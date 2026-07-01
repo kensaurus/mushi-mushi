@@ -24,7 +24,7 @@ export function useHealthUx(): HealthUxFlags {
     isAdvanced,
     hideTabs: isQuickstart,
     plainBanner: !isAdvanced,
-    hideOverviewChrome: !isAdvanced,
+    hideOverviewChrome: true,
     hideHealthSnapshot: isQuickstart,
   }
 }

@@ -665,7 +665,9 @@ export function StatCard({ label, value, accent, delta, trend, detail, hint, too
             />
           </span>
         ) : (
-          <span className="truncate">{label}</span>
+          <span className="truncate" title={label}>
+            {label}
+          </span>
         )}
         {help ? <StatCardHelp tooltip={tooltip} hint={hint} /> : null}
         {to ? (

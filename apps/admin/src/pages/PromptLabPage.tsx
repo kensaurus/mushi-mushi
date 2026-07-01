@@ -280,7 +280,7 @@ export function PromptLabPage() {
               [...COMMON_HEALTHY_PRIORITIES, 'no_project'],
               promptLabStats.topPriority,
             ),
-            children: <PromptLabGuide topPriority={promptLabStats.topPriority} />,
+            children: <PromptLabGuide topPriority={promptLabStats.topPriority} stats={promptLabStats} />,
           },
         ]}
       />

@@ -9,18 +9,30 @@ import {
   SKILLS_EXPLAINER_SUMMARY,
   SKILL_MODE_DEFINITIONS,
 } from '../../lib/skillsExplainer'
-import type { SkillsTopPriority } from './SkillsStatsTypes'
+import { skillsModeOverlay } from '../../lib/guideLiveOverlay'
+import type { SkillsStats, SkillsTopPriority } from './SkillsStatsTypes'
 
 interface Props {
   topPriority?: SkillsTopPriority
+  stats?: Pick<
+    SkillsStats,
+    'activeRuns' | 'failedRuns' | 'awaitingCheckin' | 'topPriority'
+  >
 }
 
-export function SkillsPipelineGuide({ topPriority }: Props) {
+export function SkillsPipelineGuide({ topPriority, stats }: Props) {
   const needsGuidance =
     topPriority === 'no_project' ||
     topPriority === 'empty_catalog' ||
     topPriority === 'failed_runs' ||
     topPriority === 'awaiting_checkin'
+
+  const live = stats ?? {
+    activeRuns: 0,
+    failedRuns: 0,
+    awaitingCheckin: 0,
+    topPriority: topPriority ?? 'healthy',
+  }
 
   return (
     <FeatureExplainPanel
@@ -29,7 +41,6 @@ export function SkillsPipelineGuide({ topPriority }: Props) {
       category="workflow"
       defaultOpen={needsGuidance}
     >
-      {/* Worked example */}
       <div className="rounded-md border border-brand/20 bg-brand/5 px-3 py-2.5 space-y-1">
         <p className="text-2xs font-semibold text-fg">Example: fix a bug with workflow-fix-and-ship</p>
         <ol className="list-decimal pl-4 space-y-0.5 text-2xs text-fg-secondary">
@@ -41,17 +52,21 @@ export function SkillsPipelineGuide({ topPriority }: Props) {
       </div>
 
       <div className="space-y-1">
-        {SKILL_MODE_DEFINITIONS.map((mode) => (
-          <WorkflowStageRow
-            key={mode.id}
-            id={mode.id}
-            shortLabel={mode.label}
-            posture="info"
-            plain={mode.plain}
-            actionLine={`Best for: ${mode.bestFor}`}
-            examples={[mode.requires]}
-          />
-        ))}
+        {SKILL_MODE_DEFINITIONS.map((mode) => {
+          const overlay = skillsModeOverlay(mode.id, live)
+          return (
+            <WorkflowStageRow
+              key={mode.id}
+              id={mode.id}
+              shortLabel={mode.label}
+              metric={overlay.metric}
+              posture={overlay.posture}
+              plain={mode.plain}
+              actionLine={overlay.actionLine ?? `Best for: ${mode.bestFor}`}
+              examples={[mode.requires]}
+            />
+          )
+        })}
       </div>
       <ul className="list-disc pl-4 space-y-0.5 text-2xs text-fg-secondary">
         <li>

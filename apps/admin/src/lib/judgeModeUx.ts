@@ -26,7 +26,7 @@ export function useJudgeUx(): JudgeUxFlags {
     isAdvanced,
     hideTabs: isQuickstart,
     plainBanner: !isAdvanced,
-    hideOverviewChrome: !isAdvanced,
+    hideOverviewChrome: true,
     hideJudgeSnapshot: isQuickstart,
   }
 }

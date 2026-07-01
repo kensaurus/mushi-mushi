@@ -588,7 +588,7 @@ function HealthPageContent() {
                 ['healthy', 'idle'],
                 stats.topPriority,
               ),
-            children: <HealthProbesGuide topPriority={stats.topPriority} />,
+            children: <HealthProbesGuide topPriority={stats.topPriority} stats={stats} />,
           },
         ]}
       />

@@ -26,7 +26,7 @@ export function useExploreUx(): ExploreUxFlags {
     hideTabs: isQuickstart,
     hideIndexTab: isQuickstart || isBeginner,
     plainBanner: !isAdvanced,
-    hideOverviewChrome: !isAdvanced,
+    hideOverviewChrome: true,
     hideExploreSnapshot: isQuickstart,
   }
 }

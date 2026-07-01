@@ -189,7 +189,20 @@ export function DashboardPage() {
   const setupIncomplete = !!setup.activeProject && !setup.selectors.done && setup.selectors.required_complete < setup.selectors.required_total
   const renderFullDashboard = !setupIncomplete || showFullDashboard
   const hasPdcaStages = !!(data.pdcaStages && data.pdcaStages.length > 0)
-  const showPdcaFlow = isAdvanced && renderFullDashboard && hasPdcaStages && !showFirstReportHero
+
+  const dashboardInsight =
+    renderFullDashboard && dashboardHeroStats
+      ? deriveDashboardInsight({
+          openBacklog: dashboardHeroStats.openBacklog,
+          fixesInProgress: dashboardHeroStats.fixesInProgress,
+          fixesFailed: dashboardHeroStats.fixesFailed,
+          integrationIssues: dashboardHeroStats.integrationIssues,
+          reports14d: counts.reports14d ?? 0,
+        })
+      : null
+
+  const showPdcaFlow =
+    isAdvanced && renderFullDashboard && hasPdcaStages && !showFirstReportHero && !dashboardInsight
   const showHeroIntro =
     !hideOverviewChrome && !showFirstReportHero && hasPdcaStages && !showPdcaFlow
 
@@ -212,17 +225,6 @@ export function DashboardPage() {
       </div>
     </>
   ) : null
-
-  const dashboardInsight =
-    renderFullDashboard && dashboardHeroStats
-      ? deriveDashboardInsight({
-          openBacklog: dashboardHeroStats.openBacklog,
-          fixesInProgress: dashboardHeroStats.fixesInProgress,
-          fixesFailed: dashboardHeroStats.fixesFailed,
-          integrationIssues: dashboardHeroStats.integrationIssues,
-          reports14d: counts.reports14d ?? 0,
-        })
-      : null
 
   const insightToneClasses: Record<string, string> = {
     ok: semanticBannerTone('ok'),
@@ -250,7 +252,7 @@ export function DashboardPage() {
         <Btn size="sm" variant="ghost" onClick={reload}>
           Refresh
         </Btn>
-        <Link to="/reports" className="text-xs text-brand hover:text-brand-hover">
+        <Link to="/reports" className="text-xs text-link">
           View all reports →
         </Link>
       </PageHeaderBar>
@@ -380,7 +382,7 @@ export function DashboardPage() {
           />
 
           {activeProjectId && (
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2 [&>*]:min-w-0">
               <PlatformHealthTile projectId={activeProjectId} />
               <QaCoverageTile projectId={activeProjectId} />
             </div>

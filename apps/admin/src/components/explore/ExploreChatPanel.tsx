@@ -338,7 +338,7 @@ export function ExploreChatPanel({
                 meta={new Date(t.updated_at).toLocaleDateString()}
                 onClick={() => void loadThreadMessages(t.id)}
                 actions={
-                  <div className="absolute top-1 right-1 flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover/thread:opacity-100 sm:group-focus-within/thread:opacity-100 motion-safe:transition-opacity">
+                  <div className="absolute top-1 right-1 flex items-center gap-0.5 action-reveal opacity-100">
                     <Tooltip content="Rename thread">
                       <button
                         type="button"

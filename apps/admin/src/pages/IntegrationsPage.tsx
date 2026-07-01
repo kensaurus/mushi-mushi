@@ -113,6 +113,31 @@ export function IntegrationsPage() {
       })
   }, [platform, sourceByField])
 
+  const platformConnected = useCallback(
+    (kind: Kind) => {
+      const def = PLATFORM_DEFS.find((d) => d.kind === kind)
+      if (!def) return false
+      return def.fields
+        .filter((f) => f.required)
+        .every((f) => {
+          if (platform?.[kind]?.[f.name] != null) return true
+          const src = sourceByField[f.name]
+          return src === 'org' || src === 'env'
+        })
+    },
+    [platform, sourceByField],
+  )
+
+  const integrationIntroFlags = useMemo(
+    () => ({
+      githubOk: githubConnected,
+      sentryOk: platformConnected('sentry'),
+      langfuseOk: platformConnected('langfuse'),
+      slackOk: Boolean(settingsQuery.data?.slackConfigured),
+    }),
+    [githubConnected, platformConnected, settingsQuery.data?.slackConfigured],
+  )
+
   const confirmApplyToAll = async () => {
     if (!pendingApplyKind) return
     const kind = pendingApplyKind
@@ -410,7 +435,7 @@ export function IntegrationsPage() {
         ]}
       />
 
-      <IntegrationsPageIntro topPriority={stats.topPriority} />
+      <IntegrationsPageIntro topPriority={stats.topPriority} flags={integrationIntroFlags} />
 
       {!setup.hasAnyProject && (
         <SetupNudge

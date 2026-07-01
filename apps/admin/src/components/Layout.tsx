@@ -52,6 +52,7 @@ import { useAskMushiPanel } from '../lib/useAskMushiPanel'
 import { useHotkeys } from '../lib/useHotkeys'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
 import { shouldShowLayoutPageHero } from '../lib/chromeLayers'
+import { usePostureHasStatusBanner } from '../lib/postureChromeStore'
 import { resolveLayoutHero } from '../lib/layoutHeroFromStats'
 import { usePageHeroSnapshot } from '../lib/pageHeroSnapshot'
 import { useFaviconBadge } from '../lib/favicon'
@@ -503,6 +504,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const whatsNew = useWhatsNew()
   const navCounts = useNavCounts()
   const pageHeroSnapshot = usePageHeroSnapshot()
+  const postureHasStatusBanner = usePostureHasStatusBanner()
   const projectSnapshots = useProjectSnapshots()
   const activeProjectId = useActiveProjectId()
   const setupStatus = useSetupStatus(activeProjectId)
@@ -511,7 +513,7 @@ export function Layout({ children }: { children: ReactNode }) {
     : undefined
   const criticalReports30d = activeProjectSnapshot?.severity_breakdown_30d?.critical ?? 0
   const { isSuperAdmin, has } = useEntitlements()
-  const fallbackHero = shouldShowLayoutPageHero(pathname)
+  const fallbackHero = shouldShowLayoutPageHero(pathname, postureHasStatusBanner)
     ? PAGE_HERO_FALLBACKS[pathname]
     : null
   const resolvedHero = useMemo(

@@ -23,8 +23,8 @@ export const HUMAN_ALERTS_BURNDOWN: HumanAlertBurndownItem[] = [
   { surface: 'QA Coverage — failing stories', status: 'done', notes: 'Primary CTA + qaFailingHint' },
   { surface: 'Queue/DLQ — dead letter', status: 'done', notes: 'Human dead-letter copy + primary CTA' },
   { surface: 'Inbox — open actions', status: 'done', notes: 'Primary Take action CTA' },
-  { surface: 'Connect — native CI card', status: 'partial', notes: 'Has CTAs; unify copy with SdkHealthSummary' },
+  { surface: 'Connect — native CI card', status: 'done', notes: 'Headline/playbook voice aligned with SdkHealthSummary' },
   { surface: 'Integrations — probe failures', status: 'done', notes: 'Primary CTA + integrationIssuesHint' },
-  { surface: 'Drift / Code health / Anomalies', status: 'pending', notes: 'Status banners still operator jargon' },
+  { surface: 'Drift / Code health / Anomalies', status: 'done', notes: 'StatusBannerAction + humanPageHints fallbacks' },
   { surface: 'Active project chip (header)', status: 'done', notes: 'Human chip label + clickable deep link' },
 ]

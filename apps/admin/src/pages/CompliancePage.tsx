@@ -632,7 +632,7 @@ export function CompliancePage() {
           },
           {
             priority: POSTURE_PRIORITY.guide,
-            children: <ComplianceGuide topPriority={stats.topPriority} />,
+            children: <ComplianceGuide topPriority={stats.topPriority} stats={stats} />,
           },
         ]}
       />

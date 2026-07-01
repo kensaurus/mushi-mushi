@@ -3,11 +3,24 @@
  * PURPOSE: Contract drift posture — never scanned, critical/warn findings, stale, healthy.
  */
 
-import { Link } from 'react-router-dom'
-import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
+import {
+  driftCriticalHint,
+  driftHealthyHint,
+  driftNeverScannedHint,
+  driftStaleHint,
+  driftWarnHint,
+  scopedHref,
+} from '../../lib/humanPageHints'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { StatusBannerAction } from '../StatusBannerAction'
 import type { DriftStats, DriftTabId } from './DriftStatsTypes'
+
+/** Healthy posture is covered by the page hero + snapshot — skip the banner. */
+export function isDriftStatusBannerCritical(stats: DriftStats): boolean {
+  if (!stats.hasAnyProject) return true
+  return stats.topPriority !== 'healthy'
+}
 
 interface Props {
   stats: DriftStats
@@ -21,6 +34,7 @@ export function DriftStatusBanner({ stats, onTab, onRefresh, refreshing, plainBa
   const copy = usePageCopy('/drift')
   const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
+  const pid = stats.projectId
 
   if (!stats.hasAnyProject) {
     return (
@@ -30,54 +44,78 @@ export function DriftStatusBanner({ stats, onTab, onRefresh, refreshing, plainBa
         subtitle={
           plainBanner
             ? 'Contract checks are per app — choose one in the header.'
-            : 'Pick a project to compare OpenAPI, inventory, and DB schema contracts.'
+            : 'Pick a project to compare your API docs, routes, and database schema.'
         }
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
-          </Link>
+          <StatusBannerAction label={actions.setup ?? 'Go to Setup'} to="/onboarding" tone="info" />
         }
       />
     )
   }
 
   if (stats.topPriority === 'critical_findings') {
+    const n = stats.criticalOpen
     return (
       <StatusBannerShell
         tone="danger"
         title={
           plainBanner
-            ? `${stats.criticalOpen} critical contract gap${stats.criticalOpen === 1 ? '' : 's'}`
-            : `${stats.criticalOpen} critical contract gap${stats.criticalOpen === 1 ? '' : 's'} on ${projectLabel}`
+            ? `${n} API mismatch${n === 1 ? '' : 'es'} need review`
+            : `${n} API mismatch${n === 1 ? '' : 'es'} on ${projectLabel}`
         }
-        subtitle={stats.topPriorityLabel}
+        subtitle={stats.topPriorityLabel ?? driftCriticalHint(n)}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.findings ?? 'Triage findings'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.findings ?? 'Review findings'}
+              to={stats.topPriorityTo}
+              tone="danger"
+            />
           ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('findings')}>{actions.findings ?? 'Triage findings'}</Btn>
-          ) : null
+            <StatusBannerAction
+              label={actions.findings ?? 'Review findings'}
+              onClick={() => onTab('findings')}
+              tone="danger"
+            />
+          ) : (
+            <StatusBannerAction
+              label={actions.findings ?? 'Review findings'}
+              to={scopedHref('/drift?tab=findings', pid)}
+              tone="danger"
+            />
+          )
         }
       />
     )
   }
 
   if (stats.topPriority === 'warn_findings') {
+    const n = stats.warnOpen
     return (
       <StatusBannerShell
         tone="warn"
-        title={`${stats.warnOpen} warning-level drift${stats.warnOpen === 1 ? '' : 's'} open`}
-        subtitle={stats.topPriorityLabel}
+        title={`${n} warning${n === 1 ? '' : 's'} need review`}
+        subtitle={stats.topPriorityLabel ?? driftWarnHint(n)}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.review ?? 'Review findings'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.review ?? 'Review findings'}
+              to={stats.topPriorityTo}
+              tone="warn"
+            />
           ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('findings')}>{actions.review ?? 'Review findings'}</Btn>
-          ) : null
+            <StatusBannerAction
+              label={actions.review ?? 'Review findings'}
+              onClick={() => onTab('findings')}
+              tone="warn"
+            />
+          ) : (
+            <StatusBannerAction
+              label={actions.review ?? 'Review findings'}
+              to={scopedHref('/drift?tab=findings', pid)}
+              tone="warn"
+            />
+          )
         }
       />
     )
@@ -87,16 +125,31 @@ export function DriftStatusBanner({ stats, onTab, onRefresh, refreshing, plainBa
     return (
       <StatusBannerShell
         tone="brand"
-        title={plainBanner ? 'No contract snapshot yet' : `No contract snapshot on ${projectLabel}`}
-        subtitle={stats.topPriorityLabel}
+        title={plainBanner ? 'No baseline scan yet' : `No baseline scan on ${projectLabel}`}
+        subtitle={stats.topPriorityLabel ?? driftNeverScannedHint()}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.firstScan ?? 'Run first scan'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.firstScan ?? 'Run first scan'}
+              to={stats.topPriorityTo}
+              tone="brand"
+              emphasis="primary"
+            />
           ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('scanner')}>{actions.firstScan ?? 'Run first scan'}</Btn>
-          ) : null
+            <StatusBannerAction
+              label={actions.firstScan ?? 'Run first scan'}
+              onClick={() => onTab('scanner')}
+              tone="brand"
+              emphasis="primary"
+            />
+          ) : (
+            <StatusBannerAction
+              label={actions.firstScan ?? 'Run first scan'}
+              to={scopedHref('/drift?tab=scanner', pid)}
+              tone="brand"
+              emphasis="primary"
+            />
+          )
         }
       />
     )
@@ -106,16 +159,28 @@ export function DriftStatusBanner({ stats, onTab, onRefresh, refreshing, plainBa
     return (
       <StatusBannerShell
         tone="warn"
-        title={plainBanner ? 'Contract snapshot is stale' : `Contract snapshot is stale on ${projectLabel}`}
-        subtitle={stats.topPriorityLabel}
+        title={plainBanner ? 'Baseline scan is stale' : `Baseline scan is stale on ${projectLabel}`}
+        subtitle={stats.topPriorityLabel ?? driftStaleHint()}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.scan ?? 'Run scan'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.scan ?? 'Run scan'}
+              to={stats.topPriorityTo}
+              tone="warn"
+            />
           ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('scanner')}>{actions.scan ?? 'Run scan'}</Btn>
-          ) : null
+            <StatusBannerAction
+              label={actions.scan ?? 'Run scan'}
+              onClick={() => onTab('scanner')}
+              tone="warn"
+            />
+          ) : (
+            <StatusBannerAction
+              label={actions.scan ?? 'Run scan'}
+              to={scopedHref('/drift?tab=scanner', pid)}
+              tone="warn"
+            />
+          )
         }
       />
     )
@@ -124,17 +189,23 @@ export function DriftStatusBanner({ stats, onTab, onRefresh, refreshing, plainBa
   return (
     <StatusBannerShell
       tone="ok"
-      title={plainBanner ? 'Contracts in sync' : `Contracts in sync on ${projectLabel}`}
-      subtitle={stats.topPriorityLabel}
+      title={plainBanner ? 'API contracts in sync' : `API contracts in sync on ${projectLabel}`}
+      subtitle={stats.topPriorityLabel ?? driftHealthyHint()}
       action={
         onRefresh ? (
-          <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-            {actions.refresh ?? 'Refresh'}
-          </Btn>
+          <StatusBannerAction
+            label={actions.refresh ?? 'Refresh'}
+            onClick={onRefresh}
+            loading={refreshing}
+            disabled={refreshing}
+            tone="ok"
+          />
         ) : stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">{actions.snapshots ?? 'View snapshots'}</Btn>
-          </Link>
+          <StatusBannerAction
+            label={actions.snapshots ?? 'View snapshots'}
+            to={stats.topPriorityTo}
+            tone="ok"
+          />
         ) : null
       }
     />

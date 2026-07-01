@@ -137,7 +137,7 @@ export function RewardsPage() {
           {
             priority: POSTURE_PRIORITY.guide,
             show: !ux.hideEconomyGuide,
-            children: <RewardsEconomyGuide topPriority={rewardsStats.topPriority} />,
+            children: <RewardsEconomyGuide topPriority={rewardsStats.topPriority} stats={rewardsStats} />,
           },
         ]}
       />

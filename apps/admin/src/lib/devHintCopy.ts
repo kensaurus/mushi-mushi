@@ -8,6 +8,7 @@ export function isDevFacingHint(text: string | null | undefined): boolean {
   const t = text.trim()
   return (
     /^Banner \+/i.test(t) ||
+    /EXPLORE SNAPSHOT/i.test(t) ||
     /SNAPSHOT (first|—)/i.test(t) ||
     /^(Posture banner|Pipeline posture|MCP posture|Reporter loop|Plugin posture|Workspace posture|Firecrawl posture)/i.test(t) ||
     /posture banner/i.test(t) ||

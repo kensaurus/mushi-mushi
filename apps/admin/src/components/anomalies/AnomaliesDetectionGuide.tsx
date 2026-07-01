@@ -9,13 +9,21 @@ import {
   ANOMALY_METHOD_DEFINITIONS,
   isAnomaliesGuideExpanded,
 } from '../../lib/anomaliesExplainer'
-import type { AnomaliesTopPriority } from './AnomaliesStatsTypes'
+import { anomaliesMethodOverlay } from '../../lib/guideLiveOverlay'
+import type { AnomaliesStats, AnomaliesTopPriority } from './AnomaliesStatsTypes'
 
 interface Props {
   topPriority?: AnomaliesTopPriority
+  stats?: Pick<AnomaliesStats, 'openAnomalies' | 'metricPointCount' | 'topPriority'>
 }
 
-export function AnomaliesDetectionGuide({ topPriority }: Props) {
+export function AnomaliesDetectionGuide({ topPriority, stats }: Props) {
+  const live = stats ?? {
+    openAnomalies: 0,
+    metricPointCount: 0,
+    topPriority: topPriority ?? 'healthy',
+  }
+
   return (
     <FeatureExplainPanel
       title="How anomaly detection works"
@@ -23,16 +31,20 @@ export function AnomaliesDetectionGuide({ topPriority }: Props) {
       defaultOpen={isAnomaliesGuideExpanded(topPriority)}
     >
       <div className="space-y-1">
-        {ANOMALY_METHOD_DEFINITIONS.map((method) => (
-          <WorkflowStageRow
-            key={method.id}
-            id={method.id}
-            shortLabel={method.label}
-            posture="info"
-            plain={method.plain}
-            actionLine={`Best for: ${method.bestFor}`}
-          />
-        ))}
+        {ANOMALY_METHOD_DEFINITIONS.map((method) => {
+          const overlay = anomaliesMethodOverlay(method.id, live)
+          return (
+            <WorkflowStageRow
+              key={method.id}
+              id={method.id}
+              shortLabel={method.label}
+              metric={overlay.metric}
+              posture={overlay.posture}
+              plain={method.plain}
+              actionLine={overlay.actionLine ?? `Best for: ${method.bestFor}`}
+            />
+          )
+        })}
       </div>
     </FeatureExplainPanel>
   )

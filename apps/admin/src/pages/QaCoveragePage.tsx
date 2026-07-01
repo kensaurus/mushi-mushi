@@ -21,7 +21,7 @@
  * - qa_story_coverage_24h MV for summary stats
  */
 
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
@@ -39,9 +39,6 @@ import { useActivationStatus, isActivationCockpitV2Enabled } from '../lib/useAct
 import { Link } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { PageHero } from '../components/PageHero'
-import type { PageAction } from '../components/PageActionBar'
-import { useAdminMode } from '../lib/mode'
 import { Drawer } from '../components/Drawer'
 import { CreateStoryModal } from '../components/qa-coverage/CreateStoryModal'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
@@ -56,6 +53,7 @@ import {
 import { QaProviderGuideCard } from '../components/qa-coverage/QaProviderGuideCard'
 import { QaCoverageSnapshotStrip } from '../components/qa-coverage/QaCoverageSnapshotStrip'
 import { useQaCoverageUx } from '../lib/qaCoverageModeUx'
+import { useEntitlements } from '../lib/useEntitlements'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -713,7 +711,9 @@ interface PendingReviewStory {
 
 export function QaCoveragePage() {
   const projectId = useActiveProjectId()
-  const { isAdvanced } = useAdminMode()
+  const { has, loading: entLoading, planName } = useEntitlements()
+  const inventoryEnabled = has('inventory_v2')
+  const qaUx = useQaCoverageUx()
   const activationEnabled = isActivationCockpitV2Enabled()
   const activation = useActivationStatus(projectId)
   const qaStep = activation.getStep('first_qa_story_passing')
@@ -746,12 +746,13 @@ export function QaCoveragePage() {
   )
   usePublishPageHeroStats('/qa-coverage', qaStatsData)
   const qaStats = qaStatsData ?? EMPTY_QA_COVERAGE_STATS
-  const qaUx = useQaCoverageUx()
 
   const { data: pendingData, reload: reloadPending } = usePageData<{ stories: PendingReviewStory[] }>(
-    `/v1/admin/inventory/${projectId}/stories/pending-review`,
-    { deps: [projectId] },
-  ) // error-handled-by-parent — supplementary queue; main coverage query surfaces errors.
+    inventoryEnabled && projectId
+      ? `/v1/admin/inventory/${projectId}/stories/pending-review`
+      : null,
+    { deps: [projectId, inventoryEnabled] },
+  ) // gated by inventory_v2 — avoids 402 + UpgradeNudge on Hobby plans
 
   const reloadAll = useCallback(() => {
     reload()
@@ -808,52 +809,6 @@ export function QaCoveragePage() {
     }
   }, [projectId, reload, reloadPending, toastSuccess, toastError])
 
-  const passing = coverage.filter((c) => (c.pass_rate_pct ?? 0) >= 80).length
-  const failing = coverage.filter((c) => c.pass_rate_pct !== null && c.pass_rate_pct < 80).length
-  const noData = coverage.filter((c) => c.runs_24h === 0).length
-
-  const latestRunStory = useMemo(() => {
-    let best: QaStoryCoverage | null = null
-    for (const row of coverage) {
-      if (!row.last_run_at) continue
-      if (!best?.last_run_at || row.last_run_at > best.last_run_at) best = row
-    }
-    return best
-  }, [coverage])
-
-  const qaHeroSeverity: 'ok' | 'warn' | 'crit' | 'neutral' | 'info' =
-    failing > 0 ? 'crit' : coverage.length === 0 ? 'neutral' : noData > 0 ? 'warn' : 'ok'
-
-  const qaAct = useMemo((): PageAction | null => {
-    if (failing > 0) {
-      const worst = coverage.find((c) => c.pass_rate_pct !== null && c.pass_rate_pct < 80)
-      return {
-        tone: 'check',
-        title: `Investigate ${failing} failing stor${failing === 1 ? 'y' : 'ies'}`,
-        reason: 'Pass rate below 80% in the last 24 hours.',
-        primary: worst
-          ? { kind: 'button', label: 'Open story', onClick: () => setSelectedStoryId(worst.story_id) }
-          : undefined,
-      }
-    }
-    if (coverage.length === 0) {
-      return {
-        tone: 'do',
-        title: 'Create your first QA story',
-        reason: 'Scheduled tests catch regressions before users do.',
-        primary: { kind: 'button', label: '+ New story', onClick: () => setShowCreate(true) },
-      }
-    }
-    if (pendingReview.length > 0) {
-      return {
-        tone: 'check',
-        title: `Review ${pendingReview.length} generated test${pendingReview.length === 1 ? '' : 's'}`,
-        reason: 'TDD tests from user stories await approval.',
-      }
-    }
-    return null
-  }, [failing, coverage, pendingReview.length])
-
   return (
     <div className="space-y-5">
       {activationEnabled && qaStep && !qaStep.complete ? (
@@ -876,8 +831,7 @@ export function QaCoveragePage() {
       <PageHeaderBar
         title="QA Coverage"
         projectScope={null}
-        withPageHero={isAdvanced}
-        description="Automated user-story tests running on schedule via Playwright, Browserbase, or Firecrawl."
+        withPageHero={false}
         helpTitle="About QA Coverage"
         helpWhatIsIt="Automated user-story tests that run on a schedule via Playwright (local), Browserbase (cloud), or Firecrawl. Each story is a natural-language prompt or a full Playwright script. Results appear in the run history with screenshots and console logs."
         helpUseCases={[
@@ -921,69 +875,12 @@ export function QaCoveragePage() {
             },
             {
               priority: POSTURE_PRIORITY.guide,
-              children: <QaProviderGuideCard topPriority={qaStats.topPriority} />,
+              show: (data?.coverage?.length ?? 0) === 0,
+              children: <QaProviderGuideCard topPriority={qaStats.topPriority} stats={qaStats} />,
             },
           ]}
         />
       )}
-
-      {isAdvanced ? (
-        <PageHero
-          scope="qa-coverage"
-          title="QA Coverage"
-          kicker="Scheduled story tests"
-          decide={{
-            label: failing > 0 ? `${failing} failing` : coverage.length === 0 ? 'No stories yet' : `${passing} passing`,
-            metric: `${coverage.length} stories · ${passing} ≥80%`,
-            summary:
-              failing > 0
-                ? `${failing} stor${failing === 1 ? 'y' : 'ies'} below 80% pass rate in the last 24h.`
-                : coverage.length === 0
-                  ? 'Write a plain-English test that runs on a schedule — optional but high leverage.'
-                  : `${noData} stor${noData === 1 ? 'y has' : 'ies have'} no runs in 24h — check schedules or trigger a manual run.`,
-            severity: qaHeroSeverity,
-            anchor: 'qa-coverage:decide',
-            evidence: {
-              kind: 'metric-breakdown',
-              whyNow:
-                failing > 0
-                  ? `${failing} failing stor${failing === 1 ? 'y' : 'ies'} — open run history for screenshots and assertion diffs.`
-                  : coverage.length === 0
-                    ? 'No QA stories yet — create one from a user flow or approve a TDD-generated test.'
-                    : `${passing}/${coverage.length} stories passing at ≥80% in the last 24h.`,
-              items: [
-                { label: 'Total', value: coverage.length, tone: 'neutral' },
-                { label: 'Passing', value: passing, tone: passing > 0 ? 'ok' : 'neutral' },
-                { label: 'Failing', value: failing, tone: failing > 0 ? 'crit' : 'ok' },
-                { label: 'No data', value: noData, tone: noData > 0 ? 'warn' : 'ok' },
-              ],
-            },
-          }}
-          act={qaAct}
-          actAnchor="qa-coverage:act"
-          actEvidence={
-            qaAct ? { kind: 'rule-trace', why: qaAct.reason ?? qaAct.title, threshold: failing > 0 ? 'pass_rate < 80%' : undefined } : undefined
-          }
-          verify={{
-            label: latestRunStory ? `Last run · ${latestRunStory.name}` : 'Awaiting first run',
-            detail: latestRunStory?.last_run_at ?? '—',
-            to: latestRunStory ? `/qa-coverage?story=${latestRunStory.story_id}` : undefined,
-            secondaryTo: '/qa-coverage',
-            secondaryLabel: 'All stories',
-            anchor: 'qa-coverage:verify',
-            evidence: latestRunStory?.last_run_at
-              ? {
-                  kind: 'last-event',
-                  at: latestRunStory.last_run_at,
-                  by: latestRunStory.browser_provider,
-                  payloadSummary: latestRunStory.last_run_status ?? 'run',
-                  status:
-                    latestRunStory.pass_rate_pct !== null && latestRunStory.pass_rate_pct < 80 ? 'warn' : 'ok',
-                }
-              : undefined,
-          }}
-        />
-      ) : null}
 
       {error && <ErrorAlert message={error} onRetry={reloadAll} />}
 
@@ -998,7 +895,15 @@ export function QaCoveragePage() {
         <p className="text-2xs text-fg-muted">
           Tests generated from your user stories appear here. Approve to add them to your QA schedule, or reject to discard.
         </p>
-        {pendingReview.length === 0 ? (
+        {!entLoading && !inventoryEnabled ? (
+          <p className="text-2xs text-fg-muted py-1">
+            TDD review from user stories requires{' '}
+            <Link to="/billing" className="text-brand hover:underline">
+              Bidirectional inventory
+            </Link>
+            {planName ? ` (not included on ${planName})` : '.'}
+          </p>
+        ) : pendingReview.length === 0 ? (
           <p className="text-2xs text-fg-faint italic py-1">
             No tests awaiting review — generate tests from User Stories → Discovery tab, or wait for the PDCA auto-improver to propose new ones.
           </p>

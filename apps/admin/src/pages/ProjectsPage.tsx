@@ -1002,7 +1002,7 @@ export function ProjectsPage() {
             show:
               activeTab === 'overview' &&
               !shouldHideGuideWhenBannerActive(true, ['healthy'], stats.topPriority),
-            children: <ProjectsHubGuide topPriority={stats.topPriority} />,
+            children: <ProjectsHubGuide topPriority={stats.topPriority} stats={stats} />,
           },
         ]}
       />
