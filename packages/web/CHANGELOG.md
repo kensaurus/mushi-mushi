@@ -1,5 +1,13 @@
 # @mushi-mushi/web
 
+## 1.22.4
+
+### Patch Changes
+
+- b0820ca: `installActivityListeners` no longer treats `history.replaceState` as a route change for `screen_view_unique_per_day` activity tracking. Frameworks like Next.js shallow routing call `replaceState` heavily, and counting it would widen the activity signal surface beyond the original rewards contract (pre-history-hub behavior). Only `pushState` and `popstate` are tracked.
+- Updated dependencies [b0820ca]
+  - @mushi-mushi/core@1.22.4
+
 ## 1.22.3
 
 ### Patch Changes
