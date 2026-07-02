@@ -4,7 +4,7 @@
  */
 
 import type { Command } from 'commander';
-import { loadConfig, saveConfig } from '../config.js';
+import { ensureClientId, loadConfig, saveConfig } from '../config.js';
 import { resolveConsoleUrl, openInBrowser } from '../console-url.js';
 import { resolveCloudEndpoint } from '../endpoint.js';
 import {
@@ -57,7 +57,7 @@ Typical first-time flow:
     // ── Step 1: browser device-auth ──────────────────────────────────────────
     let session: Awaited<ReturnType<typeof startDeviceAuth>>
     try {
-      session = await startDeviceAuth(endpoint)
+      session = await startDeviceAuth(endpoint, ensureClientId())
     } catch (err) {
       process.stderr.write(`\nerror: Could not start browser sign-in: ${err instanceof Error ? err.message : String(err)}\n`)
       process.stderr.write('  Fallback: mushi login --api-key <key> --project-id <uuid>\n')

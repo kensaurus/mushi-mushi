@@ -62,6 +62,7 @@ export const th: MushiLocale = {
     elementButton: 'เลือกองค์ประกอบ',
     elementSelected: 'เลือกองค์ประกอบแล้ว ✓',
     elementCapturing: 'คลิกองค์ประกอบบนหน้า…',
+    elementFailed: 'ไม่สามารถเลือกได้ — โปรดอธิบายแทน',
     elementSelectorHint: 'คลิกองค์ประกอบใดก็ได้ · Esc เพื่อยกเลิก',
     optional: '(ไม่บังคับ)',
     tooShort: 'กรุณาให้รายละเอียดเพิ่มเติม',

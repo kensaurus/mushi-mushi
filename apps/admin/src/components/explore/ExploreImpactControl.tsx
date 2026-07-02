@@ -75,7 +75,7 @@ export function ExploreImpactControl({ projectId, onImpact, onClear, active }: P
   return (
     <div className="rounded-md border border-edge-subtle bg-surface-overlay/30 p-2 space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-3xs uppercase tracking-wider text-fg-faint">Diff impact</span>
+        <span className="text-2xs uppercase tracking-wider text-fg-faint">Diff impact</span>
         {active && (
           <button
             type="button"
@@ -83,7 +83,7 @@ export function ExploreImpactControl({ projectId, onImpact, onClear, active }: P
               setLastResult(null)
               onClear()
             }}
-            className="text-3xs text-fg-muted hover:text-fg underline"
+            className="text-2xs text-fg-muted hover:text-fg underline"
           >
             Clear highlight
           </button>
@@ -102,7 +102,7 @@ export function ExploreImpactControl({ projectId, onImpact, onClear, active }: P
         <button
           type="button"
           onClick={() => setShowAdvanced((v) => !v)}
-          className="text-3xs text-fg-muted hover:text-fg underline self-center"
+          className="text-2xs text-fg-muted hover:text-fg underline self-center"
         >
           {showAdvanced ? 'Hide manual paths' : 'Manual paths'}
         </button>
@@ -115,7 +115,7 @@ export function ExploreImpactControl({ projectId, onImpact, onClear, active }: P
             onChange={(e) => setPathsInput(e.target.value)}
             placeholder="Paste changed paths (comma or newline)…"
             rows={2}
-            className="w-full text-3xs font-mono rounded border border-edge-subtle bg-surface-raised px-2 py-1.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 resize-none"
+            className="w-full text-2xs font-mono rounded border border-edge-subtle bg-surface-raised px-2 py-1.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 resize-none"
             aria-label="Changed file paths for impact analysis"
           />
           <Btn size="sm" variant="ghost" onClick={() => void runManualImpact()} loading={loading} disabled={!pathsInput.trim()}>
@@ -125,7 +125,7 @@ export function ExploreImpactControl({ projectId, onImpact, onClear, active }: P
       )}
 
       {lastResult && (
-        <p className="text-3xs text-fg-muted tabular-nums">
+        <p className="text-2xs text-fg-muted tabular-nums">
           {lastResult.changed_paths.length} changed · {lastResult.affected_file_paths.length} affected
           {lastResult.source ? ` · ${lastResult.source}` : ''}
         </p>

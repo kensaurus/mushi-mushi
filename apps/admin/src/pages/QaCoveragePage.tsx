@@ -42,7 +42,7 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Drawer } from '../components/Drawer'
 import { CreateStoryModal } from '../components/qa-coverage/CreateStoryModal'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
-import { IconPlay, IconHealth, IconExternalLink, IconClock, IconChevronDown, IconChevronUp } from '../components/icons'
+import { IconPlay, IconHealth, IconExternalLink, IconClock, IconChevronDown, IconChevronUp, IconQaCoverage } from '../components/icons'
 import {
   QaCoverageStatusBanner,
 } from '../components/qa-coverage/QaCoverageStatusBanner'
@@ -54,6 +54,7 @@ import { QaProviderGuideCard } from '../components/qa-coverage/QaProviderGuideCa
 import { QaCoverageSnapshotStrip } from '../components/qa-coverage/QaCoverageSnapshotStrip'
 import { useQaCoverageUx } from '../lib/qaCoverageModeUx'
 import { useEntitlements } from '../lib/useEntitlements'
+import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -121,9 +122,9 @@ interface QaEvidence {
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const PROVIDER_BADGE: Record<string, string> = {
-  local:             'bg-surface-overlay text-fg-secondary border-edge-subtle',
-  browserbase:       'bg-brand/15 text-brand border-brand/20',
-  firecrawl_actions: 'bg-ok-muted text-ok border-ok/20',
+  local:             CHIP_TONE.neutral,
+  browserbase:       CHIP_TONE.brandSubtle,
+  firecrawl_actions: CHIP_TONE.okSubtle,
 }
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -133,22 +134,23 @@ const PROVIDER_LABEL: Record<string, string> = {
 }
 
 const STATUS_TONE: Record<string, string> = {
-  passed:  'text-ok',
-  failed:  'text-danger',
-  error:   'text-danger',
-  timeout: 'text-warn',
+  passed:  'text-ok-foreground',
+  failed:  'text-danger-foreground',
+  error:   'text-danger-foreground',
+  timeout: 'text-warning-foreground',
   skipped: 'text-fg-faint',
   running: 'text-brand',
   pending: 'text-fg-secondary',
 }
 
+/** Chip chrome per run status — routed through the shared console tone util. */
 const STATUS_BG: Record<string, string> = {
-  passed:  'bg-ok/10 border-ok/20 text-ok',
-  failed:  'bg-danger/10 border-danger/20 text-danger',
-  error:   'bg-danger/10 border-danger/20 text-danger',
-  timeout: 'bg-warn/10 border-warn/20 text-warn',
-  running: 'bg-brand/10 border-brand/20 text-brand',
-  pending: 'bg-surface-overlay border-edge-subtle text-fg-secondary',
+  passed:  runStatusChipTone('passed'),
+  failed:  runStatusChipTone('failed'),
+  error:   runStatusChipTone('error'),
+  timeout: runStatusChipTone('timeout'),
+  running: runStatusChipTone('running'),
+  pending: CHIP_TONE.neutral,
 }
 
 const ACTIVE_STATUSES = new Set(['pending', 'running'])
@@ -830,6 +832,7 @@ export function QaCoveragePage() {
       ) : null}
       <PageHeaderBar
         title="QA Coverage"
+        icon={<IconQaCoverage />}
         projectScope={null}
         withPageHero={false}
         helpTitle="About QA Coverage"
@@ -889,7 +892,7 @@ export function QaCoveragePage() {
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-fg">🧪 TDD Tests Pending Review</span>
           {pendingReview.length > 0 && (
-            <span className="text-2xs bg-warn-muted/50 text-warning-foreground px-1.5 py-0.5 rounded-full">{pendingReview.length}</span>
+            <span className={`text-2xs ${CHIP_TONE.warnSubtle} px-1.5 py-0.5 rounded-full`}>{pendingReview.length}</span>
           )}
         </div>
         <p className="text-2xs text-fg-muted">

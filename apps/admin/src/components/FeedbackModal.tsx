@@ -25,6 +25,7 @@ import { Btn, Card } from './ui'
 import { Modal } from './Modal'
 import { apiFetch } from '../lib/supabase'
 import { useActiveProjectId } from './ProjectSwitcher'
+import { CHIP_TONE } from '../lib/chipTone'
 
 type FeedbackType = 'bug' | 'feature'
 
@@ -304,7 +305,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
 
               {/* Error */}
               {error && (
-                <p role="alert" className="text-2xs text-danger bg-danger-muted/20 border border-danger/20 rounded-sm px-2 py-1.5 leading-snug">
+                <p role="alert" className={`text-2xs rounded-sm border px-2 py-1.5 leading-snug ${CHIP_TONE.dangerSubtle}`}>
                   {error}
                 </p>
               )}

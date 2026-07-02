@@ -674,3 +674,152 @@ describe('MushiWidget screenshot preview + sensitive-info hint', () => {
     w.destroy();
   });
 });
+
+// ── Form draft persistence across re-renders ─────────────────────────────────
+
+describe('MushiWidget — description draft survives background render', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: false }),
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: undefined,
+    });
+  });
+
+  const getShadow = (w: MushiWidget): ShadowRoot =>
+    (w as unknown as { shadow: ShadowRoot }).shadow;
+
+  it('preserves typed description when capture state triggers a re-render', () => {
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    w.open({ featureRequest: true });
+
+    const textarea = getShadow(w).querySelector('textarea.mushi-textarea') as HTMLTextAreaElement;
+    expect(textarea).not.toBeNull();
+    textarea.value = 'Steps to reproduce: tap Save twice';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+    // Mimics attach-screenshot success or quiet inbox poll side-effects.
+    w.setScreenshotCapturing(true);
+    w.setScreenshotCapturing(false);
+
+    const restored = getShadow(w).querySelector('textarea.mushi-textarea') as HTMLTextAreaElement;
+    expect(restored.value).toBe('Steps to reproduce: tap Save twice');
+    w.destroy();
+  });
+
+  it('refreshReporterInboxQuiet updates badge without rebuilding the details step', async () => {
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    w.open({ featureRequest: true });
+
+    const textarea = getShadow(w).querySelector('textarea.mushi-textarea') as HTMLTextAreaElement;
+    textarea.value = 'Still typing…';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+    (w as unknown as { reporterReports: Array<{ unread_count: number }> }).reporterReports = [
+      { unread_count: 2 },
+    ];
+    await w.refreshReporterInboxQuiet();
+
+    const after = getShadow(w).querySelector('textarea.mushi-textarea') as HTMLTextAreaElement;
+    expect(after.value).toBe('Still typing…');
+    w.destroy();
+  });
+});
+
+// ── Element-selector error feedback (symmetric with screenshot errors) ───────
+
+describe('MushiWidget — element selector error feedback', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: false }),
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: undefined,
+    });
+  });
+
+  const getShadow = (w: MushiWidget): ShadowRoot =>
+    (w as unknown as { shadow: ShadowRoot }).shadow;
+  const elementBtn = (w: MushiWidget) =>
+    getShadow(w).querySelector('[data-action="element"]') as HTMLButtonElement | null;
+
+  it('shows the failed label and error class after setElementError(true)', () => {
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    w.open({ featureRequest: true });
+
+    w.setElementError(true);
+
+    const btn = elementBtn(w);
+    expect(btn).not.toBeNull();
+    expect(btn!.className).toContain('error');
+    expect(btn!.getAttribute('aria-label')).toContain("Couldn't select");
+    w.destroy();
+  });
+
+  it('clears the error and stops the capturing spinner via setElementError', () => {
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    w.open({ featureRequest: true });
+
+    w.setElementCapturing(true);
+    w.setElementError(true);
+    expect((w as unknown as { elementCapturing: boolean }).elementCapturing).toBe(false);
+    expect((w as unknown as { elementError: boolean }).elementError).toBe(true);
+    w.destroy();
+  });
+
+  it('a successful selection clears a stale error from a previous attempt', () => {
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    w.open({ featureRequest: true });
+
+    w.setElementError(true);
+    w.setElementSelected(true);
+
+    const btn = elementBtn(w);
+    expect(btn!.className).not.toContain('error');
+    expect(btn!.getAttribute('aria-label')).toContain('Element selected');
+    w.destroy();
+  });
+
+  it('starting a new capture attempt clears a stale error', () => {
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    w.open({ featureRequest: true });
+
+    w.setElementError(true);
+    w.setElementCapturing(true);
+    expect((w as unknown as { elementError: boolean }).elementError).toBe(false);
+    w.destroy();
+  });
+
+  it('open() resets any stale elementError from a previous session', () => {
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    w.open({ featureRequest: true });
+    w.setElementError(true);
+    w.close();
+
+    w.open({ featureRequest: true });
+    expect((w as unknown as { elementError: boolean }).elementError).toBe(false);
+    w.destroy();
+  });
+});

@@ -22,6 +22,7 @@ import { StatCard } from '../ui/metrics'
 import { MetricStrip } from '../MetricStrip'
 import { EmptyState } from '../ui/forms'
 import type { REP_TIERS } from '../../lib/useTesterStatus'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 /** Opaque raised panel — use instead of border-white/10 bg-white/5. */
 export const TESTER_PANEL =
@@ -118,12 +119,12 @@ export function TesterPipelineRow({
 }) {
   const badgeClass =
     badgeTone === 'warn'
-      ? 'bg-warn-muted text-warning-foreground border-warn/30'
+      ? CHIP_TONE.warnSubtle + ' border-warn/30'
       : badgeTone === 'ok'
-        ? 'bg-ok-muted text-ok border-ok/30'
+        ? CHIP_TONE.okSubtle + ' border-ok/30'
         : badgeTone === 'neutral'
           ? 'bg-surface-overlay text-fg-muted border-edge'
-          : 'bg-info-muted text-info-foreground border-info/30'
+          : CHIP_TONE.infoSubtle + ' border-info/30'
 
   return (
     <Link

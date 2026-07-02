@@ -50,6 +50,7 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PdcaContextHint } from '../components/PdcaContextHint'
 import { BarSparkline } from '../components/charts'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface AnomalyDetection {
   id: string
@@ -77,9 +78,9 @@ interface MetricPoint {
 }
 
 const METHOD_CLS: Record<string, string> = {
-  'page-hinkley': 'bg-warn-muted/50 text-warning-foreground border border-warn/20',
-  'z-score': 'bg-danger-muted/50 text-danger-foreground border border-danger/20',
-  'release-regression': 'bg-danger-muted/50 text-danger-foreground border border-danger/20',
+  'page-hinkley': CHIP_TONE.warnSubtle + ' border border-warn/20',
+  'z-score': CHIP_TONE.dangerSubtle,
+  'release-regression': CHIP_TONE.dangerSubtle,
 }
 
 function methodBadge(m: string) {
@@ -255,7 +256,7 @@ export function AnomaliesPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Anomalies'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={copy?.description ?? 'Banner + ANOMALIES SNAPSHOT — Overview for posture, Anomalies to triage, Metrics to ingest, Detect to run analysis.'}
+
         contextChip={<PdcaContextHint stage="check" />}
         helpTitle={copy?.help?.title ?? 'Anomaly detection'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Ingest any numeric metric (error rate, latency, conversion rate) via the Metrics tab or SDK. The detector runs hourly and auto-creates bug reports for release regressions.'}
@@ -271,11 +272,11 @@ export function AnomaliesPage() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
+              ? CHIP_TONE.okSubtle
               : bannerSeverity === 'danger'
-                ? 'bg-danger-muted/50 text-danger-foreground'
+                ? CHIP_TONE.dangerSubtle
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn-muted/50 text-warning-foreground'
+                  ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
                     ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                     : 'bg-surface-overlay text-fg-muted'

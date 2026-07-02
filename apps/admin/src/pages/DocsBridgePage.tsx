@@ -185,7 +185,7 @@ export function DocsBridgePage() {
     <div className="min-h-screen bg-surface p-6 space-y-4">
       <PageHeaderBar
         title="Docs bridge"
-        description="Connects your Mushi admin session to the docs Migration Hub for checklist sync."
+
         helpTitle="About the docs bridge"
         helpWhatIsIt="Cross-origin auth bridge opened by the docs Migration Hub — posts your Supabase access token to the docs origin after login."
         helpUseCases={[

@@ -2,6 +2,7 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import { ConfigHelp } from '../ConfigHelp';
 import { isDevFacingHint } from '../../lib/devHintCopy';
+import { CHIP_TONE } from '../../lib/chipTone';
 import { ContainedBlock } from '../report-detail/ReportSurface';
 import { InfoHint } from './fields';
 import { RelativeTime, formatRelative } from './metrics';
@@ -30,17 +31,22 @@ export function LabelHelp({ helpId, tooltip }: { helpId?: string; tooltip?: stri
 
 /* ── Badge ──────────────────────────────────────────────────────────────── */
 
+export type BadgeTone = keyof typeof CHIP_TONE
+
 interface BadgeProps {
   children: ReactNode
   className?: string
   title?: string
+  /** WCAG-safe tinted chip — pairs muted bg with *-foreground text via chipTone.ts */
+  tone?: BadgeTone
 }
 
-export function Badge({ children, className = '', title }: BadgeProps) {
+export function Badge({ children, className = '', title, tone }: BadgeProps) {
+  const toneClass = tone ? CHIP_TONE[tone] : ''
   return (
     <span
       title={title}
-      className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-2xs leading-tight font-medium ${className}`}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-2xs leading-tight font-medium ${toneClass} ${className}`.trim()}
     >
       {children}
     </span>

@@ -1,0 +1,37 @@
+/** AUTO-GENERATED — edit tokens/brand.tokens.json then run: pnpm build:tokens */
+
+export const BRAND_PRIMITIVE_TOKENS = {
+  "--mushi-paper": "#f8f4ed",
+  "--mushi-paper-wash": "#efe7da",
+  "--mushi-ink": "#0e0d0b",
+  "--mushi-ink-muted": "#5c5852",
+  "--mushi-ink-faint": "#9a9489",
+  "--mushi-rule": "rgba(14, 13, 11, 0.12)",
+  "--mushi-vermillion": "#e03c2c",
+  "--mushi-vermillion-wash": "rgba(224, 60, 44, 0.08)",
+  "--mushi-vermillion-ink": "#7a1f15",
+  "--mushi-jade": "#2d7a55",
+  "--mushi-jade-wash": "rgba(45, 122, 85, 0.09)",
+  "--mushi-code-surface": "#1a1917",
+  "--mushi-code-surface-fg": "#f2ebdd",
+  "--mushi-code-surface-fg-muted": "#b8b0a4",
+  "--mushi-code-surface-border": "rgba(242, 235, 221, 0.14)",
+  "--mushi-viz-warn": "#b8720e",
+  "--mushi-viz-wash-warn": "rgba(184, 114, 14, 0.1)",
+  "--mushi-viz-info": "#5c5580",
+  "--mushi-viz-wash-info": "rgba(92, 85, 128, 0.09)",
+  "--mushi-viz-danger": "#b83232",
+  "--mushi-viz-wash-danger": "rgba(184, 50, 50, 0.08)",
+  "--mushi-viz-selected-fg": "#ffffff",
+  "--mushi-banner-neon-bg": "#0fff50",
+  "--mushi-banner-neon-fg": "#0a1a0a",
+  "--mushi-banner-neon-border": "#00c43a",
+  "--mushi-font-display": "\"Iowan Old Style\", \"Palatino Linotype\", Palatino, \"Book Antiqua\", Cambria, Georgia, \"Times New Roman\", serif",
+  "--mushi-font-body": "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI Variable Display\", \"Segoe UI\", sans-serif",
+  "--mushi-font-mono": "ui-monospace, \"SF Mono\", \"JetBrains Mono\", Menlo, Consolas, \"Liberation Mono\", monospace",
+  "--mushi-ease-stamp": "cubic-bezier(0.22, 1, 0.36, 1)",
+  "--mushi-banner-height": "36px",
+  "--mushi-fab-size": "52px",
+} as const
+
+export type BrandPrimitiveTokenName = keyof typeof BRAND_PRIMITIVE_TOKENS

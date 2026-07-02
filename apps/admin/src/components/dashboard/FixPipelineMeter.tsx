@@ -8,6 +8,7 @@
 import { Link } from 'react-router-dom'
 import type { FixSummary } from './types'
 import { SignalChip } from '../report-detail/ReportSurface'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   fixSummary: FixSummary
@@ -91,9 +92,9 @@ export function FixPipelineMeter({ fixSummary }: Props) {
         to={primaryHref}
         className={`flex items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-xs font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
           hasFailure
-            ? 'border-danger/40 bg-danger-muted/50 text-danger-foreground hover:bg-danger/15'
+            ? `border-danger/40 ${CHIP_TONE.dangerSubtle} hover:bg-danger/15`
             : openPrs > 0
-              ? 'border-ok/35 bg-ok-muted/50 text-ok-foreground hover:bg-ok/15'
+              ? `border-ok/35 ${CHIP_TONE.okSubtle} hover:bg-ok/15`
               : 'border-edge-subtle bg-surface-overlay/30 text-fg-secondary hover:bg-surface-overlay/50 hover:text-fg'
         }`}
       >

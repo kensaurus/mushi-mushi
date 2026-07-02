@@ -1,6 +1,7 @@
 import React, { useState, useEffect, forwardRef } from 'react';
 import type { ReactNode, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react';
 import { Card, LabelHelp } from './layout';
+import { CHIP_TONE } from '../../lib/chipTone'
 
 
 /* ── FilterSelect ───────────────────────────────────────────────────────── */
@@ -170,12 +171,12 @@ const BTN_VARIANTS = {
   ghost:
     'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg hover:border-edge hover:-translate-y-px',
   cancel:
-    'bg-danger-muted/60 text-danger border border-danger/40 hover:bg-danger-muted hover:border-danger/50 hover:-translate-y-px',
+    `${CHIP_TONE.danger} border-danger/40 hover:bg-danger-muted hover:border-danger/50 hover:-translate-y-px`,
   danger:
-    'bg-danger-muted text-danger border border-danger/30 hover:bg-danger-muted/80 hover:border-danger/40 hover:-translate-y-px',
+    `${CHIP_TONE.dangerSubtle} hover:bg-danger-muted/80 hover:border-danger/40 hover:-translate-y-px`,
   success:
-    'bg-ok-muted text-ok border border-ok/30 hover:bg-ok-muted/80 hover:border-ok/40 hover:-translate-y-px',
-} as const
+    `${CHIP_TONE.okSubtle} hover:bg-ok-muted/80 hover:border-ok/40 hover:-translate-y-px`,
+}
 
 export function Btn({
   variant = 'primary',

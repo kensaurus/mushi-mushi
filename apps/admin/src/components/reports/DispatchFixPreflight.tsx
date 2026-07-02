@@ -25,6 +25,7 @@ import { type CSSProperties, useCallback, useEffect, useId, useLayoutEffect, use
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import type { PreflightCheck, PreflightState } from '../../lib/useDispatchPreflight'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   busy: boolean
@@ -349,7 +350,7 @@ function PreflightChecklist({
   }
   if (failing.length === 0) {
     return (
-      <div className="mt-2 rounded-sm border border-ok/30 bg-ok-muted/15 p-2 text-2xs text-ok">
+      <div className={`mt-2 rounded-sm border border-ok/30 ${CHIP_TONE.okSubtle} p-2 text-2xs`}>
         <div className="flex items-center gap-1.5">
           <CheckIcon />
           <span className="font-medium">All {checks.length} prerequisites met</span>

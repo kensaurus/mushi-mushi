@@ -30,6 +30,7 @@
 import { readFileSync, statSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
+import { execFileSync } from 'node:child_process'
 import process from 'node:process'
 
 const SUPABASE_API = 'https://api.supabase.com'
@@ -76,6 +77,19 @@ async function walk(dir) {
 
 function toForwardSlash(p) {
   return p.split(sep).join('/')
+}
+
+// Prefer $GITHUB_SHA (set by every GitHub Actions run — no git call needed
+// and correct even on a shallow checkout). Falls back to `git rev-parse
+// HEAD` for local `npm run deploy`. Never throws — an unresolvable SHA just
+// means the hosted MCP version stays at the base semver for this deploy.
+function resolveDeploySha() {
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+  } catch {
+    return 'unknown'
+  }
 }
 
 function flag(name) {
@@ -183,10 +197,26 @@ async function main() {
   const form = new FormData()
   form.append('metadata', JSON.stringify(metadata))
 
+  // Stamp _shared/deploy-info.ts with the real deploy commit so hosted MCP's
+  // serverInfo.version reflects what's actually running (production-
+  // readiness audit item #12) instead of the checked-in `sha: 'dev'`
+  // placeholder. Generated in-memory and swapped into the upload only —
+  // never written to disk — so a local `npm run deploy` never leaves a
+  // dirty working tree.
+  const deployInfoRel = toForwardSlash(join(FUNCTIONS_ROOT_REL, '_shared', 'deploy-info.ts'))
+  const deploySha = resolveDeploySha()
+  const deployedAt = new Date().toISOString()
+  const stampedDeployInfo =
+    `// AUTO-STAMPED at deploy time by scripts/deploy-edge-function.mjs — do not edit by hand.\n` +
+    `export const DEPLOY_INFO: { sha: string; deployedAt: string | null } = {\n` +
+    `  sha: ${JSON.stringify(deploySha)},\n` +
+    `  deployedAt: ${JSON.stringify(deployedAt)},\n` +
+    `}\n`
+
   let totalBytes = 0
   for (const abs of allFiles) {
     const rel = toForwardSlash(`${FUNCTIONS_ROOT_REL}/${relative(fnRootAbs, abs)}`)
-    const buf = readFileSync(abs)
+    const buf = rel === deployInfoRel ? Buffer.from(stampedDeployInfo, 'utf8') : readFileSync(abs)
     totalBytes += buf.byteLength
     form.append('file', new Blob([buf]), rel)
   }

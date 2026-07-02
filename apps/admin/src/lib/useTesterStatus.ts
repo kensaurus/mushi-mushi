@@ -22,8 +22,8 @@ export interface TesterStatus {
 
 /** Tier thresholds (inclusive lower bound). */
 export const REP_TIERS = [
-  { name: 'Platinum', min: 200, color: 'text-info', bg: 'bg-info-muted border-info/30' },
-  { name: 'Gold',     min: 75,  color: 'text-warn', bg: 'bg-warn-muted border-warn/30' },
+  { name: 'Platinum', min: 200, color: 'text-info-foreground', bg: 'bg-info-muted border-info/30' },
+  { name: 'Gold',     min: 75,  color: 'text-warning-foreground', bg: 'bg-warn-muted border-warn/30' },
   { name: 'Silver',   min: 25,  color: 'text-fg-secondary', bg: 'bg-surface-overlay border-edge' },
   { name: 'Bronze',   min: 0,   color: 'text-brand', bg: 'bg-brand-subtle border-brand/30' },
 ] as const

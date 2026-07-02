@@ -40,6 +40,7 @@ import {
   IconTerminal,
 } from './icons'
 import { headerDropdownPanelClass } from '../lib/appChrome'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface VersionBadgeProps {
   whatsNew: ReturnType<typeof useWhatsNew>
@@ -67,7 +68,7 @@ const ACCENT_THEMES: Record<AccentTone, AccentTheme> = {
     pill: 'sdk',
   },
   warn: {
-    chip: 'bg-warn-muted/50 text-warning-foreground border border-warn/35',
+    chip: CHIP_TONE.warnSubtle + ' border border-warn/35',
     header: 'bg-warn/10 border-warn/25',
     rail: 'border-l-warn/55',
     text: 'text-warn',
@@ -88,7 +89,7 @@ const ACCENT_THEMES: Record<AccentTone, AccentTheme> = {
     pill: 'neutral',
   },
   accent: {
-    chip: 'bg-accent-muted/55 text-accent-foreground border border-accent/35',
+    chip: CHIP_TONE.accentSubtle + ' border border-accent/35',
     header: 'bg-accent/10 border-accent/25',
     rail: 'border-l-accent/55',
     text: 'text-accent',
@@ -149,8 +150,8 @@ const PIPELINE_LINKS: PipelineLink[] = [
 
 const TONE_BADGE: Record<'feature' | 'fix' | 'breaking' | 'note', string> = {
   feature:  'bg-brand/15 text-brand border border-brand/30',
-  fix:      'bg-ok-muted text-ok border border-ok/30',
-  breaking: 'bg-danger-muted/50 text-danger-foreground border border-danger/30',
+  fix:      CHIP_TONE.okSubtle + ' border border-ok/30',
+  breaking: CHIP_TONE.dangerSubtle + ' border border-danger/30',
   note:     'bg-surface-overlay text-fg-secondary border border-edge/60',
 }
 const TONE_LABEL: Record<'feature' | 'fix' | 'breaking' | 'note', string> = {
@@ -179,19 +180,19 @@ function VersionPill({
 }) {
   const toneClass =
     tone === 'sdk'
-      ? 'border-info/35 bg-info-muted/50 text-info-foreground'
+      ? `border-info/35 ${CHIP_TONE.infoSubtle}`
       : tone === 'admin'
-        ? 'border-accent/35 bg-accent-muted/55 text-accent-foreground'
+        ? `border-accent/35 ${CHIP_TONE.accentSubtle}`
         : tone === 'tool'
-          ? 'border-warn/35 bg-warn-muted/50 text-warning-foreground'
+          ? `border-warn/35 ${CHIP_TONE.warnSubtle}`
           : tone === 'plugin'
-            ? 'border-accent/35 bg-accent-muted/55 text-accent-foreground'
+            ? `border-accent/35 ${CHIP_TONE.accentSubtle}`
             : tone === 'runtime'
-              ? 'border-ok/35 bg-ok-muted/50 text-ok-foreground'
+              ? `border-ok/35 ${CHIP_TONE.okSubtle}`
               : 'border-edge/70 bg-surface-overlay text-fg-secondary'
   return (
     <span
-      className={`inline-flex min-w-[2.75rem] items-center justify-center rounded-full border px-1.5 py-0.5 font-mono text-3xs font-medium tabular-nums leading-none shrink-0 ${toneClass}`}
+      className={`inline-flex min-w-[2.75rem] items-center justify-center rounded-full border px-1.5 py-0.5 font-mono text-2xs font-medium tabular-nums leading-none shrink-0 ${toneClass}`}
     >
       {version}
     </span>
@@ -232,7 +233,7 @@ function SectionDivider({
   return (
     <div className="flex items-center gap-2">
       {icon && theme && <ThemeIconChip icon={icon} theme={theme} />}
-      <p className={`text-3xs font-semibold uppercase tracking-wider shrink-0 ${labelClass}`}>{label}</p>
+      <p className={`text-2xs font-semibold uppercase tracking-wider shrink-0 ${labelClass}`}>{label}</p>
       <div className="h-px flex-1 bg-edge" aria-hidden="true" />
       {trailing}
     </div>
@@ -263,7 +264,7 @@ function ChangelogHighlightRow({
 }) {
   return (
     <li className="flex items-start gap-2 border-b border-edge-subtle/70 px-2.5 py-2 last:border-b-0">
-      <Badge className={`${TONE_BADGE[tone]} shrink-0 text-3xs min-w-[3.25rem] justify-center`}>
+      <Badge className={`${TONE_BADGE[tone]} shrink-0 text-2xs min-w-[3.25rem] justify-center`}>
         {TONE_LABEL[tone]}
       </Badge>
       <span className="text-2xs text-fg leading-snug">{text}</span>
@@ -353,7 +354,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
         </span>
         <span
           aria-hidden
-          className="hidden lg:inline text-3xs font-semibold uppercase tracking-wider leading-none"
+          className="hidden lg:inline text-2xs font-semibold uppercase tracking-wider leading-none"
           title="@mushi-mushi/web — browser SDK published to npm"
         >
           <span className={SDK_LABEL}>SDK</span>
@@ -369,7 +370,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
         </span>
         <span
           aria-hidden
-          className="hidden lg:inline text-3xs font-semibold uppercase tracking-wider leading-none"
+          className="hidden lg:inline text-2xs font-semibold uppercase tracking-wider leading-none"
           title="This admin console (Vite SPA) — not the customer-facing SDK"
         >
           <span className={ADMIN_LABEL}>Admin</span>
@@ -400,7 +401,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
             <div>
               <div className="flex items-center gap-1.5">
                 <ThemeIconChip icon={IconGauge} theme={ACCENT_THEMES.accent} />
-                <p className="text-3xs font-semibold uppercase tracking-wider text-accent leading-none">Running</p>
+                <p className="text-2xs font-semibold uppercase tracking-wider text-accent leading-none">Running</p>
               </div>
               <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm font-semibold text-fg leading-none">
                 <span>
@@ -419,12 +420,12 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
             </div>
             <div className="text-right shrink-0 space-y-1">
               <VersionPill version={__BUILD_SHA__} />
-              <p className="text-3xs text-fg-faint leading-none">{__BUILD_DATE__}</p>
+              <p className="text-2xs text-fg-faint leading-none">{__BUILD_DATE__}</p>
               <a
                 href={REPO_URL}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="mt-1.5 inline-flex items-center gap-0.5 text-3xs text-fg-muted hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
+                className="mt-1.5 inline-flex items-center gap-0.5 text-2xs text-fg-muted hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
                 title="View source on GitHub"
               >
                 GitHub <span aria-hidden>↗</span>
@@ -485,7 +486,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
               theme={ACCENT_THEMES.brand}
               trailing={
                 whatsNew.hasUnread ? (
-                  <span className="inline-flex items-center rounded-full border border-brand/35 bg-brand/10 px-1.5 py-px text-3xs font-medium text-brand shrink-0">
+                  <span className="inline-flex items-center rounded-full border border-brand/35 bg-brand/10 px-1.5 py-px text-2xs font-medium text-brand shrink-0">
                     Unread
                   </span>
                 ) : undefined
@@ -572,7 +573,7 @@ function PackageGroup({ id, children }: { id: PackageGroupId; children: ReactNod
     <div className={`rounded-md border border-edge-subtle/80 border-l-[3px] ${meta.rail} bg-surface/40 overflow-hidden`}>
       <div className={`flex items-center gap-1.5 border-b px-2 py-1 ${meta.header}`}>
         <ThemeIconChip icon={GroupIcon} theme={meta} size={12} />
-        <p className={`text-3xs font-semibold uppercase tracking-wider ${meta.text}`}>{id}</p>
+        <p className={`text-2xs font-semibold uppercase tracking-wider ${meta.text}`}>{id}</p>
       </div>
       <div className="grid grid-cols-2 gap-x-2 px-1 py-0.5">
         {rows}
@@ -613,7 +614,7 @@ function PackageRow({
       }`}
       title={hint}
     >
-      <span className="font-mono text-3xs text-fg truncate flex items-center gap-0.5 min-w-0">
+      <span className="font-mono text-2xs text-fg truncate flex items-center gap-0.5 min-w-0">
         {name}
         {href && (
           <span aria-hidden className="text-fg-faint group-hover:text-fg-muted shrink-0 leading-none">↗</span>

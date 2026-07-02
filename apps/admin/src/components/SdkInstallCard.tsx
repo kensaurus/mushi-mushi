@@ -404,7 +404,7 @@ export function SdkInstallCard({
               </li>
             ))}
           </ul>
-          <p className="text-3xs text-fg-muted">Full secret shown once at mint or rotate.</p>
+          <p className="text-2xs text-fg-muted">Full secret shown once at mint or rotate.</p>
         </div>
       )}
 
@@ -692,7 +692,7 @@ function WidgetPreview({
         <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-preview-traffic-yellow)]" />
         <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-preview-traffic-green)]" />
         <span
-          className="ml-2 text-3xs"
+          className="ml-2 text-2xs"
           style={{ color: tokens.inkMuted, fontFamily: 'ui-monospace, SF Mono, Menlo, monospace' }}
         >
           your-app.com
@@ -802,7 +802,7 @@ function WidgetPreview({
         </div>
       ) : (config.trigger === 'manual' || config.trigger === 'hidden' || config.trigger === 'attach') ? (
         <div
-          className="absolute rounded-sm border px-2 py-1 text-3xs"
+          className="absolute rounded-sm border px-2 py-1 text-2xs"
           style={{
             ...cornerPos[config.position],
             color: tokens.inkMuted,
@@ -890,13 +890,13 @@ function WidgetPreview({
           role="presentation"
         >
           <div
-            className="px-2 py-1 border-b text-3xs font-medium flex items-center justify-between gap-1"
+            className="px-2 py-1 border-b text-2xs font-medium flex items-center justify-between gap-1"
             style={{ borderColor: tokens.rule, color: tokens.inkMuted }}
           >
             <span>{t.step1.heading}</span>
             <button
               type="button"
-              className="text-3xs"
+              className="text-2xs"
               style={{ color: tokens.inkMuted, cursor: 'pointer' }}
               aria-label={t.widget.close}
               onClick={() => setPanelOpen(false)}
@@ -906,7 +906,7 @@ function WidgetPreview({
           </div>
           <div className="p-2 space-y-1">
             <p
-              className="text-3xs font-medium"
+              className="text-2xs font-medium"
               style={{
                 color: tokens.inkMuted,
                 fontFamily: 'ui-monospace, SF Mono, Menlo, monospace',
@@ -939,21 +939,21 @@ function WidgetPreview({
               {moreNavOpen && (
                 <div className="space-y-0.5 pl-1">
                   <div
-                    className="rounded-sm px-2 py-0.5 border text-3xs"
+                    className="rounded-sm px-2 py-0.5 border text-2xs"
                     style={{ borderColor: tokens.rule, background: tokens.paper, color: tokens.inkMuted }}
                   >
                     📬 {t.step1.moreNav.yourReports}
                   </div>
                   {assistant.enabled && (
                     <div
-                      className="rounded-sm px-2 py-0.5 border text-3xs"
+                      className="rounded-sm px-2 py-0.5 border text-2xs"
                       style={{ borderColor: tokens.rule, background: tokens.paper, color: tokens.inkMuted }}
                     >
                       💬 {assistant.label || t.assistant.defaultLabel}
                     </div>
                   )}
                   <div
-                    className="rounded-sm px-2 py-0.5 text-3xs"
+                    className="rounded-sm px-2 py-0.5 text-2xs"
                     style={{ color: tokens.inkMuted }}
                   >
                     🌐 {t.step1.moreNav.joinCommunity.split(' · ')[0]}
@@ -1075,7 +1075,7 @@ function ConfiguratorPanel({
                   {config.trigger === value && <span className="w-1.5 h-1.5 rounded-full bg-brand-fg" />}
                 </span>
                 <span className="font-medium">{label}</span>
-                {value === 'banner' && <span className="ml-auto text-3xs text-ok uppercase tracking-wider font-semibold">Recommended</span>}
+                {value === 'banner' && <span className="ml-auto text-2xs text-ok uppercase tracking-wider font-semibold">Recommended</span>}
               </button>
             ))}
           </div>
@@ -1176,7 +1176,7 @@ function ConfiguratorPanel({
                 placeholder="#report-button"
                 className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand font-mono text-2xs"
               />
-              <p className="text-fg-faint text-3xs mt-0.5">Leave blank to set programmatically via <code>sdk.attachTo(el)</code>.</p>
+              <p className="text-fg-faint text-2xs mt-0.5">Leave blank to set programmatically via <code>sdk.attachTo(el)</code>.</p>
             </label>
           )}
           <p className="mt-1 text-fg-faint inline-flex items-center gap-1">

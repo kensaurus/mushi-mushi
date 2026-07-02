@@ -44,7 +44,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={copy}
-      className="text-3xs text-fg-faint hover:text-fg transition-colors px-1.5 py-0.5 rounded border border-transparent hover:border-edge-subtle"
+      className="text-2xs text-fg-faint hover:text-fg transition-colors px-1.5 py-0.5 rounded border border-transparent hover:border-edge-subtle"
       title="Copy path"
       aria-label="Copy file path"
     >
@@ -66,7 +66,7 @@ function CopyButton({ text }: { text: string }) {
 function CodePreview({ content, startLine }: { content: string; startLine: number | null }) {
   const lines = content.split('\n')
   return (
-    <div className="rounded-md border border-edge-subtle bg-surface-root overflow-hidden font-mono text-3xs leading-5">
+    <div className="rounded-md border border-edge-subtle bg-surface-root overflow-hidden font-mono text-2xs leading-5">
       <div className="overflow-x-auto max-h-48">
         <table className="w-full border-collapse">
           <tbody>
@@ -162,12 +162,12 @@ export function ExploreSymbolPanel({
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
-              <span className="text-3xs uppercase tracking-wider text-fg-faint">
+              <span className="text-2xs uppercase tracking-wider text-fg-faint">
                 {symbol_name ? 'Symbol' : 'File'}
               </span>
               {layer && (
                 <span
-                  className="text-3xs px-1.5 py-px rounded-sm border font-medium"
+                  className="text-2xs px-1.5 py-px rounded-sm border font-medium"
                   style={{
                     backgroundColor: `${layerColor}18`,
                     borderColor: `${layerColor}40`,
@@ -178,12 +178,12 @@ export function ExploreSymbolPanel({
                 </span>
               )}
               {fileExt && (
-                <span className="text-3xs px-1 py-px rounded-sm bg-surface-overlay text-fg-faint border border-edge-subtle font-mono">
+                <span className="text-2xs px-1 py-px rounded-sm bg-surface-overlay text-fg-faint border border-edge-subtle font-mono">
                   .{fileExt}
                 </span>
               )}
               {lineCount != null && (
-                <span className="text-3xs text-fg-faint">
+                <span className="text-2xs text-fg-faint">
                   {lineCount.toLocaleString()} lines
                 </span>
               )}
@@ -210,7 +210,7 @@ export function ExploreSymbolPanel({
 
       {/* File path row */}
       <div className="px-3 py-2 border-b border-edge-subtle/60 flex items-center gap-1 bg-surface-overlay/40">
-        <code className="text-3xs font-mono text-fg-secondary truncate flex-1 min-w-0" title={file_path}>
+        <code className="text-2xs font-mono text-fg-secondary truncate flex-1 min-w-0" title={file_path}>
           {file_path}
         </code>
         <CopyButton text={file_path} />
@@ -220,25 +220,25 @@ export function ExploreSymbolPanel({
       <div className="px-3 py-2 grid grid-cols-2 gap-x-3 gap-y-1.5 border-b border-edge-subtle/60">
         {language && (
           <>
-            <span className="text-3xs text-fg-faint">Language</span>
-            <span className="text-3xs font-mono text-brand">{language}</span>
+            <span className="text-2xs text-fg-faint">Language</span>
+            <span className="text-2xs font-mono text-brand">{language}</span>
           </>
         )}
         {line_start != null && line_end != null && (
           <>
-            <span className="text-3xs text-fg-faint">Lines</span>
-            <span className="text-3xs font-mono text-fg-secondary">
+            <span className="text-2xs text-fg-faint">Lines</span>
+            <span className="text-2xs font-mono text-fg-secondary">
               {line_start.toLocaleString()}–{line_end.toLocaleString()}
             </span>
           </>
         )}
-        <span className="text-3xs text-fg-faint">Node type</span>
-        <span className="text-3xs text-fg-secondary">{node.node_type}</span>
+        <span className="text-2xs text-fg-faint">Node type</span>
+        <span className="text-2xs text-fg-secondary">{node.node_type}</span>
         {complexity && (
           <>
-            <span className="text-3xs text-fg-faint">Complexity</span>
+            <span className="text-2xs text-fg-faint">Complexity</span>
             <div className="flex items-center gap-1.5">
-              <span className="text-3xs font-medium" style={{ color: complexity.color }}>
+              <span className="text-2xs font-medium" style={{ color: complexity.color }}>
                 {complexity.label}
               </span>
               <div className="flex-1 h-1 rounded-full bg-surface-overlay overflow-hidden">
@@ -248,19 +248,19 @@ export function ExploreSymbolPanel({
                 />
               </div>
               {lineCount != null && (
-                <span className="text-3xs text-fg-faint tabular-nums">{lineCount.toLocaleString()}</span>
+                <span className="text-2xs text-fg-faint tabular-nums">{lineCount.toLocaleString()}</span>
               )}
             </div>
           </>
         )}
         {node.metadata.language_notes && node.metadata.language_notes.length > 0 && (
           <>
-            <span className="text-3xs text-fg-faint col-span-2">Language concepts</span>
+            <span className="text-2xs text-fg-faint col-span-2">Language concepts</span>
             <div className="col-span-2 flex flex-wrap gap-1">
               {node.metadata.language_notes.map((note) => (
                 <span
                   key={note}
-                  className="text-3xs px-1.5 py-0.5 rounded border border-info/30 bg-info/10 text-info"
+                  className="text-2xs px-1.5 py-0.5 rounded border border-info/30 bg-info/10 text-info"
                 >
                   {note}
                 </span>
@@ -273,10 +273,10 @@ export function ExploreSymbolPanel({
       {/* Content preview */}
       {previewContent && (
         <div className="px-3 py-2.5 border-b border-edge-subtle/60">
-          <div className="text-3xs uppercase tracking-wider text-fg-faint mb-1.5 flex items-center justify-between">
+          <div className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5 flex items-center justify-between">
             <span>Preview</span>
             {content_preview && content_preview.length > 800 && (
-              <span className="text-3xs text-fg-faint normal-case tracking-normal">truncated</span>
+              <span className="text-2xs text-fg-faint normal-case tracking-normal">truncated</span>
             )}
           </div>
           <CodePreview content={previewContent} startLine={line_start} />
@@ -287,7 +287,7 @@ export function ExploreSymbolPanel({
       {projectId && (
         <div className="px-3 py-2.5 border-b border-edge-subtle/60 space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-3xs uppercase tracking-wider text-fg-faint">Plain English</span>
+            <span className="text-2xs uppercase tracking-wider text-fg-faint">Plain English</span>
             {!summary && !summaryLoading && (
               <Btn size="sm" variant="ghost" onClick={() => void loadSummary()} className="h-7 text-2xs px-2">
                 Explain this file

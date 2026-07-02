@@ -79,6 +79,7 @@ import { TesterSubmissionCard } from '../components/report-detail/TesterSubmissi
 import { SdkUpgradeCTA } from '../components/SdkUpgradeCTA'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import type { SdkStatus } from '../components/SdkVersionBadge'
+import { CHIP_TONE } from '../lib/chipTone'
 
 export function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -408,7 +409,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
       <PageHeaderBar
         title="Report detail"
         contextChip={null}
-        description="Triage, dispatch fixes, and reply to the reporter."
+
         helpTitle="About this report"
         helpWhatIsIt="A single bug report submitted from your app, auto-classified by the LLM pipeline and queued for human triage."
         helpUseCases={[
@@ -678,8 +679,8 @@ function describeTriageUpdate(updates: Record<string, string>): string | null {
 
 /** Platform chip colour map — mirrors the same sentiment used by InboxPage. */
 const PLATFORM_BADGE: Record<string, string> = {
-  ios:     'bg-info-muted text-info border-info/20',
-  android: 'bg-ok-muted text-ok border-ok/20',
+  ios:     CHIP_TONE.infoSubtle + ' border-info/20',
+  android: CHIP_TONE.okSubtle + ' border-ok/20',
   web:     'bg-brand/15 text-brand border-brand/20',
   macos:   'bg-surface-overlay text-fg-secondary border-edge-subtle',
   windows: 'bg-surface-overlay text-fg-secondary border-edge-subtle',

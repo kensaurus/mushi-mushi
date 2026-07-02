@@ -17,6 +17,7 @@
 import { Tooltip } from '../ui'
 import { ReportCodeText } from './ReportCodeText'
 import type { ReportRow } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   row: ReportRow
@@ -62,14 +63,14 @@ function captureLabel(trigger: string | null | undefined): { label: string; tone
   if (trigger === 'window-error' || trigger === 'unhandled-rejection') {
     return {
       label: 'auto',
-      tone: 'bg-info-muted text-info border-info/30',
+      tone: CHIP_TONE.infoSubtle + ' border-info/30',
       tooltip: `Captured automatically when ${trigger === 'window-error' ? 'a JS error was thrown' : 'a promise rejection went unhandled'}. Check whether it actually broke a user flow — these can be benign third-party noise.`,
     }
   }
   if (trigger === 'captureException' || trigger === 'captureMessage' || trigger.startsWith('node-')) {
     return {
       label: 'server',
-      tone: 'bg-warn-muted/50 text-warning-foreground border-warn/30',
+      tone: CHIP_TONE.warnSubtle + ' border-warn/30',
       tooltip:
         'Forwarded from a backend service via @mushi-mushi/node (Express/Hono/Fastify middleware or direct captureException call). The user may never have seen this surface.',
     }

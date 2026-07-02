@@ -50,6 +50,7 @@ import {
 import { IconIntelligence, IconShield, IconChevronRight } from '../components/icons'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
+import { CHIP_TONE } from '../lib/chipTone'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -103,10 +104,10 @@ function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
 function SeverityBadge({ severity }: { severity: string }) {
   const className =
     severity === 'critical'
-      ? 'bg-danger-muted/50 text-danger-foreground border border-danger/20'
+      ? CHIP_TONE.dangerSubtle
       : severity === 'warn'
-        ? 'bg-warn-muted/50 text-warning-foreground border border-warn/20'
-        : 'bg-info-muted/50 text-info-foreground border border-info/20'
+        ? CHIP_TONE.warnSubtle + ' border border-warn/20'
+        : CHIP_TONE.infoSubtle + ' border border-info/20'
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${className}`}>
       {severity}
@@ -377,7 +378,7 @@ function ClustersTab() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <Badge
-                    className={cluster.status === 'promoted' ? 'bg-ok-muted/20 text-ok' : cluster.status === 'candidate' ? 'bg-warn-muted text-warn' : 'bg-surface-overlay text-fg-secondary'}
+                    className={cluster.status === 'promoted' ? CHIP_TONE.okSubtle : cluster.status === 'candidate' ? CHIP_TONE.warnSubtle : 'bg-surface-overlay text-fg-secondary'}
                   >
                     {cluster.status}
                   </Badge>
@@ -635,7 +636,7 @@ export function LessonsPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Lessons'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={copy?.description ?? 'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for rules, Clusters to promote, Query Sim to preview injection.'}
+
         helpTitle={copy?.help?.title ?? 'About Lessons'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Lessons are the institutional memory of your project — named classes of bugs that have recurred ≥ 3 times, been judged coherent by the LLM judge, and promoted to permanent rules.'}
         helpUseCases={copy?.help?.useCases ?? [
@@ -650,11 +651,11 @@ export function LessonsPage() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
+              ? CHIP_TONE.okSubtle
               : bannerSeverity === 'danger'
-                ? 'bg-danger-muted/50 text-danger-foreground'
+                ? CHIP_TONE.dangerSubtle
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn-muted/50 text-warning-foreground'
+                  ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
                     ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                     : 'bg-surface-overlay text-fg-muted'

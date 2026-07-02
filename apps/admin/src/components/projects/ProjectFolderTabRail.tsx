@@ -15,6 +15,7 @@ import {
 } from '../../lib/pdcaBottleneck'
 import type { PdcaStageId } from '../../lib/pdca'
 import type { SdkStatus } from '../SdkVersionBadge'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 export interface ProjectFolderTabItem {
   id: string
@@ -129,7 +130,7 @@ function ProjectMetaRow({ project }: { project: ProjectFolderTabItem }) {
         </SignalChip>
       ) : null}
       {critical > 0 ? (
-        <Badge className="bg-danger-muted text-danger border border-danger/30 text-3xs px-1 py-0">
+        <Badge className={`${CHIP_TONE.dangerSubtle} border border-danger/30 text-3xs px-1 py-0`}>
           {critical} critical
         </Badge>
       ) : null}

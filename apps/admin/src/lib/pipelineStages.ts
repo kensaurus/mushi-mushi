@@ -2,6 +2,8 @@
  * Queue / pipeline stage labels → admin pages.
  */
 
+import { CHIP_TONE } from './chipTone'
+
 export interface PipelineStageInfo {
   label: string
   description: string
@@ -14,43 +16,43 @@ const STAGES: Record<string, PipelineStageInfo> = {
     label: 'Classify',
     description: 'LLM triage assigns category and severity.',
     to: '/reports',
-    className: 'border-info/35 bg-info-muted/45 text-info hover:bg-info-muted/70',
+    className: `${CHIP_TONE.infoSubtle} hover:bg-info-muted/70`,
   },
   fix: {
     label: 'Auto-fix',
     description: 'Fix worker drafts a patch and opens a PR.',
     to: '/fixes',
-    className: 'border-accent/35 bg-accent-muted/45 text-accent hover:bg-accent-muted/70',
+    className: `${CHIP_TONE.accentSubtle} hover:bg-accent-muted/70`,
   },
   judge: {
     label: 'Judge',
     description: 'Quality scoring on classification or fixes.',
     to: '/judge',
-    className: 'border-warn/35 bg-warn-muted/45 text-warn hover:bg-warn-muted/70',
+    className: `${CHIP_TONE.warnSubtle} hover:bg-warn-muted/70`,
   },
   pdca: {
     label: 'PDCA',
     description: 'Iterate loop critiques the draft before merge.',
     to: '/iterate',
-    className: 'border-warn/25 bg-warn-muted/35 text-warn hover:bg-warn-muted/55',
+    className: `${CHIP_TONE.warnSubtle} hover:bg-warn-muted/55`,
   },
   release: {
     label: 'Release',
     description: 'Release notes and changelog builder.',
     to: '/releases',
-    className: 'border-ok/35 bg-ok-muted/45 text-ok hover:bg-ok-muted/70',
+    className: `${CHIP_TONE.okSubtle} hover:bg-ok-muted/70`,
   },
   intelligence: {
     label: 'Intelligence',
     description: 'Weekly narrative digest.',
     to: '/intelligence',
-    className: 'border-brand/35 bg-brand/10 text-brand hover:bg-brand/15',
+    className: `${CHIP_TONE.brandSubtle} hover:bg-brand/15`,
   },
   qa: {
     label: 'QA story',
     description: 'Scheduled user-story test run.',
     to: '/qa-coverage',
-    className: 'border-info/25 bg-info-muted/30 text-info hover:bg-info-muted/50',
+    className: `${CHIP_TONE.infoSubtle} hover:bg-info-muted/50`,
   },
 }
 

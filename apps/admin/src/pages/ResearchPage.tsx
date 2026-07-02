@@ -45,6 +45,7 @@ import {
 import { ResearchSnippetCard } from '../components/research/ResearchSnippetCard'
 import { ResearchSessionTable } from '../components/research/ResearchSessionTable'
 import type { SearchResponse, SessionRow } from '../components/research/types'
+import { CHIP_TONE } from '../lib/chipTone'
 
 type SessionMode = 'all' | 'search' | 'scrape'
 type SessionAge = 'all' | '24h' | '7d'
@@ -290,7 +291,7 @@ export function ResearchPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Research'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={copy?.description ?? 'Status banner first — Summary for posture, Search to look things up, History for past sessions.'}
+
         helpTitle={copy?.help?.title ?? 'About web research'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Search the web while reviewing a bug — look up release notes, Stack Overflow threads, or vendor changelogs and pin the result to a specific report.'}
         helpUseCases={copy?.help?.useCases ?? [
@@ -305,11 +306,11 @@ export function ResearchPage() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
+              ? CHIP_TONE.okSubtle
               : bannerSeverity === 'danger'
-                ? 'bg-danger-muted/50 text-danger-foreground'
+                ? CHIP_TONE.dangerSubtle
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn-muted/50 text-warning-foreground'
+                  ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
                     ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                     : 'bg-surface-overlay text-fg-muted'

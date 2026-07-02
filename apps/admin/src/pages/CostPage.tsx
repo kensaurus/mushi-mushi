@@ -206,7 +206,7 @@ export function CostPage() {
       <div className="space-y-4" data-testid="mushi-page-cost">
         <PageHeaderBar
           title={copy?.title ?? 'LLM Cost'}
-          description={copy?.description ?? 'Track and audit every LLM call across classify, fix, judge, and inventory agents.'}
+
           helpTitle={copy?.help?.title ?? 'About AI cost tracking'}
           helpWhatIsIt={
             copy?.help?.whatIsIt ??
@@ -245,7 +245,7 @@ export function CostPage() {
       <PageHeaderBar
         title={copy?.title ?? 'LLM Cost'}
         projectScope={stats.projectName ?? undefined}
-        description={copy?.description ?? 'Track and audit every LLM call across classify, fix, judge, and inventory agents.'}
+
         helpTitle={copy?.help?.title ?? 'About AI cost tracking'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
@@ -266,9 +266,9 @@ export function CostPage() {
         {!ux.hideOverviewChrome && (
           <>
             {stats.totalCalls > 0 ? (
-              <Badge className="bg-ok-muted text-ok">Telemetry on</Badge>
+              <Badge tone="okSubtle">Telemetry on</Badge>
             ) : (
-              <Badge className="bg-warn-muted/50 text-warning-foreground">No calls yet</Badge>
+              <Badge tone="warnSubtle">No calls yet</Badge>
             )}
           </>
         )}

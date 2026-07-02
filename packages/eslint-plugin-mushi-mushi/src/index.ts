@@ -40,6 +40,7 @@ import noLegacyShadcnTokens from './rules/no-legacy-shadcn-tokens.js'
 import noAccentForSelection from './rules/no-accent-for-selection.js'
 import noRawHexInWidget from './rules/no-raw-hex-in-widget.js'
 import noCardElevatedOutsideAllowlist from './rules/no-card-elevated-outside-allowlist.js'
+import noRawSemanticOnMuted from './rules/no-raw-semantic-on-muted.js'
 
 const PLUGIN_NAME = 'mushi-mushi'
 
@@ -55,6 +56,7 @@ const rules: Record<string, Rule.RuleModule> = {
   'no-accent-for-selection': noAccentForSelection,
   'no-raw-hex-in-widget': noRawHexInWidget,
   'no-card-elevated-outside-allowlist': noCardElevatedOutsideAllowlist,
+  'no-raw-semantic-on-muted': noRawSemanticOnMuted,
 }
 
 const recommendedRules: Linter.RulesRecord = {

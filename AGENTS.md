@@ -713,6 +713,49 @@ Reporter opens widget (capture.screenshot on-report/auto)
 
 ---
 
+## SDK reliability overhaul (Jul 2026)
+
+Fixes CLI browser sign-in desync, host-vs-console config clobbering, and several
+backend hardening gaps. User docs:
+[runtime config concept](https://kensaur.us/mushi-mushi/docs/concepts/runtime-config),
+[CLI loop](https://kensaur.us/mushi-mushi/docs/quickstart/cli-console-loop).
+Operator checklist: [`docs/operators/sdk-reliability-overhaul.md`](docs/operators/sdk-reliability-overhaul.md).
+
+### CLI device auth
+
+| Route | Auth | Role |
+| --- | --- | --- |
+| `POST /v1/cli/auth/device/start` | Public + IP rate limit | Mint device code; accepts `client_id` |
+| `POST /v1/cli/auth/device/approve` | JWT | User approves code |
+| `POST /v1/cli/auth/device/token` | Public + IP rate limit | CLI polls; sets `cli_token_claimed_at` |
+| `GET /v1/cli/auth/device/status` | JWT | Approval page polls until claimed |
+
+Shared logic: `_shared/cli-auth-helpers.ts` (`parseClientId`, `evaluateTokenDelivery`,
+60s re-delivery grace). Migration: `20260702090000_cli_auth_two_phase_claim.sql`.
+
+### SDK runtime config
+
+| Object | Role |
+| --- | --- |
+| `_shared/sdk-config.ts` | Single `normalizeSdkConfig` / `coerceSdkConfigUpdate` (explicit-only emission) |
+| `packages/web/src/runtime-merge.ts` | Client merge — host banner/capture win over console defaults |
+| `GET /v1/sdk/config` | Runtime payload for SDK |
+
+Full precedence: [`docs/SDK_RUNTIME_CONFIG.md`](docs/SDK_RUNTIME_CONFIG.md).
+
+### Backend hardening (same release)
+
+| Change | Migration / file |
+| --- | --- |
+| Idempotency cache not readable by project viewers | `20260702100000_request_idempotency_restrict_member_read.sql` |
+| Rate limits work for IP-derived actors | `20260702110000_scoped_rate_limits_generalize_actor.sql` |
+| MCP JWT validation for write scope | `functions/mcp/index.ts` |
+| Canonical hosted tool manifest | `_shared/mcp-hosted-tool-manifest.json` |
+| Readiness probe | `GET /health/ready` in `api/routes/discovery.ts` |
+| LLM transient retry before key rotation | `_shared/llm-failover.ts` |
+
+---
+
 ## ExecPlans
 
 Detailed, phase-by-phase implementation plans live in

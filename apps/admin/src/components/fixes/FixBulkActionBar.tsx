@@ -6,6 +6,7 @@
  */
 
 import { pluralizeWithCount } from '../../lib/format'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   /** Fixes currently shown after status-bucket filter. */
@@ -104,7 +105,7 @@ export function FixBulkActionBar({
                 ? 'None of the selected fixes are in a failed state'
                 : `Re-dispatch the auto-fix agent for ${pluralizeWithCount(failedCount, 'failed fix', 'failed fixes')}`
             }
-            className="inline-flex items-center gap-1 rounded-sm border border-warn/35 bg-warn-muted/30 px-2.5 py-1 text-xs font-medium text-warn hover:bg-warn-muted/50 disabled:cursor-not-allowed disabled:opacity-40 motion-safe:transition-colors"
+            className={`inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium hover:bg-warn-muted/50 disabled:cursor-not-allowed disabled:opacity-40 motion-safe:transition-colors ${CHIP_TONE.warnSubtle}`}
           >
             {busy && progressLabel?.startsWith('Re-dispatch') ? progressLabel : `Retry ${failedCount}`}
           </button>

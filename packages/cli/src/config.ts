@@ -18,6 +18,7 @@
  * proactively chmod it down. The containing directory inherits 0o700.
  */
 
+import { randomUUID } from 'crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join } from 'path'
@@ -28,6 +29,13 @@ export interface CliConfig {
   projectId?: string
   /** URL of the Mushi admin console (e.g. http://localhost:6464 for local dev). */
   consoleUrl?: string
+  /**
+   * Random per-machine identifier sent with device-auth /start so the server
+   * can supersede this machine's earlier pending sign-in requests (a stale
+   * approval tab must not be approvable while the terminal polls a new code).
+   * Not a secret — it only groups requests from the same machine.
+   */
+  clientId?: string
 }
 
 const SECURE_FILE_MODE = 0o600
@@ -115,6 +123,26 @@ export function loadConfig(path = CONFIG_PATH): CliConfig {
       : {}),
   }
   return { ...file, ...fromEnv }
+}
+
+/**
+ * Return the persistent per-machine client id, minting and saving one on
+ * first use. Best-effort: if the config file cannot be written (read-only
+ * home, sandbox), a fresh id is still returned so device-auth works — it
+ * just won't supersede across runs.
+ */
+export function ensureClientId(path = CONFIG_PATH): string {
+  const existing = loadConfig(path)
+  if (existing.clientId && /^[A-Za-z0-9_-]{8,64}$/.test(existing.clientId)) {
+    return existing.clientId
+  }
+  const clientId = `cli_${randomUUID().replace(/-/g, '')}`
+  try {
+    saveConfig({ ...existing, clientId }, path)
+  } catch {
+    // best-effort — a non-persisted id still works for this run
+  }
+  return clientId
 }
 
 export function saveConfig(config: CliConfig, path = CONFIG_PATH): void {

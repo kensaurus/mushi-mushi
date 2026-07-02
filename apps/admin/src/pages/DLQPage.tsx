@@ -207,7 +207,7 @@ export function DLQPage() {
     <div className="space-y-5">
       <PageHeaderBar
         title="Processing Queue"
-        description="Inflight, failed, and dead-letter jobs from the worker pipeline. Retry or quarantine here."
+
         helpTitle="About the Processing Queue"
         helpWhatIsIt="Every report passes through fast-filter, classify, and (optionally) judge + fix stages. This page is the operator view of that pipeline — backlog by status, throughput trend, and any item stuck in dead letter."
         helpUseCases={[

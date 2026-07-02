@@ -53,3 +53,36 @@ export function statusChipTone(severity: StatusSeverity): string {
       return CHIP_TONE.neutral
   }
 }
+
+/**
+ * Canonical run / job / lifecycle status → chip tone.
+ *
+ * Single source of truth for every status pill in the console (QA runs,
+ * releases, experiments, compliance evidence, DSARs, storage health, support
+ * tickets, feature tickets…). Pages must consume this instead of declaring
+ * their own `Record<Status, string>` maps — that's how we ended up with
+ * AA-failing `text-ok`-on-`bg-ok/10` chips in four different hues.
+ */
+const RUN_STATUS_SEVERITY: Record<string, StatusSeverity> = {
+  // success family
+  passed: 'ok', pass: 'ok', completed: 'ok', resolved: 'ok', published: 'ok',
+  healthy: 'ok', done: 'ok', merged: 'ok', verified: 'ok', active: 'ok',
+  connected: 'ok', success: 'ok',
+  // failure family
+  failed: 'danger', fail: 'danger', error: 'danger', failing: 'danger',
+  rejected: 'danger', dead_letter: 'danger', critical: 'danger', blocked: 'danger',
+  // attention family
+  timeout: 'warn', degraded: 'warn', warn: 'warn', pending: 'warn',
+  draft: 'warn', open: 'warn', high: 'warn', stale: 'warn',
+  // in-flight / informational family
+  running: 'info', in_progress: 'info', queued: 'info', info: 'info',
+  validating: 'info', deploying: 'info', syncing: 'info',
+  // neutral / terminal-quiet family
+  skipped: 'neutral', closed: 'neutral', cancelled: 'neutral', stopped: 'neutral',
+  disabled: 'neutral', unknown: 'neutral', archived: 'neutral', optional: 'neutral',
+}
+
+export function runStatusChipTone(status: string | null | undefined): string {
+  if (!status) return CHIP_TONE.neutral
+  return statusChipTone(RUN_STATUS_SEVERITY[status] ?? 'neutral')
+}

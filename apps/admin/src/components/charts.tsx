@@ -37,6 +37,7 @@ import {
   resolveChartMax,
   shortDay,
 } from './charts/chartAxis'
+import { CHIP_TONE } from '../lib/chipTone'
 
 export { shortDay, formatChartCount, formatChartUsd } from './charts/chartAxis'
 export { ChartFrame } from './charts/ChartFrame'
@@ -922,13 +923,13 @@ export function HealthPill({ status }: { status: string | null | undefined }) {
     )
   if (status === 'degraded')
     return (
-      <Badge className="bg-warn-muted/50 text-warning-foreground border border-warn/30">
+      <Badge tone="warnSubtle">
         Degraded
       </Badge>
     )
   if (status === 'down')
     return (
-      <Badge className="bg-danger-muted/50 text-danger-foreground border border-danger/30">
+      <Badge className={`${CHIP_TONE.dangerSubtle} border border-danger/30`}>
         Down
       </Badge>
     )
@@ -942,17 +943,17 @@ export function HealthPill({ status }: { status: string | null | undefined }) {
 /* ── StatusPill ─────────────────────────────────────────────────────────── */
 
 const STATUS_CLASS: Record<string, string> = {
-  new: 'bg-warn-muted/50 text-warning-foreground border-warn/30',
-  pending: 'bg-warn-muted/50 text-warning-foreground border-warn/30',
+  new: CHIP_TONE.warnSubtle + ' border-warn/30',
+  pending: CHIP_TONE.warnSubtle + ' border-warn/30',
   queued: 'bg-info/15 text-info border-info/30',
   running: 'bg-info/15 text-info border-info/30',
   classified: 'bg-ok/15 text-ok border-ok/30',
   completed: 'bg-ok/15 text-ok border-ok/30',
   fixing: 'bg-brand/15 text-brand border-brand/30',
   fixed: 'bg-info/15 text-info border-info/30',
-  failed: 'bg-danger-muted/50 text-danger-foreground border-danger/30',
-  dead_letter: 'bg-danger-muted/50 text-danger-foreground border-danger/30',
-  rejected: 'bg-danger-muted/50 text-danger-foreground border-danger/30',
+  failed: CHIP_TONE.dangerSubtle + ' border-danger/30',
+  dead_letter: CHIP_TONE.dangerSubtle + ' border-danger/30',
+  rejected: CHIP_TONE.dangerSubtle + ' border-danger/30',
   dismissed: 'bg-fg-faint/15 text-fg-muted border-edge-subtle',
 }
 

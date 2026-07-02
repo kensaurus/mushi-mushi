@@ -15,6 +15,7 @@ import { useEntitlements } from '../../lib/useEntitlements'
 import { UpgradePrompt } from '../billing/UpgradePrompt'
 import { SettingsPanelLayout } from './SettingsPanelLayout'
 import { ContainedBlock } from '../report-detail/ReportSurface'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 type PoolKeyStatus = 'active' | 'disabled' | 'quota_exhausted' | 'auth_failed'
 
@@ -56,10 +57,10 @@ const PROVIDER_META: Record<string, { name: string; placeholder: string; console
 }
 
 const STATUS_CHIP: Record<PoolKeyStatus, { label: string; className: string }> = {
-  active: { label: 'active', className: 'bg-ok-muted/50 text-ok-foreground' },
+  active: { label: 'active', className: CHIP_TONE.okSubtle },
   disabled: { label: 'disabled', className: 'bg-surface-raised text-fg-muted' },
-  quota_exhausted: { label: 'quota exhausted', className: 'bg-warn-muted/50 text-warning-foreground' },
-  auth_failed: { label: 'auth failed', className: 'bg-danger-muted/50 text-danger-foreground' },
+  quota_exhausted: { label: 'quota exhausted', className: CHIP_TONE.warnSubtle },
+  auth_failed: { label: 'auth failed', className: CHIP_TONE.dangerSubtle },
 }
 
 const DISPLAY_PROVIDERS = ['anthropic', 'openai', 'cursor'] as const

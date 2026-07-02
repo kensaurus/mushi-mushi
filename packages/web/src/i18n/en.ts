@@ -62,6 +62,7 @@ export const en: MushiLocale = {
     elementButton: 'Select Element',
     elementSelected: 'Element selected ✓',
     elementCapturing: 'Click anything on the page…',
+    elementFailed: "Couldn't select — describe it instead",
     elementSelectorHint: 'Click any element · Esc to cancel',
     optional: '(optional)',
     tooShort: 'A bit more detail helps us fix it faster',

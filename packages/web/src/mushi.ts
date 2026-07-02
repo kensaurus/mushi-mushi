@@ -1,7 +1,6 @@
 import { compressScreenshotDataUrl } from './capture/compress-screenshot';
 import {
   type MushiConfig,
-  type MushiWidgetConfig,
   type MushiReport,
   type MushiReportCategory,
   type MushiRuntimeSdkConfig,
@@ -37,6 +36,7 @@ import {
 } from '@mushi-mushi/core';
 
 import { MushiWidget } from './widget';
+import { mergeRuntimeConfig } from './runtime-merge';
 import { exposeMarketingRecorder } from './marketing-recorder';
 import {
   initRewards,
@@ -299,7 +299,12 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     }
 
     if (activeConfig.capture?.screenshot !== 'off') {
-      const screenshotOptions = { privacy: activeConfig.privacy };
+      const screenshotOptions = {
+        privacy: activeConfig.privacy,
+        // Surface capture failures (canvas taint, CSP) in the widget UI —
+        // an invisible failure looks identical to a broken button.
+        onFailed: () => widget.setScreenshotError(true),
+      };
       if (activeConfig.capture?.screenshotProvider) {
         // When a custom provider is set the built-in DOM capturer is bypassed
         // entirely. We still allow the built-in as a fallback if the provider
@@ -323,6 +328,17 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       elementSelector = null;
       pendingElement = null;
     }
+
+    // Tell the widget which attachment tools are actually usable so the
+    // details step hides (rather than renders dead) buttons. A rendered
+    // button whose handler silently early-returns is indistinguishable
+    // from a bug to the reporter.
+    widget.setCaptureAvailability({
+      screenshot:
+        (!!screenshotCap || !!activeConfig.capture?.screenshotProvider) &&
+        activeConfig.capture?.screenshot !== 'off',
+      element: !!elementSelector,
+    });
 
     // Mushi v2.1: passive inventory discovery. Default OFF — only stand
     // up when the host explicitly opts in. We deliberately re-create the
@@ -616,11 +632,26 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     },
     onScreenshotRequest: async () => {
       const hasCapture = !!screenshotCap || !!activeConfig.capture?.screenshotProvider;
-      if (!hasCapture || activeConfig.capture?.screenshot === 'off') return;
+      if (!hasCapture || activeConfig.capture?.screenshot === 'off') {
+        // The button should be hidden in this state (setCaptureAvailability),
+        // but if a stale render still shows it, fail visibly rather than no-op.
+        log.warn('Screenshot requested but capture is disabled');
+        widget.setScreenshotError(true);
+        return;
+      }
       log.debug('Taking screenshot');
-      pendingScreenshot = await takeScreenshotWithoutChrome();
+      widget.setScreenshotCapturing(true);
+      try {
+        pendingScreenshot = await takeScreenshotWithoutChrome();
+      } catch (err) {
+        log.warn('Screenshot capture threw', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        pendingScreenshot = null;
+      }
       widget.setScreenshotAttached(pendingScreenshot !== null);
       widget.setScreenshotPreview(pendingScreenshot);
+      if (pendingScreenshot === null) widget.setScreenshotError(true);
     },
     onScreenshotRemove: () => {
       log.debug('Screenshot attachment removed');
@@ -690,7 +721,14 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       container.insertBefore(toolbar, container.firstChild);
     },
     onElementSelectorRequest: async () => {
-      if (!elementSelector || activeConfig.capture?.elementSelector === false) return;
+      if (!elementSelector || activeConfig.capture?.elementSelector === false) {
+        // Should be unreachable now that unavailable tools are hidden
+        // (setCaptureAvailability), but fail visibly rather than no-op —
+        // mirrors onScreenshotRequest's disabled-but-clicked guard.
+        log.warn('Element selector requested but it is disabled/unavailable');
+        widget.setElementError(true);
+        return;
+      }
       log.debug('Element selector activated');
       widget.setElementCapturing(true);
       widget.hidePanel();
@@ -701,8 +739,18 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
           widget.setElementSelected(true);
           log.debug('Element selected', { tagName: el.tagName, xpath: el.xpath });
         } else {
+          // activate() only resolves null on an explicit Escape-press — a
+          // deliberate cancel, not a failure, so this is NOT setElementError.
           widget.setElementCapturing(false);
         }
+      } catch (err) {
+        // Defensive: activate() never rejects today, but a future capture
+        // provider might. Surface it rather than silently hiding the button
+        // state, matching onScreenshotRequest's catch-and-flag behavior.
+        log.warn('Element selector threw', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        widget.setElementError(true);
       } finally {
         widget.showPanel();
       }
@@ -1810,75 +1858,6 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   return isolatePublicApi(sdk);
 }
 
-function mergeRuntimeConfig(config: MushiConfig, runtime: MushiRuntimeSdkConfig): MushiConfig {
-  const nativeTrigger = runtime.native?.triggerMode;
-  // The server returns `launcher` for the new field (backwards-compat with
-  // the old `trigger` field that only tracked `auto`). Prefer `launcher`.
-  const runtimeLauncher = (runtime.widget as Record<string, unknown>)?.launcher as string | undefined;
-  const widgetTrigger =
-    runtimeLauncher ??
-    runtime.widget?.trigger ??
-    (nativeTrigger === 'none' || nativeTrigger === 'shake' ? 'manual' : undefined);
-  // Never silently regress a host-configured visible widget to `hidden`.
-  // The console is authoritative, but only when it *explicitly* asks for
-  // `hidden` (launcher/trigger field present and set to hidden). A default
-  // or empty runtime payload must not disable a widget the host wired up —
-  // this was a primary cause of "the SDK doesn't show up" in dev.
-  const explicitHidden = runtimeLauncher === 'hidden' || runtime.widget?.trigger === 'hidden';
-  const hostTrigger = config.widget?.trigger;
-  const safeWidgetTrigger =
-    widgetTrigger === 'hidden' && !explicitHidden && hostTrigger && hostTrigger !== 'hidden'
-      ? hostTrigger
-      : widgetTrigger;
-  // Build bannerConfig from flat runtime fields when present.
-  const runtimeWidget = runtime.widget as Record<string, unknown> | undefined;
-  const runtimeBannerVariant = runtimeWidget?.bannerVariant as string | undefined;
-  const runtimeBannerPosition = runtimeWidget?.bannerPosition as string | undefined;
-  const runtimeBannerMessage = runtimeWidget?.bannerMessage as string | null | undefined;
-  const runtimeBannerLabel = runtimeWidget?.bannerLabel as string | null | undefined;
-  const runtimeBannerBugCta = runtimeWidget?.bannerBugCta as string | null | undefined;
-  const runtimeBannerFeatureCta = runtimeWidget?.bannerFeatureCta as boolean | undefined;
-  const derivedBannerConfig =
-    runtimeBannerVariant ||
-    runtimeBannerPosition ||
-    runtimeBannerMessage != null ||
-    runtimeBannerLabel != null ||
-    runtimeBannerBugCta != null ||
-    runtimeBannerFeatureCta != null
-      ? {
-          ...(config.widget?.bannerConfig ?? {}),
-          ...(runtimeBannerVariant ? { variant: runtimeBannerVariant as 'neon' | 'brand' | 'subtle' } : {}),
-          ...(runtimeBannerPosition ? { position: runtimeBannerPosition as 'top' | 'bottom' } : {}),
-          ...(runtimeBannerMessage != null ? { message: runtimeBannerMessage } : {}),
-          // Dashboard sends an empty string to hide the pill (the runtime
-          // payload has no way to express the local-config `label: false`).
-          ...(runtimeBannerLabel != null
-            ? { label: runtimeBannerLabel === '' ? (false as const) : runtimeBannerLabel }
-            : {}),
-          ...(runtimeBannerBugCta != null ? { bugCta: runtimeBannerBugCta ?? undefined } : {}),
-          ...(runtimeBannerFeatureCta != null ? { featureCta: runtimeBannerFeatureCta } : {}),
-        }
-      : undefined;
-  return {
-    ...config,
-    widget: {
-      ...config.widget,
-      ...runtime.widget,
-      ...(safeWidgetTrigger ? { trigger: safeWidgetTrigger as MushiWidgetConfig['trigger'] } : {}),
-      ...(derivedBannerConfig ? { bannerConfig: derivedBannerConfig } : {}),
-      // betaMode is local-only: set by the host app, not the dashboard.
-      // Restore it after the runtime spread so it is never silently cleared.
-      ...(config.widget?.betaMode ? { betaMode: config.widget.betaMode } : {}),
-    },
-    capture: {
-      ...config.capture,
-      ...runtime.capture,
-    },
-    privacy: {
-      ...config.privacy,
-    },
-  };
-}
 
 function applyPresetConfig(config: MushiConfig): MushiConfig {
   if (!config.preset) return config;

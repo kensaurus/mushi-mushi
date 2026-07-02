@@ -49,6 +49,7 @@ import {
   overviewPendingLiabilityTooltip,
   overviewPendingLiabilityDetail,
 } from '../../../lib/statTooltips/rewards'
+import { CHIP_TONE } from '../../../lib/chipTone'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -125,9 +126,9 @@ interface ProjectOption {
 
 const TIER_BADGE: Record<string, string> = {
   free:        'bg-surface-overlay text-fg-secondary',
-  explorer:    'bg-info-muted text-info',
+  explorer:    CHIP_TONE.infoSubtle,
   contributor: 'bg-brand/15 text-brand',
-  champion:    'bg-warn-muted text-warn',
+  champion:    CHIP_TONE.warnSubtle,
 }
 
 // ─── Overview tab ────────────────────────────────────────────
@@ -299,7 +300,7 @@ export function OverviewTab() {
               const rejected = !!ev.rejected_reason
               return (
                 <div key={ev.id} className={`py-1.5 flex items-start gap-2 ${rejected ? 'opacity-50' : ''}`}>
-                  <span className={`shrink-0 inline-flex items-center rounded-sm px-1.5 py-0.5 text-2xs font-mono mt-0.5 ${rejected ? 'bg-surface-overlay text-fg-faint' : 'bg-ok-muted text-ok'}`}>
+                  <span className={`shrink-0 inline-flex items-center rounded-sm px-1.5 py-0.5 text-2xs font-mono mt-0.5 ${rejected ? 'bg-surface-overlay text-fg-faint' : CHIP_TONE.okSubtle}`}>
                     {ev.action.replace(/_/g, ' ')}
                   </span>
                   <div className="flex-1 min-w-0">
@@ -724,12 +725,12 @@ export function ContributorDrawer({
   }, [overrideTier, tierReason, endUserId, reloadDetail, onDataChange, toast])
 
   const ACTION_TONE: Record<string, string> = {
-    report_submit:                 'bg-ok-muted text-ok',
-    screen_view_unique_per_day:    'bg-info-muted text-info',
+    report_submit:                 CHIP_TONE.okSubtle,
+    screen_view_unique_per_day:    CHIP_TONE.infoSubtle,
     session_minute:                'bg-brand/15 text-brand',
-    comment_posted:                'bg-ok-muted text-ok',
+    comment_posted:                CHIP_TONE.okSubtle,
     app_launch:                    'bg-surface-overlay text-fg-secondary',
-    quest_completed:               'bg-warn-muted text-warn',
+    quest_completed:               CHIP_TONE.warnSubtle,
   }
 
   const profileRows: DetailRowItem[] = detail?.profile
@@ -865,7 +866,7 @@ export function ContributorDrawer({
               <div className="font-semibold text-danger mb-1">Anti-fraud flags</div>
               <div className="flex flex-wrap gap-1.5 mt-1">
                 {detail.profile.anti_fraud_flags.map((f) => (
-                  <Badge key={f} className="bg-danger-muted text-danger text-2xs">{f}</Badge>
+                  <Badge key={f} className={`${CHIP_TONE.dangerSubtle} text-2xs`}>{f}</Badge>
                 ))}
               </div>
             </div>
@@ -1094,7 +1095,7 @@ export function ContributorsTab() {
         </td>
         <td className="py-2.5 pr-2">
           {hasFlag
-            ? <Badge className="bg-danger-muted text-danger text-2xs">{flags[0]}{flags.length > 1 ? ` +${flags.length - 1}` : ''}</Badge>
+            ? <Badge className={`${CHIP_TONE.dangerSubtle} text-2xs`}>{flags[0]}{flags.length > 1 ? ` +${flags.length - 1}` : ''}</Badge>
             : <span className="text-fg-faint">—</span>
           }
         </td>
@@ -1409,7 +1410,7 @@ export function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-fg capitalize">{p.provider}</span>
-              <Badge className={p.enabled ? 'bg-ok-muted text-ok text-2xs' : 'bg-surface-overlay text-fg-muted text-2xs'}>
+              <Badge className={p.enabled ? CHIP_TONE.okSubtle + ' text-2xs' : 'bg-surface-overlay text-fg-muted text-2xs'}>
                 {p.enabled ? 'Active' : 'Disabled'}
               </Badge>
             </div>
@@ -1445,10 +1446,10 @@ interface DisputeRow {
 }
 
 const DISPUTE_BADGE: Record<string, string> = {
-  open:         'bg-warn-muted text-warn',
-  under_review: 'bg-info-muted text-info',
-  approved:     'bg-ok-muted text-ok',
-  denied:       'bg-danger-muted text-danger',
+  open:         CHIP_TONE.warnSubtle,
+  under_review: CHIP_TONE.infoSubtle,
+  approved:     CHIP_TONE.okSubtle,
+  denied:       CHIP_TONE.dangerSubtle,
   withdrawn:    'bg-surface-overlay text-fg-muted',
 }
 
@@ -1535,10 +1536,10 @@ interface PayoutRow {
 }
 
 const PAYOUT_BADGE: Record<string, string> = {
-  paid:       'bg-ok-muted text-ok',
-  pending:    'bg-warn-muted text-warn',
-  processing: 'bg-info-muted text-info',
-  failed:     'bg-danger-muted text-danger',
+  paid:       CHIP_TONE.okSubtle,
+  pending:    CHIP_TONE.warnSubtle,
+  processing: CHIP_TONE.infoSubtle,
+  failed:     CHIP_TONE.dangerSubtle,
   withheld:   'bg-surface-overlay text-fg-muted',
   cancelled:  'bg-surface-overlay text-fg-muted',
 }
@@ -1847,11 +1848,11 @@ export function QuestsTab({ canEdit }: { canEdit: boolean }) {
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-medium text-xs text-fg">{q.name}</span>
-                    <Badge className={q.enabled ? 'text-2xs bg-ok-muted text-ok' : 'text-2xs bg-surface-overlay text-fg-muted'}>
+                    <Badge className={q.enabled ? `text-2xs ${CHIP_TONE.okSubtle}` : 'text-2xs bg-surface-overlay text-fg-muted'}>
                       {q.enabled ? 'Active' : 'Disabled'}
                     </Badge>
                     <Badge className="text-2xs bg-surface-overlay text-fg-secondary">+{q.completion_points} pts</Badge>
-                    {q.repeatable && <Badge className="text-2xs bg-info-muted text-info">Repeatable</Badge>}
+                    {q.repeatable && <Badge className={`text-2xs ${CHIP_TONE.infoSubtle}`}>Repeatable</Badge>}
                   </div>
                   {q.description && <p className="text-2xs text-fg-muted mt-0.5">{q.description}</p>}
                   <div className="flex gap-1.5 flex-wrap mt-1.5">
@@ -2065,8 +2066,8 @@ export function SandboxSimulatorTab() {
                       {row.unknown ? '–' : row.subtotal.toLocaleString()}
                     </td>
                     <td className="py-1.5 pl-3">
-                      {row.unknown && <Badge className="bg-warn-muted text-warn text-2xs">unknown action</Badge>}
-                      {row.capped && <Badge className="bg-info-muted text-info text-2xs">daily cap applied</Badge>}
+                      {row.unknown && <Badge className={`${CHIP_TONE.warnSubtle} text-2xs`}>unknown action</Badge>}
+                      {row.capped && <Badge className={`${CHIP_TONE.infoSubtle} text-2xs`}>daily cap applied</Badge>}
                     </td>
                   </tr>
                 ))}

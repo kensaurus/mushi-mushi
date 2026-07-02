@@ -21,12 +21,13 @@ import {
   type ConsoleLevel,
 } from './reportLogFormat'
 import { apiFetch } from '../../lib/supabase'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 function statusBadge(status: number): string {
-  if (status >= 500) return 'bg-danger-muted text-danger border border-danger/25'
-  if (status >= 400) return 'bg-warn-muted text-warn border border-warn/25'
-  if (status >= 300) return 'bg-info-muted text-info border border-info/25'
-  if (status >= 200) return 'bg-ok-muted text-ok border border-ok/25'
+  if (status >= 500) return CHIP_TONE.dangerSubtle
+  if (status >= 400) return CHIP_TONE.warnSubtle + ' border border-warn/25'
+  if (status >= 300) return CHIP_TONE.infoSubtle + ' border border-info/25'
+  if (status >= 200) return CHIP_TONE.okSubtle
   return 'bg-surface-overlay text-fg-muted border border-edge-subtle'
 }
 

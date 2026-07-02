@@ -41,6 +41,7 @@ import {
   InlineProof,
   SignalChip,
 } from '../components/report-detail/ReportSurface'
+import { CHIP_TONE } from '../lib/chipTone'
 
 export function PromptLabPage() {
   const { data, loading, error, reload } = usePageData<PromptLabData>('/v1/admin/prompt-lab')
@@ -239,7 +240,7 @@ export function PromptLabPage() {
     <div className="space-y-5">
       <PageHeaderBar
         title="Prompt Lab"
-        description="Test prompt versions live before promoting them to production. Diff outputs side-by-side."
+
         helpTitle="About Prompt Lab"
         helpWhatIsIt="The control plane for the LLM prompts that drive fast-filter (Stage 1) and classify-report (Stage 2). Clone a baseline, edit it, run it as a candidate at 10% traffic, and promote when the judge score beats the active version."
         helpUseCases={[
@@ -488,8 +489,8 @@ function PromptLabWorkflow({ candidates, active }: PromptLabWorkflowProps) {
     },
   ]
   const toneClass: Record<NonNullable<WorkflowStep['badge']>['tone'], string> = {
-    ok: 'bg-ok-subtle text-ok',
-    info: 'bg-info-subtle text-info',
+    ok: CHIP_TONE.okSubtle,
+    info: CHIP_TONE.infoSubtle,
     muted: 'bg-surface-overlay text-fg-faint',
   }
   return (

@@ -30,6 +30,17 @@ export interface DeviceProject {
 export type PollOutcome =
   | { status: 'approved'; cliToken: string; userId?: string }
   | { status: 'pending' }
+  | {
+      /**
+       * RFC 8628 §3.5: the server is explicitly telling a well-behaved client to
+       * back off (we're polling faster than its rate limit allows). This is a
+       * courtesy signal, not a fault — it must not spend the same error budget
+       * as a flaky network or an upstream 5xx.
+       */
+      status: 'slow_down'
+      /** Milliseconds to wait, from the `Retry-After` header (falls back to a fixed bump if absent/unparseable). */
+      retryAfterMs: number
+    }
   | { status: 'denied' }
   | { status: 'expired' }
   | {
@@ -43,6 +54,9 @@ export type PollOutcome =
        */
       retryable: boolean
     }
+
+/** Fallback backoff bump when a `slow_down` response omits (or sends a garbage) `Retry-After`. */
+const DEFAULT_SLOW_DOWN_MS = 5_000
 
 function trimTrailingSlash(endpoint: string): string {
   let end = endpoint.length
@@ -64,12 +78,17 @@ async function deviceFetch(url: string, init: RequestInit = {}): Promise<Respons
 /**
  * Start a device-auth session. Throws a descriptive Error on any failure so
  * callers can fall back to the manual paste path.
+ *
+ * `clientId` (optional, persisted per-machine) lets the server supersede this
+ * machine's earlier pending requests, so an approval tab left over from a
+ * Ctrl+C'd run can no longer be approved while this run polls a new code.
  */
-export async function startDeviceAuth(endpoint: string): Promise<DeviceAuthSession> {
+export async function startDeviceAuth(endpoint: string, clientId?: string): Promise<DeviceAuthSession> {
   const base = trimTrailingSlash(endpoint)
   const res = await deviceFetch(`${base}/v1/cli/auth/device/start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(clientId ? { client_id: clientId } : {}),
   })
   const json = (await res.json().catch(() => null)) as {
     ok?: boolean
@@ -110,6 +129,15 @@ export async function pollDeviceToken(endpoint: string, deviceCode: string): Pro
     switch (json.error) {
       case 'authorization_pending':
         return { status: 'pending' }
+      case 'slow_down': {
+        const retryAfterHeader = res.headers?.get?.('Retry-After')
+        const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN
+        const retryAfterMs =
+          Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+            ? retryAfterSeconds * 1000
+            : DEFAULT_SLOW_DOWN_MS
+        return { status: 'slow_down', retryAfterMs }
+      }
       case 'access_denied':
         return { status: 'denied' }
       case 'expired_token':
@@ -118,9 +146,11 @@ export async function pollDeviceToken(endpoint: string, deviceCode: string): Pro
         return {
           status: 'error',
           message: json.error_description ?? json.error ?? `HTTP ${res.status}`,
-          // 5xx is a server hiccup the next poll may clear; a 4xx is a definitive
-          // rejection (already claimed / invalid_grant) that won't fix itself.
-          retryable: res.status >= 500,
+          // 5xx is a server hiccup the next poll may clear; 408 (gateway
+          // timeout) is equally transient. Any other 4xx is a definitive
+          // rejection (already claimed / invalid_grant) that won't fix
+          // itself. (429/slow_down is handled above as its own outcome.)
+          retryable: res.status >= 500 || res.status === 408,
         }
     }
   } catch (err) {
@@ -132,6 +162,11 @@ export async function pollDeviceToken(endpoint: string, deviceCode: string): Pro
 export interface WaitForTokenOptions {
   /** Invoked on every `pending` poll (e.g. to print a progress dot). */
   onPending?: () => void
+  /**
+   * Invoked when the server sends `slow_down` (RFC 8628 §3.5). `retryAfterMs`
+   * is how long the loop will wait before the next poll.
+   */
+  onSlowDown?: (retryAfterMs: number) => void
   /**
    * Invoked when a transient poll error is tolerated (network blip / 5xx).
    * `attempt` is the current consecutive-error count.
@@ -168,7 +203,10 @@ export async function waitForCliToken(
 ): Promise<string> {
   const sleep = opts.sleep ?? defaultSleep
   const now = opts.now ?? Date.now
-  const intervalMs = (session.interval || 5) * 1000
+  // Bumped (never lowered) if the server sends `slow_down` — a well-behaved
+  // client should settle into whatever cadence the server asks for, not just
+  // wait out a single Retry-After and immediately resume the original pace.
+  let intervalMs = (session.interval || 5) * 1000
   const deadline = now() + (session.expires_in || 600) * 1000
   const maxConsecutiveErrors = opts.maxConsecutiveErrors ?? 5
   let consecutiveErrors = 0
@@ -188,6 +226,15 @@ export async function waitForCliToken(
       case 'pending':
         consecutiveErrors = 0
         opts.onPending?.()
+        continue
+      case 'slow_down':
+        // A courtesy rate-limit signal, not a fault — never counts against
+        // the transient-error budget. Settle the poll cadence (permanently,
+        // for the rest of this session) at whatever the server just asked
+        // for, so the very next sleep already honors this Retry-After.
+        consecutiveErrors = 0
+        intervalMs = Math.max(intervalMs, outcome.retryAfterMs)
+        opts.onSlowDown?.(outcome.retryAfterMs)
         continue
       case 'denied':
         throw new Error('Login was denied in the browser.')

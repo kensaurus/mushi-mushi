@@ -46,6 +46,7 @@ import {
   type IterateStats,
   type IterateTabId,
 } from '../components/iterate/IterateStatsTypes'
+import { CHIP_TONE } from '../lib/chipTone'
 
 const TABS: Array<{ id: IterateTabId; label: string; description: string }> = [
   {
@@ -273,7 +274,7 @@ export function IteratePage() {
       <PageHeaderBar
         title={copy?.title ?? 'Iterate'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={copy?.description ?? 'Banner + PDCA SNAPSHOT — Overview for posture, Runs to trigger/abort, New Run to queue loops.'}
+
         contextChip={<PdcaContextHint stage="act" />}
         helpTitle={copy?.help?.title ?? 'About PDCA iteration'}
         helpWhatIsIt={
@@ -297,11 +298,11 @@ export function IteratePage() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
+              ? CHIP_TONE.okSubtle
               : bannerSeverity === 'danger'
-                ? 'bg-danger-muted/50 text-danger-foreground'
+                ? CHIP_TONE.dangerSubtle
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn-muted/50 text-warning-foreground'
+                  ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
                     ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                     : 'bg-surface-overlay text-fg-muted'

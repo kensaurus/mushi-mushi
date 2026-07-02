@@ -33,6 +33,7 @@ import {
   EMPTY_FULLSTACK_AUDIT_STATS,
   type FullstackAuditStats,
 } from '../components/fullstack-audit/FullstackAuditStatsTypes'
+import { CHIP_TONE } from '../lib/chipTone'
 
 // ─── Local type definitions (mirrors fullstack-audit.ts response shapes) ─────
 
@@ -70,18 +71,18 @@ interface AuditResult {
 
 function SeverityBadge({ severity }: { severity: AuditFinding['severity'] }) {
   if (severity === 'error')
-    return <Badge className="bg-danger-subtle text-danger">Error</Badge>
+    return <Badge tone="dangerSubtle">Error</Badge>
   if (severity === 'warn')
-    return <Badge className="bg-warn-muted/50 text-warning-foreground">Warn</Badge>
+    return <Badge tone="warnSubtle">Warn</Badge>
   return <Badge className="bg-surface-overlay text-fg-secondary">Info</Badge>
 }
 
 // ─── Gate status badge ────────────────────────────────────────────────────────
 
 function GateStatusBadge({ status }: { status: string }) {
-  if (status === 'pass') return <Badge className="bg-ok-muted text-ok">Pass</Badge>
-  if (status === 'fail') return <Badge className="bg-danger-subtle text-danger">Fail</Badge>
-  if (status === 'warn') return <Badge className="bg-warn-muted/50 text-warning-foreground">Warn</Badge>
+  if (status === 'pass') return <Badge tone="okSubtle">Pass</Badge>
+  if (status === 'fail') return <Badge tone="dangerSubtle">Fail</Badge>
+  if (status === 'warn') return <Badge tone="warnSubtle">Warn</Badge>
   return <Badge className="bg-surface-overlay text-fg-secondary">{status}</Badge>
 }
 
@@ -91,20 +92,18 @@ function OverallScorecard({ result }: { result: AuditResult }) {
   const { overall, error_count, warn_count, info_count } = result.summary
   const overallCls =
     overall === 'fail'
-      ? 'border-danger/40 bg-danger-subtle'
+      ? CHIP_TONE.dangerSubtle
       : overall === 'warn'
-        ? 'border-warn/40 bg-warn/10'
-        : 'border-ok/40 bg-ok-muted'
+        ? 'border-warn/40 bg-warn/10 text-warning-foreground'
+        : CHIP_TONE.okSubtle
   const overallLabel =
     overall === 'fail' ? 'Issues found' : overall === 'warn' ? 'Warnings' : 'All clear'
-  const overallTextCls =
-    overall === 'fail' ? 'text-danger' : overall === 'warn' ? 'text-warn' : 'text-ok'
 
   return (
     <div className={`rounded-md border px-4 py-3 ${overallCls}`}>
       <div className="flex items-center justify-between">
         <div>
-          <p className={`text-sm font-semibold ${overallTextCls}`}>{overallLabel}</p>
+          <p className="text-sm font-semibold">{overallLabel}</p>
           <p className="mt-0.5 text-xs text-fg-secondary">
             {error_count} error{error_count !== 1 ? 's' : ''} ·{' '}
             {warn_count} warning{warn_count !== 1 ? 's' : ''} ·{' '}
@@ -266,7 +265,7 @@ export function FullStackAuditPage() {
     <div className="space-y-5 pb-16">
       <PageHeaderBar
         title="Full-Stack Audit"
-        description="One-click health scorecard for your project: backend schema, API contracts, gate results, and security gaps."
+
         helpTitle="Full-Stack Audit"
         helpWhatIsIt="A one-click health scorecard that fans out to your linked Supabase backend, runs Gates 3–8, and returns PM-readable findings."
         helpUseCases={[

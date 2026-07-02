@@ -13,6 +13,7 @@ import { apiFetch } from '../../lib/supabase'
 import { Badge, Btn, Card, CodeValue, ErrorAlert, RelativeTime } from '../ui'
 import { ContainedBlock, SignalChip, ActionPill, ActionPillRow } from '../report-detail/ReportSurface'
 import { IconGit } from '../icons'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface ProjectRepo {
   id: string
@@ -35,7 +36,7 @@ const ROLE_BADGE_CLASS: Record<string, string> = {
   frontend: 'bg-brand/15 text-brand border-brand/30',
   backend:  'bg-ok/15 text-ok border-ok/30',
   monorepo: 'bg-info/15 text-info border-info/30',
-  mobile:   'bg-accent-muted/55 text-accent-foreground border-accent/30',
+  mobile:   CHIP_TONE.accentSubtle + ' border-accent/30',
 }
 
 interface Props {

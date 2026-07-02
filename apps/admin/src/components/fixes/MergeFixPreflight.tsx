@@ -6,6 +6,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { mergeFixAttempt, type MergeMethod } from '../../lib/mergeFix'
 import { Btn } from '../ui'
+import { CHIP_TONE } from '../../lib/chipTone'
 import { FixCiFeedback } from './FixCiFeedback'
 
 interface Props {
@@ -192,7 +193,7 @@ export function MergeFixPreflight({
           </ul>
 
           {error && (
-            <p className="mt-2 rounded-sm border border-danger/25 bg-danger-muted/15 px-2 py-1 text-2xs text-danger">
+            <p className={`mt-2 rounded-sm px-2 py-1 text-2xs ${CHIP_TONE.dangerSubtle}`}>
               {error}
             </p>
           )}

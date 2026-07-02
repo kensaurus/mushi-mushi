@@ -4,6 +4,7 @@ import { Section, RelativeTime, InfoHint, Tooltip } from '../ui'
 import { IconChat } from '../icons'
 import { useReportComments, type FeedbackSignal } from '../../lib/reportComments'
 import { useToast } from '../../lib/toast'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 // Loop-closure: short, human-readable hover text for each feedback chip
 // the SDK widget can attach to a reporter reply. Used by the comment
@@ -31,16 +32,16 @@ function feedbackSignalTooltip(signal: FeedbackSignal): string {
 function feedbackSignalToneClass(signal: FeedbackSignal): string {
   switch (signal) {
     case 'confirms':
-      return 'border-ok/40 bg-ok-muted/20 text-ok'
+      return `border-ok/40 ${CHIP_TONE.okSubtle}`
     case 'already_fixed':
-      return 'border-info/40 bg-info-muted/20 text-info'
+      return `border-info/40 ${CHIP_TONE.infoSubtle}`
     case 'wrong_target':
     case 'agent_fixed_wrong_thing':
-      return 'border-warn/40 bg-warn-muted/20 text-warn'
+      return `border-warn/40 ${CHIP_TONE.warnSubtle}`
     case 'noise':
-      return 'border-danger/40 bg-danger-muted/20 text-danger'
+      return `border-danger/40 ${CHIP_TONE.dangerSubtle}`
     case 'not_fixed':
-      return 'border-warn/40 bg-warn-muted/20 text-warn'
+      return `border-warn/40 ${CHIP_TONE.warnSubtle}`
     default:
       return 'border-edge-subtle bg-surface-overlay text-fg-muted'
   }
@@ -138,7 +139,7 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
           <button
             type="button"
             onClick={() => setVisibleToReporter(true)}
-            className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-md border border-accent/35 bg-accent-muted/55 text-accent-foreground hover:bg-accent/10 motion-safe:transition-colors"
+            className={`inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-md border border-accent/35 ${CHIP_TONE.accentSubtle} hover:bg-accent/10 motion-safe:transition-colors`}
           >
             Message reporter
           </button>

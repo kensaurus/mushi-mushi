@@ -49,6 +49,7 @@ import {
   IconAlertTriangle,
   IconArrowRight,
   IconIntegrations,
+  IconLink,
 } from '../components/icons'
 import { CodeInline } from '../components/CodePanel'
 import type { SdkStatus } from '../components/SdkVersionBadge'
@@ -137,7 +138,7 @@ function UpgradeStatusIndicator({ status, prUrl, error }: {
         rel="noopener noreferrer"
         role="status"
         aria-live="polite"
-        className="inline-flex items-center gap-1.5 rounded-full bg-ok/10 border border-ok/25 px-2.5 py-0.5 text-xs font-medium text-ok hover:bg-ok/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        className="inline-flex items-center gap-1.5 rounded-full bg-ok-muted/50 border border-ok/25 px-2.5 py-0.5 text-xs font-medium text-ok-foreground hover:bg-ok-muted/70 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
         <IconCheck className="h-3.5 w-3.5" aria-hidden />
         PR opened
@@ -152,7 +153,7 @@ function UpgradeStatusIndicator({ status, prUrl, error }: {
         <span
           role="status"
           aria-live="polite"
-          className="inline-flex items-center gap-1 rounded-full bg-ok/10 border border-ok/25 px-2.5 py-0.5 text-xs font-medium text-ok"
+          className="inline-flex items-center gap-1 rounded-full bg-ok-muted/50 border border-ok/25 px-2.5 py-0.5 text-xs font-medium text-ok-foreground"
         >
           <IconCheck className="h-3.5 w-3.5" aria-hidden />
           All up to date
@@ -603,6 +604,7 @@ export function ConnectPage() {
 
       <PageHeaderBar
         title={copy?.title ?? 'Connect & Update'}
+        icon={<IconLink />}
         description={
           copy?.description ??
           'Connect GitHub, install the SDK, add MCP to your editor, set up the CLI, and keep @mushi-mushi/* packages current.'

@@ -15,6 +15,7 @@ import {
   PAGE_HELP_BANNER_SHELL,
   PAGE_HELP_BANNER_SUMMARY_HOVER,
 } from '../lib/pageHelpSurfaces'
+import { CHIP_TONE } from '../lib/chipTone'
 
 export interface PageHelpProps {
   title: string
@@ -87,7 +88,7 @@ function PageRelatedLinks({ links }: { links: PageFlowLink[] }) {
               className="group/link flex min-w-0 w-full items-start gap-2.5 rounded-md border border-edge-subtle bg-surface-overlay/60 px-3 py-2.5 motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] motion-safe:duration-150 hover:border-brand/45 hover:bg-brand-muted/25 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 motion-safe:active:translate-y-0 motion-safe:active:scale-[0.99]"
             >
               <span
-                className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-muted/25 text-brand motion-safe:transition-colors group-hover/link:bg-brand-muted/40"
+                className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand/12 text-brand motion-safe:transition-colors group-hover/link:bg-brand/20"
                 aria-hidden="true"
               >
                 {Icon ? <Icon className="h-4 w-4" /> : null}
@@ -202,7 +203,7 @@ export function PageHelp({
           <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <span
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-ok-muted/60 text-ok"
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${CHIP_TONE.okSubtle}`}
           aria-hidden="true"
         >
           <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -217,14 +218,14 @@ export function PageHelp({
             {summaryPills.map((pill) => (
               <span
                 key={pill}
-                className="shrink-0 rounded-full border border-edge-subtle/80 bg-surface-overlay/50 px-1.5 py-px text-3xs text-fg-faint"
+                className="shrink-0 rounded-full border border-edge-subtle/80 bg-surface-overlay/50 px-1.5 py-px text-2xs text-fg-faint"
               >
                 {pill}
               </span>
             ))}
           </span>
         ) : null}
-        <span className="ml-auto hidden shrink-0 text-3xs text-fg-faint md:inline">
+        <span className="ml-auto hidden shrink-0 text-2xs text-fg-faint md:inline">
           {open ? 'Click to collapse' : 'Click to expand'}
         </span>
       </summary>
@@ -261,11 +262,11 @@ export function PageHelp({
           </label>
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 rounded-sm text-3xs font-medium text-brand hover:text-brand-hover motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+            className="inline-flex items-center gap-1.5 rounded-sm text-2xs font-medium text-brand hover:text-brand-hover motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
             onClick={() => commandPalette.open()}
           >
             Jump to any page
-            <kbd className="rounded border border-edge-subtle bg-surface-overlay/80 px-1 py-px font-mono text-3xs text-fg-faint">
+            <kbd className="rounded border border-edge-subtle bg-surface-overlay/80 px-1 py-px font-mono text-2xs text-fg-faint">
               ⌘K
             </kbd>
           </button>

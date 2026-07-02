@@ -8,6 +8,7 @@ import { usePageData } from '../../lib/usePageData'
 import type { DispatchState } from '../../lib/dispatchFix'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import type { ReportDetail } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 const STATUS_OPTS = ['new', 'classified', 'fixing', 'fixed', 'resolved', 'verified', 'reopened', 'dismissed']
 const SEV_OPTS = ['critical', 'high', 'medium', 'low']
@@ -170,7 +171,7 @@ export function ReportTriageBar({
             </a>
           )}
           {dispatchState.status === 'failed' && dispatchState.error && (
-            <span className="rounded-sm border border-danger/25 bg-danger-muted/15 px-2 py-1 text-2xs text-danger max-w-xs text-right">
+            <span className={`rounded-sm px-2 py-1 text-2xs max-w-xs text-right ${CHIP_TONE.dangerSubtle}`}>
               {dispatchState.error}
             </span>
           )}

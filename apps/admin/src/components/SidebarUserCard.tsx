@@ -44,6 +44,7 @@ import { useState, type ReactElement } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { ConfirmDialog } from './ConfirmDialog'
 import { PlanBadge } from './PlanBadge'
+import { CHIP_TONE } from '../lib/chipTone'
 
 type AuthProvider = 'google' | 'apple' | 'email' | 'github' | 'unknown'
 
@@ -130,7 +131,7 @@ function Avatar({ user, className = 'h-7 w-7' }: AvatarProps) {
 }
 
 const AVATAR_TONE: Record<AuthProvider, string> = {
-  google:  'bg-info-muted text-info ring-info/40',
+  google:  CHIP_TONE.infoSubtle + ' ring-info/40',
   apple:   'bg-surface-overlay text-fg ring-edge',
   email:   'bg-brand/15 text-brand ring-brand/40',
   github:  'bg-accent-muted/70 text-accent-foreground ring-brand/40',

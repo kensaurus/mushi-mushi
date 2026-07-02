@@ -57,10 +57,32 @@ export class MushiWidget {
   private screenshotCapturing = false;
   private screenshotError = false;
   private allowScreenshotRemove = true;
+  /**
+   * Whether the screenshot / element-select tools are actually usable
+   * (capture module present + not disabled by config). Unavailable tools are
+   * hidden from the details step — a rendered button whose handler silently
+   * no-ops reads as a bug to the reporter.
+   */
+  private screenshotAvailable = true;
+  private elementAvailable = true;
+  /**
+   * In-progress form input preserved across full shadow-DOM re-renders.
+   * render() rebuilds the panel with `innerHTML = ''`, which used to destroy
+   * whatever the reporter had typed whenever a background refresh (60s inbox
+   * poll, visibilitychange refetch, screenshot attach) fired mid-typing.
+   * Captured from the live DOM right before teardown, replayed right after.
+   */
+  private draftDescription = '';
+  private draftEmail = '';
+  private draftReply = '';
+  private draftFocus: 'description' | 'email' | 'reply' | null = null;
+  private draftSelStart = 0;
+  private draftSelEnd = 0;
   /** Data URL of the attached screenshot, rendered as a visible preview. */
   private screenshotPreview: string | null = null;
   private elementSelected = false;
   private elementCapturing = false;
+  private elementError = false;
   private submitting = false;
   /** Hint element injected outside the shadow DOM during element selection. */
   private selectorHint: HTMLDivElement | null = null;
@@ -321,12 +343,16 @@ export class MushiWidget {
     this.screenshotPreview = null;
     this.elementSelected = false;
     this.elementCapturing = false;
+    this.elementError = false;
     this.submitting = false;
     this.submittedAt = null;
     this.removeSelectorHint();
     this.lastReportId = null;
     this.lastSubmitQueuedOffline = false;
     this.viaFeatureRequest = false;
+    // A fresh session starts with a clean slate — drafts only need to
+    // survive re-renders WITHIN a session, not across open/close cycles.
+    this.clearFormDrafts();
 
     if (options?.featureRequest) {
       // External callers can deep-link straight into the feature-request
@@ -483,6 +509,10 @@ export class MushiWidget {
 
   setScreenshotAttached(attached: boolean): void {
     this.screenshotAttached = attached;
+    // The capture attempt is over either way; a successful attach also
+    // clears any stale error state from a previous failed attempt.
+    this.screenshotCapturing = false;
+    if (attached) this.screenshotError = false;
     // A detached screenshot has no preview to show.
     if (!attached) this.screenshotPreview = null;
     if (this.isOpen) this.render();
@@ -512,8 +542,29 @@ export class MushiWidget {
     if (this.isOpen) this.render();
   }
 
+  /** Show/hide the attachment tools based on what the SDK can actually do. */
+  setCaptureAvailability(availability: { screenshot?: boolean; element?: boolean }): void {
+    const nextScreenshot = availability.screenshot ?? this.screenshotAvailable;
+    const nextElement = availability.element ?? this.elementAvailable;
+    if (nextScreenshot === this.screenshotAvailable && nextElement === this.elementAvailable) return;
+    this.screenshotAvailable = nextScreenshot;
+    this.elementAvailable = nextElement;
+    if (this.isOpen) this.render();
+  }
+
   setElementSelected(selected: boolean): void {
     this.elementSelected = selected;
+    this.elementCapturing = false;
+    // A successful selection also clears any stale error from a previous
+    // failed attempt, mirroring setScreenshotAttached.
+    if (selected) this.elementError = false;
+    this.removeSelectorHint();
+    if (this.isOpen) this.render();
+  }
+
+  /** Surface a failed/cancelled element-selection attempt (mirrors setScreenshotError). */
+  setElementError(failed: boolean): void {
+    this.elementError = failed;
     this.elementCapturing = false;
     this.removeSelectorHint();
     if (this.isOpen) this.render();
@@ -534,6 +585,7 @@ export class MushiWidget {
   setElementCapturing(capturing: boolean): void {
     this.elementCapturing = capturing;
     if (capturing) {
+      this.elementError = false;
       this.showSelectorHint();
     } else {
       this.removeSelectorHint();
@@ -1120,11 +1172,92 @@ export class MushiWidget {
     return 'light';
   }
 
+  /** Snapshot in-progress form input from the live DOM before teardown. */
+  private captureFormDrafts(): void {
+    const desc = this.shadow.querySelector(
+      'textarea.mushi-textarea:not([data-role="reporter-reply"])',
+    ) as HTMLTextAreaElement | null;
+    const email = this.shadow.querySelector('[data-role="magic-link-email"]') as HTMLInputElement | null;
+    const reply = this.shadow.querySelector(
+      'textarea[data-role="reporter-reply"]',
+    ) as HTMLTextAreaElement | null;
+
+    if (desc) this.draftDescription = desc.value;
+    if (email) this.draftEmail = email.value;
+    if (reply) this.draftReply = reply.value;
+
+    const active = this.shadow.activeElement;
+    this.draftFocus =
+      active && active === desc
+        ? 'description'
+        : active && active === email
+          ? 'email'
+          : active && active === reply
+            ? 'reply'
+            : null;
+    if (this.draftFocus && active) {
+      const el = active as HTMLTextAreaElement | HTMLInputElement;
+      this.draftSelStart = el.selectionStart ?? el.value.length;
+      this.draftSelEnd = el.selectionEnd ?? el.value.length;
+    }
+  }
+
+  /** Replay captured drafts (value + focus + caret) into a freshly built panel. */
+  private restoreFormDrafts(panel: HTMLElement): void {
+    const fields: Array<{
+      selector: string;
+      value: string;
+      key: 'description' | 'email' | 'reply';
+    }> = [
+      {
+        selector: 'textarea.mushi-textarea:not([data-role="reporter-reply"])',
+        value: this.draftDescription,
+        key: 'description',
+      },
+      { selector: '[data-role="magic-link-email"]', value: this.draftEmail, key: 'email' },
+      { selector: 'textarea[data-role="reporter-reply"]', value: this.draftReply, key: 'reply' },
+    ];
+    for (const field of fields) {
+      const el = panel.querySelector(field.selector) as HTMLTextAreaElement | HTMLInputElement | null;
+      if (!el) continue;
+      if (field.value && el.value !== field.value) {
+        el.value = field.value;
+        // Re-fire input so dependent UI (char counter) reflects the restored text.
+        el.dispatchEvent(new Event('input'));
+      }
+      if (this.draftFocus === field.key) {
+        // trapFocus() focuses its default target inside a rAF; schedule the
+        // restore in a later rAF (registration order is preserved) so the
+        // reporter's caret wins over the default focus target.
+        const applyFocus = () => {
+          el.focus();
+          try {
+            el.setSelectionRange(this.draftSelStart, this.draftSelEnd);
+          } catch {
+            // Some input types reject setSelectionRange — focus alone is fine.
+          }
+        };
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(applyFocus);
+        else applyFocus();
+      }
+    }
+  }
+
+  private clearFormDrafts(): void {
+    this.draftDescription = '';
+    this.draftEmail = '';
+    this.draftReply = '';
+    this.draftFocus = null;
+    this.draftSelStart = 0;
+    this.draftSelEnd = 0;
+  }
+
   private render(): void {
     const theme = this.getTheme();
     const pos = this.config.position;
     const t = this.locale;
 
+    if (this.isOpen) this.captureFormDrafts();
     this.bannerResizeObserver?.disconnect();
     this.bannerResizeObserver = null;
     this.shadow.innerHTML = '';
@@ -1220,7 +1353,10 @@ export class MushiWidget {
       panel.innerHTML = `${renderOutdatedBanner(ctx)}${renderStep(ctx)}${renderBrandFooter(ctx)}`;
       this.shadow.appendChild(panel);
       this.attachHandlers(panel);
+      // After trapFocus so a preserved caret position beats the default
+      // "focus the first field" behavior.
       this.trapFocus(panel);
+      this.restoreFormDrafts(panel);
       this.attachViewportHandlers(panel);
     } else {
       this.teardownViewportHandlers();
@@ -1568,6 +1704,8 @@ export class MushiWidget {
       screenshotAttached: this.screenshotAttached,
       screenshotPreview: this.screenshotPreview,
       screenshotHint: this.resolveScreenshotHint(),
+      screenshotAvailable: this.screenshotAvailable,
+      elementAvailable: this.elementAvailable,
       reporterError: this.reporterError,
       magicLinkError: this.magicLinkError,
       elementCapturing: this.elementCapturing,
@@ -1580,6 +1718,7 @@ export class MushiWidget {
       globalLeaderboardLoading: this.globalLeaderboardLoading,
       globalLeaderboard: this.globalLeaderboard,
       elementSelected: this.elementSelected,
+      elementError: this.elementError,
       crossAppLoading: this.crossAppLoading,
       callbacks: this.callbacks,
       testerJwt: this.testerJwt,
@@ -1968,6 +2107,13 @@ export class MushiWidget {
         this.submitting = false;
         this.step = 'success';
         this.render();
+        // The report is on its way — drop the description draft so a
+        // follow-up report starts clean instead of repainting the sent text.
+        // Must run AFTER render(): render() calls captureFormDrafts() first
+        // (to snapshot whatever's still live in the about-to-be-torn-down
+        // 'details' textarea), which would otherwise re-populate
+        // draftDescription with the just-submitted text and clobber this clear.
+        this.draftDescription = '';
         // Don't auto-close as aggressively if we're waiting on a
         // report id — give the user a moment to copy it. Once the
         // outcome lands we kick off a longer auto-close so the deep
@@ -2083,10 +2229,28 @@ export class MushiWidget {
   async refreshReporterInboxQuiet(): Promise<void> {
     try {
       this.reporterReports = await this.callbacks.onReporterReportsRequest?.() ?? [];
-      if (this.isOpen) this.render();
+      if (!this.isOpen) return;
+      // Only the reports list actually displays this data — re-render it.
+      // Every other step gets a targeted badge-text update instead of a full
+      // shadow-DOM rebuild: a background poll must never disturb a panel the
+      // reporter is actively typing or reading in.
+      if (this.step === 'reports') {
+        this.render();
+      } else {
+        this.updateReportsBadgeText();
+      }
     } catch {
       // Non-fatal background poll — never surface errors outside the inbox UI.
     }
+  }
+
+  /** Patch the "Your reports (N new)" nav label in place, if it is rendered. */
+  private updateReportsBadgeText(): void {
+    const label = this.shadow.querySelector('.mushi-reports-entry .mushi-option-label');
+    if (!label) return;
+    const mn = this.locale.step1.moreNav;
+    const unread = this.unreadCount();
+    label.textContent = unread ? `${mn.yourReports} (${unread} ${mn.unreadNew})` : mn.yourReports;
   }
 
   private async loadReporterReports(): Promise<void> {
@@ -2105,6 +2269,14 @@ export class MushiWidget {
   }
 
   private async loadReporterComments(reportId: string): Promise<void> {
+    // Navigating to a DIFFERENT thread must drop any in-progress reply draft —
+    // otherwise an unsent draft typed for report A reappears (and could be
+    // posted) under report B. `submitReporterReply` already clears the draft
+    // itself before calling back in here for the *same* reportId, so this is
+    // a no-op on that path.
+    if (this.selectedReportId !== reportId) {
+      this.draftReply = '';
+    }
     this.selectedReportId = reportId;
     this.step = 'report-detail';
     this.reporterLoading = true;
@@ -2149,10 +2321,11 @@ export class MushiWidget {
     this.render();
     try {
       await this.callbacks.onReporterReply?.(reportId, body);
-      // Clear the field on success so the next render (driven by
-      // loadReporterComments) doesn't repaint the just-sent text and tempt
-      // the user into a duplicate submit.
+      // Clear the field AND its preserved draft on success so the next render
+      // (driven by loadReporterComments) doesn't repaint the just-sent text
+      // and tempt the user into a duplicate submit.
       if (textarea) textarea.value = '';
+      this.draftReply = '';
       await this.loadReporterComments(reportId);
     } catch (err) {
       this.reporterError = err instanceof Error ? err.message : 'Could not send reply.';

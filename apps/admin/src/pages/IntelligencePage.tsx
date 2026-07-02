@@ -60,6 +60,7 @@ import type {
   IntelligenceReport,
   ModernizationFinding,
 } from '../components/intelligence/types'
+import { CHIP_TONE } from '../lib/chipTone'
 
 const TABS: Array<{ id: IntelligenceTabId; label: string; description: string }> = [
   {
@@ -378,7 +379,7 @@ export function IntelligencePage() {
       <PageHeaderBar
         title={copy?.title ?? 'Bug Intelligence'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={copy?.description ?? 'Banner + INTELLIGENCE SNAPSHOT — Overview for posture, Reports for digests, Pipeline for jobs and findings.'}
+
         helpTitle={copy?.help?.title ?? 'About Bug Intelligence'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Weekly LLM-authored digest of your bug pipeline — trends, fix velocity, hotspots, and recommendations.'}
         helpUseCases={copy?.help?.useCases ?? [
@@ -393,11 +394,11 @@ export function IntelligencePage() {
             <Badge
               className={
                 bannerSeverity === 'ok'
-                  ? 'bg-ok-muted text-ok'
+                  ? CHIP_TONE.okSubtle
                   : bannerSeverity === 'danger'
-                    ? 'bg-danger-muted/50 text-danger-foreground'
+                    ? CHIP_TONE.dangerSubtle
                     : bannerSeverity === 'warn'
-                      ? 'bg-warn-muted/50 text-warning-foreground'
+                      ? CHIP_TONE.warnSubtle
                       : bannerSeverity === 'brand'
                         ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                         : 'bg-surface-overlay text-fg-muted'

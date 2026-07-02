@@ -16,6 +16,7 @@ import {
   SignalChip,
 } from './ReportSurface'
 import type { ReportFixAttempt } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   fix: ReportFixAttempt
@@ -73,13 +74,13 @@ function badgeToneClass(
 ): string {
   switch (tone) {
     case 'ok':
-      return 'bg-ok-subtle text-ok'
+      return CHIP_TONE.okSubtle
     case 'danger':
-      return 'bg-danger-subtle text-danger'
+      return CHIP_TONE.dangerSubtle
     case 'warn':
-      return 'bg-warn-subtle text-warn'
+      return CHIP_TONE.warnSubtle
     case 'info':
-      return 'bg-info-subtle text-info'
+      return CHIP_TONE.infoSubtle
     default:
       return 'bg-surface-overlay text-fg-muted'
   }
@@ -162,8 +163,8 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
 
   const prStateTone: Record<string, string> = {
     merged: 'bg-[oklch(0.30_0.10_300)] text-[oklch(0.92_0.08_300)]',
-    open: 'bg-ok-subtle text-ok',
-    closed: 'bg-danger-subtle text-danger',
+    open: CHIP_TONE.okSubtle,
+    closed: CHIP_TONE.dangerSubtle,
     draft: 'bg-surface-overlay text-fg-muted',
   }
 

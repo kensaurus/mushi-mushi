@@ -41,6 +41,7 @@ import {
 } from '../ui'
 import { useToast } from '../../lib/toast'
 import { GitHubAppInstallButton, GitHubPatDisclosure } from './GitHubAppInstallButton'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 const SUPPORTED_EXTENSIONS = ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'py', 'pyi', 'go', 'rs']
 const PATH_GLOB_PRESETS = ['src/**', 'app/**', 'apps/*/src/**', 'packages/*/src/**']
@@ -279,8 +280,8 @@ export function CodebaseIndexCard({ projectId }: Props) {
         <div className="flex items-center gap-2">
           <h4 className="text-xs font-semibold text-fg-primary">Codebase indexing</h4>
           {enabled
-            ? <Badge className="bg-ok-muted text-ok">On</Badge>
-            : <Badge className="bg-warn-muted text-warn">Off</Badge>}
+            ? <Badge tone="okSubtle">On</Badge>
+            : <Badge tone="warnSubtle">Off</Badge>}
           {enabled && !hasFiles && (
             <ResultChip tone="running">{`Indexing${ELLIPSIS}`}</ResultChip>
           )}
@@ -349,7 +350,7 @@ export function CodebaseIndexCard({ projectId }: Props) {
       )}
 
       {enabled && hasFiles && stats?.at_file_cap && (
-        <div className="flex items-start gap-2 rounded bg-warn-muted/20 px-2 py-1.5 text-2xs text-warn">
+        <div className={`flex items-start gap-2 rounded ${CHIP_TONE.warnSubtle} px-2 py-1.5 text-2xs`}>
           <span aria-hidden="true">{WARNING_SIGN}</span>
           <span>
             Indexed {stats.indexed_files.toLocaleString()} of {stats.file_cap} max files.
@@ -491,7 +492,7 @@ function AutofixToggleRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-fg-primary">Autofix dispatcher</span>
-          <Badge className={isOn ? 'bg-ok-muted text-ok' : 'bg-warn-muted text-warn'}>
+          <Badge className={isOn ? CHIP_TONE.okSubtle : CHIP_TONE.warnSubtle}>
             {enabled == null ? '\u2014' : isOn ? 'On' : 'Off'}
           </Badge>
         </div>
