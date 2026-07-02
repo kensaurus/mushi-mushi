@@ -34,12 +34,24 @@ for (const [label, url] of checks) {
   }
 }
 
+// Smithery's real scanner completes the OAuth stub before probing the
+// catalog (see _shared/mcp-oauth-smithery-stub.ts) — isSmitheryScanner() no
+// longer trusts a spoofable User-Agent, it requires the exact bearer token
+// minted here. Mint it the same way Smithery would, then reuse it below.
+const scannerTokenRes = await fetch(`${HOSTED}/oauth/token`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  body: 'grant_type=client_credentials',
+})
+const scannerToken = (await scannerTokenRes.json().catch(() => null))?.access_token ?? ''
+
 const init = await fetch(`${HOSTED}`, {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json, text/event-stream',
     'User-Agent': 'SmitheryBot/1.0',
+    ...(scannerToken ? { Authorization: `Bearer ${scannerToken}` } : {}),
   },
   body: JSON.stringify({
     jsonrpc: '2.0',
@@ -86,7 +98,7 @@ if (!unauthOk) {
 let headStatus = '000'
 try {
   headStatus = execSync(
-    `curl -sS -o NUL -w "%{http_code}" --max-time 10 -I "${HOSTED}/.well-known/oauth-authorization-server"`,
+    `curl -sS -o /dev/null -w "%{http_code}" --max-time 10 -I "${HOSTED}/.well-known/oauth-authorization-server"`,
     { encoding: 'utf8', shell: true },
   ).trim()
 } catch {
