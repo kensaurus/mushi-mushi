@@ -62,7 +62,73 @@ function fail(msg) {
   failed = true
 }
 
+/**
+ * Regression guard: the server must exit on its own once the client closes
+ * stdin (EOF), without being killed. Real MCP clients (Cursor, Claude
+ * Desktop) never exercise this path — they kill the child process directly
+ * on shutdown — but external Docker introspection harnesses (e.g. Glama's
+ * build test) pipe requests over stdio, close the pipe, and wait for a
+ * natural exit. An un-refed `setInterval` (or any other unmanaged handle)
+ * left running after `connect()` will keep the event loop — and the
+ * container — alive forever, which reads as a hung/failed build test even
+ * though every JSON-RPC response was correct.
+ */
+async function checkStdinEofExit() {
+  const { spawn } = await import('node:child_process')
+  const child = spawn(process.execPath, [serverPath], {
+    env: {
+      MUSHI_API_KEY: 'smoke-test-key',
+      MUSHI_PROJECT_ID: 'smoke-test-project',
+      MUSHI_API_ENDPOINT: 'http://127.0.0.1:1/offline',
+      MUSHI_FEATURES: 'all',
+    },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
+
+  const exitPromise = new Promise((resolve) => child.once('exit', resolve))
+
+  child.stdin.write(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: { name: 'smoke-lifecycle', version: '1.0' },
+      },
+    }) + '\n',
+  )
+  // Give the server a moment to boot, respond, and schedule its background
+  // timers before we close stdin — we want to prove the shutdown path wins
+  // even with those timers pending, not just on a cold-start race.
+  await new Promise((r) => setTimeout(r, 750))
+  child.stdin.end()
+
+  const timeoutMs = 8000
+  const result = await Promise.race([
+    exitPromise,
+    new Promise((resolve) => setTimeout(() => resolve('TIMEOUT'), timeoutMs)),
+  ])
+
+  if (result === 'TIMEOUT') {
+    child.kill('SIGKILL')
+    fail(
+      `Server did not exit within ${timeoutMs}ms of stdin EOF — an un-refed ` +
+        `timer/handle is likely keeping the event loop alive again (this is ` +
+        `the Glama Docker introspection hang regression).`,
+    )
+  } else if (result !== 0) {
+    fail(`Server exited with code ${result} on stdin EOF (expected 0)`)
+  } else {
+    console.log('OK — server exits cleanly on stdin EOF')
+  }
+}
+
 try {
+  await checkStdinEofExit()
+  if (failed) process.exit(1)
+
   await client.connect(transport)
   const { tools } = await client.listTools()
   const { resources } = await client.listResources()
