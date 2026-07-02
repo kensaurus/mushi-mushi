@@ -45,7 +45,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
-    "eslint": "^10.4.1",
+    "eslint": "^10.5.0",
     "eslint-plugin-mushi-mushi": "workspace:*",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4.3.0",
