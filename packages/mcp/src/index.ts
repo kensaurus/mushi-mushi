@@ -13,7 +13,7 @@
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { createRequire } from 'node:module'
-import { createLogger } from '@mushi-mushi/core'
+import { createLogger, DEFAULT_API_ENDPOINT } from '@mushi-mushi/core'
 
 // MCP stdio transport owns stdout for JSON-RPC 2.0 exclusively.
 // Any non-JSON-RPC bytes on stdout — including structured log lines from
@@ -39,7 +39,15 @@ const VERSION = (require('../package.json') as { version: string }).version
 
 const log = createLogger({ scope: 'mushi:mcp', level: 'info', destination: 'stderr' })
 
-const API_ENDPOINT = process.env.MUSHI_API_ENDPOINT ?? ''
+/**
+ * API base URL. Falls back to the hosted Mushi Cloud endpoint — the same
+ * default the CLI (`resolveCloudEndpoint`), `@mushi-mushi/node`, and the
+ * VS Code extension already apply, and what the README + registry
+ * server.json have documented all along ("Override only if you self-host").
+ * Before this default, a zero-config `npx @mushi-mushi/mcp` booted with an
+ * empty endpoint and every tool call failed.
+ */
+const API_ENDPOINT = process.env.MUSHI_API_ENDPOINT?.trim() || DEFAULT_API_ENDPOINT
 const API_KEY = process.env.MUSHI_API_KEY ?? ''
 const PROJECT_ID = process.env.MUSHI_PROJECT_ID ?? ''
 /**
@@ -91,10 +99,11 @@ async function main() {
     log.fatal('MUSHI_API_KEY environment variable is required')
     process.exit(1)
   }
-  if (!API_ENDPOINT) {
-    console.error(
-      '[mushi-mcp] MUSHI_API_ENDPOINT is not set. All tool calls will fail.\n' +
-        'Set MUSHI_API_ENDPOINT to your Supabase edge function URL, ' +
+  if (!process.env.MUSHI_API_ENDPOINT?.trim()) {
+    log.info(
+      '[mushi-mcp] MUSHI_API_ENDPOINT not set — using the hosted Mushi Cloud ' +
+        `endpoint (${DEFAULT_API_ENDPOINT}). Self-hosted deployments must set ` +
+        'MUSHI_API_ENDPOINT to their Supabase edge function URL, ' +
         'e.g. https://xyz.supabase.co/functions/v1/api',
     )
   }
@@ -113,7 +122,7 @@ async function main() {
   log.info('Starting Mushi MCP server', {
     version: VERSION,
     mode,
-    endpoint: API_ENDPOINT || '(unset)',
+    endpoint: API_ENDPOINT,
     hasProjectId: !!PROJECT_ID,
     scopes: SCOPES.join(','),
   })
@@ -150,6 +159,17 @@ async function main() {
   process.stdin.on('close', () => shutdown(0))
   process.on('SIGINT', () => shutdown(0))
   process.on('SIGTERM', () => shutdown(0))
+  process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+    // The client closed the read end mid-write (crash / kill). The JSON-RPC
+    // channel is gone; exit quietly instead of dying with an unhandled EPIPE
+    // stack trace on stderr.
+    if (err.code === 'EPIPE') {
+      shutdown(0)
+      return
+    }
+    log.fatal('stdout write error', { err: String(err) })
+    shutdown(1)
+  })
 
   // Inventory change notifications (P1.7):
   // Poll the inventory endpoint every 60 seconds and send
