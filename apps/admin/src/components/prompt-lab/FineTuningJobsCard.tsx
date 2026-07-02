@@ -13,6 +13,7 @@ import {
   IconTrash,
 } from '../icons'
 import type { FineTuningJob } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 // See PromptStageTable for the icon-button pattern. Same `!px-1.5` trick
 // gives us a square inset for icon-only Btns while still inheriting
@@ -33,8 +34,8 @@ const STATUS_TONE: Record<string, string> = {
   validating: 'bg-info/15 text-info border border-info/30',
   validated: 'bg-ok/15 text-ok border border-ok/30',
   promoted: 'bg-ok/15 text-ok border border-ok/30',
-  rejected: 'bg-warn-muted/50 text-warning-foreground border border-warn/30',
-  failed: 'bg-danger-muted/50 text-danger-foreground border border-danger/30',
+  rejected: CHIP_TONE.warnSubtle,
+  failed: CHIP_TONE.dangerSubtle + ' border border-danger/30',
 }
 
 const VENDOR_OPTIONS = [

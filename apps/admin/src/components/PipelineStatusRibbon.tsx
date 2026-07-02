@@ -29,6 +29,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Tooltip } from './ui'
+import { CHIP_TONE } from '../lib/chipTone'
 import { useAdminMode } from '../lib/mode'
 import { useNavCounts } from '../lib/useNavCounts'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
@@ -115,10 +116,10 @@ const TONE_CLASS: Record<Tone, { dot: string; ring: string; label: string }> = {
 }
 
 const STAGE_TONE: Record<RibbonTile['stage'], string> = {
-  P: 'bg-info-muted text-info border border-info/35',
+  P: CHIP_TONE.infoSubtle + ' border border-info/35',
   D: 'bg-brand-subtle text-brand border border-brand/35',
-  C: 'bg-warn-muted text-warning-foreground border border-warn/35',
-  A: 'bg-ok-muted text-ok border border-ok/35',
+  C: CHIP_TONE.warnSubtle + ' border border-warn/35',
+  A: CHIP_TONE.okSubtle + ' border border-ok/35',
 }
 
 const STAGE_BORDER: Record<RibbonTile['stage'], string> = {
@@ -173,7 +174,7 @@ function PulseArrow({
             Tint to the source stage colour so the pill matches the arrow's gradient origin
             (NN/g #6 Recognition over Recall — colour signals direction without reading copy). */}
         <span
-          className="absolute top-0 left-1/2 z-[2] -translate-x-1/2 whitespace-nowrap rounded-full border bg-surface-overlay px-1.5 py-px text-3xs font-semibold uppercase tracking-wide shadow-sm pointer-events-none"
+          className="absolute top-0 left-1/2 z-[2] -translate-x-1/2 whitespace-nowrap rounded-full border bg-surface-overlay px-1.5 py-px text-2xs font-semibold uppercase tracking-wide shadow-sm pointer-events-none"
           style={{ color: fromColor, borderColor: fromColor }}
           title={fullLabel}
         >
@@ -357,7 +358,7 @@ export function PipelineStatusRibbon({ embedded = false }: { embedded?: boolean 
         data-collapsed="true"
         className="mb-3"
       >
-        <Tooltip content={<span className="whitespace-pre-wrap text-3xs leading-relaxed">{collapsedTooltip}</span>} side="bottom" nowrap={false} portal>
+        <Tooltip content={<span className="whitespace-pre-wrap text-2xs leading-relaxed">{collapsedTooltip}</span>} side="bottom" nowrap={false} portal>
         <button
           type="button"
           onClick={() => setCollapsed(false)}
@@ -414,13 +415,13 @@ export function PipelineStatusRibbon({ embedded = false }: { embedded?: boolean 
     >
       {!embedded && (
       <div className="flex items-center justify-between gap-2 px-2 pb-1 border-b border-edge-subtle/50">
-        <span className="flex items-center gap-2 text-3xs font-medium text-fg-faint uppercase tracking-wider">
+        <span className="flex items-center gap-2 text-2xs font-medium text-fg-faint uppercase tracking-wider">
           Workspace pipeline
           {!nav.ready && (
             <span className="inline-block h-1.5 w-8 animate-pulse rounded-full bg-fg-faint/30" aria-label="Loading counts" />
           )}
           {nav.ready && worst.tone === 'danger' && (
-            <span className="normal-case rounded bg-danger-muted px-1 py-px text-3xs font-semibold text-danger motion-safe:animate-pulse">
+            <span className={`normal-case rounded px-1 py-px text-2xs font-semibold motion-safe:animate-pulse ${CHIP_TONE.dangerSubtle}`}>
               attention
             </span>
           )}
@@ -430,7 +431,7 @@ export function PipelineStatusRibbon({ embedded = false }: { embedded?: boolean 
           onClick={() => setCollapsed(true)}
           aria-expanded="true"
           aria-controls="pipeline-status-ribbon-tiles"
-          className="text-3xs text-fg-muted hover:text-fg motion-safe:transition-colors px-1.5 py-0.5 rounded-sm hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          className="text-2xs text-fg-muted hover:text-fg motion-safe:transition-colors px-1.5 py-0.5 rounded-sm hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           title="Collapse pipeline ribbon — leaves a single-line summary"
         >
           Collapse <span aria-hidden>▴</span>

@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint src/",
-    "lint:tokens": "node ../../scripts/check-design-tokens.mjs",
+    "lint:tokens": "node ../../scripts/check-design-tokens.mjs && node ../../scripts/audit-chip-contrast.mjs --strict",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

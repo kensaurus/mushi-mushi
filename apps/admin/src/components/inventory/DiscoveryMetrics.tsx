@@ -1,3 +1,4 @@
+import { CHIP_TONE } from '../../lib/chipTone'
 import type { ReactNode } from 'react'
 
 /**
@@ -44,21 +45,21 @@ const TONES: Record<
   },
   info: {
     wrap: 'ring-1 ring-info/25 bg-info-muted/12',
-    iconWrap: 'bg-info-muted/40 text-info ring-1 ring-info/30',
-    value: 'text-info',
-    chip: 'text-info',
+    iconWrap: `${CHIP_TONE.infoSubtle} ring-1 ring-info/30`,
+    value: 'text-info-foreground',
+    chip: 'text-fg-muted',
   },
   ok: {
     wrap: 'ring-1 ring-ok/25 bg-ok-muted/10',
-    iconWrap: 'bg-ok-muted/40 text-ok ring-1 ring-ok/30',
-    value: 'text-ok',
-    chip: 'text-ok',
+    iconWrap: `${CHIP_TONE.okSubtle} ring-1 ring-ok/30`,
+    value: 'text-ok-foreground',
+    chip: 'text-fg-muted',
   },
   warn: {
     wrap: 'ring-1 ring-warn/25 bg-warn-muted/12',
-    iconWrap: 'bg-warn-muted/40 text-warn ring-1 ring-warn/30',
-    value: 'text-warn',
-    chip: 'text-warn',
+    iconWrap: `${CHIP_TONE.warnSubtle} ring-1 ring-warn/30`,
+    value: 'text-warning-foreground',
+    chip: 'text-fg-muted',
   },
   neutral: {
     wrap: 'ring-1 ring-edge-subtle bg-surface-overlay/40',

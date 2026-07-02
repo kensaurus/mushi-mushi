@@ -373,10 +373,7 @@ export function IntegrationsPage() {
     <div className="space-y-4">
       <PageHeaderBar
         title={copy?.title ?? 'Integrations'}
-        description={
-          copy?.description ??
-          'Wire Sentry, Langfuse, GitHub, and your routing destinations so the loop closes against tools you already trust.'
-        }
+
         helpTitle={copy?.help?.title ?? 'About Integrations'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??

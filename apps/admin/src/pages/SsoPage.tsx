@@ -25,6 +25,7 @@ import { SsoStatusBanner } from '../components/sso/SsoStatusBanner';
 import { SsoSnapshotStrip } from '../components/sso/SsoSnapshotStrip';
 import { SsoReadout } from '../components/sso/SsoReadout';
 import { EMPTY_SSO_STATS, type SsoStats } from '../components/sso/types';
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface SsoConfig {
   id: string;
@@ -51,11 +52,11 @@ interface RegisterResult {
 }
 
 const REGISTRATION_TONE: Record<string, string> = {
-  registered: 'bg-ok-muted text-ok',
-  pending: 'bg-warn-muted/50 text-warning-foreground',
-  failed: 'bg-danger-subtle text-danger',
+  registered: CHIP_TONE.okSubtle,
+  pending: CHIP_TONE.warnSubtle,
+  failed: CHIP_TONE.dangerSubtle,
   disabled: 'bg-surface-overlay text-fg-muted',
-  manual_required: 'bg-info-muted/50 text-info-foreground',
+  manual_required: CHIP_TONE.infoSubtle,
 };
 
 export function SsoPage() {
@@ -166,7 +167,7 @@ export function SsoPage() {
     <div className="space-y-4">
       <PageHeaderBar
         title="SSO Configuration"
-        description="Configure SAML or OIDC for your team. JIT-provisioning on first login is enabled by default."
+
         helpTitle="About SSO"
         helpWhatIsIt="Single Sign-On lets your team log in via your corporate identity provider (Okta, Azure AD, Google Workspace, etc.) instead of email + password."
         helpUseCases={[

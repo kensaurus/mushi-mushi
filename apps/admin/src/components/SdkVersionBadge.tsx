@@ -7,6 +7,7 @@
 
 import { Badge, MetricTooltipContent, Tooltip, type MetricTooltipData } from './ui'
 import { resolveSdkDisplay } from '../lib/sdkVersionCompare'
+import { CHIP_TONE } from '../lib/chipTone'
 
 export type SdkStatus = 'up-to-date' | 'outdated' | 'deprecated' | 'unknown'
 
@@ -28,10 +29,10 @@ type SdkDisplayResolutionTone =
   | 'unknown'
 
 const STATUS_TONE: Record<Exclude<SdkDisplayResolutionTone, 'unknown'>, string> = {
-  'up-to-date': 'bg-ok-muted text-ok border border-ok/30',
-  'catalog-ahead': 'bg-info-muted text-info border border-info/30',
-  'upgrade-available': 'bg-warn-muted text-warning-foreground border border-warn/30',
-  deprecated: 'bg-danger-muted text-danger border border-danger/30',
+  'up-to-date': CHIP_TONE.okSubtle + ' border border-ok/30',
+  'catalog-ahead': CHIP_TONE.infoSubtle,
+  'upgrade-available': CHIP_TONE.warnSubtle + ' border border-warn/30',
+  deprecated: CHIP_TONE.dangerSubtle + ' border border-danger/30',
 }
 
 function shortPackageName(package_: string | null): string {

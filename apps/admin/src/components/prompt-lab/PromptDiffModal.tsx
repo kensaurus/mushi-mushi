@@ -3,6 +3,7 @@ import { Modal } from '../Modal'
 import { formatLlmCost } from '../../lib/format'
 import type { PromptVersion } from './types'
 import { lineDiff } from './lineDiff'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface PromptDiffModalProps {
   prompt: PromptVersion
@@ -61,9 +62,9 @@ export function PromptDiffModal({ prompt, parent, onClose }: PromptDiffModalProp
               key={idx}
               className={
                 l.kind === 'add'
-                  ? 'bg-ok-muted/50 text-ok-foreground'
+                  ? CHIP_TONE.okSubtle
                   : l.kind === 'del'
-                    ? 'bg-danger-muted/50 text-danger-foreground'
+                    ? CHIP_TONE.dangerSubtle
                     : 'text-fg-muted'
               }
             >

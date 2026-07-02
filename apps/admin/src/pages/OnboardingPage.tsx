@@ -62,8 +62,9 @@ import {
 import { CliSetupGuide } from '../components/CliSetupGuide'
 import { isCliSetupMode, shouldFocusCreateForm, shouldShowOnboardingCreateForm } from '../lib/onboardingCliSetup'
 import { clearStoredInstanceConfig } from '../lib/env'
-import { IconChat } from '../components/icons'
+import { IconChat, IconBolt } from '../components/icons'
 import { askMushiPanel } from '../lib/useAskMushiPanel'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface ApiKey {
   key: string
@@ -431,6 +432,7 @@ export function OnboardingPage() {
     <div className="space-y-4">
       <PageHeaderBar
         title={copy?.title ?? 'Setup'}
+        icon={<IconBolt />}
         projectScope={stats.projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
         description={copy?.description ?? 'Create a project, generate a report key, install the SDK, and watch your first bug get a plain-English read — target: under 2 minutes.'}
@@ -443,7 +445,7 @@ export function OnboardingPage() {
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Complete the required steps in order. The API key is only shown once — copy it before continuing. You can rerun the test report any time from Settings.'}
       >
-        <Badge className={stats.setupDone ? 'bg-ok-muted text-ok' : stats.hasAnyProject ? 'bg-warn-muted/50 text-warning-foreground' : 'bg-info-muted/50 text-info-foreground'}>
+        <Badge className={stats.setupDone ? CHIP_TONE.okSubtle : stats.hasAnyProject ? CHIP_TONE.warnSubtle : CHIP_TONE.infoSubtle}>
           {stats.setupDone ? 'READY' : stats.hasAnyProject ? `${stats.requiredComplete}/${stats.requiredTotal}` : 'START'}
         </Badge>
       </PageHeaderBar>

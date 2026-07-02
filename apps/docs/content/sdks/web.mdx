@@ -23,6 +23,9 @@ import { Callout } from 'nextra/components'
 
 See [Quickstart → Vanilla JS](/quickstart/web) for setup. Notable extras:
 
+- **`runtimeConfig: 'auto'`** — fetches console settings from `GET /v1/sdk/config`
+  and merges them over host init. Host-wired banner and capture flags win over
+  console defaults. See [Runtime config](/concepts/runtime-config).
 - **`onProactiveTrigger(({ context }) => …)`** — fires when the SDK detects
   user friction (rage clicks, repeated navigation, console errors during
   the same interaction). Use it to surface the report widget contextually.
@@ -66,6 +69,45 @@ See the [Next.js App Router + CSP recipe](/sdks/nextjs-app-router-csp).
 
 Maintainer deep-dive:
 [SDK_SCREENSHOT_PREVIEW.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md)
+
+---
+
+## Runtime config merge (Jul 2026+)
+
+When `runtimeConfig` is `'auto'`, the SDK merges console settings from
+`GET /v1/sdk/config` over your `init()` config. Explicit host wiring wins — if
+you set `widget: { trigger: 'banner' }`, a console default of `launcher: 'auto'`
+no longer hides the banner.
+
+Capture flags merge key-by-key: only values the console explicitly configured
+replace host values. Unconfigured console defaults are omitted so they cannot
+clobber host init.
+
+See [Runtime config](/concepts/runtime-config) for the setup default and
+troubleshooting table. Maintainer deep-dive:
+[SDK_RUNTIME_CONFIG.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_RUNTIME_CONFIG.md).
+
+---
+
+## Capture availability & errors
+
+Screenshot and element-picker buttons hide when that capture mode is unavailable
+(permission denied, unsupported browser, or disabled in config). When capture
+fails at runtime, the widget shows a short inline error instead of a dead button.
+
+Wire availability from host code when needed:
+
+```typescript
+mushi.setCaptureAvailability({ screenshot: true, element: false })
+```
+
+---
+
+## Description draft persistence
+
+Typed report text (description, email, follow-up reply) survives background panel
+re-renders — for example when runtime config refreshes or the route changes.
+Drafts clear on successful submit or when the reporter opens a new session.
 
 ---
 

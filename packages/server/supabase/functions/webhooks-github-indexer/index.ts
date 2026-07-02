@@ -22,6 +22,7 @@ import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { finalizeFixMerge } from '../_shared/fix-merge.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
+import { createWebhookMiddleware, ReplayAttackError, RateLimitError } from '../_shared/webhook-middleware.ts';
 
 ensureSentry('webhooks-github-indexer');
 
@@ -1016,6 +1017,8 @@ app.post('/webhooks-github-indexer', async (c) => {
   const raw = await c.req.text();
 
   // Sweep mode: cron-invoked, no GitHub signature; auth via service-role bearer.
+  // Internal caller (not inbound webhook traffic), so it deliberately bypasses
+  // the audit/rate-limit/replay middleware below.
   if (raw.length > 0) {
     try {
       const peek = JSON.parse(raw) as { mode?: string; project_id?: string };
@@ -1027,11 +1030,46 @@ app.post('/webhooks-github-indexer', async (c) => {
     }
   }
 
+  // Genuine inbound GitHub webhook delivery from here on — apply the same
+  // audit-log + per-IP rate-limit + 24h replay-cache posture as the other
+  // GitHub webhook route (api/routes/public.ts `/v1/webhooks/github`).
+  const t0 = Date.now();
+  const { audit, checkReplay, checkRateLimit } = createWebhookMiddleware('github');
+  const auditDeliveryId = c.req.header('X-GitHub-Delivery') ?? null;
+  const sourceIp =
+    c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null;
+
+  const auditRow = await audit(c as never, raw, auditDeliveryId);
+  try {
+    checkRateLimit(sourceIp);
+    await checkReplay(auditRow.id, auditDeliveryId);
+  } catch (err) {
+    if (err instanceof RateLimitError) {
+      await auditRow.resolve('rejected_rate_limit', 429, Date.now() - t0, err.message);
+      return c.json({ ok: false, error: err.message }, 429);
+    }
+    if (err instanceof ReplayAttackError) {
+      await auditRow.resolve('rejected_replay', 409, Date.now() - t0, err.message);
+      return c.json({ ok: false, error: 'Duplicate delivery' }, 409);
+    }
+    throw err;
+  }
+
   if (!(await verifySignature(c.req.raw, raw))) {
+    await auditRow.resolve('rejected_signature', 401, Date.now() - t0, 'Invalid signature');
     return c.json({ error: 'invalid signature' }, 401);
   }
   const event = c.req.header('X-GitHub-Event') ?? 'unknown';
-  const deliveryId = c.req.header('X-GitHub-Delivery') ?? crypto.randomUUID();
+  const deliveryId = auditDeliveryId ?? crypto.randomUUID();
+
+  // Resolve the audit row now: it tracks the security gate (signature +
+  // replay + rate limit), which has passed. Downstream business-logic
+  // outcomes (per-event success/failure) are already tracked separately in
+  // `fix_events` and `project_repos.last_index_error`, and this handler has
+  // ~10 distinct event-type branches/early-returns below — threading a
+  // second resolve() through each would duplicate that bookkeeping without
+  // adding signal to the webhook_audit_log dashboard.
+  await auditRow.resolve('accepted', 200, Date.now() - t0);
 
   // pull_request.*: covers opened / reopened / converted_to_draft /
   // ready_for_review / closed. Each updates `fix_attempts.pr_state`, emits a

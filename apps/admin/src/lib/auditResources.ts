@@ -2,6 +2,8 @@
  * Audit log resource_type → page links and chip styling.
  */
 
+import { CHIP_TONE } from './chipTone'
+
 export interface AuditResourceInfo {
   label: string
   description: string
@@ -13,7 +15,7 @@ const RESOURCES: Record<string, AuditResourceInfo> = {
   report: {
     label: 'Bug report',
     description: 'User-submitted bug or feedback. Open Reports to triage or dispatch a fix.',
-    className: 'border-info/30 bg-info-muted/35 text-info hover:bg-info-muted/55',
+    className: `${CHIP_TONE.infoSubtle} hover:bg-info-muted/55`,
     listPath: '/reports',
   },
   fix: {
@@ -43,13 +45,13 @@ const RESOURCES: Record<string, AuditResourceInfo> = {
   plugin: {
     label: 'Plugin',
     description: 'Marketplace plugin install or uninstall.',
-    className: 'border-warn/25 bg-warn-muted/30 text-warn hover:bg-warn-muted/50',
+    className: `${CHIP_TONE.warnSubtle} hover:bg-warn-muted/50`,
     listPath: '/marketplace',
   },
   compliance: {
     label: 'Compliance',
     description: 'Privacy, retention, or DSAR-related action.',
-    className: 'border-ok/25 bg-ok-muted/30 text-ok hover:bg-ok-muted/50',
+    className: `${CHIP_TONE.okSubtle} hover:bg-ok-muted/50`,
     listPath: '/compliance',
   },
   api_key: {

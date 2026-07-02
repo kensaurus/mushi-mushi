@@ -4,7 +4,7 @@
  */
 
 import type { Command } from 'commander';
-import { loadConfig, saveConfig } from '../config.js';
+import { ensureClientId, loadConfig, saveConfig } from '../config.js';
 import { runInit } from '../init.js';
 import { runMigrate } from '../migrate.js';
 import type { FrameworkId } from '../detect.js';
@@ -151,7 +151,7 @@ Examples:
     // Step 1: start device-auth session (RFC 8628 — shared with the init wizard)
     let deviceData: Awaited<ReturnType<typeof startDeviceAuth>>
     try {
-      deviceData = await startDeviceAuth(endpoint)
+      deviceData = await startDeviceAuth(endpoint, ensureClientId())
     } catch (err) {
       process.stderr.write(`\nerror: Could not start login session: ${err instanceof Error ? err.message : String(err)}\n`)
       process.stderr.write(`  Fallback: mushi login --api-key <key> --project-id <uuid>\n`)

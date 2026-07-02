@@ -262,7 +262,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <button
               type="button"
               onClick={() => dismiss(t.id)}
-              className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-sm text-danger hover:text-danger hover:bg-danger-muted/50 text-xs leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface-raised motion-safe:transition-colors"
+              className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-sm text-danger-foreground hover:bg-danger-muted/50 text-xs leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface-raised motion-safe:transition-colors"
               aria-label="Dismiss notification"
             >
               <span aria-hidden="true">✕</span>

@@ -50,7 +50,66 @@ import {
 import { buildMcpServerCard, MCP_SERVER_CARD_HEADERS } from '../../_shared/mcp-server-card.ts';
 
 export function registerPreRegionDiscoveryRoutes(app: Hono<{ Variables: Variables }>): void {
+  // Pure liveness ping — intentionally NEVER touches the DB or checks
+  // secrets. Uptime monitors, `scripts/smoke-prod-flow.mjs`, and the MCP
+  // `diagnose_setup` tool's `endpoint_health` probe (mcp/index.ts) all treat
+  // a 200 here as "the edge function is deployed and routing works" — none
+  // of them expect it to reflect downstream Postgres health, so changing its
+  // semantics would turn transient DB blips into false "the whole platform
+  // is down" alarms. See `/health/ready` below for the readiness signal.
   app.get('/health', (c) => c.json({ status: 'ok', version: '1.0.0', region: currentRegion() }));
+
+  // Readiness check — Kubernetes-style liveness/readiness split. Answers "can
+  // this instance actually serve a real request right now", not just "is the
+  // process up". A Postgres outage or a missing critical secret shows up here
+  // as 503 instead of staying invisible behind the always-green /health ping
+  // above (the exact gap flagged in the production-readiness audit — every
+  // health endpoint in this codebase was previously a `{ok:true}` liveness
+  // stub with no downstream check).
+  app.get('/health/ready', async (c) => {
+    const startedAt = Date.now();
+    const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_ANON_KEY'];
+    const missingEnv = requiredEnv.filter((name) => !Deno.env.get(name));
+
+    let dbOk = false;
+    let dbErrorMessage: string | null = null;
+    if (missingEnv.length === 0) {
+      try {
+        const db = getServiceClient();
+        // Cheapest possible real round-trip: a `head`-only count against a
+        // small, always-populated table. Confirms both network reachability
+        // AND that the service-role key still has read grants — a revoked/
+        // rotated key would 401 here just like it would on a real request.
+        const dbCheck = db
+          .from('pricing_plans')
+          .select('id', { head: true, count: 'exact' });
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('db_timeout_after_3000ms')), 3000),
+        );
+        const { error } = (await Promise.race([dbCheck, timeout])) as Awaited<typeof dbCheck>;
+        dbOk = !error;
+        dbErrorMessage = error?.message ?? null;
+      } catch (err) {
+        dbErrorMessage = err instanceof Error ? err.message : String(err);
+      }
+    }
+
+    const ready = missingEnv.length === 0 && dbOk;
+    return c.json(
+      {
+        status: ready ? 'ok' : 'degraded',
+        checks: {
+          env: missingEnv.length === 0 ? 'ok' : 'missing',
+          ...(missingEnv.length > 0 ? { missingEnv } : {}),
+          db: dbOk ? 'ok' : 'error',
+          ...(dbErrorMessage ? { dbError: dbErrorMessage } : {}),
+        },
+        latencyMs: Date.now() - startedAt,
+        region: currentRegion(),
+      },
+      ready ? 200 : 503,
+    );
+  });
 
   // C7: data residency — public lookup so SDKs can prime their region
   // cache before the first call. No auth required; only exposes the region tag.

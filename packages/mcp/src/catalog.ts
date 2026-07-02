@@ -269,7 +269,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'merge_fix',
     title: 'Merge fix PR',
     description:
-      'Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns { merged, reportStatus }. Write; destructive (mutates the target repo\'s default branch); idempotent — re-running an already-merged attempt is a safe no-op. Prerequisite: CI green (check with refresh_ci). Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging.',
+      'Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns { merged, reportStatus }. Write; destructive and irreversible from Mushi\'s side — once GitHub merges into the target repo\'s default branch there is no unmerge endpoint, only a manual revert PR outside this tool. Idempotent — re-running an already-merged attempt is a safe no-op. Prerequisite: CI green (check with refresh_ci); confirm the diff and CI status with the user before calling on a PR you have not reviewed. Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: true, idempotent: true, openWorld: true },
     useCase: 'Merge the draft PR and notify the reporter.',
@@ -307,23 +307,25 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'award_bonus_points',
     title: 'Award bonus points',
     description:
-      'Award ad-hoc bonus points to a contributor by their external user id (as passed to Mushi.identify()). ' +
-      'Points are applied server-side, audit-logged, and trigger tier re-evaluation. ' +
+      'Award ad-hoc bonus points (1-50000, positive only — there is no way to subtract via this tool) to a contributor by their external user id (as passed to Mushi.identify()). ' +
+      'Points post immediately to their total and are audit-logged as bonus_manual. Destructive and effectively irreversible: there is no reversal endpoint, so confirm the amount and recipient with the user before calling. ' +
+      'Tier re-evaluation (and any host-side reward_webhooks grant tied to crossing a threshold) is NOT immediate — it only runs on the contributor\'s next tracked activity, not on this call. ' +
       'Requires mcp:write scope. Use this to thank a contributor who found a critical bug or to run a one-off promotional campaign.',
     scope: 'mcp:write',
-    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    hints: { readOnly: false, destructive: true, idempotent: false, openWorld: true },
     useCase: 'Give this contributor 500 bonus points for the critical bug they found.',
   },
   {
     name: 'set_tier',
     title: 'Override contributor tier',
     description:
-      'Override a contributor\'s tier by tier slug (e.g. "champion"). This is an admin escape hatch for manual promotions — ' +
-      'normal tier transitions happen automatically via point thresholds. ' +
-      'The override is logged in end_user_activity with action=tier_override_manual. ' +
+      'Override a contributor\'s tier by tier slug (e.g. "champion"), bypassing the normal points-threshold logic entirely. This is an admin escape hatch for manual promotions — ' +
+      'normal tier transitions happen automatically via point thresholds instead. ' +
+      'Destructive: it is a label-only override that does NOT replay the automatic tier-evaluation path, so any host_credit_payload grant (Stripe perk, badge, etc.) normally tied to reaching that tier via points will NOT fire — confirm with the user whether they also need the perk granted another way. ' +
+      'The override persists until another set_tier call changes it; the prior override stays in the end_user_activity audit trail either way, logged as tier_override_manual. ' +
       'Requires mcp:write scope.',
     scope: 'mcp:write',
-    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+    hints: { readOnly: false, destructive: true, idempotent: true, openWorld: true },
     useCase: 'Manually promote this user to Champion tier as a thank-you.',
   },
   {

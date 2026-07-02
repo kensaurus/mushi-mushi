@@ -29,6 +29,7 @@ import type { KeyboardEvent } from 'react'
 import { Modal } from './Modal'
 import { Badge, CodeValue } from './ui'
 import { SignalChip } from './report-detail/ReportSurface'
+import { CHIP_TONE } from '../lib/chipTone'
 
 export interface FixTimelineEvent {
   // Lock-step with the DB constraint on `fix_events.kind`
@@ -84,9 +85,9 @@ const STATUS_COLOR: Record<string, string> = {
 }
 
 const PR_STATE_TONE: Record<PrState, string> = {
-  open: 'bg-ok-subtle text-ok',
+  open: CHIP_TONE.okSubtle,
   merged: 'bg-[oklch(0.30_0.10_300)] text-[oklch(0.92_0.08_300)]',
-  closed: 'bg-danger-subtle text-danger',
+  closed: CHIP_TONE.dangerSubtle,
   draft: 'bg-surface-overlay text-fg-muted',
 }
 

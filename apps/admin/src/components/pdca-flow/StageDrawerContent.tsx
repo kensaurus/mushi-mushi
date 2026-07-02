@@ -23,6 +23,7 @@ import type { PdcaStage } from '../dashboard/types'
 import type { FixAttempt, DispatchJob } from '../fixes/types'
 import { Btn, RelativeTime, Loading } from '../ui'
 import { useFlowUndo } from '../flow-primitives/useFlowUndo'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface StageDrawerContentProps {
   stageId: PdcaStageId
@@ -489,10 +490,10 @@ function CheckDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: ()
                 <span
                   className={`inline-flex items-center justify-center w-9 rounded-sm py-0.5 font-mono font-semibold text-2xs ${
                     e.passed === true
-                      ? 'bg-ok-muted text-ok'
+                      ? CHIP_TONE.okSubtle
                       : e.passed === false
-                        ? 'bg-danger-muted text-danger'
-                        : 'bg-warn-muted text-warn'
+                        ? CHIP_TONE.dangerSubtle
+                        : CHIP_TONE.warnSubtle
                   }`}
                 >
                   {e.score ?? '—'}

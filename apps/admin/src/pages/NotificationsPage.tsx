@@ -52,6 +52,7 @@ import {
   type NotificationTabId,
   type ReporterNotification,
 } from '../components/notifications/types'
+import { CHIP_TONE } from '../lib/chipTone'
 
 const TABS: Array<{ id: NotificationTabId; label: string; description: string }> = [
   {
@@ -214,7 +215,7 @@ export function NotificationsPage() {
       <div className="space-y-4">
         <PageHeaderBar
           title={copy?.title ?? 'Notifications'}
-          description={copy?.description ?? 'Outbound messages the reporter SDK widget polls after classify, fix, or reward events.'}
+
           helpTitle={copy?.help?.title ?? 'About reporter notifications'}
           helpWhatIsIt={
             copy?.help?.whatIsIt ??
@@ -275,7 +276,7 @@ export function NotificationsPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Notifications'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={copy?.description ?? 'Outbound messages the reporter SDK widget polls after classify, fix, or reward events.'}
+
         helpTitle={copy?.help?.title ?? 'About reporter notifications'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
@@ -298,9 +299,9 @@ export function NotificationsPage() {
             <Badge
               className={
                 bannerSeverity === 'ok'
-                  ? 'bg-ok-muted text-ok'
+                  ? CHIP_TONE.okSubtle
                   : bannerSeverity === 'warn'
-                    ? 'bg-warn-muted/50 text-warning-foreground'
+                    ? CHIP_TONE.warnSubtle
                     : bannerSeverity === 'brand'
                       ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                       : 'bg-surface-overlay text-fg-muted'

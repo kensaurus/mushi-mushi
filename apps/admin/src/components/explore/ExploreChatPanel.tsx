@@ -284,7 +284,7 @@ export function ExploreChatPanel({
         <ChatThreadList
           header={
             <div className="flex items-center justify-between gap-2">
-              <span className="text-3xs uppercase tracking-wider text-fg-faint">Threads</span>
+              <span className="text-2xs uppercase tracking-wider text-fg-faint">Threads</span>
               <Btn size="sm" variant="ghost" onClick={startNewThread} disabled={loading}>
                 New
               </Btn>
@@ -292,10 +292,10 @@ export function ExploreChatPanel({
           }
         >
           {threadsLoading && threads.length === 0 && (
-            <p className="text-3xs text-fg-muted px-2 py-1">Loading…</p>
+            <p className="text-2xs text-fg-muted px-2 py-1">Loading…</p>
           )}
           {!threadsLoading && threads.length === 0 && (
-            <p className="text-3xs text-fg-muted px-2 py-1">No past chats yet.</p>
+            <p className="text-2xs text-fg-muted px-2 py-1">No past chats yet.</p>
           )}
           {threads.map((t) =>
             renamingId === t.id ? (
@@ -416,7 +416,7 @@ export function ExploreChatPanel({
         )}
 
         {threadTotals.cost > 0 || threadTotals.input > 0 ? (
-          <p className="text-3xs text-fg-faint font-mono tabular-nums px-0.5">
+          <p className="text-2xs text-fg-faint font-mono tabular-nums px-0.5">
             Thread total: {threadTotals.input.toLocaleString()} → {threadTotals.output.toLocaleString()} tok
             {threadTotals.cost > 0 ? ` · ${formatLlmCost(threadTotals.cost)}` : ''}
             {' · '}
@@ -505,7 +505,7 @@ function ChatTurnCard({
               key={`${label}-${ci}`}
               type="button"
               onClick={() => onCitationClick?.(c)}
-              className="text-3xs font-mono px-1.5 py-0.5 rounded border border-edge-subtle bg-surface-raised hover:border-brand/50 hover:text-brand transition-colors"
+              className="text-2xs font-mono px-1.5 py-0.5 rounded border border-edge-subtle bg-surface-raised hover:border-brand/50 hover:text-brand transition-colors"
               title={c.symbol_name ?? c.file_path}
             >
               {label}
@@ -564,7 +564,7 @@ function MessageTelemetryStrip({ turn }: { turn: ChatTurn }) {
   if (turn.keySource === 'byok') meta.push('your key')
 
   return (
-    <div className="border-t border-edge-subtle/70 px-3 py-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-3xs font-mono tabular-nums text-fg-faint bg-surface-overlay">
+    <div className="border-t border-edge-subtle/70 px-3 py-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs font-mono tabular-nums text-fg-faint bg-surface-overlay">
       {turn.model ? <CodeChip maxWidthClass="max-w-[14rem]">{turn.model}</CodeChip> : null}
       {meta.length > 0 ? <span>{meta.join(' · ')}</span> : null}
       <Link

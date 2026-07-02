@@ -23,6 +23,7 @@ import { useActiveProjectId } from './ProjectSwitcher'
 import { useAdminMode } from '../lib/mode'
 import type { DashboardData } from './dashboard/types'
 import { renderDogfoodNarrative } from '../lib/copy'
+import { CHIP_TONE } from '../lib/chipTone'
 
 export function DogfoodNarrativeBanner() {
   const { isAdvanced } = useAdminMode()
@@ -62,7 +63,7 @@ export function DogfoodNarrativeBanner() {
     >
       <span
         aria-hidden="true"
-        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-info-muted/40 text-info text-sm"
+        className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${CHIP_TONE.infoSubtle} text-sm`}
         title="Most fragile area"
       >
         ◆

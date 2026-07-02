@@ -13,6 +13,7 @@ import { useToast } from '../../lib/toast'
 import { Btn, Badge, SegmentedControl } from '../../components/ui'
 import { TableSkeleton } from '../../components/skeletons/TableSkeleton'
 import { TesterPageIntro } from '../../components/tester/tester-ui'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface BountyTier {
   action: string
@@ -76,7 +77,7 @@ function actionLabel(action: string) {
 const ACTION_COLOR: Record<string, string> = {
   bug_critical: 'text-danger bg-danger/10 border-danger/30',
   bug_high:     'text-warn bg-warn/10 border-warn/30',
-  bug_medium:   'text-warn bg-warn-muted/20 border-warn/20',
+  bug_medium:   CHIP_TONE.warnSubtle + ' border-warn/20',
   bug_low:      'text-fg-muted bg-surface-overlay/40 border-edge/30',
   enhancement:  'text-info bg-info/10 border-info/30',
 }

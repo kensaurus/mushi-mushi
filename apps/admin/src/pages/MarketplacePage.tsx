@@ -58,6 +58,7 @@ import {
   type MarketplaceTabId,
   type ReliabilityStats,
 } from '../components/marketplace/types'
+import { CHIP_TONE } from '../lib/chipTone'
 
 const TABS: Array<{ id: MarketplaceTabId; label: string; description: string }> = [
   {
@@ -444,7 +445,7 @@ export function MarketplacePage() {
       <div className="space-y-4">
         <PageHeaderBar
           title={copy?.title ?? 'Marketplace'}
-          description={copy?.description ?? 'Install signed webhook plugins that react when reports classify or fixes land.'}
+
           helpTitle={copy?.help?.title ?? 'About the marketplace'}
           helpWhatIsIt={
             copy?.help?.whatIsIt ??
@@ -503,7 +504,7 @@ export function MarketplacePage() {
       <PageHeaderBar
         title={copy?.title ?? 'Marketplace'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={copy?.description ?? 'Install signed webhook plugins that react when reports classify or fixes land.'}
+
         helpTitle={copy?.help?.title ?? 'About the marketplace'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
@@ -526,11 +527,11 @@ export function MarketplacePage() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
+              ? CHIP_TONE.okSubtle
               : bannerSeverity === 'danger'
-                ? 'bg-danger-muted/50 text-danger-foreground'
+                ? CHIP_TONE.dangerSubtle
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn-muted/50 text-warning-foreground'
+                  ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
                     ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                     : 'bg-surface-overlay text-fg-muted'

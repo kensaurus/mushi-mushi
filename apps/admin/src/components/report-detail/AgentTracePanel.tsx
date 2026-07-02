@@ -3,6 +3,7 @@
  */
 import { Card, Badge } from '../ui'
 import type { ReportDetail } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface LlmInvocationRow {
   id: string
@@ -57,7 +58,7 @@ export function AgentTracePanel({ report }: Props) {
                 </td>
                 <td className="py-1.5 pr-2">{r.cost_usd != null ? `$${Number(r.cost_usd).toFixed(4)}` : '—'}</td>
                 <td className="py-1.5">
-                  <Badge className={r.status === 'success' ? 'bg-ok-muted text-ok text-3xs' : 'bg-danger-muted text-danger text-3xs'}>{r.status}</Badge>
+                  <Badge className={r.status === 'success' ? CHIP_TONE.okSubtle + ' text-3xs' : CHIP_TONE.dangerSubtle + ' text-3xs'}>{r.status}</Badge>
                 </td>
               </tr>
             ))}

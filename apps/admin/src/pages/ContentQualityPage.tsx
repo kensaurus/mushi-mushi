@@ -176,7 +176,7 @@ export function ContentQualityPage() {
     <div className="flex flex-col flex-1 min-h-0">
       <PageHeaderBar
         title="Content Quality"
-        description={`${total} asset${total !== 1 ? 's' : ''} need attention · auto-synced every 15 min`}
+
         helpTitle="About Content Quality"
         helpWhatIsIt="Content quality issues are surfaced by AI judge scores, user flags, star ratings, and downvote ratios. Each issue links to its Langfuse trace and full feedback history."
         helpUseCases={[

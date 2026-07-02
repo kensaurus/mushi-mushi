@@ -100,7 +100,7 @@ export function SetupCopilotPage() {
     <div className="space-y-6 pb-10">
       <PageHeaderBar
         title="Setup Copilot"
-        description="Wire the SDK, confirm heartbeat traffic, then verify dispatch readiness — without guessing which checklist applies."
+
         helpTitle="About Setup Copilot"
         helpWhatIsIt="Guided ingest and dispatch verification with copy-paste CLI blocks for the active project."
         helpUseCases={[

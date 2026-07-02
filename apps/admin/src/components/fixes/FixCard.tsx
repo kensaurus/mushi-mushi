@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom';
 import { Card, Badge, RelativeTime } from '../ui';
 import { formatTokens } from '../charts';
 import { PIPELINE_STATUS, pipelineStatusLabel } from '../../lib/tokens';
+import { CHIP_TONE } from '../../lib/chipTone';
 import { useRowFlash } from '../../lib/useRowFlash';
 import { FixGitGraph, type FixTimelineEvent } from '../FixGitGraph';
 import { PdcaReceipt } from './PdcaReceipt';
@@ -160,7 +161,7 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
             )}
             {shipped && fix.status !== 'merged' && (
               <Badge
-                className="bg-ok-muted text-ok"
+                tone="okSubtle"
                 title={
                   fix.merged_at
                     ? `Merged on GitHub at ${fix.merged_at}`
@@ -172,7 +173,7 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
             )}
             {fix.review_passed === false && (
               <Badge
-                className="bg-warn-muted text-warn"
+                tone="warnSubtle"
                 title="The agent flagged this for extra human review."
               >
                 Needs review
@@ -180,7 +181,7 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
             )}
             {specWarnings.length > 0 && (
               <Badge
-                className="bg-warn-muted text-warn"
+                tone="warnSubtle"
                 title={`Spec gate raised ${specWarnings.length} soft warning${specWarnings.length === 1 ? '' : 's'}: ${specWarnings.map((w) => w.code).join(', ')}. Expand details to inspect.`}
               >
                 {`Spec ${specWarnings.length}`}
@@ -188,7 +189,7 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
             )}
             {fix.status === 'failed' && fix.failure_category && (
               <Badge
-                className="bg-danger-subtle text-danger font-mono"
+                className={`${CHIP_TONE.dangerSubtle} font-mono`}
                 title={`Categorised by fix-worker.categorizeFailure(). Aggregated into the "Why fixes failed" tile on the Fixes summary so trends are visible at a glance.`}
               >
                 {fix.failure_category}
@@ -196,7 +197,7 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
             )}
             {fix.inventory_action_node_id && !inventoryAction && (
               <Badge
-                className="bg-info-subtle text-info font-mono"
+                className={`${CHIP_TONE.infoSubtle} font-mono`}
                 title="This fix is linked to an inventory action. Expand to see the origin contract."
               >
                 spec-linked
@@ -420,7 +421,7 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
         )}
 
         {fix.error && (
-          <div className="rounded bg-danger-muted/40 px-2 py-1.5 text-2xs text-danger">
+          <div className={`rounded px-2 py-1.5 text-2xs ${CHIP_TONE.dangerSubtle}`}>
             <span className="font-mono uppercase tracking-wide">Error · </span>
             <span className="font-mono">{fix.error}</span>
           </div>

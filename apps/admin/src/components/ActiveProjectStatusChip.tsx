@@ -16,6 +16,7 @@ import {
 import { buildTrendTooltip } from '../lib/projectMetaTooltips'
 import { resolveSdkDisplay } from '../lib/sdkVersionCompare'
 import { MetricTooltipContent, Tooltip } from './ui'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface ActiveProjectStatusChipProps {
   snapshot: ProjectSnapshot | null | undefined
@@ -101,7 +102,7 @@ export function ActiveProjectStatusChip({ snapshot }: ActiveProjectStatusChipPro
           nowrap={false}
           portal
         >
-          <span className="inline-flex h-5 cursor-help items-center rounded-sm bg-warn-muted px-1 text-3xs font-mono font-semibold text-warn">
+          <span className={`inline-flex h-5 cursor-help items-center rounded-sm ${CHIP_TONE.warnSubtle} px-1 text-3xs font-mono font-semibold`}>
             ↑
           </span>
         </Tooltip>
@@ -140,10 +141,10 @@ export function ActiveProjectStatusChip({ snapshot }: ActiveProjectStatusChipPro
             onClick={(e) => e.stopPropagation()}
             className={`inline-flex h-5 cursor-pointer items-center rounded-sm px-1 text-3xs font-medium hover:opacity-90 ${
               sdkResolution.kind === 'deprecated'
-                ? 'bg-danger-muted text-danger'
+                ? CHIP_TONE.dangerSubtle
                 : sdkResolution.kind === 'catalog-ahead'
-                  ? 'bg-info-muted text-info'
-                  : 'bg-warn-muted text-warn'
+                  ? CHIP_TONE.infoSubtle
+                  : CHIP_TONE.warnSubtle
             }`}
           >
             SDK

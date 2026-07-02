@@ -10,6 +10,7 @@ import { Navigate } from 'react-router-dom'
 import { Input, Btn, PageHelpBanner, Loading } from '../components/ui'
 import { ContainedBlock, InlineProof, SignalChip } from '../components/report-detail/ReportSurface'
 import { detectRecoveryFromUrl } from '../lib/authRedirect'
+import { CHIP_TONE } from '../lib/chipTone'
 
 export function ResetPasswordPage() {
   const { isPasswordRecovery, updatePassword, session, loading: authLoading } = useAuth()
@@ -93,7 +94,7 @@ export function ResetPasswordPage() {
         {done ? (
           <div className="bg-surface border border-edge rounded-md p-5 space-y-3">
             <div className="flex items-center justify-center">
-              <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-ok-muted/50 text-ok-foreground">
+              <span className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${CHIP_TONE.okSubtle}`}>
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>

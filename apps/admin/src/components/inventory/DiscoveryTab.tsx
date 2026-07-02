@@ -3,6 +3,7 @@ import { Btn, Card, Badge, ErrorAlert, Input } from '../ui'
 import { IconNote } from '../icons'
 import { ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
 import { apiFetch } from '../../lib/supabase'
+import { CHIP_TONE } from '../../lib/chipTone'
 import { useToast } from '../../lib/toast'
 import { usePageData } from '../../lib/usePageData'
 import { useRealtimeReload } from '../../lib/realtime'
@@ -380,7 +381,7 @@ function ActionCard({
     return (
       <Card className="p-4 space-y-3">
         <div className="flex items-start gap-3">
-          <div className="shrink-0 w-9 h-9 rounded-lg bg-info-muted/40 ring-1 ring-info/30 text-info flex items-center justify-center">
+          <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${CHIP_TONE.infoSubtle}`}>
             <SdkIcon />
           </div>
           <div className="min-w-0">
@@ -420,7 +421,7 @@ Mushi.init({
     return (
       <Card className="p-4">
         <div className="flex items-start gap-3">
-          <div className="shrink-0 w-9 h-9 rounded-lg bg-warn-muted/40 ring-1 ring-warn/30 text-warn flex items-center justify-center">
+          <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${CHIP_TONE.warnSubtle}`}>
             <ClockIcon />
           </div>
           <div className="min-w-0 flex-1">
@@ -564,10 +565,10 @@ function ProposalsList({
 function ProposalStatusPill({ status }: { status: 'draft' | 'accepted' | 'discarded' }) {
   const styles =
     status === 'accepted'
-      ? 'bg-ok-muted text-ok border-ok/30'
+      ? CHIP_TONE.okSubtle + ' border-ok/30'
       : status === 'discarded'
         ? 'bg-surface-overlay text-fg-muted border-edge-subtle'
-        : 'bg-warn-muted text-warn border-warn/30'
+        : CHIP_TONE.warnSubtle + ' border-warn/30'
   return (
     <Badge className={`${styles} border uppercase tracking-wider text-2xs`}>
       {status}
@@ -874,7 +875,7 @@ function LiveCrawlCard({
 
       {/* Quota exhausted banner */}
       {quotaExhausted && (
-        <div className="rounded-md bg-warn-muted border border-warn/30 px-3 py-2 text-2xs text-warn">
+        <div className={`rounded-md ${CHIP_TONE.warnSubtle} px-3 py-2 text-2xs`}>
           Daily crawl budget reached — resets at 00:00 UTC, or raise the limit in{' '}
           <a href="/settings?tab=general" className="underline">Settings → General</a>.
         </div>
@@ -962,9 +963,9 @@ function LiveCrawlCard({
           {runs.slice(0, 5).map(run => (
             <div key={run.id} className="flex items-center gap-3 text-2xs">
               <span className={`shrink-0 font-mono px-1.5 py-0.5 rounded-sm ${
-                run.status === 'completed' ? 'bg-ok-muted/50 text-ok-foreground' :
-                run.status === 'failed' ? 'bg-danger-muted/50 text-danger-foreground' :
-                'bg-info-muted/50 text-info-foreground'
+                run.status === 'completed' ? CHIP_TONE.okSubtle :
+                run.status === 'failed' ? CHIP_TONE.dangerSubtle :
+                CHIP_TONE.infoSubtle
               }`}>{run.status}</span>
               <span className="text-fg-muted truncate flex-1">{run.base_url}</span>
               {run.status === 'completed' && run.proposal_id && (

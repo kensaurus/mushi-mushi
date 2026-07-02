@@ -24,7 +24,7 @@ export function IntelligenceReportCard({ report, onDownload }: Props) {
           <span className="text-sm font-semibold text-fg">Week of {report.week_start}</span>
           <Badge className="bg-surface-raised text-fg-secondary">{report.generated_by}</Badge>
           {report.benchmarks?.optedIn && (
-            <Badge className="bg-ok-muted text-ok">Benchmarks</Badge>
+            <Badge tone="okSubtle">Benchmarks</Badge>
           )}
           <span className="text-2xs text-fg-faint">
             Generated <RelativeTime value={report.created_at} />
@@ -57,10 +57,10 @@ export function IntelligenceReportCard({ report, onDownload }: Props) {
       {(topCategory || topSeverity || report.llm_model) && (
         <div className="mb-3 flex flex-wrap gap-2">
           {topCategory && (
-            <Badge className="bg-info-muted text-info">Top category: {topCategory}</Badge>
+            <Badge tone="infoSubtle">Top category: {topCategory}</Badge>
           )}
           {topSeverity && (
-            <Badge className="bg-warn-muted text-warn">Top severity: {topSeverity}</Badge>
+            <Badge tone="warnSubtle">Top severity: {topSeverity}</Badge>
           )}
           {report.llm_model && (
             <span className="font-mono text-3xs text-fg-faint">{report.llm_model}</span>

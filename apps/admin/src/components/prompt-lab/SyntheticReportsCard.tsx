@@ -8,6 +8,7 @@ import { formatPct } from '../charts'
 import { PromptDialog } from '../ConfirmDialog'
 import { ConfigHelp } from '../ConfigHelp'
 import type { SyntheticReportRow } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface SyntheticPayload {
   reports: SyntheticReportRow[]
@@ -96,8 +97,8 @@ export function SyntheticReportsCard() {
                   : match >= 0.8
                     ? 'bg-ok/15 text-ok border border-ok/30'
                     : match >= 0.5
-                      ? 'bg-warn-muted/50 text-warning-foreground border border-warn/30'
-                      : 'bg-danger-muted/50 text-danger-foreground border border-danger/30'
+                      ? CHIP_TONE.warnSubtle
+                      : CHIP_TONE.dangerSubtle + ' border border-danger/30'
                 return (
                   <tr key={r.id} className="border-t border-edge-subtle align-top">
                     <td className="px-2 py-1.5 text-fg-secondary max-w-[24rem]">

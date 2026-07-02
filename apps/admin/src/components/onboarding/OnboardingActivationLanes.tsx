@@ -2,8 +2,11 @@
  * Five-lane activation cockpit — SDK, Repo/CI, Observability, Agent access, Community.
  */
 
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, Badge } from '../ui'
+import { CHIP_TONE } from '../../lib/chipTone'
+import { IconBolt, IconGithub, IconHealth, IconMcp, IconChat } from '../icons'
 import { ContainedBlock } from '../report-detail/ReportSurface'
 import type { SetupProject } from '../../lib/useSetupStatus'
 import type { OnboardingStats } from './types'
@@ -21,10 +24,19 @@ export interface ActivationLane {
 }
 
 function laneTone(status: LaneStatus): string {
-  if (status === 'done') return 'bg-ok-muted text-ok border-ok/30'
-  if (status === 'next') return 'bg-brand/15 text-brand border-brand/30'
-  if (status === 'blocked') return 'bg-warn-muted/50 text-warning-foreground border-warn/30'
-  return 'bg-surface-overlay text-fg-muted border-edge-subtle'
+  if (status === 'done') return CHIP_TONE.okSubtle
+  if (status === 'next') return CHIP_TONE.brandSubtle
+  if (status === 'blocked') return CHIP_TONE.warnSubtle
+  return CHIP_TONE.neutral
+}
+
+/** Same glyph set as nav / setup steps so lanes scan consistently. */
+const LANE_ICON: Record<string, ReactNode> = {
+  sdk: <IconBolt />,
+  repo: <IconGithub />,
+  observability: <IconHealth />,
+  agent: <IconMcp />,
+  community: <IconChat />,
 }
 
 function deriveLanes(
@@ -147,8 +159,13 @@ export function OnboardingActivationLanes({
             className="block rounded-lg border border-edge-subtle bg-surface-raised/40 p-3 transition-colors hover:border-brand/30 hover:bg-surface-hover/30 focus-visible:outline focus-visible:ring-2 focus-visible:ring-focus"
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-fg">{lane.label}</span>
-              <Badge className={`text-3xs border ${laneTone(lane.status)}`}>
+              <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-fg">
+                <span className="shrink-0 text-fg-muted [&>svg]:h-3.5 [&>svg]:w-3.5" aria-hidden>
+                  {LANE_ICON[lane.id]}
+                </span>
+                <span className="truncate">{lane.label}</span>
+              </span>
+              <Badge className={laneTone(lane.status)}>
                 {lane.status === 'done' ? 'Done' : lane.status === 'next' ? 'Next' : lane.status === 'blocked' ? 'Blocked' : 'Optional'}
               </Badge>
             </div>

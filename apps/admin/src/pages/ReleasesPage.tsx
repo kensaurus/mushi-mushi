@@ -48,6 +48,7 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ResponsiveTable } from '../components/ResponsiveTable'
 import { FulfilledTicketsPicker } from '../components/support/FulfilledTicketsPicker'
+import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
 function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
   if (!payload) return []
@@ -80,8 +81,8 @@ interface Credit {
 }
 
 const STATUS_CLS: Record<Release['status'], string> = {
-  draft: 'bg-warn-muted/50 text-warning-foreground border border-warn/20',
-  published: 'bg-ok-muted/50 text-ok-foreground border border-ok/20',
+  draft: runStatusChipTone('draft'),
+  published: runStatusChipTone('published'),
 }
 
 const STATUS_LABEL: Record<Release['status'], string> = {
@@ -570,7 +571,7 @@ export function ReleasesPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Releases'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={copy?.description ?? 'Banner + RELEASES SNAPSHOT — Overview for posture, Drafts/Published to manage, Draft to generate with AI.'}
+
         helpTitle={copy?.help?.title ?? 'About Releases'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Release drafts scan fixed bug reports from a time window, attribute them to reporters, and write a plain-English changelog using AI.'}
         helpUseCases={copy?.help?.useCases ?? [
@@ -583,9 +584,9 @@ export function ReleasesPage() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
+              ? CHIP_TONE.okSubtle
               : bannerSeverity === 'warn'
-                ? 'bg-warn-muted/50 text-warning-foreground'
+                ? CHIP_TONE.warnSubtle
                 : bannerSeverity === 'brand'
                   ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                   : 'bg-surface-overlay text-fg-muted'

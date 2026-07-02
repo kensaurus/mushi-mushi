@@ -96,7 +96,7 @@ export function ExploreDomainsPanel({ projectId, onFileClick }: Props) {
             ].join(' ')}
           >
             <p className="text-sm font-medium text-fg truncate">{d.name}</p>
-            <p className="text-3xs text-fg-muted line-clamp-2 mt-0.5">{d.description}</p>
+            <p className="text-2xs text-fg-muted line-clamp-2 mt-0.5">{d.description}</p>
           </button>
         ))}
       </div>
@@ -117,7 +117,7 @@ export function ExploreDomainsPanel({ projectId, onFileClick }: Props) {
                   <ol className="mt-2 space-y-2">
                     {flow.steps.map((step, si) => (
                       <li key={step.id} className="flex gap-2 items-start">
-                        <span className="text-3xs font-mono text-brand tabular-nums shrink-0 pt-0.5">
+                        <span className="text-2xs font-mono text-brand tabular-nums shrink-0 pt-0.5">
                           {si + 1}
                         </span>
                         <div className="min-w-0 flex-1">
@@ -130,7 +130,7 @@ export function ExploreDomainsPanel({ projectId, onFileClick }: Props) {
                                   key={fp}
                                   type="button"
                                   onClick={() => onFileClick?.(fp)}
-                                  className="text-3xs font-mono px-1 py-0.5 rounded border border-edge-subtle hover:border-brand/40 truncate max-w-full"
+                                  className="text-2xs font-mono px-1 py-0.5 rounded border border-edge-subtle hover:border-brand/40 truncate max-w-full"
                                 >
                                   {fp.split('/').pop() ?? fp}
                                 </button>

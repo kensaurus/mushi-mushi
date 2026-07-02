@@ -48,6 +48,7 @@ export interface MushiLocale {
     elementButton: string;
     elementSelected: string;
     elementCapturing: string;
+    elementFailed: string;
     elementSelectorHint: string;
     optional: string;
     /** Inline validation: description is below the minimum length. */

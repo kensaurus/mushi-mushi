@@ -50,6 +50,7 @@ import {
 import { settingsLinks } from '../lib/statCardLinks'
 import { useRealtimeReload } from '../lib/realtime'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
+import { IconSettings } from '../components/icons'
 
 const TABS: Array<{ id: SettingsTabId; label: string; description: string }> = [
   { id: 'general', label: SETTINGS_TAB_LABELS.general, description: SETTINGS_TAB_DESCRIPTIONS.general },
@@ -190,6 +191,7 @@ export function SettingsPage() {
     <div className="space-y-4" data-testid="mushi-page-settings">
       <PageHeaderBar
         title={copy?.title ?? 'Project settings'}
+        icon={<IconSettings />}
         projectScope={projectName ?? stats.projectName}
         helpTitle={copy?.help?.title ?? 'About Settings'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Project settings for the active app: your own LLM keys (optional), how bugs get classified, dedup sensitivity, widget copy, and developer toggles.'}

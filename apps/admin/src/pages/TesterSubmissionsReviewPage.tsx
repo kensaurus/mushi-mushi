@@ -93,7 +93,7 @@ export function TesterSubmissionsReviewPage() {
     <div className="space-y-6">
       <PageHeaderBar
         title="Tester submissions"
-        description="Review bug reports from Mushi Bounties testers and award points."
+
         helpTitle="About tester submissions"
         helpWhatIsIt="Org-scoped reviewer queue for bug reports submitted via Mushi Bounties — accept, mark informative, duplicate, or spam, and award points."
         helpUseCases={[

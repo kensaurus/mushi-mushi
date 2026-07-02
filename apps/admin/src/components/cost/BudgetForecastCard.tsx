@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Card, Btn } from '../ui'
+import { CHIP_TONE } from '../../lib/chipTone'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import type { DailySpendSeries } from './dailySpendSeries'
@@ -150,9 +151,7 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
         <div
           role="alert"
           className={`mb-3 flex items-start gap-2 rounded-md px-3 py-2 text-2xs ${
-            isOverBudget100
-              ? 'bg-danger-muted/20 border border-danger/30 text-danger'
-              : 'bg-warn-muted/20 border border-warn/30 text-warn'
+            isOverBudget100 ? CHIP_TONE.dangerSubtle : CHIP_TONE.warnSubtle
           }`}
         >
           <span aria-hidden="true">{isOverBudget100 ? '🚨' : '⚠️'}</span>

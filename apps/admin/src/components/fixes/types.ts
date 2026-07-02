@@ -5,6 +5,8 @@
  *          orchestration.
  */
 
+import { CHIP_TONE } from '../../lib/chipTone'
+
 /**
  * Soft warning emitted by `validateAgainstSpec()` when the diff parses
  * cleanly but doesn't visibly touch the inventory contract's
@@ -112,9 +114,9 @@ export interface FixSummary {
 
 export const DISPATCH_STATUS: Record<DispatchJob['status'], string> = {
   queued: 'bg-surface-overlay text-fg-muted',
-  running: 'bg-info-subtle text-info',
-  completed: 'bg-ok-subtle text-ok',
-  failed: 'bg-danger-subtle text-danger',
+  running: CHIP_TONE.infoSubtle,
+  completed: CHIP_TONE.okSubtle,
+  failed: CHIP_TONE.dangerSubtle,
   cancelled: 'bg-surface-overlay text-fg-faint',
 };
 
@@ -127,15 +129,15 @@ export const DISPATCH_STATUS_LABEL: Record<DispatchJob['status'], string> = {
 };
 
 const CHECK_RUN_TONE: Record<string, string> = {
-  success: 'bg-ok-subtle text-ok',
-  failure: 'bg-danger-subtle text-danger',
+  success: CHIP_TONE.okSubtle,
+  failure: CHIP_TONE.dangerSubtle,
   cancelled: 'bg-surface-overlay text-fg-muted',
-  timed_out: 'bg-warning-subtle text-warning',
-  action_required: 'bg-warning-subtle text-warning',
+  timed_out: CHIP_TONE.warnSubtle,
+  action_required: CHIP_TONE.warnSubtle,
   neutral: 'bg-surface-overlay text-fg-muted',
-  in_progress: 'bg-info-subtle text-info',
-  queued: 'bg-info-subtle text-info',
-  pending: 'bg-info-subtle text-info',
+  in_progress: CHIP_TONE.infoSubtle,
+  queued: CHIP_TONE.infoSubtle,
+  pending: CHIP_TONE.infoSubtle,
 };
 
 /**

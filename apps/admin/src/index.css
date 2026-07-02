@@ -205,12 +205,6 @@
   --color-fg-on-accent: var(--color-fg);
   --color-border: var(--color-edge);
   --color-border-subtle: var(--color-edge-subtle);
-  /* Legacy shadcn aliases — prefer edge-* / fg-muted in new code */
-  --color-muted-foreground: var(--color-fg-muted);
-  --color-muted: var(--color-surface-overlay);
-  --color-background: var(--color-surface);
-  --color-foreground: var(--color-fg);
-  --color-card: var(--color-surface-raised);
 
   /* ── Chrome (page-level UI chrome: help banners, info panels, section
      frames). Distinct from brand-amber so semantic colours (ok/warn/danger)

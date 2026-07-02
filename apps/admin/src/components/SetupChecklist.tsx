@@ -14,6 +14,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { SetupProject, SetupStep } from '../lib/useSetupStatus'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface SetupChecklistProps {
   project: SetupProject
@@ -119,13 +120,13 @@ function BannerChecklist({
         onClick={() => setOpen(true)}
         className={`mb-4 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-2xs motion-safe:transition-colors ${
           allDone || requiredDone
-            ? 'border-ok/30 bg-ok-muted/15 text-ok-foreground'
-            : 'border-warn/30 bg-warn-muted/50 text-warning-foreground'
+            ? `border-ok/30 ${CHIP_TONE.okSubtle}`
+            : `border-warn/30 ${CHIP_TONE.warnSubtle}`
         } hover:brightness-110`}
         aria-label="Show setup checklist"
       >
         <span className="font-medium">{collapsedCopy}</span>
-        <span className="text-3xs text-fg-muted">expand</span>
+        <span className="text-2xs text-fg-muted">expand</span>
       </button>
     )
   }
@@ -138,11 +139,11 @@ function BannerChecklist({
             <span className={`text-xs font-semibold ${requiredDone ? 'text-ok-foreground' : 'text-warning-foreground'}`}>
               {requiredDone ? 'Setup complete' : 'Finish setting up Mushi Mushi'}
             </span>
-            <span className="text-3xs font-mono text-fg-muted">
+            <span className="text-2xs font-mono text-fg-muted">
               {project.complete}/{project.total} done · {pct}% required
             </span>
           </div>
-          <p className="mt-0.5 text-3xs text-fg-muted truncate">
+          <p className="mt-0.5 text-2xs text-fg-muted truncate">
             {requiredDone
               ? 'Optional integrations below unlock auto-fix PRs and BYOK billing.'
               : `Project: ${project.project_name}`}
@@ -153,7 +154,7 @@ function BannerChecklist({
             <button
               type="button"
               onClick={onRefresh}
-              className="text-3xs text-fg-muted hover:text-fg-secondary"
+              className="text-2xs text-fg-muted hover:text-fg-secondary"
               aria-label="Refresh setup status"
             >
               Refresh
@@ -162,7 +163,7 @@ function BannerChecklist({
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="text-3xs text-fg-muted hover:text-fg-secondary"
+            className="text-2xs text-fg-muted hover:text-fg-secondary"
             aria-label="Collapse setup checklist"
           >
             Hide
@@ -206,7 +207,7 @@ function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndp
           <span className="text-xs font-semibold text-fg">
             {requiredDone ? 'You\u2019re set up' : 'Setup progress'}
           </span>
-          <span className="text-3xs font-mono text-fg-muted">
+          <span className="text-2xs font-mono text-fg-muted">
             {project.required_complete}/{project.required_total} required · {pct}%
           </span>
         </div>
@@ -310,13 +311,13 @@ function buildSdkDiagnostic(
 function SdkDiagnostic({ tone, lines }: { tone: 'ok' | 'warn' | 'info'; lines: string[] }) {
   const palette =
     tone === 'warn'
-      ? 'border-warn/30 bg-warn-muted/50 text-warning-foreground'
+      ? `border-warn/30 ${CHIP_TONE.warnSubtle}`
       : tone === 'ok'
-        ? 'border-ok/30 bg-ok-muted/15 text-ok'
+        ? `border-ok/30 ${CHIP_TONE.okSubtle}`
         : 'border-edge-subtle bg-surface-overlay/40 text-fg-secondary'
   const label = tone === 'warn' ? 'Backend mismatch' : tone === 'ok' ? 'SDK heartbeat' : 'Heartbeat'
   return (
-    <div className={`mt-1.5 rounded-sm border px-2 py-1 text-3xs ${palette}`}>
+    <div className={`mt-1.5 rounded-sm border px-2 py-1 text-2xs ${palette}`}>
       <span className="mr-1.5 font-semibold uppercase tracking-wider">{label}</span>
       {lines.map((line, i) => (
         <p key={i} className={i === 0 ? 'inline' : 'mt-0.5'}>
@@ -348,17 +349,17 @@ function ChecklistRow({
             {step.label}
           </span>
           {current && (
-            <span className="rounded-sm bg-brand/15 px-1 py-0.5 text-3xs text-brand uppercase tracking-wider">
+            <span className="rounded-sm bg-brand/15 px-1 py-0.5 text-2xs text-brand uppercase tracking-wider">
               do this next
             </span>
           )}
           {!step.required && !current && (
-            <span className="rounded-sm border border-edge-subtle bg-surface-raised px-1 py-0.5 text-3xs text-fg-faint uppercase tracking-wider">
+            <span className="rounded-sm border border-edge-subtle bg-surface-raised px-1 py-0.5 text-2xs text-fg-faint uppercase tracking-wider">
               optional
             </span>
           )}
         </div>
-        <p className="text-3xs text-fg-muted truncate">{step.description}</p>
+        <p className="text-2xs text-fg-muted truncate">{step.description}</p>
         {diag && <SdkDiagnostic tone={diag.tone} lines={diag.lines} />}
       </div>
       {!step.complete && (
@@ -401,17 +402,17 @@ function ChecklistCard({
               {step.label}
             </h4>
             {current && (
-              <span className="rounded-sm bg-brand text-brand-fg px-1.5 py-0.5 text-3xs uppercase tracking-wider font-semibold">
+              <span className="rounded-sm bg-brand text-brand-fg px-1.5 py-0.5 text-2xs uppercase tracking-wider font-semibold">
                 do this next
               </span>
             )}
             {!step.required && !current && (
-              <span className="rounded-sm border border-edge-subtle bg-surface-raised px-1 py-0.5 text-3xs text-fg-faint uppercase tracking-wider">
+              <span className="rounded-sm border border-edge-subtle bg-surface-raised px-1 py-0.5 text-2xs text-fg-faint uppercase tracking-wider">
                 optional
               </span>
             )}
             {step.complete && (
-              <span className="rounded-sm bg-ok/15 px-1.5 py-0.5 text-3xs text-ok uppercase tracking-wider">
+              <span className="rounded-sm bg-ok/15 px-1.5 py-0.5 text-2xs text-ok uppercase tracking-wider">
                 done
               </span>
             )}

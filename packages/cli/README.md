@@ -86,6 +86,20 @@ Monorepo awareness: if you run the wizard at a workspace root with no framework 
 
 Console URL resolution: `MUSHI_CONSOLE_URL` → saved `consoleUrl` in config → localhost `:6464` probe → mushi-mushi monorepo heuristic → hosted default. Saved on successful `mushi login`.
 
+### Browser sign-in reliability
+
+Device auth (RFC 8628) uses a stable per-machine `client_id` stored in
+`~/.config/mushi/config.json`. Starting a new login on the same machine supersedes
+any older pending approval for that id.
+
+During token polling the CLI retries **429** and **408** responses automatically.
+If saved credentials exist, re-running the wizard validates them with
+`GET /v1/sync/whoami` before reinstalling.
+
+The browser approval page waits until the CLI actually claims the token (not
+just when you click Approve). Full flow + troubleshooting:
+[CLI ↔ console loop](https://kensaur.us/mushi-mushi/docs/quickstart/cli-console-loop).
+
 ## Install globally
 
 ```bash
@@ -211,6 +225,18 @@ Only `published` guides ever surface — `draft` entries are filtered out so
 the CLI never points users at a 404. This safety property is unit-pinned in
 `packages/cli/src/migrate.test.ts` (positive control + negative control +
 real-catalog regression guard).
+
+### `mushi completion`
+
+Prints a tab-completion script for bash, zsh, or fish, generated from the
+CLI's live command tree — so it never drifts as commands are added.
+
+```bash
+eval "$(mushi completion bash)"                      # try it for the current session
+mushi completion bash >> ~/.bashrc                   # bash: persist across sessions
+mushi completion zsh > "${fpath[1]}/_mushi"           # zsh: needs a dir already on $fpath
+mushi completion fish > ~/.config/fish/completions/mushi.fish
+```
 
 ### `mushi doctor`
 

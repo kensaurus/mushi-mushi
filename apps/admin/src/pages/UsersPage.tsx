@@ -43,6 +43,7 @@ import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { UsersReadout } from '../components/users/UsersReadout'
 import { UsersSnapshotStrip } from '../components/users/UsersSnapshotStrip'
 import { EMPTY_USERS_STATS } from '../components/users/UsersStatsTypes'
+import { CHIP_TONE } from '../lib/chipTone'
 interface SuperAdminUser {
   user_id: string
   email: string | null
@@ -110,15 +111,14 @@ const PLAN_FILTER_OPTIONS = [
 ]
 
 function planBadgeTone(plan: string | null): {
-  bg: string
-  fg: string
+  chipClass: string
   label: string
 } {
-  if (!plan || plan === 'hobby') return { bg: 'bg-surface-raised', fg: 'text-fg-muted', label: 'Hobby' }
-  if (plan === 'starter') return { bg: 'bg-info-muted', fg: 'text-info', label: 'Starter' }
-  if (plan === 'pro') return { bg: 'bg-brand/15', fg: 'text-brand', label: 'Pro' }
-  if (plan === 'enterprise') return { bg: 'bg-[var(--mushi-vermillion-wash)]', fg: 'text-[var(--mushi-vermillion)]', label: 'Enterprise' }
-  return { bg: 'bg-surface-raised', fg: 'text-fg-muted', label: plan }
+  if (!plan || plan === 'hobby') return { chipClass: CHIP_TONE.neutral, label: 'Hobby' }
+  if (plan === 'starter') return { chipClass: CHIP_TONE.infoSubtle, label: 'Starter' }
+  if (plan === 'pro') return { chipClass: CHIP_TONE.brandSubtle, label: 'Pro' }
+  if (plan === 'enterprise') return { chipClass: 'bg-[var(--mushi-vermillion-wash)] text-[var(--mushi-vermillion)] border border-[var(--mushi-vermillion)]/30', label: 'Enterprise' }
+  return { chipClass: CHIP_TONE.neutral, label: plan }
 }
 
 export function UsersPage() {
@@ -189,7 +189,7 @@ export function UsersPage() {
     <div className="space-y-6">
       <PageHeaderBar
         title="Users"
-        description="Operator-only — every signup, current plan, and recent activity. Service-role view, never reachable by non-operators."
+
         helpTitle={copy?.help?.title ?? 'About the user directory'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'A full list of every Mushi account — visible only to operators — showing signup date, plan, and recent activity.'}
         helpUseCases={copy?.help?.useCases ?? [
@@ -300,7 +300,7 @@ export function UsersPage() {
                         <RelativeTime value={u.signed_up_at} />
                       </td>
                       <td className="px-3 py-2.5">
-                        <Badge className={`${tone.bg} ${tone.fg}`}>{tone.label}</Badge>
+                        <Badge className={tone.chipClass}>{tone.label}</Badge>
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{u.project_count ?? 0}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{u.reports_last_30d ?? 0}</td>
@@ -446,7 +446,7 @@ function UserDetailDrawer({ userId, onClose }: { userId: string; onClose: () => 
                     {detail.subscriptions.map((s) => (
                       <Card key={s.id} className="text-sm flex justify-between">
                         <div>
-                          <Badge className={`${planBadgeTone(s.plan_id).bg} ${planBadgeTone(s.plan_id).fg}`}>
+                          <Badge className={planBadgeTone(s.plan_id).chipClass}>
                             {planBadgeTone(s.plan_id).label}
                           </Badge>
                           <span className="ml-2 text-fg-muted text-2xs">{s.status}</span>
@@ -470,7 +470,7 @@ function UserDetailDrawer({ userId, onClose }: { userId: string; onClose: () => 
                       <li key={r.id} className="text-2xs flex justify-between border-b border-edge/30 pb-1.5">
                         <div className="flex items-center gap-2">
                           <Badge className="bg-surface-raised text-fg-muted">{r.category}</Badge>
-                          {r.severity && <Badge className="bg-warn-muted text-warn">{r.severity}</Badge>}
+                          {r.severity && <Badge tone="warnSubtle">{r.severity}</Badge>}
                           <span className="text-fg-muted">{r.status}</span>
                         </div>
                         <RelativeTime value={r.created_at} />

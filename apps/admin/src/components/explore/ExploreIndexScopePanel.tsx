@@ -98,27 +98,27 @@ export function ExploreIndexScopePanel({ projectId }: Props) {
         Limit indexing and RAG to specific folders. Leave scope empty for the whole repo.
       </p>
       <label className="block space-y-1">
-        <span className="text-3xs uppercase tracking-wider text-fg-faint">Scope paths</span>
+        <span className="text-2xs uppercase tracking-wider text-fg-faint">Scope paths</span>
         <textarea
           value={scopePaths}
           onChange={(e) => setScopePaths(e.target.value)}
           placeholder="packages/web&#10;apps/admin"
           rows={3}
-          className="w-full text-3xs font-mono rounded border border-edge-subtle bg-surface-raised px-2 py-1.5"
+          className="w-full text-2xs font-mono rounded border border-edge-subtle bg-surface-raised px-2 py-1.5"
         />
       </label>
       <label className="block space-y-1">
-        <span className="text-3xs uppercase tracking-wider text-fg-faint">Exclude globs</span>
+        <span className="text-2xs uppercase tracking-wider text-fg-faint">Exclude globs</span>
         <textarea
           value={excludeGlobs}
           onChange={(e) => setExcludeGlobs(e.target.value)}
           placeholder="**/generated/**&#10;**/*.test.ts"
           rows={2}
-          className="w-full text-3xs font-mono rounded border border-edge-subtle bg-surface-raised px-2 py-1.5"
+          className="w-full text-2xs font-mono rounded border border-edge-subtle bg-surface-raised px-2 py-1.5"
         />
       </label>
       <label className="block space-y-1">
-        <span className="text-3xs uppercase tracking-wider text-fg-faint">LLM output language</span>
+        <span className="text-2xs uppercase tracking-wider text-fg-faint">LLM output language</span>
         <input
           value={outputLanguage}
           onChange={(e) => setOutputLanguage(e.target.value)}

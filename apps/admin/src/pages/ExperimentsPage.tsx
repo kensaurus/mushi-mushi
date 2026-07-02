@@ -43,6 +43,7 @@ import {
 } from '../components/experiments/ExperimentsStatsTypes'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
+import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
 interface ExperimentVariant {
   id: string
@@ -83,10 +84,10 @@ interface AnalysisResult {
 }
 
 const STATUS_CLS: Record<Experiment['status'], string> = {
-  draft: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
-  running: 'bg-warn-muted/50 text-warning-foreground border border-warn/20',
-  stopped: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
-  completed: 'bg-ok-muted/50 text-ok-foreground border border-ok/20',
+  draft: CHIP_TONE.neutral,
+  running: runStatusChipTone('running'),
+  stopped: runStatusChipTone('stopped'),
+  completed: runStatusChipTone('completed'),
 }
 
 const STATUS_LABEL: Record<Experiment['status'], string> = {
@@ -254,7 +255,7 @@ export function ExperimentsPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Experiments'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={copy?.description ?? 'Banner + EXPERIMENTS SNAPSHOT — Overview for posture, Experiments to launch/monitor, New to create variants.'}
+
         helpTitle={copy?.help?.title ?? 'A/B experiments'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Each experiment auto-assigns reporters to variants via deterministic hash or Thompson sampling (bandit mode). Run Analyze at any time for an always-valid p-value — no peeking penalty.'}
         helpUseCases={copy?.help?.useCases ?? [
@@ -269,9 +270,9 @@ export function ExperimentsPage() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
+              ? CHIP_TONE.okSubtle
               : bannerSeverity === 'warn'
-                ? 'bg-warn-muted/50 text-warning-foreground'
+                ? CHIP_TONE.warnSubtle
                 : bannerSeverity === 'brand'
                   ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                   : 'bg-surface-overlay text-fg-muted'
@@ -593,7 +594,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
             <Badge className="bg-brand/10 text-brand border border-brand/20">Bandit</Badge>
           )}
           {experiment.winner_variant_id && (
-            <Badge className="bg-ok-muted/50 text-ok-foreground border border-ok/20">Winner found</Badge>
+            <Badge className={`${CHIP_TONE.okSubtle} border border-ok/20`}>Winner found</Badge>
           )}
           <div className="ml-auto flex gap-2">
             {experiment.status === 'draft' && variants.length >= 2 && (
@@ -623,7 +624,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
                   </div>
                 </div>
                 {experiment.winner_variant_id === v.id && (
-                  <Badge className="bg-ok-muted/50 text-ok-foreground border border-ok/20">Winner</Badge>
+                  <Badge className={`${CHIP_TONE.okSubtle} border border-ok/20`}>Winner</Badge>
                 )}
               </div>
             ))}

@@ -4,6 +4,7 @@ import { LAYER_COLORS, LAYER_LABELS, LAYER_ORDER } from './exploreLayers'
 import type { ExploreLayer, ExploreSearchHit } from './exploreTypes'
 import { ContainedBlock, InlineProof } from '../report-detail/ReportSurface'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   projectId: string
@@ -42,7 +43,7 @@ function SimilarityBar({ score }: { score: number }) {
       <div className="w-12 h-1.5 rounded-full bg-surface-overlay overflow-hidden">
         <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
       </div>
-      <span className="text-3xs font-mono tabular-nums" style={{ color }} title="Semantic similarity score">
+      <span className="text-2xs font-mono tabular-nums" style={{ color }} title="Semantic similarity score">
         {pct}%
       </span>
     </div>
@@ -203,7 +204,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
       </div>
 
       {error && (
-        <div className="text-2xs text-danger bg-danger-muted/20 border border-danger/20 rounded-sm px-3 py-2">
+        <div className={`text-2xs rounded-sm border px-3 py-2 ${CHIP_TONE.dangerSubtle}`}>
           {error}
         </div>
       )}
@@ -218,7 +219,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
                 type="button"
                 onClick={() => setActiveLayer(null)}
                 className={[
-                  'text-3xs px-2 py-0.5 rounded-sm border transition-colors',
+                  'text-2xs px-2 py-0.5 rounded-sm border transition-colors',
                   activeLayer === null
                     ? 'border-edge bg-surface-overlay text-fg font-medium'
                     : 'border-edge-subtle bg-surface-raised text-fg-secondary hover:text-fg hover:border-edge',
@@ -234,7 +235,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
                     type="button"
                     onClick={() => setActiveLayer(l)}
                     className={[
-                      'text-3xs px-2 py-0.5 rounded-sm border transition-colors flex items-center gap-1',
+                      'text-2xs px-2 py-0.5 rounded-sm border transition-colors flex items-center gap-1',
                       activeLayer === l
                         ? 'border-current font-medium'
                         : 'border-edge-subtle bg-surface-raised hover:border-current',
@@ -274,7 +275,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
                       </code>
                       {hit.layer && (
                         <span
-                          className="text-3xs px-1 py-px rounded-sm border"
+                          className="text-2xs px-1 py-px rounded-sm border"
                           style={{
                             backgroundColor: `${LAYER_COLORS[hit.layer as ExploreLayer]}15`,
                             borderColor: `${LAYER_COLORS[hit.layer as ExploreLayer]}35`,
@@ -285,12 +286,12 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
                         </span>
                       )}
                     </div>
-                    <div className="text-3xs text-fg-faint font-mono mt-0.5 truncate">{hit.file_path}</div>
+                    <div className="text-2xs text-fg-faint font-mono mt-0.5 truncate">{hit.file_path}</div>
                   </div>
                   <SimilarityBar score={hit.similarity} />
                 </div>
                 {hit.content_preview && (
-                  <pre className="mushi-code-block mushi-code-body text-3xs font-mono rounded-sm px-2.5 py-1.5 overflow-hidden max-h-16 whitespace-pre-wrap break-words leading-5">
+                  <pre className="mushi-code-block mushi-code-body text-2xs font-mono rounded-sm px-2.5 py-1.5 overflow-hidden max-h-16 whitespace-pre-wrap break-words leading-5">
                     {hit.content_preview.slice(0, 240)}
                   </pre>
                 )}
@@ -316,14 +317,14 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
             </p>
           </div>
           <div>
-            <div className="text-3xs uppercase tracking-wider text-fg-faint mb-1.5">Example queries</div>
+            <div className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5">Example queries</div>
             <div className="flex flex-wrap gap-1.5">
               {EXAMPLE_QUERIES.map((ex) => (
                 <button
                   key={ex}
                   type="button"
                   onClick={() => setQuery(ex)}
-                  className="text-3xs px-2 py-1 rounded-md border border-edge-subtle bg-surface-overlay text-fg-secondary hover:text-fg hover:border-edge hover:bg-surface-overlay transition-colors"
+                  className="text-2xs px-2 py-1 rounded-md border border-edge-subtle bg-surface-overlay text-fg-secondary hover:text-fg hover:border-edge hover:bg-surface-overlay transition-colors"
                 >
                   {ex}
                 </button>

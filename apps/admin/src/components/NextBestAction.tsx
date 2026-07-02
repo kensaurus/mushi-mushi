@@ -20,6 +20,7 @@ import { useActiveProjectId } from './ProjectSwitcher'
 import { useAdminMode } from '../lib/mode'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
+import { CHIP_TONE } from '../lib/chipTone'
 import { Btn, ResultChip } from './ui'
 
 type NbaTone = 'plan' | 'do' | 'check' | 'act' | 'idle'
@@ -37,12 +38,12 @@ interface NbaAction {
     | { kind: 'inline-test-report'; label: string }
 }
 
-const NBA_TONES: Record<NbaTone, { ring: string; bg: string; chip: string; chipText: string }> = {
-  plan:  { ring: 'border-info/40',   bg: 'bg-info-muted/15',   chip: 'bg-info-muted',   chipText: 'text-info' },
-  do:    { ring: 'border-edge',        bg: 'bg-surface-raised/40', chip: 'bg-surface-overlay', chipText: 'text-brand' },
-  check: { ring: 'border-info/40',   bg: 'bg-info-muted/15',   chip: 'bg-info-muted',   chipText: 'text-info' },
-  act:   { ring: 'border-ok/40',     bg: 'bg-ok-muted/15',     chip: 'bg-ok-muted',     chipText: 'text-ok' },
-  idle:  { ring: 'border-edge',      bg: 'bg-surface-raised/40', chip: 'bg-surface-overlay', chipText: 'text-fg-muted' },
+const NBA_TONES: Record<NbaTone, { ring: string; bg: string; chipClass: string }> = {
+  plan:  { ring: 'border-info/40',   bg: 'bg-info-muted/15',   chipClass: CHIP_TONE.infoSubtle },
+  do:    { ring: 'border-edge',        bg: 'bg-surface-raised/40', chipClass: CHIP_TONE.brandSubtle },
+  check: { ring: 'border-info/40',   bg: 'bg-info-muted/15',   chipClass: CHIP_TONE.infoSubtle },
+  act:   { ring: 'border-ok/40',     bg: 'bg-ok-muted/15',     chipClass: CHIP_TONE.okSubtle },
+  idle:  { ring: 'border-edge',      bg: 'bg-surface-raised/40', chipClass: CHIP_TONE.neutral },
 }
 
 const NBA_LABELS: Record<NbaTone, string> = {
@@ -106,7 +107,7 @@ export function NextBestAction() {
         aria-live="polite"
         className={`mb-3 -mt-1 flex items-center gap-2.5 rounded-md border ${fromTone.ring} ${fromTone.bg} px-3 py-1.5 motion-safe:animate-mushi-fade-in`}
       >
-        <span className={`inline-flex items-center gap-1 shrink-0 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${fromTone.chip} ${fromTone.chipText}`}>
+        <span className={`inline-flex items-center gap-1 shrink-0 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${fromTone.chipClass}`}>
           <span aria-hidden="true">✓</span>
           Done: {NBA_LABELS[handoff.from]}
         </span>
@@ -140,7 +141,7 @@ export function NextBestAction() {
       aria-label="Next best action"
       className={`mb-3 -mt-1 flex items-center gap-2.5 rounded-md border ${tone.ring} ${tone.bg} px-3 py-1.5 motion-safe:animate-mushi-fade-in`}
     >
-      <span className={`inline-flex items-center gap-1 shrink-0 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${tone.chip} ${tone.chipText}`}>
+      <span className={`inline-flex items-center gap-1 shrink-0 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${tone.chipClass}`}>
         <span aria-hidden="true">→</span>
         {NBA_LABELS[action.tone]}
       </span>

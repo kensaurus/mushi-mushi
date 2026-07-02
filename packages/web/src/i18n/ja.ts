@@ -62,6 +62,7 @@ export const ja: MushiLocale = {
     elementButton: '要素を選択',
     elementSelected: '要素選択済み ✓',
     elementCapturing: 'ページ上の要素をクリック…',
+    elementFailed: '選択できませんでした — 文字で教えてください',
     elementSelectorHint: '要素をクリック · Esc でキャンセル',
     optional: '（任意）',
     tooShort: 'もう少し詳しく教えてください',

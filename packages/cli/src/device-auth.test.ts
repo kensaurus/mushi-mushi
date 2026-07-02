@@ -16,11 +16,16 @@ import {
 
 const ENDPOINT = 'https://api.example.test/functions/v1/api'
 
-function jsonResponse(body: unknown, init: { ok?: boolean; status?: number } = {}) {
+function jsonResponse(
+  body: unknown,
+  init: { ok?: boolean; status?: number; headers?: Record<string, string> } = {},
+) {
+  const headerMap = new Map(Object.entries(init.headers ?? {}))
   return {
     ok: init.ok ?? true,
     status: init.status ?? 200,
     json: async () => body,
+    headers: { get: (name: string) => headerMap.get(name) ?? null },
   } as unknown as Response
 }
 
@@ -61,6 +66,26 @@ describe('startDeviceAuth', () => {
       jsonResponse({ ok: false, error: { message: 'nope' } }, { ok: false, status: 500 }),
     )
     await expect(startDeviceAuth(ENDPOINT)).rejects.toThrow('nope')
+  })
+
+  it('sends client_id in the start body when provided', async () => {
+    const session = {
+      device_code: 'dc',
+      user_code: 'ABCD-EFGH',
+      verification_uri: 'https://console/cli-auth?code=ABCD-EFGH',
+      expires_in: 600,
+      interval: 5,
+    }
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: session }))
+
+    await startDeviceAuth(ENDPOINT, 'cli_abc123def4567890')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${ENDPOINT}/v1/cli/auth/device/start`,
+      expect.objectContaining({
+        body: JSON.stringify({ client_id: 'cli_abc123def4567890' }),
+      }),
+    )
   })
 })
 
@@ -119,6 +144,40 @@ describe('pollDeviceToken', () => {
     })
   })
 
+  it('maps 429 slow_down to its own outcome, honoring Retry-After', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        { error: 'slow_down', error_description: 'rate limited' },
+        { ok: false, status: 429, headers: { 'Retry-After': '3' } },
+      ),
+    )
+    await expect(pollDeviceToken(ENDPOINT, 'dc')).resolves.toEqual({
+      status: 'slow_down',
+      retryAfterMs: 3000,
+    })
+  })
+
+  it('falls back to a default backoff when slow_down omits Retry-After', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ error: 'slow_down', error_description: 'rate limited' }, { ok: false, status: 429 }),
+    )
+    await expect(pollDeviceToken(ENDPOINT, 'dc')).resolves.toEqual({
+      status: 'slow_down',
+      retryAfterMs: 5000,
+    })
+  })
+
+  it('maps 408 gateway timeout to a retryable error', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ error: 'timeout', error_description: 'gateway timed out' }, { ok: false, status: 408 }),
+    )
+    await expect(pollDeviceToken(ENDPOINT, 'dc')).resolves.toEqual({
+      status: 'error',
+      message: 'gateway timed out',
+      retryable: true,
+    })
+  })
+
   it('never throws on a network failure — surfaces it as a retryable error', async () => {
     fetchMock.mockRejectedValueOnce(new Error('ECONNRESET'))
     await expect(pollDeviceToken(ENDPOINT, 'dc')).resolves.toEqual({
@@ -173,6 +232,53 @@ describe('waitForCliToken', () => {
 
     expect(token).toBe('tok')
     expect(onPending).toHaveBeenCalledTimes(1)
+  })
+
+  it('honors slow_down without spending the transient-error budget', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { error: 'slow_down' },
+          { ok: false, status: 429, headers: { 'Retry-After': '9' } },
+        ),
+      )
+      .mockResolvedValueOnce(jsonResponse({ ok: true, data: { cli_token: 'tok' } }))
+
+    const sleepSpy = vi.fn(async () => {})
+    const onSlowDown = vi.fn()
+    const onTransientError = vi.fn()
+    const token = await waitForCliToken(ENDPOINT, session, {
+      sleep: sleepSpy,
+      now: () => 0,
+      onSlowDown,
+      onTransientError,
+    })
+
+    expect(token).toBe('tok')
+    expect(onSlowDown).toHaveBeenCalledWith(9000)
+    expect(onTransientError).not.toHaveBeenCalled()
+    // interval (5000) bumped up to the requested 9000ms before the next poll.
+    expect(sleepSpy).toHaveBeenCalledWith(9000)
+  })
+
+  it('slow_down survives past the transient-error budget without throwing', async () => {
+    // Five slow_downs in a row would blow a maxConsecutiveErrors=3 budget if it
+    // were bucketed as a generic retryable error — it must not be.
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ error: 'slow_down' }, { ok: false, status: 429 }))
+      .mockResolvedValueOnce(jsonResponse({ error: 'slow_down' }, { ok: false, status: 429 }))
+      .mockResolvedValueOnce(jsonResponse({ error: 'slow_down' }, { ok: false, status: 429 }))
+      .mockResolvedValueOnce(jsonResponse({ error: 'slow_down' }, { ok: false, status: 429 }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, data: { cli_token: 'tok' } }))
+
+    const token = await waitForCliToken(ENDPOINT, session, {
+      sleep: async () => {},
+      now: () => 0,
+      maxConsecutiveErrors: 3,
+    })
+
+    expect(token).toBe('tok')
+    expect(fetchMock).toHaveBeenCalledTimes(5)
   })
 
   it('throws when the request is denied', async () => {

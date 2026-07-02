@@ -6,6 +6,7 @@
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { useAdminMode } from '../lib/mode'
+import { CHIP_TONE } from '../lib/chipTone'
 import { Btn } from './ui'
 
 export type PageActionTone = 'plan' | 'do' | 'check' | 'act' | 'idle'
@@ -28,12 +29,12 @@ export interface PageAction {
   >
 }
 
-const TONES: Record<PageActionTone, { ring: string; bg: string; chip: string; chipText: string; chipLabel: string }> = {
-  plan:  { ring: 'border-info/40',   bg: 'bg-info-muted',     chip: 'bg-info-muted',       chipText: 'text-info',      chipLabel: 'Plan' },
-  do:    { ring: 'border-brand/40',  bg: 'bg-brand-subtle',   chip: 'bg-brand-subtle',     chipText: 'text-brand',     chipLabel: 'Do' },
-  check: { ring: 'border-info/40',   bg: 'bg-info-muted',     chip: 'bg-info-muted',       chipText: 'text-info',      chipLabel: 'Check' },
-  act:   { ring: 'border-ok/40',     bg: 'bg-ok-muted',       chip: 'bg-ok-muted',         chipText: 'text-ok',        chipLabel: 'Act' },
-  idle:  { ring: 'border-edge',      bg: 'bg-surface-overlay', chip: 'bg-surface-overlay',  chipText: 'text-fg-muted',  chipLabel: 'Idle' },
+const TONES: Record<PageActionTone, { ring: string; bg: string; chipClass: string; chipLabel: string }> = {
+  plan:  { ring: 'border-info/40',   bg: 'bg-info-muted',     chipClass: CHIP_TONE.infoSubtle, chipLabel: 'Plan' },
+  do:    { ring: 'border-brand/40',  bg: 'bg-brand-subtle',   chipClass: CHIP_TONE.brandSubtle, chipLabel: 'Do' },
+  check: { ring: 'border-info/40',   bg: 'bg-info-muted',     chipClass: CHIP_TONE.infoSubtle, chipLabel: 'Check' },
+  act:   { ring: 'border-ok/40',     bg: 'bg-ok-muted',       chipClass: CHIP_TONE.okSubtle, chipLabel: 'Act' },
+  idle:  { ring: 'border-edge',      bg: 'bg-surface-overlay', chipClass: CHIP_TONE.neutral, chipLabel: 'Idle' },
 }
 
 interface PageActionBarProps {
@@ -67,7 +68,7 @@ export function PageActionBar({ scope, action, trailing, hidden }: PageActionBar
         data-scope={scope}
         className={`mb-4 -mt-1 flex items-center gap-3 rounded-md border ${idle.ring} ${idle.bg} px-3 py-2`}
       >
-        <span className={`inline-flex items-center gap-1.5 shrink-0 rounded-full px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider ${idle.chip} ${idle.chipText}`}>
+        <span className={`inline-flex items-center gap-1.5 shrink-0 rounded-full px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider ${idle.chipClass}`}>
           <span aria-hidden="true">✓</span>
           All clear
         </span>
@@ -87,7 +88,7 @@ export function PageActionBar({ scope, action, trailing, hidden }: PageActionBar
       data-scope={scope}
       className={`mb-4 -mt-1 flex items-start gap-3 rounded-md border ${tone.ring} ${tone.bg} px-3 py-2 motion-safe:animate-mushi-fade-in`}
     >
-      <span className={`inline-flex items-center gap-1.5 shrink-0 rounded-full px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider ${tone.chip} ${tone.chipText}`}>
+      <span className={`inline-flex items-center gap-1.5 shrink-0 rounded-full px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider ${tone.chipClass}`}>
         <span aria-hidden="true">→</span>
         {tone.chipLabel}
       </span>

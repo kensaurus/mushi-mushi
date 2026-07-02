@@ -16,6 +16,7 @@ import {
   PAGE_HELP_BANNER_SUMMARY_HOVER,
 } from '../../lib/pageHelpSurfaces';
 import { Tooltip } from './misc';
+import { CHIP_TONE } from '../../lib/chipTone'
 
 
 /* ── PageHeader ─────────────────────────────────────────────────────────── */
@@ -249,11 +250,11 @@ export function PageHelpBanner({
 
   // Moss-green guide surface — calm, readable, distinct from warn/danger chrome.
   const surfaceClass = PAGE_HELP_BANNER_SHELL
-  const iconClass = 'bg-ok-muted/60 text-ok'
+  const iconClass = CHIP_TONE.okSubtle
   const statusLabel = isRead ? 'Read' : 'New'
   const statusBadgeClass = isRead
-    ? 'bg-ok-muted/70 text-ok border border-ok/40'
-    : 'bg-ok-muted/50 text-ok border border-ok/35'
+    ? CHIP_TONE.ok
+    : CHIP_TONE.okSubtle + ' border border-ok/35'
 
   return (
     <details

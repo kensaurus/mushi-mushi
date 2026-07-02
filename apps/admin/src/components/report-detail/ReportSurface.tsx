@@ -17,6 +17,7 @@ import {
   CONFIDENCE_SEGMENT_COUNT,
   confidenceSegmentFilled,
 } from '../reports/reportMetricViz'
+import { CHIP_TONE as WCAG_CHIP_TONE } from '../../lib/chipTone'
 
 // ─── ContainedBlock ───────────────────────────────────────────
 // Inset tinted card for contextual data blocks.
@@ -68,10 +69,10 @@ type ChipTone = 'neutral' | 'ok' | 'warn' | 'danger' | 'info' | 'brand'
 
 const CHIP_TONE: Record<ChipTone, string> = {
   neutral: 'bg-surface-overlay text-fg-muted border-edge',
-  ok:      'bg-ok-muted text-ok border-ok/35',
-  warn:    'bg-warn-muted text-warning-foreground border-warn/35',
-  danger:  'bg-danger-muted text-danger-foreground border-danger/35',
-  info:    'bg-info-muted text-info border-info/35',
+  ok:      WCAG_CHIP_TONE.okSubtle + ' border-ok/35',
+  warn:    WCAG_CHIP_TONE.warnSubtle + ' border-warn/35',
+  danger:  WCAG_CHIP_TONE.dangerSubtle + ' border-danger/35',
+  info:    WCAG_CHIP_TONE.infoSubtle + ' border-info/35',
   brand:   'bg-brand-subtle text-brand border-brand/35',
 }
 
@@ -120,9 +121,9 @@ type PillTone = 'neutral' | 'brand' | 'ok' | 'danger' | 'warn'
 const PILL_TONE: Record<PillTone, string> = {
   neutral: 'bg-surface-overlay text-fg-muted border-edge hover:bg-surface-raised hover:text-fg',
   brand:   'bg-brand/10 text-brand border-brand/30 hover:bg-brand/20',
-  ok:      'bg-ok-muted/20 text-ok border-ok/30 hover:bg-ok-muted/30',
-  danger:  'bg-danger-muted/20 text-danger border-danger/30 hover:bg-danger-muted/30',
-  warn:    'bg-warn-muted/20 text-warn border-warn/30 hover:bg-warn-muted/30',
+  ok:      WCAG_CHIP_TONE.okSubtle + ' border-ok/30 hover:bg-ok-muted/30',
+  danger:  WCAG_CHIP_TONE.dangerSubtle + ' border-danger/30 hover:bg-danger-muted/30',
+  warn:    WCAG_CHIP_TONE.warnSubtle + ' border-warn/30 hover:bg-warn-muted/30',
 }
 
 export interface ActionPillProps {

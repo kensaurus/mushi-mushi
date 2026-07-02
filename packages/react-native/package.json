@@ -9,8 +9,15 @@
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "size": "size-limit"
   },
+  "size-limit": [
+    {
+      "path": "dist/index.js",
+      "limit": "22 KB"
+    }
+  ],
   "peerDependencies": {
     "@react-native-async-storage/async-storage": ">=1.19",
     "@react-native-community/netinfo": ">=11",
@@ -46,9 +53,11 @@
     "@mushi-mushi/web": "workspace:^"
   },
   "devDependencies": {
+    "@size-limit/file": "^12.1.0",
     "@types/react": "^19.2.17",
     "react": "^19.2.7",
     "react-native": "^0.86.0",
+    "size-limit": "^12.1.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"

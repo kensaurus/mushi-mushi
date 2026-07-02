@@ -65,7 +65,7 @@ export function PdcaRunTable({ runs, projectName, onOpen, onAbort, onTrigger }: 
               <td className="px-3 py-2">
                 <ScoreBar score={run.final_score} />
               </td>
-              <td className="px-3 py-2 font-mono text-3xs text-fg-faint">{run.persona}</td>
+              <td className="px-3 py-2 font-mono text-2xs text-fg-faint">{run.persona}</td>
               <td className="px-3 py-2 text-2xs text-fg-muted">
                 <RelativeTime value={run.created_at} />
               </td>

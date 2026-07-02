@@ -28,9 +28,32 @@ const findings = []
 for (const file of walk(PAGES_DIR)) {
   const src = readFileSync(file, 'utf8')
   if (!src.includes('PageHeaderBar')) continue
-  const hasDescription = /\bdescription=\{/.test(src) || /\bdescription="/.test(src)
   const hasHelp = /\bhelpWhatIsIt=\{/.test(src) || /\bhelpWhatIsIt="/.test(src)
-  if (hasDescription && hasHelp) {
+  if (!hasHelp) continue
+
+  const marker = '<PageHeaderBar'
+  let idx = 0
+  let hasRedundantDescription = false
+  while ((idx = src.indexOf(marker, idx)) !== -1) {
+    const tagEnd = src.indexOf('>', idx)
+    const closeTag = src.indexOf('</PageHeaderBar>', idx)
+    const selfClose = src.indexOf('/>', idx)
+    const end =
+      selfClose !== -1 && (closeTag === -1 || selfClose < closeTag)
+        ? selfClose + 2
+        : closeTag !== -1
+          ? closeTag + '</PageHeaderBar>'.length
+          : -1
+    if (end === -1) break
+    const block = src.slice(idx, end)
+    if (/\bdescription=\{/.test(block) || /\bdescription="/.test(block)) {
+      hasRedundantDescription = true
+      break
+    }
+    idx = end
+  }
+
+  if (hasRedundantDescription) {
     findings.push(file.replace(resolve(__dirname, '..') + '/', ''))
   }
 }

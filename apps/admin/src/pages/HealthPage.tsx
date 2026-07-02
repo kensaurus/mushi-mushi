@@ -66,6 +66,7 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { shouldHideGuideWhenBannerActive } from '../lib/pagePostureHelpers'
 import { CheckVerificationHub } from '../components/check/CheckVerificationHub'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface LlmRecent {
   function_name: string
@@ -493,7 +494,7 @@ function HealthPageContent() {
         title={copy?.title ?? 'System Health'}
         projectScope={stats.projectName ?? projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
-        description={copy?.description ?? 'Banner + HEALTH SNAPSHOT — Overview for posture, LLM for breakdowns, Cron for jobs, Activity for traces.'}
+
         helpTitle={copy?.help?.title ?? 'About System Health'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Live operational dashboard showing every LLM call routed by Mushi Mushi (Anthropic primary, OpenAI fallback) and every scheduled job (judge, intelligence, retention). Each event is written to a telemetry table and streamed here via Supabase Realtime.'}
         helpUseCases={copy?.help?.useCases ?? [
@@ -506,11 +507,11 @@ function HealthPageContent() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
+              ? CHIP_TONE.okSubtle
               : bannerSeverity === 'danger'
-                ? 'bg-danger-muted/50 text-danger-foreground'
+                ? CHIP_TONE.dangerSubtle
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn-muted/50 text-warning-foreground'
+                  ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
                     ? 'bg-brand/15 text-brand'
                     : 'bg-surface-overlay text-fg-muted'
@@ -807,7 +808,7 @@ function HealthPageContent() {
                       <div className="flex items-center gap-2">
                         <code className="text-xs font-mono font-medium">{job}</code>
                         {j ? (
-                          <Badge className={j.lastStatus === 'success' ? 'bg-ok-muted text-ok' : j.lastStatus === 'error' ? 'bg-danger-muted text-danger' : 'bg-surface-overlay text-fg-muted'}>
+                          <Badge className={j.lastStatus === 'success' ? CHIP_TONE.okSubtle : j.lastStatus === 'error' ? CHIP_TONE.dangerSubtle : 'bg-surface-overlay text-fg-muted'}>
                             {j.lastStatus ?? 'never'}
                           </Badge>
                         ) : (
@@ -861,11 +862,11 @@ function HealthPageContent() {
               {(['anthropic', 'openai'] as const).map((kind) => {
                 const r = probeResults[kind]
                 const statusColor = r?.status === 'ok'
-                  ? 'bg-ok-muted text-ok'
+                  ? CHIP_TONE.okSubtle
                   : r?.status === 'degraded'
-                    ? 'bg-warn-muted text-warn'
+                    ? CHIP_TONE.warnSubtle
                     : r?.status === 'down'
-                      ? 'bg-danger-muted text-danger'
+                      ? CHIP_TONE.dangerSubtle
                       : 'bg-surface-overlay text-fg-muted'
                 return (
                   <Card key={kind} className="p-2.5">
@@ -927,9 +928,9 @@ function HealthPageContent() {
                       <span className="text-fg-faint w-32 truncate">{new Date(r.created_at).toLocaleTimeString()}</span>
                       <span className="text-fg-secondary w-32 truncate">{r.function_name}</span>
                       <span className="text-fg w-48 truncate">{r.used_model}</span>
-                      {r.fallback_used && <Badge className="bg-warn-muted text-warn">fallback</Badge>}
-                      {r.status !== 'success' && <Badge className="bg-danger-muted text-danger">{r.status}</Badge>}
-                      {r.key_source && r.key_source !== 'env' && <Badge className="bg-info-muted text-info">{r.key_source}</Badge>}
+                      {r.fallback_used && <Badge tone="warnSubtle">fallback</Badge>}
+                      {r.status !== 'success' && <Badge tone="dangerSubtle">{r.status}</Badge>}
+                      {r.key_source && r.key_source !== 'env' && <Badge tone="infoSubtle">{r.key_source}</Badge>}
                       <span className="text-fg-muted ml-auto">{r.latency_ms ?? '?'}ms</span>
                       <span className="text-fg-faint w-24 text-right">{(r.input_tokens ?? 0) + (r.output_tokens ?? 0)} tok</span>
                       {r.report_id && (

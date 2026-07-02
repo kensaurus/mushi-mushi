@@ -4,6 +4,7 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
+import { withIdempotency } from '../../_shared/idempotency.ts';
 import { dbError, userCanAccessProject } from '../shared.ts';
 
 export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -254,6 +255,14 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
   // silently extend the rotated key's effective lifetime.
   app.post('/v1/admin/projects/:id/keys/rotate', jwtAuth, async (c) => {
     const projectId = c.req.param('id')!;
+    // Set explicitly (rather than relying on withIdempotency's body-based
+    // extraction) because this route takes projectId from the URL path,
+    // not the request body — the cache-store step needs a project_id to
+    // persist the response, or a dropped-connection retry would mint a
+    // second key and immediately revoke the first (which the client never
+    // saw), locking it out.
+    c.set('projectId', projectId);
+    return withIdempotency(c, async () => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -344,6 +353,7 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
       },
       201,
     );
+    }); // withIdempotency
   });
 
   app.delete('/v1/admin/projects/:id/keys/:keyId', jwtAuth, async (c) => {
