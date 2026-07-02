@@ -130,6 +130,27 @@ async function main() {
   const transport = new StdioServerTransport()
   await server.connect(transport)
 
+  // Graceful shutdown: real MCP clients (Cursor, Claude Desktop, …) manage
+  // the child process lifecycle by killing it directly, so this path was
+  // never exercised by hand-testing. External test harnesses that pipe
+  // requests over stdio then close the pipe and wait for a natural exit
+  // (Docker introspection checks, e.g. Glama's build test) do rely on it —
+  // without an explicit stdin-EOF/signal handler the process leaks forever
+  // once `pollTimer` below is scheduled, since a bare `setInterval` keeps
+  // the event loop alive indefinitely.
+  let shuttingDown = false
+  let pollTimer: ReturnType<typeof setInterval> | undefined
+  const shutdown = (exitCode: number) => {
+    if (shuttingDown) return
+    shuttingDown = true
+    if (pollTimer) clearInterval(pollTimer)
+    void transport.close().finally(() => process.exit(exitCode))
+  }
+  process.stdin.on('end', () => shutdown(0))
+  process.stdin.on('close', () => shutdown(0))
+  process.on('SIGINT', () => shutdown(0))
+  process.on('SIGTERM', () => shutdown(0))
+
   // Inventory change notifications (P1.7):
   // Poll the inventory endpoint every 60 seconds and send
   // notifications/resources/updated when the `updated_at` timestamp changes.
@@ -143,6 +164,7 @@ async function main() {
     const POLL_INTERVAL_MS = 60_000
 
     const pollInventory = async () => {
+      if (shuttingDown) return
       try {
         const res = await fetch(`${API_ENDPOINT}/v1/admin/inventory/${PROJECT_ID}`, {
           headers: {
@@ -167,9 +189,14 @@ async function main() {
       }
     }
 
-    // Start immediately, then repeat.
+    // Start immediately, then repeat. `.unref()` so this background poll
+    // never blocks the process from exiting on its own (belt-and-suspenders
+    // alongside the explicit shutdown() handlers above) — a real MCP client
+    // session keeps stdin open for hours, so unref has no effect on normal
+    // operation, it only matters once nothing else is keeping the loop alive.
     void pollInventory()
-    setInterval(() => { void pollInventory() }, POLL_INTERVAL_MS)
+    pollTimer = setInterval(() => { void pollInventory() }, POLL_INTERVAL_MS)
+    pollTimer.unref()
   }
 }
 
