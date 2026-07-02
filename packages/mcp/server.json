@@ -3,7 +3,7 @@
   "name": "io.github.kensaurus/mushi-mushi",
   "title": "Mushi Mushi",
   "description": "Bug translation for vibe coders: plain-English diagnosis + paste-ready fix in your AI coding agent",
-  "version": "0.17.0",
+  "version": "0.18.4",
   "icons": [
     {
       "src": "https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/packages/brand/src/logo-mark-512.png",
@@ -21,7 +21,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mushi-mushi/mcp",
-      "version": "0.17.0",
+      "version": "0.18.4",
       "transport": {
         "type": "stdio"
       },
