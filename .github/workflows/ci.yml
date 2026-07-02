@@ -166,6 +166,14 @@ jobs:
       - name: Check SDK version matrix
         run: pnpm check:sdk-version-matrix
 
+      - name: Check Flutter PII pattern sync
+        # Regression guard for production-readiness audit item #16: the
+        # Flutter SDK's PII scrubber (packages/flutter/lib/src/pii_patterns.g.dart)
+        # is generated from packages/core/src/pii-patterns.json, the same
+        # source the JS/TS pii-scrubber.ts consumes. Fails if the JSON changed
+        # without regenerating + committing the Dart copy.
+        run: pnpm check:flutter-pii-patterns
+
       - name: Check internal doc links
         run: pnpm check:internal-doc-links
 
@@ -211,7 +219,10 @@ jobs:
         run: node scripts/check-jsx-unicode-escapes.mjs
 
       - name: Check bundle sizes
-        run: pnpm --filter @mushi-mushi/core --filter @mushi-mushi/web --filter @mushi-mushi/react exec size-limit
+        # Starter budgets on react-native/node/capacitor/angular/svelte/vue
+        # (production-readiness audit item #14) so a regression on any
+        # publishable package is caught in CI, not just core/web/react.
+        run: pnpm --filter @mushi-mushi/core --filter @mushi-mushi/web --filter @mushi-mushi/react --filter @mushi-mushi/react-native --filter @mushi-mushi/node --filter @mushi-mushi/capacitor --filter @mushi-mushi/angular --filter @mushi-mushi/svelte --filter @mushi-mushi/vue exec size-limit
 
       # ── MCP package gates ──────────────────────────────────────────────────
       # Regression guard: keep the MCP package buildable, type-safe, and in

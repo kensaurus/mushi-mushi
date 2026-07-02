@@ -15,6 +15,7 @@ import {
   SignalChip,
 } from '../report-detail/ReportSurface'
 import { AgeChip } from '../ui'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 export const GROUP_LABEL: Record<InboxCardGroup, string> = {
   plan: 'Plan',
@@ -32,12 +33,12 @@ export const GROUP_LONG_LABEL: Record<InboxCardGroup, string> = {
   ops: 'Ops — health + compliance',
 }
 
-export const GROUP_TONE: Record<InboxCardGroup, { chip: string; chipText: string; ring: string }> = {
-  plan: { chip: 'bg-info-muted', chipText: 'text-info', ring: 'border-info/30' },
-  do: { chip: 'bg-brand/15', chipText: 'text-brand', ring: 'border-brand/30' },
-  check: { chip: 'bg-warn-muted', chipText: 'text-warn', ring: 'border-warn/30' },
-  act: { chip: 'bg-ok-muted', chipText: 'text-ok', ring: 'border-ok/30' },
-  ops: { chip: 'bg-surface-overlay', chipText: 'text-fg-muted', ring: 'border-edge' },
+export const GROUP_TONE: Record<InboxCardGroup, { chipClass: string; ring: string }> = {
+  plan: { chipClass: CHIP_TONE.infoSubtle, ring: 'border-info/30' },
+  do: { chipClass: CHIP_TONE.brandSubtle, ring: 'border-brand/30' },
+  check: { chipClass: CHIP_TONE.warnSubtle, ring: 'border-warn/30' },
+  act: { chipClass: CHIP_TONE.okSubtle, ring: 'border-ok/30' },
+  ops: { chipClass: CHIP_TONE.neutral, ring: 'border-edge' },
 }
 
 export const TONE_RING: Record<PageAction['tone'], string> = {
@@ -60,7 +61,7 @@ export function ClearChip({ card }: { card: InboxCard }) {
     >
       <SignalChip tone="ok">✓</SignalChip>
       <span
-        className={`rounded-sm px-1 py-0.5 text-3xs font-semibold uppercase tracking-wider ${groupTone.chip} ${groupTone.chipText}`}
+        className={`rounded-sm px-1 py-0.5 text-3xs font-semibold uppercase tracking-wider ${groupTone.chipClass}`}
       >
         {GROUP_LABEL[card.group]}
       </span>
@@ -92,7 +93,7 @@ export function OpenInboxCard({
       <header className="mb-2 flex flex-wrap items-center gap-1.5">
         <SignalChip tone="neutral">#{priority}</SignalChip>
         <span
-          className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wider ${groupTone.chip} ${groupTone.chipText}`}
+          className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wider ${groupTone.chipClass}`}
         >
           {GROUP_LABEL[card.group]}
         </span>

@@ -100,6 +100,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Open source & licensing](https://kensaur.us/mushi-mushi/docs/concepts/open-source)
 - [Connecting your orchestrator (MCP / A2A / REST / AG-UI)](https://kensaur.us/mushi-mushi/docs/concepts/orchestrator-interop)
 - [Rewards & contributor identity](https://kensaur.us/mushi-mushi/docs/concepts/rewards)
+- [Runtime config](https://kensaur.us/mushi-mushi/docs/concepts/runtime-config)
 - [Where the report button lives](https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes)
 - [Cursor integration](https://kensaur.us/mushi-mushi/docs/integrations/cursor)
 - [Launch Week](https://kensaur.us/mushi-mushi/docs/launch-week)

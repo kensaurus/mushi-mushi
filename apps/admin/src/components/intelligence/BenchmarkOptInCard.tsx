@@ -5,6 +5,7 @@
 
 import { Card, Toggle, Badge } from '../ui'
 import type { BenchmarkSettings } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   benchmark: BenchmarkSettings
@@ -20,7 +21,7 @@ export function BenchmarkOptInCard({ benchmark, onToggle }: Props) {
             <span className="text-xs font-semibold uppercase tracking-wider text-fg-secondary">
               Cross-customer benchmarking
             </span>
-            <Badge className={benchmark.optIn ? 'bg-ok-muted text-ok' : 'bg-surface-raised text-fg-muted'}>
+            <Badge className={benchmark.optIn ? CHIP_TONE.okSubtle : 'bg-surface-raised text-fg-muted'}>
               {benchmark.optIn ? 'Opted in' : 'Opted out'}
             </Badge>
           </div>

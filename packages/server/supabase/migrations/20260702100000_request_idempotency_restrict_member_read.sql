@@ -1,0 +1,25 @@
+-- 20260702100000_request_idempotency_restrict_member_read.sql
+--
+-- Tightens `request_idempotency` SELECT access from "any project member" to
+-- service-role only.
+--
+-- Why: the "members read own project" policy (added in
+-- 20260509200001_request_idempotency.sql) let ANY authenticated member of a
+-- project — including 'viewer' and 'member' roles, not just owner/admin —
+-- read every cached response for that project via a direct PostgREST query.
+-- That was already loose (audit trails belong in `audit_log`, not a raw
+-- request/response cache), but it becomes a real secret-exposure bug now
+-- that `POST /v1/admin/projects/:id/keys/rotate` (production-readiness
+-- audit, idempotency-expand) is wired into `withIdempotency`: the cached
+-- `response_body` for that route contains a freshly-minted, plaintext raw
+-- API key for its 24h TTL window. A 'viewer' should never be able to read
+-- an owner's rotated secret by querying this table directly.
+--
+-- No application code was ever built against the "members read own
+-- project" policy (grep confirms no route selects from
+-- `request_idempotency`), so removing it is a pure hardening with zero
+-- behavioral impact on existing features. Edge Functions always use the
+-- service-role client (`getServiceClient()`), so both the idempotency
+-- middleware itself and any future admin audit endpoint continue to work.
+
+DROP POLICY IF EXISTS "members read own project" ON public.request_idempotency;

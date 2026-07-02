@@ -17,6 +17,10 @@
  *     member — Slack auth is a separate identity system. The dispatch
  *     is therefore attributed to the system actor and the audit trail
  *     records `source = 'slack'`.
+ *   - Every request (accepted or rejected) is recorded via the shared
+ *     `_shared/webhook-middleware.ts` (audit log + per-IP rate limit +
+ *     24h replay-cache keyed on the interaction's `trigger_id`), matching
+ *     the same posture as the Sentry/GitHub webhook routes.
  *
  * Response format:
  *   - Slack requires a 200 within 3 seconds. We respond immediately
@@ -33,16 +37,72 @@ import { log as rootLog } from '../_shared/logger.ts'
 import { getServiceClient } from '../_shared/db.ts'
 import { dispatchFixForReport } from '../_shared/dispatch.ts'
 import { sendBotMessage } from '../_shared/slack.ts'
+import { createWebhookMiddleware, ReplayAttackError, RateLimitError } from '../_shared/webhook-middleware.ts'
 
 const log = rootLog.child('slack-interactions')
 
 const SIGNATURE_VERSION = 'v0'
 const MAX_TIMESTAMP_DRIFT_S = 60 * 5
 
+/**
+ * Minimal shim so the Hono-shaped `createWebhookMiddleware().audit()` can
+ * read headers/method/url off a raw `Request` — this function predates the
+ * Hono migration and still uses `Deno.serve` directly.
+ */
+function toWebhookContext(req: Request) {
+  return {
+    req: {
+      header: (name: string) => req.headers.get(name) ?? undefined,
+      method: req.method,
+      url: req.url,
+    },
+  }
+}
+
 Deno.serve(
   withSentry('slack-interactions', async (req) => {
     if (req.method !== 'POST') {
       return new Response('Method not allowed', { status: 405 })
+    }
+
+    const t0 = Date.now()
+    const rawBody = await req.text()
+    const { audit, checkReplay, checkRateLimit } = createWebhookMiddleware('slack')
+    const sourceIp =
+      req.headers.get('CF-Connecting-IP') ??
+      req.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ??
+      null
+
+    // Peek `trigger_id` before signature verification purely to get a stable
+    // per-click dedup key for the replay cache — Slack mints a fresh
+    // trigger_id per user interaction, so it's a reasonable proxy for a
+    // delivery id (Slack doesn't send one for interactive components the way
+    // GitHub/Sentry do). This is inert: a forged payload can only influence
+    // which replay bucket gets touched, never bypass the signature check
+    // that gates everything below.
+    let deliveryId: string | null = null
+    try {
+      const peekParams = new URLSearchParams(rawBody)
+      const peekPayload = JSON.parse(peekParams.get('payload') ?? '{}') as { trigger_id?: string }
+      deliveryId = peekPayload.trigger_id ?? null
+    } catch {
+      /* not parseable yet — falls through to the signature/parse checks below */
+    }
+
+    const auditRow = await audit(toWebhookContext(req) as never, rawBody, deliveryId)
+    try {
+      checkRateLimit(sourceIp)
+      await checkReplay(auditRow.id, deliveryId)
+    } catch (err) {
+      if (err instanceof RateLimitError) {
+        await auditRow.resolve('rejected_rate_limit', 429, Date.now() - t0, err.message)
+        return new Response('Rate limited', { status: 429 })
+      }
+      if (err instanceof ReplayAttackError) {
+        await auditRow.resolve('rejected_replay', 409, Date.now() - t0, err.message)
+        return new Response('Duplicate delivery', { status: 409 })
+      }
+      throw err
     }
 
     const secret = Deno.env.get('SLACK_SIGNING_SECRET')
@@ -51,14 +111,15 @@ Deno.serve(
       reportMessage('Slack signing secret missing', 'error', {
         tags: { source: 'slack-interactions' },
       })
+      await auditRow.resolve('error', 500, Date.now() - t0, 'SLACK_SIGNING_SECRET not set')
       return new Response('Server misconfigured', { status: 500 })
     }
 
     const signature = req.headers.get('x-slack-signature')
     const timestamp = req.headers.get('x-slack-request-timestamp')
-    const rawBody = await req.text()
 
     if (!signature || !timestamp) {
+      await auditRow.resolve('rejected_signature', 400, Date.now() - t0, 'Missing signature headers')
       return new Response('Missing signature headers', { status: 400 })
     }
 
@@ -70,26 +131,35 @@ Deno.serve(
     })
     if (!valid) {
       log.warn('Invalid signature', { ts: timestamp })
+      await auditRow.resolve('rejected_signature', 401, Date.now() - t0, 'Invalid signature')
       return new Response('Invalid signature', { status: 401 })
     }
 
     const params = new URLSearchParams(rawBody)
     const payloadRaw = params.get('payload')
-    if (!payloadRaw) return new Response('Missing payload', { status: 400 })
+    if (!payloadRaw) {
+      await auditRow.resolve('error', 400, Date.now() - t0, 'Missing payload')
+      return new Response('Missing payload', { status: 400 })
+    }
 
     let payload: SlackInteractionPayload
     try {
       payload = JSON.parse(payloadRaw)
     } catch {
+      await auditRow.resolve('error', 400, Date.now() - t0, 'Malformed payload')
       return new Response('Malformed payload', { status: 400 })
     }
 
     if (payload.type !== 'block_actions') {
+      await auditRow.resolve('accepted', 200, Date.now() - t0, 'Unsupported interaction type')
       return ephemeral('Unsupported interaction type.')
     }
 
     const action = payload.actions?.[0]
-    if (!action) return ephemeral('No action in payload.')
+    if (!action) {
+      await auditRow.resolve('accepted', 200, Date.now() - t0, 'No action in payload')
+      return ephemeral('No action in payload.')
+    }
 
     const actionId = action.action_id ?? ''
     const colonIdx = actionId.indexOf(':')
@@ -103,30 +173,39 @@ Deno.serve(
     // ── QA story: pause_story ────────────────────────────────────────────────
     if (actionKind === 'pause_story') {
       const storyId = actionValue || action.value
-      if (!storyId) return ephemeral('Missing story ID.')
+      if (!storyId) {
+        await auditRow.resolve('accepted', 200, Date.now() - t0, 'Missing story ID')
+        return ephemeral('Missing story ID.')
+      }
 
       const bgWork = finishPauseStory({ db, storyId, slackUser, responseUrl }).catch(
         (err) => log.error('pause_story failed', { err: String(err) }),
       )
       waitUntil(bgWork)
+      await auditRow.resolve('accepted', 200, Date.now() - t0)
       return ephemeral(':hourglass_flowing_sand: Pausing story…')
     }
 
     // ── QA story: improve_story (PDCA) ───────────────────────────────────────
     if (actionKind === 'improve_story') {
       const storyId = actionValue || action.value
-      if (!storyId) return ephemeral('Missing story ID.')
+      if (!storyId) {
+        await auditRow.resolve('accepted', 200, Date.now() - t0, 'Missing story ID')
+        return ephemeral('Missing story ID.')
+      }
 
       const bgWork = finishImproveStory({ db, storyId, slackUser, responseUrl }).catch(
         (err) => log.error('improve_story failed', { err: String(err) }),
       )
       waitUntil(bgWork)
+      await auditRow.resolve('accepted', 200, Date.now() - t0)
       return ephemeral(':hourglass_flowing_sand: Queuing AI improvement…')
     }
 
     // ── Report: dispatch_fix ─────────────────────────────────────────────────
     if (actionKind !== 'dispatch_fix' || !actionValue) {
       // Link-only buttons like `open_report:<id>` / `open_qa_run:<id>` don't round-trip here.
+      await auditRow.resolve('accepted', 200, Date.now() - t0, 'Nothing to do')
       return ephemeral('Nothing to do.')
     }
 
@@ -139,6 +218,7 @@ Deno.serve(
 
     if (!report) {
       log.warn('Unknown report clicked', { reportId })
+      await auditRow.resolve('accepted', 200, Date.now() - t0, 'Unknown report clicked')
       return ephemeral('That report no longer exists.')
     }
 
@@ -155,6 +235,7 @@ Deno.serve(
     })
 
     waitUntil(dispatchPromise)
+    await auditRow.resolve('accepted', 200, Date.now() - t0)
     return ephemeral(':hourglass_flowing_sand: Dispatching fix — PR will land in `/fixes` shortly.')
   }),
 )

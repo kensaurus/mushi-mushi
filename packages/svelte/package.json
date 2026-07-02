@@ -10,8 +10,15 @@
     "build": "tsup",
     "lint": "eslint src/",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "size": "size-limit"
   },
+  "size-limit": [
+    {
+      "path": "dist/index.js",
+      "limit": "1 KB"
+    }
+  ],
   "peerDependencies": {
     "svelte": ">=4"
   },
@@ -21,7 +28,9 @@
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
+    "@size-limit/file": "^12.1.0",
     "eslint": "^10.4.1",
+    "size-limit": "^12.1.0",
     "svelte": "^5.56.3",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",

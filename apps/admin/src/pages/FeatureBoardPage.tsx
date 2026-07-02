@@ -31,6 +31,7 @@ import {
   RelativeTime,
   SegmentedControl,
 } from '../components/ui'
+import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -78,10 +79,10 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
 }
 
 const STATUS_BADGE: Record<TicketStatus, string> = {
-  open: 'bg-info-muted/60 text-info border-info/30',
-  in_progress: 'bg-warn-muted/60 text-warn border-warn/30',
-  resolved: 'bg-ok-muted/60 text-ok border-ok/30',
-  closed: 'bg-surface-overlay text-fg-faint border-edge-subtle',
+  open: runStatusChipTone('open'),
+  in_progress: runStatusChipTone('in_progress'),
+  resolved: runStatusChipTone('resolved'),
+  closed: runStatusChipTone('closed'),
 }
 
 const SORT_OPTIONS: { id: SortKey; label: string }[] = [
@@ -257,11 +258,11 @@ function FeatureRow({
           <h3 className="text-sm font-medium leading-snug text-fg">{ticket.subject}</h3>
           <div className="flex shrink-0 items-center gap-1.5">
             {isShipped && (
-              <Badge className="border border-ok/30 bg-ok-muted/60 text-ok text-3xs">
+              <Badge className={`border border-ok/30 ${CHIP_TONE.okSubtle} text-3xs`}>
                 Shipped
               </Badge>
             )}
-            <Badge className={`border text-3xs ${STATUS_BADGE[ticket.status]}`}>
+            <Badge className={STATUS_BADGE[ticket.status]}>
               {STATUS_LABEL[ticket.status]}
             </Badge>
           </div>

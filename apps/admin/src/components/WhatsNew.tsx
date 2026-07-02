@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Modal } from './Modal'
 import { Badge } from './ui'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface ChangelogHighlight {
   tone: 'feature' | 'fix' | 'breaking' | 'note'
@@ -54,8 +55,8 @@ function writeLastSeen(date: string) {
 
 const TONE_BADGE: Record<ChangelogHighlight['tone'], string> = {
   feature:  'bg-brand/15 text-brand border border-brand/30',
-  fix:      'bg-ok-muted text-ok border border-ok/30',
-  breaking: 'bg-danger-muted/50 text-danger-foreground border border-danger/30',
+  fix:      CHIP_TONE.okSubtle + ' border border-ok/30',
+  breaking: CHIP_TONE.dangerSubtle + ' border border-danger/30',
   note:     'bg-surface-overlay text-fg-secondary border border-edge/60',
 }
 

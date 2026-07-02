@@ -40,6 +40,7 @@ import {
   type ComplianceStats,
   type ComplianceTabId,
 } from '../components/compliance/types'
+import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
 interface RetentionPolicy {
   project_id: string
@@ -85,16 +86,16 @@ interface Evidence {
 }
 
 const STATUS_CHIP: Record<Evidence['status'], string> = {
-  pass: 'bg-ok/15 text-ok border border-ok/30',
-  warn: 'bg-warn-muted/50 text-warning-foreground border border-warn/30',
-  fail: 'bg-danger-muted/50 text-danger-foreground border border-danger/30',
+  pass: runStatusChipTone('pass'),
+  warn: runStatusChipTone('warn'),
+  fail: runStatusChipTone('fail'),
 }
 
 const DSAR_STATUS_CHIP: Record<Dsar['status'], string> = {
-  pending: 'bg-warn-muted/50 text-warning-foreground border border-warn/30',
-  in_progress: 'bg-info/15 text-info border border-info/30',
-  completed: 'bg-ok/15 text-ok border border-ok/30',
-  rejected: 'bg-fg-faint/20 text-fg-muted border border-edge-subtle',
+  pending: runStatusChipTone('pending'),
+  in_progress: runStatusChipTone('in_progress'),
+  completed: runStatusChipTone('completed'),
+  rejected: CHIP_TONE.neutral,
 }
 
 /**
@@ -531,7 +532,7 @@ export function CompliancePage() {
       <div className="space-y-4">
         <PageHeaderBar
           title={copy?.title ?? 'Compliance'}
-          description={copy?.description ?? 'Track GDPR, SOC 2, retention, residency, and DSAR obligations for the active project.'}
+
           helpTitle={copy?.help?.title ?? 'About Compliance'}
           helpWhatIsIt={
             copy?.help?.whatIsIt ??
@@ -570,7 +571,7 @@ export function CompliancePage() {
       <PageHeaderBar
         title={copy?.title ?? 'Compliance'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={copy?.description ?? 'Track GDPR, SOC 2, retention, residency, and DSAR obligations for the active project.'}
+
         helpTitle={copy?.help?.title ?? 'About Compliance'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
@@ -589,9 +590,9 @@ export function CompliancePage() {
         }
       >
         {stats.soc2Entitlement ? (
-          <Badge className="bg-ok-muted text-ok">SOC 2 enabled</Badge>
+          <Badge tone="okSubtle">SOC 2 enabled</Badge>
         ) : (
-          <Badge className="bg-warn-muted/50 text-warning-foreground">{stats.planDisplayName} — upgrade for compliance</Badge>
+          <Badge tone="warnSubtle">{stats.planDisplayName} — upgrade for compliance</Badge>
         )}
         <Btn onClick={refreshEvidence} disabled={refreshing} loading={refreshing} data-dav-anchor="compliance:act">
           Refresh evidence

@@ -90,8 +90,43 @@ The console shows a 3-step guide and displays the same code:
 2. Click **Approve CLI connection**
 3. Switch back to your terminal — setup resumes automatically
 
-After approval the browser shows **"CLI connected — switch back to your terminal"**
-and the terminal continues to the project picker.
+After you click **Approve**, the browser shows a **waiting** state while the CLI
+claims the token. When the terminal picks it up, the page switches to **"CLI
+connected — switch back to your terminal"** and the terminal continues to the
+project picker.
+
+## How sign-in reliability works
+
+Each machine gets a stable `client_id` (stored in `~/.config/mushi/config.json`).
+The CLI sends it when starting device auth so concurrent logins on the same
+machine behave predictably.
+
+```mermaid
+sequenceDiagram
+  participant CLI as CLI
+  participant API as API
+  participant Browser as Browser
+
+  CLI->>API: POST /device/start with client_id
+  CLI->>Browser: Open /cli-auth
+  Browser->>API: POST /device/approve
+  loop CLI polls
+    CLI->>API: POST /device/token
+  end
+  loop Browser polls until claimed
+    Browser->>API: GET /device/status
+  end
+  Browser->>Browser: Show connected
+  CLI->>CLI: Resume wizard
+```
+
+**Concurrent logins:** Starting a new `mushi login` or `npx mushi-mushi` on the
+same machine supersedes any older pending approval for that `client_id`. If you
+have two terminals waiting, only the newest poll wins — close the stale one and
+run the wizard again.
+
+**Re-running the wizard:** If credentials are already saved, the CLI validates
+them with `GET /v1/sync/whoami` before reinstalling anything.
 
 <Steps>
 
@@ -106,7 +141,8 @@ The wizard auto-detects your framework (Next.js, React, Vue, Expo, …).
 ### 2. Approve in the browser
 
 A browser tab opens at `/cli-auth?code=XXXX-XXXX`. Click **Approve CLI connection**.
-Your terminal resumes the moment you approve — no copy-paste needed.
+The browser waits until your terminal claims the token, then shows connected — no
+copy-paste needed.
 
 ### 3. Pick or create a project
 
@@ -190,6 +226,11 @@ MUSHI_API_KEY=mushi_xxx mushi connect \
 | "Browser sign-in timed out" | 10-minute code expired before approval | Run `npx mushi-mushi` again — a new code is generated |
 | `--write-env` unknown option | CLI older than v1.19 | Upgrade: `npm i -g @mushi-mushi/cli@latest` |
 | Non-interactive hang in CI | TTY prompts with partial flags | Pass `--yes --project-id <uuid> --api-key mushi_xxx` |
+| Browser says connected, terminal still waiting | Stale browser tab, wrong terminal window, or superseded poll from a second login | Close old `/cli-auth` tabs. Use the terminal that started the most recent `npx mushi-mushi`. Run the wizard again if needed. |
+| Browser stuck on "waiting" after Approve | CLI has not claimed the token yet (slow network) or terminal was closed | Keep the terminal open. After ~45s the browser shows stale-tab help. |
+| Terminal still waiting after browser connected | Token poll hit a different `device_code` than the open browser tab | Run `npx mushi-mushi` again in the terminal you want to use. Approve in the fresh browser tab only. |
+| `429 Too Many Requests` during token poll | Rate limit on `/device/token` | The CLI retries automatically. Wait a few seconds — do not spam Approve. |
+| `408 Request Timeout` during token poll | Transient network blip | The CLI retries automatically. If it persists, check firewall/proxy rules. |
 
 ## Related
 
@@ -197,3 +238,4 @@ MUSHI_API_KEY=mushi_xxx mushi connect \
 - [Admin → Onboarding](/admin/onboarding) — in-console checklist + success panel
 - [Connect & Update](/admin/connect) — copy commands with your active project prefilled
 - [MCP quickstart](/quickstart/mcp) — IDE wiring after credentials are saved
+- [SDK reliability deploy checklist](https://github.com/kensaurus/mushi-mushi/blob/master/docs/operators/sdk-reliability-overhaul.md) — operators self-hosting the stack

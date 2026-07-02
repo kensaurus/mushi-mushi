@@ -21,14 +21,24 @@ npm install @mushi-mushi/web
 import { Mushi } from '@mushi-mushi/web';
 
 Mushi.init({
-  projectId: 'proj_xxx', // UUID from Admin → Projects
-  apiKey: 'mushi_xxx',   // report:write key from Admin → Settings → API Keys
+  projectId: '00000000-0000-0000-0000-000000000000', // UUID from Admin → Projects
+  apiKey: 'mushi_xxx',   // report:write key from Setup → Verify (not Settings → BYOK)
   widget: { position: 'bottom-right', theme: 'auto' },
   capture: { console: true, network: true, screenshot: 'on-report' },
 });
 ```
 
 That's the whole integration. A floating 🐛 launcher appears; a report is one click away.
+
+## Runtime config
+
+With `runtimeConfig: 'auto'` (default), the SDK fetches console settings from
+`GET /v1/sdk/config` and merges them over your init — so you can tune the widget
+from **Projects → SDK install** without rebuilding. Host-wired values (banner
+trigger, capture flags) win over console defaults.
+
+→ [Runtime config docs](https://kensaur.us/mushi-mushi/docs/concepts/runtime-config) ·
+maintainer deep-dive: [SDK_RUNTIME_CONFIG.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_RUNTIME_CONFIG.md)
 
 ## What you get
 
@@ -253,7 +263,7 @@ Screenshot capture uses canvas / SVG `foreignObject` serialization — it does n
 
 ## Bundle size
 
-~7 KB brotli, enforced at 80 KB gzipped (105 KB uncompressed) in CI. Requires `@mushi-mushi/core` (installed automatically, not bundled inline). The widget's visual system — washi paper, sumi ink, vermillion 朱 accent, system serif — lives in [`src/styles.ts`](./src/styles.ts).
+~7 KB brotli, enforced at 82 KB gzipped (105 KB uncompressed) in CI. Requires `@mushi-mushi/core` (installed automatically, not bundled inline). The widget's visual system — washi paper, sumi ink, vermillion 朱 accent, system serif — lives in [`src/styles.ts`](./src/styles.ts).
 
 ## License
 

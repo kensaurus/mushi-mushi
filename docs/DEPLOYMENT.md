@@ -193,6 +193,15 @@ Verify the change landed (e.g. via the Supabase MCP `list_tables` / `pg_proc`
 lookups or a `SET ROLE` smoke test) and check `get_advisors` for new ERROR-level
 findings before declaring the deploy done.
 
+**Jul 2026 reliability trio** (CLI auth + SDK config + backend hardening — see
+[`docs/operators/sdk-reliability-overhaul.md`](operators/sdk-reliability-overhaul.md)):
+
+| Migration | Purpose |
+| --- | --- |
+| `20260702090000_cli_auth_two_phase_claim.sql` | Two-phase CLI token claim + `client_id` |
+| `20260702100000_request_idempotency_restrict_member_read.sql` | Drop member read on idempotency cache (secret exposure) |
+| `20260702110000_scoped_rate_limits_generalize_actor.sql` | Generalize rate-limit actor column (IP-derived IDs) |
+
 ---
 
 ## 6. Backup, PITR, and data-integrity runbook

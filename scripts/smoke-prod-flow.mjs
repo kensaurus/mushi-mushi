@@ -22,6 +22,9 @@
 //   5. /v1/api/health → 200 + `{ status: 'ok' }` (gateway sanity).
 //   6. /v1/admin/entitlements with MUSHI_HOBBY_JWT → 200 + planId='hobby'
 //      and `featureFlags.sso === false` (introspection consistency).
+//   7. /v1/api/health/ready → 200 + `{ status: 'ok' }` (real DB round-trip
+//      readiness check — distinct from #5's pure liveness ping; see
+//      api/routes/discovery.ts for the liveness/readiness split rationale).
 //
 // Required env
 // ------------
@@ -151,6 +154,23 @@ await check('gateway /health responds 200 ok', async () => {
     throw new Error(`status field was ${JSON.stringify(body?.status)}, expected "ok"`)
   }
   pass('gateway /health responds 200 ok', body?.region ? `region=${body.region}` : '')
+})
+
+// --- 7. Gateway /health/ready (real DB round-trip) --------------------------
+await check('gateway /health/ready responds 200 ok', async () => {
+  const { status, text } = await getText(`${API}/health/ready`)
+  let body
+  try {
+    body = JSON.parse(text)
+  } catch {
+    throw new Error(`health/ready body was not valid JSON — status=${status} body=${text.slice(0, 200)}`)
+  }
+  if (status !== 200 || body?.status !== 'ok') {
+    throw new Error(
+      `expected 200 + status=ok, got ${status} status=${JSON.stringify(body?.status)} checks=${JSON.stringify(body?.checks)}`,
+    )
+  }
+  pass('gateway /health/ready responds 200 ok', `latencyMs=${body?.latencyMs}`)
 })
 
 // --- 4 + 6. Entitlement gating (requires HOBBY JWT) -------------------------

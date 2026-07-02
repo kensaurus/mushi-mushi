@@ -37,6 +37,7 @@ import {
   type MembersStats,
   type MembersTabId,
 } from '../components/members/types'
+import { CHIP_TONE } from '../lib/chipTone'
 
 // Undo window for soft-delete operations on this page. Long enough for the
 // "wait, that wasn't who I meant" reaction (Nielsen reports ~5-10 s for
@@ -118,9 +119,9 @@ interface MembersResponse {
 }
 
 const ROLE_TONE: Record<OrgRole, string> = {
-  owner: 'bg-warn-muted/50 text-warning-foreground border border-warn/30',
-  admin: 'bg-brand-subtle text-brand',
-  member: 'bg-ok-muted text-ok',
+  owner: CHIP_TONE.warnSubtle,
+  admin: CHIP_TONE.brand,
+  member: CHIP_TONE.okSubtle,
   viewer: 'bg-surface-overlay text-fg-muted',
 }
 
@@ -140,17 +141,17 @@ const JOINED_VIA_META: Record<JoinedVia, { label: string; tooltip: string; tone:
   founding_owner: {
     label: 'Founder',
     tooltip: 'Created this organization. Has been here since day one.',
-    tone: 'bg-warn-muted/50 text-warning-foreground border border-warn/30',
+    tone: CHIP_TONE.warnSubtle,
   },
   invitation: {
     label: 'Invited',
     tooltip: 'Joined by accepting an email invitation.',
-    tone: 'bg-brand-subtle text-brand',
+    tone: CHIP_TONE.brand,
   },
   sso: {
     label: 'SSO',
     tooltip: 'Provisioned through your identity provider (SCIM/OIDC).',
-    tone: 'bg-ok-muted text-ok',
+    tone: CHIP_TONE.okSubtle,
   },
   direct_admin: {
     label: 'Direct',
@@ -655,7 +656,7 @@ export function OrganizationSettingsPage() {
       <div className="space-y-4">
         <PageHeaderBar
           title={copy?.title ?? 'Team members'}
-          description={copy?.description ?? 'Invite colleagues, assign roles, and manage workspace access.'}
+
           helpTitle={copy?.help?.title ?? 'About team management'}
           helpWhatIsIt={copy?.help?.whatIsIt ?? 'Invite teammates, set what each person can see or change, and remove access when someone leaves the team.'}
           helpUseCases={copy?.help?.useCases ?? [
@@ -685,7 +686,7 @@ export function OrganizationSettingsPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Team members'}
         projectScope={data?.organization?.name ?? stats.organizationName ?? undefined}
-        description={copy?.description ?? 'Invite colleagues, assign roles, and manage workspace access.'}
+
         helpTitle={copy?.help?.title ?? 'About team management'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Invite teammates, set what each person can see or change, and remove access when someone leaves the team.'}
         helpUseCases={copy?.help?.useCases ?? [
@@ -695,7 +696,7 @@ export function OrganizationSettingsPage() {
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Use Invites to send email invitations. Use Roster to audit activity and change roles.'}
       >
-        <Badge className={teamsEnabled ? 'bg-ok-muted text-ok' : 'bg-warn-muted/50 text-warning-foreground'}>
+        <Badge className={teamsEnabled ? CHIP_TONE.okSubtle : CHIP_TONE.warnSubtle}>
           {stats.planDisplayName ?? data?.organization?.plan_id ?? 'hobby'}
         </Badge>
       </PageHeaderBar>

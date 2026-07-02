@@ -22,6 +22,8 @@ import { EMPTY_REWARDS_STATS, type RewardsStats, type RewardsTabId } from '../co
 import { rewardsTabMeta, resolveRewardsTabParam } from '../components/rewards/rewardsTabs'
 import { useRewardsUx, resolveQuickRewardsTab } from '../lib/rewardsModeUx'
 import { Badge } from '../components/ui'
+import { runStatusChipTone } from '../lib/chipTone'
+import { IconRewards } from '../components/icons'
 import {
   OverviewTab,
   ActivityRulesTab,
@@ -91,6 +93,7 @@ export function RewardsPage() {
     <div className="space-y-4">
       <PageHeaderBar
         title="Rewards"
+        icon={<IconRewards />}
         description="Incentivize users to report bugs, explore your app, and give feedback — earn points, tier badges, and perks."
         helpTitle="About Rewards"
         helpWhatIsIt="The Rewards program tracks user activity via the Mushi SDK, awards points for SDK events (screen views, session time, bug reports), and promotes users through tiers as they accumulate points. Each tier can carry perks — Pro access, monetary payouts, or host-defined credits applied via webhook."
@@ -102,8 +105,8 @@ export function RewardsPage() {
         helpHowToUse="Configure activity rules to set points per SDK event, then define the tier ladder. Share the SDK snippet with your app and call identify() to link users. Monitor contributors in the leaderboard; use the Simulator tab to preview changes before going live."
       >
         {rewardsEnabled
-          ? <Badge className="bg-ok-muted text-ok">Active</Badge>
-          : <Badge className="bg-surface-overlay text-fg-muted">Hobby — read-only</Badge>}
+          ? <Badge className={runStatusChipTone('active')}>Active</Badge>
+          : <Badge tone="neutral">Hobby — read-only</Badge>}
       </PageHeaderBar>
 
       <PagePosture

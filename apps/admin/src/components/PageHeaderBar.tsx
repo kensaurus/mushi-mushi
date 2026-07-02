@@ -71,6 +71,8 @@ function HeaderPdcaChip({ chip }: { chip: string }) {
 
 export interface PageHeaderBarProps {
   title: string
+  /** Leading glyph before the title — pass the page's nav icon for scan consistency. */
+  icon?: ReactNode
   /** Secondary descriptor shown mid-title (e.g. project name). */
   projectScope?: string | null
   /** Override the URL-derived PDCA chip. Pass null to suppress entirely. */
@@ -105,6 +107,7 @@ export interface PageHeaderBarProps {
  */
 export function PageHeaderBar({
   title,
+  icon,
   projectScope,
   contextChip,
   suppressContextChip: suppressContextChipProp,
@@ -166,6 +169,15 @@ export function PageHeaderBar({
           ) : contextChip ? (
             <span className="shrink-0">{contextChip}</span>
           ) : null}
+
+          {icon && (
+            <span
+              className="shrink-0 text-fg-muted [&>svg]:h-4 [&>svg]:w-4"
+              aria-hidden="true"
+            >
+              {icon}
+            </span>
+          )}
 
           {/* Title — aria-label includes the middot scope when present (dot is aria-hidden visually). */}
           <h2

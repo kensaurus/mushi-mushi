@@ -102,6 +102,29 @@ describe('mcp http edge function — setup tools parity', () => {
   })
 })
 
+describe('mcp http edge function — tool-execution error shape (production-readiness audit #13)', () => {
+  // Tool EXECUTION failures (bad args a handler rejected, a downstream
+  // /v1/admin/* 4xx/5xx via apiCall) must surface as a successful tools/call
+  // result with isError: true — not a re-thrown top-level JSON-RPC error —
+  // so the calling LLM can see the message and self-correct. Stdio gets
+  // this for free from the official MCP SDK's registerTool; the hosted
+  // transport's hand-rolled dispatcher has to do it explicitly.
+  it('handleToolsCall catch block returns isError: true instead of re-throwing', () => {
+    expect(SOURCE).toMatch(/content: \[\{ type: 'text', text: JSON\.stringify\(errorPayload, null, 2\) \}\],\s*\n\s*isError: true,/);
+  });
+
+  it('handleToolsCall catch block no longer re-throws the caught error', () => {
+    const catchBlockMatch = SOURCE.match(/recordOutcome\('error', errorCode\)[\s\S]*?\n  \}\n\}/m);
+    expect(catchBlockMatch).not.toBeNull();
+    expect(catchBlockMatch![0]).not.toMatch(/\n\s*throw err\s*\n/);
+  });
+
+  it('preserves McpError code + data in the isError payload for structured debugging', () => {
+    expect(SOURCE).toMatch(/errorPayload\.code = err\.code/);
+    expect(SOURCE).toMatch(/errorPayload\.data = err\.data/);
+  });
+});
+
 describe('mcp http edge function — drift detector', () => {
   it('keeps the catalog comment that tells future agents to update both files', () => {
     expect(SOURCE).toMatch(/Mirror of `packages\/mcp\/src\/server\.ts`/)

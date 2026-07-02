@@ -55,6 +55,7 @@ import { ActiveFiltersRail, type ActiveFilter } from '../components/ActiveFilter
 import { DataTable, type ColumnDef } from '../components/DataTable'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface AuditEntry {
   id: string
@@ -169,7 +170,7 @@ function actionTone(action: string): string {
     action.endsWith('.revoked') ||
     action.endsWith('.dismissed')
   ) {
-    return 'bg-danger-muted/50 text-danger-foreground'
+    return CHIP_TONE.dangerSubtle
   }
   if (
     action.endsWith('.applied') ||
@@ -629,7 +630,7 @@ export function AuditPage() {
       <div className="space-y-4">
         <PageHeaderBar
           title={copy?.title ?? 'Audit log'}
-          description={copy?.description ?? 'Append-only history of every mutation — filter by actor, action, or resource.'}
+
           helpTitle={copy?.help?.title ?? 'About the Audit Log'}
           helpWhatIsIt={
             copy?.help?.whatIsIt ??
@@ -668,7 +669,7 @@ export function AuditPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Audit log'}
         projectScope={stats.projectName ?? undefined}
-        description={copy?.description ?? 'Append-only history of every mutation — filter by actor, action, or resource.'}
+
         helpTitle={copy?.help?.title ?? 'About the Audit Log'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
@@ -687,9 +688,9 @@ export function AuditPage() {
         }
       >
         {stats.auditLogEntitlement ? (
-          <Badge className="bg-ok-muted text-ok">Audit enabled</Badge>
+          <Badge tone="okSubtle">Audit enabled</Badge>
         ) : (
-          <Badge className="bg-warn-muted/50 text-warning-foreground">{stats.planDisplayName} — upgrade for audit</Badge>
+          <Badge tone="warnSubtle">{stats.planDisplayName} — upgrade for audit</Badge>
         )}
         <Btn variant="ghost" size="sm" onClick={exportCsv} data-dav-anchor="audit:act">
           Export CSV ({logs.length})

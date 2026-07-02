@@ -99,8 +99,31 @@
     "clean": "rm -rf dist .turbo",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "size": "size-limit"
   },
+  "size-limit": [
+    {
+      "name": "index (core middleware + hooks)",
+      "path": "dist/index.js",
+      "limit": "8 KB"
+    },
+    {
+      "name": "express adapter",
+      "path": "dist/express.js",
+      "limit": "1.5 KB"
+    },
+    {
+      "name": "fastify adapter",
+      "path": "dist/fastify.js",
+      "limit": "1.25 KB"
+    },
+    {
+      "name": "hono adapter",
+      "path": "dist/hono.js",
+      "limit": "1.25 KB"
+    }
+  ],
   "dependencies": {
     "@mushi-mushi/core": "workspace:^"
   },
@@ -127,9 +150,11 @@
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
+    "@size-limit/file": "^12.1.0",
     "@types/express": "^5.0.6",
     "@types/node": "^22.19.21",
     "eslint": "^10.4.1",
+    "size-limit": "^12.1.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"

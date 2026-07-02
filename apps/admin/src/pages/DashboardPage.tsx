@@ -45,6 +45,7 @@ import { usePageCopy } from '../lib/copy'
 import { useDashboardUx } from '../lib/dashboardModeUx'
 import { deriveDashboardInsight } from '../lib/dashboardExplainer'
 import { semanticBannerTone } from '../lib/tokens'
+import { IconDashboard } from '../components/icons'
 
 function inferRunningStage(data: DashboardData): PdcaStageId | null {
   const activity = data.activity ?? []
@@ -237,6 +238,7 @@ export function DashboardPage() {
       <Confetti triggerKey={confettiKey} />
       <PageHeaderBar
         title={copy?.title ?? 'Dashboard'}
+        icon={<IconDashboard />}
         description={copy?.description ?? (projectName ? `Your loop on ${projectName}` : undefined)}
         helpTitle={copy?.help?.title ?? 'About the Dashboard'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'A live picture of bugs your users hit, fixes Mushi drafted, quality scores, and what shipped — in Overview, Loop, Metrics, and Health tabs.'}

@@ -6,6 +6,7 @@
 
 import type { ReactNode } from 'react'
 import { ActionPill, ActionPillRow } from './report-detail/ReportSurface'
+import { CHIP_TONE } from '../lib/chipTone'
 
 export interface ActiveFilter {
   /** Stable identifier — used for React `key` and for the chip's
@@ -38,10 +39,10 @@ interface ActiveFiltersRailProps {
 const TONE_CLASS: Record<NonNullable<ActiveFilter['tone']>, string> = {
   neutral: 'border-edge-subtle bg-surface-overlay/60 text-fg-secondary',
   brand:   'border-brand/40 bg-brand/10 text-brand',
-  ok:      'border-ok/40 bg-ok-muted/30 text-ok',
-  warn:    'border-warn/40 bg-warn-muted/30 text-warn',
-  danger:  'border-danger/40 bg-danger-muted/30 text-danger',
-  info:    'border-info/40 bg-info-muted/30 text-info',
+  ok:      CHIP_TONE.okSubtle,
+  warn:    CHIP_TONE.warnSubtle,
+  danger:  CHIP_TONE.dangerSubtle,
+  info:    CHIP_TONE.infoSubtle,
 }
 
 /**

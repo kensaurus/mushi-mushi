@@ -85,8 +85,8 @@ const BOUNTY_ACTIONS = [
 ]
 
 function statusBadge(visibility: PublishedApp['visibility']) {
-  if (visibility === 'public')  return <Badge className="bg-ok-muted text-ok">Live</Badge>
-  if (visibility === 'paused')  return <Badge className="bg-warn-muted text-warn">Paused</Badge>
+  if (visibility === 'public')  return <Badge tone="okSubtle">Live</Badge>
+  if (visibility === 'paused')  return <Badge tone="warnSubtle">Paused</Badge>
   return <Badge className="bg-surface-overlay text-fg-muted">Draft</Badge>
 }
 
@@ -643,7 +643,7 @@ export function PublishingTab() {
                         className="inline-flex"
                       >
                         {row.enabled ? (
-                          <Badge className="bg-ok-muted text-ok">On</Badge>
+                          <Badge tone="okSubtle">On</Badge>
                         ) : (
                           <Badge className="bg-surface-overlay text-fg-muted">Off</Badge>
                         )}

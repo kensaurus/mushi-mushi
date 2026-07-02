@@ -8,6 +8,8 @@ export default [
     rules: {
       'no-console': 'off',
       'mushi-mushi/no-raw-palette-color': 'error',
+      'mushi-mushi/no-text-3xs-on-interactive': 'error',
+      'mushi-mushi/no-raw-semantic-on-muted': 'error',
       'mushi-mushi/no-hand-rolled-tablist': [
         'warn',
         { pageFilesOnly: true, pagePattern: 'Page\\.tsx$' },

@@ -14,6 +14,7 @@
 
 import { Badge, Btn } from '../ui'
 import { ContainedBlock } from '../report-detail/ReportSurface'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface PlanCatalogEntry {
   id: string
@@ -275,7 +276,7 @@ export function PlanComparisonTable({
                   </Badge>
                 )}
                 {isCurrent && (
-                  <Badge className="bg-ok-muted text-ok text-3xs">
+                  <Badge className={`${CHIP_TONE.okSubtle} text-3xs`}>
                     Your plan
                   </Badge>
                 )}

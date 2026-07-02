@@ -2,6 +2,8 @@
  * FILE: apps/admin/src/components/notifications/types.ts
  */
 
+import { CHIP_TONE } from '../../lib/chipTone'
+
 export interface ReporterNotification {
   id: string
   project_id: string
@@ -58,10 +60,10 @@ export const EMPTY_NOTIFICATIONS_STATS: NotificationStats = {
 export type NotificationTabId = 'overview' | 'inbox' | 'setup'
 
 export const TYPE_BADGE: Record<string, string> = {
-  classified: 'bg-info-muted text-info border border-info/30',
-  fixed: 'bg-ok-muted text-ok border border-ok/30',
-  fix_failed: 'bg-danger-muted text-danger border border-danger/30',
-  reward: 'bg-warn-muted text-warn border border-warn/30',
+  classified: CHIP_TONE.infoSubtle,
+  fixed: CHIP_TONE.okSubtle,
+  fix_failed: CHIP_TONE.dangerSubtle,
+  reward: CHIP_TONE.warnSubtle,
   comment_reply: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
 }
 

@@ -47,6 +47,7 @@ import {
   RelativeTime,
   SegmentedControl,
 } from '../components/ui'
+import { CHIP_TONE } from '../lib/chipTone'
 
 type ListFilter = 'all' | 'bug' | 'feature'
 
@@ -228,7 +229,7 @@ export function FeedbackPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Support'}
         projectScope={stats.projectName ?? undefined}
-        description={copy?.description ?? 'Your support tickets to the Mushi team — bugs and feature requests about the console itself. End-user bug reports from your app live under Reports.'}
+
         helpTitle={copy?.help?.title ?? 'About Support'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
@@ -250,12 +251,12 @@ export function FeedbackPage() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
+              ? CHIP_TONE.okSubtle
               : bannerSeverity === 'brand'
                 ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn-muted/50 text-warning-foreground'
-                  : 'bg-info-muted/50 text-info-foreground'
+                  ? CHIP_TONE.warnSubtle
+                  : CHIP_TONE.infoSubtle
           }
         >
           {stats.awaitingReply > 0
@@ -484,7 +485,7 @@ function TicketRow({
               </Badge>
             )}
             {shipped && release && (
-              <Badge className="shrink-0 bg-ok-muted font-mono text-3xs text-ok">v{release.version}</Badge>
+              <Badge className="shrink-0 font-mono text-3xs">v{release.version}</Badge>
             )}
           </div>
           <InlineProof className="truncate border-0 bg-transparent px-0 py-0">

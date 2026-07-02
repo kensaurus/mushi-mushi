@@ -61,6 +61,7 @@ import {
   type ProjectMushiEnvVars,
 } from '../lib/projectMushiEnv'
 import { sdkPlatformHintFromUserAgent, sdkOriginKind } from '../lib/sdkClientPlatform'
+import { CHIP_TONE } from '../lib/chipTone'
 
 // Heartbeat columns mirror the server-side select in
 // routes/billing-projects-queue-graph.ts on /v1/admin/projects.
@@ -241,31 +242,31 @@ export const SDK_CARD_CHIP_LABEL: Record<CardStatus, string> = {
 const STATUS_TONE: Record<CardStatus, { dot: string; chip: string; headline: string; subtitle: string }> = {
   healthy: {
     dot: 'bg-ok',
-    chip: 'bg-ok-muted text-ok border border-ok/30',
+    chip: CHIP_TONE.okSubtle + ' border border-ok/30',
     headline: 'Feedback widget is connected',
     subtitle: 'Your app is checking in — new bug reports should appear within seconds.',
   },
   'endpoint-mismatch': {
     dot: 'bg-danger',
-    chip: 'bg-danger-muted text-danger border border-danger/30',
+    chip: CHIP_TONE.dangerSubtle + ' border border-danger/30',
     headline: 'SDK is pointed at the wrong backend',
     subtitle: 'Reports may be landing somewhere else. Fix your API endpoint env var and rebuild.',
   },
   stale: {
     dot: 'bg-warn',
-    chip: 'bg-warn-muted text-warn border border-warn/30',
+    chip: CHIP_TONE.warnSubtle,
     headline: 'App has not checked in recently',
     subtitle: 'Normal for low-traffic apps. If you just shipped an update, confirm SDK env vars are still in the build.',
   },
   cold: {
     dot: 'bg-warn',
-    chip: 'bg-warn-muted text-warn border border-warn/30',
+    chip: CHIP_TONE.warnSubtle,
     headline: 'No app activity in 7+ days',
     subtitle: 'The SDK may have been removed from a recent deploy, or the API key was rotated.',
   },
   never: {
     dot: 'bg-danger',
-    chip: 'bg-danger-muted text-danger border border-danger/30',
+    chip: CHIP_TONE.dangerSubtle + ' border border-danger/30',
     headline: 'SDK not connected yet',
     subtitle: 'Your API key exists but your app has never used it — usually missing env vars in the build.',
   },
@@ -924,7 +925,7 @@ export function SdkHealthEmptyState(props: SdkHealthSummaryProps) {
   return (
     <Card className="p-5 space-y-4 border-dashed">
       <div className="flex items-center gap-2 text-2xs font-mono text-fg-faint uppercase tracking-wide">
-        <Badge className="bg-info-muted text-info border border-info/30">Connectivity check</Badge>
+        <Badge tone="infoSubtle">Connectivity check</Badge>
         <span>Why this is empty</span>
       </div>
       <SdkHealthSummary {...props} compact />
@@ -995,7 +996,7 @@ export function SdkConnectivityEmptyState({
   return (
     <Card className="p-5 space-y-4 border-dashed">
       <div className="flex items-center gap-2 text-2xs font-mono text-fg-faint uppercase tracking-wide">
-        <Badge className="bg-info-muted text-info border border-info/30">Connectivity check</Badge>
+        <Badge tone="infoSubtle">Connectivity check</Badge>
         <span>{headline}</span>
       </div>
       <SdkHealthSummary

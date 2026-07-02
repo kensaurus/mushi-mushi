@@ -5,6 +5,7 @@ import { getServiceClient, getUserClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
 import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
+import { withIdempotency } from '../../_shared/idempotency.ts';
 import { dbError } from '../shared.ts';
 
 const ORG_ROLES = ['owner', 'admin', 'member', 'viewer'] as const;
@@ -688,14 +689,24 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
   app.post('/v1/org/:id/invitations', jwtAuth, requireFeature('teams'), async (c) => {
     const actorId = c.get('userId') as string;
     const orgId = c.req.param('id')!;
+    if (!UUID_RE.test(orgId)) {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'Valid email required' } }, 400);
+    }
+    // Resolved up front (rather than after the insert, as before) so it can
+    // be set on the context before entering withIdempotency: the cache-store
+    // step requires a project_id, and this org-scoped route has no
+    // project_id in its request body for the generic extractor to find.
+    const db = getServiceClient();
+    const projectId = await firstProjectId(db, orgId);
+    if (projectId) c.set('projectId', projectId);
+    return withIdempotency(c, async () => {
     const body = await c.req.json().catch(() => ({}));
     const email = normalizeEmail(body.email);
     const role = isInviteRole(body.role) ? body.role : 'member';
     const note = sanitiseNote(body.note);
-    if (!UUID_RE.test(orgId) || !email) {
+    if (!email) {
       return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'Valid email required' } }, 400);
     }
-    const db = getServiceClient();
     const actorRole = await loadMembership(db, orgId, actorId);
     if (actorRole !== 'owner' && actorRole !== 'admin') {
       return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
@@ -749,7 +760,6 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
       })
       .catch(() => null);
 
-    const projectId = await firstProjectId(db, orgId);
     if (projectId) {
       await logAudit(db, projectId, actorId, 'settings.updated', 'organization_invitation', invite.id, {
         organizationId: orgId,
@@ -759,6 +769,7 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
       }).catch(() => {});
     }
     return c.json({ ok: true, data: { invitation: invite, acceptUrl: adminUrl(acceptPath) } }, 201);
+    }); // withIdempotency
   });
 
   app.delete('/v1/org/:id/invitations/:invitationId', jwtAuth, async (c) => {

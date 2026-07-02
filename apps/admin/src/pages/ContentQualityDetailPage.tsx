@@ -62,13 +62,6 @@ interface ContentQualityIssue {
   updated_at: string
 }
 
-const REASON_LABELS: Record<string, { label: string; description: string }> = {
-  low_judge_score:     { label: 'Low AI score', description: 'The AI judge rated this content below the quality threshold.' },
-  user_flag:           { label: 'User flagged', description: 'One or more learners flagged this content as incorrect or unhelpful.' },
-  low_star_rating:     { label: 'Low star rating', description: 'Users gave this content a low average star rating.' },
-  high_downvote_ratio: { label: 'High downvote ratio', description: 'More users downvoted than upvoted this content.' },
-}
-
 const LANG_NAMES: Record<string, string> = {
   vi: 'Vietnamese', zh: 'Chinese', ja: 'Japanese',
   de: 'German', fr: 'French', es: 'Spanish',
@@ -269,7 +262,6 @@ export function ContentQualityDetailPage() {
   const regenRunDuration = issue.regen_requested_at && issue.regen_completed_at
     ? Math.round((new Date(issue.regen_completed_at).getTime() - new Date(issue.regen_requested_at).getTime()) / 1000)
     : null
-  const reasonInfo = REASON_LABELS[issue.reason]
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -281,7 +273,7 @@ export function ContentQualityDetailPage() {
 
         <PageHeaderBar
           title={title}
-          description={reasonInfo?.description}
+
           helpTitle="About content quality issues"
           helpWhatIsIt="Rich detail for a flagged learning asset — quality signals, Langfuse trace, user feedback, and regenerate or resolve actions."
           helpUseCases={[

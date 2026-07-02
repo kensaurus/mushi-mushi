@@ -2,6 +2,7 @@ export default {
   index: 'Overview',
   'open-source': 'Open source & licensing',
   credentials: 'Project ID & API keys',
+  'runtime-config': 'Runtime config',
   architecture: 'Architecture',
   'trigger-modes': 'Trigger modes',
   classification: 'Classification pipeline',

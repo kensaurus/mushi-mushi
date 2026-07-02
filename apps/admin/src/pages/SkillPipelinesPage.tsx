@@ -214,7 +214,7 @@ export function SkillPipelinesPage() {
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-skills">
       <PageHeaderBar
         title="Skill Pipelines"
-        description="Attach cursor-kenji skills to reports, run them as pipelines, and track each step live."
+
         helpTitle="About Skill Pipelines"
         helpWhatIsIt="Browse the cursor-kenji skill catalog, attach skills to bug reports, and run handoff or cloud pipeline steps with live status."
         helpUseCases={[

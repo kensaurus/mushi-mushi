@@ -1,3 +1,4 @@
+import { CHIP_TONE } from '../../lib/chipTone'
 import { useState } from 'react'
 
 /**
@@ -121,13 +122,13 @@ export function ObservedRouteCard({ route, maxEventCount }: Props) {
             heading="Test IDs"
             empty="No data-testid attributes seen on this route yet."
             items={route.testids}
-            chipClassName="bg-info-muted/20 text-info ring-1 ring-info/25"
+            chipClassName={`${CHIP_TONE.infoSubtle} ring-1 ring-info/25`}
           />
           <DetailColumn
             heading="API paths"
             empty="No same-origin API requests seen on this route yet."
             items={route.apis}
-            chipClassName="bg-ok-muted/15 text-ok ring-1 ring-ok/25"
+            chipClassName={`${CHIP_TONE.okSubtle} ring-1 ring-ok/25`}
           />
         </div>
       )}
@@ -169,8 +170,8 @@ function ChipCountSummary({
 }) {
   const previewClass =
     tone === 'info'
-      ? 'bg-info-muted/20 text-info ring-1 ring-info/25'
-      : 'bg-ok-muted/15 text-ok ring-1 ring-ok/25'
+      ? CHIP_TONE.infoSubtle + ' ring-1 ring-info/25'
+      : CHIP_TONE.okSubtle + ' ring-1 ring-ok/25'
   // Show first preview chip + count to give the user a "feel" for what the
   // SDK observed without dumping the whole list (tier-C density).
   const first = previewItems[0]

@@ -52,6 +52,7 @@ import { EMPTY_REPO_STATS, type RepoStats, type RepoTabId } from '../components/
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { ProjectReposCard } from '../components/repo/ProjectReposCard'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface RepoBranch {
   id: string
@@ -152,16 +153,16 @@ function bucketize(b: RepoBranch): Bucket {
 
 function ciBadge(b: RepoBranch): { label: string; className: string } {
   const c = b.check_run_conclusion?.toLowerCase()
-  if (c === 'success') return { label: 'CI passing', className: 'bg-ok-subtle text-ok' }
-  if (c === 'failure' || c === 'timed_out') return { label: `CI ${c}`, className: 'bg-danger-subtle text-danger' }
-  if (c === 'action_required') return { label: 'CI action required', className: 'bg-warn-subtle text-warn' }
+  if (c === 'success') return { label: 'CI passing', className: CHIP_TONE.okSubtle }
+  if (c === 'failure' || c === 'timed_out') return { label: `CI ${c}`, className: CHIP_TONE.dangerSubtle }
+  if (c === 'action_required') return { label: 'CI action required', className: CHIP_TONE.warnSubtle }
   const s = b.check_run_status?.toLowerCase()
   if (s === 'in_progress' || s === 'queued' || s === 'pending') {
-    return { label: `CI ${s.replace(/_/g, ' ')}`, className: 'bg-info-subtle text-info' }
+    return { label: `CI ${s.replace(/_/g, ' ')}`, className: CHIP_TONE.infoSubtle }
   }
-  if (b.status === 'failed') return { label: 'Failed', className: 'bg-danger-subtle text-danger' }
-  if (b.status === 'completed' && b.pr_url) return { label: 'PR open', className: 'bg-info-subtle text-info' }
-  if (b.status === 'running' || b.status === 'queued') return { label: b.status, className: 'bg-info-subtle text-info' }
+  if (b.status === 'failed') return { label: 'Failed', className: CHIP_TONE.dangerSubtle }
+  if (b.status === 'completed' && b.pr_url) return { label: 'PR open', className: CHIP_TONE.infoSubtle }
+  if (b.status === 'running' || b.status === 'queued') return { label: b.status, className: CHIP_TONE.infoSubtle }
   return { label: b.status, className: 'bg-surface-overlay text-fg-muted' }
 }
 
@@ -565,7 +566,7 @@ export function RepoPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Repo graph'}
         projectScope={projectName}
-        description={copy?.description ?? 'Every auto-fix branch the worker has opened on this repo — grouped by CI status, with a live activity log.'}
+
         helpTitle={copy?.help?.title ?? 'About the Repo graph'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? "A repo-level view of Mushi's fix pipeline: every draft PR, its branch, and its CI conclusion in one place. Multi-repo projects (e.g. frontend + backend) can have multiple repos linked — each gets its own fix worker run."}
         helpUseCases={copy?.help?.useCases ?? [

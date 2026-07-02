@@ -13,6 +13,7 @@ import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { Skeleton } from './ui'
 import { ActionPill, ActionPillRow, ContainedBlock } from './report-detail/ReportSurface'
 import type { DispatchState } from '../lib/dispatchFix'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface FixAttempt {
   id: string
@@ -48,11 +49,11 @@ const STAGE_LABEL: Record<string, string> = {
 
 const STAGE_TONE: Record<string, string> = {
   idle: 'bg-surface-overlay text-fg-muted',
-  queueing: 'bg-info-subtle text-info',
-  queued: 'bg-info-subtle text-info',
-  running: 'bg-info-subtle text-info animate-pulse',
-  completed: 'bg-ok-subtle text-ok',
-  failed: 'bg-danger-subtle text-danger',
+  queueing: CHIP_TONE.infoSubtle,
+  queued: CHIP_TONE.infoSubtle,
+  running: `${CHIP_TONE.infoSubtle} animate-pulse`,
+  completed: CHIP_TONE.okSubtle,
+  failed: CHIP_TONE.dangerSubtle,
 }
 
 function totalTokens(a: FixAttempt | null): string | null {

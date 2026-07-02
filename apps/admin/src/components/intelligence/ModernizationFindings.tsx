@@ -6,6 +6,7 @@
 import { Link } from 'react-router-dom'
 import { Card, Btn, Badge, RelativeTime, EmptyState } from '../ui'
 import { SEVERITY_TONE, type ModernizationFinding } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   findings: ModernizationFinding[]
@@ -49,7 +50,7 @@ export function ModernizationFindings({
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-edge-subtle px-3 py-2">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-secondary">
           Library modernization
-          <Badge className="ml-2 bg-warn-muted text-warn">{findings.length}</Badge>
+          <Badge className={`ml-2 ${CHIP_TONE.warnSubtle}`}>{findings.length}</Badge>
         </h3>
         <span className="text-2xs text-fg-faint">Weekly cron · Firecrawl-augmented</span>
       </div>

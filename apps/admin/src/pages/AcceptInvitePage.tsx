@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth'
 import { Badge, Btn, Card, DetailRows, Loading, RelativeTime } from '../components/ui'
 import { ContainedBlock, InlineProof, SignalChip } from '../components/report-detail/ReportSurface'
 import { loginPathForLocation } from '../lib/authRedirect'
+import { CHIP_TONE } from '../lib/chipTone'
 
 type PreviewStatus = 'pending' | 'accepted' | 'revoked' | 'expired'
 
@@ -24,8 +25,8 @@ interface PreviewResponse {
 }
 
 const ROLE_TONE: Record<PreviewResponse['invitation']['role'], string> = {
-  admin: 'bg-brand-subtle text-brand',
-  member: 'bg-ok-muted text-ok',
+  admin: CHIP_TONE.brand,
+  member: CHIP_TONE.okSubtle,
   viewer: 'bg-surface-overlay text-fg-muted',
 }
 
@@ -271,7 +272,7 @@ export function AcceptInvitePage() {
         />
 
         {acceptDone ? (
-          <ContainedBlock tone="info" className="mt-5 text-center text-sm text-ok border-ok/30 bg-ok-muted/40">
+          <ContainedBlock tone="ok" className="mt-5 text-center text-sm">
             You're in. Opening {preview.organization?.name ?? 'the workspace'}…
           </ContainedBlock>
         ) : (

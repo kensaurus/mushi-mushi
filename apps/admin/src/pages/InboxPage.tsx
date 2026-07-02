@@ -44,6 +44,7 @@ import {
   InlineProof,
 } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
+import { CHIP_TONE } from '../lib/chipTone'
 
 type Group = InboxCardGroup
 
@@ -232,12 +233,7 @@ export function InboxPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Action inbox'}
         projectScope={stats.projectName ?? undefined}
-        description={
-          copy?.description ??
-          (stats.openActions > 0
-            ? `${stats.openActions} open action${stats.openActions === 1 ? '' : 's'} — work top to bottom on Actions tab`
-            : 'No open actions — cleared stages stay one click away on Stages tab')
-        }
+
         helpTitle={copy?.help?.title ?? 'About the inbox'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
@@ -258,12 +254,12 @@ export function InboxPage() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
+              ? CHIP_TONE.okSubtle
               : bannerSeverity === 'danger'
-                ? 'bg-danger-muted text-danger-foreground'
+                ? CHIP_TONE.dangerSubtle
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn-muted text-warning-foreground'
-                  : 'bg-info-muted text-info-foreground'
+                  ? CHIP_TONE.warnSubtle
+                  : CHIP_TONE.infoSubtle
           }
         >
           {bannerSeverity === 'ok'

@@ -45,6 +45,7 @@ import {
   SignalChip,
 } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface ReporterDevice {
   id: string
@@ -74,10 +75,10 @@ interface AntiGamingEvent {
 }
 
 const EVENT_BADGE: Record<AntiGamingEvent['event_type'], string> = {
-  multi_account: 'bg-warn-muted text-warn',
-  velocity_anomaly: 'bg-danger-muted text-danger',
-  manual_flag: 'bg-danger-muted text-danger',
-  unflag: 'bg-ok-muted text-ok',
+  multi_account: CHIP_TONE.warnSubtle,
+  velocity_anomaly: CHIP_TONE.dangerSubtle,
+  manual_flag: CHIP_TONE.dangerSubtle,
+  unflag: CHIP_TONE.okSubtle,
 }
 
 const EVENT_TYPE_OPTIONS = ['', 'multi_account', 'velocity_anomaly', 'manual_flag', 'unflag']
@@ -375,7 +376,7 @@ export function AntiGamingPage() {
     <div className="space-y-3">
       <PageHeaderBar
         title="Anti-Gaming"
-        description="Protect intake quality — throttle bad-faith reporters, quarantine spam, and audit reward eligibility."
+
         helpTitle="About Anti-Gaming"
         helpWhatIsIt="Detects abusive reporters: the same device fingerprint registering many distinct reporter tokens (multi-account), or a single token submitting too many reports in a short window (velocity anomaly). Device fingerprint is derived server-side from IP + User-Agent and supplemented by an SDK-supplied stable hash."
         helpUseCases={[
@@ -769,10 +770,10 @@ function DeviceCard({ device: d, isExpanded, isBusy, onToggleExpand, onFlag, onU
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               {d.cross_account_flagged && (
-                <Badge className="bg-danger-muted text-danger">cross-account</Badge>
+                <Badge tone="dangerSubtle">cross-account</Badge>
               )}
               {d.flagged_as_suspicious && !d.cross_account_flagged && (
-                <Badge className="bg-danger-muted text-danger">flagged</Badge>
+                <Badge tone="dangerSubtle">flagged</Badge>
               )}
               <code className="text-2xs font-mono text-fg-secondary truncate">
                 fp:{d.device_fingerprint.slice(0, 16)}…
@@ -978,7 +979,7 @@ function WithheldRedemptionRow({
       <div className="flex-1 min-w-0 space-y-0.5">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium truncate">@{handle}</span>
-          <Badge className="bg-warn-muted text-warn">{redemption.kind.replace(/_/g, ' ')}</Badge>
+          <Badge tone="warnSubtle">{redemption.kind.replace(/_/g, ' ')}</Badge>
           {redemption.face_value_usd && (
             <span className="text-xs text-fg-secondary">${redemption.face_value_usd} gift card</span>
           )}

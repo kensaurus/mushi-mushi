@@ -5,12 +5,13 @@
  */
 
 import type { PdcaStageId } from './pdca'
+import { CHIP_TONE } from './chipTone'
 
 export const PDCA_BOTTLENECK_TONE: Record<PdcaStageId, string> = {
-  plan: 'bg-info-muted text-info border border-info/30',
-  do: 'bg-warn-muted text-warn border border-warn/30',
-  check: 'bg-warn-muted text-warn border border-warn/30',
-  act: 'bg-danger-muted text-danger border border-danger/30',
+  plan: CHIP_TONE.infoSubtle,
+  do: CHIP_TONE.warnSubtle,
+  check: CHIP_TONE.warnSubtle,
+  act: CHIP_TONE.dangerSubtle,
 }
 
 export const PDCA_BOTTLENECK_DEEP_LINK: Record<PdcaStageId, string> = {

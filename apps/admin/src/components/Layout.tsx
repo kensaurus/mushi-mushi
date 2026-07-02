@@ -64,6 +64,7 @@ import { appChromeHeaderClass, appChromeMainClass, mobileNavBelowAppChromeClass 
 import { PAGE_SHELL_CLASS, pageLayoutWidthForPath } from '../lib/pageLayout'
 import { AnimatedDisclosure } from './motion/AnimatedDisclosure'
 import { NavSectionStagger } from './motion/NavSectionStagger'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface NavItem extends BuiltNavItem {}
 
@@ -435,7 +436,7 @@ const SECTION_TO_STAGE: Record<string, PdcaStageId> = {
 const STAGE_TONE: Record<NonNullable<NavSection['stage']>, string> = {
   P: 'bg-info/15 text-info border border-info/35',
   D: 'bg-brand/15 text-brand border border-brand/35',
-  C: 'bg-warn-muted/50 text-warning-foreground border border-warn/35',
+  C: CHIP_TONE.warnSubtle + ' border border-warn/35',
   A: 'bg-ok/15 text-ok border border-ok/35',
 }
 
@@ -1373,9 +1374,9 @@ function computeStaleness(
 }
 
 const STALENESS_TONE: Record<SectionStaleness['tone'], string> = {
-  ok: 'bg-ok-muted text-ok',
-  warn: 'bg-warn-muted text-warn',
-  danger: 'bg-danger-muted text-danger',
+  ok: CHIP_TONE.okSubtle,
+  warn: CHIP_TONE.warnSubtle,
+  danger: CHIP_TONE.dangerSubtle,
 }
 
 interface SectionRailHeaderProps {

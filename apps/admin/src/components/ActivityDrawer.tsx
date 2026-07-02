@@ -471,7 +471,7 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
                 <header className="flex items-center gap-1.5 mb-1 sticky top-0 bg-surface-root/95 backdrop-blur-sm py-0.5 z-1">
                   <h3
                     id={`activity-bucket-${b.bucket}`}
-                    className="text-3xs uppercase tracking-wider text-fg-faint font-semibold"
+                    className="text-2xs uppercase tracking-wider text-fg-faint font-semibold"
                   >
                     {BUCKET_LABEL[b.bucket]}
                   </h3>
@@ -528,7 +528,7 @@ function ActivityKpi({
       className={`rounded-sm border ${RING[tone]} px-2 py-1.5`}
       title={hint}
     >
-      <p className="text-3xs uppercase tracking-wider text-fg-faint font-semibold leading-none">{label}</p>
+      <p className="text-2xs uppercase tracking-wider text-fg-faint font-semibold leading-none">{label}</p>
       <p className="mt-1 text-base font-semibold text-fg tabular-nums leading-none">{value}</p>
     </div>
   )
@@ -555,7 +555,7 @@ function EventRow({
         className={`absolute -left-3 top-0.5 inline-flex h-3 w-3 items-center justify-center rounded-full bg-surface-root ${meta.tone}`}
         aria-hidden
       >
-        <span className="text-3xs leading-none">{meta.glyph}</span>
+        <span className="text-2xs leading-none">{meta.glyph}</span>
       </span>
       <div className="flex items-baseline gap-1.5">
         <span className={`text-2xs font-medium ${meta.tone}`}>{meta.caption}</span>
@@ -593,7 +593,7 @@ function EventRow({
           type="button"
           onClick={onToggle}
           aria-expanded={expanded}
-          className="ml-auto text-3xs text-fg-faint hover:text-fg-muted motion-safe:transition-colors focus-visible:outline-none focus-visible:underline"
+          className="ml-auto text-2xs text-fg-faint hover:text-fg-muted motion-safe:transition-colors focus-visible:outline-none focus-visible:underline"
         >
           {expanded ? 'Less ▴' : 'More ▾'}
         </button>

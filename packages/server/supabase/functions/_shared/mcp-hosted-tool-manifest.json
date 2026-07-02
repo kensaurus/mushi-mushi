@@ -59,13 +59,14 @@
   },
   "merge_fix": {
     "scope": "mcp:write",
-    "description": "Squash-merge a fix PR.",
+    "description": "Squash-merge a fix PR into the repo's default branch and mark the report fixed. Destructive and irreversible from Mushi — there is no unmerge endpoint, only a manual revert PR outside this tool. Confirm CI is green and the diff is reviewed before calling.",
     "method": "POST",
     "path": "/v1/admin/fixes/{fixId}/merge",
-    "required": ["fixId"]
+    "required": ["fixId"],
+    "hints": { "destructive": true, "idempotent": true }
   },
   "refresh_ci": {
-    "scope": "mcp:read",
+    "scope": "mcp:write",
     "description": "Refresh GitHub CI status for a fix.",
     "method": "POST",
     "path": "/v1/admin/fixes/{fixId}/refresh-ci",
@@ -87,18 +88,20 @@
   },
   "award_bonus_points": {
     "scope": "mcp:write",
-    "description": "Award bonus points to a contributor.",
+    "description": "Award bonus points (positive only — no reversal endpoint) to a contributor by external user id. Destructive: points post immediately and permanently; confirm the amount and recipient before calling. Tier re-evaluation is not immediate — it runs on the contributor's next tracked activity.",
     "method": "POST",
     "path": "/v1/admin/rewards/bonus-points",
     "required": ["external_user_id", "points", "reason"],
-    "bodyPassthrough": true
+    "bodyPassthrough": true,
+    "hints": { "destructive": true, "idempotent": false }
   },
   "set_tier": {
     "scope": "mcp:write",
-    "description": "Override contributor tier.",
+    "description": "Override a contributor's tier by slug, bypassing point thresholds. Destructive: this is a label-only override that does not replay reward_webhooks, so any host perk normally tied to reaching that tier via points will not auto-grant.",
     "method": "POST",
     "path": "/v1/admin/rewards/set-tier",
-    "bodyPassthrough": true
+    "bodyPassthrough": true,
+    "hints": { "destructive": true, "idempotent": true }
   },
   "setup_repo_for_mushi": {
     "scope": "mcp:write",
@@ -142,12 +145,6 @@
     "description": "Evolution loop history.",
     "method": "GET",
     "path": "/v1/admin/projects/{projectId}/evolution-history"
-  },
-  "activation_status": {
-    "scope": "mcp:read",
-    "description": "Activation cockpit status.",
-    "method": "GET",
-    "path": "/v1/admin/activation?project_id={project_id}"
   },
   "project_integration_health": {
     "scope": "mcp:read",

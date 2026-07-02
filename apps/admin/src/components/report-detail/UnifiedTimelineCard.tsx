@@ -1,13 +1,14 @@
 import { usePageData } from '../../lib/usePageData'
 import { EmptyState, RelativeTime } from '../ui'
 import type { UnifiedTimelineEntry, UnifiedTimelineLane } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 const LANE_PILL: Record<UnifiedTimelineLane, string> = {
   report: 'bg-brand/15 text-brand',
-  reporter_comment: 'bg-info-muted text-info',
-  admin_comment: 'bg-warn-muted text-warn',
-  fix: 'bg-ok-muted text-ok',
-  qa: 'bg-accent-muted/55 text-accent-foreground',
+  reporter_comment: CHIP_TONE.infoSubtle,
+  admin_comment: CHIP_TONE.warnSubtle,
+  fix: CHIP_TONE.okSubtle,
+  qa: CHIP_TONE.accentSubtle,
   skill_pipeline: 'bg-brand/10 text-brand',
   ask_mushi: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
 }

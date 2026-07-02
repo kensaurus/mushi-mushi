@@ -2,6 +2,7 @@ import { Drawer } from '../Drawer'
 import { Badge } from '../ui'
 import { InventoryStatusPill } from './InventoryStatusPill'
 import { Btn } from '../ui'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 /**
  * Action drawer — replaces the previous JSON.stringify dumps with proper
@@ -123,7 +124,7 @@ export function ActionDetailDrawer({
                   key={`w-${i}`}
                   className="flex items-center gap-2 rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-1"
                 >
-                  <Badge className="bg-danger-muted text-danger border border-danger/25 font-mono">
+                  <Badge className={`${CHIP_TONE.dangerSubtle} font-mono`}>
                     {(d.operation ?? 'write').toUpperCase()}
                   </Badge>
                   <code className="text-2xs font-mono text-fg-secondary">
@@ -136,7 +137,7 @@ export function ActionDetailDrawer({
                   key={`r-${i}`}
                   className="flex items-center gap-2 rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-1"
                 >
-                  <Badge className="bg-info-muted text-info border border-info/25 font-mono">
+                  <Badge className={`${CHIP_TONE.infoSubtle} border border-info/25 font-mono`}>
                     READ
                   </Badge>
                   <code className="text-2xs font-mono text-fg-secondary">
@@ -153,7 +154,7 @@ export function ActionDetailDrawer({
             Verified by ({tests.length})
           </p>
           {tests.length === 0 ? (
-            <div className="rounded-sm border border-danger/25 bg-danger-muted p-2 text-2xs text-danger">
+            <div className={`rounded-sm border border-danger/25 ${CHIP_TONE.dangerSubtle} p-2 text-2xs`}>
               No <code className="font-mono">verified_by</code> entry. Without a test reference,
               this action can never reach <strong>verified</strong> status — the reconciler will
               keep it at <strong>wired</strong> at best. Add a Playwright/Vitest spec and
@@ -167,7 +168,7 @@ export function ActionDetailDrawer({
                   className="rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-1.5"
                 >
                   <div className="flex items-center gap-2 mb-0.5">
-                    <Badge className="bg-ok-muted text-ok border border-ok/25 font-mono">
+                    <Badge className={`${CHIP_TONE.okSubtle} font-mono`}>
                       {frameworkLabel(t)}
                     </Badge>
                     <span className="text-fg-secondary truncate">{t.name}</span>

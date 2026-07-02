@@ -1,5 +1,7 @@
 /** Shared QA Coverage story/run types and display constants. */
 
+import { CHIP_TONE } from '../../lib/chipTone'
+
 export interface QaStoryCoverage {
   story_id: string
   project_id: string
@@ -61,7 +63,7 @@ export interface QaEvidence {
 export const PROVIDER_BADGE: Record<string, string> = {
   local: 'bg-surface-overlay text-fg-secondary border-edge-subtle',
   browserbase: 'bg-brand/15 text-brand border-brand/20',
-  firecrawl_actions: 'bg-ok-muted text-ok border-ok/20',
+  firecrawl_actions: CHIP_TONE.okSubtle,
 }
 
 export const PROVIDER_LABEL: Record<string, string> = {
