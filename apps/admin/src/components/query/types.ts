@@ -4,6 +4,28 @@
 
 export type QueryTabId = 'overview' | 'ask' | 'history' | 'schema'
 
+export type QueryMode = 'nl' | 'raw'
+
+export interface HistoryRow {
+  id: string
+  prompt: string
+  sql: string | null
+  summary: string | null
+  explanation: string | null
+  row_count: number
+  error: string | null
+  latency_ms: number | null
+  is_saved?: boolean
+  mode?: QueryMode
+  created_at: string
+}
+
+export interface TeamRow extends HistoryRow {
+  user_id: string | null
+  author_email: string | null
+  author_name: string | null
+}
+
 export interface QueryStats {
   projectId: string | null
   projectName: string | null

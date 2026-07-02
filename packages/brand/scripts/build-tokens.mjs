@@ -131,4 +131,21 @@ const darkBlock = `
 const css = `${header}:root {\n${primitiveLines.join('\n')}\n${semanticRoot}\n}\n${darkBlock}\n`
 
 writeFileSync(OUT, css, 'utf8')
+
+const tsOut = join(ROOT, 'src', 'tokens.generated.ts')
+const tsLines = [
+  '/** AUTO-GENERATED — edit tokens/brand.tokens.json then run: pnpm build:tokens */',
+  '',
+  'export const BRAND_PRIMITIVE_TOKENS = {',
+  ...[...flat.entries()]
+    .filter(([name]) => name.startsWith('--mushi-') && !name.includes('dark-'))
+    .map(([name, value]) => `  ${JSON.stringify(name)}: ${JSON.stringify(value)},`),
+  '} as const',
+  '',
+  'export type BrandPrimitiveTokenName = keyof typeof BRAND_PRIMITIVE_TOKENS',
+  '',
+]
+writeFileSync(tsOut, tsLines.join('\n'), 'utf8')
+
 console.log('[ok] Generated', OUT, `(${flat.size} primitives)`)
+console.log('[ok] Generated', tsOut)

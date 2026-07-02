@@ -10,14 +10,14 @@ import { GUIDE_CLEAR_WHEN_LABEL } from '../../lib/guideCopy'
 import type { WorkflowPosture } from '../../lib/guideLiveOverlay'
 import { GUIDE_STAGE_ROW_NEUTRAL } from '../../lib/guideSurfaces'
 
-/** Chip sits on a tinted row — use raised surface so posture text stays crisp. */
+/** Chip sits on a tinted row — use raised surface + AA foreground tokens so posture text stays crisp. */
 const POSTURE_CHIP: Record<WorkflowPosture, string> = {
-  clear: 'bg-surface-raised text-ok border border-ok/30',
-  open: 'bg-surface-raised text-warn border border-warn/35',
-  warn: 'bg-surface-raised text-warn border border-warn/35',
-  danger: 'bg-surface-raised text-danger border border-danger/35',
-  info: 'bg-surface-raised text-info border border-info/35',
-  ok: 'bg-surface-raised text-ok border border-ok/30',
+  clear: 'bg-surface-raised text-ok-foreground border border-ok/30',
+  open: 'bg-surface-raised text-warning-foreground border border-warn/35',
+  warn: 'bg-surface-raised text-warning-foreground border border-warn/35',
+  danger: 'bg-surface-raised text-danger-foreground border border-danger/35',
+  info: 'bg-surface-raised text-info-foreground border border-info/35',
+  ok: 'bg-surface-raised text-ok-foreground border border-ok/30',
 }
 
 const POSTURE_ROW: Record<WorkflowPosture, string> = {

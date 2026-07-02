@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import 'config.dart';
 import 'offline_queue.dart';
+import 'pii_patterns.g.dart';
 
 /// HTTP client for submitting reports. Scrubs PII from description before
 /// sending. On any non-2xx (or transport error), the payload is enqueued to
@@ -108,52 +109,15 @@ class ApiClient {
 
   // PII scrubbing — Wave S2 / D-16
   //
-  // Mirrors packages/core/src/pii-scrubber.ts so a Flutter user who pastes a
-  // Stripe key, an OpenAI key, a JWT, or a credit card into a bug report
-  // never ships it to our servers. Order matters: high-entropy / high-cost
-  // tokens first so generic email/phone regex never wins a tie. We omit
-  // IPv4/IPv6 by default (too noisy: `192.168.1.1` is rarely PII).
-  static final List<MapEntry<RegExp, String>> _scrubPatterns =
-      <MapEntry<RegExp, String>>[
-    MapEntry(RegExp(r'\b\d{3}-\d{2}-\d{4}\b'), '[REDACTED_SSN]'),
-    MapEntry(RegExp(r'\b(?:\d[ -]*){12,18}\d\b'), '[REDACTED_CC]'),
-    MapEntry(RegExp(r'\b(?:AKIA|ASIA)[0-9A-Z]{16}\b'), '[REDACTED_AWS_KEY]'),
-    MapEntry(
-      RegExp(
-        r'(?:aws_secret_access_key|secret_access_key)["'
-        "'"
-        r'\s:=]+[A-Za-z0-9/+=]{40}\b',
-        caseSensitive: false,
-      ),
-      'aws_secret_access_key=[REDACTED_AWS_SECRET]',
-    ),
-    MapEntry(RegExp(r'\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{24,}\b'),
-        '[REDACTED_STRIPE_KEY]'),
-    MapEntry(RegExp(r'\bpk_(?:live|test)_[A-Za-z0-9]{24,}\b'),
-        '[REDACTED_STRIPE_PK]'),
-    MapEntry(
-        RegExp(r'\bxox[abpor]-[A-Za-z0-9-]{10,}\b'), '[REDACTED_SLACK_TOKEN]'),
-    MapEntry(RegExp(r'\bghp_[A-Za-z0-9]{36}\b'), '[REDACTED_GITHUB_PAT]'),
-    MapEntry(
-        RegExp(r'\bgithub_pat_[A-Za-z0-9_]{80,}\b'), '[REDACTED_GITHUB_PAT]'),
-    MapEntry(RegExp(r'\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b'),
-        '[REDACTED_OPENAI_KEY]'),
-    MapEntry(
-        RegExp(r'\bsk-ant-[A-Za-z0-9_-]{20,}\b'), '[REDACTED_ANTHROPIC_KEY]'),
-    MapEntry(RegExp(r'\bAIza[0-9A-Za-z_-]{35}\b'), '[REDACTED_GOOGLE_KEY]'),
-    MapEntry(RegExp(r'\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b'),
-        '[REDACTED_JWT]'),
-    MapEntry(RegExp(r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b'),
-        '[REDACTED_EMAIL]'),
-    MapEntry(
-        RegExp(
-            r'(?:\+\d{1,3}[\s.\-])?\(?\d{2,4}\)?[\s.\-]\d{3,4}[\s.\-]\d{3,4}\b'),
-        '[REDACTED_PHONE]'),
-  ];
-
+  // Patterns live in pii_patterns.g.dart, generated from the single source of
+  // truth shared with packages/core/src/pii-scrubber.ts (see
+  // packages/core/src/pii-patterns.json) so the JS and Flutter SDKs can't
+  // drift. Order matters: high-entropy / high-cost tokens first so generic
+  // email/phone regex never wins a tie. IPv4/IPv6 are omitted by default
+  // (too noisy: `192.168.1.1` is rarely PII).
   String _scrubPii(String text) {
     var result = text;
-    for (final entry in _scrubPatterns) {
+    for (final entry in kPiiScrubPatterns) {
       result = result.replaceAll(entry.key, entry.value);
     }
     return result;

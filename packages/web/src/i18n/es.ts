@@ -62,6 +62,7 @@ export const es: MushiLocale = {
     elementButton: 'Seleccionar elemento',
     elementSelected: 'Elemento seleccionado ✓',
     elementCapturing: 'Haz clic en cualquier elemento…',
+    elementFailed: 'No se pudo seleccionar — descríbelo en su lugar',
     elementSelectorHint: 'Clic en cualquier elemento · Esc para cancelar',
     optional: '(opcional)',
     tooShort: 'Un poco más de detalle nos ayuda a resolverlo',

@@ -28,10 +28,16 @@ function readEnv(key: string): string | undefined {
       return Deno.env.get(key);
     }
   } catch {
-    /* not Deno */
+    /* no env permission granted (e.g. unit tests run without --allow-env) */
   }
-  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
-  return proc?.env?.[key];
+  try {
+    const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+      .process;
+    return proc?.env?.[key];
+  } catch {
+    /* Deno's Node-compat `process.env` also gates on --allow-env */
+    return undefined;
+  }
 }
 
 const LEVEL_VALUE: Record<LogLevel, number> = {

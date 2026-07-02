@@ -2,6 +2,8 @@
  * Shared types + labels for customer support tickets (/feedback, /billing).
  */
 
+import { runStatusChipTone } from './chipTone'
+
 export type SupportTicketStatus =
   | 'open'
   | 'in_progress'
@@ -46,11 +48,11 @@ export function releaseForTicket(ticket: SupportTicket): ShippedRelease | null {
 }
 
 export const TICKET_STATUS_TONE: Record<SupportTicketStatus, string> = {
-  open: 'bg-warn-muted/50 text-warning-foreground',
-  in_progress: 'bg-brand-subtle text-brand',
-  resolved: 'bg-ok-muted text-ok',
-  closed: 'bg-surface-overlay text-fg-muted',
-  cancelled: 'bg-surface-overlay text-fg-faint border border-edge-subtle',
+  open: runStatusChipTone('open'),
+  in_progress: runStatusChipTone('in_progress'),
+  resolved: runStatusChipTone('resolved'),
+  closed: runStatusChipTone('closed'),
+  cancelled: runStatusChipTone('cancelled'),
 }
 
 export const TICKET_STATUS_LABEL: Record<SupportTicketStatus, string> = {

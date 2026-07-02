@@ -9,13 +9,111 @@
  */
 
 import { markPullRequestReady } from './github.ts'
+import { log } from './logger.ts'
+
+const ghLog = log.child('github-pr')
 
 // ---------------------------------------------------------------------------
 // Low-level fetch helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Reliability fix (production-readiness audit): `ghFetch`/`ghFetchOptional`
+ * used to be a single `fetch()` with no retry, so the core "open a fix PR"
+ * flow (`fix-worker`, `sdk-upgrade-worker`) died on the very first transient
+ * GitHub 5xx or secondary-rate-limit 429. Mirrors the exponential-backoff +
+ * jitter policy already proven in `_shared/embeddings.ts` (added after a
+ * real OpenRouter incident): honour `Retry-After` when GitHub sends it,
+ * fall back to exponential + jitter otherwise, and also retry raw network
+ * failures (DNS hiccup, connection reset) since those are indistinguishable
+ * from a transient outage. 4xx (auth/validation) errors are NOT retried —
+ * retrying a bad request just wastes the retry budget on a deterministic
+ * failure.
+ */
+function readEnvNumber(name: string, fallback: number): number {
+  const raw = Deno.env.get(name)
+  if (!raw) return fallback
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : fallback
+}
+
+const GH_MAX_RETRIES = readEnvNumber('MUSHI_GITHUB_MAX_RETRIES', 3)
+const GH_BASE_BACKOFF_MS = readEnvNumber('MUSHI_GITHUB_BASE_BACKOFF_MS', 500)
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function computeGhRetryDelay(response: Response | null, attempt: number): number {
+  const header = response?.headers.get('retry-after')
+  if (header) {
+    const asSeconds = Number(header)
+    if (Number.isFinite(asSeconds) && asSeconds > 0) {
+      return Math.min(asSeconds * 1000, 30_000)
+    }
+    const asDateMs = Date.parse(header)
+    if (Number.isFinite(asDateMs)) {
+      return Math.min(Math.max(asDateMs - Date.now(), 0), 30_000)
+    }
+  }
+  const base = GH_BASE_BACKOFF_MS * Math.pow(2, attempt)
+  const jitter = base * 0.2 * (Math.random() * 2 - 1)
+  return Math.min(Math.max(base + jitter, 150), 30_000)
+}
+
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || (status >= 500 && status < 600)
+}
+
+/**
+ * Fetch with bounded exponential-backoff+jitter retry for transient GitHub
+ * failures. Returns the raw `Response` — callers decide how to interpret
+ * status codes (ghFetch throws on !ok, ghFetchOptional treats 404 as null).
+ */
+async function fetchGhWithRetry(url: string, init: RequestInit): Promise<Response> {
+  let lastNetworkError: unknown = null
+  for (let attempt = 0; attempt <= GH_MAX_RETRIES; attempt++) {
+    let response: Response
+    try {
+      response = await fetch(url, init)
+    } catch (err) {
+      lastNetworkError = err
+      if (attempt === GH_MAX_RETRIES) throw err
+      const delay = computeGhRetryDelay(null, attempt)
+      ghLog.warn('Network error calling GitHub — retrying', {
+        url,
+        method: init.method ?? 'GET',
+        attempt: attempt + 1,
+        maxAttempts: GH_MAX_RETRIES + 1,
+        delayMs: Math.round(delay),
+        err: String(err).slice(0, 200),
+      })
+      await sleep(delay)
+      continue
+    }
+
+    if (response.ok || !isRetryableStatus(response.status) || attempt === GH_MAX_RETRIES) {
+      return response
+    }
+
+    const delay = computeGhRetryDelay(response, attempt)
+    ghLog.warn('GitHub API retryable error — backing off', {
+      url,
+      method: init.method ?? 'GET',
+      status: response.status,
+      attempt: attempt + 1,
+      maxAttempts: GH_MAX_RETRIES + 1,
+      delayMs: Math.round(delay),
+    })
+    await sleep(delay)
+  }
+  // Unreachable — the loop always returns or throws — but keeps TS happy
+  // and gives a sane error if `GH_MAX_RETRIES` is ever set negative.
+  throw lastNetworkError ?? new Error(`GitHub fetch failed: ${url}`)
+}
+
 export async function ghFetch(url: string, init: RequestInit): Promise<unknown> {
-  const res = await fetch(url, init)
+  const res = await fetchGhWithRetry(url, init)
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`GitHub ${init.method ?? 'GET'} ${url} → ${res.status}: ${text.slice(0, 200)}`)
@@ -24,7 +122,7 @@ export async function ghFetch(url: string, init: RequestInit): Promise<unknown> 
 }
 
 export async function ghFetchOptional(url: string, init: RequestInit): Promise<unknown | null> {
-  const res = await fetch(url, init)
+  const res = await fetchGhWithRetry(url, init)
   if (res.status === 404) return null
   if (!res.ok) return null
   try {

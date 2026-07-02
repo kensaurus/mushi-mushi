@@ -2,6 +2,8 @@
  * LLM operation / function registry — colors, ELI5 copy, and cross-page links.
  */
 
+import { CHIP_TONE } from './chipTone'
+
 export type OperationCategory =
   | 'ingest'
   | 'fix'
@@ -22,13 +24,13 @@ export interface OperationInfo {
 }
 
 export const OPERATION_CATEGORY_CLASS: Record<OperationCategory, string> = {
-  ingest: 'border-info/35 bg-info-muted/45 text-info hover:bg-info-muted/70',
-  fix: 'border-accent/35 bg-accent-muted/45 text-accent hover:bg-accent-muted/70',
-  iterate: 'border-warn/35 bg-warn-muted/45 text-warn hover:bg-warn-muted/70',
-  release: 'border-ok/35 bg-ok-muted/45 text-ok hover:bg-ok-muted/70',
+  ingest: `${CHIP_TONE.infoSubtle} hover:bg-info-muted/70`,
+  fix: `${CHIP_TONE.accentSubtle} hover:bg-accent-muted/70`,
+  iterate: `${CHIP_TONE.warnSubtle} hover:bg-warn-muted/70`,
+  release: `${CHIP_TONE.okSubtle} hover:bg-ok-muted/70`,
   intel: 'border-brand/35 bg-brand/10 text-brand hover:bg-brand/15',
   lessons: 'border-accent/25 bg-surface-overlay text-fg-secondary hover:bg-surface-overlay/80',
-  qa: 'border-info/25 bg-info-muted/30 text-info hover:bg-info-muted/50',
+  qa: `border-info/25 ${CHIP_TONE.infoSubtle} hover:bg-info-muted/50`,
   ops: 'border-edge bg-surface-overlay text-fg-muted hover:bg-surface-overlay/80',
   other: 'border-edge-subtle bg-surface-overlay/60 text-fg-muted hover:bg-surface-overlay',
 }

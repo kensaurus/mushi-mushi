@@ -667,7 +667,7 @@ export function FixesPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Fix drafts & PRs'}
         projectScope={projectName}
-        description={copy?.description ?? 'Every fix attempt and the PR it produced. Expand a card for rationale and CI status.'}
+
         helpTitle={copy?.help?.title ?? 'About drafted fixes'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'When Mushi finds a reproducible bug, it drafts a fix on a branch and opens a pull request for you to review before merge.'}
         helpUseCases={copy?.help?.useCases ?? [

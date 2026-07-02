@@ -13,6 +13,7 @@ import { Section, Input, SelectField, ErrorAlert, Checkbox } from '../ui'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 import { ConfigHelp } from '../ConfigHelp'
 import { slackWebhookUrl, sentryDsn, token } from '../../lib/validators'
+import { CHIP_TONE } from '../../lib/chipTone'
 import { SettingsChangeHint } from './SettingsChangeHint'
 import { SettingsFormFooter } from './SettingsFormFooter'
 import { SettingsPanelLayout } from './SettingsPanelLayout'
@@ -142,9 +143,9 @@ export function GeneralPanel() {
                   disabled={testingSlack}
                   className={`shrink-0 px-2.5 py-1 rounded-sm text-2xs font-medium border transition-colors ${
                     slackTestResult === 'ok'
-                      ? 'border-ok bg-ok-muted/50 text-ok-foreground'
+                      ? `border-ok ${CHIP_TONE.okSubtle}`
                       : slackTestResult === 'err'
-                        ? 'border-danger bg-danger-muted text-danger'
+                        ? `border-danger ${CHIP_TONE.dangerSubtle}`
                         : 'border-edge-subtle text-fg-muted hover:text-fg'
                   }`}
                 >

@@ -19,6 +19,7 @@ import { Btn, Badge } from './ui'
 import { useToast } from '../lib/toast'
 import { RESOLVED_EXTERNAL_API_URL } from '../lib/env'
 import { mushiEnvVarsForProjectSlug, isExpoReporterProject, expoReporterGithubRepo, type ProjectMushiEnvVars } from '../lib/projectMushiEnv'
+import { CHIP_TONE } from '../lib/chipTone'
 
 type Mode = 'raw' | 'env' | 'cursor' | 'admin' | 'expo' | 'github'
 
@@ -141,8 +142,8 @@ function buildGithubCiEnv(projectId: string, apiKey: string, env: ProjectMushiEn
 }
 
 function scopeBadgeTone(scope: string): string {
-  if (scope === 'mcp:write') return 'bg-danger-muted text-danger border border-danger/30'
-  if (scope === 'mcp:read') return 'bg-info-muted text-info border border-info/30'
+  if (scope === 'mcp:write') return CHIP_TONE.dangerSubtle + ' border border-danger/30'
+  if (scope === 'mcp:read') return CHIP_TONE.infoSubtle
   return 'bg-surface-overlay text-fg-muted border border-edge-subtle'
 }
 

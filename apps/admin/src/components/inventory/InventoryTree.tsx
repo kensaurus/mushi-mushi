@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-table'
 import { Badge } from '../ui'
 import { InventoryStatusPill } from './InventoryStatusPill'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 export interface TreeRow {
   id: string
@@ -33,13 +34,13 @@ interface Props {
 function frameworkChip(framework: string | undefined): string {
   switch (framework) {
     case 'playwright':
-      return 'bg-ok-muted text-ok border border-ok/25'
+      return CHIP_TONE.okSubtle
     case 'vitest':
-      return 'bg-warn-muted text-warn border border-warn/25'
+      return CHIP_TONE.warnSubtle + ' border border-warn/25'
     case 'cypress':
-      return 'bg-info-muted text-info border border-info/25'
+      return CHIP_TONE.infoSubtle + ' border border-info/25'
     case 'jest':
-      return 'bg-danger-muted text-danger border border-danger/25'
+      return CHIP_TONE.dangerSubtle
     default:
       return 'bg-surface-overlay text-fg-muted border border-edge-subtle'
   }
@@ -100,7 +101,7 @@ export function InventoryTree({ rows, onRowClick }: Props) {
           if (!list.length) {
             return (
               <Badge
-                className="bg-danger-muted text-danger border border-danger/25 font-mono"
+                className={`${CHIP_TONE.dangerSubtle} font-mono`}
                 title="No verified_by entry — this action has no automated coverage declared in inventory.yaml"
               >
                 untested

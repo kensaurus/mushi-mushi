@@ -3,6 +3,8 @@
  * PURPOSE: Shared shapes for the Research page and subcomponents.
  */
 
+import { CHIP_TONE } from '../../lib/chipTone'
+
 export interface Snippet {
   id: string
   url: string
@@ -38,6 +40,6 @@ export interface FirecrawlConfig {
 }
 
 export const MODE_TONE: Record<SessionRow['mode'], string> = {
-  search: 'bg-info-muted text-info',
+  search: CHIP_TONE.infoSubtle,
   scrape: 'bg-brand/15 text-brand border border-brand/30',
 }

@@ -33,6 +33,8 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
+import { CHIP_TONE } from '../lib/chipTone'
+import { runStatusChipTone } from '../lib/chipTone'
 
 type Provider = 'supabase' | 's3' | 'r2' | 'gcs' | 'minio'
 
@@ -75,10 +77,10 @@ interface StorageUsageRow {
 }
 
 const HEALTH_CHIP: Record<StorageSetting['health_status'], string> = {
-  unknown: 'bg-fg-muted/10 text-fg-muted border-edge-subtle',
-  healthy: 'bg-ok/15 text-ok border-ok/30',
-  degraded: 'bg-warn-muted/50 text-warning-foreground border-warn/30',
-  failing: 'bg-danger-muted/50 text-danger-foreground border-danger/30',
+  unknown: runStatusChipTone('unknown'),
+  healthy: runStatusChipTone('healthy'),
+  degraded: runStatusChipTone('degraded'),
+  failing: runStatusChipTone('failing'),
 }
 
 // New cards (no DB row yet) need a sensible baseline so the user can hit Save
@@ -401,7 +403,7 @@ export function StoragePage() {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {!existing ? (
-                  <span className="inline-flex rounded px-2 py-0.5 text-2xs bg-info-muted/50 text-info-foreground border border-info/30">
+                  <span className={`inline-flex rounded px-2 py-0.5 text-2xs ${CHIP_TONE.infoSubtle}`}>
                     Using cluster default — save to override
                   </span>
                 ) : (
@@ -613,7 +615,7 @@ export function StoragePage() {
       <div className="space-y-4">
         <PageHeaderBar
           title={copy?.title ?? 'Storage'}
-          description={copy?.description ?? 'Per-project BYO bucket configuration for screenshots and attachments.'}
+
           helpTitle={copy?.help?.title ?? 'About BYO Storage'}
           helpWhatIsIt={
             copy?.help?.whatIsIt ??
@@ -655,7 +657,7 @@ export function StoragePage() {
       <PageHeaderBar
         title={copy?.title ?? 'Storage'}
         projectScope={stats.projectName ?? undefined}
-        description={copy?.description ?? 'Per-project BYO bucket configuration for screenshots and attachments.'}
+
         helpTitle={copy?.help?.title ?? 'About BYO Storage'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
@@ -673,7 +675,7 @@ export function StoragePage() {
           'Configure tab saves provider + bucket. Health check runs a write probe and shows step-by-step debug output.'
         }
       >
-        <Badge className={stats.activeProjectHealthStatus === 'healthy' ? 'bg-ok-muted text-ok' : stats.activeProjectHealthStatus === 'failing' ? 'bg-danger-subtle text-danger' : 'bg-warn-muted/50 text-warning-foreground'}>
+        <Badge className={stats.activeProjectHealthStatus === 'healthy' ? CHIP_TONE.okSubtle : stats.activeProjectHealthStatus === 'failing' ? CHIP_TONE.dangerSubtle : CHIP_TONE.warnSubtle}>
           {stats.activeProjectHealthStatus.toUpperCase()}
         </Badge>
       </PageHeaderBar>

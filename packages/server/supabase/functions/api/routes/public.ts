@@ -35,7 +35,6 @@ import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
 import { dbError, ownedProjectIds, callerProjectIds } from '../shared.ts';
 import {
-  canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
   ingestReport,
   invokeFixWorker,
@@ -54,196 +53,21 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   // ============================================================
   // SDK ROUTES (API key auth)
   // ============================================================
-
-  const SDK_WIDGET_POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const;
-  const SDK_WIDGET_THEMES = ['auto', 'light', 'dark'] as const;
-  const SDK_SCREENSHOT_MODES = ['on-report', 'auto', 'off'] as const;
-  const SDK_NATIVE_TRIGGER_MODES = ['shake', 'button', 'both', 'none'] as const;
-  const SDK_WIDGET_LAUNCHERS = ['auto', 'banner', 'edge-tab', 'manual', 'hidden'] as const;
-  const SDK_BANNER_VARIANTS = ['neon', 'brand', 'subtle'] as const;
-  const SDK_BANNER_POSITIONS_LOCAL = ['top', 'bottom'] as const;
-
-  type SdkWidgetPosition = (typeof SDK_WIDGET_POSITIONS)[number];
-  type SdkWidgetTheme = (typeof SDK_WIDGET_THEMES)[number];
-  type SdkScreenshotMode = (typeof SDK_SCREENSHOT_MODES)[number];
-  type SdkNativeTriggerMode = (typeof SDK_NATIVE_TRIGGER_MODES)[number];
-
-  interface SdkConfigRow {
-    project_id?: string;
-    sdk_config_enabled?: boolean | null;
-    sdk_widget_position?: string | null;
-    sdk_widget_theme?: string | null;
-    sdk_widget_trigger_text?: string | null;
-    sdk_widget_launcher?: string | null;
-    sdk_banner_variant?: string | null;
-    sdk_banner_position?: string | null;
-    sdk_banner_bug_cta?: string | null;
-    sdk_banner_feature_cta?: boolean | null;
-    sdk_banner_message?: string | null;
-    sdk_banner_label?: string | null;
-    sdk_screenshot_sensitive_hint?: string | null;
-    sdk_capture_console?: boolean | null;
-    sdk_capture_network?: boolean | null;
-    sdk_capture_performance?: boolean | null;
-    sdk_capture_screenshot?: string | null;
-    sdk_capture_element_selector?: boolean | null;
-    sdk_native_trigger_mode?: string | null;
-    sdk_min_description_length?: number | null;
-    sdk_config_updated_at?: string | null;
-    // Workstream E — page-aware assistant.
-    assistant_enabled?: boolean | null;
-    assistant_label?: string | null;
-    assistant_greeting?: string | null;
-    assistant_suggestions?: unknown;
-  }
-
-  function oneOf<T extends readonly string[]>(
-    value: unknown,
-    allowed: T,
-    fallback: T[number],
-  ): T[number] {
-    return isOneOf(value, allowed) ? (value as T[number]) : fallback;
-  }
-
-  function isOneOf<T extends readonly string[]>(value: unknown, allowed: T): value is T[number] {
-    return typeof value === 'string' && (allowed as readonly string[]).includes(value);
-  }
-
-  function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
-  }
-
-  function normalizeSdkConfig(row?: SdkConfigRow | null) {
-    return {
-      enabled: row?.sdk_config_enabled ?? true,
-      version: row?.sdk_config_updated_at ?? null,
-      widget: {
-        position: oneOf(row?.sdk_widget_position, SDK_WIDGET_POSITIONS, 'bottom-right'),
-        theme: oneOf(row?.sdk_widget_theme, SDK_WIDGET_THEMES, 'auto'),
-        triggerText: row?.sdk_widget_trigger_text ?? null,
-        launcher: oneOf(row?.sdk_widget_launcher, SDK_WIDGET_LAUNCHERS, 'auto'),
-        bannerVariant: oneOf(row?.sdk_banner_variant, SDK_BANNER_VARIANTS, 'brand'),
-        bannerPosition: oneOf(row?.sdk_banner_position, SDK_BANNER_POSITIONS_LOCAL, 'top'),
-        bannerBugCta: row?.sdk_banner_bug_cta ?? null,
-        bannerFeatureCta: row?.sdk_banner_feature_cta ?? true,
-        bannerMessage: row?.sdk_banner_message ?? null,
-        bannerLabel: row?.sdk_banner_label ?? null,
-        // Only emit when the console has set it (non-null) so an unset column
-        // never clobbers a host-configured value. '' → false (hide caption);
-        // any other string → custom caption.
-        ...(row?.sdk_screenshot_sensitive_hint != null
-          ? {
-              screenshotSensitiveHint:
-                row.sdk_screenshot_sensitive_hint === '' ? false : row.sdk_screenshot_sensitive_hint,
-            }
-          : {}),
-      },
-      capture: {
-        console: row?.sdk_capture_console ?? true,
-        network: row?.sdk_capture_network ?? true,
-        performance: row?.sdk_capture_performance ?? false,
-        screenshot: oneOf(row?.sdk_capture_screenshot, SDK_SCREENSHOT_MODES, 'on-report'),
-        elementSelector: row?.sdk_capture_element_selector ?? false,
-      },
-      native: {
-        triggerMode: oneOf(row?.sdk_native_trigger_mode, SDK_NATIVE_TRIGGER_MODES, 'both'),
-        minDescriptionLength: Math.max(0, Math.min(1000, row?.sdk_min_description_length ?? 20)),
-      },
-      // Workstream E — page-aware assistant. `enabled` gates the "Ask" tab in the
-      // widget; greeting/suggestions are display-only. The knowledge corpus and
-      // LLM keys never leave the server (POST /v1/sdk/assistant).
-      assistant: {
-        enabled: row?.assistant_enabled ?? false,
-        label: (typeof row?.assistant_label === 'string' && row.assistant_label.trim())
-          ? row.assistant_label.trim().slice(0, 24)
-          : 'Ask',
-        greeting: typeof row?.assistant_greeting === 'string' ? row.assistant_greeting.slice(0, 400) : null,
-        suggestions: Array.isArray(row?.assistant_suggestions)
-          ? (row.assistant_suggestions as unknown[])
-              .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
-              .map((s) => s.trim().slice(0, 120))
-              .slice(0, 6)
-          : [],
-      },
-    };
-  }
-
-  function coerceSdkConfigUpdate(body: Record<string, unknown>): Record<string, unknown> {
-    const updates: Record<string, unknown> = {};
-    const widget = isRecord(body.widget) ? body.widget : {};
-    const capture = isRecord(body.capture) ? body.capture : {};
-    const native = isRecord(body.native) ? body.native : {};
-
-    if (typeof body.enabled === 'boolean') updates.sdk_config_enabled = body.enabled;
-    if (isOneOf(widget.position, SDK_WIDGET_POSITIONS))
-      updates.sdk_widget_position = widget.position;
-    if (isOneOf(widget.theme, SDK_WIDGET_THEMES)) updates.sdk_widget_theme = widget.theme;
-    if (typeof widget.triggerText === 'string') {
-      const trimmed = widget.triggerText.trim();
-      updates.sdk_widget_trigger_text = trimmed ? widget.triggerText.slice(0, 24) : null;
-    } else if (widget.triggerText === null) {
-      updates.sdk_widget_trigger_text = null;
-    }
-    if (typeof capture.console === 'boolean') updates.sdk_capture_console = capture.console;
-    if (typeof capture.network === 'boolean') updates.sdk_capture_network = capture.network;
-    if (typeof capture.performance === 'boolean')
-      updates.sdk_capture_performance = capture.performance;
-    if (isOneOf(capture.screenshot, SDK_SCREENSHOT_MODES))
-      updates.sdk_capture_screenshot = capture.screenshot;
-    if (typeof capture.elementSelector === 'boolean')
-      updates.sdk_capture_element_selector = capture.elementSelector;
-    if (isOneOf(native.triggerMode, SDK_NATIVE_TRIGGER_MODES))
-      updates.sdk_native_trigger_mode = native.triggerMode;
-    if (Number.isFinite(native.minDescriptionLength)) {
-      updates.sdk_min_description_length = Math.max(
-        0,
-        Math.min(1000, Math.round(native.minDescriptionLength as number)),
-      );
-    }
-    updates.sdk_config_updated_at = new Date().toISOString();
-    return updates;
-  }
-
-  async function canManageProjectSdkConfig(
-    db: ReturnType<typeof getServiceClient>,
-    projectId: string,
-    userId: string,
-  ): Promise<boolean> {
-    // Mirrors api/helpers.ts canManageProjectSdkConfig — kept as a private
-    // copy here because public.ts mounts on the public path and avoids
-    // importing from the admin barrel. Three paths to allowed: direct
-    // project owner, org owner/admin (Teams v1), or legacy
-    // project_members owner/admin.
-    const { data: project } = await db
-      .from('projects')
-      .select('owner_id, organization_id')
-      .eq('id', projectId)
-      .maybeSingle();
-    if (!project) return false;
-
-    if ((project as { owner_id?: string | null }).owner_id === userId) return true;
-
-    if ((project as { organization_id?: string | null }).organization_id) {
-      const { data: orgMember } = await db
-        .from('organization_members')
-        .select('role')
-        .eq('organization_id', (project as { organization_id: string }).organization_id)
-        .eq('user_id', userId)
-        .in('role', ['owner', 'admin'])
-        .maybeSingle();
-      if (orgMember) return true;
-    }
-
-    const { data: member } = await db
-      .from('project_members')
-      .select('role')
-      .eq('project_id', projectId)
-      .eq('user_id', userId)
-      .in('role', ['owner', 'admin'])
-      .maybeSingle();
-
-    return Boolean(member);
-  }
+  //
+  // normalizeSdkConfig / coerceSdkConfigUpdate are intentionally NOT
+  // redefined here — this file used to shadow the imported helpers.ts
+  // versions with a local copy that had drifted (missing
+  // reporterNotificationsEnabled, always-emitted defaults). Use the shared
+  // exports from '../helpers.ts' imported above.
+  //
+  // canManageProjectSdkConfig is also intentionally NOT redefined here — this
+  // file previously imported it AND shadowed it with an identical private
+  // copy that no route in this file ever called (dead code masking the real
+  // import). None of the routes below actually need it (they're API-key or
+  // unauthenticated), so it isn't imported at all now. If a future route in
+  // this file needs the write gate, import it from '../helpers.ts' like every
+  // other route file (identity-secret.ts, sdk-assistant.ts,
+  // settings-research.ts, etc.) does.
 
   app.get('/v1/sdk/latest-version', async (c) => {
     const packageName = c.req.query('package')?.trim();

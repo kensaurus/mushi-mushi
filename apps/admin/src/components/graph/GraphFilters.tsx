@@ -143,7 +143,7 @@ export function GraphFilterChips({
               type="button"
               onClick={() => onToggleEdgeType(et)}
               aria-pressed={active}
-              className={`px-2 py-0.5 rounded-sm text-3xs border font-mono motion-safe:transition-colors ${
+              className={`px-2 py-0.5 rounded-sm text-2xs border font-mono motion-safe:transition-colors ${
                 active
                   ? 'border-edge bg-surface-raised text-fg-secondary'
                   : 'border-edge-subtle bg-transparent text-fg-faint hover:text-fg-muted'
@@ -175,7 +175,7 @@ function FilterChipGroup({ label, allActive, children }: FilterChipGroupProps) {
       <span className="text-2xs uppercase tracking-wider text-fg-faint min-w-[6.5rem]">
         {label}
         {allActive && (
-          <span className="ml-1 text-3xs text-fg-faint/60 normal-case tracking-normal">
+          <span className="ml-1 text-2xs text-fg-faint/60 normal-case tracking-normal">
             (all)
           </span>
         )}

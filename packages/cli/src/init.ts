@@ -23,7 +23,7 @@ import {
   type FrameworkId,
   type PackageManager,
 } from './detect.js'
-import { loadConfig, saveConfig } from './config.js'
+import { ensureClientId, loadConfig, saveConfig } from './config.js'
 import {
   apiKeyHint,
   cliSetupDeepLink,
@@ -98,7 +98,15 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
   const framework = await chooseFramework(detected, options)
 
   const consoleBase = await resolveConsoleUrl({ cwd })
-  const endpoint = resolveCloudEndpoint(options.endpoint)
+  // Honor a previously-saved self-hosted endpoint (`mushi config endpoint …`)
+  // so existing users aren't silently redirected to Mushi Cloud. Precedence:
+  // --endpoint flag → MUSHI_API_ENDPOINT env → saved config → cloud default.
+  const endpoint = resolveCloudEndpoint(
+    options.endpoint ?? process.env.MUSHI_API_ENDPOINT?.trim() ?? loadConfig().endpoint,
+  )
+  // Thread the resolved endpoint through so every downstream step (verify,
+  // connect offer, test report) talks to the same backend.
+  options = { ...options, endpoint }
 
   const credentials = await acquireCredentials(options, consoleBase, endpoint)
   await verifyCredentials(credentials, options, consoleBase)
@@ -265,7 +273,7 @@ async function acquireCredentials(
   }
 
   // 4. Manual paste fallback.
-  return collectCredentialsManually(options, consoleBase)
+  return collectCredentialsManually(options, consoleBase, endpoint)
 }
 
 /**
@@ -283,7 +291,7 @@ async function runBrowserSignIn(
   startSpin.start('Starting secure browser sign-in…')
   let session
   try {
-    session = await startDeviceAuth(endpoint)
+    session = await startDeviceAuth(endpoint, ensureClientId())
   } catch (err) {
     startSpin.stop('Could not start browser sign-in.')
     p.log.warn(err instanceof Error ? err.message : String(err))
@@ -398,11 +406,40 @@ async function runBrowserSignIn(
 async function collectCredentialsManually(
   options: InitOptions,
   consoleBase: string,
+  endpoint: string,
 ): Promise<{ apiKey: string; projectId: string }> {
   const existing = loadConfig()
+  let savedProjectId = existing.projectId
+  let savedApiKey = existing.apiKey
+
+  // Never silently adopt saved credentials. Announce the reuse, check they
+  // still authenticate, and fall back to prompting when they don't. Before
+  // this guard, a stale ~/.config/mushi/config.json meant no prompt was ever
+  // shown and the wizard died later in verifyCredentials with a one-line
+  // error — the exact "terminal just returns to the prompt" report.
+  if (!options.projectId && !options.apiKey && savedProjectId && savedApiKey) {
+    p.log.info(
+      `Found saved credentials from a previous sign-in (project ${sanitizeSecret(savedProjectId).slice(0, 8)}…).`,
+    )
+    const checkSpin = p.spinner()
+    checkSpin.start('Checking saved credentials…')
+    const check = await apiCall<{ project_name: string }>('/v1/sync/whoami', {
+      apiKey: sanitizeSecret(savedApiKey),
+      projectId: sanitizeSecret(savedProjectId),
+      endpoint,
+    })
+    if (check.ok) {
+      checkSpin.stop(`Saved credentials still work (${check.data.project_name}).`)
+    } else {
+      checkSpin.stop('Saved credentials no longer authenticate — enter fresh ones below.')
+      savedProjectId = undefined
+      savedApiKey = undefined
+    }
+  }
+
   const rawProjectId =
     options.projectId ??
-    existing.projectId ??
+    savedProjectId ??
     (await promptText({
       message: 'Project ID',
       placeholder: 'e.g. bdafa28d-b153-482f-bd4f-42981f3fd3a4',
@@ -415,7 +452,7 @@ async function collectCredentialsManually(
 
   const rawApiKey =
     options.apiKey ??
-    existing.apiKey ??
+    savedApiKey ??
     (await promptText({
       message: 'API key',
       placeholder: 'mushi_xxxxxxxxxxxx',
@@ -462,8 +499,32 @@ async function verifyCredentials(
   if (!result.ok) {
     spinner.stop('Credentials could not be verified.')
     p.log.error(result.error?.message ?? 'Authentication failed.')
-    p.log.info(`Double-check values in the console:\n  ${cliSetupDeepLink(consoleBase)}`)
+    // Be explicit about the wizard's state — a bare exit here used to look
+    // like a silent success followed by a missing .env.local.
+    p.log.warn('Setup did NOT complete: nothing was installed and no env vars were written.')
+    p.log.info(
+      [
+        'To recover:',
+        '  • Re-run `npx mushi-mushi` and choose "Sign in with your browser", or',
+        `  • Double-check the Project ID / API key in the console: ${cliSetupDeepLink(consoleBase)}`,
+      ].join('\n'),
+    )
     throw new Error('Credential verification failed — fix Project ID / API key and re-run.')
+  }
+
+  // The API key is the source of truth for which project it belongs to —
+  // `/v1/sync/whoami` resolves `project_id` from the key server-side and
+  // ignores whatever `projectId` the client sent alongside it. A stale saved
+  // config (e.g. the key was later rotated for a different project) would
+  // otherwise pass verification here and then silently write the WRONG
+  // `NEXT_PUBLIC_MUSHI_PROJECT_ID` — reports still land in the key's real
+  // project, but every local env var/tool would point at a project that has
+  // no data. Self-heal by adopting the authoritative id before it's written.
+  if (result.data.project_id && result.data.project_id !== credentials.projectId) {
+    p.log.warn(
+      `Project ID ${redact(credentials.projectId)} doesn't match this API key's project — using the key's actual project (${result.data.project_name}) instead.`,
+    )
+    credentials.projectId = result.data.project_id
   }
 
   spinner.stop(`Connected to ${result.data.project_name}`)

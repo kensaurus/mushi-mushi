@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react'
 import { Btn, Tooltip } from '../ui'
 import type { OperatorTraceLine, OperatorTraceLevel } from './operatorTrace'
 import { summarizeOperatorTrace, traceToClipboardText } from './operatorTrace'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 const LEVEL_CLASS: Record<OperatorTraceLevel, string> = {
   debug: 'text-fg-faint',
@@ -18,8 +19,8 @@ const LEVEL_CLASS: Record<OperatorTraceLevel, string> = {
 
 const LEVEL_BADGE: Record<OperatorTraceLevel, string> = {
   debug: 'bg-surface-overlay text-fg-faint',
-  info: 'bg-info-muted/30 text-info',
-  warn: 'bg-warn-muted/50 text-warning-foreground',
+  info: CHIP_TONE.infoSubtle,
+  warn: CHIP_TONE.warnSubtle,
   error: 'bg-err/15 text-err',
 }
 
@@ -55,7 +56,7 @@ export function OperatorTraceBadge({ lines }: { lines: OperatorTraceLine[] }) {
   const tone =
     summary.errorCount > 0
       ? 'bg-err/20 text-err border-err/30'
-      : 'bg-warn-muted/50 text-warning-foreground border-warn/30'
+      : CHIP_TONE.warnSubtle + ' border-warn/30'
   return (
     <span
       className={`ml-1 inline-flex shrink-0 items-center rounded px-1 py-px text-3xs font-bold uppercase tracking-wide border ${tone} ${summary.errorCount > 0 ? 'motion-safe:animate-pulse' : ''}`}

@@ -207,11 +207,11 @@ export function PlatformIntegrationCard({
               <h3 className="text-sm font-semibold text-fg">{def.label}</h3>
               <HealthPill status={PLATFORM_STATUS_MAP[status]} />
               {!requiredOk && (
-                <Badge className="bg-warn-muted/50 text-warning-foreground border border-warn/30">Not configured</Badge>
+                <Badge tone="warnSubtle">Not configured</Badge>
               )}
               {requiredOk && latestProbe?.checked_at && isStale(latestProbe.checked_at) && (
                 <Tooltip content="Auto-probe runs every 15 min. Click Test to refresh now.">
-                  <Badge className="bg-warn-muted/50 text-warning-foreground border border-warn/30">Stale</Badge>
+                  <Badge tone="warnSubtle">Stale</Badge>
                 </Tooltip>
               )}
               {/* Inheritance source badges */}

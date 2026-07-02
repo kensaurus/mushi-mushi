@@ -23,6 +23,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, Btn, Tooltip, MetricTooltipContent } from '../ui'
+import { CHIP_TONE } from '../../lib/chipTone'
 import { CodeInline } from '../CodePanel'
 import {
   IconBolt,
@@ -124,7 +125,7 @@ function RowStatus({
   }
   if (status === 'completed_no_pr') {
     return wrap(
-      <span className="inline-flex items-center gap-1 rounded-full bg-info-muted/30 border border-info/30 px-2.5 py-0.5 text-2xs font-medium text-info">
+      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-2xs font-medium ${CHIP_TONE.infoSubtle}`}>
         <IconCheck className="h-3.5 w-3.5" aria-hidden /> {label}
       </span>,
     )
@@ -173,7 +174,7 @@ function FreshnessChip({
       return 'bg-ok/10 border-ok/25 text-ok'
     }
     if (resolution.kind === 'catalog-ahead') {
-      return 'bg-info-muted/40 border-info/30 text-info'
+      return CHIP_TONE.infoSubtle
     }
     return 'bg-surface-overlay border-edge-subtle text-fg-muted'
   })()

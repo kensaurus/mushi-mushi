@@ -7,6 +7,7 @@ import { usePageData } from '../../lib/usePageData'
 import { useRealtimeReload } from '../../lib/realtime'
 import { Card, Btn, Badge } from '../ui'
 import { ContainedBlock, InlineProof } from '../report-detail/ReportSurface'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Summary {
   total: number
@@ -63,12 +64,12 @@ export function FeedbackHubStrip({ className = '' }: { className?: string }) {
               </Badge>
             )}
             {(s.votes ?? 0) > 0 && (
-              <Badge className="bg-info-muted text-info text-3xs font-mono">
+              <Badge className={`${CHIP_TONE.infoSubtle} text-3xs font-mono`}>
                 {s.votes} votes
               </Badge>
             )}
             {s.shipped > 0 && (
-              <Badge className="bg-ok-muted text-ok text-3xs font-mono">
+              <Badge className={`${CHIP_TONE.okSubtle} text-3xs font-mono`}>
                 {s.shipped} shipped
               </Badge>
             )}

@@ -12,12 +12,13 @@
 
 import { Link } from 'react-router-dom'
 import { useActivePlan } from '../lib/useActivePlan'
+import { CHIP_TONE } from '../lib/chipTone'
 
 const TONE: Record<string, string> = {
   hobby: 'bg-surface-overlay text-fg-muted border-edge-subtle',
   starter: 'bg-brand-subtle text-brand border-brand/30',
-  pro: 'bg-ok-muted text-ok border-ok/30',
-  enterprise: 'bg-warn-muted/50 text-warning-foreground border-warn/30',
+  pro: CHIP_TONE.okSubtle + ' border-ok/30',
+  enterprise: CHIP_TONE.warnSubtle + ' border-warn/30',
 }
 
 const GLYPH: Record<string, string> = {

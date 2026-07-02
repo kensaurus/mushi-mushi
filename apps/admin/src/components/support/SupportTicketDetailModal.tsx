@@ -105,7 +105,7 @@ export function SupportTicketDetailModal({
     >
       <div className="space-y-3 text-xs">
         {release && release.status === 'published' && (
-          <ContainedBlock tone="info" className="space-y-1 text-ok border-ok/30 bg-ok-muted/20">
+          <ContainedBlock tone="ok" className="space-y-1">
             <p className="text-2xs font-semibold uppercase tracking-wider">
               Shipped in release
             </p>

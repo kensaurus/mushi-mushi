@@ -21,6 +21,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Btn, Tooltip } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { isGithubHostname } from '../../lib/githubUrl'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   /** Active project id -- the card fetches its own `repo_url` from
@@ -263,7 +264,7 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
 const STATUS_TONE: Record<ChecklistItem['status'], { dot: string; pill: string; label: string }> = {
   ready: {
     dot: 'bg-ok',
-    pill: 'bg-ok-muted text-ok border-ok/30',
+    pill: CHIP_TONE.okSubtle + ' border-ok/30',
     label: 'Ready',
   },
   recommended: {

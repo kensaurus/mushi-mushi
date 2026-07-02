@@ -71,6 +71,7 @@
 import { withSentry } from '../_shared/sentry.ts'
 import { propagateRequestId } from '../_shared/internal-headers.ts'
 import { recordMcpToolInvocation } from '../_shared/mcp-tool-audit.ts'
+import { claimMcpToolCallRateLimit } from '../_shared/mcp-rate-limit.ts'
 import { buildManifestTools } from './manifest-tools.ts'
 import { SERVER_INFO_EXTENDED, MUSHI_ICON_SVG_INLINE } from '../_shared/mcp-branding.ts'
 import { parseFeaturesParam, toolMatchesFeatures, DEPRECATED_TOOL_ALIASES, type FeatureFilter } from './feature-groups.ts'
@@ -129,6 +130,10 @@ const ERR_INVALID_PARAMS = -32602
 const ERR_INTERNAL = -32603
 // Mushi-specific: tool failed at the REST layer (HTTP error from /v1/admin/*).
 const ERR_UPSTREAM_HTTP = -32000
+// Mushi-specific: caller exceeded the per-actor tools/call budget (see
+// _shared/mcp-rate-limit.ts). `error.data.retryAfterSeconds` tells the
+// client how long to back off.
+const ERR_RATE_LIMITED = -32001
 
 /**
  * MCP tool registry — name → { scope required, handler }. Each handler
@@ -1215,6 +1220,23 @@ async function handleToolsCall(
       `tool "${name}" requires ${def.scope} scope; caller holds ${callerScope}${ctx.readOnlyMode ? ' (read_only mode)' : ''}`,
     )
   }
+
+  // Per-actor tools/call budget (production-readiness audit item #11): a
+  // leaked mcp:write key could otherwise hammer dispatch_fix/merge_fix/etc.
+  // unthrottled. Keyed on the API-key id when present, else the JWT-auth
+  // user id — resolveAuth() always sets exactly one of the two.
+  const rateLimitActorId = ctx.apiKeyId ?? ctx.ownerUserId
+  if (rateLimitActorId) {
+    const rateMiss = await claimMcpToolCallRateLimit(rateLimitActorId)
+    if (rateMiss) {
+      throw new McpError(
+        ERR_RATE_LIMITED,
+        `Rate limit exceeded: too many tool calls. Retry after ${rateMiss.retryAfterSeconds}s.`,
+        { retryAfterSeconds: rateMiss.retryAfterSeconds },
+      )
+    }
+  }
+
   const args = (params.arguments as Record<string, unknown> | undefined) ?? {}
 
   const recordOutcome = (status: 'ok' | 'error', errorCode?: string) => {
@@ -1257,7 +1279,29 @@ async function handleToolsCall(
       : err instanceof Error && err.message ? err.message.slice(0, 120)
       : 'INTERNAL'
     recordOutcome('error', errorCode)
-    throw err
+    // Production-readiness audit item #13: a tool EXECUTION failure (bad
+    // arguments a handler rejected, a downstream /v1/admin/* 4xx/5xx via
+    // apiCall's ERR_UPSTREAM_HTTP, etc.) must be reported as a *successful*
+    // tools/call result with `isError: true`, per spec — not re-thrown into
+    // a top-level JSON-RPC error. A JSON-RPC error is for problems the tool
+    // call itself can't fix (bad transport, unknown tool, insufficient
+    // scope, rate limited — all of which throw earlier in this function,
+    // outside this try block, and still surface as real JSON-RPC errors).
+    // A tool-execution failure is exactly the kind of thing an LLM caller
+    // should see the message for and retry with adjusted arguments — the
+    // stdio transport gets this for free from the official MCP SDK's
+    // `registerTool`; this hand-rolled hosted dispatcher has to do it
+    // explicitly.
+    const message = err instanceof McpError ? err.message : err instanceof Error ? err.message : String(err)
+    const errorPayload: Record<string, unknown> = { error: message }
+    if (err instanceof McpError) {
+      errorPayload.code = err.code
+      if (err.data !== undefined) errorPayload.data = err.data
+    }
+    return {
+      content: [{ type: 'text', text: JSON.stringify(errorPayload, null, 2) }],
+      isError: true,
+    }
   }
 }
 
@@ -1501,18 +1545,49 @@ async function resolveAuth(req: Request, requestId: string): Promise<CallContext
 
   const auth = req.headers.get('Authorization')
   if (auth?.startsWith('Bearer ')) {
-    // Pass the JWT through. The downstream api function does the heavy
-    // validation via db.auth.getUser(token) — we don't duplicate that
-    // here because (a) it requires the supabase-js client we deliberately
-    // avoid bundling, and (b) any MCP tool will fan-out to /v1/admin/*
-    // which fails closed if the JWT is bad. JWT callers are owners, so
-    // they get the implicit superset scope.
+    const token = auth.slice('Bearer '.length).trim()
+    if (!token) {
+      throw new McpError(ERR_INVALID_REQUEST, 'Authentication required: Bearer token is empty')
+    }
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
+    if (!supabaseUrl || !anonKey) {
+      throw new McpError(ERR_INTERNAL, 'Server not configured for JWT auth')
+    }
+    // Security fix (production-readiness audit): previously ANY string
+    // after "Bearer " was assigned scope: 'mcp:write' with zero local
+    // validation, on the theory that a bad JWT would fail closed once a
+    // tool fanned out to /v1/admin/*. That reasoning breaks for
+    // `tools/list`, which never makes a downstream call — so the full
+    // write-tool catalog (schemas for merge_fix, dispatch_fix,
+    // award_bonus_points, etc.) leaked to any caller who sent garbage in
+    // the Authorization header. This is the MCP "token passthrough"
+    // anti-pattern OWASP/Tyk explicitly warn against. A single GoTrue
+    // round-trip confirms the token is a real, unexpired Supabase session
+    // before any scope is granted; unvalidated bearer tokens now get no
+    // scope instead of the implicit superset.
+    let userRes: Response
+    try {
+      userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        headers: { apikey: anonKey, Authorization: auth },
+      })
+    } catch {
+      throw new McpError(ERR_INVALID_REQUEST, 'Invalid or expired auth token')
+    }
+    if (!userRes.ok) {
+      throw new McpError(ERR_INVALID_REQUEST, 'Invalid or expired auth token')
+    }
+    const user = (await userRes.json().catch(() => null)) as { id?: string } | null
+    if (!user?.id) {
+      throw new McpError(ERR_INVALID_REQUEST, 'Invalid or expired auth token')
+    }
     return {
       authHeaders: propagateRequestId({ Authorization: auth }, requestId),
       scope: 'mcp:write',
       readOnlyMode,
       features,
       requestId,
+      ownerUserId: user.id,
     }
   }
 
@@ -1528,17 +1603,45 @@ async function resolveAuth(req: Request, requestId: string): Promise<CallContext
 
 const ALLOWED_METHODS = 'GET, HEAD, POST, DELETE, OPTIONS'
 
-function isSmitheryScanner(req: Request): boolean {
-  const ua = req.headers.get('User-Agent') ?? ''
-  return /smithery/i.test(ua)
+const SMITHERY_SCANNER_TOKEN_DEFAULT = 'mushi-smithery-publisher-scan'
+
+function smitheryScannerToken(): string {
+  return Deno.env.get('MCP_SMITHERY_SCAN_TOKEN') || SMITHERY_SCANNER_TOKEN_DEFAULT
 }
 
-/** Publisher scan uses SmitheryBot; allow catalog probe without API key. */
+/**
+ * Security fix (production-readiness audit): this previously matched on a
+ * client-controlled `User-Agent` header (`/smithery/i`), which is trivially
+ * spoofable — any caller could claim to be the Smithery scanner in its UA
+ * string and get an unauthenticated catalog probe. We now require the
+ * caller to present the exact bearer token minted by
+ * `buildSmitheryTokenResponse()` (the OAuth stub Smithery's verifier
+ * actually completes), so scanning still requires the handshake instead of
+ * an unverifiable header claim. The token is env-overridable
+ * (`MCP_SMITHERY_SCAN_TOKEN`) so it can be rotated without a code change if
+ * it ever leaks.
+ */
+function isSmitheryScanner(req: Request): boolean {
+  const auth = req.headers.get('Authorization') ?? ''
+  const token = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : ''
+  return token.length > 0 && token === smitheryScannerToken()
+}
+
+/**
+ * Publisher scan uses the stubbed OAuth token to probe the catalog.
+ * Scope is deliberately capped at `mcp:read` — even though the OAuth stub
+ * token nominally advertises `mcp:read mcp:write`, granting write scope
+ * here would disclose full JSON schemas for destructive tools (merge_fix,
+ * dispatch_fix, award_bonus_points, ...) to an unauthenticated directory
+ * crawler. Smithery only needs to confirm the server exists and has tools,
+ * not see the mutating tool surface — same principle as a real mcp:read
+ * API key.
+ */
 function smitheryScannerContext(requestId: string): CallContext {
   return {
     authHeaders: {},
-    scope: 'mcp:write',
-    readOnlyMode: false,
+    scope: 'mcp:read',
+    readOnlyMode: true,
     features: 'all',
     requestId,
   }

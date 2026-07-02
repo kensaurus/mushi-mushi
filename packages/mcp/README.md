@@ -87,9 +87,9 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 Restart Claude Desktop. You should see a hammer icon in the chat input — click it to see the Mushi Mushi tools.
 
 > **Where do I find these values?**
-> - **`MUSHI_API_KEY`**: [Admin console](https://kensaur.us/mushi-mushi/settings) → **Settings → API Keys**
+> - **`MUSHI_API_KEY`**: [Admin → Connect](https://kensaur.us/mushi-mushi/admin/connect) or **MCP** setup — mint an `mcp:read` / `mcp:write` key. This is **not** the SDK ingest key from **Setup → Verify** (`report:write`) and **not** a BYOK key from **Settings → API Keys**.
 > - **`MUSHI_PROJECT_ID`**: [Admin console](https://kensaur.us/mushi-mushi/projects) → click your project → copy the UUID below the project name (e.g. `542b34e0-019e-41fe-b900-7b637717bb86`)
-> - **`MUSHI_API_ENDPOINT`**: [Admin console](https://kensaur.us/mushi-mushi/settings) → **Settings → API Keys** — shown alongside your key
+> - **`MUSHI_API_ENDPOINT`**: Shown when you mint the MCP key, or use your project's API base (`https://<ref>.supabase.co/functions/v1/api`)
 >
 > Or visit **Admin → MCP** in the console for a one-click pre-filled config snippet.
 
@@ -105,9 +105,9 @@ Then set the same three environment variables:
 
 | Variable | Where to find it |
 |---|---|
-| `MUSHI_API_KEY` | Admin console → Settings → API Keys |
+| `MUSHI_API_KEY` | **Connect** or **MCP** tab — mint `mcp:read` / `mcp:write` (not Setup → Verify ingest key; not Settings → BYOK) |
 | `MUSHI_PROJECT_ID` | Admin console → Projects → click project → UUID below the name |
-| `MUSHI_API_ENDPOINT` | Admin console → Settings → API Keys (shown alongside your key) |
+| `MUSHI_API_ENDPOINT` | Shown at key mint, or your Supabase `.../functions/v1/api` base |
 
 Without `MUSHI_PROJECT_ID` the server starts but scoped tools return an empty result with a message pointing you here.
 

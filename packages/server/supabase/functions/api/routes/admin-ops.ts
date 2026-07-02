@@ -17,6 +17,7 @@ import {
   type CheckoutLineItem,
 } from '../../_shared/stripe.ts';
 import { getPlan } from '../../_shared/plans.ts';
+import { withIdempotency } from '../../_shared/idempotency.ts';
 import { notifyOperator } from '../../_shared/operator-notify.ts';
 import { SUPPORT_EMAIL, SUPPORT_URL } from '../../_shared/support.ts';
 import { dbError, ownedProjectIds, resolveOwnedProject } from '../shared.ts';
@@ -1415,6 +1416,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
   // All require JWT auth + project ownership.
   // ----------------------------------------------------------------
   app.post('/v1/admin/billing/checkout', jwtAuth, async (c) => {
+    return withIdempotency(c, async () => {
     const userId = c.get('userId') as string;
     const body = (await c.req.json().catch(() => null)) as {
       project_id?: string;
@@ -1624,9 +1626,11 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     // at the top level previously caused the BillingPage checkout button to
     // silently no-op. .
     return c.json({ ok: true, data: { url: session.url, plan_id: plan.id } });
+    }); // withIdempotency
   });
 
   app.post('/v1/admin/billing/portal', jwtAuth, async (c) => {
+    return withIdempotency(c, async () => {
     const userId = c.get('userId') as string;
     const body = (await c.req.json().catch(() => null)) as { project_id?: string } | null;
     if (!body?.project_id) return c.json({ ok: false, error: { code: 'INVALID_BODY' } }, 400);
@@ -1648,6 +1652,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const session = await createBillingPortalSession(cfg, customer.stripe_customer_id);
     // Wrap in `data` for envelope parity. .
     return c.json({ ok: true, data: { url: session.url } });
+    }); // withIdempotency
   });
 
   // List Stripe invoices for a project. Wraps Stripe's /v1/invoices and

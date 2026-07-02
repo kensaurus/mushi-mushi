@@ -8,6 +8,7 @@ import { Card } from './layout';
 import { RelativeTime } from './metrics';
 import { shouldTooltipNowrap, tooltipLayoutClasses } from './tooltip-layout';
 import { TOOLTIP_POPOVER_SHELL } from '../../lib/pageHelpSurfaces';
+import { CHIP_TONE } from '../../lib/chipTone'
 
 
 /* ── FilterChip ─────────────────────────────────────────────────────────── */
@@ -35,10 +36,10 @@ interface FilterChipProps {
 const CHIP_ACTIVE: Record<FilterChipTone, string> = {
   default: 'bg-surface-overlay text-fg border-fg-faint/40',
   brand:   'bg-brand/15 text-brand border-brand/40',
-  ok:      'bg-ok-muted text-ok border-ok/40',
-  warn:    'bg-warn-muted text-warn border-warn/40',
-  danger:  'bg-danger-muted/50 text-danger-foreground border-danger/40',
-  info:    'bg-info-muted text-info border-info/40',
+  ok:      CHIP_TONE.okSubtle + ' border-ok/40',
+  warn:    CHIP_TONE.warnSubtle + ' border-warn/40',
+  danger:  CHIP_TONE.dangerSubtle + ' border-danger/40',
+  info:    CHIP_TONE.infoSubtle + ' border-info/40',
 }
 
 const CHIP_IDLE: Record<FilterChipTone, string> = {
@@ -262,7 +263,7 @@ const RESULT_CHIP_CLS: Record<ResultChipTone, string> = {
   idle: 'border-edge-subtle bg-surface-overlay/60 text-fg-muted',
   running: 'border-info/35 bg-info/15 text-info font-medium',
   success: 'border-ok/35 bg-ok/15 text-ok font-medium',
-  error: 'border-danger/35 bg-danger-muted/50 text-danger-foreground font-medium',
+  error: `border-danger/35 ${CHIP_TONE.dangerSubtle} font-medium`,
   info: 'border-brand/35 bg-brand-subtle text-brand font-medium',
 }
 
@@ -793,7 +794,7 @@ export function ErrorAlert({
       <div className="flex items-start gap-3">
         <div
           aria-hidden="true"
-          className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-danger-muted/50 text-danger-foreground text-xs font-bold"
+          className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${CHIP_TONE.dangerSubtle} text-xs font-bold`}
         >
           !
         </div>

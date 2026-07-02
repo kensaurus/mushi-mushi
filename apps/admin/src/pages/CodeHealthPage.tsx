@@ -40,6 +40,7 @@ import {
 import { CodeHealthStatusBanner, isCodeHealthStatusBannerCritical } from '../components/code-health/CodeHealthStatusBanner'
 import { CodeHealthReadout } from '../components/code-health/CodeHealthReadout'
 import { CodeHealthGuide } from '../components/code-health/CodeHealthGuide'
+import { CHIP_TONE } from '../lib/chipTone'
 
 // ── Types (mirrors code-health.ts response shapes) ────────────────────────────
 
@@ -101,9 +102,9 @@ function TrendArrow({ delta, higherIsBad }: { delta: number; higherIsBad: boolea
 
 function SeverityBadge({ severity }: { severity: GodFileFinding['severity'] }) {
   if (severity === 'error')
-    return <Badge className="bg-danger-subtle text-danger">Error</Badge>
+    return <Badge tone="dangerSubtle">Error</Badge>
   if (severity === 'warn')
-    return <Badge className="bg-warn-muted/50 text-warning-foreground">Warn</Badge>
+    return <Badge tone="warnSubtle">Warn</Badge>
   return <Badge className="bg-surface-overlay text-fg-secondary">Info</Badge>
 }
 
@@ -116,14 +117,12 @@ function Scorecard({ data }: { data: CodeHealthResponse }) {
 
   const overallCls =
     overall === 'fail'
-      ? 'border-danger/40 bg-danger-subtle'
+      ? CHIP_TONE.dangerSubtle
       : overall === 'warn'
-        ? 'border-warn/40 bg-warn/10'
-        : 'border-ok/40 bg-ok-muted'
+        ? 'border-warn/40 bg-warn/10 text-warning-foreground'
+        : CHIP_TONE.okSubtle
   const overallLabel =
     overall === 'fail' ? 'Issues found' : overall === 'warn' ? 'Warnings' : 'All clear'
-  const overallTextCls =
-    overall === 'fail' ? 'text-danger' : overall === 'warn' ? 'text-warn' : 'text-ok'
 
   // Plain-language verdict for at-a-glance reading
   const LOC_BUDGET = 2000
@@ -139,7 +138,7 @@ function Scorecard({ data }: { data: CodeHealthResponse }) {
     <div className={`rounded-md border px-4 py-3 ${overallCls}`}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex-1 min-w-0">
-          <p className={`text-sm font-semibold ${overallTextCls}`}>{overallLabel}</p>
+          <p className="text-sm font-semibold">{overallLabel}</p>
           <p className="mt-0.5 text-xs text-fg-secondary">{verdict}</p>
           <p className="mt-1.5 text-2xs text-fg-muted">
             <span className="font-medium">What counts:</span> errors = files over {LOC_BUDGET.toLocaleString()} LOC (must fix);
@@ -307,8 +306,8 @@ function GodFileList({ findings }: { findings: GodFileFinding[] }) {
 
   if (findings.length === 0) {
     return (
-      <div className="rounded-md border border-ok/30 bg-ok-muted/40 px-4 py-3">
-        <p className="text-sm font-medium text-ok">All clear</p>
+      <div className={`rounded-md px-4 py-3 ${CHIP_TONE.okSubtle}`}>
+        <p className="text-sm font-medium">All clear</p>
         <p className="mt-0.5 text-xs text-fg-secondary">
           No files exceed the LOC budget in the latest CI push.
         </p>
@@ -427,7 +426,7 @@ export function CodeHealthPage() {
       <div className="flex flex-1 flex-col">
         <PageHeaderBar
           title="Code Health"
-          description="Switch to a project using the selector at the top to view code-health data."
+
         />
         <div className="flex flex-1 items-center justify-center">
           <EmptyState
@@ -443,7 +442,7 @@ export function CodeHealthPage() {
     <div className={PAGE_CONTENT_STACK}>
       <PageHeaderBar
         title="Code Health"
-        description="Tracks bundle KB trends and files over the 2,000-LOC budget across CI pushes."
+
         helpTitle="What is Code Health?"
         helpWhatIsIt="Bundle sizes and god-file findings pushed from your host repo's CI pipeline. Each push records a gate run you can track over time."
         helpHowToUse="Mint an SDK ingest key under Projects, add MUSHI_API_URL + MUSHI_INGEST_KEY to your CI secrets, and include scan-god-files.mjs in bundle-budget.yml. Pair with Full-Stack Audit for backend/schema checks."

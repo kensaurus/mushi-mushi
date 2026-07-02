@@ -6,6 +6,7 @@
 import { Link } from 'react-router-dom'
 import { Card, Btn, Input, Badge } from '../ui'
 import type { Snippet } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   snippet: Snippet
@@ -30,7 +31,7 @@ export function ResearchSnippetCard({ snippet, attachValue, onAttachValueChange,
           <div className="truncate font-mono text-3xs text-fg-faint">{snippet.url}</div>
         </div>
         {snippet.attached_to_report_id ? (
-          <Badge className="shrink-0 bg-ok-muted text-ok">Attached</Badge>
+          <Badge className={`shrink-0 ${CHIP_TONE.okSubtle}`}>Attached</Badge>
         ) : (
           <Badge className="shrink-0 bg-surface-raised text-fg-muted">Unattached</Badge>
         )}

@@ -14,6 +14,19 @@ export interface ManifestToolDef {
   body?: Record<string, unknown>
   bodyPassthrough?: boolean
   transform?: 'fix_suggest' | 'diagnose_connection' | 'qa_run_pick' | 'backend_health'
+  /**
+   * Optional MCP annotation overrides (production-readiness audit item #18).
+   * Every manifest tool used to get a bare `{ readOnlyHint, openWorldHint }`
+   * with no destructiveHint/idempotentHint at all — per the MCP spec, an
+   * omitted destructiveHint defaults to `true` for non-read-only tools, which
+   * happened to be safe-by-accident for tools like merge_fix, but gave no way
+   * to express "not idempotent" (award_bonus_points: retrying after a timeout
+   * double-awards) or to be explicit rather than relying on client-side
+   * defaults. Set this for any tool where the default inference isn't
+   * good enough — mirror the value used in packages/mcp/src/catalog.ts so the
+   * stdio and hosted transports agree.
+   */
+  hints?: { destructive?: boolean; idempotent?: boolean }
 }
 
 type ToolHandler = (
@@ -92,11 +105,18 @@ export function buildManifestTools(deps: {
   const out: Record<string, ToolDef> = {}
 
   for (const [name, spec] of Object.entries(manifest as Record<string, ManifestToolDef>)) {
+    const annotations: Record<string, unknown> = {
+      readOnlyHint: spec.scope === 'mcp:read',
+      openWorldHint: true,
+    }
+    if (spec.hints?.destructive !== undefined) annotations.destructiveHint = spec.hints.destructive
+    if (spec.hints?.idempotent !== undefined) annotations.idempotentHint = spec.hints.idempotent
+
     out[name] = {
       scope: spec.scope,
       description: spec.description,
       inputSchema: { type: 'object', properties: {} },
-      annotations: { readOnlyHint: spec.scope === 'mcp:read', openWorldHint: true },
+      annotations,
       handler: async (args, ctx) => {
         for (const req of spec.required ?? []) {
           requireString(args[req], req)

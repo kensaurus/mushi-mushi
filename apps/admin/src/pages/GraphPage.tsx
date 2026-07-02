@@ -87,6 +87,7 @@ import {
   nodesTooltip,
 } from '../lib/statTooltips/graph'
 import { graphLinks } from '../lib/statCardLinks'
+import { CHIP_TONE } from '../lib/chipTone'
 
 const GRAPH_TABS: Array<{ id: GraphTabId; label: string; description: string }> = [
   {
@@ -619,12 +620,7 @@ export function GraphPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Knowledge Graph'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={
-          copy?.description ??
-          (stats.nodeCount > 0
-            ? `${stats.nodeCount} nodes · Explore tab for blast radius`
-            : 'Banner + GRAPH SNAPSHOT — Overview for posture, Explore for the map.')
-        }
+
         helpTitle={copy?.help?.title ?? 'About the Knowledge Graph'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
@@ -645,11 +641,11 @@ export function GraphPage() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
+              ? CHIP_TONE.okSubtle
               : bannerSeverity === 'danger'
-                ? 'bg-danger-muted/50 text-danger-foreground'
+                ? CHIP_TONE.dangerSubtle
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn-muted/50 text-warning-foreground'
+                  ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
                     ? 'bg-chrome text-fg-secondary'
                     : 'bg-surface-overlay text-fg-muted'

@@ -91,6 +91,7 @@ import {
   uiLayerTooltip,
 } from '../lib/statTooltips/explore'
 import { exploreLinks } from '../lib/statCardLinks'
+import { CHIP_TONE } from '../lib/chipTone'
 
 type DensityMode = 'files' | 'symbols'
 
@@ -699,7 +700,7 @@ export function ExplorePage() {
                   type="button"
                   onClick={() => toggleLayerFilter(layer)}
                   className={[
-                    'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs border transition-[background-color,border-color,color,box-shadow,transform,opacity]',
+                    'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs border transition-[background-color,border-color,color,box-shadow,transform,opacity]',
                     active ? 'font-semibold shadow-sm' : 'hover:border-current',
                   ].join(' ')}
                   style={{
@@ -725,7 +726,7 @@ export function ExplorePage() {
                 value={filenameFilter}
                 onChange={(e) => setFilenameFilter(e.target.value)}
                 placeholder="Filter by filename…"
-                className="text-3xs pl-3 pr-6 py-1 rounded-full border border-edge-subtle bg-surface-raised text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 focus-visible:border-brand/40 w-44"
+                className="text-2xs pl-3 pr-6 py-1 rounded-full border border-edge-subtle bg-surface-raised text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 focus-visible:border-brand/40 w-44"
                 aria-label="Filter files by name"
               />
               {filenameFilter && (
@@ -825,7 +826,7 @@ export function ExplorePage() {
         title={copy?.title ?? 'Explore'}
         projectScope={stats.projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
-        description={copy?.description ?? 'Banner + EXPLORE SNAPSHOT — Overview for posture, Graph/Layers/Search for the atlas.'}
+
         helpTitle={copy?.help?.title ?? 'Codebase Atlas'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
@@ -848,11 +849,11 @@ export function ExplorePage() {
             <Badge
               className={
                 bannerSeverity === 'ok'
-                  ? 'bg-ok-muted text-ok'
+                  ? CHIP_TONE.okSubtle
                   : bannerSeverity === 'danger'
-                    ? 'bg-danger-muted/50 text-danger-foreground'
+                    ? CHIP_TONE.dangerSubtle
                     : bannerSeverity === 'warn'
-                      ? 'bg-warn-muted/50 text-warning-foreground'
+                      ? CHIP_TONE.warnSubtle
                       : bannerSeverity === 'brand'
                         ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                         : 'bg-surface-overlay text-fg-muted'
@@ -1062,7 +1063,7 @@ export function ExplorePage() {
                     : 'border-brand/40 bg-surface-raised'
               }`}
             >
-              <p className="text-3xs font-semibold uppercase tracking-wider text-fg-muted">Top priority</p>
+              <p className="text-2xs font-semibold uppercase tracking-wider text-fg-muted">Top priority</p>
               <p className="mt-1 text-sm font-medium text-fg">{stats.topPriorityLabel}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Link to={stats.topPriorityTo}>

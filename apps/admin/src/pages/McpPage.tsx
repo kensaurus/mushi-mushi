@@ -16,7 +16,7 @@ import { Section,
   FreshnessPill,
   RecommendedAction,
   RelativeTime, } from '../components/ui'
-import { IconIntegrations, IconCheck, IconArrowRight } from '../components/icons'
+import { IconIntegrations, IconArrowRight } from '../components/icons'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
@@ -34,6 +34,8 @@ import { McpStatusBanner } from '../components/mcp/McpStatusBanner'
 import { McpConnectGuide } from '../components/mcp/McpConnectGuide'
 import { McpSnapshotStrip } from '../components/mcp/McpSnapshotStrip'
 import { McpEndpointReadout } from '../components/mcp/McpEndpointReadout'
+import { McpQuickstartStep, type McpQuickstartStepProps } from '../components/mcp/McpQuickstartStep'
+import { McpToolCard, scopeBadgeTone } from '../components/mcp/McpToolCard'
 import {
   ActionPill,
   ActionPillRow,
@@ -47,8 +49,6 @@ import {
   TOOL_CATALOG,
   RESOURCE_CATALOG,
   PROMPT_CATALOG,
-  type ToolSpec,
-  type McpScope,
 } from '../lib/mcpCatalog'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -62,6 +62,7 @@ import {
 import { MCP_CLIENTS } from '@mushi-mushi/mcp/clients'
 import { ClientConnectButton } from '../components/ClientConnectButton'
 import { McpAccountKeyCard } from '../components/McpAccountKeyCard'
+import { CHIP_TONE } from '../lib/chipTone'
 
 const CURSOR_CLIENT = MCP_CLIENTS.find((c) => c.id === 'cursor')!
 const VSCODE_CLIENT = MCP_CLIENTS.find((c) => c.id === 'vscode')!
@@ -148,44 +149,6 @@ function resolveMcpTab(value: string | null): McpTabId {
 
 function isCatalogTabId(v: string | null): v is CatalogTabId {
   return CATALOG_TABS.some((t) => t.id === v)
-}
-
-function scopeBadgeTone(scope: McpScope): string {
-  return scope === 'mcp:write'
-    ? 'bg-warn-muted text-warn border border-warn/30'
-    : 'bg-info-muted text-info border border-info/30'
-}
-
-function hintBadges(spec: ToolSpec) {
-  const chips: Array<{ label: string; tone: string; title: string }> = []
-  if (spec.hints.readOnly) {
-    chips.push({
-      label: 'read-only',
-      tone: 'bg-ok-muted text-ok border border-ok/30',
-      title: 'Client can auto-approve. No side effects.',
-    })
-  } else {
-    chips.push({
-      label: 'writes',
-      tone: 'bg-warn-muted text-warn border border-warn/30',
-      title: 'Will mutate data. Your client should prompt for confirmation.',
-    })
-  }
-  if (spec.hints.destructive) {
-    chips.push({
-      label: 'destructive',
-      tone: 'bg-danger-muted text-danger border border-danger/30',
-      title: 'Can remove data from report queues. Confirm every call.',
-    })
-  }
-  if (spec.hints.idempotent) {
-    chips.push({
-      label: 'idempotent',
-      tone: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
-      title: 'Calling twice with the same args is safe.',
-    })
-  }
-  return chips
 }
 
 function buildSdkInstallSnippet(pkgManager: 'npm' | 'yarn' | 'pnpm'): string {
@@ -381,69 +344,6 @@ function validateMcpJsonSyntax(raw: string): McpJsonCheck {
     title: ok ? 'Syntax looks valid.' : 'Config needs changes.',
     details: details.length > 0 ? details : ['Restart Cursor MCP after saving the file, then run diagnose_setup.'],
   }
-}
-
-interface QuickstartStepProps {
-  n: number
-  title: string
-  body: React.ReactNode
-  tone: 'idle' | 'done' | 'next'
-}
-
-function QuickstartStep({ n, title, body, tone }: QuickstartStepProps) {
-  const badgeTone =
-    tone === 'done'
-      ? 'bg-ok-muted text-ok border-ok/40'
-      : tone === 'next'
-        ? 'bg-brand text-brand-fg border-brand'
-        : 'bg-surface-overlay text-fg-muted border-edge-subtle'
-  return (
-    <div className="flex gap-3 items-start">
-      <span
-        className={`shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full border text-xs font-semibold ${badgeTone}`}
-        aria-hidden="true"
-      >
-        {tone === 'done' ? <IconCheck className="h-3.5 w-3.5" /> : n}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-semibold text-fg">{title}</div>
-        <div className="text-xs text-fg-muted mt-0.5">{body}</div>
-      </div>
-    </div>
-  )
-}
-
-function ToolCard({ tool }: { tool: ToolSpec }) {
-  const stripeTone = tool.scope === 'mcp:write' ? 'bg-warn' : 'bg-info'
-  return (
-    <div className="relative rounded-md border border-edge-subtle bg-surface-raised p-3 pl-4 motion-safe:transition-colors hover:border-edge">
-      <span className={`absolute left-0 top-2 bottom-2 w-0.5 rounded-sm ${stripeTone}`} aria-hidden="true" />
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-fg">{tool.title}</div>
-          <SignalChip tone="neutral" className="font-mono wrap-anywhere max-w-full">
-            {tool.name}
-          </SignalChip>
-        </div>
-        <Badge className={scopeBadgeTone(tool.scope)}>{tool.scope}</Badge>
-      </div>
-      <div className="text-sm text-fg-secondary leading-snug mb-1">
-        <span className="text-accent">“</span>
-        {tool.useCase}
-        <span className="text-accent">”</span>
-      </div>
-      <ContainedBlock tone="muted" className="mb-2">
-        <p className="text-xs leading-snug text-fg-muted">{tool.description}</p>
-      </ContainedBlock>
-      <div className="flex items-center gap-1 flex-wrap">
-        {hintBadges(tool).map((chip) => (
-          <Badge key={chip.label} className={chip.tone} title={chip.title}>
-            {chip.label}
-          </Badge>
-        ))}
-      </div>
-    </div>
-  )
 }
 
 export function McpPage() {
@@ -668,9 +568,9 @@ export function McpPage() {
 
   const hasReadKey = stats.mcpReadKeyCount > 0
   const hasWriteKey = stats.mcpWriteKeyCount > 0
-  const step1Tone: QuickstartStepProps['tone'] = hasReadKey ? 'done' : 'next'
-  const step2Tone: QuickstartStepProps['tone'] = hasReadKey ? (stats.connectedKeyCount > 0 ? 'done' : 'next') : 'idle'
-  const step3Tone: QuickstartStepProps['tone'] = stats.connectedKeyCount > 0 ? 'done' : hasReadKey ? 'next' : 'idle'
+  const step1Tone: McpQuickstartStepProps['tone'] = hasReadKey ? 'done' : 'next'
+  const step2Tone: McpQuickstartStepProps['tone'] = hasReadKey ? (stats.connectedKeyCount > 0 ? 'done' : 'next') : 'idle'
+  const step3Tone: McpQuickstartStepProps['tone'] = stats.connectedKeyCount > 0 ? 'done' : hasReadKey ? 'next' : 'idle'
 
   usePublishPageContext({
     route: '/mcp',
@@ -704,10 +604,7 @@ export function McpPage() {
       <div className="space-y-4" data-testid="mushi-page-mcp">
         <PageHeaderBar
           title={copy?.title ?? 'MCP'}
-          description={
-            copy?.description ??
-            'Connect Cursor, Claude Desktop, or any MCP-aware agent to this project\'s live bug queue.'
-          }
+
           helpTitle={copy?.help?.title ?? 'About MCP'}
           helpWhatIsIt={
             copy?.help?.whatIsIt ??
@@ -769,7 +666,7 @@ export function McpPage() {
       <PageHeaderBar
         title={copy?.title ?? 'MCP'}
         projectScope={displayName}
-        description={copy?.description ?? 'Banner + MCP SNAPSHOT — Overview for posture, Setup for snippet, Catalog for tools.'}
+
         helpTitle={copy?.help?.title ?? 'About MCP'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
@@ -792,9 +689,9 @@ export function McpPage() {
             <Badge
               className={
                 bannerSeverity === 'ok'
-                  ? 'bg-ok-muted text-ok'
+                  ? CHIP_TONE.okSubtle
                   : bannerSeverity === 'warn'
-                    ? 'bg-warn-muted/50 text-warning-foreground'
+                    ? CHIP_TONE.warnSubtle
                     : bannerSeverity === 'brand'
                       ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                       : 'bg-surface-overlay text-fg-muted'
@@ -1019,7 +916,7 @@ export function McpPage() {
                   <Badge
                     className={
                       hasReadKey
-                        ? 'bg-ok-muted text-ok border border-ok/30'
+                        ? CHIP_TONE.okSubtle + ' border border-ok/30'
                         : 'bg-surface-overlay text-fg-muted border border-edge-subtle'
                     }
                     data-testid="mcp-read-status"
@@ -1029,7 +926,7 @@ export function McpPage() {
                   <Badge
                     className={
                       hasWriteKey
-                        ? 'bg-ok-muted text-ok border border-ok/30'
+                        ? CHIP_TONE.okSubtle + ' border border-ok/30'
                         : 'bg-surface-overlay text-fg-muted border border-edge-subtle'
                     }
                     data-testid="mcp-write-status"
@@ -1040,7 +937,7 @@ export function McpPage() {
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
-                <QuickstartStep
+                <McpQuickstartStep
                   n={1}
                   tone={step1Tone}
                   title="Generate an API key"
@@ -1058,7 +955,7 @@ export function McpPage() {
                     )
                   }
                 />
-                <QuickstartStep
+                <McpQuickstartStep
                   n={2}
                   tone={step2Tone}
                   title="Paste the snippet"
@@ -1068,7 +965,7 @@ export function McpPage() {
                     </>
                   }
                 />
-                <QuickstartStep
+                <McpQuickstartStep
                   n={3}
                   tone={step3Tone}
                   title="Ask the agent"
@@ -1384,7 +1281,7 @@ export function McpPage() {
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-sm font-semibold text-fg">Connect all your projects</h3>
-                    <Badge className="bg-info-muted text-info border border-info/30 text-2xs">
+                    <Badge className={`${CHIP_TONE.infoSubtle} text-2xs`}>
                       {projectsQuery.data.projects.length} project{projectsQuery.data.projects.length === 1 ? '' : 's'}
                     </Badge>
                   </div>
@@ -1458,7 +1355,7 @@ export function McpPage() {
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-sm font-semibold text-fg">Account key (all projects, one server)</h3>
-                  <Badge className="bg-info-muted text-info border border-info/30 text-2xs">org-scoped</Badge>
+                  <Badge className={`${CHIP_TONE.infoSubtle} text-2xs`}>org-scoped</Badge>
                 </div>
                 <ContainedBlock tone="muted" className="mt-2">
                   <p className="text-xs text-fg-muted leading-relaxed">
@@ -1576,7 +1473,7 @@ export function McpPage() {
                   </SignalChip>
                   <div className="grid gap-2 md:grid-cols-2" data-testid="mcp-tool-catalog-read">
                     {readTools.map((tool) => (
-                      <ToolCard key={tool.name} tool={tool} />
+                      <McpToolCard key={tool.name} tool={tool} />
                     ))}
                   </div>
                 </div>
@@ -1586,7 +1483,7 @@ export function McpPage() {
                   </SignalChip>
                   <div className="grid gap-2 md:grid-cols-2" data-testid="mcp-tool-catalog-write">
                     {writeTools.map((tool) => (
-                      <ToolCard key={tool.name} tool={tool} />
+                      <McpToolCard key={tool.name} tool={tool} />
                     ))}
                   </div>
                 </div>

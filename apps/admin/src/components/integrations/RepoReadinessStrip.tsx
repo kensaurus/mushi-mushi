@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../../lib/supabase'
 import { Badge, Card } from '../ui'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface CodebaseStats {
   codebase_index_enabled: boolean
@@ -47,20 +48,20 @@ export function RepoReadinessStrip({ projectId, platformRepoUrl }: Props) {
       <div className="flex flex-wrap items-center gap-2">
         <h4 className="text-xs font-semibold text-fg-primary">Repo readiness</h4>
         {ragReady && prReady ? (
-          <Badge className="bg-ok-muted text-ok">Ready for fixes</Badge>
+          <Badge tone="okSubtle">Ready for fixes</Badge>
         ) : (
-          <Badge className="bg-warn-muted text-warn">Incomplete wiring</Badge>
+          <Badge tone="warnSubtle">Incomplete wiring</Badge>
         )}
       </div>
       <ul className="text-2xs text-fg-secondary space-y-1.5">
         <li className="flex flex-wrap items-center gap-2">
           <span className="font-medium text-fg-primary">RAG index</span>
           {indexOn ? (
-            <Badge className={files > 0 ? 'bg-ok-muted text-ok' : 'bg-warn-muted text-warn'}>
+            <Badge className={files > 0 ? CHIP_TONE.okSubtle : CHIP_TONE.warnSubtle}>
               {files > 0 ? `${files.toLocaleString()} files` : 'Indexing…'}
             </Badge>
           ) : (
-            <Badge className="bg-warn-muted text-warn">Off</Badge>
+            <Badge tone="warnSubtle">Off</Badge>
           )}
           {indexRepo ? (
             <code className="font-mono text-3xs truncate max-w-full">{indexRepo}</code>

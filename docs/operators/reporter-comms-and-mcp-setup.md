@@ -306,7 +306,7 @@ Local stdio MCP picks up fixes from `packages/mcp/dist/index.js` after `pnpm --f
 | `packages/server/supabase/functions/api/routes/reports.ts` | Admin routes (`adminOrApiKey`) |
 | `packages/server/supabase/functions/_shared/auth.ts` | `apiKeyAuth` vs `adminOrApiKey` |
 | `packages/mcp/src/server.ts` | Stdio tool → route mapping |
-| `packages/server/supabase/functions/mcp/hosted-tool-manifest.json` | Hosted HTTP tool → route mapping |
+| `packages/server/supabase/functions/_shared/mcp-hosted-tool-manifest.json` | Hosted HTTP tool → route mapping |
 | `packages/cli/src/project-bootstrap.ts` | Global MCP conflict guard |
 | `packages/cli/src/mcp-config.ts` | `buildMcpServerName`, `@latest` pin |
 

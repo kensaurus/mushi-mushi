@@ -55,6 +55,7 @@ import { useNextBestAction } from '../lib/useNextBestAction'
 import { ChartActionsMenu } from '../components/ChartActionsMenu'
 import { ChartAnnotations } from '../components/charts/ChartAnnotations'
 import type { ChartEvent } from '../lib/apiSchemas'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface WeekData {
   week_start: string
@@ -675,7 +676,7 @@ export function JudgePage() {
         title={copy?.title ?? 'Judge'}
         projectScope={stats.projectName ?? projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
-        description={copy?.description ?? 'Banner + JUDGE SNAPSHOT — Overview for posture, Trend for 12w chart, Evaluations for per-report grades.'}
+
         helpTitle={copy?.help?.title ?? 'About the Judge'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? "A second LLM that grades the classifier's output on every report — accuracy, severity, component, and reproduction quality. Scores feed both the weekly aggregate and the per-prompt leaderboard."}
         helpUseCases={copy?.help?.useCases ?? [
@@ -688,11 +689,11 @@ export function JudgePage() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
+              ? CHIP_TONE.okSubtle
               : bannerSeverity === 'danger'
-                ? 'bg-danger-muted/50 text-danger-foreground'
+                ? CHIP_TONE.dangerSubtle
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn-muted/50 text-warning-foreground'
+                  ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
                     ? 'bg-brand/15 text-brand'
                     : 'bg-surface-overlay text-fg-muted'
@@ -1011,7 +1012,7 @@ export function JudgePage() {
                   next.delete('filter')
                   setSearchParams(next, { replace: true })
                 }}
-                className="inline-flex items-center gap-1 px-2 py-0.5 text-2xs rounded-sm border border-warn/40 bg-warn-muted/50 text-warning-foreground hover:bg-warn/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-warn/60"
+                className={`inline-flex items-center gap-1 px-2 py-0.5 text-2xs rounded-sm border border-warn/40 ${CHIP_TONE.warnSubtle} hover:bg-warn/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-warn/60`}
                 aria-label="Clear disagreement filter"
               >
                 <span>Disagreements only</span>

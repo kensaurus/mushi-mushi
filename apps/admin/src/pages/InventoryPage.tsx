@@ -370,7 +370,7 @@ export function InventoryPage() {
   if (!entLoading && !has('inventory_v2')) {
     return (
       <div className="space-y-4">
-        <PageHeaderBar title="User stories & inventory" projectScope={null} description="Maps specs to verified actions." />
+        <PageHeaderBar title="User stories & inventory" projectScope={null} />
         <UpgradePrompt flag="inventory_v2" currentPlan={planName} />
       </div>
     )
@@ -394,7 +394,7 @@ export function InventoryPage() {
         title={copy?.title ?? 'User stories · Inventory'}
         projectScope={null}
         withPageHero={isAdvanced}
-        description={copy?.description ?? 'Positive graph: stories, pages, elements, actions — status derived from gates, crawler, and reconciler.'}
+
         helpTitle={INVENTORY_HELP.title}
         helpWhatIsIt={INVENTORY_HELP.whatIsIt}
         helpUseCases={INVENTORY_HELP.useCases}

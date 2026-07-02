@@ -8,6 +8,7 @@ import { InfoHint, MetricHelpTrigger } from './fields';
 import { Card } from './layout';
 import { Tooltip } from './misc';
 import { Modal } from '../Modal';
+import { CHIP_TONE } from '../../lib/chipTone'
 
 
 /* ── RelativeTime (humanised time + ISO tooltip) ────────────────────────── */
@@ -251,7 +252,7 @@ const META_CHIP_TONES: Record<NonNullable<RecommendedActionMeta['tone']>, string
 const INLINE_ACTION_TONES: Record<NonNullable<RecommendedActionInlineAction['tone']>, string> = {
   primary: 'bg-brand text-brand-fg hover:bg-brand-hover',
   ghost: 'bg-surface-overlay text-fg-secondary hover:text-fg hover:bg-surface-raised border border-edge',
-  danger: 'bg-danger-muted/50 text-danger-foreground hover:bg-danger-muted/70 border border-danger/30',
+  danger: CHIP_TONE.dangerSubtle + ' hover:bg-danger-muted/70 border border-danger/30',
 }
 
 function InlineActionEl({ action }: { action: RecommendedActionInlineAction }) {
@@ -516,15 +517,15 @@ const METRIC_SECTION_META: Record<
 > = {
   shows: {
     Icon: IconEye,
-    chipClass: 'border-info/35 bg-info-muted text-info-foreground',
+    chipClass: `border-info/35 ${CHIP_TONE.infoSubtle}`,
   },
   counted: {
     Icon: IconTerminal,
-    chipClass: 'border-brand/35 bg-brand-subtle text-brand',
+    chipClass: `border-brand/35 ${CHIP_TONE.brand}`,
   },
   takeaway: {
     Icon: IconCheck,
-    chipClass: 'border-ok/35 bg-ok-muted text-ok-foreground',
+    chipClass: `border-ok/35 ${CHIP_TONE.okSubtle}`,
   },
 }
 

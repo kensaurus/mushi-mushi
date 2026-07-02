@@ -85,7 +85,12 @@ function extractHostedTools(content) {
 const canonicalContent = read('packages/mcp/src/catalog.ts')
 const adminContent = read('apps/admin/src/lib/mcpCatalog.ts')
 const hostedContent = read('packages/server/supabase/functions/mcp/index.ts')
-const manifestContent = read('packages/server/supabase/functions/mcp/hosted-tool-manifest.json')
+// Bug fix (production-readiness audit): this used to read
+// `mcp/hosted-tool-manifest.json`, a stale duplicate that was never wired
+// into the hosted server. The manifest `buildManifestTools()` actually
+// loads at runtime lives under `_shared/`. Reading the wrong file meant
+// this drift guard silently never caught real scope/count mismatches.
+const manifestContent = read('packages/server/supabase/functions/_shared/mcp-hosted-tool-manifest.json')
 
 const canonicalEntries = extractEntries(canonicalContent)
 const canonicalMap = new Map(canonicalEntries.map((t) => [t.name, t.scope]))

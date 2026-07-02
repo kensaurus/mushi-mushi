@@ -69,6 +69,10 @@ export interface WidgetRenderCtx {
   screenshotPreview: string | null;
   /** Resolved privacy caption shown beside the preview; null hides it. */
   screenshotHint: string | null;
+  /** False hides the Attach Screenshot button (capture disabled/unavailable). */
+  screenshotAvailable: boolean;
+  /** False hides the Select Element button (selector disabled/unavailable). */
+  elementAvailable: boolean;
   reporterError: string | null;
   magicLinkError: string;
   elementCapturing: boolean;
@@ -81,6 +85,8 @@ export interface WidgetRenderCtx {
   globalLeaderboardLoading: boolean;
   globalLeaderboard: MushiLeaderboardEntry[] | null;
   elementSelected: boolean;
+  /** True when the last element-selection attempt failed or was cancelled unexpectedly. */
+  elementError: boolean;
   crossAppLoading: boolean;
   callbacks: WidgetCallbacks;
   testerJwt: string | null;
@@ -823,13 +829,16 @@ export function renderDetailsStep(ctx: WidgetRenderCtx): string {
 
     const elementLabel = ctx.elementCapturing
       ? t.step3.elementCapturing
-      : ctx.elementSelected
-        ? t.step3.elementSelected
-        : t.step3.elementButton;
+      : ctx.elementError
+        ? t.step3.elementFailed
+        : ctx.elementSelected
+          ? t.step3.elementSelected
+          : t.step3.elementButton;
 
     const elementClass = [
       'mushi-attach-btn',
       ctx.elementSelected ? 'active' : '',
+      ctx.elementError ? 'error' : '',
       ctx.elementCapturing ? 'loading' : '',
     ].filter(Boolean).join(' ');
 
@@ -854,28 +863,32 @@ export function renderDetailsStep(ctx: WidgetRenderCtx): string {
           </div>
         </div>
         <div class="mushi-attachments">
-          <button type="button" class="${screenshotClass}"
+          ${ctx.screenshotAvailable
+            ? `<button type="button" class="${screenshotClass}"
             data-action="screenshot"
             ${ctx.screenshotCapturing ? 'disabled' : ''}
             aria-label="${escapeHtml(screenshotLabel)}"
           >
             ${ctx.screenshotCapturing ? '<span class="mushi-spinner" aria-hidden="true"></span>' : '\uD83D\uDCF8'}
             ${escapeHtml(screenshotLabel)}
-          </button>
+          </button>`
+            : ''}
           ${ctx.screenshotAttached && ctx.allowScreenshotRemove
             ? '<button type="button" class="mushi-attach-btn danger" data-action="remove-screenshot" aria-label="Remove screenshot">\u2715 Remove</button>'
             : ''}
           ${ctx.screenshotAttached
             ? '<button type="button" class="mushi-attach-btn" data-action="annotate-screenshot" aria-label="Mark up screenshot">\u270F Mark up</button><div class="mushi-annotate-host" data-role="annotate-host"></div>'
             : ''}
-          <button type="button" class="${elementClass}"
+          ${ctx.elementAvailable
+            ? `<button type="button" class="${elementClass}"
             data-action="element"
             ${ctx.elementCapturing ? 'disabled' : ''}
             aria-label="${escapeHtml(elementLabel)}"
           >
             ${ctx.elementCapturing ? '<span class="mushi-spinner" aria-hidden="true"></span>' : '\uD83C\uDFAF'}
             ${escapeHtml(elementLabel)}
-          </button>
+          </button>`
+            : ''}
         </div>
         ${ctx.screenshotAttached && ctx.screenshotPreview
           ? `<figure class="mushi-screenshot-preview">

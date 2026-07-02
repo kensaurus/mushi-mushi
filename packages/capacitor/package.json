@@ -59,8 +59,15 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "verify:ios": "cd ios && pod install --silent && xcodebuild -workspace Plugin.xcworkspace -scheme Plugin -destination 'generic/platform=iOS Simulator' build",
-    "verify:android": "cd android && ./gradlew clean build"
+    "verify:android": "cd android && ./gradlew clean build",
+    "size": "size-limit"
   },
+  "size-limit": [
+    {
+      "path": "dist/index.js",
+      "limit": "2.5 KB"
+    }
+  ],
   "keywords": [
     "mushi-mushi",
     "capacitor",
@@ -95,7 +102,9 @@
     "@capacitor/core": "^8.4.0",
     "@mushi-mushi/eslint-config": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
+    "@size-limit/file": "^12.1.0",
     "eslint": "^10.4.1",
+    "size-limit": "^12.1.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"

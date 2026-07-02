@@ -197,4 +197,35 @@ test.describe('Admin chrome budget (PagePosture)', () => {
       })
     }
   }
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`contrast spot-check — /health and /reports (${theme})`, async ({ page, request }) => {
+      await seedSession(page, 'advanced', theme, request)
+      for (const route of ['/health', '/reports'] as const) {
+        await page.goto(`${ADMIN_URL}${route}?project=${PROJECT_ID}`, { waitUntil: 'domcontentloaded' })
+        await page.getByRole('button', { name: 'Dismiss' }).click({ timeout: 2000 }).catch(() => {})
+        await page.waitForTimeout(400)
+
+        const violations = await page.evaluate(() => {
+          const bad: string[] = []
+          const mutedBg = /\bbg-(ok|warn|danger|info|accent|brand)-muted(?:\/[\d.]+)?\b/
+          const rawText = /\btext-(ok|warn|danger|info|accent|brand)(?!-(?:foreground|fg)\b)\b/
+          for (const el of document.querySelectorAll('[class*="bg-"][class*="text-"]')) {
+            const cls = el.className
+            if (typeof cls !== 'string' || cls.includes('CHIP_TONE')) continue
+            const atRest = cls
+              .split(/\s+/)
+              .filter((c) => !/^(?:hover:|focus:|active:|group-hover:)/.test(c))
+              .join(' ')
+            if (mutedBg.test(atRest) && rawText.test(atRest)) {
+              bad.push(atRest.slice(0, 120))
+            }
+          }
+          return bad
+        })
+
+        expect(violations, `${route} (${theme}) should have no raw semantic-on-muted chips`).toEqual([])
+      }
+    })
+  }
 })

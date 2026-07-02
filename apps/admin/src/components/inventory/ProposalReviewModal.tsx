@@ -4,6 +4,7 @@ import { Modal } from '../Modal'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { usePageData } from '../../lib/usePageData'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 /**
  * ProposalReviewModal — beautified, tabbed review surface for an
@@ -564,7 +565,7 @@ function PageBlock({ page }: { page: ProposedPage }) {
               </span>
               <span className="text-fg truncate min-w-0 flex-1">{el.action ?? el.id}</span>
               {el.testid && (
-                <code className="hidden sm:inline px-1 py-0.5 rounded bg-info-muted/15 text-info text-3xs font-mono">
+                <code className={`hidden sm:inline px-1 py-0.5 rounded ${CHIP_TONE.infoSubtle} text-3xs font-mono`}>
                   {el.testid}
                 </code>
               )}

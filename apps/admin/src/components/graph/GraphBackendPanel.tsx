@@ -57,7 +57,7 @@ function buildBackendRows(data: GraphBackendStatus): DetailRowItem[] {
       label: 'AGE extension',
       value: data.ageAvailable
         ? <Badge className="bg-ok/15 text-ok border border-ok/30">Available</Badge>
-        : <Badge className="bg-warn-muted/50 text-warning-foreground border border-warn/30">Not installed</Badge>,
+        : <Badge tone="warnSubtle">Not installed</Badge>,
       hint: 'Whether the Apache AGE Postgres extension is loaded on the database.',
     },
     {

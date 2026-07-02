@@ -19,7 +19,7 @@ const ROOT = resolve(__dirname, '../../..')
 function extractHostedToolCount() {
   const hostedContent = readFileSync(resolve(ROOT, 'packages/server/supabase/functions/mcp/index.ts'), 'utf8')
   const manifest = JSON.parse(
-    readFileSync(resolve(ROOT, 'packages/server/supabase/functions/mcp/hosted-tool-manifest.json'), 'utf8'),
+    readFileSync(resolve(ROOT, 'packages/server/supabase/functions/_shared/mcp-hosted-tool-manifest.json'), 'utf8'),
   )
   const names = new Set(Object.keys(manifest))
   const toolsSection =

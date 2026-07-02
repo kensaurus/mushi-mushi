@@ -1,3 +1,5 @@
+import { CHIP_TONE } from '../../lib/chipTone'
+
 /** Strip ANSI SGR sequences from SDK / terminal log lines. */
 export function stripAnsi(text: string): string {
   return text.replace(/\u001b\[[0-9;]*m/g, '')
@@ -105,8 +107,8 @@ export const META_PILL_BASE =
   'inline-flex items-center rounded-sm border px-1.5 py-0.5 text-2xs font-semibold tabular-nums'
 
 export const PLATFORM_PILL: Record<string, string> = {
-  ios: `${META_PILL_BASE} bg-info-muted text-info border-info/25 uppercase tracking-wide`,
-  android: `${META_PILL_BASE} bg-ok-muted text-ok border-ok/25 uppercase tracking-wide`,
+  ios: `${META_PILL_BASE} ${CHIP_TONE.infoSubtle} uppercase tracking-wide`,
+  android: `${META_PILL_BASE} ${CHIP_TONE.okSubtle} uppercase tracking-wide`,
   web: `${META_PILL_BASE} bg-brand/12 text-brand border-brand/25 uppercase tracking-wide`,
   macos: `${META_PILL_BASE} bg-surface-overlay text-fg-secondary border-edge-subtle uppercase tracking-wide`,
   darwin: `${META_PILL_BASE} bg-surface-overlay text-fg-secondary border-edge-subtle uppercase tracking-wide`,
@@ -121,7 +123,7 @@ export function platformPillClass(platform: string): string {
 }
 
 export const BROWSER_CHIP: Record<'browser' | 'engine' | 'os', string> = {
-  browser: 'border-info/25 bg-info-muted/40 text-info',
+  browser: `border-info/25 ${CHIP_TONE.infoSubtle}`,
   engine: 'border-edge-subtle bg-surface-overlay/50 text-fg-secondary',
   os: 'border-brand/20 bg-brand/8 text-brand',
 }

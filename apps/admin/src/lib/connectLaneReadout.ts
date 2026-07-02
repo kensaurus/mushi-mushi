@@ -6,6 +6,7 @@
 
 import type { StepNodeData } from '../components/connect/ConnectStepFlow'
 import type { WorkflowPosture } from './guideLiveOverlay'
+import { CHIP_TONE } from './chipTone'
 
 const DONE_BLURB: Record<string, string> = {
   github: 'Your repo is linked and ready for upgrade PRs.',
@@ -58,12 +59,12 @@ export interface ConnectLaneReadoutModel {
 }
 
 const CHIP: Record<WorkflowPosture, string> = {
-  clear: 'bg-ok-muted/50 text-ok border-ok/25',
-  ok: 'bg-ok-muted/50 text-ok border-ok/25',
+  clear: `${CHIP_TONE.okSubtle} border-ok/25`,
+  ok: `${CHIP_TONE.okSubtle} border-ok/25`,
   open: 'bg-warn-muted/40 text-warning-foreground border-warn/30',
   warn: 'bg-warn-muted/40 text-warning-foreground border-warn/30',
-  danger: 'bg-danger-muted/40 text-danger border-danger/30',
-  info: 'bg-info-muted/40 text-info border-info/30',
+  danger: `${CHIP_TONE.dangerSubtle} border-danger/30`,
+  info: `${CHIP_TONE.infoSubtle} border-info/30`,
 }
 
 const BORDER: Record<WorkflowPosture, string> = {

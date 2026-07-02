@@ -47,6 +47,7 @@ import { PAGE_SIZE, type ReportRow, type SortDir, type SortField } from '../comp
 import { pluralize, pluralizeWithCount } from '../lib/format'
 import { DogfoodNarrativeBanner } from '../components/DogfoodNarrativeBanner'
 import { SdkConnectivityEmptyState } from '../components/SdkHealthSummary'
+import { IconReports } from '../components/icons'
 
 export function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -667,6 +668,7 @@ export function ReportsPage() {
     <div>
       <PageHeaderBar
         title={copy?.title ?? 'Reports'}
+        icon={<IconReports />}
         projectScope={projectName}
         description={copy?.description ?? 'User-felt friction reports waiting for review. Sort by severity, dispatch fixes, or dismiss noise.'}
         helpTitle={copy?.help?.title ?? 'About Reports'}

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -10,15 +10,24 @@ import { QueryStatusBanner } from '../components/query/QueryStatusBanner'
 import { QueryGuide } from '../components/query/QueryGuide'
 import { QuerySnapshotStrip } from '../components/query/QuerySnapshotStrip'
 import { QueryReadout } from '../components/query/QueryReadout'
-import { EMPTY_QUERY_STATS, type QueryStats, type QueryTabId } from '../components/query/types'
+import { QueryCopyButton } from '../components/query/QueryCopyButton'
+import { QueryResultsTable } from '../components/query/QueryResultsTable'
+import { HistoryItem, TeamItem } from '../components/query/QueryHistoryPanel'
+import { QueryPromptLibrary, PROMPT_CATEGORIES } from '../components/query/QueryPromptLibrary'
+import {
+  EMPTY_QUERY_STATS,
+  type HistoryRow,
+  type QueryMode,
+  type QueryStats,
+  type QueryTabId,
+  type TeamRow,
+} from '../components/query/types'
 import { SetupNudge } from '../components/SetupNudge'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { ResponsiveTable } from '../components/ResponsiveTable'
 import {
   Card,
   Btn,
-  RelativeTime,
   Loading,
   Skeleton,
   ErrorAlert,
@@ -34,20 +43,10 @@ import {
   SignalChip,
 } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
-import {
-  IconClock,
-  IconReports,
-  IconUser,
-  IconCamera,
-  IconJudge,
-  IconCopy,
-  IconCheck,
-} from '../components/icons'
 import { useToast } from '../lib/toast'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-
-type QueryMode = 'nl' | 'raw'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface QueryResult {
   sql: string
@@ -56,26 +55,6 @@ interface QueryResult {
   summary?: string
   latencyMs?: number
   rowCount?: number
-}
-
-interface HistoryRow {
-  id: string
-  prompt: string
-  sql: string | null
-  summary: string | null
-  explanation: string | null
-  row_count: number
-  error: string | null
-  latency_ms: number | null
-  is_saved?: boolean
-  mode?: QueryMode
-  created_at: string
-}
-
-interface TeamRow extends HistoryRow {
-  user_id: string | null
-  author_email: string | null
-  author_name: string | null
 }
 
 interface RunItem {
@@ -143,593 +122,6 @@ WHERE project_id = $1
 GROUP BY severity
 ORDER BY count DESC
 LIMIT 100`
-
-// Category-keyed prompt library. Replaces the previous flat SUGGESTIONS row +
-// SQL_HINTS card stack — those two surfaces were showing the same kind of
-// hint twice (once as a button, once as a list item with an italic "why
-// this works" caption), which read as a wall of text on first paint.
-// Categorising by user intent (Trends / Components / Reporters / Telemetry
-// / Quality) chunks the choice (Hick's Law) and lets the operator skip to
-// the lane they came for. The `why` line stays as a hover tooltip rather
-// than a permanent caption — progressive disclosure (NN/g #8).
-interface PromptItem {
-  prompt: string
-  why: string
-}
-interface PromptCategory {
-  id: string
-  label: string
-  icon: ReactNode
-  /** Tailwind tone class — applied as bg/text on the active tab + the
-   *  category icon swatch so the user can tell categories apart at a
-   *  glance even after the tab strip scrolls out of view. */
-  tone:
-    | 'text-info'
-    | 'text-brand'
-    | 'text-ok'
-    | 'text-warn'
-    | 'text-fg-secondary'
-  blurb: string
-  prompts: PromptItem[]
-}
-
-const PROMPT_CATEGORIES: readonly PromptCategory[] = [
-  {
-    id: 'trends',
-    label: 'Trends',
-    icon: <IconClock />,
-    tone: 'text-info',
-    blurb: 'Time-bucketed deltas — phrase the comparison explicitly.',
-    prompts: [
-      {
-        prompt: 'How many P0/P1 reports landed this week vs last week?',
-        why: 'Anchor the LLM on a concrete comparison so it picks the right time-bucket SQL.',
-      },
-      {
-        prompt: 'How many critical bugs were reported this week?',
-        why: 'Single-bucket count over the rolling 7d window — fastest to verify by eyeballing.',
-      },
-      {
-        prompt: 'List components that regressed (fixed → reopened) in the last 30 days',
-        why: 'Mention "regressed" so the LLM joins reports.fixed_at with later events.',
-      },
-    ],
-  },
-  {
-    id: 'components',
-    label: 'Components',
-    icon: <IconReports />,
-    tone: 'text-brand',
-    blurb: 'Group reports by surface, package, or feature.',
-    prompts: [
-      {
-        prompt: 'Which component has the most bugs?',
-        why: 'Single-column GROUP BY — easy to validate against your gut feel.',
-      },
-      {
-        prompt: 'Top 5 components by report count this month',
-        why: 'Pre-bound limit + window keeps the result set small + the LLM cheap.',
-      },
-      {
-        prompt: 'Show reports that might be regressions',
-        why: 'Lets the LLM lean on `is_regression` heuristics in the schema.',
-      },
-    ],
-  },
-  {
-    id: 'reporters',
-    label: 'Reporters',
-    icon: <IconUser />,
-    tone: 'text-ok',
-    blurb: 'Slice by who reported, with reputation + agreement signals.',
-    prompts: [
-      {
-        prompt: 'Which reporters have the highest agreement rate with the judge?',
-        why: 'Anchor on a known metric (classification_agreed) so the SQL stays read-only.',
-      },
-      {
-        prompt: 'List dismissed reports with low reputation reporters',
-        why: 'Pairs status + reputation in one filter — good signal-to-noise sample.',
-      },
-    ],
-  },
-  {
-    id: 'telemetry',
-    label: 'Telemetry',
-    icon: <IconCamera />,
-    tone: 'text-warn',
-    blurb: 'Coverage of screenshots, console logs, repro steps.',
-    prompts: [
-      {
-        prompt: 'Reports with screenshots but no console logs in the last 7 days',
-        why: 'Pair two columns to test telemetry coverage end-to-end.',
-      },
-      {
-        prompt: 'Average classifier latency by model over the last 14 days',
-        why: 'Time window keeps the result set small + the LLM cheap.',
-      },
-    ],
-  },
-  {
-    id: 'quality',
-    label: 'Quality',
-    icon: <IconJudge />,
-    tone: 'text-fg-secondary',
-    blurb: 'Judge scores, classification agreement, fix outcomes.',
-    prompts: [
-      {
-        prompt: 'Average judge score by week (last 4 weeks)',
-        why: 'Bounded series — render the trend without paginating.',
-      },
-      {
-        prompt: 'Which classifier model has the best agreement with the judge?',
-        why: 'Direct head-to-head — cite a single metric so the SQL stays sharp.',
-      },
-    ],
-  },
-]
-
-function asTable(rows: unknown[]): { columns: string[]; data: Record<string, unknown>[] } | null {
-  if (!Array.isArray(rows) || rows.length === 0) return null
-  const objects = rows.filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
-  if (objects.length === 0) return null
-  const cols = new Set<string>()
-  for (const obj of objects.slice(0, 50)) {
-    for (const k of Object.keys(obj)) cols.add(k)
-  }
-  return { columns: [...cols], data: objects }
-}
-
-function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }) {
-  const toast = useToast()
-  const [copied, setCopied] = useState(false)
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        void navigator.clipboard
-          .writeText(value)
-          .then(() => {
-            setCopied(true)
-            toast.success('Copied to clipboard')
-            setTimeout(() => setCopied(false), 1500)
-          })
-          .catch(() => toast.error('Could not copy'))
-      }}
-      className="inline-flex items-center gap-1 text-3xs text-fg-faint hover:text-fg motion-safe:transition-colors px-1.5 py-0.5 rounded-sm hover:bg-surface-overlay/50"
-      aria-label={label}
-    >
-      {copied ? <IconCheck size={12} /> : <IconCopy size={12} />}
-      <span>{copied ? 'Copied' : label}</span>
-    </button>
-  )
-}
-
-// One row of the user's saved/recent history list. The pin + delete buttons
-// are touch-visible at narrow viewports (≤ pointer:coarse) and hover-revealed
-// on desktop — `focus-within` keeps them keyboard-reachable too.
-function HistoryItem({
-  row,
-  onRerun,
-  onToggleSave,
-  onDelete,
-}: {
-  row: HistoryRow
-  onRerun: () => void
-  onToggleSave: () => void
-  onDelete: () => void
-}) {
-  return (
-    <li className="rounded-sm border border-edge-subtle p-2 hover:bg-surface-overlay/30 motion-safe:transition-colors group focus-within:border-edge">
-      <button
-        type="button"
-        onClick={onRerun}
-        className="text-left w-full text-2xs text-fg-secondary hover:text-fg"
-        title={row.error ?? 'Click to rerun'}
-      >
-        <span className="inline-flex items-center gap-1.5 w-full min-w-0">
-          {row.mode === 'raw' && (
-            <span className="inline-flex shrink-0 px-1 py-0.5 rounded-[2px] text-2xs font-mono font-medium bg-warn-muted/50 text-warning-foreground border border-warn/20">SQL</span>
-          )}
-          <span className="line-clamp-2">{row.prompt}</span>
-        </span>
-      </button>
-      <div className="flex items-center justify-between mt-1 text-3xs text-fg-faint font-mono gap-1">
-        <span className="truncate">
-          <RelativeTime value={row.created_at} />
-          {row.error ? (
-            <span className="ml-1 text-danger">· error</span>
-          ) : (
-            <span className="ml-1">
-              · {row.row_count} row{row.row_count === 1 ? '' : 's'}
-            </span>
-          )}
-        </span>
-        <span className="flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            onClick={onToggleSave}
-            className={`motion-safe:transition-opacity hover:text-brand ${
-              row.is_saved ? 'text-brand' : 'opacity-60 group-hover:opacity-100 group-focus-within:opacity-100'
-            }`}
-            aria-label={row.is_saved ? 'Unpin saved query' : 'Pin to Saved'}
-            title={row.is_saved ? 'Unpin saved query' : 'Pin to Saved'}
-          >
-            {row.is_saved ? '★' : '☆'}
-          </button>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 motion-safe:transition-opacity hover:text-danger"
-            aria-label="Delete history entry"
-          >
-            ✕
-          </button>
-        </span>
-      </div>
-    </li>
-  )
-}
-
-// Teammate-saved query row. Shows the author's display name as the primary
-// attribution chip — without that the Team tab would be indistinguishable
-// from "Saved" except for "wait, why does it have a different prompt?".
-function TeamItem({ row, onRerun }: { row: TeamRow; onRerun: () => void }) {
-  const display = row.author_name ?? row.author_email ?? 'Teammate'
-  const initial = (row.author_name ?? row.author_email ?? '?').charAt(0).toUpperCase()
-  return (
-    <li className="rounded-sm border border-edge-subtle p-2 hover:bg-surface-overlay/30 motion-safe:transition-colors group">
-      <button
-        type="button"
-        onClick={onRerun}
-        className="text-left w-full text-2xs text-fg-secondary hover:text-fg"
-        title={`Run this query (saved by ${display})`}
-      >
-        <span className="line-clamp-2">{row.prompt}</span>
-      </button>
-      <div className="flex items-center justify-between mt-1.5 text-3xs gap-1">
-        <span className="flex items-center gap-1 min-w-0">
-          <span
-            className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-brand/15 text-brand font-medium text-3xs shrink-0"
-            aria-hidden="true"
-          >
-            {initial}
-          </span>
-          <span className="text-fg-secondary truncate" title={row.author_email ?? undefined}>
-            {display}
-          </span>
-        </span>
-        <span className="text-fg-faint font-mono shrink-0">
-          <RelativeTime value={row.created_at} />
-        </span>
-      </div>
-    </li>
-  )
-}
-
-// ─── Cell rendering helpers ──────────────────────────────────────────────────
-
-function headerLabel(col: string): string {
-  return col
-    .replace(/_id$/, ' ID')
-    .replace(/_at$/, '')
-    .replace(/_ms$/, ' (ms)')
-    .replace(/_url$/, ' URL')
-    .replace(/_count$/, ' count')
-    .replace(/_score$/, ' score')
-    .replace(/_hash$/, ' hash')
-    .split('_')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ')
-    .trim()
-}
-
-function isNumericCol(col: string, sample: unknown): boolean {
-  const c = col.toLowerCase()
-  if (/count|score|total|points|ms|rows|weight|lines_changed|files_changed/.test(c)) return true
-  return typeof sample === 'number'
-}
-
-function isDateCol(col: string): boolean {
-  return /(_at|_date|created|updated|started|completed|verified|fixed|regressed)$/.test(col.toLowerCase())
-}
-
-function formatDate(v: string): string {
-  try {
-    const d = new Date(v)
-    if (isNaN(d.getTime())) return v
-    const now = Date.now()
-    const diff = now - d.getTime()
-    if (diff < 60_000) return 'just now'
-    if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
-    if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
-    if (diff < 7 * 86_400_000) return `${Math.floor(diff / 86_400_000)}d ago`
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: diff > 365 * 86_400_000 ? 'numeric' : undefined })
-  } catch {
-    return v
-  }
-}
-
-function CellBadge({ children, cls }: { children: string; cls: string }) {
-  return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-[3px] text-3xs font-medium leading-none ${cls}`}>
-      {children}
-    </span>
-  )
-}
-
-function renderCell(col: string, val: unknown): ReactNode {
-  const colL = col.toLowerCase()
-
-  if (val == null || val === '') return <span className="text-fg-faint">—</span>
-
-  // Boolean
-  if (typeof val === 'boolean') {
-    return val
-      ? <span className="text-ok font-medium">✓</span>
-      : <span className="text-fg-faint">✗</span>
-  }
-
-  const str = typeof val === 'object' ? JSON.stringify(val) : String(val)
-  const strL = str.toLowerCase()
-
-  // Severity
-  if (colL === 'severity') {
-    const map: Record<string, string> = {
-      critical: 'bg-danger-muted/50 text-danger-foreground border border-danger/30',
-      high:     'bg-warn-muted/50 text-warning-foreground border border-warn/30',
-      medium:   'bg-warn-muted/50 text-warning-foreground border border-warn/25',
-      low:      'bg-info-muted/50 text-info-foreground border border-info/25',
-    }
-    const label: Record<string, string> = { critical: 'P0 critical', high: 'P1 high', medium: 'P2 medium', low: 'P3 low' }
-    return <CellBadge cls={map[strL] ?? 'bg-surface-raised text-fg-secondary border border-edge-subtle'}>{label[strL] ?? str}</CellBadge>
-  }
-
-  // Status
-  if (colL === 'status') {
-    const map: Record<string, string> = {
-      new:        'bg-brand/10 text-brand border border-brand/25',
-      pending:    'bg-info-muted/50 text-info-foreground border border-info/25',
-      submitted:  'bg-info-muted/50 text-info-foreground border border-info/25',
-      queued:     'bg-info-muted/50 text-info-foreground border border-info/25',
-      classified: 'bg-ok-muted/50 text-ok-foreground border border-ok/25',
-      grouped:    'bg-ok-muted/50 text-ok-foreground border border-ok/25',
-      fixing:     'bg-warn-muted/50 text-warning-foreground border border-warn/25',
-      fixed:      'bg-ok-muted text-ok border border-ok/25',
-      dismissed:  'bg-surface-raised text-fg-muted border border-edge-subtle',
-      failed:     'bg-danger-muted/50 text-danger-foreground border border-danger/25',
-    }
-    return <CellBadge cls={map[strL] ?? 'bg-surface-raised text-fg-secondary border border-edge-subtle'}>{str}</CellBadge>
-  }
-
-  // Category
-  if (colL === 'category') {
-    const map: Record<string, string> = {
-      bug:       'bg-danger-muted/50 text-danger-foreground border border-danger/25',
-      slow:      'bg-warn-muted/50 text-warning-foreground border border-warn/25',
-      visual:    'bg-accent-muted/55 text-accent-foreground border border-accent/25',
-      confusing: 'bg-info-muted/50 text-info-foreground border border-info/25',
-      other:     'bg-surface-raised text-fg-muted border border-edge-subtle',
-    }
-    return <CellBadge cls={map[strL] ?? 'bg-surface-raised text-fg-secondary border border-edge-subtle'}>{str}</CellBadge>
-  }
-
-  // Verification status
-  if (colL === 'verification_status') {
-    const map: Record<string, string> = {
-      passed:  'bg-ok-muted text-ok border border-ok/25',
-      failed:  'bg-danger-muted/50 text-danger-foreground border border-danger/25',
-      pending: 'bg-info-muted/50 text-info-foreground border border-info/25',
-    }
-    return <CellBadge cls={map[strL] ?? 'bg-surface-raised text-fg-secondary border border-edge-subtle'}>{str}</CellBadge>
-  }
-
-  // Dates
-  if (isDateCol(col) && typeof val === 'string' && val.includes('T')) {
-    return (
-      <span className="tabular-nums text-fg-muted" title={val}>
-        {formatDate(val)}
-      </span>
-    )
-  }
-
-  // URLs
-  if (colL.endsWith('_url') && typeof val === 'string' && val.startsWith('http')) {
-    const short = val.replace(/^https?:\/\//, '').slice(0, 36)
-    return (
-      <a href={val} target="_blank" rel="noopener noreferrer" className="text-brand underline underline-offset-2 hover:text-brand/80 transition-colors" title={val}>
-        {short}{val.length > 36 ? '…' : ''}
-      </a>
-    )
-  }
-
-  // Score 0-1 range → show as %
-  if (colL.endsWith('_score') && typeof val === 'number' && val >= 0 && val <= 1) {
-    const pct = Math.round(val * 100)
-    const cls = pct >= 80 ? 'text-ok' : pct >= 50 ? 'text-warn' : 'text-danger'
-    return <span className={`tabular-nums font-medium ${cls}`}>{pct}%</span>
-  }
-
-  // Numbers
-  if (typeof val === 'number') {
-    const formatted = Number.isInteger(val)
-      ? val.toLocaleString()
-      : val.toFixed(2)
-    return <span className="tabular-nums text-fg">{formatted}</span>
-  }
-
-  // Long strings → truncate with tooltip
-  if (str.length > 60) {
-    return <span title={str} className="text-fg-secondary">{str.slice(0, 58)}…</span>
-  }
-
-  return <span className="text-fg-secondary">{str}</span>
-}
-
-// ─── ResultsTable ─────────────────────────────────────────────────────────────
-
-function ResultsTable({ rows }: { rows: unknown[] }) {
-  const table = asTable(rows)
-  if (!table) {
-    return (
-      <pre className="mushi-code-block mushi-code-body p-2 rounded-sm text-2xs overflow-x-auto max-h-64 font-mono">
-        {JSON.stringify(rows.slice(0, 20), null, 2)}
-      </pre>
-    )
-  }
-
-  // Determine alignment per column based on first non-null value
-  const sampleRow = table.data[0] ?? {}
-  const numericCols = new Set(table.columns.filter((c) => isNumericCol(c, sampleRow[c])))
-
-  return (
-    <>
-    <ResponsiveTable ariaLabel="Query results">
-      <table className="w-full text-xs border-collapse">
-        <thead>
-          <tr className="bg-surface-raised border-b border-edge">
-            {table.columns.map((c) => (
-              <th
-                key={c}
-                className={`py-2 px-3 text-3xs font-semibold uppercase tracking-wider text-fg-muted whitespace-nowrap ${
-                  numericCols.has(c) ? 'text-right' : 'text-left'
-                }`}
-              >
-                {headerLabel(c)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {table.data.slice(0, 50).map((row, i) => (
-            <tr
-              key={i}
-              className={`border-b border-edge-subtle/50 hover:bg-surface-raised motion-safe:transition-colors ${
-                i % 2 === 1 ? 'bg-surface-root/30' : ''
-              }`}
-            >
-              {table.columns.map((c) => (
-                <td
-                  key={c}
-                  className={`py-2 px-3 align-middle max-w-[18rem] ${
-                    numericCols.has(c) ? 'text-right' : ''
-                  }`}
-                >
-                  {renderCell(c, row[c])}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </ResponsiveTable>
-      {table.data.length > 50 && (
-        <InlineProof className="mt-1.5 mx-3">
-          Showing first 50 of {table.data.length} rows.
-        </InlineProof>
-      )}
-    </>
-  )
-}
-
-// The categorised "Prompt library" panel. Replaces the previous wall of
-// buttons (`SUGGESTIONS`) + bullet list (`SQL_HINTS`) which together
-// rendered the same hint twice — once as a flat pill, once as a list
-// item with an italic caption underneath. Hick's Law: chunk by user
-// intent, show the "why" only on hover. Click a prompt to insert into
-// the composer (so the operator can edit before running). Run-on-click
-// is still available via the per-row run button when in a hurry.
-function PromptLibrary({
-  onInsert,
-  onRun,
-}: {
-  onInsert: (prompt: string) => void
-  onRun: (prompt: string) => void
-}) {
-  const [activeCat, setActiveCat] = useState<string>(PROMPT_CATEGORIES[0]!.id)
-  const cat = PROMPT_CATEGORIES.find((c) => c.id === activeCat) ?? PROMPT_CATEGORIES[0]!
-  return (
-    <Card className="p-3">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-secondary">
-          Prompt library
-        </h3>
-        <span className="text-3xs text-fg-faint hidden sm:inline">
-          Click to edit · <Kbd>↵</Kbd> to run from composer
-        </span>
-      </div>
-
-      <div className="overflow-x-auto -mx-1 mb-2 pb-1">
-        <div className="inline-flex items-center gap-0.5 px-1 rounded-md border border-edge-subtle bg-surface-raised/50 p-0.5 min-w-max">
-          {PROMPT_CATEGORIES.map((c) => {
-            const active = c.id === activeCat
-            return (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setActiveCat(c.id)}
-                aria-pressed={active}
-                className={`inline-flex items-center gap-1 px-2 py-1 rounded-sm text-2xs font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
-                  active
-                    ? 'bg-brand text-brand-fg'
-                    : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50'
-                }`}
-              >
-                <span className={`shrink-0 [&>svg]:h-3 [&>svg]:w-3 ${active ? '' : c.tone}`}>
-                  {c.icon}
-                </span>
-                <span>{c.label}</span>
-                <span
-                  className={`font-mono ${
-                    active ? 'text-brand-fg/70' : 'text-fg-faint'
-                  }`}
-                >
-                  {c.prompts.length}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      <p className="text-3xs text-fg-faint mb-2 leading-relaxed">{cat.blurb}</p>
-
-      <ul className="space-y-1">
-        {cat.prompts.map((p) => (
-          <li
-            key={p.prompt}
-            className="group flex items-start gap-1 rounded-sm border border-transparent hover:border-edge-subtle hover:bg-surface-overlay/30 motion-safe:transition-colors"
-          >
-            <button
-              type="button"
-              onClick={() => onInsert(p.prompt)}
-              title={p.why}
-              className="flex-1 min-w-0 text-left px-2 py-1.5 text-2xs text-fg-secondary hover:text-fg motion-safe:transition-colors"
-            >
-              <span className="block">{p.prompt}</span>
-              <span className="hidden group-hover:block group-focus-within:block text-3xs text-fg-faint mt-0.5 italic">
-                {p.why}
-              </span>
-            </button>
-            <Tooltip content="Run now" side="left">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onRun(p.prompt)
-                }}
-                aria-label={`Run prompt: ${p.prompt}`}
-                className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 motion-safe:transition-opacity px-2 py-1.5 text-3xs font-medium text-brand hover:text-brand-fg hover:bg-brand/15 rounded-sm"
-              >
-                Run →
-              </button>
-            </Tooltip>
-          </li>
-        ))}
-      </ul>
-    </Card>
-  )
-}
 
 const QUERY_TABS: Array<{ id: QueryTabId; label: string; description: string }> = [
   {
@@ -958,7 +350,7 @@ export function QueryPage() {
       <div className="space-y-4">
         <PageHeaderBar
           title={copy?.title ?? 'Ask Your Data'}
-          description={copy?.description ?? 'Natural-language or raw SQL analytics against approved tables.'}
+
           helpTitle={copy?.help?.title ?? 'About Ask Your Data'}
           helpWhatIsIt={
             copy?.help?.whatIsIt ??
@@ -988,7 +380,7 @@ export function QueryPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Ask Your Data'}
         projectScope={stats.projectName ?? undefined}
-        description={copy?.description ?? 'Natural-language or raw SQL analytics against approved tables.'}
+
         helpTitle={copy?.help?.title ?? 'About Ask Your Data'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
@@ -997,7 +389,7 @@ export function QueryPage() {
         helpUseCases={copy?.help?.useCases ?? []}
         helpHowToUse={copy?.help?.howToUse ?? 'Use the Ask tab to run queries. History pins favorites. Schema lists approved tables.'}
       >
-        <Badge className={stats.errors24h > 0 ? 'bg-danger-subtle text-danger' : stats.runs24h > 0 ? 'bg-ok-muted text-ok' : 'bg-info-muted/50 text-info-foreground'}>
+        <Badge className={stats.errors24h > 0 ? CHIP_TONE.dangerSubtle : stats.runs24h > 0 ? CHIP_TONE.okSubtle : CHIP_TONE.infoSubtle}>
           {stats.errors24h > 0 ? `${stats.errors24h} FAIL 24H` : stats.runs24h > 0 ? `${stats.runs24h} RUNS 24H` : 'READY'}
         </Badge>
       </PageHeaderBar>
@@ -1066,7 +458,7 @@ export function QueryPage() {
             {SCHEMA_REFERENCE.map((t) => (
               <div key={t.table} className="px-3 py-2 grid grid-cols-[7rem_1fr] gap-2 items-start bg-surface-raised border-b border-edge-subtle/30 last:border-b-0">
                 <code className="text-2xs font-mono text-brand shrink-0">{t.table}</code>
-                <span className="text-3xs text-fg-faint font-mono leading-relaxed">
+                <span className="text-2xs text-fg-faint font-mono leading-relaxed">
                   {t.columns}
                   {t.note ? <span className="block text-info/80 not-italic mt-0.5">{t.note}</span> : null}
                 </span>
@@ -1127,13 +519,13 @@ export function QueryPage() {
           <div className="mb-3 rounded-sm border border-edge-subtle bg-surface-raised/50 overflow-hidden">
             <div className="px-3 py-2 border-b border-edge-subtle/50 flex items-center justify-between">
               <span className="text-2xs font-medium text-fg-secondary">Approved tables · <code className="text-brand">$1</code> = your project_id</span>
-              <span className="text-3xs text-fg-faint">severity: critical=P0 high=P1 medium=P2 low=P3</span>
+              <span className="text-2xs text-fg-faint">severity: critical=P0 high=P1 medium=P2 low=P3</span>
             </div>
             <div className="divide-y divide-edge-subtle/30 max-h-48 overflow-y-auto">
               {SCHEMA_REFERENCE.map((t) => (
                 <div key={t.table} className="px-3 py-1.5 grid grid-cols-[7rem_1fr] gap-2 items-start">
                   <code className="text-2xs font-mono text-brand shrink-0">{t.table}</code>
-                  <span className="text-3xs text-fg-faint font-mono leading-relaxed">
+                  <span className="text-2xs text-fg-faint font-mono leading-relaxed">
                     {t.columns}
                     {t.note && <span className="block text-info/80 not-italic mt-0.5">{t.note}</span>}
                   </span>
@@ -1172,7 +564,7 @@ export function QueryPage() {
                   {loading ? 'Running…' : 'Ask →'}
                 </Btn>
               </div>
-              <div className="flex items-center justify-between gap-2 text-3xs text-fg-faint flex-wrap">
+              <div className="flex items-center justify-between gap-2 text-2xs text-fg-faint flex-wrap">
                 <span className="inline-flex items-center gap-1.5">
                   <Kbd>↵</Kbd><span>to run</span>
                   <span className="opacity-40">·</span>
@@ -1212,7 +604,7 @@ export function QueryPage() {
                   {loading ? 'Running…' : 'Run →'}
                 </Btn>
               </div>
-              <div className="flex items-center justify-between gap-2 text-3xs text-fg-faint flex-wrap">
+              <div className="flex items-center justify-between gap-2 text-2xs text-fg-faint flex-wrap">
                 <span className="inline-flex items-center gap-1.5">
                   <Kbd>⌘↵</Kbd><span>to run</span>
                   <span className="opacity-40">·</span>
@@ -1268,7 +660,7 @@ export function QueryPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 mb-0.5">
                           {run.mode === 'raw' && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-[3px] text-2xs font-mono font-medium bg-warn-muted/50 text-warning-foreground border border-warn/20">SQL</span>
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-[3px] text-2xs font-mono font-medium ${CHIP_TONE.warnSubtle} border border-warn/20`}>SQL</span>
                           )}
                           <p className="text-sm text-fg font-medium break-words line-clamp-3">
                             {run.question}
@@ -1330,7 +722,7 @@ export function QueryPage() {
                         {/* Results table (shown before SQL so users see data first) */}
                         {rowCount > 0 && (
                           <div className="rounded-sm border border-edge-subtle overflow-hidden">
-                            <ResultsTable rows={run.result.results} />
+                            <QueryResultsTable rows={run.result.results} />
                             <div className="flex items-center justify-between gap-2 border-t border-edge-subtle/50 bg-surface-raised px-3 py-1.5">
                               <SignalChip tone="neutral">
                                 {rowCount} row{rowCount === 1 ? '' : 's'}
@@ -1349,10 +741,10 @@ export function QueryPage() {
                         <div className="rounded-sm border border-edge-subtle/60 overflow-hidden">
                           <details open={run.mode === 'raw'}>
                             <summary className="flex items-center justify-between gap-2 px-3 py-1.5 bg-surface-raised/50 cursor-pointer select-none hover:bg-surface-overlay/20 motion-safe:transition-colors group">
-                              <span className="text-3xs font-mono text-fg-faint group-hover:text-fg-muted transition-colors">
+                              <span className="text-2xs font-mono text-fg-faint group-hover:text-fg-muted transition-colors">
                                 ▸ SQL
                               </span>
-                              <CopyButton value={run.result.sql} label="Copy SQL" />
+                              <QueryCopyButton value={run.result.sql} label="Copy SQL" />
                             </summary>
                             <pre className="mushi-code-block mushi-code-body px-3 py-2.5 text-2xs font-mono overflow-x-auto whitespace-pre-wrap border-t border-code-surface-border max-h-56 leading-relaxed">
                               {run.result.sql}
@@ -1367,7 +759,7 @@ export function QueryPage() {
             </div>
           ) : (
             queryMode === 'nl' ? (
-              <PromptLibrary
+              <QueryPromptLibrary
                 onInsert={(p) => setQuestion(p)}
                 onRun={(p) => { setQuestion(p); handleSubmit(p, 'nl') }}
               />

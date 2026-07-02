@@ -7,33 +7,23 @@
  *          copy-pasting an API key.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePageCopy } from '../lib/copy'
 import { useRealtimeReload } from '../lib/realtime'
-import { pluralize, pluralizeWithCount } from '../lib/format'
+import { pluralizeWithCount } from '../lib/format'
 import {
-  Section,
-  Card,
   Btn,
   ErrorAlert,
-  Input,
-  EmptyState,
   Badge,
-  Tooltip,
   SegmentedControl,
   FreshnessPill,
   RecommendedAction,
 } from '../components/ui'
-import {
-  ContainedBlock,
-  InlineProof,
-  SignalChip,
-} from '../components/report-detail/ReportSurface'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { canCreateProject, viewerRoleHint } from '../lib/orgPermissions'
@@ -43,74 +33,39 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useActiveOrgId, type OrganizationSummary } from '../components/OrgSwitcher'
 import { useAdminMode } from '../lib/mode'
 import { ProjectsPageHero } from '../components/projects/ProjectsPageHero'
-import {
-  ProjectCreatedSuccessPanel,
-  type CreatedProjectInfo,
-} from '../components/ProjectCreatedSuccessPanel'
+import { type CreatedProjectInfo } from '../components/ProjectCreatedSuccessPanel'
 import { CliSetupGuide } from '../components/CliSetupGuide'
 import { ProjectsStatusBanner } from '../components/projects/ProjectsStatusBanner'
 import { ProjectsHubGuide } from '../components/projects/ProjectsHubGuide'
 import { ProjectsSetupReadout } from '../components/projects/ProjectsSetupReadout'
 import { ProjectsSnapshotStrip } from '../components/projects/ProjectsSnapshotStrip'
-import { ProjectFolderTabRail } from '../components/projects/ProjectFolderTabRail'
+import { ProjectsCreatePanel } from '../components/projects/ProjectsCreatePanel'
+import { ProjectsListPanel } from '../components/projects/ProjectsListPanel'
 import {
   EMPTY_PROJECTS_STATS,
   type ProjectsStats,
   type ProjectsTabId,
 } from '../components/projects/types'
 import {
+  type Project,
+  type ScopePresetId,
+  type OrgRole,
+  SCOPE_PRESETS,
+} from '../components/projects/project-models'
+import {
   ACTIVE_PROJECT_QUERY_PARAM,
   ACTIVE_PROJECT_STORAGE_KEY,
   setActiveProjectIdSnapshot,
 } from '../lib/activeProject'
-import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { shouldHideGuideWhenBannerActive } from '../lib/pagePostureHelpers'
-import { RevealedKeyCard } from '../components/RevealedKeyCard'
-import { SdkInstallCard } from '../components/SdkInstallCard'
-import { AssistantConfigCard } from '../components/AssistantConfigCard'
-import { IdentitySecretCard } from '../components/IdentitySecretCard'
-import { SdkHealthSummary } from '../components/SdkHealthSummary'
-import { ConfigHelp } from '../components/ConfigHelp'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { DangerConfirm } from '../components/DangerConfirm'
-import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
-import { SdkVersionBadge, type SdkStatus } from '../components/SdkVersionBadge'
-import { SdkUpgradeCTA } from '../components/SdkUpgradeCTA'
 import { BulkSdkUpgradePanel } from '../components/projects/BulkSdkUpgradePanel'
-import { VerifySetupPanel } from '../components/VerifySetupPanel'
-import { CodeInline } from '../components/CodePanel'
-import { ProjectFavicon } from '../components/ProjectFavicon'
-import { sdkOriginFromApiKeys } from '../lib/resolveProjectDomain'
-import { ProjectBottleneckCard } from '../components/projects/ProjectBottleneckCard'
-import { bottleneckDeepLink, bottleneckHumanHeadline } from '../lib/pdcaBottleneck'
-import {
-  IconCheck,
-  IconClose,
-  IconPencil,
-  IconTrash,
-  IconGit,
-  IconExternalLink,
-  IconStorage,
-  IconReports,
-  IconIntegrations,
-  IconSettings,
-  IconSend,
-  IconKey,
-  IconCopy,
-  IconExplore,
-  IconClock,
-  IconUser,
-  IconGauge,
-  IconTerminal,
-} from '../components/icons'
+import { CHIP_TONE } from '../lib/chipTone'
+import { IconProjects } from '../components/icons'
 
-// Undo window for soft-delete operations on this page (project delete,
-// API key revoke). Long enough for the "wait, that wasn't who I meant"
-// reaction (Nielsen reports ~5-10 s for recognition errors), short enough
-// that the user doesn't think the action silently failed. Mirrors the
-// member-remove window in OrganizationSettingsPage.
 const UNDO_WINDOW_MS = 8000
 
 const TABS: Array<{ id: ProjectsTabId; label: string; description: string }> = [
@@ -134,244 +89,6 @@ const TABS: Array<{ id: ProjectsTabId; label: string; description: string }> = [
 function resolveProjectsTab(value: string | null): ProjectsTabId {
   if (value === 'list' || value === 'create') return value
   return 'overview'
-}
-
-interface ApiKey {
-  id: string
-  key_prefix: string
-  created_at: string
-  is_active: boolean
-  revoked: boolean
-  scopes?: string[]
-  label?: string | null
-  // Heartbeat columns surfaced by /v1/admin/projects so the SdkHealthSummary
-  // card can render per-key connectivity status without a second round-trip.
-  // Optional because legacy responses (pre-2026-05-07 audit) didn't return
-  // them; the helper functions in SdkHealthSummary treat absence as "never".
-  last_seen_at?: string | null
-  last_seen_origin?: string | null
-  last_seen_user_agent?: string | null
-  last_seen_endpoint_host?: string | null
-}
-
-/**
- * Scope presets surfaced in the "New key" picker. Each preset bundles one or
- * more raw scopes so users can pick a capability (what agents do with the
- * key) instead of reasoning about the underlying vocabulary.
- *
- * Mirror of the check constraint on `project_api_keys.scopes` — if you add
- * a preset here you must also add the raw scope to migration
- * `20260421003000_api_key_scopes.sql`.
- */
-type ScopePresetId = 'sdk' | 'mcp-read' | 'mcp-write'
-
-const SCOPE_PRESETS: Array<{ id: ScopePresetId; label: string; scopes: string[]; hint: string }> = [
-  {
-    id: 'sdk',
-    label: 'SDK ingest',
-    scopes: ['report:write'],
-    hint: "For your app's Mushi SDK — submit reports, nothing else.",
-  },
-  {
-    id: 'mcp-read',
-    label: 'MCP read-only',
-    scopes: ['mcp:read'],
-    hint: 'Coding agent can browse reports, fixes, graph — but not act.',
-  },
-  {
-    id: 'mcp-write',
-    label: 'MCP read + write',
-    scopes: ['mcp:write'],
-    hint: 'Coding agent can dispatch fixes, run judge, transition status.',
-  },
-]
-
-function scopeBadgeTone(scope: string): string {
-  if (scope === 'mcp:write') return 'bg-danger-muted text-danger border border-danger/30'
-  if (scope === 'mcp:read') return 'bg-info-muted text-info border border-info/30'
-  return 'bg-surface-overlay text-fg-muted border border-edge-subtle'
-}
-
-interface Member {
-  user_id: string
-  role: string
-}
-
-type PdcaStageId = 'plan' | 'do' | 'check' | 'act'
-
-/**
- * Org role of the current user IN the project's organization. Returned by
- * GET /v1/admin/projects so the FE can gate destructive actions (delete
- * project) on role without a second round-trip per row. `null` is the
- * legacy-fallback shape (project predates the orgs backfill); treat null as
- * "owner" for back-compat.
- */
-type OrgRole = 'owner' | 'admin' | 'member' | 'viewer' | null
-
-interface ProjectRepoLite {
-  id: string
-  repo_url: string | null
-  role: string | null
-  default_branch: string | null
-  is_primary: boolean
-  indexing_enabled: boolean
-  last_indexed_at: string | null
-  last_index_attempt_at: string | null
-  last_index_error: string | null
-  github_app_connected: boolean
-}
-
-interface SeverityBreakdown {
-  critical: number
-  major: number
-  minor: number
-  trivial: number
-  other: number
-  total: number
-}
-
-interface Project {
-  id: string
-  name: string
-  slug: string
-  created_at: string
-  organization_id: string | null
-  organization_role: OrgRole
-  api_keys: ApiKey[]
-  active_key_count: number
-  member_count: number
-  members: Member[]
-  report_count: number
-  last_report_at: string | null
-  pdca_bottleneck: PdcaStageId | null
-  pdca_bottleneck_label: string | null
-  pdca_bottleneck_count?: number | null
-  failed_fixes_preview?: Array<{
-    id: string
-    report_id: string
-    error_head: string | null
-    report_title: string | null
-  }>
-  /** SDK identity columns and freshness verdict, plumbed by
-   *  GET /v1/admin/projects (see billing-projects-queue-graph.ts). The
-   *  backend joins `reports.sdk_package`/`reports.sdk_version` for the
-   *  most recent report against the `sdk_versions` catalogue and emits
-   *  `sdk_status` so the FE doesn't need a second round-trip to render
-   *  the badge. `unknown` = no reports landed yet, in which case the
-   *  badge silently renders nothing. */
-  sdk_package?: string | null
-  sdk_version?: string | null
-  sdk_latest_version?: string | null
-  sdk_deprecation_message?: string | null
-  sdk_status?: SdkStatus
-  /** Project-level metadata threaded through 2026-05-07 to give the FE
-   *  enough context to render an "About this project" surface without
-   *  any second round-trips. Each block is optional because legacy
-   *  responses (and projects with nothing connected) won't include it. */
-  plan_tier?: string | null
-  data_residency_region?: string | null
-  primary_repo?: ProjectRepoLite | null
-  repos?: ProjectRepoLite[]
-  indexed_file_count?: number
-  severity_breakdown_30d?: SeverityBreakdown
-  /** True when ≥1 report in the last 30 days carried a Sentry trace id.
-   *  Drives the "Sentry connected" badge on the row. Backend computes
-   *  this from `reports.sentry_trace_id IS NOT NULL` over the same
-   *  30-day window as the severity breakdown. */
-  sentry_connected?: boolean
-  sentry_connected_reports_30d?: number
-  /** 7-day vs prior-7-day report count. Powers the trend arrow chip
-   *  on each project row — "is this project getting noisier?". */
-  trend_7d?: {
-    last7d: number
-    prev7d: number
-    delta: number
-    direction: 'up' | 'down' | 'flat'
-  }
-}
-
-/**
- * True iff the current user is allowed to delete this project. Backend
- * mirrors this exact rule (org owner/admin OR legacy direct owner_id).
- */
-function canDeleteProject(project: Project): boolean {
-  if (project.organization_role === null) return true // legacy: treated as owner
-  return project.organization_role === 'owner' || project.organization_role === 'admin'
-}
-
-const LINK_CHIP_CLASS =
-  'inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-sm gap-1.5 ' +
-  'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg ' +
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface ' +
-  'motion-safe:transition-colors motion-safe:duration-150'
-
-function relativeTime(iso: string | null): string {
-  if (!iso) return 'never'
-  const ms = Date.now() - new Date(iso).getTime()
-  if (ms < 60_000) return 'just now'
-  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`
-  if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`
-  if (ms < 30 * 86_400_000) return `${Math.floor(ms / 86_400_000)}d ago`
-  return new Date(iso).toLocaleDateString()
-}
-
-/**
- * Strip a `https://github.com/owner/repo` URL down to `owner/repo` so
- * the project row can render the repo without eating half the line.
- * Falls back to the raw URL when the host isn't GitHub-shaped, so
- * self-hosted GitLab / Gitea installs are still readable.
- */
-function shortRepoLabel(url: string | null | undefined): string | null {
-  if (!url) return null
-  try {
-    const u = new URL(url)
-    const trimmed = u.pathname.replace(/^\/+/, '').replace(/\.git$/, '')
-    return trimmed || u.host
-  } catch {
-    return url
-  }
-}
-
-/**
- * Per-repo indexing freshness. The backend writes `last_indexed_at` on
- * every successful index pass and `last_index_error` on a failed one,
- * so we infer "ok / stale / failed / off / never" entirely from those.
- *
- * - `off` — indexing explicitly disabled (`indexing_enabled = false`).
- * - `failed` — last attempt errored (`last_index_error` set, no
- *   subsequent success).
- * - `stale` — no successful index in > 7 days.
- * - `ok` — indexed in the last 7 days.
- * - `never` — repo connected but never indexed (initial state).
- */
-type IndexHealth = 'ok' | 'stale' | 'failed' | 'off' | 'never'
-
-function indexHealth(repo: ProjectRepoLite): IndexHealth {
-  if (!repo.indexing_enabled) return 'off'
-  if (repo.last_index_error && (!repo.last_indexed_at ||
-      (repo.last_index_attempt_at && new Date(repo.last_index_attempt_at) > new Date(repo.last_indexed_at)))) {
-    return 'failed'
-  }
-  if (!repo.last_indexed_at) return 'never'
-  const ageMs = Date.now() - new Date(repo.last_indexed_at).getTime()
-  if (ageMs > 7 * 86_400_000) return 'stale'
-  return 'ok'
-}
-
-const INDEX_HEALTH_LABEL: Record<IndexHealth, string> = {
-  ok: 'Indexed',
-  stale: 'Stale',
-  failed: 'Failed',
-  off: 'Off',
-  never: 'Pending',
-}
-
-const INDEX_HEALTH_CHIP_TONE: Record<IndexHealth, 'ok' | 'warn' | 'danger' | 'neutral'> = {
-  ok: 'ok',
-  stale: 'warn',
-  failed: 'danger',
-  off: 'neutral',
-  never: 'neutral',
 }
 
 export function ProjectsPage() {
@@ -817,87 +534,6 @@ export function ProjectsPage() {
     return <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading projects" />
   if (error) return <ErrorAlert message={`Failed to load projects: ${error}`} onRetry={reloadAll} />
 
-  const createForm = (
-    <div className="space-y-2">
-      <div className="flex gap-2 items-end">
-        <div className="flex-1">
-          <Input
-            label="Project name"
-            helpId="projects.create_project"
-            type="text"
-            placeholder="New project name (e.g. Acme iOS app)"
-            value={newName}
-            onChange={(e) => {
-              setNewName(e.target.value)
-              if (createError) clearCreateError()
-            }}
-            onKeyDown={(e) => {
-              if (e.key !== 'Enter') return
-              // Mirror the button's gate: only submit when actually allowed.
-              if (!creating && newName.trim() && (!orgDataLoaded || canManageProjects)) {
-                void createProject()
-              }
-            }}
-            aria-invalid={createError ? true : undefined}
-            aria-describedby={createError ? 'projects-create-error' : undefined}
-          />
-        </div>
-        <Btn
-          onClick={createProject}
-          disabled={creating || !newName.trim() || (orgDataLoaded && !canManageProjects)}
-          loading={!orgDataLoaded && !creating}
-          title={
-            orgDataLoaded && !canManageProjects
-              ? (roleHint ?? 'Only owners or admins can create projects — ask your team admin')
-              : !newName.trim()
-                ? 'Enter a project name to continue'
-                : undefined
-          }
-        >
-          {creating ? 'Creating...' : 'Create project'}
-        </Btn>
-      </div>
-      {createError && (
-        <div id="projects-create-error">
-          <ErrorAlert
-            title={
-              createError.code === 'NO_ORGANIZATION'
-                ? 'No writable team found'
-                : createError.code === 'FORBIDDEN'
-                ? 'Not allowed in this team'
-                : createError.code === 'NETWORK_ERROR'
-                ? 'Couldn\u2019t reach the server'
-                : 'Couldn\u2019t create project'
-            }
-            message={createError.message}
-            code={createError.code}
-            actions={(() => {
-              if (createError.code === 'NO_ORGANIZATION') {
-                return [
-                  { label: 'Open team settings', onClick: () => navigate('/organization/members') },
-                  { label: 'Dismiss', onClick: clearCreateError },
-                ]
-              }
-              if (createError.code === 'FORBIDDEN') {
-                return [
-                  { label: 'Switch team', onClick: () => navigate('/organization/members') },
-                  { label: 'Dismiss', onClick: clearCreateError },
-                ]
-              }
-              if (createError.code === 'NETWORK_ERROR') {
-                return [
-                  { label: 'Try again', onClick: () => void createProjectRaw(newName) },
-                  { label: 'Dismiss', onClick: clearCreateError },
-                ]
-              }
-              return [{ label: 'Dismiss', onClick: clearCreateError }]
-            })()}
-          />
-        </div>
-      )}
-    </div>
-  )
-
   const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
     stats.topPriority === 'never_ingested' || stats.topPriority === 'no_sdk_heartbeat'
       ? 'warn'
@@ -926,6 +562,7 @@ export function ProjectsPage() {
     <div className="space-y-4" data-testid="mushi-page-projects">
       <PageHeaderBar
         title={copy?.title ?? 'Projects'}
+        icon={<IconProjects />}
         description={
           copy?.description ??
           'Banner + PROJECTS SNAPSHOT — Overview for posture, Your projects to mint keys and verify ingest.'
@@ -950,13 +587,13 @@ export function ProjectsPage() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
+              ? CHIP_TONE.okSubtle
               : bannerSeverity === 'warn'
-                ? 'bg-warn-muted text-warning-foreground'
+                ? CHIP_TONE.warnSubtle
                 : bannerSeverity === 'brand'
                   ? 'bg-chrome text-fg-secondary'
                   : bannerSeverity === 'info'
-                    ? 'bg-info-muted text-info-foreground'
+                    ? CHIP_TONE.infoSubtle
                     : 'bg-surface-overlay text-fg-muted'
           }
         >
@@ -1062,525 +699,67 @@ export function ProjectsPage() {
       )}
 
       {activeTab === 'create' ? (
-        <Section title="Create a project">
-          {createdProject ? (
-            <ProjectCreatedSuccessPanel
-              project={createdProject}
-              onDismiss={() => {
-                setCreatedProject(null)
-                setTab('list')
-              }}
-            />
-          ) : (
-            <>
-          <ContainedBlock tone="muted" className="mb-3">
-            <p className="text-2xs leading-relaxed text-fg-muted">
-              One project per app or environment — your API key and setup command appear on the next screen.
-            </p>
-          </ContainedBlock>
-          {orgDataLoaded && !canManageProjects && (
-            <ContainedBlock tone="warn" className="mb-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-xs font-semibold text-[var(--color-warning-foreground)]">
-                    {activeOrgRole === 'member' || activeOrgRole === 'viewer'
-                      ? 'Owner or admin access required'
-                      : 'No team found'}
-                  </p>
-                  <p className="mt-0.5 text-2xs text-fg-muted">
-                    {activeOrgRole === 'member' || activeOrgRole === 'viewer'
-                      ? 'Ask your team owner or admin to create projects, or create your own team.'
-                      : 'You need to be part of a team to create projects. Create a personal workspace first.'}
-                  </p>
-                </div>
-                <Btn size="sm" variant="ghost" onClick={() => navigate('/organization/members')}>
-                  {activeOrgRole ? 'Team settings' : 'Create team'}
-                </Btn>
-              </div>
-            </ContainedBlock>
-          )}
-          {createForm}
-            </>
-          )}
-        </Section>
+        <ProjectsCreatePanel
+          createdProject={createdProject}
+          onDismissCreated={() => {
+            setCreatedProject(null)
+            setTab('list')
+          }}
+          orgDataLoaded={orgDataLoaded}
+          canManageProjects={canManageProjects}
+          activeOrgRole={activeOrgRole as OrgRole}
+          onNavigateTeam={() => navigate('/organization/members')}
+          newName={newName}
+          onNewNameChange={setNewName}
+          creating={creating}
+          createError={createError}
+          onCreate={() => void createProject()}
+          onRetryCreate={() => void createProjectRaw(newName)}
+          onClearCreateError={clearCreateError}
+        />
       ) : activeTab === 'list' ? (
-        <Section title="Your projects">
-          {activeProjectId && (
-            <MigrationsInProgressCard
-              projectId={activeProjectId}
-              title="Migrations in this project"
-            />
-          )}
-
-          {projects.length === 0 ? (
-            <EmptyState
-              icon={<HeroPlugIntegration />}
-              title="No projects yet"
-              description="Switch to the New project tab to create your first project — you'll get an API key for the SDK or REST endpoint."
-              action={
-                <Btn size="sm" onClick={() => setTab('create')}>
-                  New project
-                </Btn>
-              }
-            />
-          ) : (
-            <div className="flex min-h-0 flex-col lg:flex-row lg:items-start lg:rounded-md lg:border lg:border-edge-subtle">
-              <ProjectFolderTabRail
-                projects={projects}
-                activeId={selectedProject?.id ?? null}
-                onSelect={setActive}
-              />
-              <div
-                className="min-w-0 flex-1 lg:border-l lg:border-edge-subtle lg:bg-surface-raised"
-                role="tabpanel"
-                aria-label={selectedProject ? `Details for ${selectedProject.name}` : 'Project details'}
-              >
-                {selectedProject && (() => {
-            const project = selectedProject
-            const isBusy = busyProject === project.id
-            const revealed = revealedKeys[project.id]
-            return (
-              <Card key={project.id} className="overflow-hidden rounded-none border-0 p-0 shadow-none lg:min-h-full">
-                <div className="flex flex-col gap-2 border-b border-edge-subtle bg-surface-raised px-3 py-2.5 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {renamingId === project.id ? (
-                        <form
-                          onSubmit={(e) => {
-                            e.preventDefault()
-                            void submitRename(project.id)
-                          }}
-                          className="flex items-center gap-1.5"
-                        >
-                          {/* Native <input> instead of the labelled <Input>
-                              primitive because we're editing inline next
-                              to the project header — a labelled field
-                              would shove the row's metadata down a line
-                              and break the scannable card silhouette. */}
-                          <input
-                            autoFocus
-                            type="text"
-                            value={renameDraft}
-                            maxLength={120}
-                            onChange={(e) => setRenameDraft(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Escape') {
-                                e.preventDefault()
-                                cancelRename()
-                              }
-                            }}
-                            disabled={renamingProject}
-                            aria-label={`Rename ${project.name}`}
-                            className="rounded-sm border border-edge bg-surface-root px-2 py-1 text-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 disabled:opacity-60"
-                          />
-                          <Btn
-                            type="submit"
-                            size="sm"
-                            disabled={
-                              renamingProject ||
-                              !renameDraft.trim() ||
-                              renameDraft.trim() === project.name
-                            }
-                            loading={renamingProject}
-                            aria-label="Save project name"
-                            title="Save project name"
-                            className="px-2"
-                          >
-                            <IconCheck />
-                          </Btn>
-                          <Btn
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={cancelRename}
-                            disabled={renamingProject}
-                            aria-label="Cancel rename"
-                            title="Cancel"
-                            className="px-2"
-                          >
-                            <IconClose />
-                          </Btn>
-                        </form>
-                      ) : (
-                        <div className="flex items-center gap-2 min-w-0">
-                          <ProjectFavicon
-                            project_id={project.id}
-                            project_name={project.name}
-                            project_slug={project.slug}
-                            sdk_origin={sdkOriginFromApiKeys(project.api_keys)}
-                            repo_url={project.primary_repo?.repo_url ?? null}
-                            size={16}
-                          />
-                          <h3 className="truncate text-base font-semibold text-fg">{project.name}</h3>
-                        </div>
-                      )}
-                      <span className="inline-flex items-center gap-1">
-                        <span title="Reports, Fixes, Dashboard, and other pages are filtered to this project.">
-                          <SignalChip tone="brand" className="normal-case tracking-normal">
-                            Active
-                          </SignalChip>
-                        </span>
-                        <ConfigHelp helpId="projects.active_project" />
-                      </span>
-                      <SignalChip tone="neutral" className="font-mono text-2xs">
-                        {project.slug}
-                      </SignalChip>
-                      {project.pdca_bottleneck && project.pdca_bottleneck_label && (
-                        <Link
-                          to={bottleneckDeepLink(
-                            project.pdca_bottleneck,
-                            project.id,
-                            project.pdca_bottleneck_label,
-                          )}
-                          className="inline-flex max-w-full min-w-0 items-center gap-1 truncate rounded-sm bg-warn-muted px-2 py-0.5 text-2xs font-medium text-warn hover:opacity-90 motion-safe:transition-opacity"
-                          title={`${project.pdca_bottleneck_label} — open to fix`}
-                        >
-                          {bottleneckHumanHeadline({
-                            stage: project.pdca_bottleneck,
-                            label: project.pdca_bottleneck_label,
-                            count: project.pdca_bottleneck_count,
-                          })}
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-1 sm:justify-end">
-                    {canDeleteProject(project) && renamingId !== project.id && (
-                      <Btn
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => startRename(project)}
-                        disabled={isBusy || renamingProject}
-                        aria-label={`Rename ${project.name}`}
-                        title={`Rename ${project.name}. Doesn't change the project slug or any URLs.`}
-                        className="px-2"
-                      >
-                        <IconPencil />
-                      </Btn>
-                    )}
-                    <Tooltip content="Reports">
-                      <Link
-                        to={`/reports?project=${project.id}`}
-                        className={LINK_CHIP_CLASS}
-                        aria-label={`Reports for ${project.name}`}
-                      >
-                        <IconReports />
-                      </Link>
-                    </Tooltip>
-                    <Tooltip content="Integrations">
-                      <Link
-                        to={`/integrations/config?project=${project.id}`}
-                        className={LINK_CHIP_CLASS}
-                        aria-label={`Integrations for ${project.name}`}
-                      >
-                        <IconIntegrations />
-                      </Link>
-                    </Tooltip>
-                    <Tooltip content="Settings">
-                      <Link
-                        to={`/settings?project=${project.id}`}
-                        className={LINK_CHIP_CLASS}
-                        aria-label={`Settings for ${project.name}`}
-                      >
-                        <IconSettings />
-                      </Link>
-                    </Tooltip>
-                    <Tooltip content="Send test report (ingest only — does not mark SDK installed)">
-                      <Btn
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => sendTestReport(project.id, project.name)}
-                        disabled={isBusy}
-                        aria-label={`Send test report for ${project.name}`}
-                        className="px-2"
-                      >
-                        <IconSend />
-                      </Btn>
-                    </Tooltip>
-                    <div className="flex items-center gap-1" data-testid={`mint-key-${project.id}`}>
-                      <label htmlFor={`key-scope-${project.id}`} className="sr-only">
-                        API key scope for {project.name}
-                      </label>
-                      <ConfigHelp helpId="projects.api_key_scope" />
-                      <select
-                        id={`key-scope-${project.id}`}
-                        data-testid={`key-scope-${project.id}`}
-                        className="text-2xs bg-surface-raised border border-edge rounded-sm px-2 py-1 text-fg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
-                        value={keyScopePreset[project.id] ?? 'sdk'}
-                        onChange={(e) =>
-                          setKeyScopePreset((prev) => ({
-                            ...prev,
-                            [project.id]: e.target.value as ScopePresetId,
-                          }))
-                        }
-                        disabled={isBusy}
-                        title={
-                          SCOPE_PRESETS.find((p) => p.id === (keyScopePreset[project.id] ?? 'sdk'))
-                            ?.hint
-                        }
-                      >
-                        {SCOPE_PRESETS.map((preset) => (
-                          <option key={preset.id} value={preset.id}>
-                            {preset.label}
-                          </option>
-                        ))}
-                      </select>
-                      <Tooltip content="Generate API key">
-                        <Btn
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => generateKey(project.id)}
-                          disabled={isBusy}
-                          loading={isBusy}
-                          data-testid={`generate-key-${project.id}`}
-                          aria-label={`Generate API key for ${project.name}`}
-                          className="px-2"
-                        >
-                          <IconKey />
-                        </Btn>
-                      </Tooltip>
-                    </div>
-                    {/* Destructive last in tab order on purpose. Gated to
-                        org owner/admin (or legacy direct owner). Members and
-                        viewers don't see the button at all so they can't
-                        even attempt the action — backend mirrors this with
-                        a 403, but hiding it is better UX than letting them
-                        click and bounce. */}
-                    {canDeleteProject(project) && (
-                      <Btn
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setPendingDelete(project)}
-                        disabled={isBusy}
-                        data-testid={`delete-project-${project.id}`}
-                        aria-label={`Delete ${project.name}`}
-                        // Inline danger tone — only flips on hover so the
-                        // row's neutral chrome stays calm at rest.
-                        className="px-2 text-fg-secondary hover:text-danger hover:bg-danger-muted/15 hover:border-danger/30"
-                        title={`Delete ${project.name} and every report, key, and integration tied to it. You'll get an Undo window.`}
-                      >
-                        <IconTrash />
-                      </Btn>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-3 px-3 py-3">
-                  <ProjectMetricsRail project={project} />
-                  <ProjectContextRail project={project} />
-                  {project.pdca_bottleneck && project.pdca_bottleneck_label && (
-                    <ProjectBottleneckCard
-                      projectId={project.id}
-                      stage={project.pdca_bottleneck}
-                      label={project.pdca_bottleneck_label}
-                      count={project.pdca_bottleneck_count}
-                      failedFixesPreview={project.failed_fixes_preview}
-                    />
-                  )}
-                </div>
-
-                {revealed && (
-                  <div className="px-3 pb-3">
-                    <RevealedKeyCard
-                      projectId={project.id}
-                      projectName={project.name}
-                      projectSlug={project.slug}
-                      apiKey={revealed.key}
-                      scopes={revealed.scopes}
-                      onDismiss={() =>
-                        setRevealedKeys((prev) => {
-                          const { [project.id]: _, ...rest } = prev
-                          return rest
-                        })
-                      }
-                    />
-                  </div>
-                )}
-
-                {/* SDK CONNECTIVITY HEALTH — primary diagnostic surface for
-                    "I generated a key 4 days ago, why am I seeing 0 reports?"
-                    Renders only when at least one key exists, since pre-key
-                    state already has the "Generate key" CTA above; before
-                    that the card would just say "no key" and double up. */}
-                {project.api_keys.length > 0 && (
-                  <div className="px-3 pb-3 space-y-3">
-                    <SdkHealthSummary
-                      projectId={project.id}
-                      projectName={project.name}
-                      projectSlug={project.slug}
-                      apiKeys={project.api_keys}
-                      lastReportAt={project.last_report_at}
-                      adminHost={adminHost}
-                      reportCount={project.report_count}
-                      compact
-                      onTestReportSent={reload}
-                    />
-                    {project.sdk_status && project.sdk_version && (
-                      <SdkUpgradeCTA
-                        status={project.sdk_status}
-                        package_={project.sdk_package ?? null}
-                        observedVersion={project.sdk_version}
-                        latestVersion={project.sdk_latest_version ?? null}
-                        stackLabel={project.slug}
-                        compact
-                        projectId={project.primary_repo ? project.id : null}
-                      />
-                    )}
-                    <VerifySetupPanel
-                      projectId={project.id}
-                      projectName={project.name}
-                      adminHost={adminHost}
-                      compact
-                    />
-                  </div>
-                )}
-
-                {project.api_keys.length > 0 && (() => {
-                  // Hide keys that are mid-revoke (in their undo window) so
-                  // the row reads as if the action already succeeded. The
-                  // active count likewise drops by the number of pending
-                  // revokes — otherwise the disclosure header lies about
-                  // how many keys are live.
-                  const visibleKeys = project.api_keys.filter(
-                    (k) => !pendingRevokeIds.has(`${project.id}:${k.id}`),
-                  )
-                  if (visibleKeys.length === 0) return null
-                  const visibleActiveCount = visibleKeys.filter(
-                    (k) => !k.revoked,
-                  ).length
-                  return (
-                    <details className="mx-3 mb-3 mt-0 border-t border-edge-subtle pt-2">
-                      <summary className="cursor-pointer select-none list-none">
-                        <span title={`${visibleKeys.length} keys · ${visibleActiveCount} active`}>
-                          <SignalChip tone="neutral" className="hover:text-fg">
-                            Keys ({visibleActiveCount})
-                          </SignalChip>
-                        </span>
-                      </summary>
-                      <div className="mt-2 space-y-1">
-                        {visibleKeys.map((key) => (
-                          <div
-                            key={key.id}
-                            className="flex items-center justify-between text-2xs gap-2"
-                          >
-                            <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                              <SignalChip
-                                tone={key.revoked ? 'neutral' : 'brand'}
-                                className={`font-mono ${key.revoked ? 'line-through opacity-60' : ''}`}
-                              >
-                                {key.key_prefix}…
-                              </SignalChip>
-                              {(key.scopes ?? []).map((s) => (
-                                <Badge key={s} className={scopeBadgeTone(s)}>
-                                  {s}
-                                </Badge>
-                              ))}
-                              <InlineProof className="border-0 bg-transparent px-0 py-0 text-2xs">
-                                created {relativeTime(key.created_at)}
-                              </InlineProof>
-                              {key.revoked && (
-                                <Badge className="bg-surface-overlay text-fg-faint">revoked</Badge>
-                              )}
-                            </div>
-                            {!key.revoked && (
-                              <Btn
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => requestRevokeKey(project.id, key.id, key.key_prefix)}
-                                aria-label={`Revoke key ${key.key_prefix}`}
-                                title={`Revoke key starting with ${key.key_prefix}…. You'll get an Undo window.`}
-                                className="px-2 text-fg-secondary hover:text-danger hover:bg-danger-muted/15"
-                              >
-                                <IconTrash />
-                              </Btn>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  )
-                })()}
-
-                {/* Per-project SDK CONFIGURATOR + install snippet. Stays
-                    collapsed by default so the row remains scannable when
-                    the user is just managing keys, but the disclosure
-                    header is now full-width with an icon + descriptive
-                    sub-line so the eye actually catches it (the previous
-                    tiny "SDK install snippet" link looked identical to
-                    the keys row above and was getting missed). */}
-                {/* SDK configurator defaults open in the folder-tab panel.
-                    Override map clears when activeProjectId changes so tab
-                    switches reset manual collapse state. */}
-                <details
-                  className="mt-3 border-t border-edge-subtle px-3 pt-3 group"
-                  data-testid={`sdk-configurator-${project.id}`}
-                  open={sdkOpenOverride[project.id] ?? true}
-                  onToggle={(e) => {
-                    const nextOpen = (e.currentTarget as HTMLDetailsElement).open
-                    setSdkOpenOverride((prev) => {
-                      if (nextOpen === true && !(project.id in prev)) return prev
-                      return { ...prev, [project.id]: nextOpen }
-                    })
-                  }}
-                >
-                  <summary className="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-2 py-1.5 -mx-2 rounded-sm hover:bg-surface-overlay transition-colors">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span aria-hidden="true" className="text-fg-muted text-xs">
-                        {'\u{1F41B}'}
-                      </span>
-                      <div className="min-w-0">
-                        <div className="text-xs font-medium text-fg">
-                          Preview, configure & install the SDK widget
-                        </div>
-                        <div className="text-2xs">
-                          <InlineProof className="border-0 bg-transparent px-0 py-0">
-                            Live mock preview · 4-corner position picker · theme · capture flags · auto-updating snippet
-                          </InlineProof>
-                        </div>
-                      </div>
-                    </div>
-                    <span
-                      aria-hidden="true"
-                      className="text-2xs text-fg-faint group-open:rotate-90 motion-safe:transition-transform"
-                    >
-                      ›
-                    </span>
-                  </summary>
-                  <div className="mt-3">
-                    {/* Pass `revealed?.key` so the snippet shows the real,
-                        just-minted plaintext key instead of the `mushi_xxx`
-                        placeholder. `revealed` is the same value the
-                        RevealedKeyCard above uses, so the user can copy the
-                        snippet without manually replacing a placeholder
-                        whose actual value is sitting on screen literally
-                        inches above. Once the user dismisses the reveal
-                        (or reloads), `revealed` becomes undefined and the
-                        card cleanly falls back to the placeholder — which
-                        is what we want, since we don't persist plaintext. */}
-                    <SdkInstallCard projectId={project.id} projectSlug={project.slug} apiKey={revealed?.key} compact />
-                    <div className="mt-4 border-t border-edge-subtle pt-4">
-                      <AssistantConfigCard projectId={project.id} />
-                    </div>
-                    <div className="mt-4 border-t border-edge-subtle pt-4">
-                      <IdentitySecretCard projectId={project.id} projectSlug={project.slug} />
-                    </div>
-                  </div>
-                </details>
-              </Card>
-            )
-          })()}
-              </div>
-            </div>
-          )}
-        </Section>
+        <ProjectsListPanel
+          projects={projects}
+          activeProjectId={activeProjectId}
+          selectedProject={selectedProject}
+          adminHost={adminHost}
+          busyProject={busyProject}
+          revealedKeys={revealedKeys}
+          sdkOpenOverride={sdkOpenOverride}
+          keyScopePreset={keyScopePreset}
+          renamingId={renamingId}
+          renameDraft={renameDraft}
+          renamingProject={renamingProject}
+          pendingRevokeIds={pendingRevokeIds}
+          onGoToCreateTab={() => setTab('create')}
+          onSelectProject={setActive}
+          onStartRename={startRename}
+          onCancelRename={cancelRename}
+          onRenameDraftChange={setRenameDraft}
+          onSubmitRename={submitRename}
+          onSendTestReport={sendTestReport}
+          onGenerateKey={generateKey}
+          onKeyScopePresetChange={(projectId, preset) =>
+            setKeyScopePreset((prev) => ({ ...prev, [projectId]: preset }))
+          }
+          onDismissRevealedKey={(projectId) =>
+            setRevealedKeys((prev) => {
+              const { [projectId]: _, ...rest } = prev
+              return rest
+            })
+          }
+          onSdkOpenOverrideChange={(projectId, open) =>
+            setSdkOpenOverride((prev) => {
+              if (open === true && !(projectId in prev)) return prev
+              return { ...prev, [projectId]: open }
+            })
+          }
+          onRequestDelete={setPendingDelete}
+          onRequestRevokeKey={requestRevokeKey}
+          onReload={reloadAll}
+        />
       ) : null}
 
-      {/* Type-the-slug-to-confirm modal for project deletion. Cascades
-          take care of every dependent table (54 rows in the FK graph as
-          of 2026-04-28: reports, comments, fix_attempts, api_keys, etc.).
-          The list of consequences shows live counts so the user knows
-          how much is on the line — vague warnings underweight the
-          decision in dogfooding. */}
       {pendingDelete && (
         <DangerConfirm
           open={true}
@@ -1615,424 +794,5 @@ export function ProjectsPage() {
         />
       )}
     </div>
-  )
-}
-
-type MetricTone = 'reports' | 'keys' | 'members' | 'activity' | 'created' | 'sdk'
-
-const METRIC_TONE: Record<
-  MetricTone,
-  { icon: string; value: string }
-> = {
-  reports: {
-    icon: 'bg-info-muted text-info',
-    value: 'text-info',
-  },
-  keys: {
-    icon: 'bg-warn-muted text-warning-foreground',
-    value: 'text-warn',
-  },
-  members: {
-    icon: 'bg-brand-subtle text-brand',
-    value: 'text-brand',
-  },
-  activity: {
-    icon: 'bg-ok-muted text-ok',
-    value: 'text-ok',
-  },
-  created: {
-    icon: 'bg-surface-overlay text-fg-muted',
-    value: 'text-fg',
-  },
-  sdk: {
-    icon: 'bg-accent-muted text-accent-foreground',
-    value: 'text-fg',
-  },
-}
-
-/** Compact KPI strip — one row, color-accent values, dividers between tiles. */
-function ProjectMetricsRail({ project }: { project: Project }) {
-  const hasSdk = project.sdk_status && project.sdk_status !== 'unknown'
-
-  return (
-    <div className="overflow-hidden rounded-md border border-edge-subtle bg-surface-raised">
-      <div
-        className={`grid grid-cols-2 gap-px bg-edge-subtle sm:grid-cols-3 ${
-          hasSdk ? 'lg:grid-cols-6' : 'lg:grid-cols-5'
-        }`}
-      >
-        <MetricTile
-          tone="reports"
-          icon={<IconReports className="h-3.5 w-3.5" />}
-          label="Reports"
-          value={project.report_count.toLocaleString()}
-        />
-        <MetricTile
-          tone="keys"
-          icon={<IconKey className="h-3.5 w-3.5" />}
-          label="Keys"
-          value={String(project.active_key_count)}
-          hint="Active API keys"
-        />
-        <MetricTile
-          tone="members"
-          icon={<IconUser className="h-3.5 w-3.5" />}
-          label="Members"
-          value={String(project.member_count)}
-        />
-        <MetricTile
-          tone="activity"
-          icon={<IconClock className="h-3.5 w-3.5" />}
-          label="Last report"
-          value={relativeTime(project.last_report_at)}
-          title={project.last_report_at ? new Date(project.last_report_at).toLocaleString() : 'No reports yet'}
-        />
-        <MetricTile
-          tone="created"
-          icon={<IconClock className="h-3.5 w-3.5" />}
-          label="Created"
-          value={new Date(project.created_at).toLocaleDateString()}
-        />
-        {hasSdk && (
-          <MetricTile
-            tone="sdk"
-            icon={<IconGauge className="h-3.5 w-3.5" />}
-            label="SDK"
-            value={
-              <SdkVersionBadge
-                status={project.sdk_status!}
-                package_={project.sdk_package ?? null}
-                observedVersion={project.sdk_version ?? null}
-                latestVersion={project.sdk_latest_version ?? null}
-                deprecationMessage={project.sdk_deprecation_message ?? null}
-                compact
-              />
-            }
-            compactValue
-          />
-        )}
-      </div>
-      <div className="grid grid-cols-1 gap-2 border-t border-edge-subtle bg-surface-overlay px-3 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-3">
-        <span
-          className="inline-flex shrink-0 items-center gap-1.5 text-2xs font-medium text-fg-muted"
-          title="Paste as MUSHI_PROJECT_ID in .env.local or CI"
-        >
-          <IconTerminal className="h-4 w-4 text-fg-faint" />
-          Project ID
-        </span>
-        <ProjectIdCopy projectId={project.id} />
-      </div>
-    </div>
-  )
-}
-
-function MetricTile({
-  tone,
-  icon,
-  label,
-  value,
-  hint,
-  title,
-  compactValue,
-}: {
-  tone: MetricTone
-  icon: ReactNode
-  label: string
-  value: ReactNode
-  hint?: string
-  title?: string
-  compactValue?: boolean
-}) {
-  const styles = METRIC_TONE[tone]
-  return (
-    <div
-      className="flex min-w-0 flex-col gap-0.5 bg-surface-raised px-3 py-2.5"
-      title={title ?? hint}
-    >
-      <div className="inline-flex min-w-0 items-center gap-1.5 text-2xs font-medium text-fg-muted">
-        <span className={`inline-flex shrink-0 items-center justify-center rounded p-0.5 ${styles.icon}`}>
-          {icon}
-        </span>
-        <span className="truncate">{label}</span>
-      </div>
-      <div
-        className={
-          compactValue
-            ? 'mt-0.5 min-w-0'
-            : `truncate font-mono text-lg font-semibold tabular-nums leading-tight ${styles.value}`
-        }
-      >
-        {value}
-      </div>
-    </div>
-  )
-}
-
-/**
- * Per-project context rail — repo, index, trend, severity, and integrations
- * in one horizontal strip inside a ContainedBlock. Icon-led items use the
- * full card width instead of a left-piled grid of gray boxes.
- */
-function ProjectContextRail({ project }: { project: Project }) {
-  const repo = project.primary_repo
-  const repoLabel = shortRepoLabel(repo?.repo_url ?? null)
-  const sev = project.severity_breakdown_30d
-  const sevTotal = sev?.total ?? 0
-  const planTier = (project.plan_tier ?? '').trim()
-  const region = (project.data_residency_region ?? '').trim()
-  const indexedFiles = project.indexed_file_count ?? 0
-  const extraRepos = (project.repos?.length ?? 0) - (repo ? 1 : 0)
-  const trend = project.trend_7d
-  const sentryConnected = !!project.sentry_connected
-  const sentryReports = project.sentry_connected_reports_30d ?? 0
-  // Trend chip is meaningful when there's been any meaningful traffic
-  // — we hide it for the typical "no reports yet" case rather than
-  // rendering a `flat 0 vs 0` chip that adds noise without signal.
-  const showTrend =
-    trend && (trend.last7d > 0 || trend.prev7d > 0) && trend.direction !== 'flat'
-
-  const hasAnything =
-    !!repo ||
-    indexedFiles > 0 ||
-    sevTotal > 0 ||
-    planTier.length > 0 ||
-    region.length > 0 ||
-    showTrend ||
-    sentryConnected
-  if (!hasAnything) return null
-
-  const health = repo ? indexHealth(repo) : null
-  const indexHint = (() => {
-    if (!repo) return undefined
-    const lastIso = repo.last_indexed_at
-    const attemptIso = repo.last_index_attempt_at
-    if (health === 'failed') {
-      const trimmed = (repo.last_index_error ?? '').slice(0, 220)
-      return `Last index attempt failed${attemptIso ? ` (${relativeTime(attemptIso)})` : ''}.${
-        trimmed ? `\n\n${trimmed}` : ''
-      }`
-    }
-    if (health === 'off') return 'Indexing is disabled for this repo. Enable it in Settings to power codebase-aware triage and fix suggestions.'
-    if (health === 'never') return 'Repo connected but no successful index pass yet. The first index runs in the background.'
-    if (health === 'stale') return `Last successful index ${relativeTime(lastIso)}. Codebase-aware features may be using stale context.`
-    return `Indexed ${relativeTime(lastIso)}.`
-  })()
-
-  return (
-    <div className="overflow-hidden rounded-md border border-edge-subtle bg-surface-raised text-xs">
-      {repo && repoLabel && (
-        <ContextDetailRow label="Repository" icon={<IconGit className="h-4 w-4" />}>
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
-            <span className="inline-flex min-w-0 items-center gap-1.5">
-              {repo.repo_url ? (
-                <a
-                  href={repo.repo_url}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="truncate font-mono text-sm text-fg hover:underline"
-                  title={`Open ${repoLabel} on GitHub`}
-                >
-                  {repoLabel}
-                </a>
-              ) : (
-                <span className="truncate font-mono text-sm text-fg">{repoLabel}</span>
-              )}
-              {repo.repo_url && <IconExternalLink className="h-3.5 w-3.5 shrink-0 text-fg-faint" />}
-            </span>
-            {repo.default_branch && (
-              <>
-                <ContextDivider />
-                <SignalChip tone="neutral" className="font-mono uppercase">
-                  {repo.default_branch}
-                </SignalChip>
-              </>
-            )}
-            {health && (
-              <>
-                <ContextDivider />
-                <span
-                  title={
-                    health === 'ok' && repo.last_indexed_at
-                      ? `${indexHint ?? ''} · ${relativeTime(repo.last_indexed_at)}`
-                      : indexHint
-                  }
-                >
-                  <SignalChip tone={INDEX_HEALTH_CHIP_TONE[health]}>
-                    {INDEX_HEALTH_LABEL[health]}
-                  </SignalChip>
-                </span>
-              </>
-            )}
-            {extraRepos > 0 && (
-              <>
-                <ContextDivider />
-                <span className="shrink-0 text-fg-muted">
-                  +{extraRepos} {extraRepos === 1 ? 'repo' : 'repos'}
-                </span>
-              </>
-            )}
-            {repo.github_app_connected && (
-              <>
-                <ContextDivider />
-                <SignalChip tone="info">GitHub</SignalChip>
-              </>
-            )}
-          </div>
-        </ContextDetailRow>
-      )}
-
-      {indexedFiles > 0 && (
-        <ContextDetailRow label="Code index" icon={<IconStorage className="h-4 w-4" />}>
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
-            <span title={`${indexedFiles.toLocaleString()} indexed source files`}>
-              <span className="font-mono text-sm text-fg">{indexedFiles.toLocaleString()}</span>{' '}
-              <span className="text-fg-secondary">{pluralize(indexedFiles, 'file')}</span>
-            </span>
-            <ContextDivider />
-            <Link
-              to={`/explore?project=${project.id}`}
-              className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay px-2 py-0.5 text-2xs text-fg-secondary transition-colors hover:border-edge hover:bg-surface-raised hover:text-fg"
-              title="Open codebase atlas"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <IconExplore className="h-3 w-3" />
-              Explore
-            </Link>
-          </div>
-        </ContextDetailRow>
-      )}
-
-      {showTrend && trend && (
-        <ContextDetailRow label="7-day trend" icon={<IconGauge className="h-4 w-4" />}>
-          <span title={`${trend.last7d} reports last 7d vs ${trend.prev7d} prior week`}>
-            <SignalChip
-              tone={trend.direction === 'up' ? 'warn' : 'ok'}
-              className="font-mono tabular-nums"
-            >
-              {trend.direction === 'up' ? '↑' : '↓'} {Math.abs(trend.delta)}
-            </SignalChip>
-          </span>
-        </ContextDetailRow>
-      )}
-
-      {sevTotal > 0 && sev && (
-        <ContextDetailRow label="Last 30 days" icon={<IconReports className="h-4 w-4" />}>
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {sev.critical > 0 && (
-              <span title={`${sev.critical} critical reports (30d)`}>
-                <SignalChip tone="danger">Crit {sev.critical}</SignalChip>
-              </span>
-            )}
-            {sev.major > 0 && (
-              <span title={`${sev.major} major reports (30d)`}>
-                <SignalChip tone="warn">Major {sev.major}</SignalChip>
-              </span>
-            )}
-            {sev.minor > 0 && (
-              <span title={`${sev.minor} minor reports (30d)`}>
-                <SignalChip tone="info">Minor {sev.minor}</SignalChip>
-              </span>
-            )}
-            {sev.trivial > 0 && (
-              <span title={`${sev.trivial} trivial reports (30d)`}>
-                <SignalChip tone="neutral">Low {sev.trivial}</SignalChip>
-              </span>
-            )}
-          </div>
-        </ContextDetailRow>
-      )}
-
-      {(planTier || region || sentryConnected) && (
-        <ContextDetailRow label="Integrations" icon={<IconIntegrations className="h-4 w-4" />}>
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {planTier && planTier !== 'free' && (
-              <Badge className="border border-brand/20 bg-brand-subtle capitalize text-brand">
-                {planTier}
-              </Badge>
-            )}
-            {region && (
-              <Badge className="border border-edge-subtle bg-surface-overlay uppercase text-fg-muted">
-                {region}
-              </Badge>
-            )}
-            {sentryConnected && (
-              <Badge
-                className="inline-flex items-center gap-1 border border-accent/30 bg-accent-muted text-accent-foreground"
-                title={
-                  sentryReports > 0
-                    ? `${sentryReports} report${sentryReports === 1 ? '' : 's'} with Sentry trace in the last 30 days`
-                    : 'Sentry SDK detected on the host app'
-                }
-              >
-                Sentry
-              </Badge>
-            )}
-          </div>
-        </ContextDetailRow>
-      )}
-    </div>
-  )
-}
-
-function ContextDivider() {
-  return <span className="hidden h-4 w-px shrink-0 bg-edge-subtle sm:inline-block" aria-hidden />
-}
-
-function ContextDetailRow({
-  label,
-  icon,
-  children,
-}: {
-  label: string
-  icon: ReactNode
-  children: ReactNode
-}) {
-  return (
-    <div className="grid grid-cols-1 gap-2 border-t border-edge-subtle px-3 py-2.5 first:border-t-0 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:items-center sm:gap-4">
-      <div className="inline-flex min-w-0 items-center gap-2 text-2xs font-semibold text-fg-muted">
-        <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-surface-overlay text-fg-muted">
-          {icon}
-        </span>
-        <span className="truncate">{label}</span>
-      </div>
-      <div className="min-w-0 text-fg-secondary">{children}</div>
-    </div>
-  )
-}
-
-function ProjectIdCopy({ projectId }: { projectId: string }) {
-  const toast = useToast()
-  const [copied, setCopied] = useState(false)
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(projectId)
-      setCopied(true)
-      toast.success('Project ID copied — paste it as MUSHI_PROJECT_ID.')
-      window.setTimeout(() => setCopied(false), 2000)
-    } catch {
-      toast.error('Clipboard blocked — select the ID and copy manually.')
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={copy}
-      className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-sm transition-colors group hover:opacity-95"
-      title="Copy project ID — paste as MUSHI_PROJECT_ID in .env.local or .cursor/mcp.json"
-      data-testid={`project-id-chip-${projectId}`}
-      aria-label={`Copy project ID: ${projectId}`}
-    >
-      <CodeInline className="min-w-0 max-w-full cursor-pointer break-all group-hover:border-edge">
-        <span className="tabular-nums">{projectId}</span>
-      </CodeInline>
-      <span className="shrink-0 opacity-50 group-hover:opacity-100 transition-opacity" aria-hidden="true">
-        {copied
-          ? <IconCheck className="h-2.5 w-2.5 text-ok" />
-          : <IconCopy className="h-2.5 w-2.5 text-fg-faint" />
-        }
-      </span>
-    </button>
   )
 }

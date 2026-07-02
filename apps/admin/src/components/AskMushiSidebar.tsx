@@ -591,10 +591,10 @@ export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadI
             </div>
             <div className="flex justify-end gap-2 px-3 pb-2">
               {modelOverride && (
-                <span className="text-3xs text-brand">model: {modelOverride}</span>
+                <span className="text-2xs text-brand">model: {modelOverride}</span>
               )}
               {intentOverride && intentOverride !== 'default' && (
-                <span className="text-3xs text-brand">intent: {intentOverride}</span>
+                <span className="text-2xs text-brand">intent: {intentOverride}</span>
               )}
               <Btn
                 type="submit"
@@ -992,7 +992,7 @@ function MessageActions({ message, onCopy }: { message: AskMushiMessage; onCopy:
         <a
           key={`${c.kind}:${c.id}`}
           href={c.kind === 'report' ? `/reports/${c.id}` : c.kind === 'fix' ? `/fixes` : '#'}
-          className="text-3xs text-brand hover:underline"
+          className="text-2xs text-brand hover:underline"
         >
           Open {c.kind} ↗
         </a>

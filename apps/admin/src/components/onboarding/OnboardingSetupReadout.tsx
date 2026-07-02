@@ -10,6 +10,7 @@ import { EndpointCodeRow, ReadoutSection } from '../readout'
 import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import type { OnboardingStats } from './types'
 import { IconCheck, IconGlobe, IconHealth, IconNetwork } from '../icons'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 export interface OnboardingSetupReadoutProps {
   stats: OnboardingStats
@@ -90,7 +91,7 @@ export function OnboardingSetupReadout({
                 Fix SDK endpoint env
               </span>
             ) : stats.sdkInstalled ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-ok/30 bg-ok-muted/30 px-2 py-0.5 text-ok">
+              <span className={`inline-flex items-center gap-1 rounded-full border border-ok/30 ${CHIP_TONE.okSubtle} px-2 py-0.5`}>
                 <IconCheck size={12} aria-hidden />
                 Pipeline live
               </span>

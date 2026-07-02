@@ -15,8 +15,12 @@
  *      redirect-to-login if not, then comes back here).
  *   3. Page shows a numbered 3-step guide + code + Approve / Deny buttons.
  *   4. On Approve → POST /v1/cli/auth/device/approve with { user_code }.
- *   5. Backend mints CLI token; CLI poll endpoint returns it; wizard resumes.
- *   6. Approved state shows large "Switch back to your terminal" banner.
+ *   5. Page polls GET /v1/cli/auth/device/status until the CLI has actually
+ *      claimed the token — only then does it declare "CLI connected!". This
+ *      closes the old failure mode where the page asserted success purely on
+ *      the approve POST while the terminal (polling a different or stale
+ *      device_code) never resumed.
+ *   6. Connected state shows large "Switch back to your terminal" banner.
  *
  * DEPENDENCIES:
  *   - apiFetch (lib/supabase)
@@ -24,13 +28,19 @@
  *   - UI primitives (components/ui)
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { CliAuthReadout } from '../components/cli-auth/CliAuthReadout'
 import { Btn } from '../components/ui'
+import { CHIP_TONE } from '../lib/chipTone'
 
-type ApproveState = 'idle' | 'approving' | 'approved' | 'denied' | 'error'
+type ApproveState = 'idle' | 'approving' | 'waiting' | 'connected' | 'denied' | 'error'
+
+/** How often the page checks whether the CLI picked the token up. */
+const CLAIM_POLL_MS = 2_500
+/** After this long without a claim, surface stale-tab troubleshooting help. */
+const CLAIM_SLOW_AFTER_MS = 45_000
 
 function TerminalIcon() {
   return (
@@ -83,15 +93,75 @@ export function CliAuthPage() {
   const [manualCode, setManualCode] = useState('')
   const [approveState, setApproveState] = useState<ApproveState>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [waitingSlow, setWaitingSlow] = useState(false)
 
   // Use code from URL (CLI opens the page with ?code=XXXX-XXXX) or
   // fall back to the manual input (user typed it themselves).
   const userCode = (codeParam || manualCode).trim().toUpperCase()
 
+  // After approval, verify the terminal actually claimed the token before
+  // declaring success. Approval alone proves nothing to the user — the CLI
+  // may be polling a different (stale) device_code, in which case the honest
+  // state is "still waiting", with troubleshooting help after a while.
+  useEffect(() => {
+    if (approveState !== 'waiting' || !userCode) return
+
+    let cancelled = false
+    const startedAt = Date.now()
+
+    const check = async () => {
+      const res = await apiFetch<{ status: string; claimed: boolean }>(
+        `/v1/cli/auth/device/status?user_code=${encodeURIComponent(userCode)}`,
+        { cache: 'no-store' },
+      ).catch(() => null)
+      if (cancelled) return
+      if (res?.ok && res.data?.claimed) {
+        setApproveState('connected')
+        return
+      }
+      if (res?.ok && res.data?.status === 'expired') {
+        setApproveState('error')
+        setErrorMessage(
+          'This request expired before your terminal picked it up. Re-run the command and approve the newest tab.',
+        )
+        return
+      }
+      // Defensive terminal states: 'rejected' should be unreachable for a row
+      // this tab just approved (reject only flips still-pending rows), but a
+      // future change or edge race must not leave the spinner running
+      // forever. NOT_FOUND means the polled request no longer exists.
+      if (res?.ok && res.data?.status === 'rejected') {
+        setApproveState('error')
+        setErrorMessage('This request was denied. Run the command again to get a fresh code.')
+        return
+      }
+      if (res && !res.ok) {
+        setApproveState('error')
+        setErrorMessage(
+          res.error?.code === 'NOT_FOUND'
+            ? 'This request could not be found — it may have expired. Re-run the command and try again.'
+            : (res.error?.message ?? 'Something went wrong while checking your terminal — please try again.'),
+        )
+        return
+      }
+      if (Date.now() - startedAt >= CLAIM_SLOW_AFTER_MS) {
+        setWaitingSlow(true)
+      }
+    }
+
+    void check()
+    const timer = setInterval(() => void check(), CLAIM_POLL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [approveState, userCode])
+
   async function handleApprove() {
     if (!userCode) return
     setApproveState('approving')
     setErrorMessage(null)
+    setWaitingSlow(false)
 
     const res = await apiFetch<{ message: string }>('/v1/cli/auth/device/approve', {
       method: 'POST',
@@ -99,7 +169,7 @@ export function CliAuthPage() {
     })
 
     if (res.ok) {
-      setApproveState('approved')
+      setApproveState('waiting')
     } else {
       setApproveState('error')
       setErrorMessage(res.error?.message ?? 'Something went wrong — please try again.')
@@ -119,15 +189,49 @@ export function CliAuthPage() {
     setApproveState('denied')
   }
 
-  // ── Approved state: big "return to terminal" prompt ──────────────────────────
-  if (approveState === 'approved') {
+  // ── Waiting state: approved, verifying the terminal picked the token up ──────
+  if (approveState === 'waiting') {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-4 text-center">
+        <span
+          className="h-12 w-12 animate-spin rounded-full border-4 border-brand/25 border-t-brand motion-reduce:animate-none"
+          role="status"
+          aria-label="Waiting for your terminal to connect"
+        />
+        <div>
+          <h1 className="text-2xl font-bold text-fg">Approved — waiting for your terminal…</h1>
+          <p className="mt-2 text-sm text-fg-muted">
+            Keep this tab open for a moment. It will confirm as soon as your
+            terminal picks up the connection (usually within a few seconds).
+          </p>
+        </div>
+        {waitingSlow && (
+          <div className="max-w-md rounded-xl border border-warning/40 bg-warning/10 px-5 py-4 text-left">
+            <p className="text-sm font-semibold text-fg">Terminal not continuing?</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-fg-muted">
+              <li>
+                This tab may belong to an <strong className="text-fg">older run</strong> of the
+                wizard. Close it, re-run{' '}
+                <code className="rounded bg-surface-overlay px-1 py-0.5 font-mono text-xs">npx mushi-mushi</code>,
+                and approve in the newest tab (check the code matches).
+              </li>
+              <li>Make sure the wizard is still running in your terminal — it waits up to 10 minutes.</li>
+            </ul>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Connected state: the CLI has claimed the token ───────────────────────────
+  if (approveState === 'connected') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-4 text-center">
         <CheckCircleIcon />
         <div>
           <h1 className="text-2xl font-bold text-fg">CLI connected!</h1>
           <p className="mt-2 text-sm text-fg-muted">
-            Setup is continuing automatically in your terminal.
+            Your terminal picked up the connection. Setup is continuing there.
           </p>
         </div>
         <div className="flex items-center gap-2 rounded-xl border border-ok/30 bg-ok/10 px-6 py-4 text-ok">
@@ -231,7 +335,7 @@ export function CliAuthPage() {
 
         {/* Error */}
         {approveState === 'error' && errorMessage && (
-          <div className="mb-4 rounded-lg border border-danger/40 bg-danger-muted/30 px-4 py-3 text-sm text-danger">
+          <div className={`mb-4 rounded-lg px-4 py-3 text-sm ${CHIP_TONE.dangerSubtle}`}>
             {errorMessage}
           </div>
         )}

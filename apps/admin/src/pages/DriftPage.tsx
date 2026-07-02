@@ -48,6 +48,7 @@ import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PdcaContextHint } from '../components/PdcaContextHint'
 import { PageHero } from '../components/PageHero'
 import type { PageAction } from '../components/PageActionBar'
+import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -78,9 +79,9 @@ interface ContractSnapshot {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const SEVERITY_CLS: Record<DriftFinding['severity'], string> = {
-  info: 'bg-info-muted/50 text-info-foreground border border-info/20',
-  warn: 'bg-warn-muted/50 text-warning-foreground border border-warn/20',
-  critical: 'bg-danger-muted/50 text-danger-foreground border border-danger/20',
+  info: runStatusChipTone('info'),
+  warn: runStatusChipTone('warn'),
+  critical: runStatusChipTone('critical'),
 }
 
 const SEVERITY_LABEL: Record<DriftFinding['severity'], string> = {
@@ -292,7 +293,7 @@ export function DriftPage() {
         title={copy?.title ?? 'Drift'}
         projectScope={stats.projectName ?? projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
-        description={copy?.description ?? 'Banner + DRIFT SNAPSHOT — Overview for posture, Findings to triage, Snapshots for history, Scanner to run walker.'}
+
         contextChip={<PdcaContextHint stage="check" />}
         helpTitle={copy?.help?.title ?? 'Contract drift detection'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'The drift-walker builds a contract snapshot then walks every route with Thompson-sampled priority — routes with more historical findings are checked first.'}
@@ -308,11 +309,11 @@ export function DriftPage() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
+              ? CHIP_TONE.okSubtle
               : bannerSeverity === 'danger'
-                ? 'bg-danger-muted/50 text-danger-foreground'
+                ? CHIP_TONE.dangerSubtle
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn-muted/50 text-warning-foreground'
+                  ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
                     ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                     : 'bg-surface-overlay text-fg-muted'

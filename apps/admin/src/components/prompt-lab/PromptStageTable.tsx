@@ -9,6 +9,7 @@ import {
 } from '../icons'
 import type { PromptVersion } from './types'
 import { STAGE_LABELS } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 // Icon-only Btn override for the dense action column.
 //
@@ -114,7 +115,7 @@ export function PromptStageTable({
                         <Badge className="bg-fg-faint/15 text-fg-muted border border-edge-subtle">Idle</Badge>
                       )}
                       {isGlobal && (
-                        <Badge className="ml-1 bg-warn-muted/50 text-warning-foreground border border-warn/30">Global</Badge>
+                        <Badge className={`ml-1 ${CHIP_TONE.warnSubtle}`}>Global</Badge>
                       )}
                       {p.auto_generated && (
                         <Badge
