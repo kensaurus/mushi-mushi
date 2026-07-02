@@ -62,11 +62,11 @@
   },
   "devDependencies": {
     "@mushi-mushi/tsconfig": "workspace:*",
-    "@types/node": "^22.19.21",
+    "@types/node": "^22.20.0",
     "tsup": "^8.5.1",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.9"
   },
   "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
   "engines": {
