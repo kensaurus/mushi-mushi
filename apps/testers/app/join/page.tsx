@@ -11,7 +11,7 @@ import { TestersPageShell } from '../components/TestersPageShell'
 function JoinPageInner() {
   const searchParams = useSearchParams()
   const appSlug = searchParams.get('app') ?? undefined
-  const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL ?? '/mushi-mushi/console'
+  const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL ?? '/mushi-mushi/admin'
 
   const next = appSlug ? `/tester/apps/${appSlug}` : '/tester'
   const signupUrl = `${adminUrl}/login?as=tester&next=${encodeURIComponent(next)}`

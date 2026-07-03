@@ -1344,6 +1344,17 @@ select, input, textarea {
 }
 
 /* ---------------------------------------------------------------------------
+   APP CHROME — shared top-row rhythm (sidebar logo row + desktop sub-header)
+--------------------------------------------------------------------------- */
+
+.chrome-top-row {
+  display: flex;
+  align-items: center;
+  min-height: var(--chrome-row-height, 2.5rem);
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------------------
    NAVIGATION
 --------------------------------------------------------------------------- */
 
@@ -1920,7 +1931,7 @@ select, input, textarea {
 --------------------------------------------------------------------------- */
 
 :root {
-  --sidebar-micro-seg-min: 2.25rem;
+  --sidebar-micro-seg-min: min(1.75rem, max(1.125rem, calc(1.375rem * var(--ui-pad, 1))));
   --sidebar-micro-solo-w: 2.75rem;
 }
 

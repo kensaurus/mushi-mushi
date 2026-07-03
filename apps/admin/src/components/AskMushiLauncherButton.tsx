@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/components/AskMushiLauncherButton.tsx
- * PURPOSE: Ask Mushi launcher — matches sibling toolbar icon buttons (h-6).
+ * PURPOSE: Ask Mushi launcher — matches sibling toolbar icon buttons (h-8).
  */
 
 import { useSyncExternalStore } from 'react'
@@ -40,7 +40,7 @@ export function AskMushiLauncherButton({ onClick, panelOpen = false }: AskMushiL
         }}
         aria-label="Open Ask Mushi"
         className={[
-          'relative inline-flex items-center justify-center h-6 w-6 rounded-sm',
+          'relative inline-flex items-center justify-center h-8 w-8 rounded-sm',
           showPulse ? 'text-brand' : 'text-fg-muted hover:text-fg hover:bg-surface-overlay',
           'motion-safe:transition-colors',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50',

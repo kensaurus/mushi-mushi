@@ -15,6 +15,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { SetupProject, SetupStep } from '../lib/useSetupStatus'
 import { CHIP_TONE } from '../lib/chipTone'
+import { RefreshIconButton } from './ui'
 
 interface SetupChecklistProps {
   project: SetupProject
@@ -149,16 +150,9 @@ function BannerChecklist({
               : `Project: ${project.project_name}`}
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           {onRefresh && (
-            <button
-              type="button"
-              onClick={onRefresh}
-              className="text-2xs text-fg-muted hover:text-fg-secondary"
-              aria-label="Refresh setup status"
-            >
-              Refresh
-            </button>
+            <RefreshIconButton onClick={onRefresh} label="Refresh setup status" />
           )}
           <button
             type="button"

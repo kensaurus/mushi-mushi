@@ -148,24 +148,23 @@ function renderSidebarNav(compact: boolean) {
 function renderSidebarContent(compact: boolean, user: ReturnType<typeof useAuth>['user'], signOut: () => void) {
   return (
     <>
-      <div className={`${compact ? 'px-2 py-3' : 'px-4 py-3'} border-b border-edge/60 overflow-visible`}>
-        {compact ? (
-          <div className="space-y-1.5">
+      <div className="shrink-0 overflow-visible border-b border-edge/60">
+        <div className={`chrome-top-row ${compact ? 'justify-center px-2' : 'px-4'}`}>
+          {compact ? (
             <h1 className="text-center text-sm font-bold leading-none tracking-tight" aria-label="mushimushi bounties">
               <span className="text-brand">m</span>
               <span className="text-fg-secondary">m</span>
             </h1>
-            <SidebarBrandToggles compact showMode={false} mode="advanced" onSelectMode={noopSelectMode} />
-          </div>
-        ) : (
-          <>
+          ) : (
             <h1 className="text-sm font-bold leading-none tracking-tight">
               <span className="text-brand">mushi</span>
               <span className="text-fg-secondary">mushi</span>
             </h1>
-            <SidebarBrandToggles showMode={false} mode="advanced" onSelectMode={noopSelectMode} />
-          </>
-        )}
+          )}
+        </div>
+        <div className={`${compact ? 'px-2 pb-2' : 'px-4 pb-2'}`}>
+          <SidebarBrandToggles compact={compact} showMode={false} mode="advanced" onSelectMode={noopSelectMode} />
+        </div>
       </div>
 
       {renderSidebarNav(compact)}
@@ -270,7 +269,7 @@ export function TesterLayout() {
           <BalanceStrip />
         </header>
 
-        <header className={`hidden items-center gap-3 border-b border-edge/40 px-5 py-1.5 md:flex ${appChromeHeaderClass}`}>
+        <header className={`hidden chrome-top-row items-center gap-3 border-b border-edge/40 px-5 md:flex ${appChromeHeaderClass}`}>
           <div className="min-w-0 shrink-0">
             <p className="text-xs font-semibold text-fg">{pageTitle}</p>
           </div>
