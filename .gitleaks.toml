@@ -6,7 +6,12 @@
 useDefault = true
 
 [allowlist]
-description = "Internal audit note documenting a legacy AWS IAM user (access key IDs are public identifiers, not secret keys; the value is redacted in-tree). Scoped to this single file so the historical commit does not fail PR scans."
+description = "Path allowlist for a redacted legacy-AWS audit note, plus fake Mushi test-fixture keys. Default OR condition: a match on any path OR regex is allowed. The regex only covers obviously-fake fixtures (mushi_test… / mushi_abcdefgh…); real keys are mushi_live_/mushi_pk_ and are still caught."
 paths = [
+  # Redacted AWS access key ID (a public identifier, not a secret) in an audit note.
   '''docs/audit-2026-06-24/pre-launch-hardening-complete\.md''',
+]
+regexes = [
+  # Hard-coded fake API keys used as fixtures in CLI unit tests.
+  '''mushi_(?:test|abcdefgh)[A-Za-z0-9_]*''',
 ]
