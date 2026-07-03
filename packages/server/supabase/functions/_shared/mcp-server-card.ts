@@ -3,10 +3,17 @@
  * Served at `/.well-known/mcp/server-card.json` when live tool scan is blocked by auth.
  *
  * Smithery quality score weights: tool descriptions, inputSchema depth, server metadata,
- * repository/homepage/license links. Keep in sync with hosted-tool-manifest.json.
+ * repository/homepage/license links.
+ *
+ * Tool list is sourced from mcp-discovery-tools.json, NOT mcp-hosted-tool-manifest.json:
+ * the latter only covers the subset of tools built at runtime via buildManifestTools()
+ * and omits tools hand-coded in mcp/index.ts's BASE_TOOLS (get_fix_context, dispatch_fix,
+ * ...), so a card built from it alone under-advertises the real hosted server. Regenerate
+ * mcp-discovery-tools.json with `node scripts/sync-mcp-discovery-card.mjs` whenever the
+ * canonical catalog (packages/mcp/src/catalog.ts) changes.
  */
 
-import manifestRaw from './mcp-hosted-tool-manifest.json' with { type: 'json' }
+import manifestRaw from './mcp-discovery-tools.json' with { type: 'json' }
 import { SERVER_INFO_EXTENDED } from './mcp-branding.ts'
 
 const SMITHERY_SERVER_URL = 'https://smithery.ai/servers/kensaurus/mushi-mushi'

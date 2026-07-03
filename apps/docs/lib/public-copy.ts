@@ -160,7 +160,14 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     diagnoses: 'Custom',
     retention: 'Up to 365 days',
     seats: 'Unlimited',
-    highlights: 'SAML SSO, SCIM, data residency, priority support',
-    cloudNotes: 'SOC 2, SAML SSO, SCIM, your own LLM keys, data residency, self-host SLA',
+    // SAML SSO is a real, shipped feature (console → SSO). SOC 2 refers to
+    // the readiness/evidence-pack module (see /security/soc2), not a
+    // third-party certification. Dedicated regional clusters are reserved,
+    // not self-serve yet (see /security/data-residency) — Enterprise is the
+    // path to get one provisioned. SCIM is intentionally omitted: no
+    // provisioning endpoint exists yet, ask sales for the current status.
+    highlights: 'SAML SSO, SOC 2 readiness pack, priority support',
+    cloudNotes:
+      'SOC 2 readiness pack, SAML SSO, your own LLM keys, dedicated regional cluster (provisioned on request), self-host SLA',
   },
 ] as const

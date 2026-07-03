@@ -1,7 +1,7 @@
 /**
  * FILE: apps/admin/src/components/ActiveProjectStatusChip.tsx
- * PURPOSE: Inline status affordances on the project switcher trigger with
- *          rich tooltips explaining bottleneck, trend, and SDK signals.
+ * PURPOSE: Status chips beside the project switcher (outside the trigger button)
+ *          with rich tooltips for bottleneck, trend, and SDK signals.
  */
 
 import { Link } from 'react-router-dom'
@@ -20,9 +20,10 @@ import { CHIP_TONE } from '../lib/chipTone'
 
 interface ActiveProjectStatusChipProps {
   snapshot: ProjectSnapshot | null | undefined
+  className?: string
 }
 
-export function ActiveProjectStatusChip({ snapshot }: ActiveProjectStatusChipProps) {
+export function ActiveProjectStatusChip({ snapshot, className = '' }: ActiveProjectStatusChipProps) {
   if (!snapshot) return null
 
   const bottleneck = snapshot.pdca_bottleneck
@@ -50,7 +51,7 @@ export function ActiveProjectStatusChip({ snapshot }: ActiveProjectStatusChipPro
     : null
 
   return (
-    <span className="inline-flex items-center gap-1 shrink-0">
+    <span className={`inline-flex items-center gap-0.5 shrink-0 min-w-0 ${className}`.trim()}>
       {bottleneck && snapshot.pdca_bottleneck_label && bottleneckCtx && (
         <Tooltip
           content={
@@ -85,11 +86,7 @@ export function ActiveProjectStatusChip({ snapshot }: ActiveProjectStatusChipPro
               snapshot.id,
               snapshot.pdca_bottleneck_label,
             )}
-            // The chip renders inside the ProjectSwitcher trigger button; stop
-            // the click from bubbling so navigating doesn't also toggle the
-            // project dropdown.
-            onClick={(e) => e.stopPropagation()}
-            className={`inline-flex h-5 max-w-[6.5rem] cursor-pointer items-center truncate rounded-sm px-1 text-3xs font-semibold leading-none hover:opacity-90 ${PDCA_BOTTLENECK_TONE[bottleneck]}`}
+            className={`inline-flex h-5 max-w-[6.5rem] cursor-pointer items-center truncate rounded-sm px-1 text-2xs font-semibold leading-none hover:opacity-90 ${PDCA_BOTTLENECK_TONE[bottleneck]}`}
           >
             {bottleneckChipLabel(bottleneckCtx)}
           </Link>
@@ -102,7 +99,7 @@ export function ActiveProjectStatusChip({ snapshot }: ActiveProjectStatusChipPro
           nowrap={false}
           portal
         >
-          <span className={`inline-flex h-5 cursor-help items-center rounded-sm ${CHIP_TONE.warnSubtle} px-1 text-3xs font-mono font-semibold`}>
+          <span className={`inline-flex h-5 cursor-help items-center rounded-sm ${CHIP_TONE.warnSubtle} px-1 text-2xs font-mono font-semibold`}>
             ↑
           </span>
         </Tooltip>
@@ -138,8 +135,7 @@ export function ActiveProjectStatusChip({ snapshot }: ActiveProjectStatusChipPro
         >
           <Link
             to={`/connect?project=${encodeURIComponent(snapshot.id)}`}
-            onClick={(e) => e.stopPropagation()}
-            className={`inline-flex h-5 cursor-pointer items-center rounded-sm px-1 text-3xs font-medium hover:opacity-90 ${
+            className={`inline-flex h-5 cursor-pointer items-center rounded-sm px-1 text-2xs font-medium hover:opacity-90 ${
               sdkResolution.kind === 'deprecated'
                 ? CHIP_TONE.dangerSubtle
                 : sdkResolution.kind === 'catalog-ahead'

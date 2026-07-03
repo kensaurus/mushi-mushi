@@ -54,11 +54,14 @@
     "check:brand-tokens-fresh": "node scripts/check-brand-tokens-fresh.mjs",
     "check:nav-registry": "node scripts/check-nav-registry.mjs",
     "check:ia-labels": "node scripts/check-ia-labels.mjs",
-    "check:catalog-sync": "node scripts/check-mcp-catalog-sync.mjs && node scripts/sync-mcp-tool-count.mjs --check",
+    "check:catalog-sync": "node scripts/check-mcp-catalog-sync.mjs && node scripts/sync-mcp-tool-count.mjs --check && node scripts/sync-mcp-discovery-card.mjs --check",
     "sync:mcp-tool-count": "node scripts/sync-mcp-tool-count.mjs",
+    "sync:mcp-discovery-card": "node scripts/sync-mcp-discovery-card.mjs",
     "check:cursor-plugin": "node scripts/check-cursor-plugin.mjs",
     "check:mcp-publish-readiness": "node scripts/check-mcp-publish-readiness.mjs",
     "smoke:admin-health": "node scripts/admin-console-health.mjs",
+    "smoke:auth-providers": "node scripts/verify-auth-providers.mjs",
+    "smoke:auth-login": "node scripts/auth-login-smoke.mjs",
     "smoke:activation-journey": "node scripts/activation-journey.mjs",
     "smoke:cli-setup": "node scripts/cli-setup-smoke.mjs",
     "check:activation-contract": "node scripts/check-activation-contract.mjs",
@@ -106,7 +109,8 @@
     "check:edge-fn-imports": "node scripts/check-edge-fn-imports.mjs",
     "bootstrap:new-npm-packages": "node scripts/bootstrap-publish-new-packages.mjs",
     "e2e": "pnpm --filter @mushi-mushi/e2e-dogfood e2e",
-    "test:cloudfront": "node --test scripts/cloudfront-functions.test.mjs"
+    "test:cloudfront": "node --test scripts/cloudfront-functions.test.mjs",
+    "test:verify-hosted-mcp": "node --test scripts/verify-hosted-mcp-helpers.test.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

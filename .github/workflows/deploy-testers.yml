@@ -1,0 +1,210 @@
+##
+# FILE: deploy-testers.yml
+# PURPOSE: Build and deploy the Mushi Bounties public marketplace
+#          (apps/testers, Next.js static export) to S3 + CloudFront at
+#          kensaur.us/mushi-mushi/testers
+#
+# OVERVIEW:
+# - Builds the Next.js app with `output: 'export'` and basePath
+#   /mushi-mushi/testers (see apps/testers/next.config.mjs)
+# - Syncs immutable assets (JS/CSS) with long cache, HTML with short cache
+# - Deploys the shared CloudFront SPA router function (idempotent — also
+#   deployed by deploy-admin.yml / deploy-docs.yml on the same script change)
+# - Invalidates CloudFront cache and runs a health check on
+#   /mushi-mushi/testers/
+#
+# DEPENDENCIES:
+# - S3 bucket: kensaur.us-mushi-mushi (ap-northeast-1)
+# - CloudFront distribution: kensaur.us (E246VQ1C9QYZVB)
+# - GitHub Secrets: AWS_ROLE_ARN (GitHub OIDC role — see deploy-admin.yml
+#   header for the one-time AWS OIDC setup steps), CLOUDFRONT_DISTRIBUTION_ID
+#
+# NOTES:
+# - NEXT_PUBLIC_API_URL / NEXT_PUBLIC_ADMIN_URL are public, non-secret URLs
+#   (see docs/marketing/canonical-urls.md) and are set directly below rather
+#   than via GitHub Secrets.
+# - This workflow is independent of the SDK release pipeline and the docs /
+#   admin workflows; it only touches the testers S3 prefix.
+##
+
+name: Deploy Testers Marketplace
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/testers/**'
+      - 'scripts/cloudfront-mushi-spa-router.js'
+      - 'scripts/cloudfront-mushi-spa-response.js'
+      - 'scripts/aws-attach-apex-redirect.mjs'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-testers
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+  S3_BUCKET: kensaur.us-mushi-mushi
+  S3_PREFIX: mushi-mushi/testers
+  MUSHI_BASE_PATH: /mushi-mushi/testers
+  NEXT_PUBLIC_API_URL: https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api
+  NEXT_PUBLIC_ADMIN_URL: https://kensaur.us/mushi-mushi/admin
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write  # Required for GitHub OIDC → AWS role assumption
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Compute version
+        id: version
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u +"%Y%m%d%H%M")
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          TESTERS_VERSION="0.1.${COMMIT_COUNT}"
+          echo "testers_version=${TESTERS_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
+          echo "::notice::Testers ${TESTERS_VERSION} (${SHORT_SHA}) built ${BUILD_DATE}"
+
+      - name: Build testers marketplace
+        run: pnpm --filter @mushi-mushi/testers build
+        env:
+          MUSHI_BASE_PATH: ${{ env.MUSHI_BASE_PATH }}
+          NEXT_PUBLIC_API_URL: ${{ env.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_ADMIN_URL: ${{ env.NEXT_PUBLIC_ADMIN_URL }}
+
+      - name: Generate version file
+        env:
+          TESTERS_VERSION: ${{ steps.version.outputs.testers_version }}
+          BUILD_DATE: ${{ steps.version.outputs.build_date }}
+        run: |
+          COMMIT=$(git rev-parse --short HEAD)
+          jq -n \
+            --arg version "$TESTERS_VERSION" \
+            --arg buildDate "$BUILD_DATE" \
+            --arg commit "$COMMIT" \
+            '{version: $version, buildDate: $buildDate, commit: $commit, app: "testers"}' \
+            > apps/testers/out/version.json
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a  # v4.2.1
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Sync immutable assets to S3 (JS)
+        run: |
+          aws s3 sync apps/testers/out/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
+            --cache-control "public, max-age=31536000, immutable" \
+            --content-type "application/javascript" \
+            --no-guess-mime-type \
+            --exclude "*" \
+            --include "*.js"
+
+      - name: Sync immutable assets to S3 (CSS)
+        run: |
+          aws s3 sync apps/testers/out/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
+            --cache-control "public, max-age=31536000, immutable" \
+            --content-type "text/css" \
+            --no-guess-mime-type \
+            --exclude "*" \
+            --include "*.css"
+
+      - name: Sync immutable assets to S3 (other static)
+        run: |
+          aws s3 sync apps/testers/out/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "*.html" \
+            --exclude "*.js" \
+            --exclude "*.css" \
+            --exclude "version.json"
+
+      - name: Sync HTML to S3 (short cache)
+        run: |
+          aws s3 sync apps/testers/out/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
+            --cache-control "public, max-age=300, must-revalidate" \
+            --content-type "text/html" \
+            --no-guess-mime-type \
+            --exclude "*" \
+            --include "*.html"
+
+      - name: Sync version.json to S3 (no cache)
+        run: |
+          aws s3 cp apps/testers/out/version.json s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/version.json \
+            --cache-control "public, max-age=0, must-revalidate" \
+            --content-type "application/json"
+
+      - name: Deploy CloudFront spa router function
+        # Idempotent — deploy-admin.yml and deploy-docs.yml already deploy this
+        # shared function on any scripts/cloudfront-mushi-spa-router.js change.
+        # Kept here too so a testers-only PR that edits the router still ships it.
+        run: |
+          FUNC_NAME="mushi-mushi-spa-router"
+          EXISTING_ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
+            --query 'ETag' --output text 2>/dev/null || echo "")
+          if [ -z "$EXISTING_ETAG" ] || [ "$EXISTING_ETAG" = "None" ]; then
+            aws cloudfront create-function \
+              --name "$FUNC_NAME" \
+              --function-config '{"Comment":"SPA + docs + testers routing under /mushi-mushi/*","Runtime":"cloudfront-js-2.0"}' \
+              --function-code fileb://scripts/cloudfront-mushi-spa-router.js \
+              --region us-east-1
+          else
+            aws cloudfront update-function \
+              --name "$FUNC_NAME" \
+              --if-match "$EXISTING_ETAG" \
+              --function-config '{"Comment":"SPA + docs + testers routing under /mushi-mushi/*","Runtime":"cloudfront-js-2.0"}' \
+              --function-code fileb://scripts/cloudfront-mushi-spa-router.js \
+              --region us-east-1
+          fi
+          ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
+            --query 'ETag' --output text)
+          aws cloudfront publish-function --name "$FUNC_NAME" --if-match "$ETAG" --region us-east-1
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/mushi-mushi/testers/*" \
+            --region us-east-1
+
+      - name: Post-deploy health check
+        run: |
+          sleep 10
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://kensaur.us/mushi-mushi/testers/version.json" || echo "000")
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::warning::Health check returned HTTP $HTTP_CODE — CloudFront may still be propagating"
+            exit 0
+          fi
+          DEPLOYED=$(curl -s "https://kensaur.us/mushi-mushi/testers/version.json" | jq -r '.version // "unknown"')
+          echo "Deployed testers version: $DEPLOYED"

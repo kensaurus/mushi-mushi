@@ -49,7 +49,7 @@ async function getApps(): Promise<PublicApp[]> {
 
 export default async function MarketplacePage() {
   const apps = await getApps()
-  const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL ?? '/mushi-mushi/console'
+  const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL ?? '/mushi-mushi/admin'
 
   return (
     <TestersPageShell>

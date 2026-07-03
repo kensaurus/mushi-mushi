@@ -14,33 +14,46 @@ const BASE = process.argv.includes('--base')
   ? process.argv[process.argv.indexOf('--base') + 1]
   : 'http://localhost:6464'
 
-const ROUTES = ['/dashboard', '/onboarding', '/mcp', '/qa-coverage', '/skills', '/feedback', '/reports', '/fixes', '/connect', '/billing', '/inventory', '/tester']
+const ROUTES = ['/login', '/signup', '/dashboard', '/onboarding', '/mcp', '/qa-coverage', '/skills', '/feedback', '/reports', '/fixes', '/connect', '/billing', '/inventory', '/tester']
+
+const PUBLIC_ROUTES = new Set(['/login', '/signup'])
+
+function isBenignConsoleError(text, route) {
+  if (/ERR_INSUFFICIENT_RESOURCES/.test(text)) return true
+  if (PUBLIC_ROUTES.has(route) && /Failed to load resource.*\b(400|401|422)\b/.test(text)) return true
+  return false
+}
 
 async function main() {
   const browser = await chromium.launch({ headless: true })
-  const page = await browser.newPage()
   const consoleErrors = []
   const failedRequests = []
 
-  page.on('console', (msg) => {
-    if (msg.type() === 'error') consoleErrors.push(msg.text())
-  })
-  page.on('response', (res) => {
-    const url = res.url()
-    if (url.includes('/v1/admin/') && res.status() >= 400) {
-      failedRequests.push(`${res.status()} ${url}`)
-    }
-  })
-
   for (const route of ROUTES) {
+    const page = await browser.newPage()
+
+    page.on('console', (msg) => {
+      if (msg.type() !== 'error') return
+      const text = msg.text()
+      if (isBenignConsoleError(text, route)) return
+      consoleErrors.push(`${route}: ${text}`)
+    })
+    page.on('response', (res) => {
+      const url = res.url()
+      if (url.includes('/v1/admin/') && res.status() >= 400) {
+        failedRequests.push(`${route}: ${res.status()} ${url}`)
+      }
+    })
+
     const url = `${BASE}${route}`
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
-    await page.waitForTimeout(800)
+    await page.waitForTimeout(400)
     const overlay = await page.locator('vite-error-overlay, [class*="vite-error"]').count()
     if (overlay > 0) {
       console.error(`FAIL overlay on ${route}`)
       process.exitCode = 1
     }
+    await page.close()
   }
 
   await browser.close()

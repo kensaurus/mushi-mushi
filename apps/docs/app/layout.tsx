@@ -6,6 +6,7 @@ import Link from 'next/link'
  * so we only import the one entry file to keep the cascade ordering stable
  * (Tailwind base layer before Nextra theme styles). */
 import './globals.css'
+import changelog from '../data/changelog.json'
 
 import type { ReactNode } from 'react'
 import type { Metadata } from 'next'
@@ -37,6 +38,13 @@ export const metadata: Metadata = {
  * editorial voice as `<EditorialHero>` so it reads as part of the same
  * publication, not a generic toast.
  *
+ * The headline text is sourced from `data/changelog.json` (generated from
+ * Changesets on every publish) instead of being hand-typed, so the banner
+ * can't drift out of sync with the actual shipped version the way the
+ * hardcoded "v0.8.0 · shipped" copy did while the SDKs were already on
+ * v1.22.x. `storageKey` is derived from the release so it naturally rotates
+ * (and re-shows the banner) on every new majorMinor.
+ *
  * `next/link` (NOT a raw `<a>`) is required so Next.js prepends the
  * configured `basePath` (set by MUSHI_BASE_PATH at build time, see
  * apps/docs/next.config.mjs). A plain `<a href="/changelog">` resolves
@@ -48,10 +56,22 @@ export const metadata: Metadata = {
  * static-export `.txt` route-payload mirrors blocked at the CloudFront
  * edge by `scripts/cloudfront-mushi-docs-response.js`).
  */
+const latestRelease = changelog[0]
+const latestVersion = latestRelease.versions?.[0] ?? latestRelease.majorMinor
+const latestHeadline =
+  latestRelease.headline ??
+  latestRelease.highlights
+    ?.slice(0, 2)
+    .map((h) => h.title.replace(/:$/, ''))
+    .join(', ') ??
+  'See what shipped.'
+
 const banner = (
-  <Banner storageKey="v0-8-0-wave-c">
-    <span className="docs-banner-eyebrow">v0.8.0 · shipped</span>
-    Native mobile SDKs, optional Sentry enrichment, and bring-your-own keys/storage.{' '}
+  <Banner storageKey={`v${latestRelease.majorMinor.replace(/\./g, '-')}-release`}>
+    <span className="docs-banner-eyebrow">
+      v{latestVersion} · {latestRelease.pending ? 'upcoming' : 'shipped'}
+    </span>{' '}
+    {latestHeadline}{' '}
     <Link href="/changelog" className="underline underline-offset-2">
       Read the changelog →
     </Link>

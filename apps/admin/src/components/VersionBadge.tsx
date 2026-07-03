@@ -61,38 +61,38 @@ interface AccentTheme {
 
 const ACCENT_THEMES: Record<AccentTone, AccentTheme> = {
   info: {
-    chip: 'bg-info/15 text-info border border-info/35',
+    chip: `${CHIP_TONE.infoSubtle} border border-info/35`,
     header: 'bg-info/10 border-info/25',
     rail: 'border-l-info/55',
-    text: 'text-info',
+    text: 'text-info-foreground',
     pill: 'sdk',
   },
   warn: {
-    chip: CHIP_TONE.warnSubtle + ' border border-warn/35',
+    chip: `${CHIP_TONE.warnSubtle} border border-warn/35`,
     header: 'bg-warn/10 border-warn/25',
     rail: 'border-l-warn/55',
-    text: 'text-warn',
+    text: 'text-warning-foreground',
     pill: 'tool',
   },
   ok: {
-    chip: 'bg-ok/15 text-ok border border-ok/35',
+    chip: `${CHIP_TONE.okSubtle} border border-ok/35`,
     header: 'bg-ok/10 border-ok/25',
     rail: 'border-l-ok/55',
-    text: 'text-ok',
+    text: 'text-ok-foreground',
     pill: 'runtime',
   },
   brand: {
-    chip: 'bg-brand/15 text-brand border border-brand/35',
+    chip: `${CHIP_TONE.brandSubtle} border border-brand/35`,
     header: 'bg-brand/10 border-brand/25',
     rail: 'border-l-brand/55',
     text: 'text-brand',
     pill: 'neutral',
   },
   accent: {
-    chip: CHIP_TONE.accentSubtle + ' border border-accent/35',
+    chip: `${CHIP_TONE.accentSubtle} border border-accent/35`,
     header: 'bg-accent/10 border-accent/25',
     rail: 'border-l-accent/55',
-    text: 'text-accent',
+    text: 'text-accent-foreground',
     pill: 'plugin',
   },
 }

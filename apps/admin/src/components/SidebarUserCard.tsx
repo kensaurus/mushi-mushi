@@ -133,8 +133,8 @@ function Avatar({ user, className = 'h-7 w-7' }: AvatarProps) {
 const AVATAR_TONE: Record<AuthProvider, string> = {
   google:  CHIP_TONE.infoSubtle + ' ring-info/40',
   apple:   'bg-surface-overlay text-fg ring-edge',
-  email:   'bg-brand/15 text-brand ring-brand/40',
-  github:  'bg-accent-muted/70 text-accent-foreground ring-brand/40',
+  email:   CHIP_TONE.brandSubtle + ' ring-brand/40',
+  github:  CHIP_TONE.accentSubtle + ' ring-brand/40',
   unknown: 'bg-surface-overlay text-fg-muted ring-edge-subtle',
 }
 
@@ -223,10 +223,10 @@ const PROVIDER_GLYPH: Record<AuthProvider, ((p: { className?: string }) => React
 }
 
 const PROVIDER_TINT: Record<AuthProvider, string> = {
-  google:  'text-info',
+  google:  'text-info-foreground',
   apple:   'text-fg',
   email:   'text-brand',
-  github:  'text-accent',
+  github:  'text-accent-foreground',
   unknown: 'text-fg-faint',
 }
 
@@ -286,7 +286,7 @@ export function SidebarUserCard({ user, signOut }: SidebarUserCardProps) {
             </div>
             {ProviderGlyph && (
               <div
-                className={`mt-0.5 flex items-center gap-1 text-3xs ${PROVIDER_TINT[provider]}`}
+                className={`mt-0.5 flex items-center gap-1 text-2xs ${PROVIDER_TINT[provider]}`}
                 title={PROVIDER_LABELS[provider]}
               >
                 <ProviderGlyph className="shrink-0" />

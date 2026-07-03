@@ -202,8 +202,8 @@ export function Btn({
   )
 }
 
-function BtnSpinner({ size }: { size: 'sm' | 'md' }) {
-  const dim = size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5'
+function BtnSpinner({ size }: { size: 'sm' | 'md' | 'icon' }) {
+  const dim = size === 'md' ? 'h-3.5 w-3.5' : 'h-3 w-3'
   return (
     <svg
       className={`motion-safe:animate-spin ${dim}`}
@@ -218,6 +218,53 @@ function BtnSpinner({ size }: { size: 'sm' | 'md' }) {
         d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
       />
     </svg>
+  )
+}
+
+/** Icon-only refresh — page headers and setup banners. */
+export function RefreshIconButton({
+  onClick,
+  loading,
+  disabled,
+  label = 'Refresh',
+  className = '',
+}: {
+  onClick: () => void
+  loading?: boolean
+  disabled?: boolean
+  label?: string
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled || loading}
+      aria-label={label}
+      aria-busy={loading || undefined}
+      title={label}
+      className={`inline-flex items-center justify-center h-8 w-8 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+    >
+      {loading ? (
+        <BtnSpinner size="icon" />
+      ) : (
+        <svg
+          viewBox="0 0 16 16"
+          width={14}
+          height={14}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          aria-hidden="true"
+        >
+          <path d="M1.5 8A6.5 6.5 0 0 1 14 5.5" />
+          <path d="M14.5 8A6.5 6.5 0 0 1 2 10.5" />
+          <polyline points="12 3.5 14 5.5 12 7.5" />
+          <polyline points="4 8.5 2 10.5 4 12.5" />
+        </svg>
+      )}
+    </button>
   )
 }
 

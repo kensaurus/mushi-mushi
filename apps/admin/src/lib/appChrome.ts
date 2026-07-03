@@ -8,7 +8,7 @@ export const BETA_BANNER_ID = 'mushi-beta-banner'
 export const BETA_BANNER_OFFSET_VAR = '--mushi-beta-banner-offset'
 
 /** Desktop sub-header height (Search + toolbar row in Layout). */
-export const DESKTOP_SUBHEADER_OFFSET = '2.25rem' /* tailwind top-9 */
+export const DESKTOP_SUBHEADER_OFFSET = 'var(--chrome-row-height, 2.5rem)'
 
 /** Tailwind top offset shared by every fixed overlay below persistent chrome. */
 export const topBelowAppChromeClass = [

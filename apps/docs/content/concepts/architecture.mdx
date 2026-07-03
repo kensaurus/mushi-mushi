@@ -39,7 +39,7 @@ device to a merged PR.
 - `api → fast-filter → classify-report` is the canonical ingest path.
 - `classify-report → pgvector + Apache AGE + plugins` happens in parallel.
 - `judge-batch` reads from and writes back into `classify-report`'s prompts.
-- `fix-worker → GitHub` only fires after a human approves the triage decision.
+- `fix-worker → GitHub` dispatches automatically when autofix is enabled and the estimated cost is under the project's budget; it pauses for a console approval only when that cost exceeds `autofix_approval_cost_threshold_usd`.
 - `pdca-runner` orchestrates `fix-worker` autonomously — one PDCA run may spawn multiple fix-worker calls.
 - `drift-walker → contract-graph-builder` compares a fresh crawl against the stored `contract_snapshots` baseline.
 - `api → Supabase Vault` resolves BYOK secrets per-request, never cached.
@@ -138,6 +138,12 @@ Each project pins to a region (`us` / `eu` / `jp`). The gateway returns
 Core SDK transparently follows it (caching the resolved region in
 `localStorage`). The US cluster remains the **catalog of record** for
 plugin marketplace + project metadata.
+
+The 307 routing itself is implemented and live today; dedicated EU/JP
+Supabase clusters are reserved but not yet provisioned, so an `eu` or `jp`
+project currently redirects to the same single production cluster — see
+[Data residency](/security/data-residency) for the exact regional rollout
+status.
 
 ## Storage
 
