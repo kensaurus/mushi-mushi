@@ -19,7 +19,7 @@ export function ChromeBreadcrumb() {
   return (
     <nav
       aria-label="Breadcrumb"
-      className="hidden md:flex items-center gap-1.5 min-w-0 text-2xs text-fg-muted shrink"
+      className="hidden xl:flex items-center gap-1.5 min-w-0 max-w-[14rem] text-2xs text-fg-muted shrink"
     >
       <Link to="/dashboard" className="hover:text-fg motion-safe:transition-colors truncate">
         Console

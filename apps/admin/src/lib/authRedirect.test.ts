@@ -51,6 +51,7 @@ describe('auth redirect helpers', () => {
     expect(sanitizeNextPath('//evil.example')).toBe('/dashboard')
     expect(sanitizeNextPath('/login?next=/reports')).toBe('/dashboard')
     expect(sanitizeNextPath('/reset-password')).toBe('/dashboard')
+    expect(sanitizeNextPath('/signup')).toBe('/dashboard')
   })
 
   it('prefers React Router state over query-string next', () => {

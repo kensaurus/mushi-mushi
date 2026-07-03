@@ -300,6 +300,10 @@ export function App() {
             the indexable landing.) */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<LoginPage />} />
+        {/* Bare /signup lands directly on the signup form instead of bouncing
+            through ProtectedRoute -> /login (see docs/pricing.mdx CTA and
+            LoginPage's pathname-based initial mode). */}
+        <Route path="/signup" element={<LoginPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route
           path="/invite/accept"

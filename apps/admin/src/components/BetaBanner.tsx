@@ -14,11 +14,15 @@ import { useLocation } from 'react-router-dom'
 import { FeedbackModal } from './FeedbackModal'
 import { getMushiSelf, reportMushiBug } from '../lib/mushi-self'
 import { Link } from 'react-router-dom'
+import { useAuth } from '../lib/auth'
 import { BETA_BANNER_ID, setBetaBannerOffset } from '../lib/appChrome'
 import { betaBannerTone } from '../lib/tokens'
 
 const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const DISMISS_KEY = 'mushi-mushi:beta-banner-dismissed-at'
+
+/** Routes where visitors are not authenticated — feedback APIs require JWT. */
+const PUBLIC_AUTH_PATHS = new Set(['/login', '/signup', '/reset-password'])
 
 function readDismissedAt(): number | null {
   if (typeof window === 'undefined') return null
@@ -34,7 +38,10 @@ function readDismissedAt(): number | null {
 
 export function BetaBanner() {
   const location = useLocation()
+  const { session } = useAuth()
   const isTesterPortal = location.pathname === '/tester' || location.pathname.startsWith('/tester/')
+  const canSubmitFeedback =
+    !!session && !PUBLIC_AUTH_PATHS.has(location.pathname)
   const [dismissed, setDismissed] = useState(true)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [feedbackType, setFeedbackType] = useState<'bug' | 'feature'>('bug')
@@ -118,29 +125,33 @@ export function BetaBanner() {
             aria-label="Beta banner actions"
             className="flex shrink-0 flex-wrap items-center gap-x-0 gap-y-0.5 text-2xs text-lime-foreground/75 sm:justify-end"
           >
-            <button
-              type="button"
-              onClick={() => openFeedback('bug')}
-              className="px-2 py-0.5 font-medium transition-colors hover:text-lime-foreground"
-            >
-              Report a bug
-            </button>
-            <span aria-hidden="true" className="hidden select-none text-lime-foreground/40 sm:inline">|</span>
-            <button
-              type="button"
-              onClick={() => openFeedback('feature')}
-              className="px-2 py-0.5 font-medium transition-colors hover:text-lime-foreground"
-            >
-              Feature request
-            </button>
-            <span aria-hidden="true" className="hidden select-none text-lime-foreground/40 sm:inline">|</span>
-            <Link
-              to="/feedback"
-              className="px-2 py-0.5 font-medium transition-colors hover:text-lime-foreground"
-            >
-              My submissions
-            </Link>
-            <span aria-hidden="true" className="hidden select-none text-lime-foreground/40 sm:inline">|</span>
+            {canSubmitFeedback ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => openFeedback('bug')}
+                  className="px-2 py-0.5 font-medium transition-colors hover:text-lime-foreground"
+                >
+                  Report a bug
+                </button>
+                <span aria-hidden="true" className="hidden select-none text-lime-foreground/40 sm:inline">|</span>
+                <button
+                  type="button"
+                  onClick={() => openFeedback('feature')}
+                  className="px-2 py-0.5 font-medium transition-colors hover:text-lime-foreground"
+                >
+                  Feature request
+                </button>
+                <span aria-hidden="true" className="hidden select-none text-lime-foreground/40 sm:inline">|</span>
+                <Link
+                  to="/feedback"
+                  className="px-2 py-0.5 font-medium transition-colors hover:text-lime-foreground"
+                >
+                  My submissions
+                </Link>
+                <span aria-hidden="true" className="hidden select-none text-lime-foreground/40 sm:inline">|</span>
+              </>
+            ) : null}
             <button
               type="button"
               onClick={handleDismiss}

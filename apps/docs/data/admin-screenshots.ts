@@ -165,7 +165,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   drift: {
     image: 'inventory-dark.png',
     alt: 'Drift scanner — live app vs contract snapshot',
-    caption: 'Stagehand walker compares inventory + OpenAPI + DB schema',
+    caption: 'drift-walker compares inventory + OpenAPI + DB schema',
     route: '/drift',
   },
   settings: {

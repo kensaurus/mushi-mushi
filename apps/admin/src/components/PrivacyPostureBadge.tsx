@@ -15,6 +15,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { Tooltip } from './ui'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface PrivacyStatus {
   byok_configured: boolean
@@ -41,12 +42,21 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
 
   const isByok = data?.byok_configured ?? false
   const label = error
+    ? 'Privacy unavailable'
+    : isByok
+      ? 'BYOK'
+      : 'Platform key'
+  const labelLong = error
     ? 'Privacy status unavailable'
     : isByok
       ? 'All systems BYOK'
       : 'Platform key in use'
   const dotClass = error ? 'bg-danger' : isByok ? 'bg-ok' : 'bg-warn'
-  const textClass = error ? 'text-danger' : isByok ? 'text-ok' : 'text-warn'
+  const textClass = error
+    ? CHIP_TONE.dangerSubtle
+    : isByok
+      ? CHIP_TONE.okSubtle
+      : CHIP_TONE.warnSubtle
 
   const tooltipContent = error
     ? 'Could not load privacy posture. Open BYOK settings or retry.'
@@ -75,11 +85,12 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
           ref={badgeRef}
           type="button"
           className="flex items-center gap-1.5 w-full px-2 py-1 rounded-sm hover:bg-surface-raised transition-colors"
-          aria-label={`${label} — click for privacy details`}
+          aria-label={`${labelLong} — click for privacy details`}
+          title={labelLong}
           onClick={() => setPopoverOpen((v) => !v)}
         >
           <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} />
-          <span className={`text-3xs font-medium truncate ${textClass}`}>{label}</span>
+          <span className={`inline-flex min-w-0 truncate rounded-sm px-1 py-px text-2xs font-medium ${textClass}`}>{label}</span>
         </button>
       </Tooltip>
 
@@ -99,13 +110,13 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
           </button>
           <p className="font-semibold text-fg text-xs">Privacy posture</p>
 
-          {error ? (
-            <p className="text-danger leading-snug">{error}</p>
+            {error ? (
+            <p className="text-danger-foreground leading-snug">{error}</p>
           ) : (
             <div className="space-y-1 text-fg-muted">
               <div className="flex justify-between">
                 <span>LLM provider</span>
-                <span className={`font-mono ${isByok ? 'text-ok' : 'text-warn'}`}>
+                <span className={`font-mono ${isByok ? 'text-ok-foreground' : 'text-warning-foreground'}`}>
                   {data?.llm_provider === 'byok' || isByok ? 'BYOK' : 'platform'}
                 </span>
               </div>

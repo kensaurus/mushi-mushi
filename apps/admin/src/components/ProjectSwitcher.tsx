@@ -30,6 +30,7 @@ import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import { buildProjectSetupTooltip } from '../lib/projectMetaTooltips'
 import { headerDropdownPanelClass } from '../lib/appChrome'
 import { MetricTooltipContent, Tooltip } from './ui'
+import { HeaderContextChip, HeaderContextChipLink, HeaderContextChipSkeleton } from './ui/chrome'
 
 export function ProjectSwitcher() {
   const setup = useSetupStatus()
@@ -112,29 +113,14 @@ export function ProjectSwitcher() {
   }, [creating])
 
   if (setup.loading || !setup.data) {
-    // never collapse the chrome anchor while loading. A skeleton
-    // chip keeps the header layout stable so links don't reflow under the
-    // user's cursor and the user always sees "I'm in a project context".
-    return (
-      <div
-        aria-busy="true"
-        aria-label="Loading project"
-        className="inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/40 px-2 py-1 text-2xs text-fg-faint"
-      >
-        <span className="motion-safe:animate-pulse">Loading project…</span>
-      </div>
-    )
+    return <HeaderContextChipSkeleton label="Loading project" />
   }
   if (setup.data.projects.length === 0) {
     return (
-      <Link
-        to="/projects?tab=create"
-        className="inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/60 px-2 py-1 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
-        title="No projects in this team yet"
-      >
+      <HeaderContextChipLink to="/projects?tab=create" title="No projects in this team yet">
         <span className="truncate max-w-[12rem]">No projects yet</span>
         <span aria-hidden className="text-fg-faint">→</span>
-      </Link>
+      </HeaderContextChipLink>
     )
   }
 
@@ -154,34 +140,41 @@ export function ProjectSwitcher() {
     setOpen(false)
   }
 
+  const snapshot = snapshots.byId.get(active.project_id)
+
   return (
-    <div ref={containerRef} className="relative">
-      <button
-        type="button"
+    <div ref={containerRef} className="relative inline-flex min-w-0 max-w-full items-center gap-1">
+      <HeaderContextChip
+        kicker="Project"
+        kickerHiddenBelowLg
+        label={
+          <span className="inline-flex items-center gap-1.5 min-w-0">
+            <ProjectFavicon
+              {...faviconSourceFromProject(active, snapshot)}
+              size={14}
+            />
+            <span className="truncate">{active.project_name}</span>
+          </span>
+        }
+        trailing={
+          <svg
+            width="9"
+            height="9"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+            className="shrink-0"
+          >
+            <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        }
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/60 px-2 py-1 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
-      >
-        <ProjectFavicon
-          {...faviconSourceFromProject(active, snapshots.byId.get(active.project_id))}
-          size={14}
-        />
-        <span className="text-2xs uppercase tracking-wider text-fg-muted hidden sm:inline">Project</span>
-        <span className="font-medium truncate max-w-[12rem]">{active.project_name}</span>
-        <ActiveProjectStatusChip snapshot={snapshots.byId.get(active.project_id)} />
-        <svg
-          width="9"
-          height="9"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          aria-hidden
-        >
-          <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
+      />
+      <ActiveProjectStatusChip snapshot={snapshot} className="hidden sm:inline-flex" />
       {open && (
         <div
           className={`${headerDropdownPanelClass} w-80 max-w-[calc(100vw-2rem)]`}

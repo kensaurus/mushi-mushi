@@ -36,4 +36,4 @@ export function microSegActive(active: boolean): string {
 
 /** Optional label wrapper inside a text segment. */
 export const MICRO_SEG_LABEL =
-  'sidebar-micro-seg__label min-w-0 truncate text-3xs font-medium leading-none'
+  'sidebar-micro-seg__label min-w-0 truncate text-2xs font-medium leading-none'

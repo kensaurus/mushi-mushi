@@ -16,12 +16,17 @@
 import { useState } from 'react'
 import { CONNECT_SKILLS } from '@/lib/public-copy'
 import { MCP_CLIENTS, type McpClientDef, type McpBuildInput } from '@mushi-mushi/mcp/clients'
+import { TOOL_CATALOG, TDD_TOOL_CATALOG, CODEBASE_TOOL_CATALOG } from '@mushi-mushi/mcp/catalog'
 import {
   ConnectLanePicker,
   useConnectSelection,
   renderConnectClientIcon,
   type ConnectLane,
 } from '@mushi-mushi/marketing-ui'
+
+// Derived from the canonical catalog (not hand-typed) so this stat can never
+// drift from what's actually callable — see packages/mcp/src/catalog.ts.
+const MCP_TOOL_COUNT = TOOL_CATALOG.length + TDD_TOOL_CATALOG.length + CODEBASE_TOOL_CATALOG.length
 
 const CONSOLE_CONNECT_URL = 'https://kensaur.us/mushi-mushi/admin/connect'
 const PLACEHOLDER_KEY = '<your-mushi-api-key>'
@@ -329,7 +334,7 @@ export default function ConnectPage() {
         <div className="mt-10 grid grid-cols-3 gap-4 text-center">
           {[
             { label: 'AI clients', value: String(MCP_CLIENTS.length) },
-            { label: 'MCP tools', value: '71+' },
+            { label: 'MCP tools', value: String(MCP_TOOL_COUNT) },
             { label: 'Setup time', value: '< 2 min' },
           ].map((item) => (
             <div key={item.label} className="rounded-md border border-[var(--mushi-rule)] bg-[var(--mushi-paper-wash)] p-4">

@@ -101,6 +101,23 @@ Status banner replaces duplicate "Needs attention" / priority cards on: Settings
 - [x] Posture slot recipes — `apps/admin/src/design-system/page-posture-recipes.ts` + Vitest catalog
 - [x] Playwright: chrome row count ≤ budget per mode — `examples/e2e-dogfood/tests/admin-chrome-budget.spec.ts`
 
+### P7 — Shell chrome (Jul 3 2026)
+
+Operator shell (`Layout.tsx` sidebar + sub-header) — distinct from page-level PagePosture burndown above.
+
+| Surface | Fix | Status |
+|---------|-----|--------|
+| Sidebar logo row + desktop sub-header | Shared `.chrome-top-row` + `--chrome-row-height` (2.5rem) | ✅ |
+| Hidden-route hint (Quick/Beginner) | Shorter copy, `text-2xs`, `text-balance` | ✅ |
+| PDCA stage badges (`STAGE_TONE`) | `CHIP_TONE.*Subtle` pairings | ✅ |
+| Privacy / plan sidebar pills | `text-2xs` floor + `CHIP_TONE` on posture badge | ✅ |
+| Header context switchers | `HeaderContextChip` primitive — Org + Project | ✅ |
+| Project status chips | Moved outside switcher `<button>` (a11y) | ✅ |
+| Sidebar micro footer | `--ui-pad`-scaled seg min + tighter track spacing | ✅ |
+| Header toolbar icons | `h-8 w-8` tap targets (activity, hotkeys, Ask Mushi) | ✅ |
+| Playwright shell guard | `examples/e2e-dogfood/tests/admin-shell-chrome.spec.ts` | ✅ |
+| Static shell contract | `apps/admin/src/lib/shell-chrome-static.test.ts` + `appChrome.test.ts` | ✅ |
+
 ## Verification
 
 ```bash
@@ -109,6 +126,9 @@ pnpm typecheck
 pnpm test
 pnpm lint
 pnpm lint:tokens
+node scripts/audit-chip-contrast.mjs --strict
+# Shell chrome alignment (requires auth env + running admin):
+# cd examples/e2e-dogfood && npx playwright test admin-shell-chrome.spec.ts --project=chromium
 ```
 
 Manual (localhost:6464): `/health`, `/drift`, `/code-health`, `/anomalies`, `/connect`, `/integrations`, `/settings` — expand feature guides; confirm live metric chips on `WorkflowStageRow`; warn/danger banners show primary CTA (not ghost-only). Phase 5 chrome dedupe Playwright-verified Jul 1 2026 — see [`UX-WAVE5-BASELINE.md`](./UX-WAVE5-BASELINE.md). Phase 6 human-alert flows — see `.cursor/burndown-state.md`.

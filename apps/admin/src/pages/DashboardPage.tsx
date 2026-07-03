@@ -19,7 +19,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 import { useMilestoneCelebration } from '../lib/useMilestoneCelebration'
 import { Confetti } from '../components/Confetti'
-import { Btn, ErrorAlert, FreshnessPill } from '../components/ui'
+import { Btn, ErrorAlert, FreshnessPill, RefreshIconButton } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { DashboardSkeleton } from '../components/skeletons/DashboardSkeleton'
@@ -251,10 +251,12 @@ export function DashboardPage() {
         helpHowToUse={copy?.help?.howToUse ?? 'Click any KPI or row to drill in. Hover the chart bars for per-day totals.'}
       >
         <FreshnessPill at={lastFetchedAt} isValidating={isValidating} channel={channelState} />
-        <Btn size="sm" variant="ghost" onClick={reload}>
-          Refresh
-        </Btn>
-        <Link to="/reports" className="text-xs text-link">
+        <RefreshIconButton
+          onClick={() => { void reload() }}
+          loading={isValidating}
+          label="Refresh dashboard"
+        />
+        <Link to="/reports" className="hidden sm:inline text-xs text-link whitespace-nowrap">
           View all reports →
         </Link>
       </PageHeaderBar>

@@ -104,6 +104,11 @@ describe('cloudfront-mushi-spa-router', () => {
     assert.equal(out.headers.location.value, '/mushi-mushi/docs/quickstart/incident-loop')
   })
 
+  it('preserves query string on mis-prefixed docs redirect (regression)', () => {
+    const out = spa(reqWithQs('/mushi-mushi/quickstart/mcp', { utm_source: 'test' }))
+    assert.equal(out.headers.location.value, '/mushi-mushi/docs/quickstart/mcp?utm_source=test')
+  })
+
   it('rewrites canonical docs path to .html', () => {
     const out = spa(req('/mushi-mushi/docs/quickstart/incident-loop'))
     assert.equal(out.uri, '/mushi-mushi/docs/quickstart/incident-loop.html')
@@ -113,6 +118,52 @@ describe('cloudfront-mushi-spa-router', () => {
     const out = spa(req('/mushi-mushi/login'))
     assert.equal(out.statusCode, 302)
     assert.equal(out.headers.location.value, '/mushi-mushi/admin/login')
+  })
+
+  it('301 bare /mushi-mushi/testers to trailing-slash form', () => {
+    const out = spa(req('/mushi-mushi/testers'))
+    assert.equal(out.statusCode, 301)
+    assert.equal(out.headers.location.value, '/mushi-mushi/testers/')
+  })
+
+  it('rewrites /mushi-mushi/testers/ to index.html', () => {
+    const out = spa(req('/mushi-mushi/testers/'))
+    assert.equal(out.uri, '/mushi-mushi/testers/index.html')
+  })
+
+  it('rewrites /mushi-mushi/testers/apps/ to index.html', () => {
+    const out = spa(req('/mushi-mushi/testers/apps/'))
+    assert.equal(out.uri, '/mushi-mushi/testers/apps/index.html')
+  })
+
+  it('301 nested testers path missing trailing slash', () => {
+    const out = spa(req('/mushi-mushi/testers/apps'))
+    assert.equal(out.statusCode, 301)
+    assert.equal(out.headers.location.value, '/mushi-mushi/testers/apps/')
+  })
+
+  it('preserves query string when adding trailing slash', () => {
+    const out = spa(reqWithQs('/mushi-mushi/testers/roadmap', { app: 'demo' }))
+    assert.equal(out.statusCode, 301)
+    assert.equal(out.headers.location.value, '/mushi-mushi/testers/roadmap/?app=demo')
+  })
+
+  it('rewrites any /apps/<slug>/ to the pre-rendered shell (regression)', () => {
+    // apps/[slug]/page.tsx can only pre-render a fixed placeholder shell
+    // under `output: export` — any real slug published after the last
+    // build must still resolve, not 404 against a nonexistent S3 key.
+    const out = spa(req('/mushi-mushi/testers/apps/some-real-app/'))
+    assert.equal(out.uri, '/mushi-mushi/testers/apps/_shell/index.html')
+  })
+
+  it('rewrites /apps/<slug> without trailing slash to the shell too', () => {
+    const out = spa(req('/mushi-mushi/testers/apps/some-real-app'))
+    assert.equal(out.uri, '/mushi-mushi/testers/apps/_shell/index.html')
+  })
+
+  it('does not rewrite the /apps/ listing page itself to the shell', () => {
+    const out = spa(req('/mushi-mushi/testers/apps/'))
+    assert.equal(out.uri, '/mushi-mushi/testers/apps/index.html')
   })
 })
 

@@ -384,3 +384,9 @@ jobs:
           fi
           DEPLOYED=$(curl -s "https://kensaur.us/mushi-mushi/admin/version.json" | jq -r '.version // "unknown"')
           echo "Deployed version: $DEPLOYED"
+
+      - name: Verify GoTrue OAuth providers enabled
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: node scripts/verify-auth-providers.mjs

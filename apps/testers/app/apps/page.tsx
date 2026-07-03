@@ -69,7 +69,7 @@ function AppsPageInner() {
   const platform = searchParams.get('platform') ?? undefined
   const minPoints = searchParams.get('min_points') ?? undefined
 
-  const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL ?? '/mushi-mushi/console'
+  const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL ?? '/mushi-mushi/admin'
 
   const [apps, setApps] = useState<PublicApp[]>([])
   const [loading, setLoading] = useState(true)
