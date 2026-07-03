@@ -57,7 +57,7 @@ async function main() {
 
   const googleBtn = page.getByRole('button', { name: /continue with google/i })
   await Promise.all([
-    page.waitForURL(/accounts\.google\.com/, { timeout: 15000 }),
+    page.waitForURL(/^https:\/\/accounts\.google\.com\//, { timeout: 15000 }),
     googleBtn.click(),
   ])
   const googleUrl = page.url()
@@ -73,7 +73,7 @@ async function main() {
 
   const githubBtn = page.getByRole('button', { name: /continue with github/i })
   await Promise.all([
-    page.waitForURL(/github\.com\/login/, { timeout: 15000 }),
+    page.waitForURL(/^https:\/\/github\.com\/login\//, { timeout: 15000 }),
     githubBtn.click(),
   ])
   const githubUrl = page.url()
