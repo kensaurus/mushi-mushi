@@ -48,8 +48,8 @@ The local gateway at `localhost:6464/mushi-mushi/testers/` proxies to this dev s
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `NEXT_PUBLIC_API_URL` | Yes | `https://kensaur.us/mushi-mushi/api` | Mushi API base URL — the edge function origin |
-| `NEXT_PUBLIC_ADMIN_URL` | Yes | `https://kensaur.us/mushi-mushi/console` | Admin SPA origin — used for login redirect CTAs |
+| `NEXT_PUBLIC_API_URL` | Yes | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` | Mushi API base URL — the edge function origin (see `docs/marketing/canonical-urls.md`) |
+| `NEXT_PUBLIC_ADMIN_URL` | Yes | `https://kensaur.us/mushi-mushi/admin` | Admin SPA origin — used for login redirect CTAs |
 | `NEXT_PUBLIC_SUPABASE_URL` | No | — | Supabase project URL (for future client-side auth) |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | No | — | Supabase anon key (for future client-side auth) |
 | `MUSHI_BASE_PATH` | CI only | — | CloudFront subpath prefix (e.g. `/mushi-mushi/testers`) |

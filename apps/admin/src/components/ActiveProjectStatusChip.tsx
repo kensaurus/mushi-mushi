@@ -1,7 +1,7 @@
 /**
  * FILE: apps/admin/src/components/ActiveProjectStatusChip.tsx
- * PURPOSE: Inline status affordances on the project switcher trigger with
- *          rich tooltips explaining bottleneck, trend, and SDK signals.
+ * PURPOSE: Status chips beside the project switcher (outside the trigger button)
+ *          with rich tooltips for bottleneck, trend, and SDK signals.
  */
 
 import { Link } from 'react-router-dom'
@@ -85,11 +85,7 @@ export function ActiveProjectStatusChip({ snapshot }: ActiveProjectStatusChipPro
               snapshot.id,
               snapshot.pdca_bottleneck_label,
             )}
-            // The chip renders inside the ProjectSwitcher trigger button; stop
-            // the click from bubbling so navigating doesn't also toggle the
-            // project dropdown.
-            onClick={(e) => e.stopPropagation()}
-            className={`inline-flex h-5 max-w-[6.5rem] cursor-pointer items-center truncate rounded-sm px-1 text-3xs font-semibold leading-none hover:opacity-90 ${PDCA_BOTTLENECK_TONE[bottleneck]}`}
+            className={`inline-flex h-5 max-w-[6.5rem] cursor-pointer items-center truncate rounded-sm px-1 text-2xs font-semibold leading-none hover:opacity-90 ${PDCA_BOTTLENECK_TONE[bottleneck]}`}
           >
             {bottleneckChipLabel(bottleneckCtx)}
           </Link>
@@ -102,7 +98,7 @@ export function ActiveProjectStatusChip({ snapshot }: ActiveProjectStatusChipPro
           nowrap={false}
           portal
         >
-          <span className={`inline-flex h-5 cursor-help items-center rounded-sm ${CHIP_TONE.warnSubtle} px-1 text-3xs font-mono font-semibold`}>
+          <span className={`inline-flex h-5 cursor-help items-center rounded-sm ${CHIP_TONE.warnSubtle} px-1 text-2xs font-mono font-semibold`}>
             ↑
           </span>
         </Tooltip>
@@ -138,8 +134,7 @@ export function ActiveProjectStatusChip({ snapshot }: ActiveProjectStatusChipPro
         >
           <Link
             to={`/connect?project=${encodeURIComponent(snapshot.id)}`}
-            onClick={(e) => e.stopPropagation()}
-            className={`inline-flex h-5 cursor-pointer items-center rounded-sm px-1 text-3xs font-medium hover:opacity-90 ${
+            className={`inline-flex h-5 cursor-pointer items-center rounded-sm px-1 text-2xs font-medium hover:opacity-90 ${
               sdkResolution.kind === 'deprecated'
                 ? CHIP_TONE.dangerSubtle
                 : sdkResolution.kind === 'catalog-ahead'

@@ -38,10 +38,11 @@ production**, free to read and to run for development/evaluation:
 
 | Capability | Where it lives today | EE in production |
 | ---------- | -------------------- | ---------------- |
-| SSO / SCIM (SAML + OIDC self-service) | `supabase/functions/api/routes/admin-ops.ts` (auth admin) | ✅ |
+| SSO (SAML + OIDC self-service) | `supabase/functions/api/routes/sso-audit.ts`, `apps/admin/src/pages/SsoPage.tsx` | ✅ |
+| SCIM provisioning | Not yet built — roadmap, no endpoint exists today | ⏳ |
 | Audit-log ingest + export | audit ingest routes / tables | ✅ |
 | Retention policy CRUD (beyond the free 7-day window) | retention routes | ✅ |
-| Region pinning / data residency | `global.region` / `global.peerRegions` (Helm) | ✅ |
+| Region pinning / data residency | `global.region` / `global.peerRegions` (Helm); single production cluster today, see [`/security/data-residency`](../../../apps/docs/content/security/data-residency.mdx) | ✅ |
 | SOC 2 evidence + compliance exports | compliance routes | ✅ |
 
 > The table maps the **boundary**, not a completed code move. EE feature code

@@ -3,6 +3,7 @@
  * SSOT for section prose — hero/category strings re-export from @mushi-mushi/brand.
  */
 import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
+import { ADMIN_DEMO_BASE } from '../data/admin-screenshots'
 
 export { MUSHI_TAGLINE_V2 }
 
@@ -57,7 +58,10 @@ export const LANDING_WHERE_TO_START: readonly LandingPathCard[] = [
   {
     title: 'I operate the console',
     desc: 'Create a project, connect GitHub, and walk through the onboarding checklist.',
-    href: '/admin/onboarding',
+    // Absolute URL (not `/admin/onboarding`) so the apex-redirect CloudFront
+    // Function — which treats `/admin/*` as a docs-nested prefix — never gets
+    // a chance to send this to the *documentation* page instead of the app.
+    href: `${ADMIN_DEMO_BASE}/onboarding`,
     cmd: 'mushi login && mushi status',
   },
 ] as const
@@ -102,7 +106,7 @@ export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
     title: 'iOS · Android · Flutter',
     icon: '◈',
     href: '/quickstart/mobile',
-    cmd: "pod 'MushiMushi'",
+    cmd: 'npx mushi-mushi',
     desc: 'Native shake, offline queue, and a Sentry bridge already wired up.',
     badge: 'Native',
   },
@@ -138,12 +142,12 @@ export const LANDING_COMPARISON_ROWS: readonly LandingComparisonRow[] = [
   {
     label: 'Closing the loop',
     foil: 'Assign a ticket and remember to update',
-    mushi: 'An optional draft PR you can merge or ignore',
+    mushi: 'An optional draft PR you can merge or ignore, once GitHub is connected',
   },
   {
     label: 'Reporter attribution',
     foil: 'Anonymous',
-    mushi: '"Fixed by Kenji" in the changelog; SDK toast on next session',
+    mushi: '"Fixed by Kenji" in the changelog and an SDK toast, once Releases is enabled',
   },
   {
     label: 'From your IDE',

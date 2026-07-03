@@ -15,6 +15,15 @@
 # - GitHub Secrets: AWS_ROLE_ARN (GitHub OIDC role — see deploy-admin.yml
 #   header for the one-time AWS OIDC setup steps), CLOUDFRONT_DISTRIBUTION_ID
 #
+# OPTIONAL — keyless "Try the demo" install on /docs/connect:
+# - GitHub Secrets: MUSHI_DEMO_API_KEY, MUSHI_DEMO_API_ENDPOINT,
+#   MUSHI_DEMO_MCP_HTTP, MUSHI_DEMO_PROJECT_ID, MUSHI_DEMO_PROJECT_NAME
+# - Mint an `mcp:read`-scoped key bound to a seeded demo project (console →
+#   API keys), seed it with scripts/marketing/seed-demo.mjs, then set the
+#   secrets above. Leave any of them unset and the Connect page falls back
+#   to its placeholder-key + "sign in to mint" flow — no code change needed
+#   either way (see apps/docs/app/connect/page.tsx, apps/docs/.env.example).
+#
 # NOTES:
 # - This workflow is independent of the SDK release pipeline
 # - Only touches the docs S3 prefix; admin and cloud have their own workflows
@@ -106,6 +115,14 @@ jobs:
           MUSHI_BASE_PATH: ${{ env.MUSHI_BASE_PATH }}
           MUSHI_ASSET_PREFIX: ${{ env.MUSHI_BASE_PATH }}
           NEXT_PUBLIC_MUSHI_BASE_PATH: ${{ env.MUSHI_BASE_PATH }}
+          # Optional keyless demo install on /docs/connect — no-ops (falls back
+          # to the placeholder-key flow) until all five secrets are set. See the
+          # workflow header above and apps/docs/.env.example.
+          NEXT_PUBLIC_MUSHI_DEMO_API_KEY: ${{ secrets.MUSHI_DEMO_API_KEY }}
+          NEXT_PUBLIC_MUSHI_DEMO_API_ENDPOINT: ${{ secrets.MUSHI_DEMO_API_ENDPOINT }}
+          NEXT_PUBLIC_MUSHI_DEMO_MCP_HTTP: ${{ secrets.MUSHI_DEMO_MCP_HTTP }}
+          NEXT_PUBLIC_MUSHI_DEMO_PROJECT_ID: ${{ secrets.MUSHI_DEMO_PROJECT_ID }}
+          NEXT_PUBLIC_MUSHI_DEMO_PROJECT_NAME: ${{ secrets.MUSHI_DEMO_PROJECT_NAME }}
 
       - name: Generate version file
         env:

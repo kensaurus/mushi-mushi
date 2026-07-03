@@ -5,6 +5,8 @@
  *
  *            /mushi-mushi/admin/*  -> S3 (apps/admin SPA, React Router fallback)
  *            /mushi-mushi/docs/*   -> S3 (apps/docs Next.js static export)
+ *            /mushi-mushi/testers/* -> S3 (apps/testers Next.js static export,
+ *                                    the Mushi Bounties public marketplace)
  *            /mushi-mushi/         -> INTERNAL REWRITE to the docs static export's
  *                                    home (/mushi-mushi/docs/index.html). That page
  *                                    is the prerendered, indexable marketing landing
@@ -74,6 +76,30 @@ var DOCS_NESTED_PREFIXES = [
   '/blog/',
 ];
 
+// CloudFront's `request.querystring` is a map of `{ key: { value } }`, not a
+// pre-encoded string — naively concatenating it into a URL yields the literal
+// text "[object Object]". Mirrors cloudfront-mushi-apex-redirect.js.
+function serializeQuerystring(qs) {
+  if (!qs) {
+    return '';
+  }
+  if (typeof qs === 'string') {
+    return qs;
+  }
+  var parts = [];
+  var key;
+  for (key in qs) {
+    if (!Object.prototype.hasOwnProperty.call(qs, key)) {
+      continue;
+    }
+    var entry = qs[key];
+    if (entry && entry.value !== undefined && entry.value !== '') {
+      parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(entry.value));
+    }
+  }
+  return parts.join('&');
+}
+
 function matchesDocsSuffix(suffix) {
   var path = suffix.charAt(0) === '/' ? suffix : '/' + suffix;
   var i;
@@ -139,7 +165,57 @@ function handler(event) {
     return request;
   }
 
-  // 4. Bare product root -> serve the docs static export's home page in place.
+  // 4. /mushi-mushi/testers/* clean URLs -> Next.js static export layout.
+  //    apps/testers sets `trailingSlash: true`, so every generated page is a
+  //    folder index (`<route>/index.html`) — there is no extensionless
+  //    `<route>.html` variant the way docs has. A bare `/testers` (no
+  //    trailing slash) or a nested path missing its trailing slash both
+  //    301 to the slash form so the URL always resolves to a real S3 key.
+  if (uri === '/mushi-mushi/testers') {
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: {
+        'location': { value: '/mushi-mushi/testers/' },
+        'cache-control': { value: 'public, max-age=300' },
+      },
+    };
+  }
+  // 4a. /mushi-mushi/testers/apps/<slug>/ (the marketplace app-detail page)
+  //     is a client-rendered dynamic route: it reads the real slug from the
+  //     browser URL via useParams(), not from build-time data. Since
+  //     `output: export` can only pre-render a fixed shell HTML
+  //     (app/apps/[slug]/page.tsx's PLACEHOLDER_SLUG), every slug — known
+  //     or not at the last build — must resolve to that same shell object,
+  //     otherwise apps published after the last deploy 404 at the S3
+  //     origin. Mirrors the admin SPA fallback (rule 2) for this one route.
+  var appDetailMatch = /^\/mushi-mushi\/testers\/apps\/([^/]+)\/?$/.exec(uri);
+  if (appDetailMatch && appDetailMatch[1]) {
+    request.uri = '/mushi-mushi/testers/apps/_shell/index.html';
+    return request;
+  }
+
+  if (uri.indexOf('/mushi-mushi/testers/') === 0) {
+    if (uri.charAt(uri.length - 1) === '/') {
+      request.uri = uri + 'index.html';
+      return request;
+    }
+    var testersQs = serializeQuerystring(qs);
+    var testersLocation = uri + '/';
+    if (testersQs) {
+      testersLocation = testersLocation + '?' + testersQs;
+    }
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: {
+        'location': { value: testersLocation },
+        'cache-control': { value: 'public, max-age=300' },
+      },
+    };
+  }
+
+  // 5. Bare product root -> serve the docs static export's home page in place.
   //    This is the indexable marketing landing (apps/docs/content/index.mdx).
   //    We REWRITE (not redirect) so the canonical homepage URL stays
   //    /mushi-mushi/ while the bytes come from the already-deployed
@@ -152,13 +228,14 @@ function handler(event) {
     return request;
   }
 
-  // 5. Mis-prefixed docs paths (/mushi-mushi/quickstart/… without /docs/) ->
+  // 6. Mis-prefixed docs paths (/mushi-mushi/quickstart/… without /docs/) ->
   //    301 to the canonical docs URL before the admin SPA fallback.
   var suffix = uri.replace(/^\/mushi-mushi\/?/, '');
   if (suffix && matchesDocsSuffix(suffix)) {
+    var docsQs = serializeQuerystring(qs);
     var docsLocation = '/mushi-mushi/docs/' + suffix.replace(/^\/+/, '');
-    if (qs) {
-      docsLocation = docsLocation + '?' + qs;
+    if (docsQs) {
+      docsLocation = docsLocation + '?' + docsQs;
     }
     return {
       statusCode: 301,
@@ -170,7 +247,7 @@ function handler(event) {
     };
   }
 
-  // 6. Anything else under /mushi-mushi/* -> 302 to the admin SPA. We forward
+  // 7. Anything else under /mushi-mushi/* -> 302 to the admin SPA. We forward
   //    whatever path suffix the user typed so deep links survive (e.g.
   //    /mushi-mushi/login -> /mushi-mushi/admin/login, which the admin React
   //    Router knows how to handle).

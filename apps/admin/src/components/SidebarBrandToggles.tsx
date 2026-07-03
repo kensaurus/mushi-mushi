@@ -51,7 +51,7 @@ export function SidebarBrandToggles({
   }
 
   return (
-    <div className="mt-1.5 w-full min-w-0 space-y-1" data-tour-id="mode-toggle">
+    <div className="mt-1 w-full min-w-0 space-y-0.5" data-tour-id="mode-toggle">
       <MicroSegmentedTrack
         trackId="sidebar-portal"
         role="radiogroup"

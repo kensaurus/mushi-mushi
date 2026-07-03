@@ -19,6 +19,7 @@ import {
 } from '../lib/activeProject'
 import { useCreateOrganization } from '../lib/useCreateOrganization'
 import { headerDropdownPanelClass } from '../lib/appChrome'
+import { HeaderContextChip, HeaderContextChipSkeleton } from './ui/chrome'
 
 export interface OrganizationSummary {
   id: string
@@ -107,11 +108,7 @@ export function OrgSwitcher() {
   }, [creating])
 
   if (loading) {
-    return (
-      <div className="inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/40 px-2 py-1 text-2xs text-fg-faint">
-        Loading team…
-      </div>
-    )
+    return <HeaderContextChipSkeleton label="Loading team" />
   }
   const orgs = data?.organizations ?? []
   // Empty-state branch — previously the switcher returned `null` when a
@@ -162,15 +159,17 @@ export function OrgSwitcher() {
             </button>
           </form>
         ) : (
-          <button
-            type="button"
+          <HeaderContextChip
+            variant="accent"
+            label={
+              <>
+                <span aria-hidden className="text-sm leading-none">+</span>
+                <span>Create team</span>
+              </>
+            }
             onClick={() => setCreating(true)}
-            className="inline-flex items-center gap-1.5 rounded-sm border border-brand/30 bg-brand/5 px-2 py-1 text-2xs font-medium text-brand hover:bg-brand/10 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
             title="You don't have any organizations yet — create your first team or workspace to start a project."
-          >
-            <span aria-hidden className="text-sm leading-none">+</span>
-            <span>Create team</span>
-          </button>
+          />
         )}
       </div>
     )
@@ -202,30 +201,20 @@ export function OrgSwitcher() {
 
   return (
     <div ref={containerRef} className="relative">
-      <button
-        type="button"
+      <HeaderContextChip
+        kicker="Team"
+        label={active.name}
+        badge={orgPillLabel(active)}
+        badgeTone={active.billing_mode === 'complimentary' ? 'brand' : 'neutral'}
+        title={
+          active.billing_mode === 'complimentary'
+            ? `Admin / complimentary org — feature set tracks the ${active.plan_id} tier`
+            : undefined
+        }
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/60 px-2 py-1 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
-      >
-        <span className="text-2xs uppercase tracking-wider text-fg-muted">Team</span>
-        <span className="max-w-[12rem] truncate font-medium">{active.name}</span>
-        <span
-          className={`rounded px-1.5 text-3xs font-medium uppercase border ${
-            active.billing_mode === 'complimentary'
-              ? 'bg-brand-subtle text-brand border-brand/35'
-              : 'bg-surface-overlay text-fg-muted border-edge-subtle'
-          }`}
-          title={
-            active.billing_mode === 'complimentary'
-              ? `Admin / complimentary org — feature set tracks the ${active.plan_id} tier`
-              : undefined
-          }
-        >
-          {orgPillLabel(active)}
-        </span>
-      </button>
+      />
       {open && (
         <div
           className={`${headerDropdownPanelClass} w-72`}

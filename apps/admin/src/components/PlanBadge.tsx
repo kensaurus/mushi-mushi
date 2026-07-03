@@ -34,7 +34,7 @@ const COMPLIMENTARY_TONE_HEADER = 'bg-brand-subtle text-brand border-brand/40'
 
 function densityClasses(sidebar: boolean) {
   if (sidebar) {
-    return 'w-full min-w-0 justify-center text-3xs px-0 py-0 gap-1 border-0 bg-transparent font-normal shrink-0'
+    return 'w-full min-w-0 justify-center text-2xs px-0 py-0 gap-1 border-0 bg-transparent font-normal shrink-0'
   }
   return 'text-2xs px-2 py-1 gap-1.5 rounded-sm'
 }
@@ -94,10 +94,10 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
           sidebar ? COMPLIMENTARY_TONE : `${COMPLIMENTARY_TONE_HEADER} border hover:brightness-110`
         } ${densityClasses(sidebar)}`}
       >
-        <span aria-hidden="true" className="leading-none shrink-0 text-brand/80 text-3xs">◆</span>
+        <span aria-hidden="true" className="leading-none shrink-0 text-brand/80 text-2xs">◆</span>
         <span className={sidebar ? 'truncate' : ''}>Admin</span>
         {sidebar ? (
-          <span className="text-fg-faint font-mono uppercase tracking-wider text-3xs shrink-0">
+          <span className="text-fg-faint font-mono uppercase tracking-wider text-2xs shrink-0">
             {plan.displayName}
           </span>
         ) : (
@@ -133,7 +133,7 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
       <span className={sidebar ? 'truncate min-w-0' : ''}>{label}</span>
       {plan.overQuota && (
         <span
-          className={`ml-0.5 rounded-sm bg-danger/20 font-semibold text-danger shrink-0 ${sidebar ? 'px-1 py-px text-2xs' : 'px-1 py-0.5 text-2xs'}`}
+          className={`ml-0.5 shrink-0 rounded-sm px-1 py-0.5 text-2xs font-semibold ${CHIP_TONE.dangerSubtle}`}
           aria-label="Over quota"
         >
           !
@@ -141,7 +141,7 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
       )}
       {!plan.overQuota && plan.usagePct != null && plan.usagePct >= 80 && (
         <span
-          className={`ml-0.5 rounded-sm bg-warn/20 font-mono text-warn shrink-0 ${sidebar ? 'px-1 py-px text-2xs' : 'px-1 py-0.5 text-2xs'}`}
+          className={`ml-0.5 shrink-0 rounded-sm px-1 py-0.5 font-mono text-2xs ${CHIP_TONE.warnSubtle}`}
           aria-label={`${plan.usagePct}% used`}
         >
           {plan.usagePct}%

@@ -5,6 +5,10 @@
  */
 
 import { execSync } from 'node:child_process'
+import {
+  buildCurlHeadStatusCommand,
+  parseClientCredentialsMint,
+} from './verify-hosted-mcp-helpers.mjs'
 
 const HOSTED = 'https://kensaur.us/mushi-mushi/hosted-mcp'
 const ORIGIN_PRM =
@@ -43,33 +47,45 @@ const scannerTokenRes = await fetch(`${HOSTED}/oauth/token`, {
   headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   body: 'grant_type=client_credentials',
 })
-const scannerToken = (await scannerTokenRes.json().catch(() => null))?.access_token ?? ''
-
-const init = await fetch(`${HOSTED}`, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    Accept: 'application/json, text/event-stream',
-    'User-Agent': 'SmitheryBot/1.0',
-    ...(scannerToken ? { Authorization: `Bearer ${scannerToken}` } : {}),
-  },
-  body: JSON.stringify({
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'initialize',
-    params: {
-      protocolVersion: '2024-11-05',
-      capabilities: {},
-      clientInfo: { name: 'verify-hosted-mcp', version: '1.0' },
-    },
-  }),
+const scannerTokenBody = await scannerTokenRes.text()
+const scannerMint = parseClientCredentialsMint({
+  status: scannerTokenRes.status,
+  bodyText: scannerTokenBody,
 })
-const initText = await init.text()
-const initOk = init.ok && initText.includes('protocolVersion')
-console.log(`${initOk ? '✓' : '✗'} SmitheryBot initialize ${init.status}`)
-if (!initOk) {
+console.log(
+  `${scannerMint.ok ? '✓' : '✗'} Smithery scanner client_credentials mint (${scannerTokenRes.status})`,
+)
+if (!scannerMint.ok) {
   failed++
-  console.log(`  ${initText.slice(0, 200)}`)
+  console.log(`  ${scannerMint.error}`)
+  console.log(`  body: ${scannerMint.bodyPreview}`)
+} else {
+  const init = await fetch(`${HOSTED}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      'User-Agent': 'SmitheryBot/1.0',
+      Authorization: `Bearer ${scannerMint.token}`,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: { name: 'verify-hosted-mcp', version: '1.0' },
+      },
+    }),
+  })
+  const initText = await init.text()
+  const initOk = init.ok && initText.includes('protocolVersion')
+  console.log(`${initOk ? '✓' : '✗'} SmitheryBot initialize ${init.status}`)
+  if (!initOk) {
+    failed++
+    console.log(`  ${initText.slice(0, 200)}`)
+  }
 }
 
 // Smithery spec: unauthenticated POST must return 401 (not 403) with PRM hint (RFC 9728).
@@ -98,7 +114,7 @@ if (!unauthOk) {
 let headStatus = '000'
 try {
   headStatus = execSync(
-    `curl -sS -o /dev/null -w "%{http_code}" --max-time 10 -I "${HOSTED}/.well-known/oauth-authorization-server"`,
+    buildCurlHeadStatusCommand(`${HOSTED}/.well-known/oauth-authorization-server`),
     { encoding: 'utf8', shell: true },
   ).trim()
 } catch {

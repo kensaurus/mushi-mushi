@@ -434,10 +434,10 @@ const SECTION_TO_STAGE: Record<string, PdcaStageId> = {
 }
 
 const STAGE_TONE: Record<NonNullable<NavSection['stage']>, string> = {
-  P: 'bg-info/15 text-info border border-info/35',
-  D: 'bg-brand/15 text-brand border border-brand/35',
-  C: CHIP_TONE.warnSubtle + ' border border-warn/35',
-  A: 'bg-ok/15 text-ok border border-ok/35',
+  P: CHIP_TONE.infoSubtle,
+  D: CHIP_TONE.brandSubtle,
+  C: CHIP_TONE.warnSubtle,
+  A: CHIP_TONE.okSubtle,
 }
 
 function isActive(currentPath: string, itemPath: string) {
@@ -774,8 +774,8 @@ export function Layout({ children }: { children: ReactNode }) {
     s.items.some(i => isActive(pathname, i.path))
   )
   const hiddenRouteCopy = isQuickstart
-    ? 'This page is outside Quickstart. Switch to Beginner or Advanced to keep it in your sidebar.'
-    : 'This page lives in Advanced mode. Switch to keep it in your sidebar.'
+    ? 'Not in Quick mode.'
+    : 'This page is in Advanced mode only.'
 
   function selectSection(id: string, options?: { expandSidebar?: boolean }) {
     setExpandedSectionId(id)
@@ -825,35 +825,40 @@ export function Layout({ children }: { children: ReactNode }) {
     <>
       {/* Brand — collapses to a single "M" stamp in compact mode so the
           rail still has a recognisable identity at the top. */}
-      <div className={`${compact ? 'px-2 py-3' : 'px-4 py-3'} border-b border-edge/60 overflow-visible`}>
-        {compact ? (
-          <div className="space-y-1.5">
+      <div className="border-b border-edge/60 overflow-visible shrink-0">
+        <div className={`chrome-top-row ${compact ? 'px-2 justify-center' : 'px-4'}`}>
+          {compact ? (
             <h1 className="text-sm font-bold tracking-tight leading-none text-center" aria-label="mushi mushi admin console">
               <span className="text-brand">m</span>
               <span className="text-fg-secondary">m</span>
             </h1>
-            <SidebarBrandToggles compact mode={mode} onSelectMode={setMode} />
-          </div>
-        ) : (
-          <>
+          ) : (
             <h1 className="text-sm font-bold tracking-tight leading-none">
               <span className="text-brand">mushi</span>
               <span className="text-fg-secondary">mushi</span>
             </h1>
+          )}
+        </div>
+        {compact ? (
+          <div className="px-2 pb-2">
+            <SidebarBrandToggles compact mode={mode} onSelectMode={setMode} />
+          </div>
+        ) : (
+          <div className="px-4 pb-2 space-y-1.5">
             <SidebarBrandToggles mode={mode} onSelectMode={setMode} />
             {onHiddenRoute && (
-              <div className="mt-2 rounded-sm border border-chrome-border bg-chrome px-2 py-1.5 text-3xs text-fg-muted space-y-1.5">
+              <div className="rounded-sm border border-chrome-border bg-chrome px-2 py-1.5 text-2xs text-fg-muted space-y-1 text-balance">
                 <p className="leading-snug">{hiddenRouteCopy}</p>
                 <button
                   type="button"
                   onClick={() => setMode(isQuickstart ? 'beginner' : 'advanced')}
-                  className="underline hover:no-underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm"
+                  className="text-left underline hover:no-underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm"
                 >
-                  Switch to {isQuickstart ? 'Beginner' : 'Advanced'} mode →
+                  Show in {isQuickstart ? 'Beginner' : 'Advanced'} →
                 </button>
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
 
@@ -1006,13 +1011,13 @@ export function Layout({ children }: { children: ReactNode }) {
             aria-pressed={sidebarCollapsed}
             aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             title={sidebarCollapsed ? 'Expand sidebar  ·  [' : 'Collapse to icon rail  ·  ['}
-            className={`group flex items-center gap-2 border-t border-edge/60 px-3 py-1.5 text-2xs text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}
+            className={`group flex items-center gap-2 border-t border-edge/60 px-3 py-1.5 text-2xs text-fg-faint hover:text-fg-muted hover:bg-surface-overlay/40 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}
           >
             <span aria-hidden className="font-mono leading-none text-base">
               {sidebarCollapsed ? '›' : '‹'}
             </span>
             {!sidebarCollapsed && (
-              <span className="font-mono text-3xs uppercase tracking-wider text-fg-faint">
+              <span className="font-mono text-2xs uppercase tracking-wider text-fg-faint">
                 Collapse
               </span>
             )}
@@ -1090,7 +1095,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </header>
 
         {/* Desktop sub-header — search left; controls + switchers right */}
-        {!focusMode && <header className={`hidden md:flex items-center gap-3 px-5 py-1.5 border-b border-edge/40 ${appChromeHeaderClass}`}>
+        {!focusMode && <header className={`hidden md:flex chrome-top-row items-center gap-3 px-5 border-b border-edge/40 ${appChromeHeaderClass}`}>
           <ChromeBreadcrumb />
           <div className="min-w-0 shrink-0">
             <SearchButton />
@@ -1105,7 +1110,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   type="button"
                   onClick={() => setActivityOpen(true)}
                   aria-label={activityUnread > 0 ? `Live activity, ${activityUnread} unread` : 'Live activity'}
-                  className="relative inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                  className="relative inline-flex items-center justify-center h-8 w-8 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
                 >
                   <IconBell className="h-3.5 w-3.5" />
                   {activityUnread > 0 && (
@@ -1123,7 +1128,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   type="button"
                   onClick={() => setHotkeysOpen(true)}
                   aria-label="Open keyboard shortcuts"
-                  className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                  className="inline-flex items-center justify-center h-8 w-8 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
                 >
                   <span aria-hidden className="font-mono text-xs leading-none">?</span>
                 </button>

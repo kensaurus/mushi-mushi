@@ -48,8 +48,9 @@ tags they declare. No device recording, no video, no biometrics in v1.
 Inside the tester dashboard, each app has a built-in submission form. The
 submission runs through the same `ingestReport()` pipeline as host-SDK reports:
 screenshot upload, PII scrub, console log capture, environment metadata. It
-lands in your existing Sentry inbox tagged `mushi_tester:true` so you triage it
-alongside your production errors — no new tool to learn.
+always lands in your Mushi reports queue tagged `mushi_tester:true`; if you've
+set a Sentry DSN for the published app it also forwards there so you can
+triage alongside your production errors — Sentry is optional, not required.
 
 ### You review and grade
 
@@ -138,9 +139,9 @@ Bounties reuse the existing anti-gaming engine (`reporter_devices`, `anti_gaming
 ## Architecture
 
 ```
-apps/testers/             Next.js SSR — public browse + signup (kensaur.us/mushi-mushi/testers/)
+apps/testers/             Next.js static export — public browse + signup (kensaur.us/mushi-mushi/testers/)
 apps/admin /tester/*      Vite SPA — logged-in tester dashboard (same auth.users pool)
-apps/admin /rewards       Dev console — Publishing tab (Wave 2)
+apps/admin /rewards       Dev console — Publishing tab (live, gated behind the marketplace_publish Pro+ entitlement)
 packages/server/          API routes: tester-marketplace.ts, published-apps.ts
                           Edge functions: tremendous-redemption-worker (cron)
 Supabase DB               mushi_testers, published_apps, tester_submissions,

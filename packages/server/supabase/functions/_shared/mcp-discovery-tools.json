@@ -1,0 +1,361 @@
+{
+  "activation_status": {
+    "description": "Return the unified activation posture — SDK heartbeat, ingested reports, GitHub, MCP readiness, QA stories, and the next best action. Read this before guessing which onboarding step is blocking the user. Also available as the mushi://activation resource for resource-reader clients. Returns { sdkActive, reportsIngested, githubConnected, mcpConnected, qaStoriesCreated, nextBestAction }.",
+    "scope": "mcp:read"
+  },
+  "add_byok_key": {
+    "description": "Add a BYOK API key to the project pool for a provider (anthropic | openai | firecrawl | browserbase | cursor), with a label and priority for failover ordering. The raw key is stored encrypted in Supabase Vault and never returned. Returns { id, provider, label }. Write; NOT idempotent — adds a new row each call. Use to register a backup/rotated key; use list_byok_keys to review the pool.",
+    "scope": "mcp:write"
+  },
+  "analyze_codebase_impact": {
+    "description": "Find files that depend on a set of changed paths by walking the reverse import graph. Source paths from: manual list, last push, a GitHub compare range, or a fix PR's files. Returns { changed_paths, source, affected_file_paths, affected_node_ids, meta }. Requires codebase indexing. Read-only. Use to gauge a diff's blast radius before merging; use get_blast_radius for a bug's component impact, or search_codebase to locate files.",
+    "scope": "mcp:read"
+  },
+  "analyze_wiki_knowledge": {
+    "description": "Return the wiki/docs knowledge-graph nodes and their sources for the project. Returns { nodes: [{ id, label, source_url }], sources }. Read-only. Use to see what doc entities exist; pass include_wiki=true to ask_codebase to merge this corpus into a grounded answer.",
+    "scope": "mcp:read"
+  },
+  "approve_qa_story": {
+    "description": "Approve or reject a qa_story currently in pending_review (pass approve=true|false and an optional note). Approved stories are enabled in the QA schedule immediately; rejected ones are disabled. Returns { id, approval_status }. Write; idempotent — re-approving an approved story is a no-op. Use to clear the review queue from list_pending_review_stories.",
+    "scope": "mcp:write",
+    "required": [
+      "projectId",
+      "qaStoryId",
+      "status"
+    ]
+  },
+  "ask_codebase": {
+    "description": "Answer a plain-English question about the connected repo, grounded on pgvector retrieval over project_codebase_files. Returns { answer, citations: [{ path, line }] }. Set include_wiki=true to merge docs/wiki knowledge. Requires codebase indexing + your Anthropic or OpenAI key; consumes LLM budget (write scope). Use for \"how does X work?\"; use search_codebase for raw file matches without synthesis, or get_file_summary for one file.",
+    "scope": "mcp:write"
+  },
+  "award_bonus_points": {
+    "description": "Award ad-hoc bonus points (1-50000, positive only — there is no way to subtract via this tool) to a contributor by their external user id (as passed to Mushi.identify()). Points post immediately to their total and are audit-logged as bonus_manual. Destructive and effectively irreversible: there is no reversal endpoint, so confirm the amount and recipient with the user before calling. Tier re-evaluation (and any host-side reward_webhooks grant tied to crossing a threshold) is NOT immediate — it only runs on the contributor's next tracked activity, not on this call. Requires mcp:write scope. Use this to thank a contributor who found a critical bug or to run a one-off promotional campaign.",
+    "scope": "mcp:write",
+    "required": [
+      "external_user_id",
+      "points",
+      "reason"
+    ]
+  },
+  "checkin_pipeline_step": {
+    "description": "Report the completion status of a pipeline step (passed, failed, running, or skipped). Optionally include notes, a PR URL, or the Cursor agentId. Updates the live React Flow canvas in the Mushi console so PMs see real-time progress.",
+    "scope": "mcp:write",
+    "required": [
+      "run_id",
+      "step_index",
+      "status"
+    ]
+  },
+  "diagnose_setup": {
+    "description": "Diagnose Mushi setup health and return the single best next action. mode=full (default) runs both SDK-ingest and fix-dispatch preflight checks; mode=ingest runs ingest checks only (project exists, active API key, SDK heartbeat, at least one report); mode=dispatch runs dispatch readiness only (GitHub connected, codebase indexed, LLM key present, autofix enabled). Returns { ready, steps: [{ label, complete, required, hint }], nextAction }. Read-only. The one setup-diagnosis entry point — use this instead of separate connection/ingest checks.",
+    "scope": "mcp:read"
+  },
+  "diff_inventory": {
+    "description": "Diff two ingested inventory commits (fromSha to toSha): added/removed nodes and edges. Returns { added, removed, changed }. Requires inventory_v2. Read-only. Use before merging a PR that touches inventory.yaml to see what changed; use get_inventory for the current snapshot.",
+    "scope": "mcp:read",
+    "required": [
+      "fromSha",
+      "toSha"
+    ]
+  },
+  "dispatch_fix": {
+    "description": "Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent=\"cursor_cloud\" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns { fixAttemptId }; poll get_fix_timeline for progress and merge_fix when CI is green. Write; NOT idempotent — each call starts a new attempt. Report must be classified — run triage_issue if not.",
+    "scope": "mcp:write"
+  },
+  "generate_tdd_from_story": {
+    "description": "Generate a full Playwright TypeScript test from a mapped user story id (from accepted inventory) using Claude, and insert a qa_stories row (source=test_gen_from_story). approval_status follows the project automation_mode (auto = enabled immediately; review/approve = pending_review). Optionally opens a draft GitHub PR. Returns { qaStoryId, prUrl, approvalStatus, needsHumanReview }. Write; consumes LLM budget; NOT idempotent. Run map_user_stories first; use test_gen_from_report to build a test from a bug report instead.",
+    "scope": "mcp:write",
+    "required": [
+      "projectId",
+      "storyNodeId"
+    ]
+  },
+  "get_account_overview": {
+    "description": "Return an enriched summary of every Mushi project accessible to this API key: id, name, recent report count (last 30 days), number of connected MCP keys, and last-seen heartbeat timestamp. For project-scoped keys this is a one-item list; for org-scoped (account) keys it lists every owned project. Also includes toolCount, resourceCount, promptCount so agents know how many tools are available. Call this at the start of a multi-repo or multi-app triage session to orient yourself.",
+    "scope": "mcp:read"
+  },
+  "get_backend_health": {
+    "description": "Return the current backend health state for a linked Supabase project: table list (with RLS enabled status), recent API and Postgres error logs, and DB advisor findings. Uses the read-only Supabase MCP client via the stored PAT. Returns { tables, logs, advisors, projectRef } when the backend is linked, or { reason: \"no_supabase_pat\" | \"no_project_ref\" } when it is not configured. This is the read-only fast path — use run_fullstack_audit for the full scorecard including gate results.",
+    "scope": "mcp:read"
+  },
+  "get_blast_radius": {
+    "description": "Return the other components/pages a bug group touches, via knowledge-graph traversal from the report node. Returns { nodes: [{ id, label, type }], edges }. Read-only. Use before dispatch_fix to scope a change safely; use get_knowledge_graph to traverse from an arbitrary seed, or analyze_codebase_impact for file-level import impact.",
+    "scope": "mcp:read"
+  },
+  "get_codebase_domains": {
+    "description": "Extract the business domains, flows, and steps in the repo, each mapped to the file paths that implement it. Returns { domains: [{ name, flows: [{ name, steps, paths }] }] }. Cached per index fingerprint. Requires codebase indexing. Read-only. Use to see what the app does at a product level; use get_codebase_tour for a dependency-ordered code walkthrough instead.",
+    "scope": "mcp:read"
+  },
+  "get_codebase_tour": {
+    "description": "Return a dependency-ordered onboarding tour of the repo (~6-10 stops); each stop lists node ids, file paths, architectural layer, and why it matters. Returns { stops: [{ title, paths, layer, rationale }] }. Cached per index fingerprint. Requires codebase indexing. Read-only. Use to get oriented in an unfamiliar repo; use get_codebase_domains for a business-domain map, or get_file_summary for one file.",
+    "scope": "mcp:read"
+  },
+  "get_file_summary": {
+    "description": "Return a plain-English summary of one indexed file or symbol (lazily generated on first call, then cached until content_hash changes on re-index). Returns { path, summary, symbols }. Requires codebase indexing. Read-only. Use to understand a single file fast; use ask_codebase for cross-file questions, or get_codebase_tour for an onboarding walkthrough.",
+    "scope": "mcp:read"
+  },
+  "get_fix_context": {
+    "description": "Bundle everything an agent needs to fix one bug in a single call: a paste-ready fixPrompt (plain-English diagnosis + reproduction + suggested fix + relevant code + blast radius), plus report detail, repro steps, component, root cause, and ontology tags. Returns { fixPrompt, report, reproduction, component, rootCause, tags }. Read-only; no second LLM key needed. Use before writing a fix; use triage_issue for a multi-report review packet, or suggest_fix for just the Stage-2 hint.",
+    "scope": "mcp:read"
+  },
+  "get_fix_timeline": {
+    "description": "Return the ordered lifecycle of one fix attempt: dispatched, started, branch, commit, PR opened, CI, completed/failed, with timestamps and the PR URL. Returns { events: [{ ts, stage, detail }] }. Read-only. Use to debug \"why did this fix fail?\" after dispatch_fix; use refresh_ci to re-poll GitHub CI, or get_report_timeline for the whole report thread.",
+    "scope": "mcp:read"
+  },
+  "get_graph_neighborhood": {
+    "description": "Return the BFS neighborhood around one graph node by id or label: { nodes: [{ id, label, node_type }], edges: [{ source_node_id, target_node_id, edge_type }] } within a depth budget (default 2, max 4). Read-only. Tuned for \"what touches this action?\"; use get_knowledge_graph to traverse from a component seed, or get_graph_node for a single node's row.",
+    "scope": "mcp:read"
+  },
+  "get_graph_node": {
+    "description": "Fetch one knowledge-graph node row by id. Returns { node: { id, node_type, label, metadata } } including the v2 derived status on Action nodes (ok | stale | broken). Read-only. Use to inspect a single node's status; use get_graph_neighborhood to see what connects to it.",
+    "scope": "mcp:read"
+  },
+  "get_inventory": {
+    "description": "Return the current inventory.yaml snapshot for a project: latest ingest, validation errors, and a per-action status summary. Returns { snapshot, validationErrors, actions: [{ id, status }] }. Requires the inventory_v2 plan. Read-only. Use for the full current state; use diff_inventory to compare two commits, or list_gate_findings for the latest gate results.",
+    "scope": "mcp:read"
+  },
+  "get_knowledge_graph": {
+    "description": "Traverse the knowledge graph from a seed component or page. Returns { nodes: [{ id, label, node_type }], edges: [{ source_node_id, target_node_id, edge_type }] } within a depth budget (default 2, max 4 hops). Read-only. Use to see how a component connects to the rest of the app; use get_blast_radius for a bug's impact area, or get_graph_neighborhood for a tighter BFS around one node.",
+    "scope": "mcp:read"
+  },
+  "get_map_run_status": {
+    "description": "Poll the status and results of a story_map_run started by map_user_stories. Returns { status: pending|running|completed|failed, pages_crawled, proposal_id (once done), cursor_pr_url (if Cursor Cloud refined the draft) }. Read-only. Use to know when a crawl has finished and which inventory_proposals row to review next.",
+    "scope": "mcp:read",
+    "required": [
+      "projectId"
+    ]
+  },
+  "get_pipeline_logs": {
+    "description": "Pull recent log entries from the Mushi pipeline services: fix-worker, qa-story-runner, pipeline, or all. Accepts project_id, service, since (ISO-8601), limit (max 200), and level (info | warn | error | fatal) filters. Returns structured log rows with timestamp, level, service, message, and a trace_id/report_id when available. Use this when a fix failed, a QA story keeps erroring, or an ingest pipeline went silent.",
+    "scope": "mcp:read"
+  },
+  "get_pipeline_run": {
+    "description": "Fetch a skill pipeline run by id: { status, context_packet, steps: [{ index, slug, status }] }. Read-only. Use to retrieve the context_packet when a pipeline was started from the console or another agent; then checkin_pipeline_step as you complete each step. Use start_skill_pipeline to begin a new run.",
+    "scope": "mcp:read",
+    "required": [
+      "run_id"
+    ]
+  },
+  "get_project_context": {
+    "description": "Return a rich context snapshot for a project: name, repo URL, SDK heartbeat, ingest status, open report count, autofix readiness, your LLM key config, plan tier, and active integration health. Equivalent to a merged preflight + activation + settings read. Agents should call this at the start of a review session to orient themselves.",
+    "scope": "mcp:read"
+  },
+  "get_qa_story_run": {
+    "description": "Fetch the full detail for a single qa_story_run: status, error_message, assertion_failures, latency_ms, provider_session_url (Browserbase replay link when available), and screenshot URLs from qa_story_evidence. Use this to drill into a specific failing run and understand the exact error before deciding whether to improve the story script or fix the app.",
+    "scope": "mcp:read",
+    "required": [
+      "storyId",
+      "runId"
+    ]
+  },
+  "get_recent_reports": {
+    "description": "List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, created_at }], total }. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports.",
+    "scope": "mcp:read"
+  },
+  "get_report_detail": {
+    "description": "Fetch the full record for one bug report by id: description, console logs, network requests, screenshot URL, classification (stage 1/2), and fix history. Returns { report }. Read-only. Use when you have a reportId and need everything about it; for evidence only use get_report_evidence, for the activity thread use get_report_timeline, for a one-call fix bundle use get_fix_context.",
+    "scope": "mcp:read"
+  },
+  "get_report_evidence": {
+    "description": "Return the full evidence package for a single bug report: screenshot URL, console logs, network excerpts, browser environment (user agent, URL, viewport, SDK version), user replay link if available, breadcrumb trail, and the reporter's own comments thread. This is the same data an engineer would collect for a root-cause investigation. Faster than calling get_report_detail + report timeline separately.",
+    "scope": "mcp:read"
+  },
+  "get_report_timeline": {
+    "description": "Return the ordered activity timeline for one report (oldest to newest), merging reporter comments, fix events, QA runs, skill-pipeline steps, and Ask Mushi turns into one lane. Returns { events: [{ ts, kind, actor, summary }] }. Read-only. Use to see what happened end-to-end on a report thread; use get_report_detail for the static record or get_fix_timeline to debug one fix attempt.",
+    "scope": "mcp:read",
+    "required": [
+      "reportId"
+    ]
+  },
+  "get_similar_bugs": {
+    "description": "Find existing bugs similar to a component, page, or description via pgvector nearest-neighbour search (same backend as search_reports, tuned for \"have we seen this before?\"). Returns ranked { reports: [{ id, summary, similarity }] }. Read-only. Use to dedupe before filing or group regressions; use search_reports for general free-text search.",
+    "scope": "mcp:read",
+    "required": [
+      "query"
+    ]
+  },
+  "get_skill": {
+    "description": "Fetch one agent skill by slug, including the complete SKILL.md body and the resolved chain of sub-skills. Returns { slug, title, body, chain: [{ slug, title }] }. Read-only. Use to read what a skill instructs before executing a pipeline step; use list_skills to discover slugs.",
+    "scope": "mcp:read",
+    "required": [
+      "slug"
+    ]
+  },
+  "get_two_way_comms_health": {
+    "description": "Summarize SDK ↔ admin two-way reporter health for a host app: last SDK heartbeat, app version/platform last seen, unread reporter messages, recent reporter replies, and pending QA/TDD follow-ups. Use after wiring @mushi-mushi/web in a Vite/Capacitor app to confirm reports land in the console and admin/MCP replies reach the in-app widget.",
+    "scope": "mcp:read"
+  },
+  "get_usage": {
+    "description": "Read-only diagnoses quota and billing summary for the current project: diagnoses used / limit / percentage, spend cap, period start/end, plan name, and whether the project is approaching or over its quota. Use this to answer \"how many diagnoses do I have left?\" or \"am I close to my spend cap?\".",
+    "scope": "mcp:read"
+  },
+  "improve_qa_story": {
+    "description": "Analyze recently failed qa_story_runs and use Claude to write improved test scripts that address the failures. New tests are created with source=pdca, parent_story_id chained to the original, and approval gated by the original story's automation_mode. Returns { improvedStoryIds }. Write; consumes LLM budget; NOT idempotent. Use to repair flaky/broken tests; use run_qa_story to re-run as-is, or list_qa_story_runs to inspect failures first.",
+    "scope": "mcp:write"
+  },
+  "list_byok_keys": {
+    "description": "List the project's BYOK API keys grouped by provider (anthropic | openai | firecrawl | browserbase | cursor). Returns { keys: [{ id, provider, label, priority, status, cooldownUntil }] } — metadata only, never the raw secret. Read-only. Use to see which keys are active vs rate-limited/exhausted; use add_byok_key to add one.",
+    "scope": "mcp:read",
+    "required": [
+      "projectId"
+    ]
+  },
+  "list_gate_findings": {
+    "description": "List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead-handler | mock-leak | crawl | status-claim) or minimum severity (low|medium|high|critical). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.",
+    "scope": "mcp:read"
+  },
+  "list_lessons": {
+    "description": "List promoted learning rules (\"lessons\") for the current project, highest-frequency first. Returns { lessons: [{ id, rule_text, severity, frequency, anti_pattern, … }] }. Read-only. Use to browse the full catalog of encoded heuristics; use query_lessons to retrieve only lessons relevant to a specific diff or PR within a token budget.",
+    "scope": "mcp:read"
+  },
+  "list_pending_review_stories": {
+    "description": "List auto-generated QA/TDD stories in approval_status=pending_review — the queue waiting for human sign-off before they run on schedule. Returns { stories: [{ id, title, source, target_url, created_at }] }. Read-only. Use to find what needs review today; then approve_qa_story to approve or reject each.",
+    "scope": "mcp:read",
+    "required": [
+      "projectId"
+    ]
+  },
+  "list_projects": {
+    "description": "List all Mushi projects accessible to this API key. For project-scoped keys returns a single-item list; for org-scoped keys (account mode) returns every project owned by this account. Call this first when MUSHI_PROJECT_ID is not configured — use the returned id with subsequent tool calls. If multiple projects are returned, pass the target projectId explicitly to project-scoped tools. Multi-project tip: run `mushi setup --all-projects` in your terminal to create one named MCP server entry per project in .cursor/mcp.json.",
+    "scope": "mcp:read"
+  },
+  "list_qa_story_runs": {
+    "description": "Return the most recent runs for a given QA story, newest first. Each row includes status (passed/failed/error/running), latency_ms, created_at, error_message headline, and assertion_failures (up to 10). Use this to understand whether a story is currently healthy, what the last failure was, and whether a manual run has completed.",
+    "scope": "mcp:read",
+    "required": [
+      "storyId"
+    ]
+  },
+  "list_skills": {
+    "description": "List the agent skills in the catalog, optionally filtered by category or search text. Returns { skills: [{ slug, title, description, category, chain_slugs }] }. Read-only. Use to find the right skill slug before start_skill_pipeline; use get_skill to read one skill's full instructions.",
+    "scope": "mcp:read"
+  },
+  "list_top_contributors": {
+    "description": "Return the top N contributors for the organization, ranked by points in a time window (30d | 90d | all). Each row includes display name, tier, total points, report count, and anti-fraud flag. Use this to identify your most engaged power users, write them a thank-you message, or decide who deserves a bonus.",
+    "scope": "mcp:read"
+  },
+  "map_user_stories": {
+    "description": "Crawl a live application URL (Firecrawl/Browserbase) and have Claude draft an inventory.yaml of pages and user stories, written to an inventory_proposals row (source=live_crawl). Optionally dispatches a Cursor Cloud agent to refine the draft and open a PR. Returns { runId, status: \"pending\" } immediately — poll get_map_run_status. Write; consumes crawl + LLM budget; NOT idempotent. Use to bootstrap test coverage without hand-writing YAML; then generate_tdd_from_story per accepted story.",
+    "scope": "mcp:write",
+    "required": [
+      "projectId",
+      "baseUrl"
+    ]
+  },
+  "merge_fix": {
+    "description": "Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns { merged, reportStatus }. Write; destructive and irreversible from Mushi's side — once GitHub merges into the target repo's default branch there is no unmerge endpoint, only a manual revert PR outside this tool. Idempotent — re-running an already-merged attempt is a safe no-op. Prerequisite: CI green (check with refresh_ci); confirm the diff and CI status with the user before calling on a PR you have not reviewed. Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging.",
+    "scope": "mcp:write",
+    "required": [
+      "fixId"
+    ]
+  },
+  "query_lessons": {
+    "description": "Retrieve the learning rules (\"lessons\") most relevant to a given code diff or PR context, packed within a token budget. Uses bi-encoder retrieval + severity-weighted scoring; pass the diff/description as the query and max_tokens (default 2000). Returns ranked { lessons: [{ title, rule, severity }] }. Read-only. Use before writing a fix or opening a PR; use list_lessons to browse all lessons unfiltered.",
+    "scope": "mcp:read"
+  },
+  "refresh_ci": {
+    "description": "Re-poll GitHub for the latest check-run status of a fix attempt's PR and persist it on the fix_attempt row (does not merge or mutate GitHub). Returns { check_run_status, check_run_conclusion, check_run_updated_at }. Write; idempotent. Use right before merge_fix to confirm CI is green; use get_fix_timeline for the full attempt lifecycle.",
+    "scope": "mcp:write",
+    "required": [
+      "fixId"
+    ]
+  },
+  "reopen_report": {
+    "description": "Move a previously fixed/verified/dismissed report back to the reopened state for regression review, recording an operator note. Returns { report } with status=reopened. Write; idempotent — reopening an already-reopened report is a no-op. Use when a reporter says \"still broken\" after a fix shipped; use transition_status for any other state change.",
+    "scope": "mcp:write",
+    "required": [
+      "reportId"
+    ]
+  },
+  "reply_to_reporter": {
+    "description": "Send a visible message to the end-user who filed a bug report. The reply appears in the in-app Mushi widget as an admin comment and creates an unread notification badge so the reporter sees it immediately. Use this to answer questions, request reproduction steps, or confirm a fix — without leaving the Cursor IDE.",
+    "scope": "mcp:write",
+    "required": [
+      "reportId",
+      "message"
+    ]
+  },
+  "run_fullstack_audit": {
+    "description": "Fan out a full-stack health audit for the current project: DB schema + advisors, API contract gate results (Gates 3–8), recent backend error logs, and RLS gap detection. Returns a PM-readable scorecard with severity-ranked findings and fix hints. Requires the project to have a Supabase PAT configured (Settings → API Keys, slug: supabase) and supabase_project_ref set in project settings for backend analysis. The audit completes synchronously in ~10 s. Triggers a background gate run for orphan_endpoint and unknown_call gates if they have not run today.",
+    "scope": "mcp:write"
+  },
+  "run_nl_query": {
+    "description": "Answer a natural-language question about your project data by generating and running a read-only SQL query (no privileged schemas, rate-limited to 60/hour). Returns { sql, rows }. Use for ad-hoc analytics (\"which components had the most critical bugs this week?\"); use get_recent_reports/search_reports for plain report lookups, or search_mushi_docs for documentation questions.",
+    "scope": "mcp:read"
+  },
+  "run_qa_story": {
+    "description": "Queue an immediate manual run for an enabled + approved qa_story (equivalent to \"Run now\" in the console). Returns { runId } right away; poll list_qa_story_runs or get_qa_story_run for progress and results. Write; NOT idempotent — each call creates a new run; returns 409 if the story is disabled or pending review. Use to verify a flow on demand; use improve_qa_story to repair a failing story.",
+    "scope": "mcp:write",
+    "required": [
+      "projectId",
+      "qaStoryId"
+    ]
+  },
+  "search_codebase": {
+    "description": "Search the indexed repo by plain-English meaning via embeddings. Returns { results: [{ file_path, line_start, line_end, content_preview, similarity, … }], query, mode } ordered by similarity. Requires codebase indexing enabled. Read-only. Use to locate where something lives (\"where do we verify webhooks?\"); use ask_codebase for a synthesized answer with citations, or analyze_codebase_impact to find dependents of a file.",
+    "scope": "mcp:read"
+  },
+  "search_mushi_docs": {
+    "description": "Search the official Mushi documentation (guides, MCP setup, inventory, QA, skills) by keyword. Returns ranked { results: [{ title, url, excerpt }] }. Read-only. Use before guessing API shapes, tool names, or RPC names; use run_nl_query for questions about your own project data, not the docs.",
+    "scope": "mcp:read"
+  },
+  "search_reports": {
+    "description": "Search reports by meaning and keyword (pgvector similarity server-side; falls back to summary/description substring if embeddings are unavailable). Returns ranked { results: [{ id, summary, similarity }] }. Read-only. Use to find reports by free text (\"checkout flakiness\"); use get_similar_bugs to dedupe a known component/bug, or get_recent_reports to list without a query.",
+    "scope": "mcp:read"
+  },
+  "set_tier": {
+    "description": "Override a contributor's tier by tier slug (e.g. \"champion\"), bypassing the normal points-threshold logic entirely. This is an admin escape hatch for manual promotions — normal tier transitions happen automatically via point thresholds instead. Destructive: it is a label-only override that does NOT replay the automatic tier-evaluation path, so any host_credit_payload grant (Stripe perk, badge, etc.) normally tied to reaching that tier via points will NOT fire — confirm with the user whether they also need the perk granted another way. The override persists until another set_tier call changes it; the prior override stays in the end_user_activity audit trail either way, logged as tier_override_manual. Requires mcp:write scope.",
+    "scope": "mcp:write"
+  },
+  "setup_repo_for_mushi": {
+    "description": "Writes the three Mushi bootstrap files into the current repo root: `.cursorrules` (Cursor evolution-loop coding rules), `.mushi/lessons.json` (initial empty lesson cache), and `MUSHI.md` (one-page project contract for agents). Idempotent — safe to re-run after lessons sync. Requires mcp:write scope. Call this once after connecting the repo; subsequently use `mushi sync-lessons` from CI to keep lessons current.",
+    "scope": "mcp:write"
+  },
+  "start_skill_pipeline": {
+    "description": "Start a new skill pipeline run for a report. Pass root_skill_slug and optionally report_id. Returns run_id, context_packet (full instructions + report context), and step list. Read the context_packet — it contains skill instructions plus full report context (repro steps, root cause, RAG files). After executing each step, call checkin_pipeline_step. The PM watching the console sees progress live.",
+    "scope": "mcp:write",
+    "required": [
+      "root_skill_slug"
+    ]
+  },
+  "submit_fix_result": {
+    "description": "Record a fix outcome from an external agent (e.g. your own Cursor/Claude run): branch, PR URL, files changed, lines added/removed. Creates a fix_attempt row then patches it to completed and links it to the report. Returns { fixAttemptId }. Write; NOT idempotent — each call creates a new fix_attempt, so call once per PR. Use after you opened a PR outside Mushi; use dispatch_fix to have Mushi open the PR instead, or merge_fix once CI is green.",
+    "scope": "mcp:write",
+    "required": [
+      "reportId"
+    ]
+  },
+  "suggest_fix": {
+    "description": "Return the Stage-2 suggested-fix slice for one report: root cause, suggested fix, repro steps, summary, and component — faster than get_report_detail when you only need the human-readable hint. Returns { reportId, rootCause, suggestedFix, reproductionSteps, summary, component }. Read-only; reads the existing classification (run triage_issue first if unclassified). Use for a quick \"what should we try?\"; use get_fix_context for the full paste-ready bundle.",
+    "scope": "mcp:read",
+    "required": [
+      "reportId"
+    ]
+  },
+  "test_gen_from_report": {
+    "description": "Generate a Playwright regression test from a classified report using your project LLM key, then open a draft GitHub PR with the spec. Requires the inventory_v2 plan plus GitHub and LLM keys configured. Returns { qaStoryId, prUrl }. Write; consumes LLM budget; NOT idempotent — each call opens a new PR. Use to lock in a regression as an E2E test; use generate_tdd_from_story to build a test from a mapped user story instead.",
+    "scope": "mcp:write",
+    "required": [
+      "reportId"
+    ]
+  },
+  "test_notification_channel": {
+    "description": "Send a test notification to a configured notification channel for the project. Supported channel kinds: \"slack\" (posts a test Block Kit message to the configured channel), \"discord\" (posts to the project discord_webhook_url). Returns ok=true if the message was accepted. Use this to verify the integration is working after setup or after changing credentials.",
+    "scope": "mcp:write",
+    "required": [
+      "kind"
+    ]
+  },
+  "transition_status": {
+    "description": "Move a report to a new workflow state, enforcing the same transition rules as the admin UI. Valid targets: classified, grouped, fixing, fixed, verified, reopened, dismissed. Returns { report } with the updated status. Write; idempotent (setting the current status is a no-op); rejects illegal transitions. Use to dismiss a duplicate or mark fixed; use merge_fix to mark fixed via a merged PR, or reopen_report for the reopened path.",
+    "scope": "mcp:write"
+  },
+  "triage_issue": {
+    "description": "Read-only combined tool: merges report detail, evidence, similar bugs, fix context, blast radius, and recent pipeline logs for a report into a single structured review packet. Returns a prioritised list of recommended next actions (investigate, dispatch_fix, group_with, dismiss). Equivalent to a Sentry \"Analyze with Seer\" flow grounded in user-felt reports. Pass report_id to kick off review. Call this before dispatch_fix.",
+    "scope": "mcp:read"
+  },
+  "trigger_judge": {
+    "description": "Queue the Sonnet-as-Judge to grade recent fix quality across accessible projects. Returns { dispatched: number } — one judge-batch job per project; scores land asynchronously in judge_results (read back with run_nl_query). Write; consumes LLM budget. Idempotent within a short window. Use before shipping to vet fix quality; use get_fix_timeline to inspect a single attempt instead.",
+    "scope": "mcp:write"
+  }
+}

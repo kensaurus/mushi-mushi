@@ -5,6 +5,7 @@
  *          `from '.../components/ui'` import sites keep working unchanged.
  */
 export * from './ui/layout';
+export * from './ui/chrome';
 export * from './ui/fields';
 export * from './ui/metrics';
 export * from './ui/page-help';

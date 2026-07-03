@@ -123,7 +123,7 @@ export function SidebarFooterControls({
 
   return (
     <div
-      className="w-full min-w-0 space-y-1"
+      className="w-full min-w-0 space-y-0.5"
       role="group"
       aria-label="Density, theme, and focus"
     >

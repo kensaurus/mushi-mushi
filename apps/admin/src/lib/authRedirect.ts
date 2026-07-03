@@ -4,7 +4,7 @@
  */
 
 const FALLBACK_PATH = '/dashboard'
-const AUTH_PATHS = new Set(['/login', '/reset-password'])
+const AUTH_PATHS = new Set(['/login', '/signup', '/reset-password'])
 
 function normalizeBasePath(basePath: string): string {
   if (!basePath || basePath === '/') return '/'
