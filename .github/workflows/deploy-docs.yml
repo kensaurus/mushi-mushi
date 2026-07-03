@@ -200,6 +200,17 @@ jobs:
             --exclude "*" \
             --include "*.json"
 
+      - name: Build CloudFront Function artifacts (comment-strip + size gate)
+        # CloudFront Functions reject code >= 10,240 bytes
+        # (FunctionSizeLimitExceeded). Deploy stripped artifacts so source
+        # comments never break deploys; fails here with headroom instead.
+        run: |
+          node scripts/build-cf-function.mjs \
+            scripts/cloudfront-mushi-docs-router.js \
+            scripts/cloudfront-mushi-docs-response.js \
+            scripts/cloudfront-mushi-apex-redirect.js \
+            scripts/cloudfront-mushi-spa-router.js
+
       - name: Deploy CloudFront docs router function
         run: |
           FUNC_NAME="mushi-mushi-docs-router"
@@ -209,14 +220,14 @@ jobs:
             aws cloudfront create-function \
               --name "$FUNC_NAME" \
               --function-config '{"Comment":"Clean-URL routing for mushi-mushi docs","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/cloudfront-mushi-docs-router.js \
+              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-docs-router.js \
               --region us-east-1
           else
             aws cloudfront update-function \
               --name "$FUNC_NAME" \
               --if-match "$EXISTING_ETAG" \
               --function-config '{"Comment":"Clean-URL routing for mushi-mushi docs","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/cloudfront-mushi-docs-router.js \
+              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-docs-router.js \
               --region us-east-1
           fi
           ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
@@ -232,14 +243,14 @@ jobs:
             aws cloudfront create-function \
               --name "$FUNC_NAME" \
               --function-config '{"Comment":"Security headers + 404 handling for mushi-mushi docs","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/cloudfront-mushi-docs-response.js \
+              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-docs-response.js \
               --region us-east-1
           else
             aws cloudfront update-function \
               --name "$FUNC_NAME" \
               --if-match "$EXISTING_ETAG" \
               --function-config '{"Comment":"Security headers + 404 handling for mushi-mushi docs","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/cloudfront-mushi-docs-response.js \
+              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-docs-response.js \
               --region us-east-1
           fi
           ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
@@ -255,14 +266,14 @@ jobs:
             aws cloudfront create-function \
               --name "$FUNC_NAME" \
               --function-config '{"Comment":"Redirect apex docs + admin routes to /mushi-mushi/docs|admin","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/cloudfront-mushi-apex-redirect.js \
+              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-apex-redirect.js \
               --region us-east-1
           else
             aws cloudfront update-function \
               --name "$FUNC_NAME" \
               --if-match "$EXISTING_ETAG" \
               --function-config '{"Comment":"Redirect apex docs + admin routes to /mushi-mushi/docs|admin","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/cloudfront-mushi-apex-redirect.js \
+              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-apex-redirect.js \
               --region us-east-1
           fi
           ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
@@ -278,14 +289,14 @@ jobs:
             aws cloudfront create-function \
               --name "$FUNC_NAME" \
               --function-config '{"Comment":"SPA + docs routing under /mushi-mushi/*","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/cloudfront-mushi-spa-router.js \
+              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-spa-router.js \
               --region us-east-1
           else
             aws cloudfront update-function \
               --name "$FUNC_NAME" \
               --if-match "$EXISTING_ETAG" \
               --function-config '{"Comment":"SPA + docs routing under /mushi-mushi/*","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/cloudfront-mushi-spa-router.js \
+              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-spa-router.js \
               --region us-east-1
           fi
           ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
