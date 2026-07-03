@@ -1095,14 +1095,14 @@ export function Layout({ children }: { children: ReactNode }) {
         </header>
 
         {/* Desktop sub-header — search left; controls + switchers right */}
-        {!focusMode && <header className={`hidden md:flex chrome-top-row items-center gap-3 px-5 border-b border-edge/40 ${appChromeHeaderClass}`}>
+        {!focusMode && <header className={`hidden md:flex chrome-top-row items-center gap-2 px-4 xl:gap-3 xl:px-5 border-b border-edge/40 ${appChromeHeaderClass}`}>
           <ChromeBreadcrumb />
-          <div className="min-w-0 shrink-0">
+          <div className="min-w-0 flex-1 flex justify-end xl:justify-start xl:flex-none xl:max-w-xs">
             <SearchButton />
           </div>
-          <div className="ml-auto flex items-center gap-2 min-w-0 overflow-visible">
+          <div className="ml-auto flex min-w-0 shrink items-center gap-1 xl:gap-1.5 overflow-visible">
             <div
-              className="flex items-center gap-0.5 rounded-md border border-edge/50 bg-surface-raised/35 p-0.5 overflow-visible shrink-0"
+              className="flex shrink-0 items-center gap-0.5 rounded-md border border-edge/50 bg-surface-raised/35 p-0.5 overflow-visible"
               aria-label="Toolbar"
             >
               <Tooltip content={activityUnread > 0 ? `Live activity — ${activityUnread} new` : 'Live activity'} side="bottom">
@@ -1139,9 +1139,11 @@ export function Layout({ children }: { children: ReactNode }) {
               />
             </div>
             <VersionBadge whatsNew={whatsNew} />
-            <span className="h-5 w-px shrink-0 bg-edge-subtle" aria-hidden />
-            <OrgSwitcher />
-            <ProjectSwitcher />
+            <span className="hidden lg:block h-5 w-px shrink-0 bg-edge-subtle" aria-hidden />
+            <div className="flex min-w-0 items-center gap-1">
+              <OrgSwitcher />
+              <ProjectSwitcher />
+            </div>
           </div>
         </header>}
 

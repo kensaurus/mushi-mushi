@@ -196,7 +196,7 @@ export function PageHeaderBar({
 
         {/* Right-side slot */}
         {(children || showCopyLink) && (
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
             {children}
             {showCopyLink && <CopyViewLinkButton />}
           </div>

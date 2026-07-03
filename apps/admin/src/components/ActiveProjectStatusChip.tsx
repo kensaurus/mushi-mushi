@@ -20,9 +20,10 @@ import { CHIP_TONE } from '../lib/chipTone'
 
 interface ActiveProjectStatusChipProps {
   snapshot: ProjectSnapshot | null | undefined
+  className?: string
 }
 
-export function ActiveProjectStatusChip({ snapshot }: ActiveProjectStatusChipProps) {
+export function ActiveProjectStatusChip({ snapshot, className = '' }: ActiveProjectStatusChipProps) {
   if (!snapshot) return null
 
   const bottleneck = snapshot.pdca_bottleneck
@@ -50,7 +51,7 @@ export function ActiveProjectStatusChip({ snapshot }: ActiveProjectStatusChipPro
     : null
 
   return (
-    <span className="inline-flex items-center gap-1 shrink-0">
+    <span className={`inline-flex items-center gap-0.5 shrink-0 min-w-0 ${className}`.trim()}>
       {bottleneck && snapshot.pdca_bottleneck_label && bottleneckCtx && (
         <Tooltip
           content={

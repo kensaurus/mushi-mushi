@@ -18,12 +18,19 @@ describe('shell chrome static contract', () => {
     expect(tester).toMatch(/hidden chrome-top-row items-center/)
   })
 
-  it('OrgSwitcher and ProjectSwitcher use HeaderContextChip', () => {
-    const org = readFileSync(resolve(root, 'components/OrgSwitcher.tsx'), 'utf8')
+  it('ProjectSwitcher keeps status chips inline beside the trigger', () => {
     const project = readFileSync(resolve(root, 'components/ProjectSwitcher.tsx'), 'utf8')
-    expect(org).toContain('HeaderContextChip')
     expect(project).toContain('HeaderContextChip')
-    expect(project).toMatch(/\/>\s*\n\s*<ActiveProjectStatusChip snapshot=\{snapshot\} \/>/)
+    expect(project).toMatch(/inline-flex min-w-0 max-w-full items-center gap-1/)
+    expect(project).not.toMatch(/flex-col items-end/)
+    expect(project).toMatch(/<ActiveProjectStatusChip snapshot=\{snapshot\}/)
+  })
+
+  it('OrgSwitcher uses HeaderContextChip with responsive density props', () => {
+    const org = readFileSync(resolve(root, 'components/OrgSwitcher.tsx'), 'utf8')
+    expect(org).toContain('HeaderContextChip')
+    expect(org).toContain('kickerHiddenBelowLg')
+    expect(org).toContain('badgeHiddenBelowXl')
   })
 
   it('sidebar micro labels use text-2xs floor', () => {

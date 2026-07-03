@@ -42,6 +42,11 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
 
   const isByok = data?.byok_configured ?? false
   const label = error
+    ? 'Privacy unavailable'
+    : isByok
+      ? 'BYOK'
+      : 'Platform key'
+  const labelLong = error
     ? 'Privacy status unavailable'
     : isByok
       ? 'All systems BYOK'
@@ -80,7 +85,8 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
           ref={badgeRef}
           type="button"
           className="flex items-center gap-1.5 w-full px-2 py-1 rounded-sm hover:bg-surface-raised transition-colors"
-          aria-label={`${label} — click for privacy details`}
+          aria-label={`${labelLong} — click for privacy details`}
+          title={labelLong}
           onClick={() => setPopoverOpen((v) => !v)}
         >
           <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} />

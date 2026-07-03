@@ -143,10 +143,10 @@ export function ProjectSwitcher() {
   const snapshot = snapshots.byId.get(active.project_id)
 
   return (
-    <div ref={containerRef} className="relative inline-flex flex-col items-end gap-0.5 min-w-0">
+    <div ref={containerRef} className="relative inline-flex min-w-0 max-w-full items-center gap-1">
       <HeaderContextChip
         kicker="Project"
-        kickerHiddenSm
+        kickerHiddenBelowLg
         label={
           <span className="inline-flex items-center gap-1.5 min-w-0">
             <ProjectFavicon
@@ -174,7 +174,7 @@ export function ProjectSwitcher() {
         aria-haspopup="listbox"
         aria-expanded={open}
       />
-      <ActiveProjectStatusChip snapshot={snapshot} />
+      <ActiveProjectStatusChip snapshot={snapshot} className="hidden sm:inline-flex" />
       {open && (
         <div
           className={`${headerDropdownPanelClass} w-80 max-w-[calc(100vw-2rem)]`}

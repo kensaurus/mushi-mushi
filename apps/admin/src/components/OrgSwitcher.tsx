@@ -203,6 +203,8 @@ export function OrgSwitcher() {
     <div ref={containerRef} className="relative">
       <HeaderContextChip
         kicker="Team"
+        kickerHiddenBelowLg
+        badgeHiddenBelowXl
         label={active.name}
         badge={orgPillLabel(active)}
         badgeTone={active.billing_mode === 'complimentary' ? 'brand' : 'neutral'}

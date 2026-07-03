@@ -15,7 +15,8 @@ vi.mock('../lib/mushi-self', () => ({
   reportMushiBug: vi.fn(),
 }))
 
-const mockUseAuth = vi.fn(() => ({ session: { user: { id: 'user-1' } } }))
+type MockAuthReturn = { session: { user: { id: string } } | null }
+const mockUseAuth = vi.fn((): MockAuthReturn => ({ session: { user: { id: 'user-1' } } }))
 
 vi.mock('../lib/auth', () => ({
   useAuth: () => mockUseAuth(),
