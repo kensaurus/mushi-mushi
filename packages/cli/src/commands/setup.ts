@@ -39,9 +39,14 @@ The command reads credentials from ~/.config/mushi/config.json (run \`mushi logi
 
     // First-run: no credentials yet — trigger the same device-auth flow as
     // `mushi login` inline instead of erroring out, so `npx mushi-mushi setup`
-    // is a true one-command onboarding path.
-    if (!loadConfig().apiKey) {
-      await runLogin({ endpoint: opts.endpoint })
+    // is a true one-command onboarding path. Preserve a pre-configured
+    // self-hosted endpoint (config.json or MUSHI_API_ENDPOINT) when the
+    // caller didn't pass --endpoint explicitly, so this never silently
+    // redirects device-auth to the default cloud endpoint.
+    const existingConfig = loadConfig()
+    if (!existingConfig.apiKey) {
+      const endpoint = opts.endpoint ?? existingConfig.endpoint ?? process.env.MUSHI_API_ENDPOINT?.trim()
+      await runLogin({ endpoint })
     }
 
     const config = requireConfig({ needsProject: true })
