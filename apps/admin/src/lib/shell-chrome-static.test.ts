@@ -33,6 +33,11 @@ describe('shell chrome static contract', () => {
     expect(org).toContain('badgeHiddenBelowXl')
   })
 
+  it('chrome-top-row lives in @layer components so hidden md:flex wins on mobile', () => {
+    const css = readFileSync(resolve(root, 'index.css'), 'utf8')
+    expect(css).toMatch(/@layer components\s*\{[^}]*\.chrome-top-row/)
+  })
+
   it('sidebar micro labels use text-2xs floor', () => {
     const micro = readFileSync(resolve(root, 'components/sidebar/SidebarMicroChrome.ts'), 'utf8')
     expect(micro).toContain('text-2xs')
