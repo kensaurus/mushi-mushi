@@ -13,12 +13,12 @@
     "install-browsers": "playwright install --with-deps chromium"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.11.3",
+    "@axe-core/playwright": "^4.12.1",
     "@mushi-mushi/core": "workspace:*",
     "@mushi-mushi/web": "workspace:*",
     "@playwright/test": "^1.60.0",
     "@supabase/supabase-js": "^2.108.1",
-    "@types/node": "^25.9.3",
+    "@types/node": "^22.20.0",
     "msw": "^2.14.6",
     "typescript": "^6.0.3"
   }
