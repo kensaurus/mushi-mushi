@@ -5,7 +5,7 @@
  *
  * USAGE:
  *   node scripts/kill-port.mjs 6464
- *   node scripts/kill-port.mjs 6464 3000 3001   # full `pnpm dev` (admin + docs + testers)
+ *   node scripts/kill-port.mjs 6464 3000 3001 4001   # full `pnpm dev` (+ docs fallback port)
  *   node scripts/kill-port.mjs 6464 3000 5173
  */
 
