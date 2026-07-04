@@ -23,7 +23,7 @@
     "@mushi-mushi/marketing-ui": "workspace:*",
     "@mushi-mushi/mcp": "workspace:*",
     "@mushi-mushi/web": "workspace:*",
-    "@sentry/react": "^10.57.0",
+    "@sentry/react": "^10.59.0",
     "@supabase/supabase-js": "^2.108.1",
     "@tanstack/react-table": "^8.21.3",
     "@xyflow/react": "^12.11.0",
