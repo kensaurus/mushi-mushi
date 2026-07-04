@@ -71,7 +71,7 @@ jobs:
       # Once set, the stale AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY secrets
       # can be deleted from the repo.
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@b47578312673ae6fa5b5096b330d9fbac3d116df  # v4.2.1
+        uses: aws-actions/configure-aws-credentials@254c19bd240aabef8777f48595e9d2d7b972184b  # v6.2.1
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
