@@ -16,7 +16,7 @@
     "@axe-core/playwright": "^4.12.1",
     "@mushi-mushi/core": "workspace:*",
     "@mushi-mushi/web": "workspace:*",
-    "@playwright/test": "^1.60.0",
+    "@playwright/test": "^1.61.1",
     "@supabase/supabase-js": "^2.108.1",
     "@types/node": "^22.20.0",
     "msw": "^2.14.6",
