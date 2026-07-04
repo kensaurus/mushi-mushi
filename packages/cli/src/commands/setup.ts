@@ -1,6 +1,19 @@
 import type { Command } from 'commander';
 import { requireConfig } from '../cli-shared.js';
 import { buildMcpServerBlock, buildMcpServerName, writeMcpServerEntry } from '../mcp-config.js';
+import { loadConfig } from '../config.js';
+import { runLogin } from './account.js';
+
+// Exported for unit testing — resolving the login endpoint has three sources
+// of truth and a wrong precedence here silently redirects a self-hosted
+// user's device-auth to the default cloud endpoint (see setup.test.ts).
+export function resolveLoginEndpoint(
+  optsEndpoint: string | undefined,
+  existingConfigEndpoint: string | undefined,
+  envEndpoint: string | undefined,
+): string | undefined {
+  return optsEndpoint ?? existingConfigEndpoint ?? envEndpoint?.trim()
+}
 
 export function registerSetupCommands(program: Command): void {
 // ─── setup ────────────────────────────────────────────────────────────────────
@@ -14,6 +27,7 @@ program
   .option('--dry-run', 'Print what would be written without making changes')
   .option('--verify', 'Probe the MCP key after writing to confirm it has mcp:read scope (default: on)')
   .option('--no-verify', 'Skip the post-write key probe')
+  .option('--endpoint <url>', 'Override the Mushi API endpoint (self-hosted) — used for first-run login if not yet configured')
   .addHelpText('after', `
 Examples:
   mushi setup                         # wire Cursor (default)
@@ -28,11 +42,23 @@ Supported IDEs:
   zed       — writes ~/.config/zed/settings.json mcpServers block
 
 The command reads credentials from ~/.config/mushi/config.json (run \`mushi login\` first).`)
-  .action(async (opts: { ide: string; projectSlug?: string; allProjects?: boolean; withRules?: boolean; dryRun?: boolean; verify?: boolean }) => {
+  .action(async (opts: { ide: string; projectSlug?: string; allProjects?: boolean; withRules?: boolean; dryRun?: boolean; verify?: boolean; endpoint?: string }) => {
     const { writeFile, mkdir, readFile } = await import('node:fs/promises')
     const { existsSync } = await import('node:fs')
     const nodePath = await import('node:path')
     const os = await import('node:os')
+
+    // First-run: no credentials yet — trigger the same device-auth flow as
+    // `mushi login` inline instead of erroring out, so `npx mushi-mushi setup`
+    // is a true one-command onboarding path. Preserve a pre-configured
+    // self-hosted endpoint (config.json or MUSHI_API_ENDPOINT) when the
+    // caller didn't pass --endpoint explicitly, so this never silently
+    // redirects device-auth to the default cloud endpoint.
+    const existingConfig = loadConfig()
+    if (!existingConfig.apiKey) {
+      const endpoint = resolveLoginEndpoint(opts.endpoint, existingConfig.endpoint, process.env.MUSHI_API_ENDPOINT)
+      await runLogin({ endpoint })
+    }
 
     const config = requireConfig({ needsProject: true })
 
