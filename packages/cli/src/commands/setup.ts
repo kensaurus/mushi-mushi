@@ -16,6 +16,7 @@ program
   .option('--dry-run', 'Print what would be written without making changes')
   .option('--verify', 'Probe the MCP key after writing to confirm it has mcp:read scope (default: on)')
   .option('--no-verify', 'Skip the post-write key probe')
+  .option('--endpoint <url>', 'Override the Mushi API endpoint (self-hosted) — used for first-run login if not yet configured')
   .addHelpText('after', `
 Examples:
   mushi setup                         # wire Cursor (default)
@@ -30,7 +31,7 @@ Supported IDEs:
   zed       — writes ~/.config/zed/settings.json mcpServers block
 
 The command reads credentials from ~/.config/mushi/config.json (run \`mushi login\` first).`)
-  .action(async (opts: { ide: string; projectSlug?: string; allProjects?: boolean; withRules?: boolean; dryRun?: boolean; verify?: boolean }) => {
+  .action(async (opts: { ide: string; projectSlug?: string; allProjects?: boolean; withRules?: boolean; dryRun?: boolean; verify?: boolean; endpoint?: string }) => {
     const { writeFile, mkdir, readFile } = await import('node:fs/promises')
     const { existsSync } = await import('node:fs')
     const nodePath = await import('node:path')
@@ -40,7 +41,7 @@ The command reads credentials from ~/.config/mushi/config.json (run \`mushi logi
     // `mushi login` inline instead of erroring out, so `npx mushi-mushi setup`
     // is a true one-command onboarding path.
     if (!loadConfig().apiKey) {
-      await runLogin({})
+      await runLogin({ endpoint: opts.endpoint })
     }
 
     const config = requireConfig({ needsProject: true })
