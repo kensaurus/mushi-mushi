@@ -72,6 +72,7 @@ Product Hunt to Thursday.
 | 6:00am | PH | Reply to every comment from the night owls in Europe / Asia. |
 | 9:00am | **Reddit r/webdev** | Paste the r/webdev opener from snippets. Different angle from Tuesday's r/opensource post. |
 | 9:10am | **Reddit r/reactjs** | Paste the r/reactjs opener (the 4-line drop-in). |
+| 9:20am | **Reddit r/mcp** | Paste the r/mcp opener from snippets — MCP-tooling angle, not the general pitch. Check the sub's self-promo rules before posting. |
 | 9:30am | Bluesky / X | *"Mushi-chan is on Product Hunt today 🐛"* + live link. |
 | 10am – 3pm | PH + Reddit | **Same sit-with-it discipline as Tuesday.** Every comment, within 10 minutes. |
 | 2:00pm | **dev.to + Hashnode + personal blog** | Cross-post the long-form article (template in [snippets.md](./snippets.md)). Include the GIF. Tag `#showdev`, `#opensource`, `#javascript`, `#react`. |
