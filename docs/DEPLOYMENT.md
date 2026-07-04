@@ -3,7 +3,7 @@
 How Mushi Mushi ships to production. This is the operator-facing companion to the
 public summary at [`apps/docs/content/operating/deployment.mdx`](../apps/docs/content/operating/deployment.mdx).
 
-There are **four independent pipelines**. A change to one never blocks the others.
+There are **four deploy pipelines** plus a **manual DB migration** step. A change to one deploy pipeline never blocks the others.
 **Database migrations are manual** and are never run by CI.
 
 | Pipeline | Workflow | Trigger | Target |
@@ -12,6 +12,8 @@ There are **four independent pipelines**. A change to one never blocks the other
 | Edge Functions | `.github/workflows/deploy-edge-functions.yml` | Push to `master` touching `packages/server/supabase/functions/**` | Supabase Edge |
 | Admin console SPA | `.github/workflows/deploy-admin.yml` | Push to `master` touching `apps/admin/**` | S3 + CloudFront |
 | Docs site | `.github/workflows/deploy-docs.yml` | Push to `master` touching `apps/docs/**` | S3 + CloudFront |
+| Hosted MCP proxy | `.github/workflows/deploy-hosted-mcp.yml` | Push touching hosted MCP assets | CloudFront (`/hosted-mcp/`) |
+| Testers portal | `.github/workflows/deploy-testers.yml` | Push touching `apps/testers/**` | S3 + CloudFront |
 | DB migrations | — (no workflow) | Manual `supabase db push` | Postgres |
 
 ---
@@ -245,9 +247,8 @@ To restore to a point in time using Supabase PITR:
 - **Never** write `DELETE FROM <table>` or `TRUNCATE <table>` without a
   `WHERE` clause in a migration file. CI enforces this via
   `scripts/check-destructive-migrations.mjs`.
-- Run `npm run check:destructive-migrations` (backend) or
-  `node scripts/check-destructive-migrations.mjs` (this repo) before merging
-  any PR that touches `supabase/migrations/`.
+- Run `node scripts/check-destructive-migrations.mjs` before merging any PR that
+  touches `packages/server/supabase/migrations/`.
 - Confirm PITR window before running any migration that installs a retention
   cron or bulk-deletes data.
 

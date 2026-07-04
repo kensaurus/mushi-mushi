@@ -150,7 +150,7 @@ automatically.
 |----------|-------------|---------|
 | `firecrawl_actions` | None (default) | Content verification, navigation checks, link health |
 | `browserbase` | `BYOK_BROWSERBASE_API_KEY` in project settings | Complex UI interactions, JavaScript-heavy SPAs |
-| `local` | CLI runner (`mushi-dev run-qa-stories`) | Full Playwright access, local-only environments |
+| `local` | CLI runner (`mushi qa run <story-id>`) | Full Playwright access, local-only environments |
 
 When you click **Generate test from report** on a report, Mushi writes a
 Playwright script, opens a GitHub PR, and automatically creates a QA story for it

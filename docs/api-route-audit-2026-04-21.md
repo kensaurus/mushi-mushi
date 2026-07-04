@@ -1,5 +1,7 @@
 # API Route Audit — 2026-04-21
 
+> Historical snapshot — see [docs/archive/README.md](archive/README.md).
+
 audit of `packages/server/supabase/functions/api/index.ts` against
 front-end consumers in `apps/admin/src/**`. Goal: zero advertised-but-missing
 endpoints, zero unreachable handlers, every JWT-gated route accounted for.

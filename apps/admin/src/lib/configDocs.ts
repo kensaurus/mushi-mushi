@@ -133,7 +133,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
       table: 'project_settings',
       column: 'slack_webhook_url',
       endpoint: 'PATCH /v1/admin/settings',
-      readBy: ['notify-slack edge function'],
+      readBy: ['classify-report edge function', 'judge-batch edge function', 'slack-interactions edge function'],
     },
     whenToChange:
       "Set this on day 1 if your team reviews bugs from Slack. Rotate it whenever the channel owner changes — webhooks don't expire, so a stale URL keeps posting until you replace it.",
@@ -149,7 +149,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
       table: 'project_settings',
       column: 'sentry_dsn',
       endpoint: 'PATCH /v1/admin/settings',
-      readBy: ['report-to-sentry forwarder'],
+      readBy: ['tester-marketplace API route (forwardToSentryDsn)', 'published-apps API route'],
     },
     whenToChange:
       'Add this if you want Mushi reports visible in Sentry dashboards alongside crash data. Skip it if Sentry is purely the source — the Integrations page handles inbound webhooks separately.',
@@ -165,7 +165,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
       table: 'project_settings',
       column: 'sentry_webhook_secret',
       endpoint: 'PATCH /v1/admin/settings',
-      readBy: ['sentry-webhook edge function'],
+      readBy: ['POST /v1/webhooks/sentry (api route)'],
     },
     whenToChange:
       'Set this once when wiring inbound Sentry user feedback. Rotate it together with the Sentry-side value — never one without the other or every payload starts failing signature verification.',
@@ -182,7 +182,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
       table: 'project_settings',
       column: 'sentry_consume_user_feedback',
       endpoint: 'PATCH /v1/admin/settings',
-      readBy: ['sentry-webhook edge function'],
+      readBy: ['POST /v1/webhooks/sentry (api route)'],
     },
     whenToChange:
       "Turn off temporarily when piloting Sentry on a noisy public app — re-enable once you're happy with the volume and your routing rules are in place.",
@@ -297,7 +297,7 @@ const SETTINGS_BYOK: ConfigDoc[] = [
       table: 'project_settings',
       column: 'byok_openai_key_ref (vault://…)',
       endpoint: 'PUT /v1/admin/byok/openai',
-      readBy: ['fast-filter', 'classify-report', 'judge edge functions'],
+      readBy: ['fast-filter', 'classify-report', 'judge-batch edge function'],
     },
     whenToChange:
       'Add this once Anthropic outages start showing up in your error budget — the failover silently kicks in only when this is configured.',
@@ -334,7 +334,7 @@ const SETTINGS_FIRECRAWL: ConfigDoc[] = [
       table: 'project_settings',
       column: 'firecrawl_api_key_ref (vault://…)',
       endpoint: 'PUT /v1/admin/byok/firecrawl',
-      readBy: ['research', 'fix-worker', 'library-modernizer edge functions'],
+      readBy: ['settings-research API routes', 'fix-worker edge function', 'library-modernizer edge function'],
     },
     whenToChange:
       'Add this once you start seeing autofix attempts hit a wall on "library X changed its API". Skip it for offline-first projects or fully air-gapped deployments.',
@@ -350,7 +350,7 @@ const SETTINGS_FIRECRAWL: ConfigDoc[] = [
       table: 'project_settings',
       column: 'firecrawl_allowed_domains',
       endpoint: 'PUT /v1/admin/byok/firecrawl',
-      readBy: ['_shared/firecrawl helper (research, fix-worker, library-modernizer)'],
+      readBy: ['_shared/firecrawl helper (settings-research, fix-worker, library-modernizer)'],
     },
     whenToChange:
       "Lock this down to your stack's docs (`react.dev`, `nextjs.org`, `developer.mozilla.org`, etc.) when compliance demands provenance for any external content the LLM sees. Leave empty for open exploration during early adoption.",
@@ -435,7 +435,7 @@ const PROJECTS: ConfigDoc[] = [
       table: 'project_api_keys',
       column: 'scopes (jsonb)',
       endpoint: 'POST /v1/admin/projects/{id}/keys',
-      readBy: ['report-ingest edge function', 'mcp server (@mushi-mushi/mcp)'],
+      readBy: ['POST /v1/reports (api route)', 'mcp server (@mushi-mushi/mcp)'],
     },
     whenToChange:
       'Pick `SDK send-only` for keys you ship inside a browser bundle. Pick `MCP read-only` for safely letting an agent browse reports. Only pick `MCP read + write` for trusted local clients with an audit trail.',
@@ -451,7 +451,7 @@ const PROJECTS: ConfigDoc[] = [
       table: 'project_api_keys',
       column: 'scopes (jsonb)',
       endpoint: 'POST /v1/admin/projects/{id}/keys',
-      readBy: ['report-ingest edge function'],
+      readBy: ['POST /v1/reports (api route)'],
     },
     whenToChange:
       'Always grant this for keys used by the SDK. Drop it for back-office keys that only need to read state (admin dashboards, MCP read-only).',
@@ -521,7 +521,7 @@ const INTEGRATIONS: ConfigDoc[] = [
       table: 'platform_integrations',
       column: 'config.sentry_org_slug',
       endpoint: 'PUT /v1/admin/integrations/sentry',
-      readBy: ['sentry-enricher edge function'],
+      readBy: ['sentry-seer-poll edge function', 'integration-health-probe edge function'],
     },
     whenToChange: 'Set once at install. Update only if Sentry renames your org (rare).',
   },
@@ -537,7 +537,7 @@ const INTEGRATIONS: ConfigDoc[] = [
       table: 'platform_integrations',
       column: 'config.sentry_project_slug',
       endpoint: 'PUT /v1/admin/integrations/sentry',
-      readBy: ['sentry-enricher edge function'],
+      readBy: ['sentry-seer-poll edge function', 'integration-health-probe edge function'],
     },
     whenToChange:
       'Set this whenever you have more than one Sentry project — the speed-up on enrichment is significant.',
@@ -554,7 +554,7 @@ const INTEGRATIONS: ConfigDoc[] = [
       table: 'platform_integrations',
       column: 'config.sentry_auth_token_ref',
       endpoint: 'PUT /v1/admin/integrations/sentry',
-      readBy: ['sentry-enricher edge function'],
+      readBy: ['sentry-seer-poll edge function', 'integration-health-probe edge function'],
     },
     whenToChange: 'Rotate quarterly, or whenever the issuing user leaves the org.',
   },
@@ -569,7 +569,7 @@ const INTEGRATIONS: ConfigDoc[] = [
       table: 'platform_integrations',
       column: 'config.langfuse_host',
       endpoint: 'PUT /v1/admin/integrations/langfuse',
-      readBy: ['fast-filter', 'classify-report', 'fix-worker', 'judge'],
+      readBy: ['fast-filter', 'classify-report', 'fix-worker', 'judge-batch'],
     },
     whenToChange:
       'Set on day 1 — tracing is the only way to see what the LLM actually saw when it misclassifies.',
@@ -1225,7 +1225,7 @@ const PROMPT_LAB: ConfigDoc[] = [
       table: 'prompt_versions',
       column: 'body',
       endpoint: 'POST /v1/admin/prompt-lab/prompts',
-      readBy: ['fast-filter', 'classify-report', 'fix-worker, judge'],
+      readBy: ['fast-filter', 'classify-report', 'fix-worker, judge-batch'],
     },
     whenToChange:
       'When eval scores plateau or a new model rewards different prompting style. Tag every change with what you tried, so the changelog is honest.',

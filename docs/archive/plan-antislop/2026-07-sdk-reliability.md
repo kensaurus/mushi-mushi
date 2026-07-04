@@ -6,7 +6,7 @@ _Audit executed with doc authoring. Code comment trim (Phase C) deferred._
 
 - Surfaces audited: [x] Prose  [x] Visual  [x] Code  [x] Structure
 - In scope: new/updated docs for CLI auth reliability, runtime config merge, widget UX, operator runbook, README fixes
-- Out of scope: full repo re-audit, landing page hero, unrelated marketing (`docs/plan-antislop.md` GTM scope remains closed)
+- Out of scope: full repo re-audit, landing page hero, unrelated marketing ([`2026-06-gtm-directory.md`](2026-06-gtm-directory.md) GTM scope remains closed)
 
 ## Slop score (after doc execution)
 
@@ -76,7 +76,7 @@ _Audit executed with doc authoring. Code comment trim (Phase C) deferred._
 ## Manual follow-up
 
 1. **Phase C:** Trim FILE banners in `sdk-config.ts` and `CliAuthPage.tsx` if desired
-2. **Re-run:** `plan-antislop` after npm publish if GTM copy references reliability
+2. **Re-run voice checks** after npm publish if GTM copy references reliability (`pnpm check:public-voice`)
 
 ## Verify
 

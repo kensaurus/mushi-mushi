@@ -1,4 +1,6 @@
 # Handover — Real LLM cost, 2026-04-20
+> Historical snapshot — see [docs/archive/README.md](archive/README.md).
+
 
 > Picking this up? Read this top to bottom (≈6 min) before touching code. This release closes the largest gap left by the previous one (real LLM cost tracking), surfaces it across Health / Billing / Prompt Lab, and patches two production crashes that Sentry caught during rollout. Pair this with [`HANDOVER-2026-04-20-gap-closure.md`](HANDOVER-2026-04-20-gap-closure.md) — that doc is still the source of truth for everything that landed before today.
 
