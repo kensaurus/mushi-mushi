@@ -223,7 +223,7 @@ describe('checkCliAuthPath', () => {
     expect(checks[0].detail).toContain('No endpoint configured');
   });
 
-  it('treats a definitive 4xx from the device-token route as reachable', async () => {
+  it('treats HTTP 400 from the device-token route as reachable', async () => {
     // A bogus device_code MUST be rejected — the rejection itself proves the
     // route is deployed and answering, without creating server-side state.
     const doFetch = mockFetch(400, { ok: false, error: { code: 'invalid_grant' } });
@@ -231,6 +231,13 @@ describe('checkCliAuthPath', () => {
     const route = checks.find((c) => c.name === 'Sign-in route reachable');
     expect(route?.ok).toBe(true);
     expect(route?.detail).toContain('route deployed and answering');
+  });
+
+  it('fails the route check on HTTP 404 (wrong base URL or undeployed route)', async () => {
+    const checks = await checkCliAuthPath(makeConfig({ apiKey: undefined }), mockFetch(404));
+    const route = checks.find((c) => c.name === 'Sign-in route reachable');
+    expect(route?.ok).toBe(false);
+    expect(route?.detail).toContain('expected HTTP 400');
   });
 
   it('fails the route check on a 5xx', async () => {

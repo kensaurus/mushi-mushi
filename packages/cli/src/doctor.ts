@@ -178,13 +178,13 @@ export async function checkCliAuthPath(
       signal: AbortSignal.timeout(8000),
     });
     dateHeader = res.headers?.get?.('date') ?? null;
-    const definitive = res.status >= 400 && res.status < 500;
+    const signInRouteReachable = res.status === 400 || res.status === 429;
     checks.push({
       name: 'Sign-in route reachable',
-      ok: definitive,
-      detail: definitive
+      ok: signInRouteReachable,
+      detail: signInRouteReachable
         ? `POST ${base}/v1/cli/auth/device/token → ${res.status} (route deployed and answering)`
-        : `POST ${base}/v1/cli/auth/device/token → ${res.status} — expected a 4xx rejection; the API may be down or mis-deployed.`,
+        : `POST ${base}/v1/cli/auth/device/token → ${res.status} — expected HTTP 400 (invalid device_code) or 429 (slow_down); the API may be down or mis-deployed.`,
     });
   } catch (err) {
     checks.push({

@@ -194,6 +194,13 @@ export interface WaitForTokenOptions {
 
 const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/** Backoff before a transient device-auth retry. Set to 0 in unit tests. */
+let deviceAuthRetryDelayMs = 1_000;
+
+export function setDeviceAuthRetryDelayMs(ms: number): void {
+  deviceAuthRetryDelayMs = ms;
+}
+
 /**
  * Poll the token endpoint until approval, then resolve the one-time CLI token.
  *
@@ -304,7 +311,9 @@ async function withOneRetry<T>(run: () => Promise<T>): Promise<T> {
     return await run();
   } catch (err) {
     if (err instanceof DeviceAuthRequestError && err.retryable) {
-      await defaultSleep(1_000);
+      if (deviceAuthRetryDelayMs > 0) {
+        await defaultSleep(deviceAuthRetryDelayMs);
+      }
       return run();
     }
     throw err;

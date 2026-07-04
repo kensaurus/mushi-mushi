@@ -10,6 +10,7 @@ import {
   listProjects,
   mintProjectKey,
   pollDeviceToken,
+  setDeviceAuthRetryDelayMs,
   startDeviceAuth,
   waitForCliToken,
 } from './device-auth.js';
@@ -30,13 +31,17 @@ function jsonResponse(
 }
 
 let fetchMock: ReturnType<typeof vi.fn>;
+let savedRetryDelayMs: number;
 
 beforeEach(() => {
+  savedRetryDelayMs = 1_000;
+  setDeviceAuthRetryDelayMs(0);
   fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
 });
 
 afterEach(() => {
+  setDeviceAuthRetryDelayMs(savedRetryDelayMs);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });

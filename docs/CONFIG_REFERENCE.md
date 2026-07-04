@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_104 configuration knobs across 19 sections · last regenerated 2026-07-03._
+_104 configuration knobs across 19 sections · last regenerated 2026-07-04._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -61,7 +61,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (Slack disabled)`
 
-**Where it lives** — table `project_settings.slack_webhook_url` · endpoint `PATCH /v1/admin/settings` · read by `notify-slack edge function`
+**Where it lives** — table `project_settings.slack_webhook_url` · endpoint `PATCH /v1/admin/settings` · read by `classify-report edge function`, `judge-batch edge function`, `slack-interactions edge function`
 
 **When to change** — Set this on day 1 if your team reviews bugs from Slack. Rotate it whenever the channel owner changes — webhooks don't expire, so a stale URL keeps posting until you replace it.
 
@@ -77,7 +77,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (no forwarding)`
 
-**Where it lives** — table `project_settings.sentry_dsn` · endpoint `PATCH /v1/admin/settings` · read by `report-to-sentry forwarder`
+**Where it lives** — table `project_settings.sentry_dsn` · endpoint `PATCH /v1/admin/settings` · read by `tester-marketplace API route (forwardToSentryDsn)`, `published-apps API route`
 
 **When to change** — Add this if you want Mushi reports visible in Sentry dashboards alongside crash data. Skip it if Sentry is purely the source — the Integrations page handles inbound webhooks separately.
 
@@ -93,7 +93,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (inbound disabled)`
 
-**Where it lives** — table `project_settings.sentry_webhook_secret` · endpoint `PATCH /v1/admin/settings` · read by `sentry-webhook edge function`
+**Where it lives** — table `project_settings.sentry_webhook_secret` · endpoint `PATCH /v1/admin/settings` · read by `POST /v1/webhooks/sentry (api route)`
 
 **When to change** — Set this once when wiring inbound Sentry user feedback. Rotate it together with the Sentry-side value — never one without the other or every payload starts failing signature verification.
 
@@ -109,7 +109,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `true`
 
-**Where it lives** — table `project_settings.sentry_consume_user_feedback` · endpoint `PATCH /v1/admin/settings` · read by `sentry-webhook edge function`
+**Where it lives** — table `project_settings.sentry_consume_user_feedback` · endpoint `PATCH /v1/admin/settings` · read by `POST /v1/webhooks/sentry (api route)`
 
 **When to change** — Turn off temporarily when piloting Sentry on a noisy public app — re-enable once you're happy with the volume and your routing rules are in place.
 
@@ -215,7 +215,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (failover disabled)`
 
-**Where it lives** — table `project_settings.byok_openai_key_ref (vault://…)` · endpoint `PUT /v1/admin/byok/openai` · read by `fast-filter`, `classify-report`, `judge edge functions`
+**Where it lives** — table `project_settings.byok_openai_key_ref (vault://…)` · endpoint `PUT /v1/admin/byok/openai` · read by `fast-filter`, `classify-report`, `judge-batch edge function`
 
 **When to change** — Add this once Anthropic outages start showing up in your error budget — the failover silently kicks in only when this is configured.
 
@@ -251,7 +251,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (web research disabled)`
 
-**Where it lives** — table `project_settings.firecrawl_api_key_ref (vault://…)` · endpoint `PUT /v1/admin/byok/firecrawl` · read by `research`, `fix-worker`, `library-modernizer edge functions`
+**Where it lives** — table `project_settings.firecrawl_api_key_ref (vault://…)` · endpoint `PUT /v1/admin/byok/firecrawl` · read by `settings-research API routes`, `fix-worker edge function`, `library-modernizer edge function`
 
 **When to change** — Add this once you start seeing autofix attempts hit a wall on "library X changed its API". Skip it for offline-first projects or fully air-gapped deployments.
 
@@ -267,7 +267,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `empty (unrestricted)`
 
-**Where it lives** — table `project_settings.firecrawl_allowed_domains` · endpoint `PUT /v1/admin/byok/firecrawl` · read by `_shared/firecrawl helper (research, fix-worker, library-modernizer)`
+**Where it lives** — table `project_settings.firecrawl_allowed_domains` · endpoint `PUT /v1/admin/byok/firecrawl` · read by `_shared/firecrawl helper (settings-research, fix-worker, library-modernizer)`
 
 **When to change** — Lock this down to your stack's docs (`react.dev`, `nextjs.org`, `developer.mozilla.org`, etc.) when compliance demands provenance for any external content the LLM sees. Leave empty for open exploration during early adoption.
 
@@ -365,7 +365,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `SDK send-only (report:write only)`
 
-**Where it lives** — table `project_api_keys.scopes (jsonb)` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `report-ingest edge function`, `mcp server (@mushi-mushi/mcp)`
+**Where it lives** — table `project_api_keys.scopes (jsonb)` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `POST /v1/reports (api route)`, `mcp server (@mushi-mushi/mcp)`
 
 **When to change** — Pick `SDK send-only` for keys you ship inside a browser bundle. Pick `MCP read-only` for safely letting an agent browse reports. Only pick `MCP read + write` for trusted local clients with an audit trail.
 
@@ -381,7 +381,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `enabled by default for new keys`
 
-**Where it lives** — table `project_api_keys.scopes (jsonb)` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `report-ingest edge function`
+**Where it lives** — table `project_api_keys.scopes (jsonb)` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `POST /v1/reports (api route)`
 
 **When to change** — Always grant this for keys used by the SDK. Drop it for back-office keys that only need to read state (admin dashboards, MCP read-only).
 
@@ -449,7 +449,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset`
 
-**Where it lives** — table `platform_integrations.config.sentry_org_slug` · endpoint `PUT /v1/admin/integrations/sentry` · read by `sentry-enricher edge function`
+**Where it lives** — table `platform_integrations.config.sentry_org_slug` · endpoint `PUT /v1/admin/integrations/sentry` · read by `sentry-seer-poll edge function`, `integration-health-probe edge function`
 
 **When to change** — Set once at install. Update only if Sentry renames your org (rare).
 
@@ -465,7 +465,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (org-wide search)`
 
-**Where it lives** — table `platform_integrations.config.sentry_project_slug` · endpoint `PUT /v1/admin/integrations/sentry` · read by `sentry-enricher edge function`
+**Where it lives** — table `platform_integrations.config.sentry_project_slug` · endpoint `PUT /v1/admin/integrations/sentry` · read by `sentry-seer-poll edge function`, `integration-health-probe edge function`
 
 **When to change** — Set this whenever you have more than one Sentry project — the speed-up on enrichment is significant.
 
@@ -481,7 +481,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (enrichment disabled)`
 
-**Where it lives** — table `platform_integrations.config.sentry_auth_token_ref` · endpoint `PUT /v1/admin/integrations/sentry` · read by `sentry-enricher edge function`
+**Where it lives** — table `platform_integrations.config.sentry_auth_token_ref` · endpoint `PUT /v1/admin/integrations/sentry` · read by `sentry-seer-poll edge function`, `integration-health-probe edge function`
 
 **When to change** — Rotate quarterly, or whenever the issuing user leaves the org.
 
@@ -497,7 +497,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unset (tracing disabled)`
 
-**Where it lives** — table `platform_integrations.config.langfuse_host` · endpoint `PUT /v1/admin/integrations/langfuse` · read by `fast-filter`, `classify-report`, `fix-worker`, `judge`
+**Where it lives** — table `platform_integrations.config.langfuse_host` · endpoint `PUT /v1/admin/integrations/langfuse` · read by `fast-filter`, `classify-report`, `fix-worker`, `judge-batch`
 
 **When to change** — Set on day 1 — tracing is the only way to see what the LLM actually saw when it misclassifies.
 
@@ -1141,7 +1141,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `shipped baseline (varies by stage)`
 
-**Where it lives** — table `prompt_versions.body` · endpoint `POST /v1/admin/prompt-lab/prompts` · read by `fast-filter`, `classify-report`, `fix-worker, judge`
+**Where it lives** — table `prompt_versions.body` · endpoint `POST /v1/admin/prompt-lab/prompts` · read by `fast-filter`, `classify-report`, `fix-worker, judge-batch`
 
 **When to change** — When eval scores plateau or a new model rewards different prompting style. Tag every change with what you tried, so the changelog is honest.
 

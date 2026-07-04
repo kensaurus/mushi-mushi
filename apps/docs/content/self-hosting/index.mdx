@@ -17,7 +17,7 @@ Mushi is **OSS-first**. Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the e
 | Layer | Technology | License |
 | --- | --- | --- |
 | Database + Auth | Supabase (Postgres 15 + pgvector + pgcrypto + pg_cron) | Open |
-| Edge Functions | 14 Hono functions on Supabase Edge (Deno) | AGPLv3 |
+| Edge Functions | 50+ Supabase Edge functions (Deno) — run `pnpm docs-stats` for live count | AGPLv3 |
 | Admin SPA | React + Vite, deployed to any static host | AGPLv3 |
 | Observability | Langfuse + Sentry | MIT / Commercial |
 | Sandbox | E2B managed (or self-hosted Modal) | External |
@@ -43,7 +43,7 @@ Prefer a hosted Supabase project? Link it and push the schema:
 ```bash
 git clone https://github.com/kensaurus/mushi-mushi.git
 cd mushi-mushi
-npm install                                        # installs all workspaces
+pnpm install                                       # installs all workspaces
 cd packages/server                                 # Supabase CLI works relative to this dir
 npx supabase link --project-ref <your-ref>
 npx supabase db push                               # applies all migrations
@@ -52,6 +52,6 @@ npx supabase db push                               # applies all migrations
 Then follow the guides in order:
 
 1. [Supabase setup](/self-hosting/supabase) — extensions, RLS, and required seed data
-2. [Edge Functions deploy](/self-hosting/edge-functions) — all 15 functions + secrets
+2. [Edge Functions deploy](/self-hosting/edge-functions) — all edge functions + secrets
 3. [Admin SPA deploy](/self-hosting/admin-spa) — build and deploy the console
 4. [Observability (Langfuse + Sentry)](/self-hosting/observability) — traces and error tracking
