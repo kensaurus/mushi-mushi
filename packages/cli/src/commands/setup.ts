@@ -4,6 +4,17 @@ import { buildMcpServerBlock, buildMcpServerName, writeMcpServerEntry } from '..
 import { loadConfig } from '../config.js';
 import { runLogin } from './account.js';
 
+// Exported for unit testing — resolving the login endpoint has three sources
+// of truth and a wrong precedence here silently redirects a self-hosted
+// user's device-auth to the default cloud endpoint (see setup.test.ts).
+export function resolveLoginEndpoint(
+  optsEndpoint: string | undefined,
+  existingConfigEndpoint: string | undefined,
+  envEndpoint: string | undefined,
+): string | undefined {
+  return optsEndpoint ?? existingConfigEndpoint ?? envEndpoint?.trim()
+}
+
 export function registerSetupCommands(program: Command): void {
 // ─── setup ────────────────────────────────────────────────────────────────────
 program
@@ -45,7 +56,7 @@ The command reads credentials from ~/.config/mushi/config.json (run \`mushi logi
     // redirects device-auth to the default cloud endpoint.
     const existingConfig = loadConfig()
     if (!existingConfig.apiKey) {
-      const endpoint = opts.endpoint ?? existingConfig.endpoint ?? process.env.MUSHI_API_ENDPOINT?.trim()
+      const endpoint = resolveLoginEndpoint(opts.endpoint, existingConfig.endpoint, process.env.MUSHI_API_ENDPOINT)
       await runLogin({ endpoint })
     }
 
