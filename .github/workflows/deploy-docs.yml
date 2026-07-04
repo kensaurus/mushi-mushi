@@ -109,6 +109,9 @@ jobs:
         # topological order, so the export target exists before the docs build.
         run: pnpm exec turbo run build --filter=@mushi-mushi/mcp
 
+      - name: Regenerate llms.txt
+        run: pnpm gen:llms-txt
+
       - name: Build docs site
         run: pnpm --filter @mushi-mushi/docs build
         env:

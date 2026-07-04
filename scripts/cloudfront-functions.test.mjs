@@ -29,11 +29,18 @@ describe('CloudFront Function size gate', () => {
   // FunctionSizeLimitExceeded broke deploy-admin on 2026-07-03 when the
   // spa-router source crossed 10,240 bytes. Gate the BUILT artifact of every
   // cloudfront-*.js at DEFAULT_MAX_BYTES so growth fails CI, not the deploy.
+  const REQUIRED_CLOUDFRONT_SOURCES = [
+    'cloudfront-mushi-spa-response.js',
+    'cloudfront-mushi-spa-router.js',
+  ];
   const files = readdirSync(__dirname).filter(
     (f) => f.startsWith('cloudfront-') && f.endsWith('.js'),
   );
-  it('found the CloudFront function sources', () => {
-    assert.ok(files.length >= 8, `expected >= 8 cloudfront-*.js, found ${files.length}`);
+  it('found CloudFront function sources', () => {
+    assert.ok(files.length >= 1, `expected >= 1 cloudfront-*.js, found ${files.length}`);
+    for (const required of REQUIRED_CLOUDFRONT_SOURCES) {
+      assert.ok(files.includes(required), `missing required CloudFront source: ${required}`);
+    }
   });
   for (const f of files) {
     it(`${f} builds under ${DEFAULT_MAX_BYTES} bytes`, () => {

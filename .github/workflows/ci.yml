@@ -149,6 +149,15 @@ jobs:
         # `pnpm gen:config-docs` and commit the result if this fails.
         run: pnpm check:config-docs
 
+      - name: Check onboarding doc drift
+        run: pnpm check:onboarding-drift
+
+      - name: Check env template vs onboarding docs
+        run: pnpm check:env-docs
+
+      - name: Check API route manifest
+        run: pnpm check:route-manifest
+
       - name: Check README stats are in sync
         # Regression guard: root README at-a-glance badges (migrations, edge
         # functions, npm packages, etc.) must match scripts/lib/docs-stats.mjs.
