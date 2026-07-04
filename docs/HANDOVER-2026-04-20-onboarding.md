@@ -1,4 +1,6 @@
 # Handover — Onboarding UX overhaul, 2026-04-20
+> Historical snapshot — see [docs/archive/README.md](archive/README.md).
+
 
 > Picking this up? Read this top to bottom (≈5 min). This release is the **first-time-user UX overhaul + post-QA fix pass**. The premise: end-users were landing on the admin console and not knowing what to do; the 23-page nav drowned them; the PDCA narrative was muddled across pages; and a routine QA pass surfaced four cloud-vs-local drift gaps. All of that is now closed. Pair this with [`HANDOVER-2026-04-20-polish.md`](HANDOVER-2026-04-20-polish.md) for the microinteraction context release assumes is in place, and with [`audit-2026-04-20/QA-VERIFICATION.md`](audit-2026-04-20/QA-VERIFICATION.md) for the verification receipts.
 

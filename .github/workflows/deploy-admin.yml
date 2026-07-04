@@ -237,6 +237,17 @@ jobs:
             --cache-control "public, max-age=0, must-revalidate" \
             --content-type "application/json"
 
+      - name: Build CloudFront Function artifacts (comment-strip + size gate)
+        # CloudFront Functions reject code >= 10,240 bytes
+        # (FunctionSizeLimitExceeded — broke this workflow on 2026-07-03).
+        # Deploy stripped artifacts so source comments never break deploys;
+        # exits 1 while there is still headroom if a function outgrows the gate.
+        run: |
+          node scripts/build-cf-function.mjs \
+            scripts/cloudfront-mushi-spa-router.js \
+            scripts/cloudfront-mushi-spa-response.js \
+            scripts/cloudfront-mushi-apex-redirect.js
+
       - name: Deploy CloudFront SPA router function
         run: |
           FUNC_NAME="mushi-mushi-spa-router"
@@ -249,7 +260,7 @@ jobs:
             aws cloudfront create-function \
               --name "$FUNC_NAME" \
               --function-config '{"Comment":"SPA routing for mushi-mushi admin console","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/cloudfront-mushi-spa-router.js \
+              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-spa-router.js \
               --region us-east-1
           else
             echo "Updating existing CloudFront Function: $FUNC_NAME (ETag: $EXISTING_ETAG)"
@@ -257,7 +268,7 @@ jobs:
               --name "$FUNC_NAME" \
               --if-match "$EXISTING_ETAG" \
               --function-config '{"Comment":"SPA routing for mushi-mushi admin console","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/cloudfront-mushi-spa-router.js \
+              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-spa-router.js \
               --region us-east-1
           fi
 
@@ -280,7 +291,7 @@ jobs:
             aws cloudfront create-function \
               --name "$FUNC_NAME" \
               --function-config '{"Comment":"Security headers and 404 handling for mushi-mushi","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/cloudfront-mushi-spa-response.js \
+              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-spa-response.js \
               --region us-east-1
           else
             echo "Updating existing CloudFront Function: $FUNC_NAME (ETag: $EXISTING_ETAG)"
@@ -288,7 +299,7 @@ jobs:
               --name "$FUNC_NAME" \
               --if-match "$EXISTING_ETAG" \
               --function-config '{"Comment":"Security headers and 404 handling for mushi-mushi","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/cloudfront-mushi-spa-response.js \
+              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-spa-response.js \
               --region us-east-1
           fi
 
@@ -313,7 +324,7 @@ jobs:
             aws cloudfront create-function \
               --name "$FUNC_NAME" \
               --function-config '{"Comment":"Redirect apex docs + admin routes to /mushi-mushi/docs|admin","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/cloudfront-mushi-apex-redirect.js \
+              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-apex-redirect.js \
               --region us-east-1
           else
             echo "Updating existing CloudFront Function: $FUNC_NAME (ETag: $EXISTING_ETAG)"
@@ -321,7 +332,7 @@ jobs:
               --name "$FUNC_NAME" \
               --if-match "$EXISTING_ETAG" \
               --function-config '{"Comment":"Redirect apex docs + admin routes to /mushi-mushi/docs|admin","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/cloudfront-mushi-apex-redirect.js \
+              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-apex-redirect.js \
               --region us-east-1
           fi
 

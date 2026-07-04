@@ -260,9 +260,20 @@ export function buildReadmeClaimChecks(stats) {
   return checks
 }
 
+function scanAgentsHardcodedCounts(root) {
+  const filePath = path.join(root, "AGENTS.md")
+  if (!existsSync(filePath)) return []
+  const source = readFileSync(filePath, "utf8")
+  const m = source.match(/(\d+) edge functions · (\d+) SQL migrations/)
+  if (!m) return []
+  return [
+    `AGENTS.md: hardcoded scale counts (${m[1]} edge / ${m[2]} migrations) — defer to pnpm docs-stats`,
+  ]
+}
+
 export function scanReadmeClaims(root, stats) {
   const checks = buildReadmeClaimChecks(stats)
-  const findings = []
+  const findings = [...scanAgentsHardcodedCounts(root)]
   for (const check of checks) {
     const filePath = path.join(root, check.file)
     if (!existsSync(filePath)) continue

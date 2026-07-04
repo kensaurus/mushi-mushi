@@ -17,6 +17,10 @@ const SCAN_PATHS = [
   'docs/quickstart-0-to-first-fix.md',
   'docs/strategy',
   'docs/dogfood.md',
+  'docs/operators',
+  'docs/DEPLOYMENT.md',
+  'AGENTS.md',
+  'CONTRIBUTING.md',
   'packages/cli/README.md',
   'packages/mcp/README.md',
   'skills',
@@ -49,6 +53,33 @@ const RULES = [
     exception: /auto-migrat|legacy|XDG|~\/\.config\/mushi/,
     message:
       'Bare ~/.mushirc without XDG note — prefer ~/.config/mushi/config.json (legacy auto-migrated)',
+  },
+  {
+    id: 'vite_api_base_url',
+    pattern: /VITE_API_BASE_URL/,
+    message: 'Admin SPA uses VITE_API_URL — see apps/admin/src/lib/env.ts',
+  },
+  {
+    id: 'mushi_dev_cli',
+    pattern: /mushi-dev/,
+    message: 'No mushi-dev binary — use mushi qa run <story-id>',
+  },
+  {
+    id: 'npm_workspace_admin_build',
+    pattern: /npm run -w apps\/admin/,
+    message: 'Monorepo uses pnpm — pnpm --filter @mushi-mushi/admin build',
+  },
+  {
+    id: 'npm_install_monorepo',
+    pattern: /(?<![p/])npm install/,
+    paths: ['apps/docs/content/self-hosting'],
+    exception: /@mushi-mushi|npm install -g|npm install @/,
+    message: 'Monorepo dev uses pnpm install — npm install is for end-user SDK packages only',
+  },
+  {
+    id: 'check_destructive_npm_script',
+    pattern: /npm run check:destructive-migrations/,
+    message: 'Use node scripts/check-destructive-migrations.mjs',
   },
 ]
 
@@ -83,6 +114,11 @@ function collectFiles() {
   return out
 }
 
+function ruleAppliesToFile(rule, rel) {
+  if (!rule.paths) return true
+  return rule.paths.some((p) => rel === p || rel.startsWith(`${p}/`))
+}
+
 const failures = []
 
 for (const file of collectFiles()) {
@@ -92,6 +128,7 @@ for (const file of collectFiles()) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     for (const rule of RULES) {
+      if (!ruleAppliesToFile(rule, rel)) continue
       if (!rule.pattern.test(line)) continue
       if (rule.exception?.test(line)) continue
       failures.push({ file: rel, line: i + 1, rule: rule.id, message: rule.message, text: line.trim() })

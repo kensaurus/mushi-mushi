@@ -138,7 +138,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: getRedirectUrl() },
+      options: {
+        redirectTo: getRedirectUrl(),
+        // Without this, Google silently re-authenticates whichever Google
+        // account is already active in the browser session (or the last one
+        // used) instead of showing the account chooser — so a user with
+        // multiple Google accounts (or a stale session) can never pick a
+        // different one. `select_account` forces the chooser every time.
+        queryParams: { prompt: 'select_account' },
+      },
     })
     return { error: error?.message }
   }

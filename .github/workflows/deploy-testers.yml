@@ -165,6 +165,12 @@ jobs:
             --cache-control "public, max-age=0, must-revalidate" \
             --content-type "application/json"
 
+      - name: Build CloudFront Function artifacts (comment-strip + size gate)
+        # CloudFront Functions reject code >= 10,240 bytes
+        # (FunctionSizeLimitExceeded). Deploy stripped artifacts so source
+        # comments never break deploys; fails here with headroom instead.
+        run: node scripts/build-cf-function.mjs scripts/cloudfront-mushi-spa-router.js
+
       - name: Deploy CloudFront spa router function
         # Idempotent — deploy-admin.yml and deploy-docs.yml already deploy this
         # shared function on any scripts/cloudfront-mushi-spa-router.js change.
@@ -177,14 +183,14 @@ jobs:
             aws cloudfront create-function \
               --name "$FUNC_NAME" \
               --function-config '{"Comment":"SPA + docs + testers routing under /mushi-mushi/*","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/cloudfront-mushi-spa-router.js \
+              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-spa-router.js \
               --region us-east-1
           else
             aws cloudfront update-function \
               --name "$FUNC_NAME" \
               --if-match "$EXISTING_ETAG" \
               --function-config '{"Comment":"SPA + docs + testers routing under /mushi-mushi/*","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/cloudfront-mushi-spa-router.js \
+              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-spa-router.js \
               --region us-east-1
           fi
           ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \

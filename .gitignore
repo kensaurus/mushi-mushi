@@ -167,3 +167,6 @@ tsup.config.bundled_*.mjs
 
 # Editor-local multi-root workspace files
 *.code-workspace
+
+# Built CloudFront Function artifacts (scripts/build-cf-function.mjs)
+scripts/.cf-dist/

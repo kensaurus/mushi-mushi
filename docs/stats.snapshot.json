@@ -1,15 +1,15 @@
 {
-  "capturedAt": "2026-06-10",
+  "capturedAt": "2026-07-03",
   "source": "Filesystem + package.json derivation (scripts/lib/docs-stats.mjs)",
   "monorepo": {
-    "workspacePackages": 41,
-    "publishableNpmPackages": 35,
+    "workspacePackages": 44,
+    "publishableNpmPackages": 36,
     "apps": 3
   },
   "server": {
-    "edgeFunctions": 43,
-    "sqlMigrations": 234,
-    "pipelineAgents": 14
+    "edgeFunctions": 51,
+    "sqlMigrations": 302,
+    "pipelineAgents": 19
   },
   "integrations": {
     "inboundAdapters": 11,

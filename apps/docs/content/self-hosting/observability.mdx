@@ -16,10 +16,12 @@ Every LLM invocation is wrapped in a Langfuse trace with the prompt version, mod
 cd packages/server
 npx supabase secrets set LANGFUSE_PUBLIC_KEY=pk-lf-…
 npx supabase secrets set LANGFUSE_SECRET_KEY=sk-lf-…
-npx supabase secrets set LANGFUSE_HOST=https://cloud.langfuse.com
+npx supabase secrets set LANGFUSE_BASE_URL=https://cloud.langfuse.com
 ```
 
-Replace `LANGFUSE_HOST` with your self-hosted Langfuse URL if needed.
+`LANGFUSE_BASE_URL` is the canonical name (matches root `.env.example`). Docker Compose and older snippets may use `LANGFUSE_HOST` — edge code accepts both.
+
+Replace `LANGFUSE_BASE_URL` with your self-hosted Langfuse URL if needed.
 
 <Callout type="info">
   BYOK traces include `key_source: "tenant"` so you can filter Langfuse by tenant vs platform usage. See [BYOK](/security/byok) for details.
@@ -55,7 +57,7 @@ npx supabase secrets set SENTRY_RELEASE=$GIT_SHA
 The Vite SPA also ships a Sentry integration. Pass the DSN at build time:
 
 ```bash
-VITE_SENTRY_DSN=https://…@sentry.io/… npm run -w apps/admin build
+VITE_SENTRY_DSN=https://…@sentry.io/… pnpm --filter @mushi-mushi/admin build
 ```
 
 ## OpenTelemetry

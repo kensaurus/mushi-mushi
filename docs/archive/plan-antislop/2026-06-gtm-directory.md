@@ -1,6 +1,6 @@
 # Anti-Slop Burndown — GTM / directory listings (mushi-mushi)
 
-_Executed Jun 2026. Repo + mcp.so live; Smithery republish pending signed-in release._
+_Executed Jun 2026. Repo + mcp.so live; Smithery republish pending signed-in release. **Closed** — see [`README.md`](README.md) for current guardrails.
 
 ## Scope
 
@@ -67,4 +67,4 @@ _Executed Jun 2026. Repo + mcp.so live; Smithery republish pending signed-in rel
 - [ ] Smithery release row shows Supabase URL and passes scan
 - [ ] Official registry after next `@mushi-mushi/mcp` release picks up `server.json` description
 
-Re-run `plan-antislop` after Smithery is green.
+**Closed.** Smithery follow-up is manual ops; voice guardrails: `pnpm check:public-voice`.

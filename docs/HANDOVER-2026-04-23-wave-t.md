@@ -1,4 +1,6 @@
 # HANDOVER — Wave T (2026-04-23)
+> Historical snapshot — see [docs/archive/README.md](archive/README.md).
+
 
 Canonical summary of the Wave T PDCA Full Sweep. Pairs with Wave S
 (same date) and supersedes no earlier wave.

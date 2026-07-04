@@ -1,4 +1,6 @@
 # Handover — Admin polish, 2026-04-20
+> Historical snapshot — see [docs/archive/README.md](archive/README.md).
+
 
 > Picking this up? Read this top to bottom (≈7 min) before touching the admin console. This release is a UX + microinteraction sweep across all 24 admin routes — the goal was to make first-action obvious, project narrative coherent, broken buttons audible, design tokens canonical, page loads visually shaped, and async actions tactile. No backend schema changes; everything ships behind HMR. Pair this with [`HANDOVER-2026-04-20-real-cost.md`](HANDOVER-2026-04-20-real-cost.md) for cost-tracking context that release assumes is already in place.
 

@@ -1,12 +1,12 @@
 # Anti-Slop Burndown — kensaur.us/mushi-mushi site red-team
 
-_Companion to [`red-team-defect-report.md`](./red-team-defect-report.md). Audit-only — findings and phasing, no rewrites performed except where noted "Fixed."_
+_Companion to [`../red-team-2026-07-02/red-team-defect-report.md`](../red-team-2026-07-02/red-team-defect-report.md). Audit-only — findings and phasing, no rewrites performed except where noted "Fixed."_
 
 ## Scope
 
 - Surfaces audited: [x] Prose [x] Visual [x] Structure [ ] Code (code-level bugs are tracked in the defect report, not here)
 - In scope: landing page, `/connect`, `/pricing`, `/cloud`, architecture/concepts docs, admin doc screenshot captions, native SDK quickstarts
-- Out of scope: GTM/directory-listing copy (already covered by the existing [`plan-antislop.md`](../plan-antislop.md)) and the SDK-reliability-specific pass in [`plan-antislop-sdk-reliability.md`](../plan-antislop-sdk-reliability.md)
+- Out of scope: GTM/directory-listing copy (already covered by [`2026-06-gtm-directory.md`](2026-06-gtm-directory.md)) and the SDK-reliability pass in [`2026-07-sdk-reliability.md`](2026-07-sdk-reliability.md)
 
 ## Slop score
 

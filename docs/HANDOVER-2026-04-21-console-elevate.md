@@ -1,4 +1,6 @@
 # Handover — Console elevate, 2026-04-21
+> Historical snapshot — see [docs/archive/README.md](archive/README.md).
+
 
 > Picking this up? Read this top to bottom (≈3 min). This release is the **console-elevation pass** requested by an end user: (1) a real global search, (2) stripping the "Wave" product-timeline jargon that was leaking into user-facing copy, (3) a proper React Flow visualisation for the PDCA loop, and (4) a responsive-table primitive so dense data fits the viewport. All four ship together because they share a single theme: the admin console should read like a product, not like our release notebook.
 
