@@ -20,8 +20,11 @@ function pidAlive(pid) {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    // EPERM means the PID exists but is owned by another user — treat as
+    // alive rather than deleting a live lock. ESRCH (or any other error)
+    // means no such process.
+    return err?.code === "EPERM";
   }
 }
 
