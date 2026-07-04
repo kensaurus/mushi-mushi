@@ -458,11 +458,22 @@ describe('mintProjectKey', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('retries once on a 5xx and surfaces the failure if it persists', async () => {
+  it('does not retry on a 5xx — minting is not idempotent, a lost response could orphan a duplicate key', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse({ ok: false, error: { message: 'db unavailable' } }, { ok: false, status: 503 }),
     );
     await expect(mintProjectKey(ENDPOINT, 'tok', 'p1')).rejects.toThrow('db unavailable');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces the real HTTP status even when the server wraps an app-level error in a 2xx', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ ok: false, error: { message: 'quota exceeded' } }, { ok: true, status: 200 }),
+    );
+    await expect(mintProjectKey(ENDPOINT, 'tok', 'p1')).rejects.toMatchObject({
+      message: 'quota exceeded',
+      status: 200,
+      retryable: false,
+    });
   });
 });
