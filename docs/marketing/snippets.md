@@ -261,6 +261,36 @@ All OSS, MIT-licensed SDKs: github.com/kensaurus/mushi-mushi
 Live demo: kensaur.us/mushi-mushi
 ```
 
+### r/mcp — "receipts, not hype"
+
+```
+Title: MCP server that turns a user bug report into a paste-ready fix prompt in your editor — no second LLM key
+
+Been building this in the open for a while, posting the boring parts too.
+
+The MCP server (@mushi-mushi/mcp) exposes triage/fix/inventory/setup tools
+against your own project's reports — it doesn't bundle an LLM; it calls the
+Mushi API using a project MCP key (`MUSHI_API_KEY`).
+No LLM key is needed in the MCP server process itself (model usage is handled
+by your project's Mushi/BYOK configuration).
+
+What it does end to end: a user shakes their phone or clicks a widget, the
+report gets classified (severity, component, root-cause hint) and deduped
+against a knowledge graph, then you ask your agent "what's broken in prod?"
+and it pulls the plain-English diagnosis + a ready-to-paste fix straight from
+MCP. Optional: dispatch a sandboxed agent to open a draft PR.
+
+Config schema + smithery.yaml are in the repo if you want to see exactly what
+env vars it needs before installing anything.
+
+Repo: github.com/kensaurus/mushi-mushi
+Live demo (no signup): kensaur.us/mushi-mushi
+Smithery: smithery.ai/servers/kensaurus/mushi-mushi
+
+Genuinely curious what MCP server design choices people here have regretted —
+scope creep in tool count is the one I keep fighting.
+```
+
 ### r/programming — "the architecture post"
 
 ```
