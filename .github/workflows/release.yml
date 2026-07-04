@@ -236,17 +236,20 @@ jobs:
       # don't block the release, but tampered/missing signatures will.
       - name: Audit signatures of installed dependencies
         if: steps.changesets.outputs.published == 'true'
-        # CDN PROPAGATION RACE (observed 2026-05-20, run 26149167393):
+        # CDN PROPAGATION RACE (observed 2026-05-20, run 26149167393; recurred
+        # 2026-07-04, run 28698365327 — create-mushi-mushi@0.5.21 still
+        # ETARGET after the full 63s/7-attempt window, even though the
+        # publish itself succeeded and the version was resolvable on npm
+        # moments later):
         #   `npm install` against a freshly-published version can return
         #   `ETARGET / No matching version found for <pkg>@<ver>` for up
-        #   to ~30s after `changeset publish` succeeds, because npm's
-        #   registry mirror takes time to propagate the new manifest.
-        #   The tarball is already signed and verified by the previous
-        #   step — this audit just needs the registry to catch up. Retry
-        #   with exponential backoff (1, 2, 4, 8, 16, 32s = 63s total wait
-        #   across 7 attempts: try → sleep 1 → try → sleep 2 → … → try
-        #   → sleep 32 → final try) before failing the release, since
-        #   this race never lasts longer.
+        #   to ~30s (sometimes longer) after `changeset publish` succeeds,
+        #   because npm's registry mirror takes time to propagate the new
+        #   manifest. The tarball is already signed and verified by the
+        #   previous step — this audit just needs the registry to catch up.
+        #   Retry with exponential backoff (1, 2, 4, 8, 16, 32, 64, 128s =
+        #   255s total wait across 9 attempts) before failing the release —
+        #   widened from 7/63s after the race outlasted that window once.
         #
         # NB: only ETARGET / "No matching version" failures are treated
         # as the CDN race. Auth / network / registry-outage failures
@@ -259,7 +262,7 @@ jobs:
           install_with_retry() {
             local pkg="$1"
             local ver="$2"
-            local max_attempts=7
+            local max_attempts=9
             local delay=1
             local last_log
             last_log=$(mktemp)
