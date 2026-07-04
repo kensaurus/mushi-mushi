@@ -828,7 +828,10 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
     let body: { event?: string; source?: string; metadata?: Record<string, unknown> } = {}
     try { body = await c.req.json() } catch { /* ignore — body is optional */ }
 
-    const allowedEvents = ['mcp_setup_done', 'mcp_first_tool_call'] as const
+    // wizard_env_written closes the init funnel: every earlier step
+    // (cli_auth_started → … → cli_key_minted) is emitted server-side by the
+    // routes above, but only the CLI knows the env file actually landed.
+    const allowedEvents = ['mcp_setup_done', 'mcp_first_tool_call', 'wizard_env_written'] as const
     type AllowedEvent = typeof allowedEvents[number]
     const eventName = body.event as AllowedEvent | undefined
 

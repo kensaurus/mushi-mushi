@@ -47,13 +47,21 @@ npx supabase secrets set ADMIN_BASE_URL=https://your-domain.example.com/admin
 
 ## 4. Deploy Edge Functions
 
-Three functions are required for the core pipeline:
+Three functions are required for the core ingest + classification pipeline:
 
 ```bash
 npx supabase functions deploy api --no-verify-jwt
 npx supabase functions deploy fast-filter --no-verify-jwt
 npx supabase functions deploy classify-report --no-verify-jwt
 ```
+
+Also deploy **`mcp`** if you use the hosted MCP transport:
+
+```bash
+npx supabase functions deploy mcp --no-verify-jwt
+```
+
+Deploy every directory under `packages/server/supabase/functions/` except `_shared`, or mirror [`.github/workflows/deploy-edge-functions.yml`](.github/workflows/deploy-edge-functions.yml). Run `pnpm docs-stats` for the current function count.
 
 Optional functions:
 

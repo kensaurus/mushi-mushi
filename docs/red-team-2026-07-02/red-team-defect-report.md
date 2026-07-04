@@ -3,7 +3,7 @@
 **Scope:** https://kensaur.us/mushi-mushi/ (docs marketing site, admin console auth/connect surface, Supabase backend for project `dxptnwrhwsqckaftyymj`)
 **Date:** 2026-07-02
 **Method:** Headed Playwright session (manual clicks, console-error checks, screenshots) on the funnel pages (landing, connect, pricing, cloud, admin login/signup, roadmap, changelog, drift) + an automated HTTP/link sweep across all 169 docs routes + source-level verification against the actual `packages/server`, `packages/mcp`, and native SDK packages + Supabase MCP logs/advisors on the live backend.
-**Companion doc:** [`plan-antislop-site-redteam.md`](./plan-antislop-site-redteam.md) for prose/visual slop burndown.
+**Companion doc:** [`../archive/plan-antislop/2026-07-site-redteam.md`](../archive/plan-antislop/2026-07-site-redteam.md) for prose/visual slop burndown.
 
 ## Launch verdict
 

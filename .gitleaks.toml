@@ -6,7 +6,15 @@
 useDefault = true
 
 [allowlist]
-description = "Internal audit note documenting a legacy AWS IAM user (access key IDs are public identifiers, not secret keys; the value is redacted in-tree). Scoped to this single file so the historical commit does not fail PR scans."
+description = "Path allowlist for a redacted legacy-AWS audit note and CLI unit-test fixtures that embed obviously-fake Mushi API keys. Real keys (mushi_live_/mushi_pk_) are never allowlisted."
 paths = [
+  # Redacted AWS access key ID (a public identifier, not a secret) in an audit note.
   '''docs/audit-2026-06-24/pre-launch-hardening-complete\.md''',
+  # Hard-coded fake API keys in CLI unit tests only.
+  '''packages/cli/src/doctor\.test\.ts''',
+  '''packages/cli/src/device-auth\.test\.ts''',
+  '''packages/cli/src/detect\.test\.ts''',
+  '''packages/cli/src/heartbeat-wait\.test\.ts''',
+  '''packages/cli/src/index\.test\.ts''',
+  '''packages/cli/src/mcp-config\.test\.ts''',
 ]

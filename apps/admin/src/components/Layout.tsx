@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   IconMenu, IconClose,
-  IconSignOut, IconHealth, IconBell, IconEye,
+  IconSignOut, IconHealth, IconBell, IconEye, IconChevronRight,
 } from './icons'
 import { useNavCounts, toneForBacklog } from '../lib/useNavCounts'
 import { renderNavBadge } from '../lib/navBadges'
@@ -797,15 +797,14 @@ export function Layout({ children }: { children: ReactNode }) {
     const { label, path, icon: Icon, requiresFeature } = item
     const active = isActive(pathname, path)
     const gated = !!requiresFeature && !has(requiresFeature) && !isSuperAdmin
-    return (
+    const link = (
       <Link
-        key={path}
+        key={compact ? undefined : path}
         to={path}
         onClick={() => setMobileOpen(false)}
         aria-current={active ? 'page' : undefined}
-        className={`nav-link ${compact ? 'justify-center px-2 py-2' : ''} ${gated ? 'opacity-80' : ''}`}
-        title={compact ? label : undefined}
         aria-label={compact ? label : undefined}
+        className={`nav-link ${compact ? 'justify-center px-2 py-2' : ''} ${gated ? 'opacity-80' : ''}`}
       >
         <Icon className="nav-link-icon" />
         {!compact && <span>{label}</span>}
@@ -814,6 +813,12 @@ export function Layout({ children }: { children: ReactNode }) {
         )}
         {renderNavBadge(path, navCounts, { criticalReports30d })}
       </Link>
+    )
+    if (!compact) return link
+    return (
+      <Tooltip key={path} content={label} side="right" portal>
+        {link}
+      </Tooltip>
     )
   }
 
@@ -947,27 +952,29 @@ export function Layout({ children }: { children: ReactNode }) {
           />
         )}
         {compact && (
-          <button
-            type="button"
-            onClick={() => setFocusMode((value) => !value)}
-            className="nav-link justify-center px-2 py-2"
-            aria-pressed={focusMode}
-            title={focusMode ? 'Exit focus mode' : 'Focus mode'}
-            aria-label={focusMode ? 'Exit focus mode' : 'Focus mode'}
-          >
-            <IconEye className="nav-link-icon" />
-          </button>
+          <Tooltip content={focusMode ? 'Exit focus mode' : 'Focus mode'} side="right" portal>
+            <button
+              type="button"
+              onClick={() => setFocusMode((value) => !value)}
+              className="nav-link justify-center px-2 py-2"
+              aria-pressed={focusMode}
+              aria-label={focusMode ? 'Exit focus mode' : 'Focus mode'}
+            >
+              <IconEye className="nav-link-icon" />
+            </button>
+          </Tooltip>
         )}
         {!compact && <SidebarUserCard user={user} signOut={signOut} />}
         {compact && (
-          <button
-            onClick={signOut}
-            className="nav-link justify-center px-2 py-2 text-rose hover:text-rose hover:bg-rose-muted/40"
-            title={`Sign out (${user?.email ?? ''})`}
-            aria-label="Sign out"
-          >
-            <IconSignOut className="nav-link-icon" />
-          </button>
+          <Tooltip content={`Sign out (${user?.email ?? ''})`} side="right" portal>
+            <button
+              onClick={signOut}
+              className="nav-link justify-center px-2 py-2 text-rose hover:text-rose hover:bg-rose-muted/40"
+              aria-label="Sign out"
+            >
+              <IconSignOut className="nav-link-icon" />
+            </button>
+          </Tooltip>
         )}
       </div>
     </>
@@ -996,32 +1003,30 @@ export function Layout({ children }: { children: ReactNode }) {
         >
           {renderSidebarContent(sidebarCollapsed)}
           {/* Collapse toggle — pinned to the bottom of the rail so the
-              affordance is always findable in either state. Renders as a
-              chevron button with `[` hint when expanded; just a chevron
-              in compact mode. The `[` hotkey mirrors Linear's. */}
-          {/* Collapse toggle — chevron-only at the bottom of the rail.
-              Earlier revision included a `[` kbd hint inline; pulled
-              into the title tooltip instead so the chrome stays calm
-              (Linear refresh: "structure should be felt, not seen") —
-              power users who want the hotkey hover for it; everyone
-              else just sees a quiet chevron. */}
-          <button
-            type="button"
-            onClick={() => setSidebarCollapsed((value) => !value)}
-            aria-pressed={sidebarCollapsed}
-            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            title={sidebarCollapsed ? 'Expand sidebar  ·  [' : 'Collapse to icon rail  ·  ['}
-            className={`group flex items-center gap-2 border-t border-edge/60 px-3 py-1.5 text-2xs text-fg-faint hover:text-fg-muted hover:bg-surface-overlay/40 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}
-          >
-            <span aria-hidden className="font-mono leading-none text-base">
-              {sidebarCollapsed ? '›' : '‹'}
-            </span>
-            {!sidebarCollapsed && (
-              <span className="font-mono text-2xs uppercase tracking-wider text-fg-faint">
-                Collapse
-              </span>
-            )}
-          </button>
+              affordance is always findable in either state. Uses the same
+              chevron icon component as the rest of the app's icon buttons
+              (rotated per state) instead of a bare text glyph, and a rich
+              Tooltip instead of a native `title` so it reads as a real
+              button and matches every other collapsed-rail control. The
+              `[` hotkey mirrors Linear's. */}
+          <Tooltip content={sidebarCollapsed ? 'Expand sidebar  ·  [' : 'Collapse to icon rail  ·  ['} side="right" portal>
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((value) => !value)}
+              aria-pressed={sidebarCollapsed}
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className={`group flex items-center gap-2 border-t border-edge/60 px-3 py-1.5 text-2xs text-fg-faint hover:text-fg-muted hover:bg-surface-overlay/40 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}
+            >
+              <IconChevronRight
+                className={`h-3.5 w-3.5 shrink-0 motion-safe:transition-transform ${sidebarCollapsed ? '' : 'rotate-180'}`}
+              />
+              {!sidebarCollapsed && (
+                <span className="font-mono text-2xs uppercase tracking-wider text-fg-faint">
+                  Collapse
+                </span>
+              )}
+            </button>
+          </Tooltip>
         </aside>
       )}
 
@@ -1398,35 +1403,36 @@ function SectionRailHeader({ section, expanded, isActiveStage, staleness, onSele
   const glyph = railSectionGlyph(section)
   const stageTone = section.stage ? STAGE_TONE[section.stage] : 'bg-surface-overlay text-fg-secondary border border-edge-subtle'
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-expanded={expanded}
-      aria-current={expanded ? 'true' : undefined}
-      aria-label={`${section.title}${expanded ? '' : ' — show navigation'}`}
-      title={section.hint ?? section.title}
-      className={`relative nav-link justify-center px-2 py-1.5 mb-0.5 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm ${
-        expanded
-          ? 'bg-surface-overlay text-fg ring-1 ring-brand/40'
-          : 'text-fg-muted hover:text-fg-secondary hover:bg-surface-overlay/60'
-      } ${isActiveStage && !expanded ? 'ring-1 ring-brand/25' : ''}`}
-    >
-      <span
-        className={`inline-flex items-center justify-center w-6 h-6 rounded-sm text-3xs font-bold leading-none ${stageTone}`}
-        aria-hidden="true"
+    <Tooltip content={section.hint ?? section.title} side="right" portal>
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-expanded={expanded}
+        aria-current={expanded ? 'true' : undefined}
+        aria-label={`${section.title}${expanded ? '' : ' — show navigation'}`}
+        className={`relative nav-link justify-center px-2 py-1.5 mb-0.5 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm ${
+          expanded
+            ? 'bg-surface-overlay text-fg ring-1 ring-brand/40'
+            : 'text-fg-muted hover:text-fg-secondary hover:bg-surface-overlay/60'
+        } ${isActiveStage && !expanded ? 'ring-1 ring-brand/25' : ''}`}
       >
-        {glyph}
-      </span>
-      {staleness && (
         <span
-          className={`absolute top-0.5 right-0.5 inline-flex items-center justify-center min-w-[0.85rem] px-0.5 h-3.5 rounded-sm text-3xs font-mono font-bold leading-none ${STALENESS_TONE[staleness.tone]}`}
-          aria-label={staleness.label}
-          title={staleness.label}
+          className={`inline-flex items-center justify-center w-6 h-6 rounded-sm text-3xs font-bold leading-none ${stageTone}`}
+          aria-hidden="true"
         >
-          {staleness.count > 99 ? '99+' : staleness.count}
+          {glyph}
         </span>
-      )}
-    </button>
+        {staleness && (
+          <span
+            className={`absolute top-0.5 right-0.5 inline-flex items-center justify-center min-w-[0.85rem] px-0.5 h-3.5 rounded-sm text-3xs font-mono font-bold leading-none ${STALENESS_TONE[staleness.tone]}`}
+            aria-label={staleness.label}
+            title={staleness.label}
+          >
+            {staleness.count > 99 ? '99+' : staleness.count}
+          </span>
+        )}
+      </button>
+    </Tooltip>
   )
 }
 

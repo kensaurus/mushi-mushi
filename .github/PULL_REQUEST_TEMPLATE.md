@@ -27,10 +27,13 @@ Implementation approach (if non-obvious).
 - [ ] Tests pass (`pnpm test`)
 - [ ] Lint passes (`pnpm lint`)
 - [ ] Changeset added (if modifying a published package)
+- [ ] Documentation updated in the same PR if behavior, routes, env vars, or CLI commands changed (docs-as-code)
 - [ ] Documentation updated (if API changed)
 - [ ] Repositioning copy labels unshipped features as **Target** (not shipped)
 - [ ] Positioning stays on-message (`pnpm check:narrative`) — hero, north-star, buyer, and the three "will not"s match [`/VISION.md`](../VISION.md); changed a tagline? update `packages/brand` first
 - [ ] If MCP catalog changed: `pnpm gen:mcp-tools-doc && pnpm check:onboarding-drift`
+- [ ] If API routes changed: `pnpm gen:route-manifest && pnpm check:route-manifest`
+- [ ] If `.env.example` or onboarding docs changed: `pnpm check:env-docs && pnpm check:onboarding-drift`
 
 ### SDK widget tokens (only if this PR touches `packages/web/src/styles.ts`, `packages/web/src/build-widget-theme.ts`, or `packages/core/src/design-tokens.ts`)
 

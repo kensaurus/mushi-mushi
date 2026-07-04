@@ -70,7 +70,13 @@ export function fetchEnabledAuthProviders(): Promise<AuthProviderAvailability> {
   cached = fetch(url, {
     headers: RESOLVED_SUPABASE_ANON_KEY ? { apikey: RESOLVED_SUPABASE_ANON_KEY } : {},
   })
-    .then(async (res) => (res.ok ? parseAuthProviderAvailability(await res.json()) : NO_PROVIDERS))
+    .then(async (res) => {
+      if (!res.ok) {
+        cached = null
+        return NO_PROVIDERS
+      }
+      return parseAuthProviderAvailability(await res.json())
+    })
     .catch(() => {
       cached = null
       return NO_PROVIDERS

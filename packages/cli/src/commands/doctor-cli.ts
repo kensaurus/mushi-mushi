@@ -31,6 +31,10 @@ export function registerDoctorCommand(program: Command): void {
       'Check Cursor MCP config: verify mushi-* server entry, credentials, and probe account-overview connectivity.',
     )
     .option(
+      '--auth',
+      'Diagnose the browser sign-in handshake: device-auth route reachability, system clock skew, and saved-credential validity. Run this when `npx mushi-mushi` browser sign-in does not complete.',
+    )
+    .option(
       '--fix',
       'Apply safe local fixes when checks fail: write missing .env.local lines and wire Cursor MCP config.',
     )
@@ -42,58 +46,76 @@ export function registerDoctorCommand(program: Command): void {
       '--full',
       'Run ALL check categories (server, ingest, host-app, mcp, qa-stories) in one shot. Good for first-run diagnostics. Exit 0 only when all checks pass.',
     )
-    .action(async (opts: { cwd?: string; json?: boolean; server?: boolean; ingest?: boolean; qaStories?: boolean; hostApp?: boolean; mcp?: boolean; fix?: boolean; onboarding?: boolean; full?: boolean }) => {
-      const config = loadConfig()
+    .action(
+      async (opts: {
+        cwd?: string;
+        json?: boolean;
+        server?: boolean;
+        ingest?: boolean;
+        qaStories?: boolean;
+        hostApp?: boolean;
+        mcp?: boolean;
+        auth?: boolean;
+        fix?: boolean;
+        onboarding?: boolean;
+        full?: boolean;
+      }) => {
+        const config = loadConfig();
 
-      if (opts.onboarding) {
-        const cwd = opts.cwd ?? process.cwd()
-        const consoleBase = await resolveConsoleUrl({ cwd })
-        const status = await checkOnboardingStatus(config, consoleBase, cwd)
-        const base = consoleBase.replace(/\/$/, '')
-        if (status.done) {
-          console.log(`OK  Setup complete. ${status.nextAction}`)
-          console.log(`    ${base}${status.ctaPath}`)
-        } else {
-          console.log(`→ Next: ${status.nextAction}`)
-          console.log(`    Open: ${base}${status.ctaPath}`)
+        if (opts.onboarding) {
+          const cwd = opts.cwd ?? process.cwd();
+          const consoleBase = await resolveConsoleUrl({ cwd });
+          const status = await checkOnboardingStatus(config, consoleBase, cwd);
+          const base = consoleBase.replace(/\/$/, '');
+          if (status.done) {
+            console.log(`OK  Setup complete. ${status.nextAction}`);
+            console.log(`    ${base}${status.ctaPath}`);
+          } else {
+            console.log(`→ Next: ${status.nextAction}`);
+            console.log(`    Open: ${base}${status.ctaPath}`);
+          }
+          if (!status.done) process.exit(1);
+          return;
         }
-        if (!status.done) process.exit(1)
-        return
-      }
 
-      const doctorOpts = {
-        cwd: opts.cwd,
-        server: opts.server,
-        ingest: opts.ingest,
-        qaStories: opts.qaStories,
-        hostApp: opts.hostApp,
-        mcp: opts.mcp,
-        full: opts.full,
-      }
-      let result = await runDoctor(config, doctorOpts)
+        const doctorOpts = {
+          cwd: opts.cwd,
+          server: opts.server,
+          ingest: opts.ingest,
+          qaStories: opts.qaStories,
+          hostApp: opts.hostApp,
+          mcp: opts.mcp,
+          auth: opts.auth,
+          full: opts.full,
+        };
+        let result = await runDoctor(config, doctorOpts);
 
-      if (!result.ready && opts.fix && config.apiKey && config.projectId && config.endpoint) {
-        const connectResult = await runConnect({
-          apiKey: config.apiKey,
-          projectId: config.projectId,
-          endpoint: config.endpoint,
-          cwd: opts.cwd ?? process.cwd(),
-          writeEnv: true,
-          wireIde: true,
-        }, config)
-        for (const msg of connectResult.messages) console.log(msg)
-        result = await runDoctor(config, { ...doctorOpts, mcp: opts.mcp })
-      }
+        if (!result.ready && opts.fix && config.apiKey && config.projectId && config.endpoint) {
+          const connectResult = await runConnect(
+            {
+              apiKey: config.apiKey,
+              projectId: config.projectId,
+              endpoint: config.endpoint,
+              cwd: opts.cwd ?? process.cwd(),
+              writeEnv: true,
+              wireIde: true,
+            },
+            config,
+          );
+          for (const msg of connectResult.messages) console.log(msg);
+          result = await runDoctor(config, { ...doctorOpts, mcp: opts.mcp });
+        }
 
-      const { checks } = result
+        const { checks } = result;
 
-      if (opts.json) {
-        console.log(JSON.stringify({ checks, ready: result.ready }, null, 2))
-        if (!result.ready) process.exit(1)
-        return
-      }
+        if (opts.json) {
+          console.log(JSON.stringify({ checks, ready: result.ready }, null, 2));
+          if (!result.ready) process.exit(1);
+          return;
+        }
 
-      console.log(formatDoctorResult(result))
-      if (!result.ready) process.exit(1)
-    })
+        console.log(formatDoctorResult(result));
+        if (!result.ready) process.exit(1);
+      },
+    );
 }

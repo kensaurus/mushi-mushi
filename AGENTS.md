@@ -34,7 +34,7 @@ The "is this drift?" test for any feature you build or surface you write: *"Does
 
 ## Agent Inventory
 
-<sub>19 pipeline agents · 49 edge functions · 273 SQL migrations — updated Jun 18 2026 (reporter incentives: automatic report.submitted/report.triaged point awards + one-click reward presets + vault-backed reward webhooks + `@mushi-mushi/node` receiver; page-aware in-SDK assistant: `POST /v1/sdk/assistant` BYOK + knowledge corpus + audit log).</sub>
+<sub>19 pipeline agents — run <code>pnpm docs-stats</code> for live edge-function, migration, and package counts. Updated Jun 18 2026 (reporter incentives: automatic report.submitted/report.triaged point awards + one-click reward presets + vault-backed reward webhooks + `@mushi-mushi/node` receiver; page-aware in-SDK assistant: `POST /v1/sdk/assistant` BYOK + knowledge corpus + audit log).</sub>
 
 | Agent | Location | Trigger | Description |
 |-------|----------|---------|-------------|
@@ -58,6 +58,34 @@ The "is this drift?" test for any feature you build or surface you write: *"Does
 | `backend-drift-scanner` | `supabase/functions/backend-drift-scanner/` | cron daily 03:05 UTC | Snapshots each linked project's Supabase schema via read-only MCP, diffs vs previous snapshot, writes `gate_findings` of type `schema_drift` for dropped columns / missing RLS / unexpected table changes |
 | `skill-sync` | `supabase/functions/skill-sync/` | cron daily + POST /v1/admin/skills/sources/:id/sync | Fetches SKILL.md files from allowlisted GitHub repos (any skills.sh-compatible repo, default: kensaurus/cursor-kenji), parses frontmatter + chain_slugs, embeds descriptions (pgvector), upserts `agent_skills` catalog; secret-pattern scan guard; drives `classify-report` Stage 2 skill recommendation |
 
+### Infrastructure worker edge functions (not pipeline agents)
+
+Cron, billing, retention, and platform hygiene workers live alongside the 19 pipeline agents above. They are **not** user-facing agents but must be deployed for a **complete self-host**. Full list: run `pnpm docs-stats` and inspect `packages/server/supabase/functions/`.
+
+| Function | Role |
+| --- | --- |
+| `ci-sync` | Polls GitHub check-runs for open fix PRs |
+| `retention-sweep` | Applies data-retention policies |
+| `stripe-webhooks` | Stripe subscription + invoice events |
+| `slack-interactions` | Slack interactive payloads + threaded replies |
+| `webhooks-github-indexer` | GitHub App push → codebase RAG indexer |
+| `usage-aggregator` / `usage-alerts` | Stripe meter events + quota alerts |
+| `anomaly-detector` | Hourly anomaly scoring |
+| `codebase-analyze-worker` | Builds symbol graph on push / manual re-analyze |
+| `console-knowledge-build` | Rebuilds console knowledge corpus |
+| `integration-health-probe` | BYOK + integration probe cron |
+| `plugin-dispatch-retry` | Retries failed outbound plugin deliveries |
+| `qa-story-runner` | Scheduled QA story execution (also listed above) |
+| `sdk-versions-cron` / `sdk-release-sync` | SDK freshness catalog + upgrade PR CI sync |
+| `sentinel-audit` | Inventory drift vs SDK observations |
+| `sentry-seer-poll` | Proactive Sentry Seer intake |
+| `soc2-evidence` | Compliance evidence snapshots |
+| `status-reconciler` | Inventory action status derivation |
+| `synthetic-monitor` | Periodic health-check + post-PR probes |
+| `tremendous-redemption-worker` | Reward payout fulfillment |
+
+Also: **`api`** (Hono REST router) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
+
 ---
 
 ## QA Coverage Suite
@@ -72,7 +100,7 @@ Playwright scripts, schedule them via cron, and run them on three providers:
 |----------|---------------|-------------|
 | `firecrawl_actions` | Firecrawl cloud (Deno-compatible, HTTP) | Default. No setup. Works for content verification and basic navigation. |
 | `browserbase` | Browserbase cloud Chromium | Complex UI interactions. Requires a Browserbase API key — configure via **Settings → Browserbase** in the admin console (stored in Supabase Vault; see [BYOK Providers](#byok-bring-your-own-key-providers)). |
-| `local` | Operator's machine via CLI | Full Playwright access. Not schedulable via edge function. Use `mushi-dev run-qa-stories`. |
+| `local` | Operator's machine via CLI | Full Playwright access. Not schedulable via edge function. Use `mushi qa run <story-id>`. |
 
 ### Story lifecycle
 
@@ -198,6 +226,17 @@ Live App URL
 | `qa_stories` | Test scripts; notable columns: `source`, `approval_status`, `automation_mode`, `origin_story_node_id`, `parent_story_id`, `pdca_iteration`, `target_url`, `last_run_status`, `consecutive_failures`, `slack_failure_ts`, `last_notified_at` |
 
 ### CLI Quick Reference
+
+| Group | Commands |
+| --- | --- |
+| **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi doctor`, `mushi completion` |
+| **Project & deploy** | `mushi project`, `mushi config`, `mushi console`, `mushi deploy check`, `mushi index`, `mushi sourcemaps upload` |
+| **Reports** | `mushi reports list/show/search/triage/…`, `mushi feedback board` |
+| **Fixes** | `mushi fix`, `mushi fixes tail/refresh-ci/merge`, `mushi watch` |
+| **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve`, `mushi stories map` |
+| **Skills / pipeline** | `mushi skills list/show/sync`, `mushi pipeline start/watch/checkin` |
+| **Integrations** | `mushi integrations list/test`, `mushi slack status/test`, `mushi keys list/add` |
+| **Billing** | `mushi usage`, `mushi billing status/cap` |
 
 ```bash
 # ── Integrations ──────────────────────────────────────────────────────────
@@ -411,8 +450,8 @@ Console "Create Upgrade PR" button
 | Route | Auth | Description |
 | ----- | ---- | ----------- |
 | `POST /v1/admin/projects/:pid/sdk-upgrade` | `adminOrApiKey(mcp:write)` | Enqueue upgrade job; fire-and-forget worker |
-| `GET /v1/admin/projects/:pid/sdk-upgrade/:id` | `adminOrApiKey(mcp:write)` | Poll job status |
-| `GET /v1/admin/projects/:pid/sdk-upgrade/:id/stream` | `adminOrApiKey(mcp:write)` | SSE status stream |
+| `GET /v1/admin/projects/:pid/sdk-upgrade/:id` | `jwtAuth` | Poll job status (console JWT) |
+| `GET /v1/admin/projects/:pid/sdk-upgrade/:id/stream` | `adminOrApiKey(mcp:read)` | SSE status stream |
 
 ### New tables
 
@@ -603,7 +642,7 @@ override base/cap by adding a `reward_rules` row of the same name.
 
 ### One-click reward presets
 
-`POST /v1/admin/rewards/presets/apply` (`adminOrApiKey`) idempotently installs
+`POST /v1/admin/rewards/presets/apply` (`jwtAuth` — console only) idempotently installs
 recommended default rules (`report.submitted` / `report.triaged` /
 `comment_posted`) and a 4-tier ladder (Explorer → Contributor → Champion →
 Legend, with `host_credit_payload` grant instructions). Only inserts
@@ -707,8 +746,8 @@ Reporter opens widget (capture.screenshot on-report/auto)
 | SdkInstallCard | `apps/admin/src/components/SdkInstallCard.tsx` | Checkbox + optional custom text for screenshot privacy caption |
 | ConfigHelp | `sdk-install.screenshot_sensitive_hint` in `configDocs.ts` | Operator docs + link to deep-dive |
 
-**Published:** `@mushi-mushi/core` / `@mushi-mushi/web` **1.19.0**,
-`@mushi-mushi/react-native` **0.19.0**. Full doc:
+**Introduced in:** `@mushi-mushi/core` / `@mushi-mushi/web` **1.19.0** (current: **1.22.5** — see root `CHANGELOG.md`).
+`@mushi-mushi/react-native` **0.19.0** (current: **0.20.1**). Full doc:
 [`docs/SDK_SCREENSHOT_PREVIEW.md`](docs/SDK_SCREENSHOT_PREVIEW.md).
 
 ---
@@ -753,6 +792,35 @@ Full precedence: [`docs/SDK_RUNTIME_CONFIG.md`](docs/SDK_RUNTIME_CONFIG.md).
 | Canonical hosted tool manifest | `_shared/mcp-hosted-tool-manifest.json` |
 | Readiness probe | `GET /health/ready` in `api/routes/discovery.ts` |
 | LLM transient retry before key rotation | `_shared/llm-failover.ts` |
+
+---
+
+## HTTP API surfaces — operator reference
+
+Generated manifest: [`docs/API_ROUTE_MANIFEST.generated.md`](docs/API_ROUTE_MANIFEST.generated.md) (`pnpm gen:route-manifest`). OpenAPI subset: `GET /functions/v1/api/openapi.json`.
+
+### SDK ingest (`apiKeyAuth`)
+
+| Route | Role |
+| --- | --- |
+| `POST /v1/reports` | Single report ingest |
+| `POST /v1/reports/batch` | Batch ingest |
+| `POST /v1/ingest/spans` | OTel span ingest |
+| `POST /v1/ingest/metrics` | Code-health + bundle metrics |
+| `POST /v1/sdk/activity` | Reporter activity events |
+| `POST /v1/sdk/discovery` | SDK observation inventory |
+| `POST /v1/sdk/assistant` | In-widget Ask tab |
+| `GET /v1/sdk/config` | Runtime SDK config pull |
+| `GET /v1/reports/:id/status` | Report status poll |
+| `/v1/sdk/me/*` | Cross-app reporter rewards surface (`rewards.ts`) |
+
+### MCP / CLI sync mirror (`adminOrApiKey` or scoped JWT)
+
+Prefix **`/v1/sync/*`** — reports, lessons, ingest-setup mirrors for MCP and CLI offline sync. See `api/routes/sync.ts`.
+
+### Skills HTTP routes (`requireAuthOrApiKey`)
+
+Under **`/v1/admin/skills/*`**: catalog (`GET /`, `GET /:slug`), sources CRUD + `POST /sources/:id/sync`, pipeline runs + checkin, `GET /cloud-readiness`. See `api/routes/skills.ts`.
 
 ---
 
