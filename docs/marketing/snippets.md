@@ -269,9 +269,10 @@ Title: MCP server that turns a user bug report into a paste-ready fix prompt in 
 Been building this in the open for a while, posting the boring parts too.
 
 The MCP server (@mushi-mushi/mcp) exposes triage/fix/inventory/setup tools
-against your own project's reports — it doesn't run its own model, it reuses
-whatever key your MCP client (Cursor / Claude Code) already has. No signing up
-for a second LLM provider just to use the server.
+against your own project's reports — it doesn't bundle an LLM; it calls the
+Mushi API using a project MCP key (`MUSHI_API_KEY`).
+No LLM key is needed in the MCP server process itself (model usage is handled
+by your project's Mushi/BYOK configuration).
 
 What it does end to end: a user shakes their phone or clicks a widget, the
 report gets classified (severity, component, root-cause hint) and deduped
