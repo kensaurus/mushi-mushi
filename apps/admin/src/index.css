@@ -1345,13 +1345,16 @@ select, input, textarea {
 
 /* ---------------------------------------------------------------------------
    APP CHROME — shared top-row rhythm (sidebar logo row + desktop sub-header)
+   Lives in @layer components so Tailwind utilities (e.g. hidden md:flex) win.
 --------------------------------------------------------------------------- */
 
-.chrome-top-row {
-  display: flex;
-  align-items: center;
-  min-height: var(--chrome-row-height, 2.5rem);
-  flex-shrink: 0;
+@layer components {
+  .chrome-top-row {
+    display: flex;
+    align-items: center;
+    min-height: var(--chrome-row-height, 2.5rem);
+    flex-shrink: 0;
+  }
 }
 
 /* ---------------------------------------------------------------------------

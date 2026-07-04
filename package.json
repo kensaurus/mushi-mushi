@@ -34,7 +34,7 @@
     "prepare": "node scripts/install-git-hooks.mjs",
     "build:console-knowledge": "node scripts/build-console-knowledge.mjs",
     "build": "turbo run build",
-    "predev": "node scripts/kill-port.mjs 6464 3000 3001 && turbo daemon stop",
+    "predev": "node scripts/kill-port.mjs 6464 3000 3001 4001 && node scripts/clean-next-locks.mjs && turbo daemon stop",
     "dev": "turbo run dev --force --concurrency=30 --log-prefix=none",
     "lint": "turbo run lint",
     "test": "turbo run test",
