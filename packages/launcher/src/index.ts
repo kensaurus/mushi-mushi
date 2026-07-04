@@ -3,15 +3,17 @@
 /**
  * FILE: packages/launcher/src/index.ts
  * PURPOSE: Unscoped `mushi-mushi` bin — thin shim that delegates to
- *          `@mushi-mushi/cli`'s `init` command. Lets users run the wizard
- *          without remembering the scope: `npx mushi-mushi`.
+ *          `@mushi-mushi/cli`. Lets users run any CLI command without
+ *          remembering the scope: `npx mushi-mushi`.
  *
- *          - `npx mushi-mushi`            → runs the wizard
- *          - `npx mushi-mushi init [...]` → runs the wizard with flags
- *          - any other arg                → tells the user to use `@mushi-mushi/cli`
- *            for non-init commands (status, reports, etc.)
+ *          - `npx mushi-mushi`               → runs the wizard
+ *          - `npx mushi-mushi init [...]`    → runs the wizard with flags
+ *          - `npx mushi-mushi <cmd> [...]`   → forwarded verbatim to
+ *            `@mushi-mushi/cli`'s `mushi` bin (setup, login, status, etc.)
  */
 
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { runInit } from '@mushi-mushi/cli/init'
 import { FRAMEWORK_IDS, isFrameworkId, type FrameworkId } from '@mushi-mushi/cli/detect'
 
@@ -42,9 +44,8 @@ Flags (forwarded to \`mushi init\`):
   -v, --version                 print the launcher version and exit
   -h, --help                    show this help
 
-Other commands (status, reports, deploy, test, login, config, index) live
-in @mushi-mushi/cli — install with \`npm i -g @mushi-mushi/cli\` and use
-\`mushi <command>\`.
+Other commands (setup, status, reports, deploy, test, login, config, ...)
+are forwarded to @mushi-mushi/cli, e.g. \`npx mushi-mushi setup --ide cursor\`.
 
 Docs:    https://github.com/kensaurus/mushi-mushi
 Console: https://kensaur.us/mushi-mushi/`
@@ -60,6 +61,18 @@ interface ParsedArgs {
   yes?: boolean
   cwd?: string
   endpoint?: string
+}
+
+/**
+ * Any first arg that isn't `init` and isn't a flag is a `@mushi-mushi/cli`
+ * subcommand (setup, login, status, ...) — forward it verbatim instead of
+ * silently dropping it (bare `mushi-mushi setup` used to fall through to
+ * the init wizard) or throwing on its trailing flags (`--ide` etc.).
+ */
+function forwardToCli(argv: readonly string[]): never {
+  const cliBin = fileURLToPath(import.meta.resolve('@mushi-mushi/cli'))
+  const result = spawnSync(process.execPath, [cliBin, ...argv], { stdio: 'inherit' })
+  process.exit(result.status ?? 1)
 }
 
 function parseArgs(argv: readonly string[]): ParsedArgs {
@@ -106,9 +119,15 @@ function assertNodeVersion(): void {
 async function main(): Promise<void> {
   assertNodeVersion()
 
+  const rawArgs = process.argv.slice(2)
+  const first = rawArgs[0]
+  if (first !== undefined && first !== 'init' && !first.startsWith('-')) {
+    forwardToCli(rawArgs)
+  }
+
   let parsed: ParsedArgs
   try {
-    parsed = parseArgs(process.argv.slice(2))
+    parsed = parseArgs(rawArgs)
   } catch (err) {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`)
     process.exit(1)

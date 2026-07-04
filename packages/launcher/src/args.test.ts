@@ -51,4 +51,21 @@ describe('mushi-mushi launcher', () => {
     expect(status).toBe(1)
     expect(stderr).toContain('non-interactive terminal detected')
   })
+
+  // Uses `--help` rather than `--dry-run` so this never reaches the real
+  // setup action (network calls, device-auth) — it only needs to prove the
+  // launcher forwards to @mushi-mushi/cli's `setup` command instead of
+  // crashing on `--ide` or falling through to `init`.
+  it('forwards `setup --ide cursor` to @mushi-mushi/cli instead of crashing on --ide', () => {
+    const { stdout, stderr } = run(['setup', '--ide', 'cursor', '--help'])
+    expect(stderr).not.toContain('Unknown flag')
+    expect(stdout + stderr).not.toContain('non-interactive terminal detected')
+    expect(stdout).toContain('Wire Cursor MCP')
+  })
+
+  it('forwards a bare `setup` instead of silently running the init wizard', () => {
+    const { stdout, stderr } = run(['setup', '--help'])
+    expect(stdout + stderr).not.toContain('non-interactive terminal detected')
+    expect(stdout).toContain('Wire Cursor MCP')
+  })
 })
