@@ -159,6 +159,16 @@ You don't need it — Mushi works standalone — but if you already run it, Mush
 
 Inbound adapters forward Sentry (and Datadog, Bugsnag, Rollbar, Crashlytics, New Relic, Honeycomb, Grafana Loki, CloudWatch, Opsgenie, Firebase) alerts into Mushi for deeper fix context; outbound plugins send Mushi's verdicts back so a Sentry issue auto-resolves the moment Mushi merges its fix. The full enrichment / synthesis story lives in [`docs/operators/`](./docs/operators/#where-mushi-fits) — it's the upgrade path, never the front door.
 
+| | Mushi | Sentry | Langfuse |
+| --- | --- | --- | --- |
+| Catches | Thrown errors **and** silent UX bugs (dead clicks, slow screens, layout breaks) | Thrown errors, performance traces | LLM call traces, prompt evals |
+| Output | Plain-English root cause + paste-ready fix, in your editor | Stack trace + breadcrumbs, in a dashboard | Trace tree + scores, in a dashboard |
+| Auto-fix | Optional: sandbox agent opens a draft PR | Seer add-on (paid) | Not in scope |
+| Second LLM key for MCP | No — reuses your app's key | N/A | N/A |
+| Setup | One command, no account required to try | SDK + DSN + dashboard | SDK + project + dashboard |
+
+Different jobs: Sentry watches what your code throws, Langfuse watches what your LLM calls do, Mushi watches what your *user* experiences — including the bugs that never throw.
+
 ---
 
 ## Framework coverage
