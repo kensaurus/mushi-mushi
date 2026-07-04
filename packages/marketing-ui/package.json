@@ -25,7 +25,7 @@
   "dependencies": {
     "@mushi-mushi/brand": "workspace:*",
     "@mushi-mushi/mcp": "workspace:*",
-    "@xyflow/react": "^12.11.0",
+    "@xyflow/react": "^12.11.1",
     "framer-motion": "^12.40.0"
   },
   "peerDependencies": {
