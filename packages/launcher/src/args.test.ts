@@ -51,4 +51,15 @@ describe('mushi-mushi launcher', () => {
     expect(status).toBe(1)
     expect(stderr).toContain('non-interactive terminal detected')
   })
+
+  it('forwards `setup --ide cursor` to @mushi-mushi/cli instead of crashing on --ide', () => {
+    const { stdout, stderr } = run(['setup', '--ide', 'cursor', '--dry-run'])
+    expect(stderr).not.toContain('Unknown flag')
+    expect(stdout + stderr).not.toContain('non-interactive terminal detected')
+  })
+
+  it('forwards a bare `setup` instead of silently running the init wizard', () => {
+    const { stdout, stderr } = run(['setup', '--dry-run'])
+    expect(stdout + stderr).not.toContain('non-interactive terminal detected')
+  })
 })

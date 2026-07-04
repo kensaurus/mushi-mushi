@@ -1,6 +1,8 @@
 import type { Command } from 'commander';
 import { requireConfig } from '../cli-shared.js';
 import { buildMcpServerBlock, buildMcpServerName, writeMcpServerEntry } from '../mcp-config.js';
+import { loadConfig } from '../config.js';
+import { runLogin } from './account.js';
 
 export function registerSetupCommands(program: Command): void {
 // ─── setup ────────────────────────────────────────────────────────────────────
@@ -33,6 +35,13 @@ The command reads credentials from ~/.config/mushi/config.json (run \`mushi logi
     const { existsSync } = await import('node:fs')
     const nodePath = await import('node:path')
     const os = await import('node:os')
+
+    // First-run: no credentials yet — trigger the same device-auth flow as
+    // `mushi login` inline instead of erroring out, so `npx mushi-mushi setup`
+    // is a true one-command onboarding path.
+    if (!loadConfig().apiKey) {
+      await runLogin({})
+    }
 
     const config = requireConfig({ needsProject: true })
 
