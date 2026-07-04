@@ -12,6 +12,6 @@
     "@mushi-mushi/web": "^0.8.0"
   },
   "devDependencies": {
-    "vite": "^6.4.2"
+    "vite": "^8.1.3"
   }
 }
