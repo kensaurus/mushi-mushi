@@ -1,4 +1,6 @@
 # Handover — Gap closure, 2026-04-20
+> Historical snapshot — see [docs/archive/README.md](archive/README.md).
+
 
 > Picking this up? Read this top to bottom (≈8 min) before touching code. This release closes the audit gap left by the PDCA cockpit reframing — and lands the last P0/P1/P2 findings from [`docs/audit-2026-04-19.md`](audit-2026-04-19.md). All 23 admin pages now carry the same loop-aware affordances: status progression, blast radius, KPI strips, NN/G empty states, and PDCA receipts.
 

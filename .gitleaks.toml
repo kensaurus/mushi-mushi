@@ -6,12 +6,15 @@
 useDefault = true
 
 [allowlist]
-description = "Path allowlist for a redacted legacy-AWS audit note, plus fake Mushi test-fixture keys. Default OR condition: a match on any path OR regex is allowed. The regex only covers obviously-fake fixtures (mushi_test… / mushi_abcdefgh…); real keys are mushi_live_/mushi_pk_ and are still caught."
+description = "Path allowlist for a redacted legacy-AWS audit note and CLI unit-test fixtures that embed obviously-fake Mushi API keys. Real keys (mushi_live_/mushi_pk_) are never allowlisted."
 paths = [
   # Redacted AWS access key ID (a public identifier, not a secret) in an audit note.
   '''docs/audit-2026-06-24/pre-launch-hardening-complete\.md''',
-]
-regexes = [
-  # Hard-coded fake API keys used as fixtures in CLI unit tests.
-  '''mushi_(?:test|abcdefgh)[A-Za-z0-9_]*''',
+  # Hard-coded fake API keys in CLI unit tests only.
+  '''packages/cli/src/doctor\.test\.ts''',
+  '''packages/cli/src/device-auth\.test\.ts''',
+  '''packages/cli/src/detect\.test\.ts''',
+  '''packages/cli/src/heartbeat-wait\.test\.ts''',
+  '''packages/cli/src/index\.test\.ts''',
+  '''packages/cli/src/mcp-config\.test\.ts''',
 ]

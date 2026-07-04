@@ -8,6 +8,10 @@ Canonical counts for README badges, Helm docs, and integration tables.
 pnpm docs-stats        # human-readable summary
 pnpm check:docs-stats  # fail if README counts drift
 pnpm check:helm-migrations  # fail if deploy/helm/migrations is stale
+pnpm gen:route-manifest     # regenerate docs/API_ROUTE_MANIFEST.generated.md
+pnpm check:route-manifest   # fail if route manifest is stale
+pnpm check:onboarding-drift # fail on phantom MCP/env/setup patterns in onboarding docs
+pnpm check:env-docs         # fail if .env.example templates miss critical keys
 ```
 
 ## Sources of truth
@@ -24,6 +28,8 @@ pnpm check:helm-migrations  # fail if deploy/helm/migrations is stale
 | Outbound plugins | `packages/plugin-*` packages (13 integrations + `@mushi-mushi/plugin-sdk` for builders) |
 
 Snapshot file: [`stats.snapshot.json`](./stats.snapshot.json) (updated manually when major milestones ship).
+
+Closed audit burndowns (including anti-slop plans): [`archive/plan-antislop/`](./archive/plan-antislop/).
 
 ## Adding a new claim-bearing number
 

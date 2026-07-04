@@ -1,4 +1,6 @@
 # Handover — npm Trusted-Publisher bootstrap (2026-05-05)
+> Historical snapshot — see [docs/archive/README.md](archive/README.md).
+
 
 The v2 release on master shipped 11/15 packages successfully. **Four
 packages are still missing from the npm registry** and need a one-time

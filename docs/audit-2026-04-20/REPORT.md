@@ -1,5 +1,7 @@
 # MushiMushi Admin Console — UX Overhaul Report (2026-04-20)
 
+> Historical snapshot — see [docs/archive/README.md](../../archive/README.md).
+
 > Phase 8 deliverable for the [`mushi-mushi-ux-overhaul`](../../.cursor/plans/mushi-mushi-ux-overhaul_0fa950a3.plan.md)
 > plan. Pairs with [`BASELINE.md`](./BASELINE.md) (pre-overhaul snapshot).
 
