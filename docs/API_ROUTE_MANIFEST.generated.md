@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-07-03 · **502** routes.
+> Generated: 2026-07-04 · **502** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
