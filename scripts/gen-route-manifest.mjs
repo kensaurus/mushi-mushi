@@ -86,10 +86,17 @@ External base: \`{SUPABASE_URL}/functions/v1/api\`
   return body
 }
 
+// Excludes the "Generated: <date>" line, which is cosmetic and would
+// otherwise make --check fail every day regardless of actual route drift.
+function stripGeneratedDate(markdown) {
+  return markdown.replace(/^> Generated: \d{4}-\d{2}-\d{2} /m, '> Generated: ')
+}
+
 function main() {
   const routes = collectRoutes()
   const markdown = renderMarkdown(routes)
-  const hash = createHash('sha256').update(markdown).digest('hex').slice(0, 12)
+  const comparable = stripGeneratedDate(markdown)
+  const hash = createHash('sha256').update(comparable).digest('hex').slice(0, 12)
 
   if (process.argv.includes('--check')) {
     if (!existsSync(OUT)) {
@@ -97,7 +104,10 @@ function main() {
       process.exit(1)
     }
     const existing = readFileSync(OUT, 'utf8')
-    const existingHash = createHash('sha256').update(existing).digest('hex').slice(0, 12)
+    const existingHash = createHash('sha256')
+      .update(stripGeneratedDate(existing))
+      .digest('hex')
+      .slice(0, 12)
     if (existingHash !== hash) {
       console.error('Route manifest drift. Run: pnpm gen:route-manifest')
       process.exit(1)
