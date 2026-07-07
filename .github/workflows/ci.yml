@@ -186,6 +186,20 @@ jobs:
       - name: Check internal doc links
         run: pnpm check:internal-doc-links
 
+      - name: Check docs version drift
+        # Regression guard: quickstart/install snippets must advertise the SDK
+        # versions the workspace actually publishes. Docs once pinned native SDK
+        # 0.8.0 while Flutter/Android/iOS sat at 0.3.0/0.4.0 — a broken
+        # copy-paste install. Compares docs pins against the real package
+        # manifests (npm package.json, pubspec.yaml, build.gradle.kts, podspec).
+        run: pnpm check:docs-versions
+
+      - name: Check docs links (broad)
+        # Regression guard: catches dead internal + relative + JSX-href doc links
+        # (e.g. a /sdks/mcp-tools.generated 404) across .md and .mdx that the
+        # markdown-only internal-doc-links guard doesn't see.
+        run: pnpm check:docs-links
+
       - name: Check web bundle docs
         run: pnpm check:bundle-docs
 

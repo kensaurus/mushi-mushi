@@ -1,5 +1,7 @@
 import type { Command } from 'commander';
 import { requireConfig } from '../cli-shared.js';
+import { loadConfig } from '../config.js';
+import { runLogin } from '../login.js';
 import { buildMcpServerBlock, buildMcpServerName, writeMcpServerEntry } from '../mcp-config.js';
 
 export function registerSetupCommands(program: Command): void {
@@ -14,6 +16,7 @@ program
   .option('--dry-run', 'Print what would be written without making changes')
   .option('--verify', 'Probe the MCP key after writing to confirm it has mcp:read scope (default: on)')
   .option('--no-verify', 'Skip the post-write key probe')
+  .option('--endpoint <url>', 'Override the Mushi API endpoint (self-hosted) — used for first-run login if not yet configured')
   .addHelpText('after', `
 Examples:
   mushi setup                         # wire Cursor (default)
@@ -27,12 +30,18 @@ Supported IDEs:
   continue  — writes .continue/mcp.json
   zed       — writes ~/.config/zed/settings.json mcpServers block
 
-The command reads credentials from ~/.config/mushi/config.json (run \`mushi login\` first).`)
-  .action(async (opts: { ide: string; projectSlug?: string; allProjects?: boolean; withRules?: boolean; dryRun?: boolean; verify?: boolean }) => {
+The command reads credentials from ~/.config/mushi/config.json. If you are not logged in yet, it runs browser sign-in first, then writes MCP config.`)
+  .action(async (opts: { ide: string; projectSlug?: string; allProjects?: boolean; withRules?: boolean; dryRun?: boolean; verify?: boolean; endpoint?: string }) => {
     const { writeFile, mkdir, readFile } = await import('node:fs/promises')
     const { existsSync } = await import('node:fs')
     const nodePath = await import('node:path')
     const os = await import('node:os')
+
+    if (!loadConfig().apiKey) {
+      await runLogin({ endpoint: opts.endpoint, suppressPostLoginBanner: true })
+      console.log('  Continuing MCP setup…')
+      console.log('')
+    }
 
     const config = requireConfig({ needsProject: true })
 
@@ -286,9 +295,57 @@ The command reads credentials from ~/.config/mushi/config.json (run \`mushi logi
             } catch { /* ignore */ }
             if (errCode === 'INSUFFICIENT_SCOPE') {
               console.log('\n⚠  Your key has report:write scope only — MCP admin tools will not work.')
-              console.log('   New keys minted by the wizard include both scopes automatically.')
-              console.log('   To upgrade an existing key, run:\n')
-              console.log('     mushi login --upgrade-scope\n')
+              // Fix it inline instead of sending the user to a second command:
+              // upgrade the key via browser sign-in, rewrite the IDE config
+              // with the new key, and re-probe. (Interactive terminals only.)
+              const canPrompt = process.stdin.isTTY && process.stdout.isTTY
+              let upgraded = false
+              if (canPrompt) {
+                const { createInterface } = await import('node:readline')
+                const rl = createInterface({ input: process.stdin, output: process.stdout })
+                const answer = await new Promise<string>((resolve) =>
+                  rl.question('   Upgrade this key now via browser sign-in? [Y/n] ', (a) => resolve(a.trim().toLowerCase())),
+                )
+                rl.close()
+                if (answer === '' || answer === 'y' || answer === 'yes') {
+                  await runLogin({ endpoint: opts.endpoint, upgradeScope: true, suppressPostLoginBanner: true })
+                  const fresh = loadConfig()
+                  if (fresh.apiKey && ideEntry.format === 'mcp-json' && !allProjectsList) {
+                    await writeMcpServerEntry({
+                      configPath,
+                      serverName,
+                      serverBlock: buildMcpServerBlock({
+                        endpoint: fresh.endpoint ?? config.endpoint,
+                        projectId: fresh.projectId ?? config.projectId ?? '',
+                        apiKey: fresh.apiKey,
+                      }),
+                    })
+                    console.log(`✓ Rewrote ${configPath} with the upgraded key`)
+                    const reprobe = await fetch(
+                      `${(fresh.endpoint ?? config.endpoint)?.replace(/\/$/, '')}/v1/admin/mcp/account-overview`,
+                      {
+                        headers: {
+                          'X-Mushi-Api-Key': fresh.apiKey,
+                          'X-Mushi-Project': fresh.projectId ?? config.projectId ?? '',
+                        },
+                        signal: AbortSignal.timeout(6000),
+                      },
+                    ).catch(() => null)
+                    if (reprobe?.ok) {
+                      upgraded = true
+                      console.log('✓ MCP key valid — restart Cursor (or your IDE) to activate')
+                    } else {
+                      console.log(`⚠  Re-probe after upgrade returned HTTP ${reprobe?.status ?? 'error'} — run \`mushi doctor --mcp\`.`)
+                    }
+                  } else if (fresh.apiKey) {
+                    console.log('✓ Key upgraded — re-run `mushi setup` to rewrite the IDE config with it.')
+                  }
+                }
+              }
+              if (!upgraded && !canPrompt) {
+                console.log('   To upgrade this key, run:\n')
+                console.log('     mushi login --upgrade-scope\n')
+              }
             } else {
               console.log(`⚠  Key probe returned HTTP ${probeRes.status} — check your credentials.`)
             }
@@ -306,11 +363,36 @@ The command reads credentials from ~/.config/mushi/config.json (run \`mushi logi
       if (!opts.withRules) {
         console.log(`Tip: run with --with-rules to also write the lesson-library coding hook.`)
       }
-      // Security reminder — the config file contains the API key in plaintext.
+      // Security: the config file contains the API key in plaintext. For
+      // repo-local configs, append it to .gitignore ourselves (idempotent)
+      // instead of hoping the user reads a reminder.
       const configRelPath = ideEntry.dir.startsWith('/')
         ? configPath
         : nodePath.relative(cwd, configPath)
-      console.log(`\nNote: ${configRelPath} contains your Mushi API key — add it to .gitignore if this is a shared repo.`)
+      if (!ideEntry.dir.startsWith('/')) {
+        const gitignorePath = nodePath.join(cwd, '.gitignore')
+        const ignoreLine = configRelPath.replaceAll('\\', '/')
+        try {
+          const { readFile, writeFile } = await import('node:fs/promises')
+          const existing = await readFile(gitignorePath, 'utf8').catch(() => '')
+          const lines = existing.split(/\r?\n/)
+          if (!lines.some((l) => l.trim() === ignoreLine)) {
+            const sep = existing.endsWith('\n') || existing === '' ? '' : '\n'
+            await writeFile(
+              gitignorePath,
+              `${existing}${sep}# Mushi MCP config holds a plaintext API key\n${ignoreLine}\n`,
+              'utf8',
+            )
+            console.log(`\n✓ Added ${ignoreLine} to .gitignore (it contains your Mushi API key)`)
+          } else {
+            console.log(`\nNote: ${ignoreLine} is gitignored (it contains your Mushi API key).`)
+          }
+        } catch {
+          console.log(`\nNote: ${configRelPath} contains your Mushi API key — add it to .gitignore if this is a shared repo.`)
+        }
+      } else {
+        console.log(`\nNote: ${configRelPath} contains your Mushi API key.`)
+      }
     }
   })
 

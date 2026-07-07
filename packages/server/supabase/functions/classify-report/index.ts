@@ -11,7 +11,7 @@ import { createTrace } from '../_shared/observability.ts';
 import { createNotification, buildNotificationMessage } from '../_shared/notifications.ts';
 import { log as rootLog } from '../_shared/logger.ts';
 import { getAvailableTags, formatTagsForPrompt, applyTags } from '../_shared/ontology.ts';
-import { getRelevantCode, formatCodeContext } from '../_shared/rag.ts';
+import { getRelevantCodeWithReason, formatCodeContext, rerankCodeContext } from '../_shared/rag.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts';
 import { logLlmInvocation } from '../_shared/telemetry.ts';
 import { withSentry, tagLangfuseTrace } from '../_shared/sentry.ts';
@@ -404,8 +404,8 @@ Deno.serve(
       // ontology read is a single `select * from bug_ontology`. Running them
       // sequentially cost ~1.2s per report; Promise.all shaves ~500ms off.
       const ragSpan = trace.span('stage2.rag');
-      const [codeFiles, ontologyTags, inventoryCandidates, mcpTriageContext] = await Promise.all([
-        getRelevantCode(db, projectId, extraction ?? {}),
+      const [ragResult, ontologyTags, inventoryCandidates, mcpTriageContext] = await Promise.all([
+        getRelevantCodeWithReason(db, projectId, extraction ?? {}),
         getAvailableTags(db, projectId),
         // v2 inventory grounding (whitepaper §4.7). Reads SDK hints from
         // the scrubbed environment — both fields are optional so older
@@ -420,8 +420,23 @@ Deno.serve(
           summary: scrubbedReport.description?.slice(0, 200) ?? null,
         }),
       ]);
+      // Measured-signal re-rank: embedding similarity proposes, but files
+      // overlapping the route the user was on / the extracted component get
+      // boosted so diagnosis cites the code the report actually touched.
+      const codeFiles = rerankCodeContext(ragResult.files, {
+        component: extraction?.component ?? undefined,
+        route: (env as { route?: string | null }).route ?? undefined,
+      });
       const codeContext = formatCodeContext(codeFiles);
-      ragSpan.end({ fileCount: codeFiles.length });
+      // Degrade LOUDLY: when code grounding is unavailable the diagnosis
+      // quality drops — record why on the span, in the prompt, and (below)
+      // on the report row so the console can surface it to the user.
+      const codeContextStatus = {
+        status: ragResult.reason,
+        fileCount: codeFiles.length,
+        ...(ragResult.detail ? { detail: ragResult.detail } : {}),
+      };
+      ragSpan.end({ fileCount: codeFiles.length, reason: ragResult.reason });
       const ontologyContext =
         ontologyTags.length > 0 ? `\n## ${formatTagsForPrompt(ontologyTags)}` : '';
       const inventoryContext = formatCandidatesForPrompt(inventoryCandidates);
@@ -455,7 +470,7 @@ Deno.serve(
 - Platform: ${env.platform || 'unknown'}
 ${evidenceSection}
 ${sentryContext}
-${codeContext ? `\n## Relevant Code Files\n${codeContext}` : ''}
+${codeContext ? `\n## Relevant Code Files\n${codeContext}` : `\n## Relevant Code Files\nCode context unavailable (${ragResult.reason}${ragResult.detail ? `: ${ragResult.detail}` : ''}). Do not speculate about specific file names or code you cannot see.`}
 ${ontologyContext}${inventoryContext}${mcpContextSection}`;
 
       const startTime = Date.now();
@@ -647,7 +662,9 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
           stage2_analysis: {
             ...classification,
             mcp_tool_calls: mcpTriageContext.toolCalls,
+            code_context: codeContextStatus,
           },
+          processing_error: null,
           stage2_model: usedModel,
           stage2_prompt_version: promptSelection.promptVersion,
           stage2_latency_ms: latencyMs,
@@ -668,33 +685,6 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
         // Sonnet call but sees status='new'. See dogfood-glotit-2026-04-17.md.
         throw new Error(`Stage 2 writeback failed: ${updateError.message}`);
       }
-
-      // METERED DIAGNOSIS (Phase 2 — charged unit): record one 'diagnoses'
-      // usage_events row for every fresh Stage-2 classification.
-      // Deduplicated reports (handled above) do NOT reach this path.
-      // Fire-and-forget — a ledger failure must never gate classification.
-      // Invalidate the diagnosis quota cache so the next classify-report call
-      // for this project sees the updated count.
-      void db
-        .from('usage_events')
-        .insert({
-          project_id: projectId,
-          event_name: 'diagnoses',
-          quantity: 1,
-          metadata: {
-            report_id: reportId,
-            model: usedModel,
-            latency_ms: latencyMs,
-            overage: diagnosisVerdict.overage,
-          },
-        })
-        .then(({ error: usageErr }) => {
-          if (usageErr) {
-            log.warn('Diagnosis usage event insert failed', { reportId, err: usageErr.message });
-          } else {
-            invalidateDiagnosisCache(projectId);
-          }
-        });
 
       // METERED DIAGNOSIS (Phase 2 — charged unit): record one 'diagnoses'
       // usage_events row for every fresh Stage-2 classification.

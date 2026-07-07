@@ -809,7 +809,7 @@ const FIX_HINTS: Record<string, string> = {
   '[mcp]': 'Run `mushi setup` to regenerate .cursor/mcp.json with a fresh API key and endpoint.',
 };
 
-function fixHintForCheck(name: string): string | undefined {
+export function fixHintForCheck(name: string): string | undefined {
   if (FIX_HINTS[name]) return FIX_HINTS[name];
   if (name.startsWith('[ingest]')) return FIX_HINTS['[ingest]'];
   if (name.startsWith('[server]') || name.startsWith('[preflight]')) return FIX_HINTS['[server]'];
@@ -937,6 +937,143 @@ export async function checkOnboardingStatus(
   };
 }
 
+// ── Version drift (headroom pattern: stale tooling is a silent failure) ─────
+
+/**
+ * Advisory check comparing the running CLI against the npm `latest` tag and
+ * against `@mushi-mushi/*` SDK versions in the target repo. Never blocks
+ * `ready`; a registry timeout silently skips (no network ≠ broken setup).
+ */
+export async function checkVersionDrift(
+  cwd: string,
+  doFetch: typeof fetch,
+): Promise<DoctorCheck[]> {
+  const checks: DoctorCheck[] = [];
+  const { MUSHI_CLI_VERSION } = await import('./version.js');
+  if (MUSHI_CLI_VERSION === '0.0.0-dev') return checks;
+
+  // Full-precision semver compare: every published package is still 0.x, so a
+  // majors-only comparison would never fire for anything that exists today.
+  const parse = (v: string): [number, number, number] => {
+    const m = v.replace(/^[~^]/, '').match(/^(\d+)\.(\d+)\.(\d+)/);
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : [0, 0, 0];
+  };
+  const isBehind = (installed: string, latest: string): boolean => {
+    const [a1, a2, a3] = parse(installed);
+    const [b1, b2, b3] = parse(latest);
+    return a1 !== b1 ? a1 < b1 : a2 !== b2 ? a2 < b2 : a3 < b3;
+  };
+
+  try {
+    const res = await doFetch('https://registry.npmjs.org/@mushi-mushi/cli/latest', {
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (res.ok) {
+      const { version: latest } = (await res.json()) as { version?: string };
+      if (latest && isBehind(MUSHI_CLI_VERSION, latest)) {
+        checks.push({
+          name: 'CLI version',
+          ok: true,
+          warn: true,
+          detail: `Installed ${MUSHI_CLI_VERSION}, latest is ${latest}. Run \`mushi upgrade\` (or npm i -g @mushi-mushi/cli@latest).`,
+        });
+      }
+    }
+  } catch {
+    // Offline / registry slow — a version check must never fail doctor.
+  }
+
+  try {
+    const { readFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const pkg = JSON.parse(await readFile(join(cwd, 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    // Each SDK package version-tracks independently of the CLI (core is 1.x
+    // while the CLI is 0.x), so compare each dep against ITS OWN npm latest
+    // rather than against the CLI version.
+    const candidates = Object.entries(deps)
+      .filter(([name]) => name.startsWith('@mushi-mushi/'))
+      .filter(([, v]) => /^[~^]?\d/.test(v));
+    const drifted = (
+      await Promise.all(
+        candidates.map(async ([name, v]): Promise<[string, string, string] | null> => {
+          try {
+            const res = await doFetch(`https://registry.npmjs.org/${name}/latest`, {
+              signal: AbortSignal.timeout(3_000),
+            });
+            if (!res.ok) return null;
+            const { version: latest } = (await res.json()) as { version?: string };
+            return latest && isBehind(v, latest) ? [name, v, latest] : null;
+          } catch {
+            return null;
+          }
+        }),
+      )
+    ).filter((d): d is [string, string, string] => d !== null);
+    if (drifted.length > 0) {
+      checks.push({
+        name: 'SDK version drift',
+        ok: true,
+        warn: true,
+        detail: `${drifted.map(([n, v, l]) => `${n}@${v} (latest ${l})`).join(', ')} — behind npm latest. Run \`mushi upgrade\` in this repo.`,
+      });
+    }
+  } catch {
+    // No package.json in cwd — nothing to compare.
+  }
+
+  return checks;
+}
+
+// ── Server-side pipeline doctor (GET /v1/admin/doctor) ──────────────────────
+
+/**
+ * Folds the backend's own silent-failure reconciliation (recovery cron,
+ * stranded reports, codebase-index health, observability transports) into
+ * the CLI report. Requires an mcp:read-scoped key; skipped quietly for
+ * ingest-only keys.
+ */
+export async function checkPipelineDoctor(
+  config: DoctorCliConfig,
+  doFetch: typeof fetch,
+): Promise<DoctorCheck[]> {
+  if (!config.endpoint || !config.apiKey) return [];
+  try {
+    const res = await doFetch(`${config.endpoint.replace(/\/$/, '')}/v1/admin/doctor`, {
+      headers: apiKeyHeaders(config.apiKey),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 401 || res.status === 403) return []; // ingest-only key — server checks unavailable
+    if (!res.ok) {
+      return [{
+        name: '[pipeline] Server doctor',
+        ok: true,
+        warn: true,
+        detail: `GET /v1/admin/doctor returned HTTP ${res.status} — pipeline health unknown.`,
+      }];
+    }
+    const body = (await res.json()) as {
+      data?: { checks?: Array<{ name: string; status: 'pass' | 'warn' | 'fail'; summary: string; hint?: string }> };
+    };
+    return (body.data?.checks ?? []).map((ch) => ({
+      name: `[pipeline] ${ch.name}`,
+      ok: ch.status !== 'fail',
+      warn: ch.status === 'warn',
+      detail: ch.hint ? `${ch.summary} → Fix: ${ch.hint}` : ch.summary,
+    }));
+  } catch {
+    return [{
+      name: '[pipeline] Server doctor',
+      ok: true,
+      warn: true,
+      detail: 'Could not reach /v1/admin/doctor (timeout) — pipeline health unknown.',
+    }];
+  }
+}
+
 // ── Main doctor runner ───────────────────────────────────────────────────────
 
 export async function runDoctor(
@@ -963,11 +1100,36 @@ export async function runDoctor(
   const sdkCheck = await checkSdkInstall(options.cwd ?? process.cwd());
   if (sdkCheck) checks.push(sdkCheck);
 
+  // 3b. SDK actually wired in source — installing the package but never
+  // adding the init snippet is the single most common half-setup, and it
+  // used to be indistinguishable from a fully wired app.
+  if (sdkCheck?.ok && !sdkCheck.warn) {
+    const { findSdkImport } = await import('./snippet-inject.js');
+    const imported = await findSdkImport(options.cwd ?? process.cwd());
+    checks.push(
+      imported
+        ? { name: 'SDK init snippet wired', ok: true, detail: `Found SDK usage in ${imported.file}` }
+        : {
+            name: 'SDK init snippet wired',
+            ok: true,
+            warn: true,
+            detail:
+              'Package installed but no @mushi-mushi import found in src/app — paste the init snippet from `mushi init` into your entry file.',
+          },
+    );
+  }
+
   // 4. Server preflight (on by default, gracefully skipped for ingest-only keys)
   if (runServer) {
     const serverChecks = await checkServerPreflight(config, doFetch);
     checks.push(...serverChecks);
+    // Backend self-diagnostics: recovery cron, stranded reports, codebase
+    // index health — the silent-failure modes only the server can see.
+    checks.push(...(await checkPipelineDoctor(config, doFetch)));
   }
+
+  // Advisory version drift (never blocks ready).
+  checks.push(...(await checkVersionDrift(options.cwd ?? process.cwd(), doFetch)));
 
   // 5. Ingest setup (on by default)
   if (runIngest) {
