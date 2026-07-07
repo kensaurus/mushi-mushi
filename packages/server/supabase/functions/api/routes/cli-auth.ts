@@ -91,14 +91,25 @@ async function sha256hex(value: string): Promise<string> {
 // 8-4-4-4-12 hex shape, not RFC 4122 version/variant bits, so a raw hash
 // formatted this way is accepted without needing a DB-side hash function.
 export function extractClientIp(c: Context): string {
-  return (
-    c.req.header('cf-connecting-ip') ??
-    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ??
-    // No header at all (e.g. direct-to-origin local dev) — bucket under a
-    // shared fallback key rather than skipping the limiter entirely. Never
-    // fail open just because the caller's IP couldn't be determined.
-    'unknown'
-  )
+  // cf-connecting-ip is set by the platform and cannot be spoofed by the
+  // caller. The X-Forwarded-For fallback (non-Cloudflare self-hosts) takes the
+  // RIGHTMOST hop: each proxy appends the peer it actually saw, so the last
+  // entry is the only one the client cannot fabricate. Taking the leftmost
+  // entry (as before) let a caller set `X-Forwarded-For: <random>` and rotate
+  // past every per-IP throttle on these public auth endpoints. Mirrors the
+  // hosted MCP proxy's identity derivation in functions/mcp/index.ts.
+  const cf = c.req.header('cf-connecting-ip')
+  if (cf) return cf
+  const xff = c.req
+    .header('x-forwarded-for')
+    ?.split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (xff && xff.length > 0) return xff[xff.length - 1]
+  // No header at all (e.g. direct-to-origin local dev) — bucket under a
+  // shared fallback key rather than skipping the limiter entirely. Never
+  // fail open just because the caller's IP couldn't be determined.
+  return 'unknown'
 }
 
 export async function ipRateLimitActorId(ip: string, scope: string): Promise<string> {
@@ -114,10 +125,14 @@ export async function ipRateLimitActorId(ip: string, scope: string): Promise<str
 
 /**
  * Claim a per-IP rate-limit slot. Returns `null` when the caller is under
- * the cap; returns a ready-to-send 429 response body otherwise. Fails OPEN
- * on an unexpected RPC error (DB hiccup) — an unauthenticated login-start
- * endpoint should not become unusable because the rate-limit backend is
- * briefly unavailable — but logs loudly so the gap is visible in Sentry.
+ * the cap; returns a ready-to-send 429 response body otherwise. Fails CLOSED
+ * on an unexpected RPC error: these are public, unauthenticated auth endpoints
+ * (OAuth register/authorize/token, CLI device start/token, the A2A refresh
+ * grant), and failing open let an attacker who can induce a rate-limit RPC
+ * error rotate straight past the throttle. The endpoints already query the
+ * same database for their real work, so rejecting here costs no availability a
+ * DB outage wouldn't already cost — the caller just gets a 429 + Retry-After
+ * and backs off. Logs loudly so the underlying RPC failure stays visible.
  */
 export async function claimIpRateLimit(
   db: ReturnType<typeof getServiceClient>,
@@ -137,8 +152,8 @@ export async function claimIpRateLimit(
   if ((error.message ?? '').includes('rate_limit_exceeded')) {
     return { retryAfterSeconds: 60 }
   }
-  log.warn('ip rate limit check failed (non-fatal, failing open)', { scope, err: error.message })
-  return null
+  log.warn('ip rate limit check failed — failing closed', { scope, err: error.message })
+  return { retryAfterSeconds: 30 }
 }
 
 // ─── CLI token auth middleware ─────────────────────────────────────────────────

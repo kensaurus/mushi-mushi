@@ -227,17 +227,36 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
   // ─── Consent page: read the pending transaction ───────────────────────────
   // GET /v1/mcp-oauth/request?txn=<uuid>  (jwtAuth)
   app.get('/v1/mcp-oauth/request', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
     const txn = (c.req.query('txn') ?? '').trim()
     if (!UUID_RE.test(txn)) {
       return c.json({ ok: false, error: { code: 'INVALID_TXN', message: 'txn must be a UUID' } }, 400)
     }
     const db = getServiceClient()
+    // Bind the pending transaction to the first authenticated viewer — the
+    // console user who followed the /authorize 302 into their own logged-in
+    // session. Without this, any signed-in user who learns/guesses the txn
+    // UUID could read the client name, scope, and redirect host (info leak) or
+    // deny it (DoS). The claim only fires while pending + unclaimed; once bound,
+    // only that user may read, approve, or deny it.
+    await db
+      .from('mcp_oauth_requests')
+      .update({ user_id: userId })
+      .eq('id', txn)
+      .eq('status', 'pending')
+      .is('user_id', null)
     const { data: row } = await db
       .from('mcp_oauth_requests')
-      .select('id, status, scope, redirect_uri, expires_at, mcp_oauth_clients ( client_name )')
+      .select('id, status, scope, redirect_uri, expires_at, user_id, mcp_oauth_clients ( client_name )')
       .eq('id', txn)
       .maybeSingle()
     if (!row) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No authorization request found — it may have expired.' } }, 404)
+    }
+    // Bound to a different console user (lost the claim race, or someone else's
+    // transaction). Return the same NOT_FOUND as a missing txn — never confirm
+    // that another user's transaction exists.
+    if (row.user_id && row.user_id !== userId) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No authorization request found — it may have expired.' } }, 404)
     }
     const expired = row.status === 'pending' && new Date(row.expires_at) < new Date()
@@ -275,12 +294,21 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
     const db = getServiceClient()
     const { data: row } = await db
       .from('mcp_oauth_requests')
-      .select('id, status, scope, redirect_uri, state, expires_at')
+      .select('id, status, scope, redirect_uri, state, expires_at, user_id')
       .eq('id', txn)
       .eq('status', 'pending')
       .gt('expires_at', new Date().toISOString())
       .maybeSingle()
     if (!row) {
+      return c.json(
+        { ok: false, error: { code: 'NOT_FOUND', message: 'No pending authorization request — it may have expired. Retry the connection from your MCP client.' } },
+        404,
+      )
+    }
+    // The transaction is bound to the first authenticated viewer (see
+    // GET /request). Only that user may approve it — a different signed-in user
+    // must never be able to approve a consent flow they did not initiate.
+    if (row.user_id && row.user_id !== userId) {
       return c.json(
         { ok: false, error: { code: 'NOT_FOUND', message: 'No pending authorization request — it may have expired. Retry the connection from your MCP client.' } },
         404,
@@ -366,17 +394,23 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
   // ─── Deny ─────────────────────────────────────────────────────────────────
   // POST /v1/mcp-oauth/deny  (jwtAuth)  Body: { txn: uuid }
   app.post('/v1/mcp-oauth/deny', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
     const body = (await c.req.json().catch(() => ({}))) as { txn?: string }
     const txn = typeof body.txn === 'string' ? body.txn.trim() : ''
     if (!UUID_RE.test(txn)) {
       return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'txn must be a UUID' } }, 400)
     }
     const db = getServiceClient()
+    // Only the console user the transaction is bound to (via GET /request) may
+    // deny it. The `.eq('user_id', userId)` clause makes this the authorization
+    // check: without it, any signed-in user could deny any pending transaction
+    // by UUID and break other users' logins (DoS).
     const { data: row } = await db
       .from('mcp_oauth_requests')
       .update({ status: 'denied' })
       .eq('id', txn)
       .eq('status', 'pending')
+      .eq('user_id', userId)
       .select('redirect_uri, state')
       .maybeSingle()
     if (!row) {
