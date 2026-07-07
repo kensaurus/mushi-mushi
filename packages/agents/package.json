@@ -33,7 +33,7 @@
     "@ai-sdk/openai": "^3.0.76",
     "@browserbasehq/sdk": "^2.14.1",
     "@cursor/sdk": "^1.0.22",
-    "@mendable/firecrawl-js": "^4.28.3",
+    "@mendable/firecrawl-js": "^4.29.0",
     "@mushi-mushi/eslint-config": "workspace:*",
     "@playwright/test": "^1.61.1",
     "@types/node": "^22.20.0",
