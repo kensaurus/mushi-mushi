@@ -4,6 +4,17 @@ import { loadConfig } from '../config.js';
 import { runLogin } from '../login.js';
 import { buildMcpServerBlock, buildMcpServerName, writeMcpServerEntry } from '../mcp-config.js';
 
+// Exported for unit testing — resolving the login endpoint has three sources
+// of truth and a wrong precedence here silently redirects a self-hosted
+// user's device-auth to the default cloud endpoint (see setup.test.ts).
+export function resolveLoginEndpoint(
+  optsEndpoint: string | undefined,
+  existingConfigEndpoint: string | undefined,
+  envEndpoint: string | undefined,
+): string | undefined {
+  return optsEndpoint ?? existingConfigEndpoint ?? envEndpoint?.trim()
+}
+
 export function registerSetupCommands(program: Command): void {
 // ─── setup ────────────────────────────────────────────────────────────────────
 program
@@ -37,8 +48,16 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
     const nodePath = await import('node:path')
     const os = await import('node:os')
 
-    if (!loadConfig().apiKey) {
-      await runLogin({ endpoint: opts.endpoint, suppressPostLoginBanner: true })
+    // First-run: no credentials yet — trigger the same device-auth flow as
+    // `mushi login` inline instead of erroring out, so `npx mushi-mushi setup`
+    // is a true one-command onboarding path. Preserve a pre-configured
+    // self-hosted endpoint (config.json or MUSHI_API_ENDPOINT) when the
+    // caller didn't pass --endpoint explicitly, so this never silently
+    // redirects device-auth to the default cloud endpoint.
+    const existingConfig = loadConfig()
+    if (!existingConfig.apiKey) {
+      const endpoint = resolveLoginEndpoint(opts.endpoint, existingConfig.endpoint, process.env.MUSHI_API_ENDPOINT)
+      await runLogin({ endpoint, suppressPostLoginBanner: true })
       console.log('  Continuing MCP setup…')
       console.log('')
     }

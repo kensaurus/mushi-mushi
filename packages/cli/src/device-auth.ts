@@ -395,30 +395,37 @@ export async function mintProjectKey(
   projectId: string,
 ): Promise<string> {
   const base = trimTrailingSlash(endpoint);
-  return withOneRetry(async () => {
-    let res: Response;
-    try {
-      res = await deviceFetch(`${base}/v1/cli/projects/${projectId}/keys`, {
-        method: 'POST',
-        headers: cliAuthHeaders(cliToken),
-        body: JSON.stringify({}),
-      });
-    } catch (err) {
-      throw new DeviceAuthRequestError(
-        'mint_key',
-        `Could not reach ${base}/v1/cli/projects/…/keys: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-    const json = (await res.json().catch(() => null)) as {
-      ok?: boolean;
-      data?: { key?: string };
-      error?: { message?: string };
-    } | null;
-    if (res.ok && json?.ok && json.data?.key) return json.data.key;
+  // No withOneRetry here, unlike listProjects: minting isn't idempotent — the
+  // server creates a new key on every call, so retrying a request whose
+  // response was merely lost (not a confirmed failure) can silently orphan
+  // a duplicate key. A single attempt surfaces the error to the wizard
+  // instead of risking that.
+  let res: Response;
+  try {
+    res = await deviceFetch(`${base}/v1/cli/projects/${projectId}/keys`, {
+      method: 'POST',
+      headers: cliAuthHeaders(cliToken),
+      body: JSON.stringify({}),
+    });
+  } catch (err) {
     throw new DeviceAuthRequestError(
       'mint_key',
-      json?.error?.message ?? `Could not mint an SDK key (HTTP ${res.status}).`,
-      res.ok ? undefined : res.status,
+      `Could not reach ${base}/v1/cli/projects/…/keys: ${err instanceof Error ? err.message : String(err)}`,
     );
-  });
+  }
+  const json = (await res.json().catch(() => null)) as {
+    ok?: boolean;
+    data?: { key?: string };
+    error?: { message?: string };
+  } | null;
+  if (res.ok && json?.ok && json.data?.key) return json.data.key;
+  // Always propagate the real HTTP status, even when the server wrapped an
+  // app-level error in a 2xx — otherwise `status` reads as `undefined` and
+  // DeviceAuthRequestError.retryable misclassifies a real failure as a
+  // transient one.
+  throw new DeviceAuthRequestError(
+    'mint_key',
+    json?.error?.message ?? `Could not mint an SDK key (HTTP ${res.status}).`,
+    res.status,
+  );
 }
