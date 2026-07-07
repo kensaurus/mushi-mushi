@@ -8,6 +8,7 @@ import { registerAskMushiRoutes } from './routes/ask-mushi.ts';
 import { registerSdkAssistantRoutes } from './routes/sdk-assistant.ts';
 import { registerConsoleKnowledgeRoutes } from './routes/console-knowledge.ts';
 import { registerAdminOpsRoutes } from './routes/admin-ops.ts';
+import { registerDoctorRoutes } from './routes/doctor.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
 import { registerCodebaseRoutes } from './routes/codebase.ts';
 import { registerCodebaseUnderstandRoutes } from './routes/codebase-understand.ts';
@@ -31,6 +32,7 @@ import { registerSchemaRoutes } from './routes/schemas.ts';
 import { registerQaCoverageRoutes } from './routes/qa-coverage.ts';
 import { registerRewardsRoutes } from './routes/rewards.ts';
 import { registerCliAuthRoutes } from './routes/cli-auth.ts';
+import { registerMcpOauthRoutes } from './routes/mcp-oauth.ts';
 // ---------------------------------------------------------------------------
 // Closed-loop evolution + experiment routes.
 // middleware/ and _shared/auth.getOrgIdFromContext now exist — safe to import.
@@ -527,6 +529,8 @@ registerMigrationProgressRoutes(app);
 
 registerAdminOpsRoutes(app);
 
+registerDoctorRoutes(app);
+
 registerInventoryRoutes(app);
 
 registerQaCoverageRoutes(app);
@@ -535,6 +539,11 @@ registerRewardsRoutes(app);
 
 // RFC 8628 device-auth (CLI login) + CLI-authenticated project endpoints.
 registerCliAuthRoutes(app);
+
+// OAuth 2.1 authorization-code (+ PKCE) flow for MCP client login
+// (`claude mcp login`, Cursor, VS Code). The mcp function's /oauth/*
+// endpoints delegate here.
+registerMcpOauthRoutes(app);
 
 // Closed-loop evolution + experiment routes.
 registerLessonsRoutes(app);

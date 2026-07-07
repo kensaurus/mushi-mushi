@@ -5,7 +5,7 @@
  *          using mocked LLM responses and Supabase client.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 
 // --- Mock types mirroring the Edge Function's behavior ---
 
@@ -237,5 +237,26 @@ describe('fast-filter (Stage 1)', () => {
     const newAttempts = currentAttempts + 1
 
     expect(newAttempts).toBe(1)
+  })
+
+  describe('stage 2 handoff observability', () => {
+    let src: string
+    beforeAll(async () => {
+      const { readFile } = await import('node:fs/promises')
+      const { fileURLToPath } = await import('node:url')
+      src = await readFile(
+        fileURLToPath(new URL('../../supabase/functions/fast-filter/index.ts', import.meta.url)),
+        'utf8',
+      )
+    })
+
+    it('checks the classify-report response status (no fire-and-forget)', () => {
+      expect(src).toMatch(/if \(!stage2Res\.ok\)/)
+    })
+
+    it('records handoff failures on the report and treats 402 as quota, not error', () => {
+      expect(src).toContain("stage2Res.status === 402")
+      expect(src).toContain('stage2 handoff failed')
+    })
   })
 })

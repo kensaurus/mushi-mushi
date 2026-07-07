@@ -100,6 +100,9 @@
     "gen:flutter-pii-patterns": "node scripts/generate-flutter-pii-patterns.mjs",
     "check:flutter-pii-patterns": "node scripts/generate-flutter-pii-patterns.mjs --check",
     "check:internal-doc-links": "node scripts/check-internal-doc-links.mjs",
+    "check:docs-versions": "node scripts/check-docs-versions.mjs",
+    "check:docs-links": "node scripts/check-docs-links.mjs",
+    "check:docs-drift": "node scripts/check-docs-versions.mjs && node scripts/check-docs-links.mjs",
     "check:bundle-docs": "node scripts/check-bundle-docs.mjs",
     "gen:llms-txt": "node scripts/gen-llms-txt.mjs",
     "sync:public-schemas": "node scripts/sync-public-schemas.mjs",
@@ -113,7 +116,9 @@
     "bootstrap:new-npm-packages": "node scripts/bootstrap-publish-new-packages.mjs",
     "e2e": "pnpm --filter @mushi-mushi/e2e-dogfood e2e",
     "test:cloudfront": "node --test scripts/cloudfront-functions.test.mjs",
-    "test:verify-hosted-mcp": "node --test scripts/verify-hosted-mcp-helpers.test.mjs"
+    "test:verify-hosted-mcp": "node --test scripts/verify-hosted-mcp-helpers.test.mjs",
+    "verify:pipeline": "pnpm --filter @mushi-mushi/server test && cd packages/server/supabase && deno check functions/_shared/rag.ts functions/_shared/observability.ts functions/_shared/env-int.ts functions/api/routes/doctor.ts functions/api/routes/project-codebase.ts functions/webhooks-github-indexer/index.ts",
+    "check:drift": "pnpm check:catalog-sync && pnpm check:internal-doc-links && pnpm check:onboarding-drift && pnpm check:env-docs && pnpm check:docs-drift"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

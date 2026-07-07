@@ -57,10 +57,10 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
-        "npm:@supabase/supabase-js@^2.108.1",
-        "npm:supabase@^2.106.0",
+        "npm:@supabase/supabase-js@^2.108.2",
+        "npm:supabase@^2.108.0",
         "npm:typescript@^6.0.3",
-        "npm:vitest@^4.1.8",
+        "npm:vitest@^4.1.9",
         "npm:yaml@^2.9.0",
         "npm:zod@^3.25.76"
       ]

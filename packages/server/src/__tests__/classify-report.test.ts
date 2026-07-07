@@ -270,4 +270,42 @@ CRITICAL SECURITY RULES (immutable):
       expect(benign.untrusted_image_instructions_detected).toBe(false)
     })
   })
+
+  describe('diagnosis metering', () => {
+    it('source contains exactly one diagnoses usage_events insert (double-billing canary)', async () => {
+      const { readFile } = await import('node:fs/promises')
+      const { fileURLToPath } = await import('node:url')
+      const src = await readFile(
+        fileURLToPath(new URL('../../supabase/functions/classify-report/index.ts', import.meta.url)),
+        'utf8',
+      )
+      const meteringInserts = src.match(/event_name:\s*'diagnoses'/g) ?? []
+      expect(meteringInserts).toHaveLength(1)
+    })
+  })
+
+  describe('code-context grounding (degrade loudly)', () => {
+    let src: string
+    beforeAll(async () => {
+      const { readFile } = await import('node:fs/promises')
+      const { fileURLToPath } = await import('node:url')
+      src = await readFile(
+        fileURLToPath(new URL('../../supabase/functions/classify-report/index.ts', import.meta.url)),
+        'utf8',
+      )
+    })
+
+    it('uses getRelevantCodeWithReason, not the reason-discarding wrapper', () => {
+      expect(src).toContain('getRelevantCodeWithReason')
+      expect(src).not.toMatch(/[^A-Za-z]getRelevantCode\(/)
+    })
+
+    it('persists code_context status into stage2_analysis', () => {
+      expect(src).toContain('code_context: codeContextStatus')
+    })
+
+    it('tells the model when code context is unavailable instead of omitting the section', () => {
+      expect(src).toContain('Code context unavailable')
+    })
+  })
 })

@@ -86,6 +86,7 @@ const BillingPage = lazy(() => import('./pages/BillingPage').then(m => ({ defaul
 const OrganizationSettingsPage = lazy(() => import('./pages/OrganizationSettingsPage').then(m => ({ default: m.OrganizationSettingsPage })))
 const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage').then(m => ({ default: m.AcceptInvitePage })))
 const CliAuthPage = lazy(() => import('./pages/CliAuthPage').then(m => ({ default: m.CliAuthPage })))
+const McpAuthPage = lazy(() => import('./pages/McpAuthPage').then(m => ({ default: m.McpAuthPage })))
 // Wave T (2026-04-23) — new /inbox page, lazy-loaded like every other route so
 // the first-paint bundle isn't inflated for users who don't open it.
 const InboxPage = lazy(() => import('./pages/InboxPage').then(m => ({ default: m.InboxPage })))
@@ -251,14 +252,16 @@ function ResilienceLayer() {
   return <OfflineBanner />
 }
 
-/** Lazy-initialises the Mushi self-dogfood SDK after the user logs in.
- *  Deliberately placed outside ProtectedRoute so the init happens as soon as
- *  session becomes available rather than waiting for protected-route render. */
+/** Lazy-initialises the Mushi self-dogfood SDK.
+ *  Init is NOT gated on the session: the SDK authenticates with its own
+ *  project API key, and a logged-out visitor hitting a broken login page is
+ *  exactly who must still be able to report a bug (red-team #12 — reports
+ *  used to be silently discarded pre-login). The session effect only
+ *  attributes reports once the user is known. */
 function MushiSelfMount() {
   const { session } = useAuth()
   useEffect(() => {
-    if (!session) return
-    void initMushiSelf({ userId: session.user.id })
+    void initMushiSelf(session ? { userId: session.user.id } : undefined)
   }, [session?.user?.id])
   return null
 }
@@ -381,6 +384,15 @@ export function App() {
                     element={
                       <Suspense fallback={<Loading text="Loading…" />}>
                         <CliAuthPage />
+                      </Suspense>
+                    }
+                  />
+                  {/* OAuth consent page for MCP client login (claude mcp login, Cursor, VS Code) */}
+                  <Route
+                    path="/mcp-auth"
+                    element={
+                      <Suspense fallback={<Loading text="Loading…" />}>
+                        <McpAuthPage />
                       </Suspense>
                     }
                   />

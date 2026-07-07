@@ -2,6 +2,14 @@
 
 Minimal guide to get Mushi Mushi running on your own Supabase project.
 
+> **Fastest path:** from a clone of this repo, run
+> `npx mushi-mushi@latest selfhost up --project-ref <your-ref>` — it wraps
+> every step below (link → db push → secrets → function deploys → bucket →
+> bootstrap) and ends with a health-check proof step. No Supabase CLI?
+> Pass `--print-commands` to get the exact commands to copy-paste.
+> Afterwards, `mushi selfhost doctor` verifies the deployment end to end.
+> The manual steps below remain the reference for what "up" does.
+
 ## Prerequisites
 
 - [Supabase CLI](https://supabase.com/docs/guides/cli) installed
@@ -123,8 +131,28 @@ Prerequisites (once per project):
 -- (the hosted project already has these; self-hosted operators set them once):
 INSERT INTO public.mushi_runtime_config (key, value) VALUES
   ('supabase_url', 'https://YOUR_PROJECT_REF.supabase.co'),
-  ('service_role_key', 'YOUR_INTERNAL_CALLER_SECRET')
+  ('service_role_key', 'YOUR_INTERNAL_CALLER_SECRET'),
+  -- Required by the pipeline-recovery cron (recover_stranded_pipeline):
+  -- generate one secret (e.g. `openssl rand -hex 32`) and use the SAME value
+  -- for this row and the MUSHI_INTERNAL_CALLER_SECRET function secret below.
+  -- If this row is missing, recovery runs log status='skipped' in cron_runs
+  -- and stranded reports are never retried.
+  ('internal_caller_token', 'YOUR_INTERNAL_CALLER_SECRET')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
+```
+
+```bash
+# The matching function secret (edge functions verify recovery calls with it):
+npx supabase secrets set MUSHI_INTERNAL_CALLER_SECRET=YOUR_INTERNAL_CALLER_SECRET
+```
+
+Verify recovery is healthy after setup (should show `success`/`degraded`, not
+`skipped`, and `responses_failed: 0` once reconciled):
+
+```sql
+SELECT status, metadata FROM cron_runs
+ WHERE job_name = 'pipeline-recovery'
+ ORDER BY finished_at DESC LIMIT 3;
 ```
 
 Schedules:
@@ -218,20 +246,13 @@ SDK → api (ingestion) → fast-filter (Haiku Stage 1)
 
 ## Scheduling judge-batch
 
-The `judge-batch` function runs nightly LLM-as-Judge quality evaluation. Schedule it with `pg_cron`:
+The `judge-batch` function runs nightly LLM-as-Judge quality evaluation. Schedule it with `pg_cron`, using the same `mushi.edge_function_post` helper as the other schedules above (requires the [prerequisites](#recommended-pg_cron-schedules) — do **not** use `current_setting('app.settings.…')`, which returns NULL on hosted Supabase and fails silently):
 
 ```sql
 SELECT cron.schedule(
   'mushi-judge-batch',
   '0 3 * * *',
-  $$SELECT net.http_post(
-    url := current_setting('app.settings.supabase_url') || '/functions/v1/judge-batch',
-    headers := jsonb_build_object(
-      'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key'),
-      'Content-Type', 'application/json'
-    ),
-    body := '{}'::jsonb
-  )$$
+  $$ SELECT mushi.edge_function_post('judge-batch', '{}'::jsonb); $$
 );
 ```
 

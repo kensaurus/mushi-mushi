@@ -107,6 +107,8 @@ export function DiagnosisFixHero({
           </div>
         )}
 
+        <CodeContextBadge report={report} />
+
         {isConfident && report.component && (
           <p className="mt-1.5 text-2xs text-fg-faint">
             Likely in{' '}
@@ -120,5 +122,40 @@ export function DiagnosisFixHero({
       {/* Part 2 — Fix: the paste-ready prompt (already its own card). */}
       <CursorAgentLaunch report={report} cursorWorkspace={cursorWorkspace} />
     </>
+  )
+}
+
+/** Why grounding was absent, per RagSkipReason, with what to do about it. */
+const CODE_CONTEXT_HINTS: Record<string, string> = {
+  disabled: 'No code context — codebase indexing is off. Enable it under Integrations for file-level diagnoses.',
+  empty_query: 'No code context — the report had too little signal to search the codebase.',
+  embedding_failed: 'Code lookup failed while embedding the query — check your LLM keys under Integrations.',
+  rpc_failed: 'Code lookup failed against the index — check indexing status under Integrations.',
+  no_matches: 'No matching files in the code index — the index may be partial or stale.',
+}
+
+/**
+ * Surfaces whether this diagnosis was grounded in the user's codebase.
+ * A diagnosis without code context is materially weaker; hiding that fact
+ * is how "I added my repo but it doesn't work" support tickets happen.
+ */
+function CodeContextBadge({ report }: { report: ReportDetail }) {
+  const ctx = report.stage2_analysis?.code_context
+  if (!ctx) return null
+
+  if (ctx.status === 'ok') {
+    return (
+      <p className="mt-1.5 text-2xs text-fg-faint">
+        Grounded in {ctx.fileCount} indexed code file{ctx.fileCount === 1 ? '' : 's'}
+      </p>
+    )
+  }
+
+  const hint = CODE_CONTEXT_HINTS[ctx.status] ?? `Code context unavailable (${ctx.status}).`
+  return (
+    <p className="mt-1.5 rounded-sm border border-warn/30 bg-warn/5 px-2 py-1 text-2xs leading-relaxed text-fg-muted">
+      <span className="font-medium text-warn">Diagnosed without code context.</span> {hint}
+      {ctx.detail ? <span className="text-fg-faint"> ({ctx.detail})</span> : null}
+    </p>
   )
 }

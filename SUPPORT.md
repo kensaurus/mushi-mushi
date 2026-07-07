@@ -29,7 +29,7 @@ Thanks for using Mushi Mushi. Here's the fastest way to get the help you need.
 
 A report we can act on within minutes includes:
 
-- The **package + version** (e.g. `@mushi-mushi/react@0.4.0`).
+- The **package + version** (e.g. `@mushi-mushi/react@<version>` — run `npm ls @mushi-mushi/react`).
 - A **minimal reproduction** — ideally a fork of [`examples/react-demo`](./examples/react-demo).
 - What you **expected** vs. what **happened**.
 - Your **environment** (Node version, framework version, browser/OS).

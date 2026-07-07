@@ -40,17 +40,22 @@ Run these checks in order. Stop and fix at the first ❌ before continuing.
 mushi doctor
 ```
 
-Expected output — all lines green:
+Expected output — every check prefixed `OK` (the CLI prints `OK` / `WARN` /
+`FAIL` text markers, not checkmarks):
 
 ```
-✓  ~/.config/mushi/config.json found
-✓  MUSHI_API_KEY valid (mushi_...)
-✓  MUSHI_API_ENDPOINT reachable (200 OK)
-✓  MUSHI_PROJECT_ID matches a live project
-✓  Feature flags fetched
+OK CLI config file
+OK API key configured
+OK Project ID configured
+OK Endpoint reachable
 ```
 
-**Fix if red:** Re-run `mushi login --api-key mushi_... --endpoint https://<ref>.supabase.co/functions/v1/api --project-id <pid>`.
+Exit codes: `0` all pass · `2` advisory warnings only · `1` any hard failure.
+Each `FAIL` line is followed by a `→ Fix:` hint; `mushi doctor --json` includes
+the same hints in a `hint` field.
+
+**Fix if FAIL:** follow the printed `→ Fix:` hint, or re-run
+`mushi login --api-key mushi_... --endpoint https://<ref>.supabase.co/functions/v1/api --project-id <pid>`.
 
 ---
 

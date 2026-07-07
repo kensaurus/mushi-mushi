@@ -97,6 +97,12 @@
         "default": "./dist/detect.js"
       }
     },
+    "./wizard-args": {
+      "import": {
+        "types": "./dist/wizard-args.d.ts",
+        "default": "./dist/wizard-args.js"
+      }
+    },
     "./version": {
       "import": {
         "types": "./dist/version.d.ts",

@@ -23,7 +23,7 @@ Core types, API client, and shared utilities for every Mushi SDK package.
 
 | Type                       | Purpose                                                                                       |
 |----------------------------|-----------------------------------------------------------------------------------------------|
-| `MushiPreset`              | `'production-calm' \| 'beta-loud' \| 'internal-debug' \| 'manual-only'` posture bundles.      |
+| `MushiPreset`              | Posture bundles: `'production-calm' \| 'beta-loud' \| 'internal-debug' \| 'manual-only'` plus the tiers `'minimal' \| 'standard' \| 'full'`. See [Config presets](#config-presets--precedence). |
 | `MushiWidgetAnchor`        | Raw-CSS positioning (`top` / `right` / `bottom` / `left`) for the widget launcher.            |
 | `MushiPrivacyConfig`       | `maskSelectors`, `blockSelectors`, `allowUserRemoveScreenshot` for screenshot redaction.       |
 | `MushiUrlMatcher`          | `string \| RegExp` element used by `capture.ignoreUrls` and `apiCascade.ignoreUrls`.          |
@@ -45,6 +45,61 @@ Core types, API client, and shared utilities for every Mushi SDK package.
 Constants: `MUSHI_INTERNAL_HEADER` (`'X-Mushi-Internal'`),
 `MUSHI_INTERNAL_INIT_MARKER`, and the `MushiInternalRequestKind` literal union
 are re-exported so framework adapters can build their own self-noise filters.
+
+## Config presets & precedence
+
+Pass `preset` to pick a posture bundle instead of hand-assembling
+`widget` / `capture` / `proactive` flags. `expandPreset(config)` expands the
+preset into those nested objects; **your explicit config always wins** on every
+key (the merge is per-sub-object, so overriding one `capture` flag keeps the
+rest of the preset's defaults).
+
+| Field                | `minimal`      | `standard`         | `full`           |
+|----------------------|----------------|--------------------|------------------|
+| Widget               | on (`auto`)    | on (SDK default)   | on (`auto`)      |
+| `capture.console`    | ✅              | default            | ✅                |
+| `capture.network`    | ❌              | default            | ✅                |
+| `capture.performance`| ❌              | default            | ✅                |
+| `capture.screenshot` | `on-report`    | default            | `auto`           |
+| `capture.replay`     | `off`          | default            | `lite`           |
+| Proactive triggers   | none           | default            | all on           |
+
+- **`minimal`** — widget + console capture only, screenshot on report; no
+  network/performance/replay, no proactive nudges. Leanest footprint.
+- **`standard`** — today's SDK defaults. Expansion is a **no-op** (the config
+  is returned untouched); the preset exists so the intent is explicit and
+  documented.
+- **`full`** — every capture channel on (including a self-contained `lite`
+  session replay) and all proactive triggers. Loudest / most data.
+
+The four legacy postures — `production-calm`, `beta-loud`, `internal-debug`,
+`manual-only` — are still supported and expand the same way.
+
+### Precedence
+
+Highest wins. `resolveEnvConfig()` only ever supplies
+`projectId` / `apiKey` / `apiEndpoint`, so it never competes with a preset for
+the nested option objects.
+
+| Priority | Source                              | Example                                   |
+|----------|-------------------------------------|-------------------------------------------|
+| 1 (wins) | Explicit config                     | `capture: { network: true }`              |
+| 2        | `preset`                            | `preset: 'minimal'` → `network: false`    |
+| 3        | Environment variables               | `NEXT_PUBLIC_MUSHI_*` / `VITE_MUSHI_*`    |
+| 4        | SDK defaults                        | built-in fallbacks                        |
+
+### Validation
+
+`validateConfig(config)` runs at init and **fails loud but never throws**: it
+`console.error`s on unknown top-level keys (usually a typo) and on an invalid
+`preset` value, then continues. Set `MUSHI_SILENT=1` to suppress the warnings.
+
+```typescript
+import { expandPreset, validateConfig } from '@mushi-mushi/core';
+
+validateConfig(config);              // warns on typos / bad preset (never throws)
+const resolved = expandPreset(config); // preset → nested objects, explicit wins
+```
 
 ## Usage
 
