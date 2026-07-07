@@ -167,8 +167,8 @@
     "@changesets/cli": "^2.31.0",
     "jiti": "^2.7.0",
     "playwright": "^1.61.1",
-    "prettier": "^3.8.5",
-    "turbo": "^2.10.0"
+    "prettier": "^3.9.4",
+    "turbo": "^2.10.1"
   },
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
