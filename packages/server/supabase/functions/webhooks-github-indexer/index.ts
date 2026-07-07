@@ -22,6 +22,7 @@ import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { finalizeFixMerge } from '../_shared/fix-merge.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
+import { envInt } from '../_shared/env-int.ts';
 import { createWebhookMiddleware, ReplayAttackError, RateLimitError } from '../_shared/webhook-middleware.ts';
 
 ensureSentry('webhooks-github-indexer');
@@ -680,9 +681,9 @@ async function handleSweep(
   if (unauthorized) return unauthorized;
 
   const db = getDb();
-  const staleAfterHours = Number(Deno.env.get('MUSHI_REPO_INDEX_STALE_HOURS') ?? '24');
+  const staleAfterHours = envInt('MUSHI_REPO_INDEX_STALE_HOURS', 24, { min: 1 });
   const cutoff = new Date(Date.now() - staleAfterHours * 3_600_000).toISOString();
-  const limit = Number(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_BATCH') ?? '5');
+  const limit = envInt('MUSHI_REPO_INDEX_SWEEP_BATCH', 5, { min: 1, max: 100 });
 
   // Optional body filter: `{ mode:'sweep', project_id? }` scopes the sweep to a
   // single project (used by the new `/v1/admin/projects/:id/codebase/enable`
@@ -815,7 +816,7 @@ async function handleSweep(
               last_index_error:
                 stats.failed > 0
                   ? (stats.lastError ?? 'partial: some chunks failed').slice(0, 500)
-                  : null,
+                  : (stats.partial?.slice(0, 500) ?? null),
             })
             .eq('id', repo.id);
           summary.push({ repo: repo.repo_url, ok: true, ...stats });
@@ -881,7 +882,14 @@ async function sweepIndexRepo(
   owner: string,
   repo: string,
   branch: string,
-): Promise<{ inserted: number; skipped: number; failed: number; lastError?: string }> {
+): Promise<{
+  inserted: number;
+  skipped: number;
+  failed: number;
+  lastError?: string;
+  /** Set when the sweep could not cover the whole repo (file cap / GitHub tree truncation). */
+  partial?: string;
+}> {
   const treeRes = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
     {
@@ -902,7 +910,7 @@ async function sweepIndexRepo(
   let skipped = 0;
   let failed = 0;
   let lastError: string | undefined;
-  const cap = Number(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_FILE_CAP') ?? '300');
+  const cap = envInt('MUSHI_REPO_INDEX_SWEEP_FILE_CAP', 300, { min: 1 });
   // Batched embedding sweep (MUSHI-MUSHI-INDEXER-429 fix):
   //
   // Why batching: the previous loop fired one embedding API call per chunk
@@ -925,8 +933,8 @@ async function sweepIndexRepo(
   // additional layer of resilience on top of `createEmbeddingBatch`'s
   // built-in exponential backoff. The default 250ms gives ~4 batches/s
   // (~384 inputs/s) which is well inside the published limits.
-  const batchSize = Number(Deno.env.get('MUSHI_REPO_INDEX_BATCH_SIZE') ?? '96');
-  const throttleMs = Number(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_THROTTLE_MS') ?? '250');
+  const batchSize = envInt('MUSHI_REPO_INDEX_BATCH_SIZE', 96, { min: 1, max: 2048 });
+  const throttleMs = envInt('MUSHI_REPO_INDEX_SWEEP_THROTTLE_MS', 250, { min: 0 });
 
   // Phase 1: walk the file tree and collect every chunk. We materialise the
   // whole list before embedding so we can size batches deterministically.
@@ -1010,7 +1018,15 @@ async function sweepIndexRepo(
       await new Promise((resolve) => setTimeout(resolve, throttleMs));
     }
   }
-  return { inserted, skipped, failed, lastError };
+  // Honesty over unconditional success: a capped or truncated sweep used to
+  // report clean success, leaving big monorepos silently half-indexed.
+  let partial: string | undefined;
+  if (tree.truncated) {
+    partial = `partial: GitHub tree listing truncated — indexed ${Math.min(files.length, cap)} files, repo has more`;
+  } else if (files.length > cap) {
+    partial = `partial: indexed ${cap} of ${files.length} eligible files (MUSHI_REPO_INDEX_SWEEP_FILE_CAP=${cap})`;
+  }
+  return { inserted, skipped, failed, lastError, partial };
 }
 
 app.post('/webhooks-github-indexer', async (c) => {
@@ -1224,7 +1240,7 @@ app.post('/webhooks-github-indexer', async (c) => {
     }
   }
 
-  const pushBatchSize = Number(Deno.env.get('MUSHI_REPO_INDEX_BATCH_SIZE') ?? '96');
+  const pushBatchSize = envInt('MUSHI_REPO_INDEX_BATCH_SIZE', 96, { min: 1, max: 2048 });
   for (let i = 0; i < pendingChunks.length; i += pushBatchSize) {
     const batch = pendingChunks.slice(i, i + pushBatchSize);
     let embeddings: number[][];

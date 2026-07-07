@@ -330,7 +330,17 @@ export interface MushiWidgetAnchor {
   left?: string;
 }
 
-export type MushiPreset = 'production-calm' | 'beta-loud' | 'internal-debug' | 'manual-only';
+export type MushiPreset =
+  | 'production-calm'
+  | 'beta-loud'
+  | 'internal-debug'
+  | 'manual-only'
+  // Tiered posture bundles (see presets.ts). `minimal` = widget + console only;
+  // `standard` = today's SDK defaults (no-op expansion); `full` = all capture +
+  // proactive triggers on.
+  | 'minimal'
+  | 'standard'
+  | 'full';
 
 export interface MushiWidgetSmartHideConfig {
   onMobile?: 'edge-tab' | 'hide' | false;

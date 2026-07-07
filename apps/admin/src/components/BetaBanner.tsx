@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { FeedbackModal } from './FeedbackModal'
-import { getMushiSelf, reportMushiBug } from '../lib/mushi-self'
+import { getMushiSelf, isMushiSelfEnabled, reportMushiBug } from '../lib/mushi-self'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { BETA_BANNER_ID, setBetaBannerOffset } from '../lib/appChrome'
@@ -40,8 +40,13 @@ export function BetaBanner() {
   const location = useLocation()
   const { session } = useAuth()
   const isTesterPortal = location.pathname === '/tester' || location.pathname.startsWith('/tester/')
-  const canSubmitFeedback =
-    !!session && !PUBLIC_AUTH_PATHS.has(location.pathname)
+  // Bug reports must work logged-out too (red-team #12: pre-login reports
+  // were silently discarded) — the SDK widget authenticates with its own
+  // project API key, no JWT needed. Feature requests still post to the
+  // JWT-gated /v1/support/contact, so they stay session-gated.
+  const onPublicAuthPath = PUBLIC_AUTH_PATHS.has(location.pathname)
+  const canReportBug = !!session || isMushiSelfEnabled()
+  const canSubmitFeedback = !!session && !onPublicAuthPath
   const [dismissed, setDismissed] = useState(true)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [feedbackType, setFeedbackType] = useState<'bug' | 'feature'>('bug')
@@ -95,8 +100,15 @@ export function BetaBanner() {
     // full submission experience. Fall back to the FeedbackModal (which posts
     // to /v1/support/contact) when Mushi isn't loaded yet or VITE_MUSHI_SELF_*
     // env vars are absent.
-    if (type === 'bug' && getMushiSelf()) {
+    if (type === 'bug' && (getMushiSelf() || isMushiSelfEnabled())) {
       reportMushiBug({ category: 'bug' })
+      return
+    }
+    if (type === 'bug' && !session) {
+      // No SDK and no JWT — never drop the report on the floor: hand the
+      // user a mailto instead of posting to an endpoint that will 401.
+      const href = `mailto:kensaurus@gmail.com?subject=${encodeURIComponent('[mushi-mushi bug]')}&body=${encodeURIComponent(`Page: ${window.location.href}\n\n`)}`
+      window.open(href, '_blank')
       return
     }
     setFeedbackType(type)
@@ -125,7 +137,7 @@ export function BetaBanner() {
             aria-label="Beta banner actions"
             className="flex shrink-0 flex-wrap items-center gap-x-0 gap-y-0.5 text-2xs text-lime-foreground/75 sm:justify-end"
           >
-            {canSubmitFeedback ? (
+            {canReportBug ? (
               <>
                 <button
                   type="button"
@@ -135,6 +147,10 @@ export function BetaBanner() {
                   Report a bug
                 </button>
                 <span aria-hidden="true" className="hidden select-none text-lime-foreground/40 sm:inline">|</span>
+              </>
+            ) : null}
+            {canSubmitFeedback ? (
+              <>
                 <button
                   type="button"
                   onClick={() => openFeedback('feature')}

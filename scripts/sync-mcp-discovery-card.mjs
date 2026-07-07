@@ -26,7 +26,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
@@ -38,7 +38,9 @@ if (!existsSync(catalogDistPath)) {
   process.exit(1)
 }
 
-const { TOOL_CATALOG, TDD_TOOL_CATALOG, CODEBASE_TOOL_CATALOG } = await import(catalogDistPath)
+// pathToFileURL: a bare absolute path is not a valid ESM specifier on
+// Windows (the drive letter parses as a URL scheme).
+const { TOOL_CATALOG, TDD_TOOL_CATALOG, CODEBASE_TOOL_CATALOG } = await import(pathToFileURL(catalogDistPath).href)
 const canonicalTools = [...TOOL_CATALOG, ...TDD_TOOL_CATALOG, ...CODEBASE_TOOL_CATALOG]
 
 const manifestPath = resolve(

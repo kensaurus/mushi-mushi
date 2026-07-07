@@ -3,7 +3,9 @@
 # and tools/list inspection succeed without live credentials. Pulling the
 # published package is far more reliable for an external builder than compiling
 # the whole monorepo (pnpm install across 43 packages).
-FROM node:22-alpine
+# Base image pinned by digest (OpenSSF Scorecard Pinned-Dependencies). Refresh
+# the digest with `docker buildx imagetools inspect node:22-alpine` on upgrade.
+FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2
 
 WORKDIR /app
 
