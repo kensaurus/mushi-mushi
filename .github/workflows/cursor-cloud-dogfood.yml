@@ -105,10 +105,34 @@ jobs:
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7.1.0
         with:
           script: |
-            await github.rest.issues.create({
+            // De-dupe: reuse the existing open dogfood-failure issue instead of
+            // opening a new one every night (that pile-up produced #137–#157).
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const titlePrefix = '[Nightly] Cursor Cloud Agent dogfood failed';
+            const existing = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `[Nightly] Cursor Cloud Agent dogfood failed — ${new Date().toISOString().slice(0,10)}`,
-              labels: ['type:bug', 'area:cursor-integration', 'priority:high'],
-              body: `The nightly Cursor Cloud Agent dogfood test failed.\n\nRun: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-            })
+              state: 'open',
+              labels: 'area:cursor-integration',
+              per_page: 100,
+            });
+            const open = existing.data.find(
+              (i) => !i.pull_request && i.title.startsWith(titlePrefix),
+            );
+            const today = new Date().toISOString().slice(0, 10);
+            if (open) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: open.number,
+                body: `Nightly dogfood failed again on ${today}.\n\nRun: ${runUrl}`,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `${titlePrefix} — ${today}`,
+                labels: ['type:bug', 'area:cursor-integration', 'priority:high'],
+                body: `The nightly Cursor Cloud Agent dogfood test failed.\n\nRun: ${runUrl}`,
+              });
+            }
