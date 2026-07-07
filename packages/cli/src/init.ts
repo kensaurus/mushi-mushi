@@ -140,6 +140,8 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
 
   const enableRewards = await maybeEnableRewards(options);
 
+  await maybeInjectSnippet(cwd, framework, options);
+
   printNextSteps(framework, consoleBase, enableRewards);
 
   await maybeSendTestReport(credentials, { ...options, endpoint, consoleBase });
@@ -773,6 +775,49 @@ function emitWizardFunnelEvent(
   }).catch(() => {
     /* best-effort */
   });
+}
+
+/**
+ * Offer idempotent marker-block injection of the init snippet for
+ * frameworks where it is a plain top-of-file import (see ENTRY_CANDIDATES).
+ * JSX-provider frameworks are never auto-edited — the snippet must wrap the
+ * user's render tree, and rewriting that is riskier than a copy-paste.
+ * Declining (or non-interactive runs) falls through to the printed snippet;
+ * `mushi doctor` verifies either way via its "SDK init snippet wired" check.
+ */
+async function maybeInjectSnippet(
+  cwd: string,
+  framework: Framework,
+  options: InitOptions,
+): Promise<void> {
+  if (options.yes || !process.stdin.isTTY) return;
+  const { ENTRY_CANDIDATES, injectSnippet, MUSHI_MARKER_START } = await import('./snippet-inject.js');
+  const candidates = ENTRY_CANDIDATES[framework.id];
+  if (!candidates) return;
+
+  const { readFile, writeFile } = await import('node:fs/promises');
+  const nodePath = await import('node:path');
+  for (const rel of candidates) {
+    const abs = nodePath.join(cwd, rel);
+    let source: string;
+    try {
+      source = await readFile(abs, 'utf8');
+    } catch {
+      continue;
+    }
+
+    const alreadyInjected = source.includes(MUSHI_MARKER_START);
+    const confirmed = await p.confirm({
+      message: alreadyInjected
+        ? `Refresh the Mushi init block in ${rel}?`
+        : `Add the Mushi init snippet to ${rel}? (wrapped in markers; re-runs update in place)`,
+    });
+    if (p.isCancel(confirmed) || !confirmed) return;
+
+    await writeFile(abs, injectSnippet(source, framework.snippet()), 'utf8');
+    p.log.success(`${alreadyInjected ? 'Updated' : 'Added'} Mushi init block in ${rel}`);
+    return;
+  }
 }
 
 function printNextSteps(framework: Framework, consoleBase: string, enableRewards = false): void {

@@ -22,6 +22,26 @@ import { MCP_QUICKSTART_LEDE, PUBLIC_FAQ_MCP } from '@/lib/public-copy'
   Prefer the terminal? The one-liner below is just as quick.
 </Callout>
 
+## OAuth login (recommended — no keys to copy)
+
+The hosted MCP endpoint speaks the standard MCP OAuth flow (authorization
+code + PKCE), so clients that support MCP login connect with **zero manual
+credentials**:
+
+```bash
+# Claude Code
+claude mcp add --transport http mushi "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp"
+claude mcp login mushi   # or run /mcp inside a session and pick "mushi"
+```
+
+Your browser opens the console consent page: sign in, pick the project to
+connect, and click **Approve**. That mints a project API key (label
+`mcp-oauth`) which the client stores for you — revoke it any time from
+**Projects → Keys**. Cursor and VS Code follow the same flow when you add the
+hosted URL as a remote MCP server; do **not** configure an `Authorization`
+header if you want the login flow — a static header tells the client that
+OAuth isn't needed.
+
 ## One-liner setup (recommended)
 
 ```bash
@@ -93,7 +113,9 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
 ## Hosted Streamable HTTP transport (no subprocess)
 
 Skip the local subprocess — use the hosted MCP endpoint when you're
-running OpenAI Agents SDK, ChatGPT Agent, CrewAI, or any remote orchestrator:
+running OpenAI Agents SDK, ChatGPT Agent, CrewAI, or any remote orchestrator.
+Headless orchestrators can't drive the browser OAuth flow, so this is the
+one place a static API key header is the right tool:
 
 ```json filename=".cursor/mcp.json"
 {

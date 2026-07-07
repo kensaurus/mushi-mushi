@@ -197,6 +197,16 @@ export interface ReportDetail {
   created_at: string
   classified_at: string | null
   processing_error: string | null
+  /**
+   * Stage-2 deep-analysis payload. `code_context` records whether the
+   * diagnosis was grounded in the indexed codebase — `status` is 'ok' or a
+   * RagSkipReason ('disabled' | 'empty_query' | 'embedding_failed' |
+   * 'rpc_failed' | 'no_matches') so the UI can say WHY grounding was absent.
+   */
+  stage2_analysis?: {
+    code_context?: { status: string; fileCount: number; detail?: string }
+    [key: string]: unknown
+  } | null
   /** Linked agentic fix attempts for this report. Most recent first. */
   fix_attempts?: ReportFixAttempt[]
   /** Latest classification judge evaluation, if the judge has run. */

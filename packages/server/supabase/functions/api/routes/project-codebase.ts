@@ -52,25 +52,55 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
   }
 
   async function kickCodebaseSweep(projectId: string): Promise<void> {
-    // Fire-and-forget — the sweep writes to project_codebase_files and
-    // updates project_repos.last_indexed_at / last_index_error, so the
-    // caller doesn't need to block. A short AbortSignal prevents a slow
-    // sweep from holding the enable response hostage.
+    // The sweep writes to project_codebase_files and updates
+    // project_repos.last_indexed_at / last_index_error. It used to run with
+    // a 2s AbortSignal — any real first sweep takes longer, so the kick was
+    // aborted and users saw "enabled" with zero indexed files and no error.
+    // Now: record the attempt first (so the console shows "indexing" instead
+    // of nothing), then keep the invocation alive via EdgeRuntime.waitUntil.
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const internalSecret =
       Deno.env.get('MUSHI_INTERNAL_CALLER_SECRET') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!supabaseUrl || !internalSecret) return;
-    await fetch(`${supabaseUrl}/functions/v1/webhooks-github-indexer`, {
+
+    const db = getServiceClient();
+    await db
+      .from('project_repos')
+      .update({ last_index_attempt_at: new Date().toISOString() })
+      .eq('project_id', projectId)
+      .eq('is_primary', true);
+
+    const sweep = fetch(`${supabaseUrl}/functions/v1/webhooks-github-indexer`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${internalSecret}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ mode: 'sweep', project_id: projectId }),
-      signal: AbortSignal.timeout(2_000),
-    }).catch(() => {
-      /* worker is fire-and-forget */
+      // Generous ceiling — protects against a hung upstream without
+      // guillotining a legitimately slow first sweep.
+      signal: AbortSignal.timeout(150_000),
+    }).then(async (res) => {
+      if (!res.ok) {
+        const detail = await res.text().then((t) => t.slice(0, 300)).catch(() => '');
+        await db
+          .from('project_repos')
+          .update({ last_index_error: `initial sweep kick failed: HTTP ${res.status} ${detail}`.slice(0, 500) })
+          .eq('project_id', projectId)
+          .eq('is_primary', true);
+      }
+    }).catch(async (err) => {
+      await db
+        .from('project_repos')
+        .update({ last_index_error: `initial sweep kick failed: ${String(err).slice(0, 400)}` })
+        .eq('project_id', projectId)
+        .eq('is_primary', true);
     });
+
+    const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } })
+      .EdgeRuntime;
+    if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(sweep);
+    else await sweep;
   }
 
   app.post('/v1/admin/projects/:id/codebase/enable', jwtAuth, async (c) => {
@@ -137,6 +167,64 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     const pathGlobs = Array.isArray(body.path_globs)
       ? body.path_globs.filter((g) => typeof g === 'string')
       : [];
+
+    // Credential pre-flight: fail fast rather than enabling with 0 indexed files.
+    // Check the same resolution chain the indexer sweep uses:
+    //   1. installation_id in this request → GitHub App will mint a token at sweep time
+    //   2. project-level PAT ref in project_settings
+    //   3. GITHUB_TOKEN env fallback (self-hosted operator credential)
+    // The org-level PAT and the GitHub App env (GITHUB_APP_ID+GITHUB_APP_PRIVATE_KEY)
+    // also cover it when installation_id is present, so 1 or 3 is sufficient.
+    if (installationId === null && !Deno.env.get('GITHUB_TOKEN')) {
+      // Check project-level PAT.
+      const { data: settingsCheck } = await db
+        .from('project_settings')
+        .select('github_installation_token_ref')
+        .eq('project_id', projectId)
+        .maybeSingle();
+
+      const hasProjectPat =
+        settingsCheck?.github_installation_token_ref != null &&
+        String(settingsCheck.github_installation_token_ref).trim().length > 0;
+
+      if (!hasProjectPat) {
+        // Check org-level PAT.
+        const { data: projectForOrg } = await db
+          .from('projects')
+          .select('organization_id')
+          .eq('id', projectId)
+          .maybeSingle();
+        const orgId = (projectForOrg as { organization_id: string | null } | null)?.organization_id ?? null;
+        let hasOrgPat = false;
+        if (orgId) {
+          const { data: orgSettings } = await db
+            .from('organization_integration_settings')
+            .select('github_installation_token_ref')
+            .eq('organization_id', orgId)
+            .maybeSingle();
+          hasOrgPat =
+            orgSettings?.github_installation_token_ref != null &&
+            String(orgSettings.github_installation_token_ref).trim().length > 0;
+        }
+
+        if (!hasOrgPat) {
+          return c.json(
+            {
+              ok: false,
+              error: {
+                code: 'NO_GITHUB_CREDENTIAL',
+                message:
+                  'Cannot enable codebase indexing: no GitHub credential found. ' +
+                  'Provide installation_id (GitHub App), or save a Personal Access Token first — ' +
+                  'console: Integrations → GitHub, or API: PUT /v1/admin/integrations/platform/github ' +
+                  'with { github_installation_token_ref: "<PAT>" } (auto-encrypted into Supabase Vault).',
+              },
+            },
+            400,
+          );
+        }
+      }
+    }
 
     const { data: existingRepo } = await db
       .from('project_repos')

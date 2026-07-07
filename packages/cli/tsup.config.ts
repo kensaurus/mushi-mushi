@@ -20,7 +20,12 @@ export default defineConfig([
     define,
   },
   {
-    entry: { init: 'src/init.ts', detect: 'src/detect.ts', version: 'src/version.ts' },
+    entry: {
+      init: 'src/init.ts',
+      detect: 'src/detect.ts',
+      version: 'src/version.ts',
+      'wizard-args': 'src/wizard-args.ts',
+    },
     format: ['esm'],
     dts: true,
     clean: false,

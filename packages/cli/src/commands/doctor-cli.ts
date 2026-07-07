@@ -1,6 +1,6 @@
 import type { Command } from 'commander';
 import { loadConfig } from '../config.js';
-import { runDoctor, formatDoctorResult, checkOnboardingStatus } from '../doctor.js';
+import { runDoctor, formatDoctorResult, checkOnboardingStatus, fixHintForCheck } from '../doctor.js';
 import { runConnect } from '../connect.js';
 import { resolveConsoleUrl } from '../console-url.js';
 
@@ -107,15 +107,27 @@ export function registerDoctorCommand(program: Command): void {
         }
 
         const { checks } = result;
+        // Exit-code contract (headroom doctor): 0 = all pass, 2 = advisory
+        // warnings only, 1 = at least one hard failure — lets CI and scripts
+        // gate on "broken" vs "working but sub-optimally wired".
+        const hasWarn = checks.some((c) => c.ok && c.warn);
 
         if (opts.json) {
-          console.log(JSON.stringify({ checks, ready: result.ready }, null, 2));
+          // Include the fix hint per failed check — the human formatter
+          // always printed it, but --json consumers used to lose it.
+          const jsonChecks = checks.map((c) => ({
+            ...c,
+            ...(!c.ok ? { hint: fixHintForCheck(c.name) } : {}),
+          }));
+          console.log(JSON.stringify({ checks: jsonChecks, ready: result.ready }, null, 2));
           if (!result.ready) process.exit(1);
+          if (hasWarn) process.exit(2);
           return;
         }
 
         console.log(formatDoctorResult(result));
         if (!result.ready) process.exit(1);
+        if (hasWarn) process.exit(2);
       },
     );
 }

@@ -100,15 +100,87 @@ export async function getRelevantCodeWithReason(
   return { files: mapped, reason: 'ok' }
 }
 
-export function formatCodeContext(files: CodeContext[]): string {
-  if (!files.length) return ''
+/**
+ * Deterministic signals measured from the report itself (headroom pattern:
+ * let the embedding propose, but re-rank with measured signals — embedding
+ * similarity alone happily ranks a lookalike file above the one the failing
+ * request actually hit).
+ */
+export interface RerankSignals {
+  /** Component tag from Stage-1 extraction / widget element selector. */
+  component?: string
+  /** Route or URL path the user was on (e.g. '/checkout'). */
+  route?: string
+  /** Path of a failing captured network request (e.g. '/v1/orders'). */
+  failingRequestPath?: string
+}
 
-  return files
-    .map(f => {
-      const head = f.symbolName
-        ? `--- ${f.filePath}:${f.lineStart ?? '?'}-${f.lineEnd ?? '?'} :: ${f.symbolName} (similarity: ${f.similarity.toFixed(2)}) ---`
-        : `--- ${f.filePath} (similarity: ${f.similarity.toFixed(2)}) ---`
-      return `${head}\n${f.signature ? `${f.signature}\n` : ''}${f.preview}`
-    })
-    .join('\n\n')
+const RERANK_BOOSTS = {
+  component: 0.15,
+  route: 0.1,
+  failingRequestPath: 0.1,
+} as const
+
+function pathTokens(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 2)
+}
+
+/**
+ * Stable re-rank: similarity plus additive boosts when a file's path or
+ * component tag overlaps a measured signal. Never removes files, only
+ * reorders — the budget in formatCodeContext does the trimming.
+ */
+export function rerankCodeContext(files: CodeContext[], signals: RerankSignals): CodeContext[] {
+  const componentTokens = signals.component ? pathTokens(signals.component) : []
+  const routeTokens = signals.route ? pathTokens(signals.route) : []
+  const requestTokens = signals.failingRequestPath ? pathTokens(signals.failingRequestPath) : []
+  if (!componentTokens.length && !routeTokens.length && !requestTokens.length) return files
+
+  const scored = files.map((f, index) => {
+    const fileTokens = new Set(pathTokens(`${f.filePath} ${f.componentTag ?? ''} ${f.symbolName ?? ''}`))
+    let score = f.similarity
+    if (componentTokens.some((t) => fileTokens.has(t))) score += RERANK_BOOSTS.component
+    if (routeTokens.some((t) => fileTokens.has(t))) score += RERANK_BOOSTS.route
+    if (requestTokens.some((t) => fileTokens.has(t))) score += RERANK_BOOSTS.failingRequestPath
+    return { f, score, index }
+  })
+
+  return scored
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((s) => s.f)
+}
+
+/** ~4 chars/token; default keeps code context well under the model budget. */
+const DEFAULT_CONTEXT_CHAR_BUDGET = 16_000
+
+export function formatCodeContext(
+  files: CodeContext[],
+  opts: { maxChars?: number } = {},
+): string {
+  if (!files.length) return ''
+  const maxChars = opts.maxChars ?? DEFAULT_CONTEXT_CHAR_BUDGET
+
+  const blocks = files.map(f => {
+    const head = f.symbolName
+      ? `--- ${f.filePath}:${f.lineStart ?? '?'}-${f.lineEnd ?? '?'} :: ${f.symbolName} (similarity: ${f.similarity.toFixed(2)}) ---`
+      : `--- ${f.filePath} (similarity: ${f.similarity.toFixed(2)}) ---`
+    return `${head}\n${f.signature ? `${f.signature}\n` : ''}${f.preview}`
+  })
+
+  // Hard budget with an explicit truncation marker — the model (and anyone
+  // reading the trace) must know context was dropped, never guess.
+  const kept: string[] = []
+  let used = 0
+  for (const block of blocks) {
+    if (used + block.length > maxChars && kept.length > 0) {
+      kept.push(`... ${blocks.length - kept.length} more file(s) omitted (context budget ${maxChars} chars)`)
+      break
+    }
+    kept.push(block)
+    used += block.length + 2
+  }
+  return kept.join('\n\n')
 }

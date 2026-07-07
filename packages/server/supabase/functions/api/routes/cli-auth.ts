@@ -119,7 +119,7 @@ export async function ipRateLimitActorId(ip: string, scope: string): Promise<str
  * endpoint should not become unusable because the rate-limit backend is
  * briefly unavailable — but logs loudly so the gap is visible in Sentry.
  */
-async function claimIpRateLimit(
+export async function claimIpRateLimit(
   db: ReturnType<typeof getServiceClient>,
   ip: string,
   scope: string,
