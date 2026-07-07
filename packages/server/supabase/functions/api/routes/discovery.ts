@@ -23,6 +23,7 @@ import {
   regionRouter,
 } from '../../_shared/region.ts';
 import { getStorageAdapter, invalidateStorageCache } from '../../_shared/storage.ts';
+import { claimIpRateLimit, extractClientIp } from './cli-auth.ts';
 import { reportSubmissionSchema } from '../../_shared/schemas.ts';
 import { checkAntiGaming } from '../../_shared/anti-gaming.ts';
 import { logAntiGamingEvent } from '../../_shared/telemetry.ts';
@@ -347,6 +348,18 @@ export function registerPostRegionDiscoveryRoutes(app: Hono<{ Variables: Variabl
     const grantType = typeof body.grant_type === 'string' ? body.grant_type : null;
 
     if (grantType === 'refresh_token') {
+      // Public, unauthenticated grant. Throttle per-IP so a stolen or guessed
+      // refresh token can't be exercised/rotated here without bound, and so the
+      // endpoint can't be used to hammer Supabase Auth's refresh RPC.
+      const ip = extractClientIp(c);
+      const rateMiss = await claimIpRateLimit(db, ip, 'a2a_refresh_token', 30, '1 minute');
+      if (rateMiss) {
+        c.header('Retry-After', String(rateMiss.retryAfterSeconds));
+        return c.json(
+          { ok: false, error: { code: 'RATE_LIMITED', message: 'Too many token requests from this network. Try again shortly.' } },
+          429,
+        );
+      }
       const refreshToken = typeof body.refresh_token === 'string' ? body.refresh_token : null;
       if (!refreshToken) {
         return c.json(
