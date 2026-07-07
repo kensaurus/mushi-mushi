@@ -1,7 +1,9 @@
 # FILE: Dockerfile.admin
 # PURPOSE: Build and serve the admin console
 
-FROM node:22-alpine AS builder
+# Base images pinned by digest (OpenSSF Scorecard Pinned-Dependencies). Refresh
+# with `docker buildx imagetools inspect <image>` on upgrade.
+FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS builder
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY packages/core/ packages/core/
@@ -9,7 +11,7 @@ COPY apps/admin/ apps/admin/
 RUN corepack enable && pnpm install --frozen-lockfile
 RUN pnpm --filter @mushi-mushi/admin build
 
-FROM nginx:alpine
+FROM nginx:alpine@sha256:54f2a904c251d5a34adf545a72d32515a15e08418dae0266e23be2e18c66fefa
 COPY --from=builder /app/apps/admin/dist /usr/share/nginx/html
 EXPOSE 3000
 CMD ["nginx", "-g", "daemon off;"]

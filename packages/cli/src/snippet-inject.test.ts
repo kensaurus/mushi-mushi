@@ -24,7 +24,7 @@ describe('injectSnippet', () => {
   it('is idempotent — re-running replaces the block, never duplicates', () => {
     const once = injectSnippet(`console.log('app')\n`, SNIPPET)
     const twice = injectSnippet(once, SNIPPET)
-    expect(twice.match(new RegExp(MUSHI_MARKER_START.replace(/[/<>]/g, '\\$&'), 'g'))).toHaveLength(1)
+    expect(twice.match(new RegExp(MUSHI_MARKER_START.replace(/[.*+?^${}()|[\]\\/<>-]/g, '\\$&'), 'g'))).toHaveLength(1)
     expect(twice).toBe(once)
   })
 

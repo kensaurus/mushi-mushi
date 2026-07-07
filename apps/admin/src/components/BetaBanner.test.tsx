@@ -12,6 +12,7 @@ import { BETA_BANNER_TONE } from '../lib/tokens'
 
 vi.mock('../lib/mushi-self', () => ({
   getMushiSelf: () => null,
+  isMushiSelfEnabled: () => false,
   reportMushiBug: vi.fn(),
 }))
 
