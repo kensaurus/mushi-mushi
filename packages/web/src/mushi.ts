@@ -32,7 +32,10 @@ import {
   normaliseThrown,
   newUuid,
   resolveEnvConfig,
+  diagnoseEnvConfig,
   parseIdentityToken,
+  expandPreset,
+  validateConfig,
 } from '@mushi-mushi/core';
 
 import { MushiWidget } from './widget';
@@ -108,12 +111,15 @@ export class Mushi {
     // NEXT_PUBLIC_MUSHI_* / VITE_MUSHI_* / MUSHI_* automatically.
     const resolved: MushiConfig = { ...resolveEnvConfig(), ...config };
 
-    if (!resolved.projectId) {
-      throw new Error('[mushi] projectId is required — set NEXT_PUBLIC_MUSHI_PROJECT_ID / VITE_MUSHI_PROJECT_ID / MUSHI_PROJECT_ID or pass it explicitly');
-    }
-
-    if (!resolved.apiKey) {
-      throw new Error('[mushi] apiKey is required — set NEXT_PUBLIC_MUSHI_API_KEY / VITE_MUSHI_API_KEY / MUSHI_API_KEY or pass it explicitly');
+    if (!resolved.projectId || !resolved.apiKey) {
+      // Diagnose WHY env resolution failed (wrong prefix, var not exposed to
+      // the client bundle) instead of a generic "is required" — a
+      // mis-prefixed variable otherwise looks identical to no variable at all.
+      const diagnostics = diagnoseEnvConfig();
+      throw new Error(
+        diagnostics.message ??
+          '[mushi] projectId and apiKey are required — set NEXT_PUBLIC_MUSHI_* / VITE_MUSHI_* / MUSHI_* or pass them explicitly',
+      );
     }
 
     if (resolved.enabled === false) {
@@ -139,7 +145,8 @@ export class Mushi {
 }
 
 function createInstance(config: MushiConfig): MushiSDKInstance {
-  const bootstrapConfig = applyPresetConfig(config);
+  validateConfig(config);
+  const bootstrapConfig = expandPreset(config);
   const projectId = bootstrapConfig.projectId;
   const reporterTokenForProject = () => getReporterToken(projectId);
   let activeConfig: MushiConfig = bootstrapConfig;
@@ -1856,66 +1863,6 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     });
 
   return isolatePublicApi(sdk);
-}
-
-
-function applyPresetConfig(config: MushiConfig): MushiConfig {
-  if (!config.preset) return config;
-  const preset = presetDefaults(config.preset);
-  return {
-    ...config,
-    widget: {
-      ...preset.widget,
-      ...config.widget,
-    },
-    capture: {
-      ...preset.capture,
-      ...config.capture,
-    },
-    proactive: {
-      ...preset.proactive,
-      ...config.proactive,
-      cooldown: {
-        ...preset.proactive?.cooldown,
-        ...config.proactive?.cooldown,
-      },
-    },
-  };
-}
-
-function presetDefaults(preset: NonNullable<MushiConfig['preset']>): Pick<MushiConfig, 'widget' | 'capture' | 'proactive'> {
-  switch (preset) {
-    case 'manual-only':
-      return {
-        widget: { trigger: 'manual', outdatedBanner: 'console-only' },
-        capture: { console: true, network: true, performance: false, screenshot: 'on-report', elementSelector: false },
-        proactive: { rageClick: false, longTask: false, apiCascade: false, errorBoundary: false },
-      };
-    case 'beta-loud':
-      return {
-        widget: { trigger: 'auto', outdatedBanner: 'banner' },
-        capture: { console: true, network: true, performance: true, screenshot: 'auto', elementSelector: true },
-        proactive: { rageClick: true, longTask: true, apiCascade: true, errorBoundary: true },
-      };
-    case 'internal-debug':
-      return {
-        widget: { trigger: 'auto', outdatedBanner: 'banner', brandFooter: true },
-        capture: { console: true, network: true, performance: true, screenshot: 'auto', elementSelector: true },
-        proactive: {
-          rageClick: true,
-          longTask: true,
-          apiCascade: true,
-          errorBoundary: true,
-          cooldown: { maxProactivePerSession: 10, dismissCooldownHours: 0, suppressAfterDismissals: 99 },
-        },
-      };
-    case 'production-calm':
-      return {
-        widget: { trigger: 'auto', outdatedBanner: 'console-only' },
-        capture: { console: true, network: true, performance: false, screenshot: 'on-report', elementSelector: false },
-        proactive: { rageClick: false, longTask: false, apiCascade: false, errorBoundary: false },
-      };
-  }
 }
 
 function resolveApiEndpoint(config: Pick<MushiConfig, 'apiEndpoint'>): string {

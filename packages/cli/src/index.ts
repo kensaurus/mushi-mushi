@@ -30,6 +30,7 @@ import { registerAuditCommands } from './commands/audit.js'
 import { registerSkillsCommands } from './commands/skills.js'
 import { registerBillingCommands } from './commands/billing.js'
 import { registerCompletionCommand } from './commands/completion-cli.js'
+import { registerSelfhostCommands } from './commands/selfhost.js'
 import { printAndExit } from './errors.js'
 
 // Wire SIGINT/SIGTERM into a process-wide AbortController on first import.
@@ -85,6 +86,7 @@ registerQaCommands(program)
 registerAuditCommands(program)
 registerSkillsCommands(program)
 registerBillingCommands(program)
+registerSelfhostCommands(program)
 // Registered last so buildCommandTree() sees every command above when the
 // action runs (Commander builds the tree during these synchronous calls;
 // the action itself only executes later, at parseAsync() time).

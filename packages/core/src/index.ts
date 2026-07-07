@@ -81,7 +81,14 @@ export {
   type MushiInternalRequestKind,
 } from './api-client';
 export { resolveRegionEndpoint, REGION_ENDPOINTS, type MushiRegion } from './region';
-export { resolveEnvConfig, type ResolvedEnvConfig } from './env-config';
+export {
+  resolveEnvConfig,
+  diagnoseEnvConfig,
+  type ResolvedEnvConfig,
+  type EnvConfigDiagnostics,
+  type EnvNearMiss,
+} from './env-config';
+export { expandPreset, validateConfig } from './presets';
 export { createPreFilter, type PreFilterResult } from './pre-filter';
 export { createOfflineQueue, type OfflineQueue } from './queue';
 export { captureEnvironment } from './environment';

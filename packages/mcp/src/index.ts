@@ -13,6 +13,9 @@
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { createRequire } from 'node:module'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { createLogger, DEFAULT_API_ENDPOINT } from '@mushi-mushi/core'
 
 // MCP stdio transport owns stdout for JSON-RPC 2.0 exclusively.
@@ -47,9 +50,50 @@ const log = createLogger({ scope: 'mushi:mcp', level: 'info', destination: 'stde
  * Before this default, a zero-config `npx @mushi-mushi/mcp` booted with an
  * empty endpoint and every tool call failed.
  */
-const API_ENDPOINT = process.env.MUSHI_API_ENDPOINT?.trim() || DEFAULT_API_ENDPOINT
-const API_KEY = process.env.MUSHI_API_KEY ?? ''
-const PROJECT_ID = process.env.MUSHI_PROJECT_ID ?? ''
+/**
+ * Fallback credentials from the CLI's config file (`mushi login` writes it).
+ * Precedence: env var → CLI config → default. Two wins:
+ *   1. `mushi setup` no longer has to embed the API key in plaintext inside
+ *      .cursor/mcp.json — the env block can omit it when the CLI config
+ *      already holds it.
+ *   2. Self-hosters who set their endpoint once via `mushi config endpoint`
+ *      stop silently falling back to Mushi Cloud in the MCP server.
+ * Mirrors packages/cli/src/config.ts path resolution (XDG / %APPDATA%).
+ */
+function readCliConfig(): { apiKey?: string; projectId?: string; endpoint?: string } {
+  try {
+    // Must match the CLI's resolveXdgConfigPath() precedence exactly
+    // (XDG_CONFIG_HOME first on EVERY platform, then %APPDATA% on win32,
+    // then ~/.config) — otherwise `mushi login` writes to one path and this
+    // fallback silently reads another.
+    const xdg = process.env.XDG_CONFIG_HOME
+    const appData = process.env.APPDATA
+    const base =
+      xdg && xdg.length > 0
+        ? xdg
+        : process.platform === 'win32' && appData && appData.length > 0
+          ? appData
+          : join(homedir(), '.config')
+    const raw = readFileSync(join(base, 'mushi', 'config.json'), 'utf8')
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    return {
+      apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : undefined,
+      projectId: typeof parsed.projectId === 'string' ? parsed.projectId : undefined,
+      endpoint: typeof parsed.endpoint === 'string' ? parsed.endpoint : undefined,
+    }
+  } catch {
+    return {}
+  }
+}
+const CLI_CONFIG = readCliConfig()
+
+const API_ENDPOINT =
+  process.env.MUSHI_API_ENDPOINT?.trim() || CLI_CONFIG.endpoint?.trim() || DEFAULT_API_ENDPOINT
+// `||` (not `??`): manifest configs use `${MUSHI_API_KEY:-}` expansion, which
+// yields an EMPTY string when the env var is unset — that must still fall
+// through to the CLI config, not mask it.
+const API_KEY = process.env.MUSHI_API_KEY?.trim() || CLI_CONFIG.apiKey || ''
+const PROJECT_ID = process.env.MUSHI_PROJECT_ID?.trim() || CLI_CONFIG.projectId || ''
 /**
  * Optional CSV list of granted scopes. When set, the server only registers
  * tools whose catalog scope is in the list — `tools/list` will hide write
@@ -96,16 +140,30 @@ if (MCP_SENTRY_DSN) {
 
 async function main() {
   if (!API_KEY) {
-    log.fatal('MUSHI_API_KEY environment variable is required')
+    log.fatal(
+      'No API key found — set MUSHI_API_KEY, or run `mushi login` so the CLI config can supply it.',
+    )
     process.exit(1)
   }
+  if (!process.env.MUSHI_API_KEY && CLI_CONFIG.apiKey) {
+    log.info('[mushi-mcp] Using API key from the CLI config (~/.config/mushi/config.json)')
+  }
+  // Always show where traffic goes — IDE logs are the first place people
+  // look when tools return the wrong project's data.
+  log.info(`[mushi-mcp] Endpoint: ${API_ENDPOINT}`)
   if (!process.env.MUSHI_API_ENDPOINT?.trim()) {
-    log.info(
-      '[mushi-mcp] MUSHI_API_ENDPOINT not set — using the hosted Mushi Cloud ' +
-        `endpoint (${DEFAULT_API_ENDPOINT}). Self-hosted deployments must set ` +
-        'MUSHI_API_ENDPOINT to their Supabase edge function URL, ' +
-        'e.g. https://xyz.supabase.co/functions/v1/api',
-    )
+    if (CLI_CONFIG.endpoint?.trim()) {
+      log.info(`[mushi-mcp] Using endpoint from CLI config: ${API_ENDPOINT}`)
+    } else {
+      // WARN, not info: self-hosters who miss this line send traffic to the
+      // cloud and wonder why their reports never appear.
+      log.warn(
+        '[mushi-mcp] MUSHI_API_ENDPOINT not set — using the hosted Mushi Cloud ' +
+          `endpoint (${DEFAULT_API_ENDPOINT}). Self-hosted deployments must set ` +
+          'MUSHI_API_ENDPOINT to their Supabase edge function URL, ' +
+          'e.g. https://xyz.supabase.co/functions/v1/api',
+      )
+    }
   }
   const mode = PROJECT_ID ? 'single-project' : 'account'
   if (!PROJECT_ID) {

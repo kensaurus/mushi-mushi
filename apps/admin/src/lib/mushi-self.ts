@@ -71,8 +71,19 @@ export async function initMushiSelf(options?: {
 }): Promise<MushiInstance | null> {
   if (typeof window === 'undefined') return null;
   const win = window as unknown as Record<string, unknown>;
-  if (win[INIT_KEY]) return _sdk;
-  if (_initPromise) return _initPromise;
+  // Init now runs pre-login; a later call with the freshly logged-in user
+  // must still attribute the session even though the SDK already exists.
+  // Always await `_initPromise` when it exists: `win[INIT_KEY]` flips to
+  // `true` synchronously before the async init resolves and assigns `_sdk`,
+  // so trusting the flag races — the pre-login call sets it, then the
+  // logged-in re-render reads `_sdk` while it's still null and silently
+  // skips `identify()`. The promise is the only reliable handle on the SDK.
+  if (win[INIT_KEY] || _initPromise) {
+    const sdk = _initPromise ? await _initPromise : _sdk;
+    if (sdk && options?.userId) sdk.identify(options.userId, {});
+    if (sdk && options?.activeProjectId) sdk.setMetadata('active_project_id', options.activeProjectId);
+    return sdk;
+  }
   if (!isEnabled()) return null;
 
   win[INIT_KEY] = true;

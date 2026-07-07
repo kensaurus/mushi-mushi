@@ -469,7 +469,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!
       const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-      await fetch(`${supabaseUrl}/functions/v1/classify-report`, {
+      const stage2Res = await fetch(`${supabaseUrl}/functions/v1/classify-report`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -483,8 +483,33 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
           airGap: true,
         }),
       })
+
+      // A non-2xx here used to be invisible: the report stranded in
+      // status='new' until (broken) recovery. Observe the outcome and record
+      // it on the report so doctor/console can surface it.
+      if (!stage2Res.ok) {
+        const detail = await stage2Res.text().then(t => t.slice(0, 500)).catch(() => '')
+        if (stage2Res.status === 402) {
+          // Diagnosis quota exhausted — classify-report already marked the
+          // report quota_exceeded; nothing to retry until the user upgrades.
+          log.warn('Stage 2 denied: diagnosis quota exceeded', { reportId })
+        } else {
+          log.error('Stage 2 returned non-2xx', { reportId, status: stage2Res.status, detail })
+          await db
+            .from('reports')
+            .update({ processing_error: `stage2 handoff failed: HTTP ${stage2Res.status}` })
+            .eq('id', reportId)
+        }
+      }
     } catch (err) {
       log.error('Stage 2 invocation failed', { err: String(err) })
+      await db
+        .from('reports')
+        .update({ processing_error: `stage2 handoff failed: ${String(err).slice(0, 300)}` })
+        .eq('id', reportId)
+        .then(({ error }) => {
+          if (error) log.warn('Failed to record stage2 handoff error', { err: error.message })
+        })
     }
 
     return new Response(JSON.stringify({

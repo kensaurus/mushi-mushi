@@ -69,9 +69,13 @@ async function langfuseApi(path: string, body: Record<string, unknown>): Promise
   const { secretKey, publicKey, baseUrl } = getLangfuseConfig()
   if (!secretKey || !publicKey) return
 
-  try {
-    const auth = btoa(`${publicKey}:${secretKey}`)
-    await fetch(`${baseUrl}/api/public${path}`, {
+  // HTTP-level failures (401 bad keys, 429, 5xx) used to be fully silent:
+  // only network throws were logged, so misconfigured keys dropped every
+  // event with zero signal. Check res.ok, parse 207 partial-success bodies,
+  // and retry once (jittered) on retryable statuses before giving up loudly.
+  const auth = btoa(`${publicKey}:${secretKey}`)
+  const doPost = () =>
+    fetch(`${baseUrl}/api/public${path}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -79,8 +83,31 @@ async function langfuseApi(path: string, body: Record<string, unknown>): Promise
       },
       body: JSON.stringify(body),
     })
+
+  let res: Response
+  try {
+    res = await doPost()
+    if (res.status === 429 || res.status >= 500) {
+      await new Promise((r) => setTimeout(r, 500 + Math.random() * 1000))
+      res = await doPost()
+    }
   } catch (err) {
     traceLog.warn('Langfuse API error', { path, err: String(err) })
+    throw err
+  }
+
+  if (res.status === 207) {
+    // Langfuse ingestion returns 207 with per-event outcomes; surface the
+    // failed subset instead of treating the batch as fully delivered.
+    const parsed = await res.json().catch(() => null) as { errors?: unknown[] } | null
+    if (parsed?.errors && parsed.errors.length > 0) {
+      throw new Error(`Langfuse partial ingestion failure: ${JSON.stringify(parsed.errors).slice(0, 300)}`)
+    }
+    return
+  }
+  if (!res.ok) {
+    const detail = await res.text().then((t) => t.slice(0, 300)).catch(() => '')
+    throw new Error(`Langfuse HTTP ${res.status}: ${detail}`)
   }
 }
 
@@ -187,7 +214,7 @@ export function createTrace(name: string, metadata?: TraceMetadata): Trace {
             comment,
           },
         }],
-      })
+      }).catch((err) => onLangfuseIngestFailure(`score:${scoreName}`, err))
     }
   }
 
@@ -203,7 +230,7 @@ export function createTrace(name: string, metadata?: TraceMetadata): Trace {
             metadata: { ...safeMetadata, completedAt: new Date().toISOString() },
           },
         }],
-      })
+      }).catch((err) => onLangfuseIngestFailure('trace-end', err))
     }
   }
 
@@ -230,5 +257,5 @@ export async function scoreExistingTrace(
         comment,
       },
     }],
-  })
+  }).catch((err) => onLangfuseIngestFailure(`score-existing:${scoreName}`, err))
 }

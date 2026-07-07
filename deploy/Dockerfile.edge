@@ -1,7 +1,9 @@
 # FILE: Dockerfile.edge
 # PURPOSE: Container for Supabase Edge Functions (Deno runtime)
 
-FROM denoland/deno:2.0.0
+# Base image pinned by digest (OpenSSF Scorecard Pinned-Dependencies). Refresh
+# with `docker buildx imagetools inspect denoland/deno:2.0.0` on upgrade.
+FROM denoland/deno:2.0.0@sha256:675499743d2bc74ad8f4d6c8c65c13b254b8bf039d27769cc840780521d8206d
 
 WORKDIR /app
 COPY supabase/functions /app/functions

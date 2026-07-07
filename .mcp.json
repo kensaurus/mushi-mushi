@@ -1,21 +1,17 @@
 {
-  "_comment": "Public Open Plugins MCP manifest for cursor.directory auto-detection. Uses ${ENV} placeholders only — NO secrets. Install via https://kensaur.us/mushi-mushi/docs/connect or `npx mushi-mushi setup --ide cursor`. Append ?read_only=1 to the hosted URL to hide write tools.",
+  "_comment": "Public Open Plugins MCP manifest for cursor.directory auto-detection. NO secrets. The hosted `mushi` server has no static auth headers on purpose: it speaks real OAuth (authorization code + PKCE), so `claude mcp login mushi` / your client's MCP login opens the console consent page and mints a revocable project API key for you. Prefer that. `mushi-stdio` uses ${ENV:-} placeholders and falls back to ~/.config/mushi/config.json written by `mushi login`. Install via https://kensaur.us/mushi-mushi/docs/connect or `npx mushi-mushi setup --ide cursor`. Append ?read_only=1 to the hosted URL to hide write tools.",
   "mcpServers": {
     "mushi": {
       "type": "http",
-      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs",
-      "headers": {
-        "Authorization": "Bearer ${MUSHI_API_KEY}",
-        "X-Mushi-Project-Id": "${MUSHI_PROJECT_ID}"
-      }
+      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs"
     },
     "mushi-stdio": {
       "type": "stdio",
       "command": "npx",
       "args": ["-y", "@mushi-mushi/mcp@latest"],
       "env": {
-        "MUSHI_API_KEY": "${MUSHI_API_KEY}",
-        "MUSHI_PROJECT_ID": "${MUSHI_PROJECT_ID}",
+        "MUSHI_API_KEY": "${MUSHI_API_KEY:-}",
+        "MUSHI_PROJECT_ID": "${MUSHI_PROJECT_ID:-}",
         "MUSHI_API_ENDPOINT": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api"
       }
     }

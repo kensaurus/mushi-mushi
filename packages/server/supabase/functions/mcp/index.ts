@@ -88,7 +88,9 @@ import {
 import {
   buildSmitheryAuthorizeRedirect,
   buildSmitheryTokenResponse,
+  isSmitheryRedirectUri,
 } from '../_shared/mcp-oauth-smithery-stub.ts'
+import { readOAuthParams } from '../_shared/mcp-oauth-helpers.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -1484,7 +1486,14 @@ async function resolveAuth(req: Request, requestId: string): Promise<CallContext
   const url = new URL(req.url)
   const readOnlyMode = url.searchParams.get('read_only') === '1'
   const features = parseFeaturesParam(url.searchParams.get('features'))
-  const apiKey = req.headers.get('X-Mushi-Api-Key')
+  // Project API keys arrive as X-Mushi-Api-Key (legacy configs) OR as an
+  // OAuth bearer token — the token minted by the /oauth flow IS a `mushi_`
+  // project API key, so both take the same validation path below.
+  const rawAuth = req.headers.get('Authorization')
+  const bearerToken = rawAuth?.startsWith('Bearer ') ? rawAuth.slice('Bearer '.length).trim() : null
+  const apiKey =
+    req.headers.get('X-Mushi-Api-Key') ??
+    (bearerToken?.startsWith('mushi_') ? bearerToken : null)
   if (apiKey) {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -1593,7 +1602,7 @@ async function resolveAuth(req: Request, requestId: string): Promise<CallContext
 
   throw new McpError(
     ERR_INVALID_REQUEST,
-    'Authentication required: send X-Mushi-Api-Key (preferred) or Authorization: Bearer <jwt>',
+    'Authentication required: log in via OAuth (`claude mcp login mushi` / your client\'s MCP login), or send X-Mushi-Api-Key / Authorization: Bearer <mushi_ API key or console JWT>',
   )
 }
 
@@ -1711,6 +1720,58 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Max-Age': '600',
 }
 
+/**
+ * Forward an /oauth/register or /oauth/token POST to the real OAuth
+ * implementation in the api function (api/routes/mcp-oauth.ts). The client
+ * IP is forwarded so the api-side per-IP rate limits key on the caller, not
+ * on this function's egress address.
+ */
+async function proxyMcpOauthPost(
+  req: Request,
+  endpoint: 'register' | 'token',
+  body: string,
+  contentType: string,
+): Promise<Response> {
+  const supabaseOrigin = (Deno.env.get('SUPABASE_URL') ?? '').replace(/\/+$/, '')
+  if (!supabaseOrigin) {
+    return new Response(
+      JSON.stringify({ error: 'server_error', error_description: 'Server not configured for OAuth (SUPABASE_URL missing)' }),
+      { status: 500, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
+    )
+  }
+  const headers: Record<string, string> = { 'Content-Type': contentType }
+  // Rate-limit identity for the api side. cf-connecting-ip is set by the
+  // platform and cannot be spoofed by the caller. The X-Forwarded-For
+  // fallback (non-Cloudflare self-hosts) takes the RIGHTMOST hop: each proxy
+  // appends the peer it actually saw, so the last entry is the only one the
+  // client cannot fabricate. Leftmost is fully attacker-controlled and would
+  // let a client rotate past the register/token throttles.
+  const xff = req.headers.get('x-forwarded-for')?.split(',').map((s) => s.trim()).filter(Boolean)
+  const callerIp = req.headers.get('cf-connecting-ip') ?? (xff && xff[xff.length - 1])
+  if (callerIp) headers['X-Forwarded-For'] = callerIp
+  try {
+    const res = await fetch(`${supabaseOrigin}/functions/v1/api/v1/mcp-oauth/${endpoint}`, {
+      method: 'POST',
+      headers,
+      body,
+    })
+    const text = await res.text()
+    return new Response(text, {
+      status: res.status,
+      headers: {
+        'Content-Type': res.headers.get('content-type') ?? 'application/json',
+        'Cache-Control': 'no-store',
+        ...CORS_HEADERS,
+      },
+    })
+  } catch {
+    return new Response(
+      JSON.stringify({ error: 'temporarily_unavailable', error_description: 'OAuth backend unreachable — try again shortly' }),
+      { status: 503, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
+    )
+  }
+}
+
 function unauthorizedJsonRpc(req: Request, message: string, code = ERR_INVALID_REQUEST): Response {
   const metadataUrl = mcpProtectedResourceMetadataUrl(new URL(req.url))
   return new Response(
@@ -1756,8 +1817,21 @@ async function handler(req: Request): Promise<Response> {
       const metadata = buildOAuthAuthorizationServerMetadata(url)
       return jsonResponse(metadata, 200, { ...MCP_OAUTH_AS_METADATA_HEADERS, ...CORS_HEADERS }, req.method)
     }
-    const authorizeRedirect = buildSmitheryAuthorizeRedirect(url)
-    if (authorizeRedirect) return authorizeRedirect
+    if (url.pathname.includes('/oauth/authorize')) {
+      // Smithery publisher scan short-circuits to the stub; every real MCP
+      // client (claude mcp login, Cursor, …) is handed to the api function's
+      // OAuth authorize endpoint, which validates the request and 302s to
+      // the console consent page.
+      const smitheryRedirect = buildSmitheryAuthorizeRedirect(url)
+      if (smitheryRedirect) return smitheryRedirect
+      const supabaseOrigin = (Deno.env.get('SUPABASE_URL') ?? url.origin).replace(/\/+$/, '')
+      const target = new URL(`${supabaseOrigin}/functions/v1/api/v1/mcp-oauth/authorize`)
+      url.searchParams.forEach((v, k) => target.searchParams.set(k, v))
+      return new Response(null, {
+        status: 302,
+        headers: { Location: target.toString(), ...CORS_HEADERS },
+      })
+    }
     if (oauthOperationalPath(url.pathname)) {
       return jsonResponse(
         JSON.stringify({
@@ -1898,25 +1972,46 @@ async function handler(req: Request): Promise<Response> {
   }
 
   const url = new URL(req.url)
-  const tokenResponse = await buildSmitheryTokenResponse(req, url)
-  if (tokenResponse) {
-    return new Response(tokenResponse.body, {
-      status: tokenResponse.status,
-      headers: { ...Object.fromEntries(tokenResponse.headers), ...CORS_HEADERS },
-    })
+  if (url.pathname.includes('/oauth/token')) {
+    const params = await readOAuthParams(req)
+    // Smithery scanner codes (`mushi-scan-…`) / client_credentials keep the
+    // stub; real authorization codes exchange against the api function.
+    const scanToken = buildSmitheryTokenResponse(params)
+    if (scanToken) {
+      return new Response(scanToken.body, {
+        status: scanToken.status,
+        headers: { ...Object.fromEntries(scanToken.headers), ...CORS_HEADERS },
+      })
+    }
+    const form = new URLSearchParams()
+    params.forEach((v, k) => form.set(k, v))
+    return proxyMcpOauthPost(req, 'token', form.toString(), 'application/x-www-form-urlencoded')
   }
-  // RFC 7591 — Smithery publisher scan POSTs dynamic client registration here.
+  // RFC 7591 dynamic client registration. The Smithery publisher scan
+  // (smithery-only redirect URIs) keeps its deterministic stub client;
+  // everything else registers for real via the api function.
   if (url.pathname.includes('/oauth/register')) {
-    return new Response(
-      JSON.stringify({
-        client_id: 'mushi-hosted-mcp-smithery',
-        token_endpoint_auth_method: 'none',
-        client_id_issued_at: Math.floor(Date.now() / 1000),
-        grant_types: ['authorization_code', 'client_credentials'],
-        response_types: ['code'],
-      }),
-      { status: 201, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
-    )
+    const bodyText = await req.text()
+    let smitheryOnly = false
+    try {
+      const parsed = JSON.parse(bodyText) as { redirect_uris?: unknown }
+      const uris = Array.isArray(parsed.redirect_uris) ? parsed.redirect_uris : []
+      smitheryOnly =
+        uris.length > 0 && uris.every((u) => typeof u === 'string' && isSmitheryRedirectUri(u))
+    } catch { /* malformed body → let the real endpoint reject it */ }
+    if (smitheryOnly) {
+      return new Response(
+        JSON.stringify({
+          client_id: 'mushi-hosted-mcp-smithery',
+          token_endpoint_auth_method: 'none',
+          client_id_issued_at: Math.floor(Date.now() / 1000),
+          grant_types: ['authorization_code', 'client_credentials'],
+          response_types: ['code'],
+        }),
+        { status: 201, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
+      )
+    }
+    return proxyMcpOauthPost(req, 'register', bodyText, 'application/json')
   }
 
   let payload: unknown

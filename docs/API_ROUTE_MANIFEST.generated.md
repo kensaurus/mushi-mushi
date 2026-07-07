@@ -2,17 +2,17 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-07-04 · **502** routes.
+> Generated: 2026-07-07 · **509** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 80 |
+| `adminOrApiKey` | 81 |
 | `apiKeyAuth` | 43 |
-| `jwtAuth` | 320 |
+| `jwtAuth` | 323 |
 | `jwtOrApiKey` | 3 |
-| `unknown` | 56 |
+| `unknown` | 59 |
 
 ## Routes by path
 
@@ -91,6 +91,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/content-quality/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/content-quality.ts` |
 | GET | `/v1/admin/dashboard` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/dashboard.ts` |
 | GET | `/v1/admin/dashboard/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/dashboard.ts` |
+| GET | `/v1/admin/doctor` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/doctor.ts` |
 | GET | `/v1/admin/entitlements` | `jwtAuth` | `packages/server/supabase/functions/api/routes/modernization-health-super.ts` |
 | GET | `/v1/admin/explore/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-codebase.ts` |
 | GET | `/v1/admin/feedback/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
@@ -427,6 +428,12 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/invitations/preview` | `unknown` | `packages/server/supabase/functions/api/routes/organizations.ts` |
 | GET | `/v1/marketplace/plugins` | `unknown` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | POST | `/v1/marketplace/submissions` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
+| POST | `/v1/mcp-oauth/approve` | `jwtAuth` | `packages/server/supabase/functions/api/routes/mcp-oauth.ts` |
+| GET | `/v1/mcp-oauth/authorize` | `unknown` | `packages/server/supabase/functions/api/routes/mcp-oauth.ts` |
+| POST | `/v1/mcp-oauth/deny` | `jwtAuth` | `packages/server/supabase/functions/api/routes/mcp-oauth.ts` |
+| POST | `/v1/mcp-oauth/register` | `unknown` | `packages/server/supabase/functions/api/routes/mcp-oauth.ts` |
+| GET | `/v1/mcp-oauth/request` | `jwtAuth` | `packages/server/supabase/functions/api/routes/mcp-oauth.ts` |
+| POST | `/v1/mcp-oauth/token` | `unknown` | `packages/server/supabase/functions/api/routes/mcp-oauth.ts` |
 | GET | `/v1/me/tester-status` | `jwtAuth` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | GET | `/v1/notifications` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/notifications/:id/read` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |

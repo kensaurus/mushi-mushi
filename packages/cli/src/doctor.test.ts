@@ -9,9 +9,11 @@ import {
   checkCliAuthPath,
   checkCliConfig,
   checkEndpointReachability,
+  checkPipelineDoctor,
   checkServerPreflight,
   runDoctor,
   formatDoctorResult,
+  fixHintForCheck,
   type DoctorCliConfig,
 } from './doctor.js';
 
@@ -352,5 +354,66 @@ describe('formatDoctorResult', () => {
     expect(result).toContain('All checks passed');
     expect(result).toContain('advisory warning');
     expect(result).not.toContain('check failed');
+  });
+});
+
+describe('checkPipelineDoctor', () => {
+  const config: DoctorCliConfig = {
+    endpoint: 'https://x.supabase.co/functions/v1/api',
+    apiKey: 'mushi_test',
+    projectId: '00000000-0000-0000-0000-000000000000',
+  };
+
+  it('maps server pass/warn/fail statuses onto DoctorCheck semantics', async () => {
+    const doFetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          ok: true,
+          data: {
+            checks: [
+              { name: 'recovery_cron', status: 'pass', summary: 'healthy' },
+              { name: 'stranded_reports', status: 'warn', summary: '3 stuck', hint: 'check logs' },
+              { name: 'recovery_token', status: 'fail', summary: 'missing', hint: 'set token' },
+            ],
+          },
+        }),
+        { status: 200 },
+      ),
+    ) as unknown as typeof fetch;
+
+    const checks = await checkPipelineDoctor(config, doFetch);
+    expect(checks).toHaveLength(3);
+    expect(checks[0]).toMatchObject({ name: '[pipeline] recovery_cron', ok: true, warn: false });
+    expect(checks[1]).toMatchObject({ name: '[pipeline] stranded_reports', ok: true, warn: true });
+    expect(checks[1].detail).toContain('check logs');
+    expect(checks[2]).toMatchObject({ name: '[pipeline] recovery_token', ok: false });
+  });
+
+  it('skips quietly on 403 (ingest-only key)', async () => {
+    const doFetch = vi.fn(async () => new Response('forbidden', { status: 403 })) as unknown as typeof fetch;
+    expect(await checkPipelineDoctor(config, doFetch)).toEqual([]);
+  });
+
+  it('degrades to an advisory warning when the endpoint is unreachable', async () => {
+    const doFetch = vi.fn(async () => {
+      throw new Error('network down');
+    }) as unknown as typeof fetch;
+    const checks = await checkPipelineDoctor(config, doFetch);
+    expect(checks).toHaveLength(1);
+    expect(checks[0]).toMatchObject({ ok: true, warn: true });
+  });
+
+  it('returns nothing without credentials', async () => {
+    const doFetch = vi.fn() as unknown as typeof fetch;
+    expect(await checkPipelineDoctor({}, doFetch)).toEqual([]);
+    expect(doFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('fixHintForCheck', () => {
+  it('returns a hint for known checks and prefixed categories', () => {
+    expect(fixHintForCheck('API key configured')).toContain('mushi login');
+    expect(fixHintForCheck('[ingest] anything')).toBeTruthy();
+    expect(fixHintForCheck('totally unknown check')).toBeUndefined();
   });
 });

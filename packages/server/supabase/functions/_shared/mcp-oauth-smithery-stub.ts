@@ -1,6 +1,11 @@
 /**
  * Minimal OAuth authorize + token stubs for Smithery publisher verification.
- * Mushi is API-key auth for real users; this satisfies Smithery's OAuth scan only.
+ *
+ * These only short-circuit for Smithery's scanner (smithery.ai redirect URIs
+ * and `mushi-scan-` codes / client_credentials grants). Every other OAuth
+ * request falls through (`null`) to the REAL authorization-code + PKCE flow
+ * served by api/routes/mcp-oauth.ts, which is what `claude mcp login` and
+ * other MCP clients use.
  */
 
 const SMITHERY_REDIRECT_PREFIXES = ['https://smithery.run/', 'https://smithery.ai/']
@@ -17,11 +22,11 @@ export function buildSmitheryAuthorizeRedirect(url: URL): Response | null {
   const state = url.searchParams.get('state')
   const responseType = url.searchParams.get('response_type')
 
+  // Not a Smithery scan — fall through to the real authorization flow.
+  if (!redirectUri || !isSmitheryRedirectUri(redirectUri)) return null
+
   if (responseType && responseType !== 'code') {
     return jsonError('unsupported_response_type', 'Only response_type=code is supported for publisher scan', 400)
-  }
-  if (!redirectUri || !isSmitheryRedirectUri(redirectUri)) {
-    return jsonError('invalid_redirect_uri', 'redirect_uri must be a Smithery callback URL', 400)
   }
 
   const dest = new URL(redirectUri)
@@ -31,48 +36,30 @@ export function buildSmitheryAuthorizeRedirect(url: URL): Response | null {
   return Response.redirect(dest.toString(), 302)
 }
 
-/** Token endpoint — authorization_code + client_credentials for publisher scan. */
-export async function buildSmitheryTokenResponse(req: Request, url: URL): Promise<Response | null> {
-  if (!url.pathname.includes('/oauth/token')) return null
-
-  const params = await readOAuthForm(req)
+/**
+ * Token endpoint stub — ONLY answers the publisher scan (client_credentials,
+ * or an authorization_code minted by the authorize stub above, recognizable
+ * by its `mushi-scan-` prefix). Real authorization codes (64-char hex from
+ * mcp-oauth.ts) return null so the caller proxies to the real token endpoint.
+ */
+export function buildSmitheryTokenResponse(params: Map<string, string>): Response | null {
   const grantType = params.get('grant_type')
+  const code = params.get('code') ?? ''
 
-  if (grantType === 'authorization_code' || grantType === 'client_credentials') {
-    return new Response(
-      JSON.stringify({
-        access_token: 'mushi-smithery-publisher-scan',
-        token_type: 'Bearer',
-        expires_in: 3600,
-        scope: 'mcp:read mcp:write',
-      }),
-      { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } },
-    )
-  }
+  const isScan =
+    grantType === 'client_credentials' ||
+    (grantType === 'authorization_code' && code.startsWith('mushi-scan-'))
+  if (!isScan) return null
 
-  return jsonError('unsupported_grant_type', `grant_type ${grantType ?? 'missing'} not supported`, 400)
-}
-
-async function readOAuthForm(req: Request): Promise<Map<string, string>> {
-  const out = new Map<string, string>()
-  const ct = req.headers.get('content-type') ?? ''
-  if (ct.includes('application/json')) {
-    try {
-      const j = (await req.json()) as Record<string, unknown>
-      for (const [k, v] of Object.entries(j)) {
-        if (typeof v === 'string') out.set(k, v)
-      }
-    } catch { /* empty */ }
-    return out
-  }
-  try {
-    const text = await req.text()
-    for (const part of text.split('&')) {
-      const [k, v] = part.split('=').map((s) => decodeURIComponent(s.replace(/\+/g, ' ')))
-      if (k) out.set(k, v ?? '')
-    }
-  } catch { /* empty */ }
-  return out
+  return new Response(
+    JSON.stringify({
+      access_token: 'mushi-smithery-publisher-scan',
+      token_type: 'Bearer',
+      expires_in: 3600,
+      scope: 'mcp:read mcp:write',
+    }),
+    { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } },
+  )
 }
 
 function jsonError(error: string, description: string, status: number): Response {
