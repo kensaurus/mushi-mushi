@@ -1,0 +1,36 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - mushiApiKey
+    properties:
+      mushiApiKey:
+        type: string
+        description: >-
+          Project ingest/admin API key minted in the Mushi console
+          (Settings → API Keys). Scope mcp:read for triage, mcp:write to
+          dispatch fixes.
+      mushiProjectId:
+        type: string
+        description: Project UUID the key belongs to. Optional for single-project account keys.
+      mushiApiEndpoint:
+        type: string
+        description: Override the API base URL (self-hosted deployments). Defaults to the hosted Mushi Cloud endpoint.
+      mushiFeatures:
+        type: string
+        description: >-
+          Comma-separated feature groups to expose
+          (triage,fixes,inventory,setup,docs). Defaults to the lean
+          catalog; use 'all' for the full tool set.
+  commandFunction: |-
+    (config) => ({
+      command: 'npx',
+      args: ['-y', '@mushi-mushi/mcp@latest'],
+      env: {
+        MUSHI_API_KEY: config.mushiApiKey,
+        ...(config.mushiProjectId ? { MUSHI_PROJECT_ID: config.mushiProjectId } : {}),
+        ...(config.mushiApiEndpoint ? { MUSHI_API_ENDPOINT: config.mushiApiEndpoint } : {}),
+        ...(config.mushiFeatures ? { MUSHI_FEATURES: config.mushiFeatures } : {}),
+      },
+    })

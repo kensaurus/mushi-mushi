@@ -341,6 +341,14 @@ Latest tag: `v1.0.2`
 - `@mushi-mushi/vue` → 1.0.2
 - `@mushi-mushi/web` → 1.0.0
 
+## v0.25.x
+
+Latest tag: `v0.25.0`
+
+### Packages bumped
+
+- `@mushi-mushi/cli` → 0.25.0
+
 ## v0.24.x
 
 Latest tag: `v0.24.0`
@@ -667,7 +675,7 @@ Latest tag: `v0.8.4`
 
 ## v0.7.x
 
-Latest tag: `v0.7.16`
+Latest tag: `v0.7.17`
 
 ### Highlights
 
@@ -697,7 +705,7 @@ Latest tag: `v0.7.16`
 - `@mushi-mushi/svelte` → 0.7.0
 - `@mushi-mushi/vue` → 0.7.0
 - `@mushi-mushi/web` → 0.7.0
-- `mushi-mushi` → 0.7.16
+- `mushi-mushi` → 0.7.17
 
 ## v0.6.x
 
@@ -730,7 +738,7 @@ Latest tag: `v0.6.5`
 
 ## v0.5.x
 
-Latest tag: `v0.5.21`
+Latest tag: `v0.5.22`
 
 ### Highlights
 
@@ -759,7 +767,7 @@ Latest tag: `v0.5.21`
 - `@mushi-mushi/plugin-sdk` → 0.5.0
 - `@mushi-mushi/react` → 0.5.0
 - `@mushi-mushi/web` → 0.5.1
-- `create-mushi-mushi` → 0.5.21
+- `create-mushi-mushi` → 0.5.22
 - `mushi-mushi` → 0.5.2
 
 ## v0.4.x
