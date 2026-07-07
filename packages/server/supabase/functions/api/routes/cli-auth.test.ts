@@ -17,9 +17,25 @@ Deno.test('extractClientIp prefers cf-connecting-ip over x-forwarded-for', () =>
   assertEquals(extractClientIp(c), '1.2.3.4')
 })
 
-Deno.test('extractClientIp falls back to the first x-forwarded-for hop', () => {
+Deno.test('extractClientIp uses the RIGHTMOST x-forwarded-for hop (spoof-resistant)', () => {
+  // Each proxy appends the peer it actually saw, so the last entry is the only
+  // one the client cannot fabricate. The leftmost entry is fully attacker-
+  // controlled and must NOT be used to key the rate limiter.
   const c = fakeContext({ 'x-forwarded-for': '9.8.7.6, 10.0.0.1' })
-  assertEquals(extractClientIp(c), '9.8.7.6')
+  assertEquals(extractClientIp(c), '10.0.0.1')
+})
+
+Deno.test('extractClientIp ignores a client-spoofed leftmost x-forwarded-for entry', () => {
+  // A caller prepending a fake IP to rotate past the per-IP throttle must land
+  // in the same bucket as the same caller sending no fake prefix.
+  const spoofed = fakeContext({ 'x-forwarded-for': '203.0.113.9, 198.51.100.7' })
+  const honest = fakeContext({ 'x-forwarded-for': '198.51.100.7' })
+  assertEquals(extractClientIp(spoofed), extractClientIp(honest))
+})
+
+Deno.test('extractClientIp trims whitespace and skips empty x-forwarded-for entries', () => {
+  const c = fakeContext({ 'x-forwarded-for': ' 9.8.7.6 ,  10.0.0.1 ,' })
+  assertEquals(extractClientIp(c), '10.0.0.1')
 })
 
 Deno.test('extractClientIp falls back to "unknown" when no IP header is present', () => {

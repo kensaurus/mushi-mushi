@@ -136,14 +136,23 @@ const authRedirect = await fetch(
   `${HOSTED}/oauth/authorize?response_type=code&client_id=mushi-hosted-mcp-smithery&redirect_uri=${encodeURIComponent('https://smithery.run/oauth/callback')}&state=verify&code_challenge=abc&code_challenge_method=S256`,
   { redirect: 'manual' },
 )
-const authOk = authRedirect.status === 302 && (authRedirect.headers.get('location') ?? '').includes('smithery.run/oauth/callback')
+const authLocation = authRedirect.headers.get('location') ?? ''
+const authOk = authRedirect.status === 302 && authLocation.includes('smithery.run/oauth/callback')
 console.log(`${authOk ? '✓' : '✗'} OAuth authorize → Smithery callback (${authRedirect.status})`)
 if (!authOk) failed++
 
+// Exchange the mushi-scan-* code the authorize stub just minted — the exact
+// flow Smithery's scanner follows. Codes without the mushi-scan- prefix fall
+// through to the real PKCE token endpoint, which rejects a bare exchange.
+const scanCode = authOk ? new URL(authLocation).searchParams.get('code') ?? '' : ''
 const tokenRes = await fetch(`${HOSTED}/oauth/token`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  body: 'grant_type=authorization_code&code=test&redirect_uri=https://smithery.run/oauth/callback',
+  body: new URLSearchParams({
+    grant_type: 'authorization_code',
+    code: scanCode,
+    redirect_uri: 'https://smithery.run/oauth/callback',
+  }).toString(),
 })
 const tokenText = await tokenRes.text()
 const tokenOk = tokenRes.status === 200 && tokenText.includes('access_token')
@@ -165,7 +174,11 @@ if (!regOk) {
 const regPost = await fetch(`${HOSTED}/oauth/register`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ client_name: 'verify-hosted-mcp' }),
+  // RFC 7591: redirect_uris is required by the real register route.
+  body: JSON.stringify({
+    client_name: 'verify-hosted-mcp',
+    redirect_uris: ['https://smithery.run/oauth/callback'],
+  }),
 })
 const regPostText = await regPost.text()
 const regPostOk = regPost.status === 201 && regPostText.includes('client_id')

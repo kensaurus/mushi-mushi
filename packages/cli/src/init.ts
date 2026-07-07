@@ -646,7 +646,15 @@ async function writeEnvFile(
   const targetPath = join(cwd, target);
   const newVars = envVarsToWrite(apiKey, projectId, framework, endpoint);
 
-  const existing = existsSync(targetPath) ? readFileSync(targetPath, 'utf-8') : '';
+  // Read-then-branch instead of existsSync()-then-readFileSync(): a missing
+  // file just yields '' here, avoiding the check→use TOCTOU window CodeQL
+  // flags as js/file-system-race (same pattern as connect.ts).
+  let existing = '';
+  try {
+    existing = readFileSync(targetPath, 'utf-8');
+  } catch {
+    existing = '';
+  }
   if (existing.includes('MUSHI_PROJECT_ID')) {
     let shouldOverwrite = overwrite;
     if (!shouldOverwrite) {
