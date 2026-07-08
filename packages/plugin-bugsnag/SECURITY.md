@@ -25,7 +25,7 @@ Use either channel below:
    <https://github.com/kensaurus/mushi-mushi/security/advisories/new>
    Routes the report into a private advisory with built-in CVE issuance,
    patch coordination, and contributor-credit workflow.
-2. **Email** — `security@kensaur.us`, subject prefix `[mushi-security]`.
+2. **Email** — `kensaurus@gmail.com`, subject prefix `[mushi-security]`.
    PGP welcome but not required.
 
 Include:
@@ -111,7 +111,7 @@ What we treat as in-scope attacker capabilities, and what we don't.
 | User pasting a Stripe / OpenAI / GitHub PAT into a bug report | ✅ | PII scrubber redacts ~15 vendor token formats client-side before the report leaves the device. Mirrors `packages/core/src/pii-scrubber.ts` across iOS, Android, Flutter, React Native. |
 | Stolen end-user device with the SDK installed | ⚠️ partial | Offline queue is AsyncStorage / Keychain / SharedPreferences — no app-level encryption beyond the OS default. Reports waiting to flush are vulnerable to a forensic attacker. |
 | Compromised Supabase service-role key | ❌ | Treated as a tier-0 incident; would require key rotation and audit-log forensics. Not defendable in software. |
-| Compromise of `security@kensaur.us` mail account | ❌ | Treated as a project-fork event; downstream consumers should pin to the last known-good version and follow the new release channel. |
+| Compromise of `kensaurus@gmail.com` mail account | ❌ | Treated as a project-fork event; downstream consumers should pin to the last known-good version and follow the new release channel. |
 | Physical / OS-level attacker on an end-user device | ❌ | Out of scope. |
 | Malicious fork using the Mushi name to ship malware | ❌ (technical) ✅ (legal) | The MIT / AGPLv3 grant lets the fork exist; the trademark policy (`TRADEMARK.md`) makes shipping it under the Mushi name an infringement we will pursue. |
 
@@ -290,7 +290,7 @@ npm audit signatures
 
 If `npm audit signatures` reports any `@mushi-mushi/*` package as unsigned
 or with an invalid attestation, **stop the install and email
-security@kensaur.us immediately** — that's the symptom of either a
+kensaurus@gmail.com immediately** — that's the symptom of either a
 registry compromise or a tampered tarball, and we want to know within
 hours, not days.
 
@@ -300,7 +300,7 @@ hours, not days.
   security of your `node_modules`, build pipeline, and runtime is your
   responsibility. The hardening above protects the path from source to
   registry; it cannot protect a tarball after it has been downloaded.
-- **Compromise of `security@kensaur.us`.** A trusted-publisher rule still
+- **Compromise of `kensaurus@gmail.com`.** A trusted-publisher rule still
   lets the legitimate maintainer publish from any branch they push. If
   you find yourself with admin access to this repo, treat
   `.github/workflows/release.yml` as a tier-0 secret.

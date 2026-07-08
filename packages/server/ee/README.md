@@ -73,7 +73,7 @@ phone-home, air-gapped deployments work. Maintainer tooling:
 
 Hosted **Mushi Cloud Enterprise** includes the key automatically — nothing to
 configure. Self-hosters who need EE features in production obtain a key from
-`support@kensaur.us`.
+`kensaurus@gmail.com`.
 
 ## What is NOT EE (always AGPL core, always free)
 
