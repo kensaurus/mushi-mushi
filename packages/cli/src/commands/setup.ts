@@ -165,11 +165,19 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
     // opts back into the local subprocess entry (headless environments
     // can't open a browser; --all-projects needs one keyed entry per
     // project, which OAuth's consent-time project pick doesn't cover).
+    // The hosted MCP function is a sibling of the API function:
+    // …/functions/v1/api → …/functions/v1/mcp. If the configured endpoint
+    // does not end in /api (assertEndpoint allows arbitrary paths), no
+    // sibling URL can be derived — writing the API URL as an MCP server
+    // would break sign-in, so fall back to the stdio entry instead.
+    const canDeriveHostedUrl = /\/api\/?$/.test(config.endpoint ?? '')
     const useHostedOauth =
       (opts.ide === 'cursor' || opts.ide === 'claude') &&
-      !opts.stdio && !opts.ci && !opts.allProjects
-    // The hosted MCP function is a sibling of the API function:
-    // …/functions/v1/api → …/functions/v1/mcp
+      !opts.stdio && !opts.ci && !opts.allProjects && canDeriveHostedUrl
+    if ((opts.ide === 'cursor' || opts.ide === 'claude') &&
+        !opts.stdio && !opts.ci && !opts.allProjects && !canDeriveHostedUrl) {
+      console.log('Note: endpoint does not end in /api — cannot derive the hosted MCP URL; writing a local stdio entry instead.')
+    }
     const hostedMcpUrl = (config.endpoint ?? '').replace(/\/api\/?$/, '/mcp')
     // NO Authorization header here — a static header tells the client OAuth
     // isn't needed and disables the login flow (see mcp-config.ts).
