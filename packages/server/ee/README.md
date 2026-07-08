@@ -59,7 +59,7 @@ production**, free to read and to run for development/evaluation:
 
 Hosted **Mushi Cloud Enterprise** includes the key automatically — nothing to
 configure. Self-hosters who need EE features in production obtain a key from
-`kensaurus@gmail.com`.
+`support@kensaur.us`.
 
 ## What is NOT EE (always AGPL core, always free)
 

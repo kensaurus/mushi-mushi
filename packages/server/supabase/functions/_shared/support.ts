@@ -14,7 +14,7 @@
  * mail somewhere a human reads.
  */
 
-const DEFAULT_SUPPORT_EMAIL = 'kensaurus@gmail.com'
+const DEFAULT_SUPPORT_EMAIL = 'support@kensaur.us'
 const DEFAULT_SUPPORT_URL = 'https://kensaur.us/mushi-mushi/docs'
 
 export const SUPPORT_EMAIL =

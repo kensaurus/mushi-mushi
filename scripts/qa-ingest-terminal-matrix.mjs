@@ -137,7 +137,7 @@ try {
   const gi = readFileSync(join(tmp, '.gitignore'), 'utf8')
   if (existsSync(mcpPath)) {
     const mcp = readFileSync(mcpPath, 'utf8')
-    record('CLI connect mcp package name', mcp.includes('@mushi-mushi/mcp@latest'))
+    record('CLI connect mcp package name', /@mushi-mushi\/mcp@\d+\.\d+\.\d+/.test(mcp))
     record('CLI connect gitignore mcp.json', gi.includes('.cursor/mcp.json'))
   } else {
     record('CLI connect writes mcp.json', false)

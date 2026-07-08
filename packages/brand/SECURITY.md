@@ -19,7 +19,7 @@ If you discover a security vulnerability, please report it responsibly.
 
 **Do NOT open a public GitHub issue.**
 
-Instead, email: **kensaurus@gmail.com**
+Instead, email: **security@kensaur.us**
 
 Include:
 - Description of the vulnerability
@@ -104,7 +104,7 @@ npm audit signatures
 
 If `npm audit signatures` reports any `@mushi-mushi/*` package as unsigned
 or with an invalid attestation, **stop the install and email
-kensaurus@gmail.com immediately** — that's the symptom of either a
+security@kensaur.us immediately** — that's the symptom of either a
 registry compromise or a tampered tarball, and we want to know within
 hours, not days.
 
@@ -114,7 +114,7 @@ hours, not days.
   security of your `node_modules`, build pipeline, and runtime is your
   responsibility. The hardening above protects the path from source to
   registry; it cannot protect a tarball after it has been downloaded.
-- **Compromise of `kensaurus@gmail.com`.** A trusted-publisher rule still
+- **Compromise of `security@kensaur.us`.** A trusted-publisher rule still
   lets the legitimate maintainer publish from any branch they push. If
   you find yourself with admin access to this repo, treat
   `.github/workflows/release.yml` as a tier-0 secret.
