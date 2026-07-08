@@ -426,7 +426,11 @@ async function runBrowserSignIn(
       const createSpin = p.spinner();
       createSpin.start(`Creating "${name.trim()}"…`);
       try {
-        const created = await createProject(endpoint, cliToken, name.trim());
+        // Least-privilege wizard key: SDK ingest + MCP read. Admin writes
+        // require `mushi login --upgrade-scope` (matches login.ts).
+        const created = await createProject(endpoint, cliToken, name.trim(), {
+          scopes: ['report:write', 'mcp:read'],
+        });
         projectId = created.id;
         apiKey = created.apiKey ?? undefined;
         createSpin.stop(`Created project "${created.name}".`);
@@ -446,7 +450,10 @@ async function runBrowserSignIn(
     const keySpin = p.spinner();
     keySpin.start('Minting SDK key…');
     try {
-      apiKey = await mintProjectKey(endpoint, cliToken, projectId);
+      // Least-privilege wizard key: SDK ingest + MCP read (see login.ts).
+      apiKey = await mintProjectKey(endpoint, cliToken, projectId, {
+        scopes: ['report:write', 'mcp:read'],
+      });
       keySpin.stop('SDK key ready.');
     } catch (err) {
       keySpin.stop('Could not mint an API key.');

@@ -53,7 +53,7 @@ export function requireEeLicense(feature: string) {
           `[ee-license] ${feature}: running in EVAL mode (${status.reason}). ` +
             'Enterprise features are licensed for development, testing, and evaluation only. ' +
             'Production Use requires MUSHI_EE_LICENSE_KEY — see packages/server/ee/LICENSE ' +
-            'or contact support@kensaur.us.',
+            'or contact kensaurus@gmail.com.',
         )
       }
     }

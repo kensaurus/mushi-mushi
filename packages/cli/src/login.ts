@@ -245,6 +245,16 @@ export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
   let chosenProjectId = projectId
   let chosenProjectName: string | undefined
 
+  // Least-privilege default: the everyday key covers SDK ingest + MCP read
+  // tools. mcp:write (billing cap, pipeline start, fix merge — the
+  // money-moving admin surface) is an explicit opt-in via --upgrade-scope,
+  // so a leaked mcp.json or .env can't merge fixes or change billing.
+  // Applies to BOTH the create-project auto-mint and the select-project
+  // mint below, so the post-login scope output is always accurate.
+  const mintScopes: readonly string[] = opts.upgradeScope
+    ? ['report:write', 'mcp:read', 'mcp:write']
+    : ['report:write', 'mcp:read']
+
   if (!chosenProjectId) {
     const { createInterface } = await import('node:readline')
     const rl = createInterface({ input: process.stdin, output: process.stdout })
@@ -264,7 +274,7 @@ export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
       chosenProjectName = choice.name
     } else {
       try {
-        const created = await createProject(endpoint, cliToken, choice.name)
+        const created = await createProject(endpoint, cliToken, choice.name, { scopes: mintScopes })
         chosenProjectId = created.id
         chosenProjectName = created.name
         apiKey = created.apiKey ?? undefined
@@ -276,13 +286,6 @@ export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
     }
   }
 
-  // Least-privilege default: the everyday key covers SDK ingest + MCP read
-  // tools. mcp:write (billing cap, pipeline start, fix merge — the
-  // money-moving admin surface) is an explicit opt-in via --upgrade-scope,
-  // so a leaked mcp.json or .env can't merge fixes or change billing.
-  const mintScopes: readonly string[] = opts.upgradeScope
-    ? ['report:write', 'mcp:read', 'mcp:write']
-    : ['report:write', 'mcp:read']
   if (!apiKey && chosenProjectId) {
     try {
       apiKey = (await mintProjectKey(endpoint, cliToken, chosenProjectId, { scopes: mintScopes })) ?? undefined

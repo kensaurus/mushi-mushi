@@ -24,13 +24,14 @@
  */
 
 /**
- * Maintainer's Ed25519 public key (base64url, 32 raw bytes). Placeholder until
- * the first real keypair is generated with:
- *   node scripts/ee-license-tool.mjs keygen
- * While this is the all-zeros placeholder, NO license can verify — every
- * deployment runs in eval mode, which is the correct conservative default.
+ * Maintainer's Ed25519 public key (base64url, 32 raw bytes), generated
+ * 2026-07-08 via `node scripts/ee-license-tool.mjs keygen`. The matching
+ * private key lives only in the maintainer's password manager — licenses are
+ * minted with `node scripts/ee-license-tool.mjs sign <priv> <org> <exp>`.
+ * Rotating the keypair (re-run keygen) invalidates all previously issued
+ * licenses, so treat rotation as a customer-impacting event.
  */
-export const EE_LICENSE_PUBLIC_KEY_B64URL = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+export const EE_LICENSE_PUBLIC_KEY_B64URL = 'yxHAs8nDQq9v30yjp8ILcme1MpfhLh83wGtl67EJHvQ'
 
 export type EeStatus =
   | { mode: 'licensed'; org: string; expiresAt: string }

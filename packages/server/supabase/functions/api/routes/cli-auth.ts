@@ -613,7 +613,7 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
   // Same auto-mint pattern as POST /v1/admin/projects.
   app.post('/v1/cli/projects', cliTokenAuth, async (c) => {
     const userId = c.get('userId') as string
-    const body = (await c.req.json().catch(() => ({}))) as { name?: string }
+    const body = (await c.req.json().catch(() => ({}))) as { name?: string; scopes?: unknown }
     const name = typeof body.name === 'string' ? body.name.trim() : ''
 
     if (!name) {
@@ -621,6 +621,31 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
         { ok: false, error: { code: 'VALIDATION_ERROR', message: 'name is required' } },
         400,
       )
+    }
+
+    // Optional narrowing of the auto-minted key, mirroring the mint endpoint
+    // below: requested scopes must be a non-empty subset of the wizard's full
+    // set — anything else is a 400, never a silent widen. Default unchanged.
+    const FULL_WIZARD_SCOPES = ['report:write', 'mcp:read', 'mcp:write'] as const
+    let requestedScopes: readonly string[] | null = null
+    if (body.scopes !== undefined) {
+      if (
+        !Array.isArray(body.scopes) ||
+        body.scopes.length === 0 ||
+        !body.scopes.every((s) => typeof s === 'string' && (FULL_WIZARD_SCOPES as readonly string[]).includes(s))
+      ) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'INVALID_SCOPES',
+              message: `scopes must be a non-empty subset of: ${FULL_WIZARD_SCOPES.join(', ')}`,
+            },
+          },
+          400,
+        )
+      }
+      requestedScopes = [...new Set(body.scopes as string[])]
     }
 
     const db = getServiceClient()
@@ -671,7 +696,7 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
     // start`, and `mushi fixes merge`. mcp:write implies mcp:read at the gate, but
     // both are listed for explicit auditability. This endpoint is owner-gated, so
     // the key never carries more than the authenticated owner already has.
-    const WIZARD_SCOPES = ['report:write', 'mcp:read', 'mcp:write'] as const
+    const WIZARD_SCOPES = requestedScopes ?? FULL_WIZARD_SCOPES
     const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`
     const prefix = rawKey.slice(0, 12)
     const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawKey))

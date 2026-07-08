@@ -85,11 +85,29 @@ if (cmd === 'verify') {
     console.error('malformed license')
     process.exit(1)
   }
-  const key = await subtle.importKey('raw', fromB64url(pub), { name: 'Ed25519' }, false, ['verify'])
-  const ok = await subtle.verify('Ed25519', key, fromB64url(parts[1]), fromB64url(parts[0]))
-  const payload = JSON.parse(fromB64url(parts[0]).toString('utf8'))
-  console.log(ok ? `VALID — org=${payload.org} exp=${payload.exp}` : 'INVALID SIGNATURE')
-  process.exit(ok ? 0 : 1)
+  let ok = false
+  try {
+    const key = await subtle.importKey('raw', fromB64url(pub), { name: 'Ed25519' }, false, ['verify'])
+    ok = await subtle.verify('Ed25519', key, fromB64url(parts[1]), fromB64url(parts[0]))
+  } catch {
+    console.error('INVALID SIGNATURE (malformed key or signature encoding)')
+    process.exit(1)
+  }
+  if (!ok) {
+    console.error('INVALID SIGNATURE')
+    process.exit(1)
+  }
+  // Parse only after the signature checks out — a tampered payload must not
+  // crash the tool before the verdict is printed.
+  let payload
+  try {
+    payload = JSON.parse(fromB64url(parts[0]).toString('utf8'))
+  } catch {
+    console.error('VALID signature but INVALID payload (not JSON)')
+    process.exit(1)
+  }
+  console.log(`VALID — org=${payload.org} exp=${payload.exp}`)
+  process.exit(0)
 }
 
 console.error('usage: ee-license-tool.mjs keygen | sign … | verify …')

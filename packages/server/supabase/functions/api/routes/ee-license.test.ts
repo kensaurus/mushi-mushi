@@ -77,9 +77,10 @@ Deno.test('tampered payload → eval/bad-signature', async () => {
   )
 })
 
-Deno.test('default embedded placeholder public key verifies nothing', async () => {
+Deno.test('a license signed by a foreign keypair stays eval under the embedded public key', async () => {
   const { licenseKey } = await makeSignedLicense({ org: 'Acme', exp: '2030-01-01' })
-  // No publicKey argument → uses the embedded placeholder → must stay eval.
+  // No publicKey argument → verifies against the embedded maintainer key,
+  // which did not sign this → must stay eval.
   const status = await verifyEeLicense(licenseKey)
   assertEquals(status.mode, 'eval')
 })
