@@ -62,7 +62,7 @@ import {
 import { MCP_CLIENTS, MCP_PIN_SPEC } from '@mushi-mushi/mcp/clients'
 import { ClientConnectButton } from '../components/ClientConnectButton'
 import { McpAccountKeyCard } from '../components/McpAccountKeyCard'
-import { CHIP_TONE } from '../lib/chipTone'
+import { CHIP_TONE, LINK_ACCENT } from '../lib/chipTone'
 
 const CURSOR_CLIENT = MCP_CLIENTS.find((c) => c.id === 'cursor')!
 const VSCODE_CLIENT = MCP_CLIENTS.find((c) => c.id === 'vscode')!
@@ -793,13 +793,15 @@ export function McpPage() {
                 </div>
               ))}
             </div>
-            <button
+            <Btn
               type="button"
+              size="sm"
+              variant="ghost"
               onClick={() => setTab('examples')}
-              className="mt-2 text-2xs text-brand hover:underline"
+              className="mt-2 !px-0 !py-0 text-2xs"
             >
               See all {USE_CASES.length} examples →
-            </button>
+            </Btn>
           </div>
 
           {/* RecommendedAction is shown for all modes — every user benefits from a
@@ -1167,7 +1169,7 @@ export function McpPage() {
                   </Btn>
                   <Link
                     to="/docs-bridge?topic=cli-setup"
-                    className="text-xs text-brand hover:underline"
+                    className={`text-xs ${LINK_ACCENT}`}
                   >
                     CLI: mushi setup --ide cursor
                   </Link>

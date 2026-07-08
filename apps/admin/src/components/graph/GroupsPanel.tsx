@@ -128,7 +128,7 @@ export function GroupsPanel() {
                       {firstReport && (
                         <Link
                           to={`/reports/${firstReport.id}`}
-                          className="text-brand hover:text-brand-hover text-2xs"
+                          className="text-accent-foreground hover:text-accent text-2xs"
                         >
                           View
                         </Link>

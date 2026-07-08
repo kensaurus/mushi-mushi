@@ -283,7 +283,7 @@ export function SkillPipelinesPage() {
             Skill pipelines attach cursor-kenji workflows to bug reports. Select a project in the header, then sync skill sources or start a handoff run.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Link to="/onboarding" className="text-xs text-brand underline">Open setup cockpit</Link>
+            <Link to="/onboarding" className="text-xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">Open setup cockpit</Link>
             <Link to="/skills?tab=sources" className="text-xs text-fg-muted underline">Manage skill sources</Link>
           </div>
         </Card>
@@ -403,7 +403,7 @@ function SkillDetailPanel({
       <div className="border-t border-edge-subtle pt-3 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <p className="text-2xs font-semibold text-fg">Apply to a report</p>
-          <Link to="/reports" className="text-2xs text-brand hover:underline">Browse reports →</Link>
+          <Link to="/reports" className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">Browse reports →</Link>
         </div>
         <div className="space-y-1">
           <label className="text-2xs text-fg-muted" htmlFor={embedded ? 'skill-report-id-drawer' : 'skill-report-id'}>
@@ -436,13 +436,13 @@ function SkillDetailPanel({
         {mode === 'cloud' && cloudReadiness && !cloudReadiness.cloudReady ? (
           <HelpBanner tone="neutral" className="rounded-lg">
             Cloud mode needs a Cursor API key and GitHub repo URL.{' '}
-            <Link to="/integrations/config#cursor_cloud" className="text-brand hover:underline">
+            <Link to="/integrations/config#cursor_cloud" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
               Open Integrations → Cursor Cloud
             </Link>
             {!cloudReadiness.githubRepoConfigured ? (
               <>
                 {' '}and{' '}
-                <Link to="/integrations/config#github" className="text-brand hover:underline">
+                <Link to="/integrations/config#github" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
                   GitHub repo
                 </Link>
               </>
@@ -464,7 +464,7 @@ function SkillDetailPanel({
         {!reportId ? (
           <p className="text-2xs text-fg-faint">
             Tip: paste a report ID above so the skill gets your exact bug context. Find IDs in{' '}
-            <Link to="/reports" className="text-brand hover:underline">Reports</Link>.
+            <Link to="/reports" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">Reports</Link>.
           </p>
         ) : null}
       </div>
@@ -844,7 +844,7 @@ function PipelinesTab({
               <p className="font-semibold text-fg text-2xs uppercase tracking-wide">How to start your first run</p>
               <ol className="list-decimal pl-4 space-y-1 text-fg-secondary">
                 <li>Open a report and copy its ID from the URL</li>
-                <li>Go to <button type="button" onClick={onGoToCatalog} className="text-brand hover:underline">Catalog</button> and pick a skill (try <em>workflow-fix-and-ship</em> to close a bug end-to-end)</li>
+                <li>Go to <button type="button" onClick={onGoToCatalog} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">Catalog</button> and pick a skill (try <em>workflow-fix-and-ship</em> to close a bug end-to-end)</li>
                 <li>Paste the report ID in the "Apply to a report" field, click <strong>Start pipeline</strong></li>
                 <li>Copy the context packet into your Cursor agent — the skill walks you through each step</li>
               </ol>
@@ -1016,7 +1016,7 @@ function RunDetail({
           <button
             type="button"
             onClick={() => onOpenSkill(run.root_skill_slug)}
-            className="text-xs font-bold text-brand hover:underline truncate block text-left"
+            className="text-xs font-bold text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors truncate block text-left"
           >
             {run.root_skill_slug}
           </button>
@@ -1084,14 +1084,14 @@ function RunDetail({
                 href={`https://cursor.com/agents/${step.agent_ref}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-brand hover:underline text-2xs"
+                className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors text-2xs"
                 title={`Cursor agent ${step.agent_ref}`}
               >
                 Agent
               </a>
             ) : null}
             {step.pr_url ? (
-              <a href={step.pr_url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline text-2xs">PR</a>
+              <a href={step.pr_url} target="_blank" rel="noopener noreferrer" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors text-2xs">PR</a>
             ) : null}
           </div>
         ))}

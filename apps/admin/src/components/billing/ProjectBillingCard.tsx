@@ -306,7 +306,7 @@ function PlanPicker({ plans, currentPlanId, busy, onPick }: PlanPickerProps) {
       </div>
       <InlineProof className="mt-2 border-0 bg-transparent px-0 py-0">
         Need an air-gapped install, custom DPA, or &gt; 500k reports/mo?{' '}
-        <a href="mailto:kensaurus@gmail.com" className="text-brand hover:text-brand-hover">
+        <a href="mailto:kensaurus@gmail.com" className="text-accent-foreground hover:text-accent">
           Email sales
         </a>{' '}
         for Enterprise.
@@ -420,7 +420,7 @@ function InvoicesSection({ projectId, hasCustomer, isComplimentary }: InvoicesSe
                     href={inv.hosted_invoice_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-brand hover:text-brand-hover"
+                    className="text-accent-foreground hover:text-accent"
                   >
                     View
                   </a>
@@ -430,7 +430,7 @@ function InvoicesSection({ projectId, hasCustomer, isComplimentary }: InvoicesSe
                     href={inv.invoice_pdf}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-brand hover:text-brand-hover"
+                    className="text-accent-foreground hover:text-accent"
                   >
                     PDF
                   </a>

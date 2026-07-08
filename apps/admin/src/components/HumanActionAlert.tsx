@@ -73,7 +73,7 @@ export function HumanActionAlert({
               <div className="min-w-0 flex-1">
                 <Link
                   to={item.href}
-                  className="font-medium text-fg hover:text-brand underline-offset-2 hover:underline"
+                  className="font-medium text-fg hover:text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors-offset-2 hover:underline"
                 >
                   {item.title}
                 </Link>

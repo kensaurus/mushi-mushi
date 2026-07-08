@@ -283,7 +283,7 @@ function FeatureRow({
               </span>
               <button
                 type="button"
-                className="text-brand hover:text-brand-hover hover:underline"
+                className="text-accent-foreground hover:text-accent hover:underline"
                 onClick={() => setExpanded((v) => !v)}
               >
                 {ticket.comment_count} comment{ticket.comment_count !== 1 ? 's' : ''}

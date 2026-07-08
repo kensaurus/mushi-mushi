@@ -327,11 +327,11 @@ export function FeedbackPage() {
           <Card className="border-dashed border-edge-subtle bg-surface-raised/20 p-3">
             <p className="text-2xs leading-relaxed text-fg-muted">
               End-user bug reports from your app appear under{' '}
-              <Link to="/reports" className="font-medium text-brand hover:text-brand-hover">
+              <Link to="/reports" className="font-medium text-accent-foreground hover:text-accent">
                 Reports
               </Link>
               . Billing questions?{' '}
-              <Link to="/billing" className="font-medium text-brand hover:text-brand-hover">
+              <Link to="/billing" className="font-medium text-accent-foreground hover:text-accent">
                 Billing support
               </Link>
               .
@@ -422,7 +422,7 @@ export function FeedbackPage() {
         <ContainedBlock tone="muted" className="border-dashed">
           <p className="text-2xs text-fg-muted">
             Operators can link tickets to releases when publishing on{' '}
-            <Link to="/releases" className="font-medium text-brand hover:text-brand-hover">
+            <Link to="/releases" className="font-medium text-accent-foreground hover:text-accent">
               Releases
             </Link>
             .

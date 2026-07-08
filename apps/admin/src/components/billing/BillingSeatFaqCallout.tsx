@@ -30,7 +30,7 @@ export function BillingSeatFaqCallout({ collapsible = false, ...ctx }: Props) {
       <p className="text-2xs leading-relaxed text-fg-muted">{body}</p>
       <p className="text-2xs text-fg-faint">
         Manage invites and roles on{' '}
-        <Link to="/organization/members" className="text-brand hover:underline">
+        <Link to="/organization/members" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
           Members
         </Link>
         .

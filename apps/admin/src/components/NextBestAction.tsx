@@ -63,7 +63,7 @@ export function NextBestAction() {
   // only. Otherwise React throws "Rendered more hooks than during the
   // previous render" when the strip transitions from hidden (login/loading)
   // to visible (post-auth). Caught live in Playwright on 2026-04-20.
-  const { isBeginner } = useAdminMode()
+  const { isBeginner, isQuickstart } = useAdminMode()
   const { pathname } = useLocation()
   const postureHasStatusBanner = usePostureHasStatusBanner()
   const activeProjectId = useActiveProjectId()
@@ -91,7 +91,10 @@ export function NextBestAction() {
     previousActionRef.current = action
   }, [action?.title, action?.tone])
 
-  if (!isBeginner) return null
+  // Quick is the default mode — the guidance strip is exactly what new
+  // users are missing there, so it renders in both Quick and Beginner.
+  // Advanced stays opted out for a denser layout.
+  if (!isBeginner && !isQuickstart) return null
   // Status banner on PagePosture already carries the next step for this route.
   if (postureHasStatusBanner) return null
   // Login/recovery routes are unauthenticated — never render the strip.

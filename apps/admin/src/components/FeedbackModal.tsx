@@ -215,7 +215,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
             <p className="text-xs text-fg-secondary leading-relaxed max-w-xs mx-auto">{config.successBody}</p>
             <p className="text-2xs text-fg-muted">
               Track status anytime on{' '}
-              <Link to="/feedback" className="text-brand hover:text-brand-hover font-medium" onClick={onClose}>
+              <Link to="/feedback" className="text-accent-foreground hover:text-accent font-medium" onClick={onClose}>
                 My feedback
               </Link>
               .

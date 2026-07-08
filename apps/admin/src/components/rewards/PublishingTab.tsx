@@ -413,7 +413,7 @@ export function PublishingTab() {
               href={marketplaceUrl}
               target="_blank"
               rel="noreferrer"
-              className="text-xs text-brand hover:underline mt-1 inline-block"
+              className="text-xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors mt-1 inline-block"
             >
               {marketplaceUrl} ↗
             </a>
@@ -458,7 +458,7 @@ export function PublishingTab() {
       {!pendingCountHint && !sLoading && (
         <p className="text-xs text-fg-muted">
           Publish your listing, set bounties, then{' '}
-          <Link to="/rewards/tester-review" className="text-brand hover:underline">
+          <Link to="/rewards/tester-review" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
             review submissions
           </Link>{' '}
           as testers join.

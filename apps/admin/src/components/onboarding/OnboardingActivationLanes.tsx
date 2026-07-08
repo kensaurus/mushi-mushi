@@ -146,7 +146,7 @@ export function OnboardingActivationLanes({
           </ContainedBlock>
         </div>
         {topPriority ? (
-          <Link to={topPriority.to} className="shrink-0 text-2xs font-medium text-brand underline">
+          <Link to={topPriority.to} className="shrink-0 text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
             {topPriority.label} →
           </Link>
         ) : null}

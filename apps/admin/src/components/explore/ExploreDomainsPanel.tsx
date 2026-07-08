@@ -69,7 +69,7 @@ export function ExploreDomainsPanel({ projectId, onFileClick }: Props) {
         </p>
         <div className="flex items-center gap-2 shrink-0">
           {source === 'fallback' && (
-            <Badge className="bg-warn/15 text-[var(--color-warning-foreground)]">
+            <Badge className="bg-warn/15 text-warning-foreground">
               Layer fallback
             </Badge>
           )}

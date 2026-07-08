@@ -230,7 +230,7 @@ function FolderTabButton({
           {project.member_count != null && project.member_count > 0 ? (
             <>
               <span className="text-fg-faint">·</span>
-              <span className="tabular-nums">{project.member_count} members</span>
+              <span className="tabular-nums">{project.member_count} member{project.member_count === 1 ? '' : 's'}</span>
             </>
           ) : null}
           {lastReport ? (

@@ -437,7 +437,7 @@ function RunDetail({
                       href={ev.signed_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-2xs text-brand hover:underline"
+                      className="inline-flex items-center gap-1 text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
                     >
                       <IconExternalLink className="h-3 w-3" />
                       Download {ev.kind}
@@ -472,7 +472,7 @@ function RunDetail({
           href={run.provider_session_url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-2xs text-brand hover:underline font-medium"
+          className="inline-flex items-center gap-1.5 text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors font-medium"
         >
           <IconExternalLink className="h-3 w-3" />
           Open session replay in {PROVIDER_LABEL[run.provider ?? ''] ?? run.provider}
@@ -901,7 +901,7 @@ export function QaCoveragePage() {
         {!entLoading && !inventoryEnabled ? (
           <p className="text-2xs text-fg-muted py-1">
             TDD review from user stories requires{' '}
-            <Link to="/billing" className="text-brand hover:underline">
+            <Link to="/billing" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
               Bidirectional inventory
             </Link>
             {planName ? ` (not included on ${planName})` : '.'}
@@ -921,7 +921,7 @@ export function QaCoveragePage() {
                   )}
                 </div>
                 {story.generated_pr_url && (
-                  <a href={story.generated_pr_url} target="_blank" rel="noreferrer" className="text-brand hover:underline flex items-center gap-1">
+                  <a href={story.generated_pr_url} target="_blank" rel="noreferrer" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors flex items-center gap-1">
                     <IconExternalLink className="h-3 w-3" />
                     PR
                   </a>

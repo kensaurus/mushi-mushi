@@ -40,7 +40,7 @@ describe('computeNextBestAction — rule priority', () => {
         sampledCount: 50,
       })
       expect(action?.tone).toBe('plan')
-      expect(action?.title).toMatch(/judge batch/i)
+      expect(action?.title).toMatch(/quality of recent auto-fixes/i)
     })
 
     it('surfaces disagreement when fresh', () => {

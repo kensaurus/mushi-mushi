@@ -175,7 +175,7 @@ function MissingConfigCallout({ configId }: { configId: string }) {
         <p className="text-2xs text-fg-muted">{doc.summary}</p>
         <Link
           to={`${route}${anchor}`}
-          className="inline-flex items-center gap-1 text-2xs text-brand hover:text-brand-hover underline-offset-2 hover:underline"
+          className="inline-flex items-center gap-1 text-2xs text-accent-foreground hover:text-accent underline-offset-2 hover:underline"
           data-dav-action="config-link"
         >
           Configure →
@@ -396,7 +396,7 @@ export function HeroDetailPanel({
             <button
               type="button"
               onClick={handleSpotlight}
-              className="inline-flex items-center gap-1 text-2xs text-brand hover:text-brand-hover motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm px-1.5 py-0.5 hover:bg-brand/10"
+              className="inline-flex items-center gap-1 text-2xs text-accent-foreground hover:text-accent motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm px-1.5 py-0.5 hover:bg-brand/10"
               data-dav-action="spotlight"
               title="Scroll to and highlight the related section on this page"
             >

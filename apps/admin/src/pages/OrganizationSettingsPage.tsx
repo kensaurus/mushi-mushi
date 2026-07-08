@@ -909,7 +909,7 @@ export function OrganizationSettingsPage() {
                 <button
                   type="button"
                   onClick={() => setNoteOpen(true)}
-                  className="text-xs text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 rounded"
+                  className="text-xs text-accent-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 rounded"
                 >
                   + Add a personal note
                 </button>
@@ -941,7 +941,7 @@ export function OrganizationSettingsPage() {
                         setNote('')
                         setNoteOpen(false)
                       }}
-                      className="text-brand hover:text-brand-hover"
+                      className="text-accent-foreground hover:text-accent"
                     >
                       Skip
                     </button>

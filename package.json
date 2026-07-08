@@ -49,6 +49,8 @@
     "check:changeset-orphans": "node scripts/check-changeset-orphans.mjs",
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
     "check:design-tokens": "node scripts/check-design-tokens.mjs",
+    "check:raw-css-var-classes": "node scripts/audit-raw-css-var-classes.mjs",
+    "check:secondary-link-brand": "node scripts/audit-secondary-link-brand.mjs",
     "check:chip-contrast": "node scripts/audit-chip-contrast.mjs --strict",
     "build:brand-tokens": "pnpm --filter @mushi-mushi/brand build:tokens",
     "check:brand-tokens-fresh": "node scripts/check-brand-tokens-fresh.mjs",

@@ -11,9 +11,10 @@ export default [
       'mushi-mushi/no-text-3xs-on-interactive': 'error',
       'mushi-mushi/no-raw-semantic-on-muted': 'error',
       'mushi-mushi/no-hand-rolled-tablist': [
-        'warn',
+        'error',
         { pageFilesOnly: true, pagePattern: 'Page\\.tsx$' },
       ],
+      'mushi-mushi/no-raw-css-var-text': 'error',
       'mushi-mushi/no-legacy-shadcn-tokens': 'error',
       'mushi-mushi/no-accent-for-selection': 'warn',
       'mushi-mushi/no-card-elevated-outside-allowlist': [
@@ -69,9 +70,10 @@ export default [
     },
   },
   {
-    files: ['src/components/connect/**/*.tsx'],
+    files: ['src/components/connect/**/*.tsx', 'src/components/sdk-install/**/*.tsx'],
     rules: {
-      'mushi-mushi/no-hand-rolled-tablist': ['warn', { pageFilesOnly: false }],
+      'mushi-mushi/no-hand-rolled-tablist': ['error', { pageFilesOnly: false }],
+      'mushi-mushi/no-raw-css-var-text': 'error',
     },
   },
 ];

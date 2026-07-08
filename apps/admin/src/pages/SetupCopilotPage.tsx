@@ -119,15 +119,15 @@ export function SetupCopilotPage() {
         aria-label="Setup funnel"
         className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-muted"
       >
-        <Link to="/onboarding" className="text-brand hover:underline">
+        <Link to="/onboarding" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
           Setup wizard
         </Link>
         <span aria-hidden="true">·</span>
-        <Link to={projectId ? `/connect?project=${projectId}` : '/connect'} className="text-brand hover:underline">
+        <Link to={projectId ? `/connect?project=${projectId}` : '/connect'} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
           Connect hub
         </Link>
         <span aria-hidden="true">·</span>
-        <Link to="/inbox" className="text-brand hover:underline">
+        <Link to="/inbox" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
           Action Inbox
         </Link>
       </nav>

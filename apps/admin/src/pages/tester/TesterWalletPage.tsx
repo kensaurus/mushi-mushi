@@ -97,7 +97,7 @@ function MilestoneBar({ ytd, threshold, cap, kycCleared }: {
         {overThreshold && !kycCleared && (
           <Link
             to="/tester/settings#kyc"
-            className="shrink-0 rounded-lg border border-warn/30 bg-warn/20 px-3 py-1.5 text-xs font-medium text-[var(--color-warning-foreground)] motion-safe:transition-colors hover:bg-warn/30"
+            className="shrink-0 rounded-lg border border-warn/30 bg-warn/20 px-3 py-1.5 text-xs font-medium text-warning-foreground motion-safe:transition-colors hover:bg-warn/30"
           >
             Complete KYC →
           </Link>

@@ -238,7 +238,7 @@ export function LoginPage() {
               <button
                 type="button"
                 onClick={() => { switchMode('signup'); setEmail(email) }}
-                className="text-brand hover:text-brand-hover"
+                className="text-accent-foreground hover:text-accent"
               >
                 try again
               </button>.
@@ -446,7 +446,7 @@ export function LoginPage() {
                   <button
                     type="button"
                     onClick={clearRememberedEmail}
-                    className="shrink-0 text-2xs text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors"
+                    className="shrink-0 text-2xs text-accent-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors"
                   >
                     Not you?
                   </button>
@@ -535,28 +535,28 @@ export function LoginPage() {
               {mode === 'forgot' ? (
                 <>
                   Remember your password?{' '}
-                  <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                  <button type="button" onClick={() => switchMode('login')} className="text-accent-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
                     Sign in
                   </button>
                 </>
               ) : mode === 'magic' ? (
                 <>
                   Prefer a password?{' '}
-                  <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                  <button type="button" onClick={() => switchMode('login')} className="text-accent-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
                     Use password
                   </button>
                 </>
               ) : mode === 'login' ? (
                 <>
                   Don't have an account?{' '}
-                  <button type="button" onClick={() => switchMode('signup')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                  <button type="button" onClick={() => switchMode('signup')} className="text-accent-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
                     Sign up
                   </button>
                 </>
               ) : (
                 <>
                   Already have an account?{' '}
-                  <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                  <button type="button" onClick={() => switchMode('login')} className="text-accent-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
                     Sign in
                   </button>
                 </>
@@ -575,7 +575,7 @@ export function LoginPage() {
                         href="https://supabase.com/dashboard"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-brand hover:text-brand-hover underline"
+                        className="text-accent-foreground hover:text-accent underline"
                       >
                         Supabase dashboard
                       </a>.

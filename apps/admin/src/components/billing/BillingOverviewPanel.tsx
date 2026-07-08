@@ -93,7 +93,7 @@ export function BillingOverviewPanel({
             </p>
           </div>
           <Link to="/integrations" className="shrink-0">
-            <span className="text-2xs font-medium text-brand underline underline-offset-2">
+            <span className="text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors underline-offset-2">
               Connect →
             </span>
           </Link>

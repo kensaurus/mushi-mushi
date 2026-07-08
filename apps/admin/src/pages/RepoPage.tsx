@@ -432,7 +432,7 @@ export function RepoPage() {
             <button
               type="button"
               onClick={reload}
-              className="text-2xs text-brand hover:text-brand-hover underline-offset-2 hover:underline"
+              className="text-2xs text-accent-foreground hover:text-accent underline-offset-2 hover:underline"
             >
               Retry
             </button>
@@ -708,7 +708,7 @@ function BranchRow({ branch }: { branch: RepoBranch }) {
                 href={branch.pr_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-brand hover:text-brand-hover underline-offset-2 hover:underline font-mono"
+                className="text-xs text-accent-foreground hover:text-accent underline-offset-2 hover:underline font-mono"
               >
                 PR #{branch.pr_number ?? '—'} ↗
               </a>

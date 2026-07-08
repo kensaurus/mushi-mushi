@@ -34,7 +34,7 @@ function TopComponentsCard({ topComponents }: { topComponents: Props['topCompone
       <PanelHeader
         title="Top components"
         action={
-          <Link to="/graph" className="shrink-0 text-2xs text-brand hover:text-brand-hover">
+          <Link to="/graph" className="shrink-0 text-2xs text-accent-foreground hover:text-accent">
             Graph →
           </Link>
         }
@@ -94,7 +94,7 @@ function IntegrationsCard({ integrations }: { integrations: IntegrationStatus[] 
       <PanelHeader
         title="Integrations"
         action={
-          <Link to="/integrations/config" className="shrink-0 text-2xs text-brand hover:text-brand-hover">
+          <Link to="/integrations/config" className="shrink-0 text-2xs text-accent-foreground hover:text-accent">
             Manage →
           </Link>
         }

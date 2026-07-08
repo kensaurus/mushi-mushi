@@ -297,7 +297,7 @@ function AppCard({ app, onJoin, onLeave, acting }: {
         <a
           href={`/mushi-mushi/testers/apps/${app.slug}/`}
           target="_blank" rel="noreferrer"
-          className="text-xs text-brand hover:underline"
+          className="text-xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
         >
           Public listing ↗
         </a>

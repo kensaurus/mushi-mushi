@@ -99,7 +99,7 @@ export function PluginCard({ plugin: p, installed: inst, stats, busy, onInstall,
             href={p.source_url}
             target="_blank"
             rel="noreferrer"
-            className="text-2xs text-brand hover:underline"
+            className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
           >
             Source ↗
           </a>

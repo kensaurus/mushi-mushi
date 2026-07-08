@@ -268,3 +268,35 @@ pnpm check:brand-tokens-fresh   # after committing packages/brand/src/editorial.
 ```
 
 Manual (localhost:6464): `/health`, `/drift`, `/code-health`, `/anomalies`, `/connect`, `/integrations`, `/settings` — expand feature guides; confirm live metric chips on `WorkflowStageRow`; warn/danger banners show primary CTA (not ghost-only).
+
+---
+
+## Phase 8 — Cross-surface token bridge (Jul 2026)
+
+**Plan:** Mushi Console UX Audit · Connect pilot · operator/editorial bridge
+
+| Item | Status | Notes |
+|------|--------|-------|
+| `ConnectLanePicker` `surface="operator"` + `data-connect-surface` CSS bridge | ✅ | `packages/marketing-ui`, `apps/admin/src/index.css` |
+| `SectionAnchorNav` (SegmentedControl + beta offset + IO) | ✅ | `components/connect/SectionAnchorNav.tsx` |
+| `JobStatusPill` primitive | ✅ | `components/ui/job-status-pill.tsx` |
+| Extract `GithubConnectionCard`, `UpdateCenter`, `BumpPlanTable` | ✅ | `components/connect/*` |
+| `ConnectPage` slim orchestrator + label alignment ("Bug capture") | ✅ | `pages/ConnectPage.tsx` |
+| `SdkInstallCard` decomposed into `sdk-install/*` submodules | ✅ | 1374 → 310 LOC orchestrator |
+| Codemod `text-[var(--color-*-foreground)]` → semantic utilities | ✅ | 10 files |
+| ESLint `no-raw-css-var-text` (error) | ✅ | `eslint-plugin-mushi-mushi` |
+| ESLint `no-hand-rolled-tablist` promoted to error | ✅ | `apps/admin/eslint.config.js` |
+| CI `scripts/audit-raw-css-var-classes.mjs` | ✅ | root `package.json` script |
+| Orphan connect chrome removed | ✅ | `ConnectHubGuide`, `ConnectActivationStrip`, `ConnectRelatedRail` deleted; `ConnectStepFlow` retained |
+| Playwright `/connect` operator-surface regression | ✅ | `admin-chrome-budget.spec.ts` |
+| McpPage secondary links → `LINK_ACCENT` / `Btn` | ✅ | brand budget per zone |
+| Secondary inline links console-wide → accent hue | ✅ | 137 codemod hits · `scripts/codemod-link-accent.mjs` · `check:secondary-link-brand` |
+
+**Verify:**
+
+```bash
+cd apps/admin && pnpm typecheck && pnpm test && pnpm lint && pnpm lint:tokens
+node scripts/audit-raw-css-var-classes.mjs
+node scripts/audit-secondary-link-brand.mjs
+node scripts/check-design-tokens.mjs
+```

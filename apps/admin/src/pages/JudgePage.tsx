@@ -1105,7 +1105,7 @@ export function JudgePage() {
                       <td className="py-1.5 px-3 max-w-[22rem]">
                         <Link
                           to={`/reports/${e.report_id}`}
-                          className="text-brand hover:text-brand-hover line-clamp-1 leading-snug"
+                          className="text-accent-foreground hover:text-accent line-clamp-1 leading-snug"
                           title={summary ?? undefined}
                         >
                           {display}

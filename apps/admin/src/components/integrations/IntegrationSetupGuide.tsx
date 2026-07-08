@@ -40,7 +40,7 @@ export function IntegrationSetupGuide({
             href={consoleUrl}
             target="_blank"
             rel="noreferrer noopener"
-            className="inline-flex items-center gap-1 text-2xs text-brand hover:text-brand-hover underline underline-offset-2"
+            className="inline-flex items-center gap-1 text-2xs text-accent-foreground hover:text-accent underline underline-offset-2"
           >
             {consoleLabel ?? 'Open console'}
             <IconExternalLink size={10} />

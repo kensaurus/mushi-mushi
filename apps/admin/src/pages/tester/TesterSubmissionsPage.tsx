@@ -283,7 +283,7 @@ export function TesterSubmissionsPage() {
       {!loading && joinedApps.length === 0 && (
         <p className="text-xs text-fg-muted">
           Need another app?{' '}
-          <Link to="/tester/apps" className="font-medium text-brand hover:underline">
+          <Link to="/tester/apps" className="font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
             Browse the catalog →
           </Link>
         </p>

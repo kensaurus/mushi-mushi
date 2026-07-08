@@ -46,7 +46,7 @@ export function QaCoverageTile({ projectId }: { projectId: string }) {
         </Link>
       }
       action={
-        <Link to="/qa-coverage" className="text-2xs text-brand hover:underline">
+        <Link to="/qa-coverage" className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
           View all →
         </Link>
       }
@@ -65,7 +65,7 @@ export function QaCoverageTile({ projectId }: { projectId: string }) {
       {!loading && !error && !data?.total && (
         <div className="space-y-1 text-2xs text-fg-faint">
           <p>No QA stories yet.</p>
-          <Link to="/qa-coverage" className="text-brand hover:underline">
+          <Link to="/qa-coverage" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
             Create your first user story test →
           </Link>
         </div>

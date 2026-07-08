@@ -452,7 +452,7 @@ export function ResearchPage() {
                 <InlineProof>
                   Last search <RelativeTime value={stats.lastSessionAt} />
                   {' · '}
-                  <button type="button" className="text-brand hover:underline" onClick={() => setActiveTab('history')}>
+                  <button type="button" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors" onClick={() => setActiveTab('history')}>
                     View history
                   </button>
                 </InlineProof>
