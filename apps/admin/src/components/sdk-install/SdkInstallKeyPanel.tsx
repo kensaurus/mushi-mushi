@@ -240,7 +240,7 @@ export function SdkInstallKeyPanel({
           projectName={projectSlug ?? 'project'}
           projectSlug={projectSlug}
           apiKey={rotatedKey}
-          scopes={['ingest']}
+          scopes={['report:write']}
           onDismiss={() => setRotatedKey(null)}
         />
       )}
