@@ -1,6 +1,16 @@
 import { createServer } from 'node:http'
 import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
 
+if (!process.env.MUSHI_PROJECT_ID || !process.env.MUSHI_API_KEY) {
+  console.error(
+    'Missing MUSHI_PROJECT_ID / MUSHI_API_KEY.\n' +
+      'Fill in .env (see .env.example) and start with:\n' +
+      '  npm start   # runs: node --env-file=.env src/server.mjs\n' +
+      'Or run `npx mushi-mushi` to sign in and write the env file for you.',
+  )
+  process.exit(1)
+}
+
 const mushi = new MushiNodeClient({
   projectId: process.env.MUSHI_PROJECT_ID,
   apiKey: process.env.MUSHI_API_KEY,

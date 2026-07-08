@@ -42,7 +42,7 @@ requires an Enterprise subscription or `MUSHI_EE_LICENSE_KEY`. See
 
 ## How to obtain a commercial license
 
-Contact **security@kensaur.us** with:
+Contact **kensaurus@gmail.com** with:
 
 - Your company name and use case (self-host vs hosted SaaS vs OEM)
 - Whether you need EE features

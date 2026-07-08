@@ -24,6 +24,16 @@ export function classifyIngestRateLimitError(
   if (!error) return 'ok';
   const msg = error.message ?? '';
   if (msg.includes('rate_limit_exceeded')) return 'breach';
-  if (error.code === '42883' || msg.includes('does not exist')) return 'fail-open';
+  // Fail-open ONLY for the claim function itself being undeployed: Postgres
+  // 42883 (undefined_function), or PostgREST's schema-cache phrasing that
+  // names the function. A bare "does not exist" is NOT enough — that string
+  // also appears in unrelated errors (missing table/column on a degraded
+  // database), which must fail closed.
+  if (
+    error.code === '42883' ||
+    (msg.includes('report_ingest_rate_limit_claim') && msg.includes('does not exist'))
+  ) {
+    return 'fail-open';
+  }
   return 'fail-closed';
 }

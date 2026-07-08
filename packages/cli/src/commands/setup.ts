@@ -329,7 +329,7 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
           if (probeRes.ok) {
             console.log('✓ MCP key valid — restart Cursor (or your IDE) to activate')
             // Fire-and-forget: signal mcp_setup_done to the backend for funnel tracking.
-            // Opt out with MUSHI_NO_TELEMETRY=1 (or --no-telemetry flag).
+            // Opt out with MUSHI_NO_TELEMETRY=1.
             if (!process.env.MUSHI_NO_TELEMETRY) void fetch(
               `${config.endpoint.replace(/\/$/, '')}/v1/cli/funnel`,
               {

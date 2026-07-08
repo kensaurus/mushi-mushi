@@ -1,7 +1,7 @@
 // ============================================================
 // Super-admin role gate.
 //
-// Why this exists: the operator (support@kensaur.us) needs to see every
+// Why this exists: the operator (kensaurus@gmail.com) needs to see every
 // signup, plan, and activity number across all tenants. The existing
 // admin endpoints all scope by `projects.owner_id = userId` — they can
 // never read another tenant's rows. So we need a separate route family
