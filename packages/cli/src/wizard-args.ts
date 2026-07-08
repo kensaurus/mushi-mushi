@@ -25,6 +25,7 @@ export interface ParsedArgs {
   yes?: boolean
   cwd?: string
   endpoint?: string
+  audit?: boolean
 }
 
 /**
@@ -38,6 +39,7 @@ export const FLAGS_HELP = `Flags (forwarded to the wizard):
   --framework <id>              force a framework (${FRAMEWORK_IDS.join(', ')})
   --skip-install                print the install command instead of running it
   --skip-test-report            don't offer to send a test report at the end
+  --audit                       health-check an existing install (doctor checks) instead of re-running the wizard
   --cwd <path>                  run in a different directory
   --endpoint <url>              override the Mushi API endpoint (self-hosted)
   -y, --yes                     accept the detected framework without prompting
@@ -64,6 +66,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     if (a === '-y' || a === '--yes') { out.yes = true; continue }
     if (a === '--skip-install') { out.skipInstall = true; continue }
     if (a === '--skip-test-report') { out.skipTestReport = true; continue }
+    if (a === '--audit') { out.audit = true; continue }
     if (a === '--project-id') { out.projectId = args[++i]; continue }
     if (a === '--api-key') { out.apiKey = args[++i]; continue }
     if (a === '--cwd') { out.cwd = args[++i]; continue }

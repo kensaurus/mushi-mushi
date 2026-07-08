@@ -12,6 +12,9 @@
  *          only the bin name, header, and usage lines live here.
  */
 
+import { cpSync, existsSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { runInit } from '@mushi-mushi/cli/init'
 import {
   parseArgs,
@@ -29,14 +32,21 @@ const BIN = 'create-mushi-mushi'
 
 const ISSUES_URL = 'https://github.com/kensaurus/mushi-mushi/issues'
 
+/** Starter templates shipped inside the published package (templates/<id>/). */
+const TEMPLATE_IDS = ['vue', 'svelte', 'node'] as const
+type TemplateId = (typeof TEMPLATE_IDS)[number]
+
 const HELP = `create-mushi-mushi — add Mushi Mushi to your existing project
 
-This does NOT scaffold a new app. It runs the setup wizard in your current
-project: detects your framework and installs the right Mushi package.
+By default this does NOT scaffold a new app. It runs the setup wizard in your
+current project: detects your framework and installs the right Mushi package.
+With --template it scaffolds a minimal starter app instead.
 
 Usage:
-  npm create mushi-mushi                run the wizard
-  npm create mushi-mushi -- --help      show all flags
+  npm create mushi-mushi                          run the wizard (existing project)
+  npm create mushi-mushi -- --template vue        scaffold a starter (vue | svelte | node)
+  npm create mushi-mushi -- --template vue my-app scaffold into ./my-app
+  npm create mushi-mushi -- --help                show all flags
 
 Note: \`npm create\` requires the \`--\` separator before flags.
       \`yarn create mushi-mushi --help\` works without it on Yarn 1.
@@ -45,12 +55,73 @@ Note: \`npm create\` requires the \`--\` separator before flags.
 
 ${FLAGS_HELP}`
 
+/**
+ * Scaffold `templates/<id>` into targetDir and print next steps. Kept
+ * dependency-free (plain cpSync) — the starter's own README covers install
+ * and `npx mushi-mushi` for credentials, so no wizard run happens here.
+ */
+function scaffoldTemplate(id: TemplateId, targetArg: string | undefined): void {
+  const targetDir = resolve(process.cwd(), targetArg ?? `mushi-${id}-app`)
+  if (existsSync(targetDir)) {
+    process.stderr.write(`${BIN}: target directory already exists: ${targetDir}\n`)
+    process.exit(1)
+  }
+  const templateDir = fileURLToPath(new URL(`../templates/${id}`, import.meta.url))
+  cpSync(templateDir, targetDir, { recursive: true })
+  process.stdout.write(
+    `Scaffolded the ${id} starter into ${targetDir}\n\n` +
+      'Next steps:\n' +
+      `  cd ${targetArg ?? `mushi-${id}-app`}\n` +
+      '  npm install\n' +
+      '  npx mushi-mushi     # browser sign-in, writes your env vars\n' +
+      `  ${id === 'node' ? 'npm start' : 'npm run dev'}\n`,
+  )
+}
+
+/**
+ * Pull `--template <id> [dir]` out of argv before the shared wizard parser
+ * sees it (parseArgs rejects unknown flags — --template is create-only; the
+ * `mushi-mushi` launcher never scaffolds).
+ */
+function extractTemplateArgs(argv: readonly string[]): {
+  template?: TemplateId
+  targetDir?: string
+  rest: string[]
+} {
+  const rest: string[] = []
+  let template: TemplateId | undefined
+  let targetDir: string | undefined
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--template') {
+      const id = argv[++i]
+      if (!TEMPLATE_IDS.includes(id as TemplateId)) {
+        process.stderr.write(
+          `${BIN}: unknown template: ${id ?? '(missing)'}. Valid: ${TEMPLATE_IDS.join(', ')}\n`,
+        )
+        process.exit(1)
+      }
+      template = id as TemplateId
+      // Optional positional target dir directly after the template id.
+      if (argv[i + 1] && !argv[i + 1].startsWith('-')) targetDir = argv[++i]
+      continue
+    }
+    rest.push(argv[i])
+  }
+  return { template, targetDir, rest }
+}
+
 async function main(): Promise<void> {
   assertNodeVersion(BIN)
 
+  const { template, targetDir, rest } = extractTemplateArgs(process.argv.slice(2))
+  if (template) {
+    scaffoldTemplate(template, targetDir)
+    return
+  }
+
   let parsed: ParsedArgs
   try {
-    parsed = parseArgs(process.argv.slice(2))
+    parsed = parseArgs(rest)
   } catch (err) {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`)
     process.exit(1)
@@ -75,6 +146,7 @@ async function main(): Promise<void> {
     cwd: parsed.cwd,
     endpoint: parsed.endpoint,
     sendTestReport: parsed.skipTestReport ? false : undefined,
+    audit: parsed.audit,
   })
 }
 

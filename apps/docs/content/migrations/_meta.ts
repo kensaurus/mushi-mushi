@@ -21,6 +21,7 @@ export default {
   'spa-to-ssr': 'SPA → SSR',
 
   // Switch to Mushi
+  'sentry-to-mushi': 'Sentry + Mushi (enrich or standalone)',
   'instabug-to-mushi': 'Instabug (Luciq) → Mushi',
   'shake-to-mushi': 'Shake → Mushi',
   'logrocket-feedback-to-mushi': 'LogRocket Feedback → Mushi',

@@ -45,6 +45,35 @@ Non-interactive / CI fallback:
 mushi login --api-key mushi_... --project-id <uuid>
 ```
 
+Already installed? Health-check instead of re-running the wizard:
+
+```bash
+npx mushi-mushi --audit
+```
+
+### Framework → package decision tree
+
+The wizard applies this mapping automatically (`--framework <id>` forces one).
+Use it when installing manually or reviewing what the wizard chose:
+
+| If the project has… | Framework | SDK package |
+|---------------------|-----------|-------------|
+| `next` | Next.js | `@mushi-mushi/react` |
+| `react` (no meta-framework) / `react-scripts` / `@remix-run/*` | React / CRA / Remix | `@mushi-mushi/react` |
+| `vue` v3 | Vue 3 | `@mushi-mushi/vue` |
+| `nuxt` | Nuxt | `@mushi-mushi/vue` |
+| `svelte` / `@sveltejs/kit` | Svelte / SvelteKit | `@mushi-mushi/svelte` |
+| `@angular/core` | Angular | `@mushi-mushi/angular` |
+| `astro` / `solid-js` | Astro / Solid | `@mushi-mushi/web` |
+| `expo` / `react-native` | Expo / React Native | `@mushi-mushi/react-native` |
+| `@capacitor/core` | Capacitor (Ionic) | `@mushi-mushi/capacitor` |
+| none of the above | Vanilla JS | `@mushi-mushi/web` |
+| Node server (Express/Fastify/Hono) | Server | `@mushi-mushi/node` |
+
+Coming from Sentry? Don't remove it — see the
+[Sentry + Mushi guide](https://kensaur.us/mushi-mushi/docs/migrations/sentry-to-mushi)
+(enrich or standalone; `mushi migrate` detects `@sentry/*` and suggests it).
+
 ## Step 2 — Paste the init snippet
 
 The wizard prints a framework-specific snippet (e.g. `<MushiProvider>` for

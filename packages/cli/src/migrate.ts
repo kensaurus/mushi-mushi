@@ -111,6 +111,23 @@ export const MIGRATE_CATALOG: readonly MigrateGuide[] = [
   },
 
   // ── Competitor packages ───────────────────────────────────────────
+  // Sentry gets a bespoke entry, NOT the generic competitor template:
+  // the canonical messaging is "standalone OR enrich Sentry" — Mushi adds
+  // plain-English diagnosis + paste-ready fixes ALONGSIDE Sentry, never a
+  // rip-out pitch (VISION.md drift guard).
+  {
+    slug: 'sentry-to-mushi',
+    title: 'Sentry + Mushi (enrich or standalone)',
+    summary:
+      'Sentry detected. Keep it — Mushi runs alongside and adds plain-English diagnosis + paste-ready fixes to your Sentry errors, or works standalone.',
+    category: 'competitor',
+    status: 'published',
+    detectionLabel: '@sentry/*',
+    match: (d) =>
+      ['@sentry/react', '@sentry/nextjs', '@sentry/browser', '@sentry/node', '@sentry/vue',
+       '@sentry/sveltekit', '@sentry/angular', '@sentry/react-native', '@sentry/capacitor',
+      ].some((p) => d.has(p)),
+  },
   ...Object.entries(COMPETITOR_PACKAGES).map(([slug, pkgs]): MigrateGuide => ({
     slug,
     title: titleForCompetitor(slug),
