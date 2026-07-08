@@ -112,7 +112,7 @@ and projects that use the name to legitimize harmful software.
 
 If you have a use case that this policy does not clearly cover, or if
 you would like permission for a use that is otherwise not permitted,
-email **security@kensaur.us** with the subject line
+email **kensaurus@gmail.com** with the subject line
 `[Mushi Mushi trademark]`. Please include:
 
 - The exact mark you want to use

@@ -138,6 +138,7 @@ try {
   if (existsSync(mcpPath)) {
     const mcp = readFileSync(mcpPath, 'utf8')
     record('CLI connect mcp package name', /@mushi-mushi\/mcp@\d+\.\d+\.\d+/.test(mcp))
+    record('CLI connect mcp pin (no @latest)', !mcp.includes('@mushi-mushi/mcp@latest'))
     record('CLI connect gitignore mcp.json', gi.includes('.cursor/mcp.json'))
   } else {
     record('CLI connect writes mcp.json', false)

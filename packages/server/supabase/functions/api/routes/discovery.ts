@@ -230,7 +230,7 @@ export function registerPostRegionDiscoveryRoutes(app: Hono<{ Variables: Variabl
         inventory: 'https://kensaur.us/mushi-mushi/schemas/inventory-2.0.json',
       },
       contact: {
-        email: 'support@kensaur.us',
+        email: 'kensaurus@gmail.com',
         issues: 'https://github.com/kensaurus/mushi-mushi/issues',
       },
       license: { id: 'MIT', url: 'https://opensource.org/licenses/MIT' },

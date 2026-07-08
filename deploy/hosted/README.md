@@ -52,7 +52,6 @@ GitHub Actions environment. None are committed to this repository.
 | `STRIPE_SECRET_KEY` | Supabase Vault | Billing API calls |
 | `STRIPE_WEBHOOK_SECRET` | Supabase Vault | Webhook signature verification |
 | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | Supabase Vault | Default BYOK fallback (hosted) |
-| `MUSHI_INGEST_RATE_LIMIT_MAX` | Supabase Vault | Per-project ingest throttle |
 | `MUSHI_EE_LICENSE_KEY` | Supabase Vault | Hosted cloud's own EE license |
 | `NPM_TOKEN` | GH Actions (OIDC Trusted Publisher) | Package publish |
 | `VERCEL_TOKEN` | GH Actions | Console + docs deploy |
@@ -62,13 +61,15 @@ GitHub Actions environment. None are committed to this repository.
 
 ## Monitoring & alerting
 
-- **Uptime:** BetterStack / UptimeRobot monitors ingest endpoint, MCP OAuth,
-  and console — see [status.kensaur.us](https://status.kensaur.us).
+- **Uptime:** updown.io checks (5-min period) on the API edge function,
+  hosted MCP, console, and docs — public status page at
+  [updown.io/p/b6lod](https://updown.io/p/b6lod). API key lives in the
+  operator's local `.env` as `UPDOWN_API_KEY` (never committed).
 - **Error rates:** Supabase log drain → Supabase dashboard; Mushi Mushi
   monitors itself (dogfooding).
 - **Billing anomalies:** Stripe Dashboard + webhook-triggered Slack alerts.
 
 ## Contact
 
-- Security issues: `security@kensaur.us`
-- Operational questions: `support@kensaur.us`
+- Security issues: `kensaurus@gmail.com`
+- Operational questions: `kensaurus@gmail.com`

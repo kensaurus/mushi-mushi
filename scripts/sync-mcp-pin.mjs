@@ -66,6 +66,6 @@ if (CHECK_MODE) {
   if (process.exitCode !== 1) {
     console.log(`✓ MCP pin in sync: ${PIN}`)
   }
-} else if (outOfSync.length === 0) {
+} else if (outOfSync.length === 0 && process.exitCode !== 1) {
   console.log(`✓ MCP pin already in sync: ${PIN}`)
 }

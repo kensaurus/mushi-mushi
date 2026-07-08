@@ -34,3 +34,16 @@ Deno.test('classifyIngestRateLimitError fails CLOSED on any other RPC error', ()
   assertEquals(classifyIngestRateLimitError({ message: 'network error' }), 'fail-closed')
   assertEquals(classifyIngestRateLimitError({}), 'fail-closed')
 })
+
+Deno.test('classifyIngestRateLimitError fails CLOSED for unrelated "does not exist" errors', () => {
+  // "does not exist" alone must not open the gate — only the claim function
+  // being undeployed counts as the migration window.
+  assertEquals(
+    classifyIngestRateLimitError({ message: 'relation "reports" does not exist', code: '42P01' }),
+    'fail-closed',
+  )
+  assertEquals(
+    classifyIngestRateLimitError({ message: 'column "project_id" does not exist', code: '42703' }),
+    'fail-closed',
+  )
+})
