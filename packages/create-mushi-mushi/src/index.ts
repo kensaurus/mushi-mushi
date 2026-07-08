@@ -71,7 +71,7 @@ function scaffoldTemplate(id: TemplateId, targetArg: string | undefined): void {
   process.stdout.write(
     `Scaffolded the ${id} starter into ${targetDir}\n\n` +
       'Next steps:\n' +
-      `  cd ${targetArg ?? `mushi-${id}-app`}\n` +
+      `  cd "${targetArg ?? `mushi-${id}-app`}"\n` +
       '  npm install\n' +
       '  npx mushi-mushi     # browser sign-in, writes your env vars\n' +
       `  ${id === 'node' ? 'npm start' : 'npm run dev'}\n`,
