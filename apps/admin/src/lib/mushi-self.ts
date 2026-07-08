@@ -117,7 +117,7 @@ export async function initMushiSelf(options?: {
             enabled: true,
             appName: 'Mushi Admin',
             message: 'This is the Mushi admin console. Found a bug? Report it here and it goes straight to the team.',
-            contactEmail: 'support@kensaur.us',
+            contactEmail: 'kensaurus@gmail.com',
           },
           minDescriptionLength: 12,
         } as MushiInitOptions['widget'],
