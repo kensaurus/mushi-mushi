@@ -20,6 +20,7 @@ import { useToast } from '../lib/toast'
 import { RESOLVED_EXTERNAL_API_URL } from '../lib/env'
 import { mushiEnvVarsForProjectSlug, isExpoReporterProject, expoReporterGithubRepo, type ProjectMushiEnvVars } from '../lib/projectMushiEnv'
 import { CHIP_TONE } from '../lib/chipTone'
+import { MCP_PIN_SPEC } from '@mushi-mushi/mcp/clients'
 
 type Mode = 'raw' | 'env' | 'cursor' | 'admin' | 'expo' | 'github'
 
@@ -41,9 +42,10 @@ interface Props {
 }
 
 /**
- * Build the `.cursor/mcp.json` snippet. We use `npx -y @mushi-mushi/mcp@latest`
- * so users don't have to `pnpm add` the package globally — one less step on
- * day one, and they'll upgrade automatically.
+ * Build the `.cursor/mcp.json` snippet. We use `npx -y` with a pinned
+ * `@mushi-mushi/mcp` version so users don't have to `pnpm add` the package
+ * globally — one less step on day one, without the supply-chain and
+ * cold-start costs of `@latest` on every editor launch.
  */
 function buildCursorJson(projectId: string, projectName: string, apiKey: string): string {
   return JSON.stringify(
@@ -51,7 +53,7 @@ function buildCursorJson(projectId: string, projectName: string, apiKey: string)
       mcpServers: {
         [`mushi-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 32)}`]: {
           command: 'npx',
-          args: ['-y', '@mushi-mushi/mcp@latest'],
+          args: ['-y', MCP_PIN_SPEC],
           env: {
             // The same endpoint this console talks to — keeps the MCP server
             // and the admin on one host (self-hosted instances included).

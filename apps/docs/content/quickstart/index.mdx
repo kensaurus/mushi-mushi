@@ -54,6 +54,13 @@ installs the SDK, and writes `.env.local` — all automatically.
 
 See [Project ID & API keys](/concepts/credentials) for env var names per framework.
 
+<Callout type="warning">
+  The SDK needs only `MUSHI_PROJECT_ID` + `MUSHI_API_KEY` (see
+  [`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example)).
+  The repo's root `.env.example` is for **self-hosting the backend** — you do
+  not need Supabase or an LLM key to use the SDK.
+</Callout>
+
 ## Troubleshooting
 
 <TroubleshootingAccordion />
