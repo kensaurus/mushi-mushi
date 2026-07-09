@@ -16,11 +16,8 @@ import { projectServerName } from '../../lib/cursorDeeplink'
 import { MCP_PIN_SPEC } from '@mushi-mushi/mcp/clients'
 import { ClientConnectButton } from '../ClientConnectButton'
 import { McpAccountKeyCard } from '../McpAccountKeyCard'
-import {
-  buildSdkInitSnippet,
-  buildSdkInstallSnippet,
-  validateMcpJsonSyntax,
-} from '../../lib/mcpPageHelpers'
+import { buildSdkInitSnippet, buildSdkInstallSnippet } from '../../lib/mcpPageHelpers'
+import type { validateMcpJsonSyntax } from '../../lib/mcpPageHelpers'
 import { CHIP_TONE, LINK_ACCENT } from '../../lib/chipTone'
 import type { McpProjectRow, McpStats } from './types'
 import { CURSOR_CLIENT, VSCODE_CLIENT } from './mcp-clients'
