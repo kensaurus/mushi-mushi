@@ -9,7 +9,7 @@
  * and the console can surface "unlicensed production use" honestly.
  */
 
-import type { Context, Next } from 'hono'
+import type { Context, Next } from 'npm:hono@4'
 import { verifyEeLicense, type EeStatus } from './ee-license.ts'
 
 let cached: { status: EeStatus; at: number } | null = null
