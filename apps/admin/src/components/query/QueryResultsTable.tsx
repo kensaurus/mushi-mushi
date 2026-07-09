@@ -142,7 +142,7 @@ function renderCell(col: string, val: unknown): ReactNode {
   if (colL.endsWith('_url') && typeof val === 'string' && val.startsWith('http')) {
     const short = val.replace(/^https?:\/\//, '').slice(0, 36)
     return (
-      <a href={val} target="_blank" rel="noopener noreferrer" className="text-brand underline underline-offset-2 hover:text-brand/80 transition-colors" title={val}>
+      <a href={val} target="_blank" rel="noopener noreferrer" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors" title={val}>
         {short}{val.length > 36 ? '…' : ''}
       </a>
     )

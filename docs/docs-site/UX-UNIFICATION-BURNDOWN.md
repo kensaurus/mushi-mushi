@@ -1,5 +1,8 @@
 # Docs Site UX Unification Burndown
 
+> **Status: CLOSED (Jul 2026).** P0–P4 items are done. Keep as reference for
+> docs-site brand / MDX conventions — not an open burndown.
+>
 > Living burndown for the public Nextra docs (`apps/docs`) — editorial brand, MDX components, and `/connect`.
 > Updated Jul 1 2026 after DTCG brand token pipeline + Phase 6 admin cross-reference.
 

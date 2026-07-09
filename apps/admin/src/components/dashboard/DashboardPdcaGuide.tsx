@@ -45,7 +45,7 @@ export function DashboardPdcaGuide({ stages = [] }: Props) {
       </div>
       <p className="text-2xs text-fg-faint">
         Full checklist with Ops stage on{' '}
-        <Link to="/inbox" className="text-brand hover:underline">
+        <Link to="/inbox" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
           Inbox
         </Link>
         .

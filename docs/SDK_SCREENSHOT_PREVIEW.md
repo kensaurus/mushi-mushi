@@ -280,4 +280,4 @@ Shipped in the same release line (see package CHANGELOGs):
 - [`@mushi-mushi/web` README](../packages/web/README.md) — bundle budget + feature list
 - [`@mushi-mushi/react-native` README](../packages/react-native/README.md) — view-shot setup
 - [Public docs — web SDK](https://kensaur.us/mushi-mushi/docs/sdks/web) · [React Native SDK](https://kensaur.us/mushi-mushi/docs/sdks/react-native)
-- [Next.js App Router + CSP](./apps/docs/content/sdks/nextjs-app-router-csp.mdx) — keep `img-src data:` when previews are enabled
+- [Next.js App Router + CSP](../apps/docs/content/sdks/nextjs-app-router-csp.mdx) — keep `img-src data:` when previews are enabled

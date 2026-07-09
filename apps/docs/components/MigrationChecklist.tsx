@@ -1,41 +1,6 @@
 'use client'
 
-/**
- * FILE: apps/docs/components/MigrationChecklist.tsx
- * PURPOSE: Interactive per-step checklist embedded inside a migration guide.
- *
- *   <MigrationChecklist
- *     id="cordova-to-capacitor"
- *     steps={[
- *       { id: 'init',    label: 'npx cap init' },
- *       { id: 'platforms', label: 'Add iOS + Android platforms' },
- *       ...
- *     ]}
- *   />
- *
- * BEHAVIOUR
- *   - Anonymous-first: progress persists to `localStorage` under
- *     `mushi:migration:<id>:steps` as a JSON array of completed step IDs.
- *     Zero-config; works offline; never asks for sign-in.
- *   - Stable across SSR: state hydrates from `localStorage` inside
- *     `useEffect`, so the server-rendered output stays consistent and React
- *     does not warn about hydration mismatches.
- *   - Accessible: each row is a real `<label>` wrapping a checkbox so screen
- *     readers announce state changes correctly. Bulk actions live in a
- *     keyboard-reachable toolbar.
- *   - Opt-in cloud sync: the footer `<SyncCta>` opens an admin popup auth
- *     bridge (apps/docs/lib/migrationProgress.ts → openAdminAuthBridge).
- *     The popup hands back a short-lived JWT via postMessage; the docs
- *     never store a refresh token. Sync NEVER blocks local checklist use
- *     — every checkbox keeps working when the bridge is closed, expired,
- *     or the user is offline.
- *
- * NOT in scope here:
- *   - Reordering steps. Steps are positional + ID'd so authors can rename a
- *     step's label without losing user progress, but reordering is a content
- *     decision — we don't try to merge old completion state into new
- *     positions.
- */
+/** Interactive per-step checklist embedded inside a migration guide. */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 

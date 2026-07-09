@@ -61,7 +61,7 @@ function SkillStepNodeInner({ data }: NodeProps) {
           href={node.prUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-2xs text-brand hover:underline truncate"
+          className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors truncate"
           onClick={(e) => e.stopPropagation()}
         >
           View PR →

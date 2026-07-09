@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, Navigate, type LinkProps } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { Btn } from '../components/ui'
 import {
   MarketingFooter,
   MarketingProvider,
@@ -292,10 +293,12 @@ function CopyButton({ text }: { text: string }) {
     : `Copy install command for ${text}`
 
   return (
-    <button
+    <Btn
       type="button"
+      variant="ghost"
+      size="sm"
       onClick={() => { void handleCopy() }}
-      className="inline-flex items-center gap-1 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-2.5 py-1 font-mono text-2xs text-[var(--mushi-ink-muted)] transition hover:border-[var(--mushi-vermillion)]/40 hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
+      className="inline-flex items-center gap-1 rounded-full border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-2.5 py-1 font-mono text-2xs text-[var(--mushi-ink-muted)] hover:border-[var(--mushi-vermillion)]/40 hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
       title={`Copy: ${text}`}
       aria-label={label}
     >
@@ -315,7 +318,7 @@ function CopyButton({ text }: { text: string }) {
           <span>Copy install</span>
         </>
       )}
-    </button>
+    </Btn>
   )
 }
 
@@ -536,12 +539,14 @@ export function PublicIntegrationsPage() {
             className="flex flex-wrap gap-1.5"
           >
             {CATEGORIES.map((cat) => (
-              <button
+              <Btn
                 key={cat}
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => setFilter(cat)}
                 aria-pressed={filter === cat}
-                className={`rounded-full border px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.16em] transition ${
+                className={`rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.16em] ${
                   filter === cat
                     ? 'border-[var(--mushi-vermillion)]/50 bg-[var(--mushi-vermillion-wash)] text-[var(--mushi-vermillion)]'
                     : 'border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_94%,white)] text-[var(--mushi-ink-muted)] hover:border-[color-mix(in_oklch,var(--mushi-ink)_20%,var(--mushi-rule))] hover:text-[var(--mushi-ink)]'
@@ -553,7 +558,7 @@ export function PublicIntegrationsPage() {
                     {INTEGRATIONS.filter((i) => i.category === cat).length}
                   </span>
                 )}
-              </button>
+              </Btn>
             ))}
           </div>
 

@@ -195,7 +195,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   mcp: {
     image: 'mcp-dark.png',
     alt: 'MCP install — one-click Cursor deeplink and tool catalog',
-    caption: '71 tools · Add to Cursor deeplink · read-only demo mode',
+    caption: '68 tools · Add to Cursor deeplink · read-only demo mode',
     route: '/mcp',
   },
   notifications: {

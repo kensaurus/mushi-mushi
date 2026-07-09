@@ -148,7 +148,7 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
                 <ol className="text-xs text-fg-secondary space-y-1.5 list-decimal list-inside">
                   <li>
                     Go to{' '}
-                    <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-brand hover:text-brand-hover underline">
+                    <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-accent-foreground hover:text-accent underline">
                       supabase.com/dashboard
                     </a>
                     {' '}and create or select a project

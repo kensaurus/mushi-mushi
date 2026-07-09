@@ -224,7 +224,7 @@ function ReportRowViewInner({
               )}
               {reporterReplied && (
                 <Tooltip portal content="Reporter replied — open thread">
-                  <span className="shrink-0 rounded-full border border-accent/35 bg-accent-muted/70 px-1.5 py-0.5 text-2xs font-medium text-[var(--color-accent-foreground)] cursor-help">
+                  <span className="shrink-0 rounded-full border border-accent/35 bg-accent-muted/70 px-1.5 py-0.5 text-2xs font-medium text-accent-foreground cursor-help">
                     reply
                   </span>
                 </Tooltip>

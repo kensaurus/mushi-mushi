@@ -906,13 +906,14 @@ export function OrganizationSettingsPage() {
           {teamsEnabled && canManage && (
             <div className="mt-3">
               {!noteOpen ? (
-                <button
-                  type="button"
+                <Btn
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setNoteOpen(true)}
-                  className="text-xs text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 rounded"
+                  className="border-0 bg-transparent shadow-none hover:bg-transparent px-0 py-0 text-xs text-accent-foreground hover:text-accent"
                 >
                   + Add a personal note
-                </button>
+                </Btn>
               ) : (
                 <div>
                   <div className="mb-1 flex items-baseline justify-between gap-2">
@@ -935,16 +936,17 @@ export function OrganizationSettingsPage() {
                   />
                   <p className="mt-1 text-2xs text-fg-faint">
                     Shown in the invite email and the preview screen the recipient sees before accepting.{' '}
-                    <button
-                      type="button"
+                    <Btn
+                      variant="ghost"
+                      size="sm"
                       onClick={() => {
                         setNote('')
                         setNoteOpen(false)
                       }}
-                      className="text-brand hover:text-brand-hover"
+                      className="inline border-0 bg-transparent shadow-none hover:bg-transparent px-0 py-0 text-accent-foreground hover:text-accent"
                     >
                       Skip
-                    </button>
+                    </Btn>
                   </p>
                 </div>
               )}

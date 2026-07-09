@@ -122,7 +122,7 @@ export function QaCoverageSnapshotStrip({
           {stats.topFailingStoryId ? (
             <Link
               to={`/qa-coverage?story=${stats.topFailingStoryId}`}
-              className="text-brand hover:underline"
+              className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
             >
               Top failing story →
             </Link>

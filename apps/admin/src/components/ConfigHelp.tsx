@@ -358,7 +358,7 @@ export function ConfigHelp({ helpId, ariaLabel }: ConfigHelpProps) {
                   href={doc.learnMore.href}
                   target={doc.learnMore.href.startsWith('http') ? '_blank' : undefined}
                   rel={doc.learnMore.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-                  className="inline-flex items-center gap-1 text-brand hover:text-brand-hover underline-offset-2 hover:underline"
+                  className="inline-flex items-center gap-1 text-accent-foreground hover:text-accent underline-offset-2 hover:underline"
                 >
                   {doc.learnMore.label}
                   <span aria-hidden="true">→</span>

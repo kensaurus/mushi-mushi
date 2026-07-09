@@ -562,12 +562,13 @@ export function AntiGamingPage() {
               return (
                 <div key={group.key} className="space-y-1">
                   {showHeader && (
-                    <button
-                      type="button"
+                    <Btn
+                      variant="ghost"
+                      size="sm"
                       onClick={() => toggleGroup(group.key)}
                       aria-expanded={!isCollapsed}
                       aria-controls={`group-body-${group.key}`}
-                      className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left bg-surface-raised border border-edge-subtle/60 hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                      className="w-full flex items-center gap-2 justify-start rounded-sm px-2 py-1.5 text-left bg-surface-raised border-edge-subtle/60 hover:bg-surface-overlay"
                     >
                       <span aria-hidden="true" className="text-fg-faint font-mono text-2xs leading-none w-3 inline-block">
                         {isCollapsed ? '▸' : '▾'}
@@ -579,7 +580,7 @@ export function AntiGamingPage() {
                           {group.sublabel}
                         </SignalChip>
                       )}
-                    </button>
+                    </Btn>
                   )}
                   {!isCollapsed && (
                     <div id={`group-body-${group.key}`} className={`space-y-1 ${showHeader ? 'pl-4 border-l border-edge-subtle/60 ml-2' : ''}`}>
@@ -646,12 +647,13 @@ export function AntiGamingPage() {
               const tokTip = `Reporter token hash ${g.reporter_token_hash}`
               return (
                 <div key={g.key} className="rounded-sm hover:bg-surface-overlay/40">
-                  <button
-                    type="button"
+                  <Btn
+                    variant="ghost"
+                    size="sm"
                     onClick={() => isRecurring && setExpandedEventGroup(isOpen ? null : g.key)}
                     aria-expanded={isOpen}
                     disabled={!isRecurring}
-                    className="w-full flex items-center gap-2 px-2 py-1 text-left disabled:cursor-default"
+                    className="w-full flex items-center gap-2 justify-start px-2 py-1 text-left border-0 bg-transparent shadow-none hover:bg-transparent disabled:cursor-default"
                   >
                     <span title={`First: ${new Date(g.first_at).toLocaleString()}\nLast: ${new Date(g.last_at).toLocaleString()}`}>
                       <SignalChip tone="neutral" className="w-32 truncate font-mono tabular-nums">
@@ -678,7 +680,7 @@ export function AntiGamingPage() {
                     {isRecurring && (
                       <span className="text-fg-faint shrink-0 text-3xs">{isOpen ? '▾' : '▸'}</span>
                     )}
-                  </button>
+                  </Btn>
                   {isOpen && isRecurring && (
                     <ContainedBlock tone="muted" className="mx-2 mb-2 ml-32 space-y-1">
                       {events

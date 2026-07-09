@@ -1,6 +1,6 @@
 # Quickstart
 
-import { Cards, Callout } from 'nextra/components'
+import { Callout } from 'nextra/components'
 import { TroubleshootingAccordion } from '../../components/TroubleshootingAccordion'
 import { QUICKSTART_HUB_LEDE, QUICKSTART_ONE_KEY_CALLOUT } from '@/lib/public-copy'
 
@@ -8,43 +8,29 @@ import { QUICKSTART_HUB_LEDE, QUICKSTART_ONE_KEY_CALLOUT } from '@/lib/public-co
 
 Or run the wizard: `npx mushi-mushi` (detects your framework, signs in via browser, writes env vars, optional test report).
 
-## MCP-first (recommended)
+## Start here (MCP)
 
-<Cards>
-  <Cards.Card title="Incident loop" href="/quickstart/incident-loop" arrow />
-  <Cards.Card title="MCP server" href="/quickstart/mcp" arrow />
-</Cards>
+1. [Incident loop](/quickstart/incident-loop) — broken prod → diagnosis → fix in the editor
+2. [MCP server](/quickstart/mcp) — wire Cursor / VS Code / Claude
 
-## Web
+## Pick your stack
 
-<Cards>
-  <Cards.Card title="React" href="/quickstart/react" arrow />
-  <Cards.Card title="Vue 3" href="/quickstart/vue" arrow />
-  <Cards.Card title="Svelte" href="/quickstart/svelte" arrow />
-  <Cards.Card title="Angular" href="/quickstart/angular" arrow />
-  <Cards.Card title="Vanilla JS" href="/quickstart/web" arrow />
-</Cards>
+**Web:** [React](/quickstart/react) · [Vue](/quickstart/vue) · [Svelte](/quickstart/svelte) · [Angular](/quickstart/angular) · [Vanilla JS](/quickstart/web)
 
-## Mobile
+**Mobile:** [React Native](/quickstart/react-native) · [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter) · [Capacitor](/quickstart/capacitor)
 
-<Cards>
-  <Cards.Card title="React Native" href="/quickstart/react-native" arrow />
-  <Cards.Card title="iOS (Swift)" href="/quickstart/ios" arrow />
-  <Cards.Card title="Android (Kotlin)" href="/quickstart/android" arrow />
-  <Cards.Card title="Flutter" href="/quickstart/flutter" arrow />
-  <Cards.Card title="Capacitor" href="/quickstart/capacitor" arrow />
-</Cards>
+**CLI ↔ console:** [CLI console loop](/quickstart/cli-console-loop)
 
 ## How do I install the SDK?
 
-**Option A — zero copy-paste (recommended):**
+**Option A — wizard (recommended):**
 
 ```bash
 npx mushi-mushi
 ```
 
 The wizard opens your browser, you click **Approve**, picks or creates a project,
-installs the SDK, and writes `.env.local` — all automatically.
+installs the SDK, and writes `.env.local`.
 
 <Callout type="info">
   {QUICKSTART_ONE_KEY_CALLOUT}
@@ -55,7 +41,7 @@ installs the SDK, and writes `.env.local` — all automatically.
 See [Project ID & API keys](/concepts/credentials) for env var names per framework.
 
 <Callout type="warning">
-  The SDK needs only `MUSHI_PROJECT_ID` + `MUSHI_API_KEY` (see
+  The SDK needs only framework-prefixed project id + API key (see
   [`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example)).
   The repo's root `.env.example` is for **self-hosting the backend** — you do
   not need Supabase or an LLM key to use the SDK.

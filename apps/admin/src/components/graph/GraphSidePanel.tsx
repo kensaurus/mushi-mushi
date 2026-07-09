@@ -98,7 +98,7 @@ export function GraphSidePanel({ node, blastRadius, blastLoading, onClear }: Pro
       />
 
       {reportLink && (
-        <Link to={reportLink} className="inline-block text-xs text-brand hover:text-brand-hover">
+        <Link to={reportLink} className="inline-block text-xs text-accent-foreground hover:text-accent">
           View related reports →
         </Link>
       )}

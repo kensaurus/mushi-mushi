@@ -4,6 +4,7 @@
 
 import { Link } from 'react-router-dom'
 import { Section, StatCard, SnapshotSectionHint } from '../ui'
+import { LINK_ACCENT } from '../../lib/chipTone'
 import { MetricStrip } from '../MetricStrip'
 import type { McpStats } from '../mcp/types'
 import type { SdkStatus } from '../SdkVersionBadge'
@@ -154,7 +155,7 @@ export function ConnectSnapshotStrip({
       </MetricStrip>
       {!hideLinks ? (
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-2xs text-fg-muted">
-          <Link to="/mcp?tab=setup" className="text-brand hover:underline">
+          <Link to="/mcp?tab=setup" className={LINK_ACCENT}>
             MCP setup →
           </Link>
           <Link to="/projects" className="hover:text-fg underline-offset-2 hover:underline">

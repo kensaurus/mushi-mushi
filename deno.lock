@@ -6,9 +6,6 @@
     "npm:@supabase/supabase-js@2": "2.108.1",
     "npm:hono@4": "4.12.25",
     "npm:jiti@^2.7.0": "2.7.0",
-    "npm:playwright@^1.60.0": "1.61.0",
-    "npm:prettier@^3.8.4": "3.8.4",
-    "npm:turbo@^2.9.18": "2.9.18",
     "npm:zod@3": "3.25.76"
   },
   "npm": {
@@ -28,7 +25,7 @@
         "fs-extra@7.0.1",
         "lodash.startcase",
         "outdent",
-        "prettier@2.8.8",
+        "prettier",
         "resolve-from",
         "semver"
       ]
@@ -187,7 +184,7 @@
         "@changesets/types@6.1.0",
         "fs-extra@7.0.1",
         "human-id",
-        "prettier@2.8.8"
+        "prettier"
       ]
     },
     "@inquirer/external-editor@1.0.3": {
@@ -595,26 +592,8 @@
     "pify@4.0.1": {
       "integrity": "sha512-uB80kBFb/tfd68bVleG9T5GGsGPjJrLAUpR5PZIrhBnIaRTQRjqdJSsIKkOP6OAIFbj7GOrcudc5pNjZ+geV2g=="
     },
-    "playwright-core@1.61.0": {
-      "integrity": "sha512-caX7TrY3Ml6egyDX0WUcTHDxodl/b51y5wJOdCEA36QviK/s2g081hvmGs8eaE3DWb6NYZQ6BjO/QkNRPenoPA==",
-      "bin": true
-    },
-    "playwright@1.61.0": {
-      "integrity": "sha512-Z+7BeeqQPRRzklHsVFP4KTGIyMxKUmfeRA4WisM6G3/XW6nwGeX6fX9qYaDa+CiUqpOkb2f6X3nar05R3kSuJQ==",
-      "dependencies": [
-        "playwright-core"
-      ],
-      "optionalDependencies": [
-        "fsevents"
-      ],
-      "bin": true
-    },
     "prettier@2.8.8": {
       "integrity": "sha512-tdN8qQGvNjw4CHbY+XXk0JgCXn9QiF21a55rBe5LJAU+kDyC4WQn4+awm2Xfk2lQMk5fKup9XgzTZtGkjBdP9Q==",
-      "bin": true
-    },
-    "prettier@3.8.4": {
-      "integrity": "sha512-N2MylSdi48+5N/6S5j+maeHbUSIzzZ5uOcX5Hm4QpV8Dkb1HFjfAKTKX6yNPJQD9AhcT3ifHNB66tWTTJDi11Q==",
       "bin": true
     },
     "quansync@0.2.11": {
@@ -697,18 +676,6 @@
     "tslib@2.8.1": {
       "integrity": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="
     },
-    "turbo@2.9.18": {
-      "integrity": "sha512-bwabv6PupzeavybzEoArBAkwq5fnzwf8OFnRtpHwnviFWuwJPFxtyH+aVp36TmIqK3aYYgtTJ3J0m2ysxxSzQg==",
-      "optionalDependencies": [
-        "@turbo/darwin-64",
-        "@turbo/darwin-arm64",
-        "@turbo/linux-64",
-        "@turbo/linux-arm64",
-        "@turbo/windows-64",
-        "@turbo/windows-arm64"
-      ],
-      "bin": true
-    },
     "universalify@0.1.2": {
       "integrity": "sha512-rBJeI5CXAlmy1pV+617WB9J63U6XcazHHF2f2dbJix4XzpUF0RS3Zbj0FGIOCAva5P/d/GBOYaACQ1w+0azUkg=="
     },
@@ -763,9 +730,9 @@
       "dependencies": [
         "npm:@changesets/cli@^2.31.0",
         "npm:jiti@^2.7.0",
-        "npm:playwright@^1.60.0",
-        "npm:prettier@^3.8.4",
-        "npm:turbo@^2.9.18"
+        "npm:playwright@^1.61.1",
+        "npm:prettier@^3.8.5",
+        "npm:turbo@^2.10.0"
       ]
     }
   }

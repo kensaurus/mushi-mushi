@@ -1,15 +1,4 @@
-/**
- * FILE: apps/docs/app/[[...mdxPath]]/page.tsx
- * PURPOSE: Nextra v4 catch-all gateway for the `content/` directory.
- *
- * Boilerplate from https://nextra.site/docs/file-conventions/content-directory
- * — routes every URL not handled by another `app/` segment into the
- * matching MDX file under `apps/docs/content/`. Without it, Next.js
- * generates only the 404 page and `output: 'export'` ships an empty site.
- *
- * Translated into the project's TypeScript style + the existing
- * `mdx-components.tsx` import path.
- */
+/** Nextra v4 catch-all gateway for the `content/` directory. */
 
 import { generateStaticParamsFor, importPage } from 'nextra/pages'
 import { useMDXComponents as getMDXComponents } from '../../mdx-components'

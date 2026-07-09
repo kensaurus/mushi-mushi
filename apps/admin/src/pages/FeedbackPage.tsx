@@ -327,11 +327,11 @@ export function FeedbackPage() {
           <Card className="border-dashed border-edge-subtle bg-surface-raised/20 p-3">
             <p className="text-2xs leading-relaxed text-fg-muted">
               End-user bug reports from your app appear under{' '}
-              <Link to="/reports" className="font-medium text-brand hover:text-brand-hover">
+              <Link to="/reports" className="font-medium text-accent-foreground hover:text-accent">
                 Reports
               </Link>
               . Billing questions?{' '}
-              <Link to="/billing" className="font-medium text-brand hover:text-brand-hover">
+              <Link to="/billing" className="font-medium text-accent-foreground hover:text-accent">
                 Billing support
               </Link>
               .
@@ -422,7 +422,7 @@ export function FeedbackPage() {
         <ContainedBlock tone="muted" className="border-dashed">
           <p className="text-2xs text-fg-muted">
             Operators can link tickets to releases when publishing on{' '}
-            <Link to="/releases" className="font-medium text-brand hover:text-brand-hover">
+            <Link to="/releases" className="font-medium text-accent-foreground hover:text-accent">
               Releases
             </Link>
             .
@@ -468,10 +468,11 @@ function TicketRow({
 
   return (
     <li>
-      <button
+      <Btn
         type="button"
+        variant="ghost"
         onClick={onOpen}
-        className="-mx-1 flex w-full items-start justify-between gap-3 rounded-sm px-1 py-2.5 text-left hover:bg-surface-overlay/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 motion-safe:transition-colors"
+        className="-mx-1 flex w-full items-start justify-between gap-3 rounded-sm px-1 py-2.5 text-left hover:bg-surface-overlay/40 !border-0 !bg-transparent hover:!border-0 shadow-none hover:-translate-y-0"
       >
         <div className="min-w-0 flex-1 space-y-0.5">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -503,7 +504,7 @@ function TicketRow({
           )}
         </div>
         <Badge className={`${TICKET_STATUS_TONE[t.status]} shrink-0`}>{TICKET_STATUS_LABEL[t.status]}</Badge>
-      </button>
+      </Btn>
     </li>
   )
 }

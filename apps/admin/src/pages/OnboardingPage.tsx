@@ -559,15 +559,16 @@ export function OnboardingPage() {
             return (
               <span key={`${tab}-${stepId}`} className="flex items-center gap-2">
                 {i > 0 && <span className="text-fg-faint text-xs" aria-hidden="true">›</span>}
-                <button
-                  type="button"
+                <Btn
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setActiveTab(tab)}
-                  className={`flex items-center gap-1.5 rounded px-2 py-0.5 text-2xs font-medium transition-colors ${
+                  className={`flex items-center gap-1.5 rounded px-2 py-0.5 text-2xs font-medium border-0 shadow-none ${
                     isDone
-                      ? 'text-ok'
+                      ? 'text-ok bg-transparent hover:bg-transparent'
                       : isActive
                         ? 'bg-brand/10 text-brand ring-1 ring-inset ring-brand/20'
-                        : 'text-fg-muted hover:text-fg'
+                        : 'text-fg-muted hover:text-fg bg-transparent'
                   }`}
                   aria-current={isActive ? 'step' : undefined}
                 >
@@ -576,7 +577,7 @@ export function OnboardingPage() {
                     : <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-current text-3xs">{i + 1}</span>
                   }
                   {label}
-                </button>
+                </Btn>
               </span>
             )
           })}
@@ -585,14 +586,14 @@ export function OnboardingPage() {
               <span className="text-fg-faint text-xs" aria-hidden="true">›</span>
               <Link
                 to="/connect"
-                className="flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-medium text-brand hover:underline"
+                className="flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
               >
                 Continue to Connect hub →
               </Link>
               <span className="text-fg-faint text-xs" aria-hidden="true">·</span>
               <Link
                 to="/setup-copilot"
-                className="flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-medium text-fg-muted hover:text-brand hover:underline"
+                className="flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-medium text-fg-muted hover:text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
               >
                 Setup copilot
               </Link>
@@ -1139,22 +1140,26 @@ export function OnboardingPage() {
 
       {!ux.hideFooterLinks ? (
       <p className="text-center flex items-center justify-center gap-3">
-        <button
+        <Btn
+          variant="ghost"
+          size="sm"
           onClick={() => navigate('/dashboard')}
-          className="text-2xs text-fg-faint hover:text-fg-muted transition-colors"
+          className="border-0 bg-transparent shadow-none hover:bg-transparent px-0 py-0 text-2xs text-fg-faint hover:text-fg-muted"
         >
           Skip setup — go to dashboard
-        </button>
+        </Btn>
         <span className="text-2xs text-fg-faint" aria-hidden="true">·</span>
-        <button
+        <Btn
+          variant="ghost"
+          size="sm"
           onClick={() => {
             restartFirstRunTour()
             navigate('/dashboard')
           }}
-          className="text-2xs text-fg-faint hover:text-fg-muted transition-colors"
+          className="border-0 bg-transparent shadow-none hover:bg-transparent px-0 py-0 text-2xs text-fg-faint hover:text-fg-muted"
         >
           Restart tour
-        </button>
+        </Btn>
       </p>
       ) : null}
     </div>

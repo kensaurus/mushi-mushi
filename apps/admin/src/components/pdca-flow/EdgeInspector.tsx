@@ -157,7 +157,7 @@ export function EdgeInspector({ edge, stages, onClose }: EdgeInspectorProps) {
       <Link
         to={copy.href}
         onClick={onClose}
-        className="mt-2 inline-flex items-center gap-1 text-brand hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-sm"
+        className="mt-2 inline-flex items-center gap-1 text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-sm"
       >
         Open {targetMeta.label.toLowerCase()} queue
         <span aria-hidden="true">→</span>

@@ -7,6 +7,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Section, Card, Btn } from '../components/ui'
+import { LINK_ACCENT } from '../lib/chipTone'
 import { VerifySetupPanel } from '../components/VerifySetupPanel'
 import { SdkHealthSummary } from '../components/SdkHealthSummary'
 import { SdkUpgradeCTA } from '../components/SdkUpgradeCTA'
@@ -119,15 +120,15 @@ export function SetupCopilotPage() {
         aria-label="Setup funnel"
         className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-muted"
       >
-        <Link to="/onboarding" className="text-brand hover:underline">
+        <Link to="/onboarding" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
           Setup wizard
         </Link>
         <span aria-hidden="true">·</span>
-        <Link to={projectId ? `/connect?project=${projectId}` : '/connect'} className="text-brand hover:underline">
+        <Link to={projectId ? `/connect?project=${projectId}` : '/connect'} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
           Connect hub
         </Link>
         <span aria-hidden="true">·</span>
-        <Link to="/inbox" className="text-brand hover:underline">
+        <Link to="/inbox" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
           Action Inbox
         </Link>
       </nav>
@@ -148,9 +149,15 @@ export function SetupCopilotPage() {
       {projectId && !projectRow && !projectsPayload && projectsError && (
         <Card className="p-5">
           <p className="text-sm text-fg-muted">Could not load projects: {projectsError}</p>
-          <button type="button" onClick={() => void reload()} className="text-xs text-accent underline mt-2 inline-block">
+          <Btn
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => void reload()}
+            className={`mt-2 inline-block !px-0 !py-0 !border-0 !bg-transparent hover:!bg-transparent ${LINK_ACCENT}`}
+          >
             Retry
-          </button>
+          </Btn>
         </Card>
       )}
 

@@ -249,7 +249,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
                   {(channelErrorCode === 'missing_scope' ||
                     ['invalid_auth', 'not_authed', 'account_inactive', 'token_revoked'].includes(channelErrorCode ?? '')) && (
                     <button
-                      className="inline-flex items-center gap-1 text-xs font-medium text-brand underline hover:no-underline"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors hover:no-underline"
                       onClick={handleAddToSlack}
                       disabled={!projectId}
                     >

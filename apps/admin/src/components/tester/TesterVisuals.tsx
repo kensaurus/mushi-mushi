@@ -128,7 +128,7 @@ export function TesterGuideBullets({ items }: { items: string[] }) {
 
 export function TesterGuideLink({ to, children }: { to: string; children: ReactNode }) {
   return (
-    <Link to={to} className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">
+    <Link to={to} className="inline-flex items-center gap-1 text-xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
       {children}
       <span aria-hidden>→</span>
     </Link>

@@ -199,7 +199,7 @@ export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages }: Pr
                 : 'Watch a bug travel through Mushi'}
           </Btn>
           {demoState === 'done' && (
-            <Link to="/reports" className="text-2xs text-brand hover:underline">
+            <Link to="/reports" className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
               Open Reports →
             </Link>
           )}

@@ -29,153 +29,25 @@
  *          dominating it.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ConnectionStatus } from './ConnectionStatus'
-import { RevealedKeyCard } from './RevealedKeyCard'
-import { Card, Btn, Tooltip, CopyButton } from './ui'
-import { CodePanel, CodeInline } from './CodePanel'
-import { ConfigHelp } from './ConfigHelp'
+import { Card } from './ui'
 import { apiFetch, invalidateApiCache } from '../lib/supabase'
 import {
   DEFAULT_SDK_CONFIG,
-  FRAMEWORKS,
-  frameworkLabel,
   installCommand,
-  isMobileFramework,
   isServerFramework,
   renderSnippet,
-  type BannerPosition,
-  type BannerVariant,
   type Framework,
-  type ScreenshotMode,
   type SdkPreviewConfig,
-  type WidgetPosition,
-  type WidgetTheme,
-  type WidgetTrigger,
 } from '../lib/sdkSnippets'
-import { getWidgetPreviewTokens, getLocale } from '@mushi-mushi/web'
 import { resolveDefaultSdkFramework } from '../lib/sdkInstallDefaults'
-
-interface Props {
-  /** The project's external `project_id` (the value the SDK sends back to the
-   *  ingest endpoint) — not the internal UUID. */
-  projectId: string
-  /** Project slug — drives Expo env-var snippets and default framework tab. */
-  projectSlug?: string | null
-  /** Optional linked-repo package.json text for frameworkDetect auto-tab. */
-  linkedPackageJson?: string | null
-  /** Plaintext API key, only available the moment after a mint. */
-  apiKey?: string | null
-  /** Active key prefixes (e.g. `mushi_a1b2c3d4`) when the full secret is not in memory. */
-  keyPrefixes?: string[]
-  /** When true, drops outer padding and the descriptive subhead so the card
-   *  reads as a sub-block inside another card rather than a full section. */
-  compact?: boolean
-  /** Show live connection / ingest status chip above the snippet. */
-  showConnectionStatus?: boolean
-}
-
-const POSITIONS: WidgetPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
-const THEMES: WidgetTheme[] = ['auto', 'light', 'dark']
-const SCREENSHOT_MODES: ScreenshotMode[] = ['on-report', 'auto', 'off']
-const NATIVE_TRIGGER_MODES = ['shake', 'button', 'both', 'none'] as const
-
-const POSITION_LABEL: Record<WidgetPosition, string> = {
-  'top-left': 'Top left',
-  'top-right': 'Top right',
-  'bottom-left': 'Bottom left',
-  'bottom-right': 'Bottom right',
-}
-
-const SCREENSHOT_LABEL: Record<ScreenshotMode, string> = {
-  'on-report': 'When report opens',
-  auto: 'Always',
-  off: 'Never',
-}
-
-/** Subset of assistant config used by the live widget preview mock. */
-interface AssistantPreviewState {
-  enabled: boolean
-  label: string
-  greeting: string
-}
-
-interface RemoteSdkConfig {
-  enabled?: boolean
-  widget?: {
-    position?: WidgetPosition
-    theme?: WidgetTheme
-    trigger?: WidgetTrigger
-    triggerText?: string | null
-    attachToSelector?: string | null
-    launcher?: WidgetTrigger
-    bannerVariant?: BannerVariant
-    bannerPosition?: BannerPosition
-    bannerBugCta?: string | null
-    bannerFeatureCta?: boolean
-    bannerMessage?: string | null
-    bannerLabel?: string | null
-    screenshotSensitiveHint?: boolean | string | null
-  }
-  capture?: SdkPreviewConfig['capture']
-  native?: SdkPreviewConfig['native']
-}
-
-function fromRemoteConfig(remote: RemoteSdkConfig): SdkPreviewConfig {
-  return {
-    position: remote.widget?.position ?? DEFAULT_SDK_CONFIG.position,
-    theme: remote.widget?.theme ?? DEFAULT_SDK_CONFIG.theme,
-    trigger: remote.widget?.launcher ?? remote.widget?.trigger ?? DEFAULT_SDK_CONFIG.trigger,
-    triggerText: remote.widget?.triggerText ?? DEFAULT_SDK_CONFIG.triggerText,
-    attachToSelector: remote.widget?.attachToSelector ?? DEFAULT_SDK_CONFIG.attachToSelector,
-    bannerVariant: remote.widget?.bannerVariant ?? DEFAULT_SDK_CONFIG.bannerVariant,
-    bannerPosition: remote.widget?.bannerPosition ?? DEFAULT_SDK_CONFIG.bannerPosition,
-    bannerMessage: remote.widget?.bannerMessage ?? DEFAULT_SDK_CONFIG.bannerMessage,
-    bannerLabel: remote.widget?.bannerLabel ?? DEFAULT_SDK_CONFIG.bannerLabel,
-    bannerBugCta: remote.widget?.bannerBugCta ?? DEFAULT_SDK_CONFIG.bannerBugCta,
-    bannerFeatureCta: remote.widget?.bannerFeatureCta ?? DEFAULT_SDK_CONFIG.bannerFeatureCta,
-    // `false` must survive (?? keeps it); `null`/undefined → default (show caption).
-    screenshotSensitiveHint:
-      remote.widget?.screenshotSensitiveHint ?? DEFAULT_SDK_CONFIG.screenshotSensitiveHint,
-    capture: {
-      console: remote.capture?.console ?? DEFAULT_SDK_CONFIG.capture.console,
-      network: remote.capture?.network ?? DEFAULT_SDK_CONFIG.capture.network,
-      performance: remote.capture?.performance ?? DEFAULT_SDK_CONFIG.capture.performance,
-      screenshot: remote.capture?.screenshot ?? DEFAULT_SDK_CONFIG.capture.screenshot,
-      elementSelector: remote.capture?.elementSelector ?? DEFAULT_SDK_CONFIG.capture.elementSelector,
-    },
-    native: {
-      triggerMode: remote.native?.triggerMode ?? DEFAULT_SDK_CONFIG.native.triggerMode,
-      minDescriptionLength: remote.native?.minDescriptionLength ?? DEFAULT_SDK_CONFIG.native.minDescriptionLength,
-    },
-  }
-}
-
-function toRemoteConfig(config: SdkPreviewConfig, enabled: boolean): RemoteSdkConfig {
-  return {
-    enabled,
-    widget: {
-      position: config.position,
-      theme: config.theme,
-      trigger: config.trigger,
-      launcher: config.trigger,
-      triggerText: config.triggerText.trim() ? config.triggerText : null,
-      attachToSelector: config.attachToSelector.trim() || null,
-      bannerVariant: config.bannerVariant,
-      bannerPosition: config.bannerPosition,
-      bannerMessage: config.bannerMessage.trim() || null,
-      bannerLabel: config.bannerLabel.trim() || null,
-      bannerBugCta: config.bannerBugCta.trim() || null,
-      bannerFeatureCta: config.bannerFeatureCta,
-      screenshotSensitiveHint:
-        typeof config.screenshotSensitiveHint === 'string'
-          ? config.screenshotSensitiveHint.trim() || true
-          : config.screenshotSensitiveHint,
-    },
-    capture: config.capture,
-    native: config.native,
-  }
-}
+import { fromRemoteConfig, toRemoteConfig } from './sdk-install/sdk-install-config-mappers'
+import { SdkInstallConfigurator } from './sdk-install/SdkInstallConfigurator'
+import { SdkInstallKeyPanel } from './sdk-install/SdkInstallKeyPanel'
+import { SdkInstallPreview } from './sdk-install/SdkInstallPreview'
+import { SdkInstallSnippetColumn } from './sdk-install/SdkInstallSnippetColumn'
+import type { AssistantPreviewState, RemoteSdkConfig, SdkInstallCardProps } from './sdk-install/sdk-install-types'
 
 export function SdkInstallCard({
   projectId,
@@ -185,15 +57,13 @@ export function SdkInstallCard({
   keyPrefixes,
   compact,
   showConnectionStatus = false,
-}: Props) {
+}: SdkInstallCardProps) {
   const detectedFramework = useMemo(
     () => resolveDefaultSdkFramework(projectSlug, linkedPackageJson),
     [projectSlug, linkedPackageJson],
   )
   const [framework, setFramework] = useState<Framework>(() => detectedFramework)
   const autoFrameworkApplied = useRef(false)
-  const [snippetCopied, setSnippetCopied] = useState(false)
-  const [installCopied, setInstallCopied] = useState(false)
   const [config, setConfig] = useState<SdkPreviewConfig>(DEFAULT_SDK_CONFIG)
   const [savedConfig, setSavedConfig] = useState<SdkPreviewConfig>(DEFAULT_SDK_CONFIG)
   const [enabled, setEnabled] = useState(true)
@@ -206,12 +76,8 @@ export function SdkInstallCard({
     label: 'Ask',
     greeting: '',
   })
-
-  const [fetchedPrefixes, setFetchedPrefixes] = useState<string[]>([])
-  const [rotating, setRotating] = useState(false)
   const [rotatedKey, setRotatedKey] = useState<string | null>(null)
 
-  const activePrefixes = keyPrefixes ?? fetchedPrefixes
   // NEVER bake a truncated key (e.g. `mushi_a1b2c3d4…`) into the copyable
   // snippet: it reads like a real key but fails when pasted, which was a
   // top setup-failure cause. When we don't hold the full secret in memory we
@@ -227,6 +93,14 @@ export function SdkInstallCard({
   const install = installCommand(framework)
   const isDirty = enabled !== savedEnabled || JSON.stringify(config) !== JSON.stringify(savedConfig)
 
+  const handleRotatedKeyChange = useCallback((key: string | null) => {
+    setRotatedKey(key)
+  }, [])
+
+  const handleKeyError = useCallback((message: string) => {
+    setSaveMessage(message)
+  }, [])
+
   useEffect(() => {
     if (autoFrameworkApplied.current) return
     if (detectedFramework !== 'react') {
@@ -234,27 +108,6 @@ export function SdkInstallCard({
       autoFrameworkApplied.current = true
     }
   }, [detectedFramework])
-
-  useEffect(() => {
-    if (apiKey || (keyPrefixes && keyPrefixes.length > 0)) return
-    let cancelled = false
-    void apiFetch<{ projects: Array<{ id: string; api_keys: Array<{ key_prefix: string; is_active: boolean }> }> }>(
-      '/v1/admin/projects',
-    ).then((res) => {
-      if (cancelled || !res.ok || !res.data) return
-      // `/v1/admin/projects` keys each row by internal `id` (no `project_id`
-      // field); `projectId` passed into this card is that same internal UUID.
-      const row = res.data.projects.find((p) => p.id === projectId)
-      const prefixes = (row?.api_keys ?? [])
-        .filter((k) => k.is_active)
-        .map((k) => k.key_prefix)
-        .filter(Boolean)
-      setFetchedPrefixes(prefixes)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [apiKey, keyPrefixes, projectId])
 
   useEffect(() => {
     let cancelled = false
@@ -298,13 +151,6 @@ export function SdkInstallCard({
       cancelled = true
     }
   }, [projectId])
-
-  function copy(text: string, setter: (v: boolean) => void) {
-    navigator.clipboard.writeText(text).then(() => {
-      setter(true)
-      setTimeout(() => setter(false), 2000)
-    })
-  }
 
   function reset() {
     setConfig(DEFAULT_SDK_CONFIG)
@@ -357,22 +203,6 @@ export function SdkInstallCard({
     config.native.triggerMode === DEFAULT_SDK_CONFIG.native.triggerMode &&
     config.native.minDescriptionLength === DEFAULT_SDK_CONFIG.native.minDescriptionLength
 
-  async function rotateKey() {
-    setRotating(true)
-    setSaveMessage(null)
-    const res = await apiFetch<{ key: string; prefix: string }>(`/v1/admin/projects/${projectId}/keys/rotate`, {
-      method: 'POST',
-    })
-    setRotating(false)
-    if (res.ok && res.data?.key) {
-      setRotatedKey(res.data.key)
-      setFetchedPrefixes([res.data.prefix])
-      invalidateApiCache('/v1/admin/projects')
-    } else {
-      setSaveMessage(res.error?.message ?? 'Key rotation failed')
-    }
-  }
-
   return (
     <Card className={compact ? 'p-3 space-y-4' : 'p-5 space-y-5'}>
       {showConnectionStatus && (
@@ -382,50 +212,24 @@ export function SdkInstallCard({
         </div>
       )}
 
-      {!apiKey && activePrefixes.length > 0 && (
-        <div className="rounded-md border border-edge-subtle bg-surface-raised/60 px-3 py-2.5 space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-2xs font-medium text-fg-secondary">
-              Active API key{activePrefixes.length > 1 ? 's' : ''}
-            </span>
-            <Btn size="sm" variant="ghost" disabled={rotating} onClick={() => void rotateKey()}>
-              {rotating ? 'Rotating…' : 'Rotate key'}
-            </Btn>
-          </div>
-          <ul className="space-y-1.5" aria-label="Active API key prefixes">
-            {activePrefixes.map((p) => (
-              <li key={p}>
-                <div className="flex items-start justify-between gap-2 rounded-sm border border-edge-subtle/80 bg-surface-root/50 px-2 py-1.5">
-                  <Tooltip content={`Prefix ${p} — full secret shown once at mint or rotate`} side="top">
-                    <CodeInline className="min-w-0 flex-1 break-all">{p}…</CodeInline>
-                  </Tooltip>
-                  <CopyButton value={p} label="Copy prefix" copiedLabel="Copied" size="sm" />
-                </div>
-              </li>
-            ))}
-          </ul>
-          <p className="text-2xs text-fg-muted">Full secret shown once at mint or rotate.</p>
-        </div>
-      )}
+      <SdkInstallKeyPanel
+        projectId={projectId}
+        projectSlug={projectSlug}
+        apiKey={apiKey}
+        keyPrefixes={keyPrefixes}
+        onRotatedKeyChange={handleRotatedKeyChange}
+        onError={handleKeyError}
+      />
 
-      {rotatedKey && (
-        <RevealedKeyCard
-          projectId={projectId}
-          projectName={projectSlug ?? 'project'}
-          projectSlug={projectSlug}
-          apiKey={rotatedKey}
-          scopes={['ingest']}
-          onDismiss={() => setRotatedKey(null)}
-        />
-      )}
       {!compact && (
         <div>
           <h3 className="text-sm font-semibold text-fg">Configure & install the SDK</h3>
           <p className="text-xs text-fg-muted mt-1">
             Tune the widget on the left, watch the snippet on the right update in real time, then copy it
-            into your app. Your project ID is pre-filled; replace
-            <code className="mx-1 px-1 py-0.5 rounded bg-surface-raised text-fg-secondary">mushi_xxx</code>
-            with an API key (generate one in Projects).
+            into your app. Your project ID is pre-filled. If the snippet still shows
+            <code className="mx-1 px-1 py-0.5 rounded bg-surface-raised text-fg-secondary">mushi_xxx</code>,
+            click <span className="font-medium text-fg-secondary">Mint SDK key</span> above and the real
+            key fills in automatically.
           </p>
         </div>
       )}
@@ -463,10 +267,16 @@ export function SdkInstallCard({
                 </button>
               )}
             </div>
-            <WidgetPreview config={config} assistant={assistantPreview} />
+            <SdkInstallPreview config={config} assistant={assistantPreview} />
           </div>
 
-          <ConfiguratorPanel config={config} enabled={enabled} framework={framework} onEnabledChange={setEnabled} onChange={setConfig} />
+          <SdkInstallConfigurator
+            config={config}
+            enabled={enabled}
+            framework={framework}
+            onEnabledChange={setEnabled}
+            onChange={setConfig}
+          />
           <div className="flex items-center justify-between gap-2">
             <p className="text-2xs text-fg-faint">
               {loadingConfig ? 'Loading saved config…' : saveMessage ?? 'Saved config is served to SDKs at startup.'}
@@ -488,887 +298,14 @@ export function SdkInstallCard({
         )}
 
         {/* ─── RIGHT COLUMN: framework picker, install, snippet ─── */}
-        <div className="space-y-3 min-w-0">
-          {/* Framework tabs.
-              `flex-wrap` is non-negotiable: there are 7 frameworks today
-              (React / Vue / Svelte / React Native / Expo / Capacitor /
-              Vanilla JS) which already overflow the right-column track at
-              ≤ 1024 px viewports. Without wrap the rightmost button (Vanilla
-              JS) gets *clipped outside* the card border — verified at
-              1440 / 1024 / 800 before this fix. `whitespace-nowrap` keeps
-              "React Native" on a single line when wrapping kicks in
-              (otherwise it splits into "React" / "Native" on adjacent
-              lines, which the eye reads as two separate tabs). */}
-          <div className="flex flex-wrap items-center gap-1 border-b border-edge-subtle pb-2">
-            <div role="tablist" aria-label="Framework" className="flex flex-wrap items-center gap-1">
-              {FRAMEWORKS.map((fw) => (
-                <button
-                  key={fw}
-                  type="button"
-                  role="tab"
-                  aria-selected={framework === fw}
-                  onClick={() => {
-                    autoFrameworkApplied.current = true
-                    setFramework(fw)
-                    setSnippetCopied(false)
-                    setInstallCopied(false)
-                  }}
-                  className={`px-2.5 py-1 rounded-sm text-xs whitespace-nowrap transition-colors ${
-                    framework === fw
-                      ? 'bg-brand text-brand-fg font-medium'
-                      : 'text-fg-muted hover:text-fg hover:bg-surface-overlay'
-                  }`}
-                >
-                  {frameworkLabel(fw)}
-                </button>
-              ))}
-            </div>
-            <ConfigHelp helpId="sdk-install.framework" />
-          </div>
-
-          <CodePanel
-            label="Install"
-            language="bash"
-            code={install}
-            onCopy={() => copy(install, setInstallCopied)}
-            copied={installCopied}
-          />
-
-          <CodePanel
-            label="Code"
-            language={CODE_LANG_BY_FRAMEWORK[framework]}
-            code={code}
-            onCopy={() => copy(code, setSnippetCopied)}
-            copied={snippetCopied}
-            maxHeight="max-h-72"
-          />
-
-          {/* Power-user APIs added in the 2026-05-07 SDK boost.
-              Hidden by default so the install card stays scannable for
-              first-timers, but a one-click expand for hosts that want
-              identity/tags/breadcrumbs/Sentry-grade context. We only
-              show this disclosure for the web frameworks because the
-              mobile bridges (React Native / Expo / Capacitor) don't
-              ship these methods yet — they'll get a per-platform
-              equivalent once their wave lands. */}
-          {!isMobileFramework(framework) && !isServerFramework(framework) && (
-            <details className="rounded-md border border-edge-subtle bg-surface-raised/50">
-              <summary className="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-3 py-2 text-xs text-fg hover:bg-surface-overlay rounded-md">
-                <span className="font-medium">Power-user APIs (identity, tags, breadcrumbs, Sentry)</span>
-                <span aria-hidden className="text-2xs text-fg-faint">›</span>
-              </summary>
-              <div className="px-3 pb-3 pt-1 space-y-3 text-2xs text-fg-secondary">
-                <p className="leading-relaxed">
-                  Every report carries the breadcrumb buffer, sticky tags, and (when
-                  Sentry is installed) the active trace + replay + user. After a
-                  successful submit the SDK also tags Sentry's scope with
-                  <code className="mushi-code-inline mx-1 font-mono">mushi.report_id</code>
-                  so subsequent Sentry events backlink — the admin can pivot via
-                  Sentry MCP without a manual paste.
-                </p>
-                <pre className="mushi-code-block mushi-code-body px-2.5 py-2 rounded-sm border border-code-surface-border overflow-x-auto whitespace-pre-wrap">{`// Identity — sticky across every subsequent report
-Mushi.getInstance()?.identify(user.id, { email: user.email, name: user.name })
-
-// Tags — short scalar key/values, surfaced to the Triage LLM
-Mushi.getInstance()?.setTag('feature', 'checkout-v2')
-Mushi.getInstance()?.setTags({ tenant: org.slug, plan: 'pro' })
-
-// Breadcrumbs — auto-captured for routes / clicks / console.error,
-// add your own for domain events the SDK can't infer
-Mushi.getInstance()?.addBreadcrumb({
-  category: 'custom',
-  level: 'info',
-  message: 'Checkout flow: payment intent created',
-  data: { intentId: pi.id, amountCents: 4999 },
-})
-
-// Programmatic capture — try/catch friendly, normalises any thrown
-// value (Error / string / plain object). Pairs with Sentry: same
-// call-site can flush to both and the reports are auto-linked via
-// sentryContext.eventId.
-try {
-  await checkout(cart)
-} catch (err) {
-  await Mushi.getInstance()?.captureException(err, {
-    severity: 'high',
-    component: 'CheckoutPage',
-    tags: { step: 'submit-payment' },
-  })
-  throw err
-}`}</pre>
-              </div>
-            </details>
-          )}
-        </div>
+        <SdkInstallSnippetColumn
+          framework={framework}
+          onFrameworkChange={setFramework}
+          autoFrameworkApplied={autoFrameworkApplied}
+          code={code}
+          install={install}
+        />
       </div>
     </Card>
-  )
-}
-
-/** Maps each framework tab to the language label on the code-panel chrome. */
-const CODE_LANG_BY_FRAMEWORK: Record<Framework, string> = {
-  loader: 'html',
-  react: 'tsx',
-  'react-native': 'tsx',
-  expo: 'tsx',
-  capacitor: 'ts',
-  vue: 'vue',
-  svelte: 'svelte',
-  vanilla: 'html',
-  // Server-side: instrument files are TypeScript.
-  node: 'ts',
-  express: 'ts',
-  fastify: 'ts',
-  hono: 'ts',
-}
-
-/* ── Live widget preview ─────────────────────────────────────────────── */
-
-/**
- * A mock browser viewport that renders the bug-capture trigger button at
- * the chosen corner with the chosen theme and trigger text. We deliberately
- * do NOT instantiate the real `@mushi-mushi/web` SDK because it mounts a
- * shadow-root widget on `document.body` (would fight any real widget the
- * admin app already has, and pollute every other admin page once mounted).
- *
- * Visual styling mirrors `packages/web/src/styles.ts` — the "Mushi Mushi
- * Editorial" design language: paper background, sumi ink type, vermillion
- * stamp accent, rounded-square trigger card with a vermillion bottom edge
- * and a pulsing 朱 dot. Updating those tokens here in lockstep with the
- * widget keeps the preview honest; if the visual drifts, users will report
- * "the actual widget doesn't look like the preview".
- */
-function WidgetPreview({
-  config,
-  assistant,
-}: {
-  config: SdkPreviewConfig
-  assistant: AssistantPreviewState
-}) {
-  const [panelOpen, setPanelOpen] = useState(false)
-  const [moreNavOpen, setMoreNavOpen] = useState(false)
-  const t = useMemo(() => getLocale('en'), [])
-  const moreNavCount = 2 + (assistant.enabled ? 1 : 0)
-  const moreNavToggle = `${t.step1.moreNavLabel} (${moreNavCount})`
-  // mushi-mushi-allowlist: mirrors packages/web widget tokens — hex must match shipped SDK preview
-  const isDark =
-    config.theme === 'dark' ||
-    (config.theme === 'auto' && typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches)
-
-  // Single source: @mushi-mushi/core palette via web build-widget-theme helper.
-  const tokens = getWidgetPreviewTokens(isDark ? 'dark' : 'light')
-
-  const cornerPos: Record<WidgetPosition, React.CSSProperties> = {
-    'top-left': { top: 10, left: 10 },
-    'top-right': { top: 10, right: 10 },
-    'bottom-left': { bottom: 10, left: 10 },
-    'bottom-right': { bottom: 10, right: 10 },
-  }
-
-  return (
-    <div
-      className="relative h-44 w-full rounded-md border overflow-hidden"
-      style={{
-        background: tokens.paper,
-        borderColor: tokens.rule,
-        // Subtle paper-grain via two stacked radial gradients — costs nothing
-        // and breaks the digital-flat look the previous gradient bg had.
-        backgroundImage: isDark
-          ? 'radial-gradient(circle at 20% 10%, rgba(255,255,255,0.02) 0%, transparent 40%), radial-gradient(circle at 80% 80%, rgba(255,255,255,0.015) 0%, transparent 40%)'
-          : 'radial-gradient(circle at 20% 10%, rgba(0,0,0,0.015) 0%, transparent 40%), radial-gradient(circle at 80% 80%, rgba(0,0,0,0.02) 0%, transparent 40%)',
-      }}
-      aria-label="Live preview of the issue-report widget in your app"
-    >
-      {/* Faux browser chrome — kept minimal so the eye lands on the widget */}
-      {/* mushi-mushi-allowlist: macOS traffic-light mock chrome in SDK widget preview */}
-      <div
-        className="flex items-center gap-1 px-2 py-1 border-b"
-        style={{
-          background: isDark ? 'rgba(0,0,0,0.30)' : 'rgba(255,255,255,0.55)',
-          borderColor: tokens.rule,
-        }}
-      >
-        <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-preview-traffic-red)]" />
-        <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-preview-traffic-yellow)]" />
-        <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-preview-traffic-green)]" />
-        <span
-          className="ml-2 text-2xs"
-          style={{ color: tokens.inkMuted, fontFamily: 'ui-monospace, SF Mono, Menlo, monospace' }}
-        >
-          your-app.com
-        </span>
-      </div>
-
-      {/* Faux page content — type sample lines, slight variation in width */}
-      <div className="px-3 pt-3 space-y-1.5">
-        <div className="h-2 w-2/3 rounded-sm" style={{ background: tokens.rule }} />
-        <div className="h-2 w-1/2 rounded-sm" style={{ background: tokens.rule, opacity: 0.7 }} />
-        <div className="h-2 w-3/4 rounded-sm" style={{ background: tokens.rule, opacity: 0.7 }} />
-      </div>
-
-      {config.trigger === 'banner' ? (
-        /* Banner strip preview — mushi-mushi-allowlist: yen-yen widget banner variant colours in live preview */
-        <div
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            ...(config.bannerPosition === 'bottom' ? { bottom: 0 } : { top: 22 }),
-            minHeight: 22,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: config.bannerMessage.trim() ? 'space-between' : 'center',
-            gap: 6,
-            paddingLeft: 8,
-            paddingRight: 8,
-            fontSize: 11,
-            fontFamily: 'ui-monospace, SF Mono, Menlo, monospace',
-            background: config.bannerVariant === 'neon'
-              ? tokens.neonBannerBg
-              : config.bannerVariant === 'subtle'
-                ? tokens.accentWash
-                : tokens.vermillion,
-            color: config.bannerVariant === 'neon' ? tokens.neonBannerFg : config.bannerVariant === 'subtle' ? tokens.inkMuted : tokens.onAccent,
-            borderBottom: config.bannerPosition !== 'bottom' ? `1px solid ${config.bannerVariant === 'neon' ? tokens.neonBannerBorder : config.bannerVariant === 'subtle' ? tokens.rule : tokens.brandBannerBorder}` : 'none',
-            borderTop: config.bannerPosition === 'bottom' ? `1px solid ${config.bannerVariant === 'neon' ? tokens.neonBannerBorder : config.bannerVariant === 'subtle' ? tokens.rule : tokens.brandBannerBorder}` : 'none',
-          }}
-        >
-          {config.bannerMessage.trim() ? (
-            <>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, overflow: 'hidden' }}>
-                {(config.bannerLabel.trim() || 'Beta') && (
-                  <span style={{ flexShrink: 0, padding: '0 4px', borderRadius: 2, border: '1px solid currentColor', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                    {config.bannerLabel.trim() || 'Beta'}
-                  </span>
-                )}
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.9 }}>
-                  {config.bannerMessage.trim()}
-                </span>
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0, fontSize: 11 }}>
-                <span
-                  role="button"
-                  tabIndex={0}
-                  style={{ cursor: 'pointer', opacity: 0.9 }}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setPanelOpen(true)
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      setPanelOpen(true)
-                    }
-                  }}
-                >
-                  {config.bannerBugCta.trim() || '🐛 Report a bug'}
-                </span>
-                {config.bannerFeatureCta && (
-                  <>
-                    <span style={{ opacity: 0.25 }}>|</span>
-                    <span style={{ cursor: 'pointer', opacity: 0.75 }}>Feature</span>
-                  </>
-                )}
-                <span style={{ opacity: 0.55, marginLeft: 2, cursor: 'pointer' }}>✕</span>
-              </span>
-            </>
-          ) : (
-            <>
-              <span
-                role="button"
-                tabIndex={0}
-                style={{ padding: '1px 6px', borderRadius: 2, background: 'rgba(0,0,0,0.14)', cursor: 'pointer' }}
-                onClick={(e) => {
-                  e.preventDefault()
-                  setPanelOpen(true)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    setPanelOpen(true)
-                  }
-                }}
-              >
-                {config.bannerBugCta.trim() || '🐛 Report a bug'}
-              </span>
-              {config.bannerFeatureCta && (
-                <span style={{ padding: '1px 6px', borderRadius: 2, background: 'rgba(0,0,0,0.10)', cursor: 'pointer' }}>
-                  Feature
-                </span>
-              )}
-              <span style={{ opacity: 0.55, marginLeft: 'auto', cursor: 'pointer' }}>✕</span>
-            </>
-          )}
-        </div>
-      ) : (config.trigger === 'manual' || config.trigger === 'hidden' || config.trigger === 'attach') ? (
-        <div
-          className="absolute rounded-sm border px-2 py-1 text-2xs"
-          style={{
-            ...cornerPos[config.position],
-            color: tokens.inkMuted,
-            borderColor: tokens.rule,
-            fontFamily: 'ui-monospace, SF Mono, Menlo, monospace',
-          }}
-        >
-          {config.trigger === 'attach' ? 'HOST BUTTON' : 'NO DEFAULT UI'}
-        </div>
-      ) : (
-        <button
-          type="button"
-          className="absolute flex items-center justify-center transition-transform hover:-translate-y-0.5"
-          style={{
-            ...cornerPos[config.position],
-            height: config.trigger === 'edge-tab' ? 70 : 44,
-            width: config.trigger === 'edge-tab' ? 24 : 44,
-            background: tokens.paper,
-            color: tokens.ink,
-            border: `1px solid ${tokens.rule}`,
-            borderRadius: config.trigger === 'edge-tab' ? '4px 0 0 4px' : 4,
-            fontSize: config.trigger === 'edge-tab' ? 14 : 18,
-            lineHeight: 1,
-            writingMode: config.trigger === 'edge-tab' ? 'vertical-rl' : undefined,
-            fontFamily: "'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif",
-            // Two-layer shadow + inset vermillion bar = the "stamp face" look
-            boxShadow: config.trigger === 'edge-tab'
-              ? `0 1px 0 ${tokens.rule}, 0 6px 12px -6px rgba(14,13,11,0.30), inset -3px 0 0 ${tokens.vermillion}`
-              : `0 1px 0 ${tokens.rule}, 0 6px 12px -6px rgba(14,13,11,0.30), inset 0 -3px 0 ${tokens.vermillion}`,
-          }}
-          aria-label="Mock bug-capture trigger button — click to preview panel"
-          onClick={(e) => {
-            e.preventDefault()
-            setPanelOpen((open) => !open)
-          }}
-        >
-        {/* Trim BEFORE falling back, not after. Bare `||` would treat `"   "`
-            as truthy and render three invisible spaces — a blank trigger button
-            visually identical to the regression we just patched in widget.ts.
-            The snippet generator (sdkSnippets.ts widgetLines) already trims
-            before deciding whether to emit `triggerText`; this keeps the
-            preview's "is this empty?" semantics IDENTICAL to the snippet's.
-
-            Render the *original* (untrimmed) string when non-empty after trim
-            — the snippet emits `JSON.stringify(cfg.triggerText)` which
-            preserves leading/trailing whitespace verbatim, so a deliberate
-            ` Report ` should look the same in the preview. */}
-        <span aria-hidden="true">{config.triggerText.trim() ? config.triggerText : '\u{1F41B}'}</span>
-        {/* Pulsing 朱 indicator dot */}
-        <span
-          aria-hidden="true"
-          className="absolute"
-          style={{
-            top: 5,
-            right: 5,
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: tokens.vermillion,
-            boxShadow: `0 0 0 0 ${tokens.vermillion}`,
-            // Inline animation name — defined in the global stylesheet via
-            // a CSS string would be cleaner, but Tailwind's animate-pulse
-            // is close enough and avoids a second style injection.
-            animation: 'pulse 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite',
-          }}
-        />
-        </button>
-      )}
-
-      {panelOpen && config.trigger !== 'manual' && config.trigger !== 'hidden' && config.trigger !== 'attach' && (
-        <div
-          className="absolute rounded-sm border shadow-lg overflow-hidden"
-          style={{
-            bottom: 8,
-            right: 8,
-            width: '62%',
-            maxHeight: '72%',
-            background: tokens.paperRaised,
-            borderColor: tokens.rule,
-            color: tokens.ink,
-            fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-            fontSize: 11,
-            zIndex: 2,
-          }}
-          role="presentation"
-        >
-          <div
-            className="px-2 py-1 border-b text-2xs font-medium flex items-center justify-between gap-1"
-            style={{ borderColor: tokens.rule, color: tokens.inkMuted }}
-          >
-            <span>{t.step1.heading}</span>
-            <button
-              type="button"
-              className="text-2xs"
-              style={{ color: tokens.inkMuted, cursor: 'pointer' }}
-              aria-label={t.widget.close}
-              onClick={() => setPanelOpen(false)}
-            >
-              ✕
-            </button>
-          </div>
-          <div className="p-2 space-y-1">
-            <p
-              className="text-2xs font-medium"
-              style={{
-                color: tokens.inkMuted,
-                fontFamily: 'ui-monospace, SF Mono, Menlo, monospace',
-                fontSize: 11,
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                margin: 0,
-              }}
-            >
-              {t.step1.reportSectionLabel}
-            </p>
-            <div
-              className="rounded-sm px-2 py-1 border"
-              style={{ borderColor: tokens.rule, background: tokens.paper }}
-            >
-              <span style={{ color: tokens.vermillion }} aria-hidden="true">🐛</span>{' '}
-              {t.step1.categoryDescriptions.bug}
-            </div>
-            <div className="space-y-0.5">
-              <button
-                type="button"
-                className="w-full rounded-sm px-2 py-1 border text-left flex items-center justify-between gap-1"
-                style={{ borderColor: tokens.rule, background: tokens.paper, color: tokens.inkMuted, cursor: 'pointer' }}
-                aria-expanded={moreNavOpen}
-                onClick={() => setMoreNavOpen((open) => !open)}
-              >
-                <span>{moreNavToggle}</span>
-                <span aria-hidden="true">{moreNavOpen ? '▾' : '▸'}</span>
-              </button>
-              {moreNavOpen && (
-                <div className="space-y-0.5 pl-1">
-                  <div
-                    className="rounded-sm px-2 py-0.5 border text-2xs"
-                    style={{ borderColor: tokens.rule, background: tokens.paper, color: tokens.inkMuted }}
-                  >
-                    📬 {t.step1.moreNav.yourReports}
-                  </div>
-                  {assistant.enabled && (
-                    <div
-                      className="rounded-sm px-2 py-0.5 border text-2xs"
-                      style={{ borderColor: tokens.rule, background: tokens.paper, color: tokens.inkMuted }}
-                    >
-                      💬 {assistant.label || t.assistant.defaultLabel}
-                    </div>
-                  )}
-                  <div
-                    className="rounded-sm px-2 py-0.5 text-2xs"
-                    style={{ color: tokens.inkMuted }}
-                  >
-                    🌐 {t.step1.moreNav.joinCommunity.split(' · ')[0]}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-    </div>
-  )
-}
-
-/* ── Configurator controls ────────────────────────────────────────────── */
-
-function ConfiguratorPanel({
-  config,
-  enabled,
-  framework,
-  onEnabledChange,
-  onChange,
-}: {
-  config: SdkPreviewConfig
-  enabled: boolean
-  framework: Framework
-  onEnabledChange: (next: boolean) => void
-  onChange: (next: SdkPreviewConfig) => void
-}) {
-  function update<K extends keyof SdkPreviewConfig>(k: K, v: SdkPreviewConfig[K]) {
-    onChange({ ...config, [k]: v })
-  }
-
-  function updateCapture<K extends keyof SdkPreviewConfig['capture']>(k: K, v: SdkPreviewConfig['capture'][K]) {
-    onChange({ ...config, capture: { ...config.capture, [k]: v } })
-  }
-
-  function updateNative<K extends keyof SdkPreviewConfig['native']>(k: K, v: SdkPreviewConfig['native'][K]) {
-    onChange({ ...config, native: { ...config.native, [k]: v } })
-  }
-
-  return (
-    <div className="space-y-3 text-2xs">
-      <label className="flex items-start gap-2 rounded-sm border border-edge-subtle bg-surface-raised/60 p-2">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => onEnabledChange(e.target.checked)}
-          className="mt-0.5 h-3 w-3 accent-brand"
-        />
-        <span>
-          <span className="block text-fg-secondary font-medium">Serve runtime config</span>
-          <span className="block text-fg-faint mt-0.5">
-            Turn off to make installed SDKs ignore saved console settings and keep their local bootstrap defaults.
-          </span>
-        </span>
-      </label>
-
-      {/* Position 4-corner picker */}
-      <fieldset>
-        <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1 inline-flex items-center gap-1">
-          Position
-          <ConfigHelp helpId="sdk-install.position" />
-        </legend>
-        <div
-          className="grid grid-cols-2 gap-1 w-32 p-1 bg-surface-raised border border-edge-subtle rounded-sm"
-          role="radiogroup"
-          aria-label="Widget position"
-        >
-          {POSITIONS.map((pos) => (
-            <button
-              key={pos}
-              type="button"
-              role="radio"
-              aria-checked={config.position === pos}
-              aria-label={POSITION_LABEL[pos]}
-              onClick={() => update('position', pos)}
-              className={`h-6 rounded-sm transition-colors ${
-                config.position === pos
-                  ? 'bg-brand'
-                  : 'bg-surface-overlay hover:bg-edge-subtle'
-              }`}
-              title={POSITION_LABEL[pos]}
-            />
-          ))}
-        </div>
-      </fieldset>
-
-      {!isMobileFramework(framework) && (
-        <fieldset>
-          <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1 inline-flex items-center gap-1">
-            Trigger mode
-            <ConfigHelp helpId="sdk-install.trigger_mode" />
-          </legend>
-          {/* 3-option chooser — recommended order mirrors the plan's guidance:
-              attach first (best headless UX), then auto (easy default), then
-              manual / edge-tab for advanced hosts. */}
-          <div className="space-y-1.5">
-            {([
-              { value: 'banner',   label: 'Header banner',          hint: 'A slim strip pinned to the top (or bottom) of the viewport. Less obtrusive than a FAB.' },
-              { value: 'attach',   label: 'Attach to my button',    hint: 'Your button opens the reporter. No floating stamp.' },
-              { value: 'auto',     label: 'Floating stamp (FAB)',    hint: 'SDK renders a bug-stamp in the chosen corner.' },
-              { value: 'edge-tab', label: 'Edge tab',               hint: 'A vertical tab on the screen edge.' },
-              { value: 'manual',   label: 'Headless (manual)',       hint: 'Use <MushiTrigger> anywhere in your JSX.' },
-            ] as const).map(({ value, label, hint }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => update('trigger', value)}
-                title={hint}
-                className={`w-full rounded-sm border px-2 py-1.5 text-left text-2xs transition-colors flex items-center gap-2 ${
-                  config.trigger === value
-                    ? 'border-brand bg-brand/15 text-brand'
-                    : 'border-edge-subtle bg-surface-raised text-fg-muted hover:text-fg'
-                }`}
-              >
-                <span className={`inline-flex items-center justify-center w-3 h-3 rounded-full border shrink-0 ${config.trigger === value ? 'border-brand bg-brand' : 'border-fg-faint'}`}>
-                  {config.trigger === value && <span className="w-1.5 h-1.5 rounded-full bg-brand-fg" />}
-                </span>
-                <span className="font-medium">{label}</span>
-                {value === 'banner' && <span className="ml-auto text-2xs text-ok uppercase tracking-wider font-semibold">Recommended</span>}
-              </button>
-            ))}
-          </div>
-          {config.trigger === 'banner' && (
-            <div className="mt-2 rounded-sm border border-edge-subtle bg-surface-raised/50 p-2 space-y-2">
-              <p className="text-fg-muted font-medium">Banner options</p>
-              {/* Variant */}
-              <fieldset>
-                <legend className="text-fg-faint mb-1">Style</legend>
-                <div className="flex gap-1.5">
-                  {(['brand', 'neon', 'subtle'] as BannerVariant[]).map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => onChange({ ...config, bannerVariant: v })}
-                      className={`px-2 py-0.5 rounded-sm border text-2xs capitalize transition-colors ${
-                        config.bannerVariant === v
-                          ? 'border-brand bg-brand/15 text-brand'
-                          : 'border-edge-subtle text-fg-muted hover:text-fg'
-                      }`}
-                    >
-                      {v}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-              {/* Position */}
-              <fieldset>
-                <legend className="text-fg-faint mb-1">Position</legend>
-                <div className="flex gap-1.5">
-                  {(['top', 'bottom'] as BannerPosition[]).map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => onChange({ ...config, bannerPosition: p })}
-                      className={`px-2 py-0.5 rounded-sm border text-2xs capitalize transition-colors ${
-                        config.bannerPosition === p
-                          ? 'border-brand bg-brand/15 text-brand'
-                          : 'border-edge-subtle text-fg-muted hover:text-fg'
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-              {/* Rich banner copy */}
-              <label className="block">
-                <span className="text-fg-faint">Banner message</span>
-                <input
-                  type="text"
-                  value={config.bannerMessage}
-                  onChange={(e) => onChange({ ...config, bannerMessage: e.target.value })}
-                  placeholder="Your app is in active beta — expect rough edges."
-                  className="mt-0.5 w-full px-2 py-1 bg-surface-overlay border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand text-2xs"
-                />
-              </label>
-              <label className="block">
-                <span className="text-fg-faint">Pill label</span>
-                <input
-                  type="text"
-                  value={config.bannerLabel}
-                  onChange={(e) => onChange({ ...config, bannerLabel: e.target.value })}
-                  placeholder="Beta"
-                  className="mt-0.5 w-full px-2 py-1 bg-surface-overlay border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand text-2xs"
-                />
-              </label>
-              {/* Bug CTA label */}
-              <label className="block">
-                <span className="text-fg-faint">Bug button label</span>
-                <input
-                  type="text"
-                  value={config.bannerBugCta}
-                  onChange={(e) => onChange({ ...config, bannerBugCta: e.target.value })}
-                  placeholder="🐛 Report a bug"
-                  className="mt-0.5 w-full px-2 py-1 bg-surface-overlay border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand text-2xs"
-                />
-              </label>
-              {/* Feature CTA toggle */}
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={config.bannerFeatureCta}
-                  onChange={(e) => onChange({ ...config, bannerFeatureCta: e.target.checked })}
-                  className="h-3 w-3 accent-brand"
-                />
-                <span className="text-fg-muted">Show "Request feature" button</span>
-              </label>
-            </div>
-          )}
-          {config.trigger === 'attach' && (
-            <label className="block mt-2">
-              <span className="text-fg-muted">CSS selector (optional)</span>
-              <input
-                type="text"
-                value={config.attachToSelector}
-                onChange={(e) => update('attachToSelector', e.target.value)}
-                placeholder="#report-button"
-                className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand font-mono text-2xs"
-              />
-              <p className="text-fg-faint text-2xs mt-0.5">Leave blank to set programmatically via <code>sdk.attachTo(el)</code>.</p>
-            </label>
-          )}
-          <p className="mt-1 text-fg-faint inline-flex items-center gap-1">
-            Smart hide uses this mode as the desktop baseline.
-            <ConfigHelp helpId="sdk-install.smart_hide" />
-          </p>
-        </fieldset>
-      )}
-
-      {/* Theme + trigger text on one row */}
-      <div className="grid grid-cols-2 gap-3">
-        <fieldset>
-          <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1 inline-flex items-center gap-1">
-            Theme
-            <ConfigHelp helpId="sdk-install.theme" />
-          </legend>
-          <div className="flex gap-1" role="radiogroup" aria-label="Widget theme">
-            {THEMES.map((t) => (
-              <button
-                key={t}
-                type="button"
-                role="radio"
-                aria-checked={config.theme === t}
-                onClick={() => update('theme', t)}
-                className={`px-2 py-1 rounded-sm capitalize transition-colors ${
-                  config.theme === t
-                    ? 'bg-brand text-brand-fg'
-                    : 'bg-surface-raised text-fg-muted border border-edge-subtle hover:text-fg'
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-        </fieldset>
-
-        <label className="block">
-          <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium inline-flex items-center gap-1">
-            Trigger
-            <ConfigHelp helpId="sdk-install.trigger_text" />
-          </span>
-          <input
-            type="text"
-            value={config.triggerText}
-            onChange={(e) => update('triggerText', e.target.value.slice(0, 12))}
-            maxLength={12}
-            className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
-            placeholder="\u{1F41B}"
-            aria-label="Trigger button text or emoji"
-          />
-        </label>
-      </div>
-
-      {/* Capture options */}
-      <fieldset>
-        <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1">Capture</legend>
-        <div className="grid grid-cols-2 gap-1.5">
-          <CaptureToggle
-            label="Console logs"
-            helpId="sdk-install.capture_console"
-            checked={config.capture.console}
-            onChange={(v) => updateCapture('console', v)}
-          />
-          <CaptureToggle
-            label="Network calls"
-            helpId="sdk-install.capture_network"
-            checked={config.capture.network}
-            onChange={(v) => updateCapture('network', v)}
-          />
-          <CaptureToggle
-            label="Performance"
-            helpId="sdk-install.capture_performance"
-            checked={config.capture.performance}
-            onChange={(v) => updateCapture('performance', v)}
-          />
-          <CaptureToggle
-            label="Element picker"
-            helpId="sdk-install.capture_element_picker"
-            checked={config.capture.elementSelector}
-            onChange={(v) => updateCapture('elementSelector', v)}
-          />
-        </div>
-        <label className="block mt-2">
-          <span className="text-fg-muted inline-flex items-center gap-1">
-            Screenshot
-            <ConfigHelp helpId="sdk-install.screenshot_mode" />
-          </span>
-          <select
-            value={config.capture.screenshot}
-            onChange={(e) => updateCapture('screenshot', e.target.value as ScreenshotMode)}
-            className="ml-2 px-2 py-0.5 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
-          >
-            {SCREENSHOT_MODES.map((m) => (
-              <option key={m} value={m}>{SCREENSHOT_LABEL[m]}</option>
-            ))}
-          </select>
-        </label>
-        {config.capture.screenshot !== 'off' && (
-          <div className="mt-2 rounded-sm border border-edge-subtle bg-surface-raised/40 p-2">
-            <label className="flex items-center gap-1.5 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={config.screenshotSensitiveHint !== false}
-                onChange={(e) =>
-                  update(
-                    'screenshotSensitiveHint',
-                    e.target.checked
-                      ? typeof config.screenshotSensitiveHint === 'string'
-                        ? config.screenshotSensitiveHint
-                        : true
-                      : false,
-                  )
-                }
-                className="accent-brand"
-              />
-              <span className="text-fg-muted inline-flex items-center gap-1">
-                Privacy caption on screenshot preview
-                <ConfigHelp helpId="sdk-install.screenshot_sensitive_hint" />
-              </span>
-            </label>
-            {config.screenshotSensitiveHint !== false && (
-              <input
-                type="text"
-                maxLength={200}
-                value={typeof config.screenshotSensitiveHint === 'string' ? config.screenshotSensitiveHint : ''}
-                placeholder="Default: warn not to share passwords or personal info"
-                onChange={(e) => update('screenshotSensitiveHint', e.target.value ? e.target.value : true)}
-                className="mt-1.5 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
-              />
-            )}
-          </div>
-        )}
-      </fieldset>
-
-      <fieldset>
-        <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1">
-          Native mobile
-        </legend>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="text-fg-muted">Trigger</span>
-            <select
-              value={config.native.triggerMode}
-              onChange={(e) => updateNative('triggerMode', e.target.value as SdkPreviewConfig['native']['triggerMode'])}
-              className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
-            >
-              {NATIVE_TRIGGER_MODES.map((mode) => (
-                <option key={mode} value={mode}>{mode}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-fg-muted">Min description</span>
-            <input
-              type="number"
-              min={0}
-              max={1000}
-              value={config.native.minDescriptionLength}
-              onChange={(e) => updateNative('minDescriptionLength', Number(e.target.value))}
-              className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
-            />
-          </label>
-        </div>
-      </fieldset>
-    </div>
-  )
-}
-
-function CaptureToggle({
-  label,
-  checked,
-  onChange,
-  helpId,
-}: {
-  label: string
-  checked: boolean
-  onChange: (v: boolean) => void
-  /** Optional id into `apps/admin/src/lib/configDocs.ts`. */
-  helpId?: string
-}) {
-  return (
-    <label className="flex items-center gap-1.5 cursor-pointer select-none">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="h-3 w-3 accent-brand"
-      />
-      <span className="text-fg-secondary inline-flex items-center gap-1">
-        {label}
-        {helpId && <ConfigHelp helpId={helpId} />}
-      </span>
-    </label>
   )
 }

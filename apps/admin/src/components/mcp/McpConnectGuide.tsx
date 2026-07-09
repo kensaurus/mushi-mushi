@@ -55,7 +55,7 @@ export function McpConnectGuide({ topPriority, toolCount }: Props) {
       )}
       <p className="text-2xs text-fg-faint">
         Keys are minted per project on{' '}
-        <Link to="/projects" className="text-brand hover:underline">
+        <Link to="/projects" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
           Projects
         </Link>
         . report:write keys alone cannot expose MCP tools.

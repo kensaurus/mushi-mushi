@@ -1,19 +1,4 @@
-/**
- * FILE: apps/docs/components/diagram-primitives.tsx
- * PURPOSE: Shared building blocks for docs pipeline / architecture diagrams.
- *
- * OVERVIEW:
- * - DiagramFigure — accessible outer shell (role=img + aria-label)
- * - DiagramNode, DiagramHArrow, DiagramVArrow — reused across concept pages
- * - DiagramStep — numbered step row for flow diagrams
- *
- * USAGE:
- *   import { DiagramFigure, DiagramNode, DiagramHArrow } from './diagram-primitives'
- *
- * NOTES:
- * - Colours come from lib/viz-tokens.ts → --mushi-viz-* in editorial.css
- * - Inline styles are intentional (SVG layout + Nextra theme compatibility)
- */
+/** Shared building blocks for docs pipeline / architecture diagrams. */
 
 import type { CSSProperties, ReactNode } from 'react'
 import { VIZ } from '../lib/viz-tokens'

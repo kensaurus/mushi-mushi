@@ -9,6 +9,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Tooltip } from './ui'
+import { JobStatusPill } from './ui/job-status-pill'
 import { CodeInline } from './CodePanel'
 import { IconCopy, IconTerminal, IconBolt, IconExternalLink } from './icons'
 import { resolveSdkDisplay } from '../lib/sdkVersionCompare'
@@ -69,11 +70,7 @@ function UpgradePrButton({
 
   if (state.status === 'failed') {
     return (
-      <Tooltip content={state.error ?? 'Upgrade failed'} side="top">
-        <span className={`${compact ? 'text-xs' : 'text-sm'} text-[var(--color-error-foreground)]`}>
-          Upgrade failed
-        </span>
-      </Tooltip>
+      <JobStatusPill status="failed" error={state.error} />
     )
   }
 

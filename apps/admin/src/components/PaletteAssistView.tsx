@@ -110,7 +110,7 @@ export function PaletteAssistView({
                     <button
                       type="button"
                       onClick={() => onNavigate(step.path!)}
-                      className="ml-2 text-[var(--color-accent-text)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus rounded-sm"
+                      className="ml-2 text-accent-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus rounded-sm"
                     >
                       Go →
                     </button>

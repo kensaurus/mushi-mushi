@@ -112,7 +112,7 @@ export function GettingStartedEmpty({ embedded = false }: { embedded?: boolean }
         <span>
           {project.report_count} {pluralize(project.report_count, 'report')} · {project.fix_count} {pluralize(project.fix_count, 'fix', 'fixes')} dispatched
         </span>
-        <Link to="/projects" className="text-brand hover:underline">Switch project →</Link>
+        <Link to="/projects" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">Switch project →</Link>
       </InlineProof>
     </div>
   )

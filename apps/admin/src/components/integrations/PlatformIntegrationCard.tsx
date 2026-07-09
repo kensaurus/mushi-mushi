@@ -410,7 +410,7 @@ export function PlatformIntegrationCard({
                 href={def.docsUrl}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="text-brand hover:text-brand-hover underline underline-offset-2"
+                className="text-accent-foreground hover:text-accent underline underline-offset-2"
               >
                 {def.label} docs <IconExternalLink size={10} className="inline -mt-0.5" />
               </a>
