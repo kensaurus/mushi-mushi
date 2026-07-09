@@ -36,6 +36,11 @@ describe('parseArgs (shared wizard-args)', () => {
     expect(parsed.yes).toBe(true)
   })
 
+  it('parses --audit and advertises it in the shared help', () => {
+    expect(parseArgs(['--audit']).audit).toBe(true)
+    expect(FLAGS_HELP).toContain('--audit')
+  })
+
   it('throws on an unknown framework', () => {
     expect(() => parseArgs(['--framework', 'rails'])).toThrow(/Unknown framework: rails/)
   })

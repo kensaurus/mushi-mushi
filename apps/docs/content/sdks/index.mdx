@@ -22,6 +22,24 @@ Published npm packages ship on independent semver tracks (see [npm](https://www.
 
 See [Project ID & API keys](/concepts/credentials) for credential formats (`proj_*` slug vs UUID, `mushi_*` vs `mush_pk_*` keys).
 
+## Maturity, honestly
+
+Version numbers don't tell the maturity story (a 1.0.x wrapper can be
+younger than a 0.20.x SDK with three years of production miles), so here it
+is directly — what each tier means and where each package sits:
+
+| Tier | What it means | Packages |
+| --- | --- | --- |
+| **Battle-tested** | Runs in production apps daily (including Mushi's own console — we dogfood); full capture surface; deep test suites | `@mushi-mushi/core`, `@mushi-mushi/web`, `@mushi-mushi/react`, `@mushi-mushi/react-native`, `@mushi-mushi/cli`, `@mushi-mushi/mcp` |
+| **Solid** | Complete for the documented surface, used in real apps, smaller scope | `@mushi-mushi/capacitor`, `@mushi-mushi/node`, `@mushi-mushi/adapters` |
+| **Functional wrapper** | Thin framework binding over `@mushi-mushi/web` (~300 lines each); everything documented works, but expect fewer framework-specific niceties | `@mushi-mushi/vue`, `@mushi-mushi/svelte`, `@mushi-mushi/angular` |
+| **Native, earlier-stage** | Full native implementations with smaller install bases than the JS SDKs | iOS (Swift), Android (Kotlin), Flutter |
+
+If a "functional wrapper" is missing something you need, the underlying
+[`@mushi-mushi/web`](/sdks/web) API is always available alongside it — and
+[issues](https://github.com/kensaurus/mushi-mushi/issues) for framework
+bindings get prioritized by demand.
+
 The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`) are AGPLv3 — true OSI open source. A small enterprise-edition boundary (`packages/server/ee/`) is source-available but commercial for production use.
 
 ## Web & frameworks

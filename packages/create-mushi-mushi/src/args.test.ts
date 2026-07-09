@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { parseArgs, FLAGS_HELP, MIN_NODE_MAJOR } from '@mushi-mushi/cli/wizard-args'
 
 const BIN = fileURLToPath(new URL('../dist/index.js', import.meta.url))
@@ -69,5 +71,37 @@ describe('create-mushi-mushi', () => {
     const { stderr, status } = run([])
     expect(status).toBe(1)
     expect(stderr).toContain('non-interactive terminal detected')
+  })
+
+  it('rejects an unknown template', () => {
+    const { stderr, status } = run(['--template', 'django'])
+    expect(status).toBe(1)
+    expect(stderr).toContain('unknown template: django')
+    expect(stderr).toContain('vue, svelte, node')
+  })
+
+  it('scaffolds a starter with --template', () => {
+    const target = mkdtempSync(join(tmpdir(), 'mushi-tpl-')) + '-app'
+    try {
+      const { stdout, status } = run(['--template', 'node', target])
+      expect(status).toBe(0)
+      expect(stdout).toContain('Scaffolded the node starter')
+      expect(existsSync(join(target, 'package.json'))).toBe(true)
+      expect(existsSync(join(target, 'src', 'server.mjs'))).toBe(true)
+      expect(existsSync(join(target, '.env.example'))).toBe(true)
+    } finally {
+      rmSync(target, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses to scaffold over an existing directory', () => {
+    const target = mkdtempSync(join(tmpdir(), 'mushi-tpl-'))
+    try {
+      const { stderr, status } = run(['--template', 'vue', target])
+      expect(status).toBe(1)
+      expect(stderr).toContain('already exists')
+    } finally {
+      rmSync(target, { recursive: true, force: true })
+    }
   })
 })

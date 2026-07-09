@@ -188,6 +188,28 @@ export const CATALOG: readonly GuideMeta[] = [
 
   // ── competitor -> Mushi ────────────────────────────────────────────
   {
+    slug: 'sentry-to-mushi',
+    title: 'Sentry + Mushi (enrich or standalone)',
+    summary:
+      'Keep Sentry — Mushi runs alongside it and adds plain-English diagnosis + paste-ready fixes to your errors, or works standalone. Never a rip-out.',
+    category: 'competitor',
+    effort: 'Hours',
+    risk: 'Low',
+    status: 'published',
+    detectPackages: [
+      '@sentry/react',
+      '@sentry/nextjs',
+      '@sentry/browser',
+      '@sentry/node',
+      '@sentry/vue',
+      '@sentry/sveltekit',
+      '@sentry/angular',
+      '@sentry/react-native',
+      '@sentry/capacitor',
+    ],
+    fromLabel: 'Sentry',
+  },
+  {
     slug: 'instabug-to-mushi',
     title: 'Instabug (Luciq) → Mushi',
     summary:

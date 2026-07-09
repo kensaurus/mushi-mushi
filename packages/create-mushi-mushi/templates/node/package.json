@@ -1,0 +1,12 @@
+{
+  "name": "mushi-node-app",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=.env src/server.mjs"
+  },
+  "dependencies": {
+    "@mushi-mushi/node": "^1.1.0"
+  }
+}

@@ -97,6 +97,7 @@ async function main(): Promise<void> {
     cwd: parsed.cwd,
     endpoint: parsed.endpoint,
     sendTestReport: parsed.skipTestReport ? false : undefined,
+    audit: parsed.audit,
   })
 }
 

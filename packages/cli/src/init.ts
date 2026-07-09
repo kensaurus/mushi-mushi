@@ -52,6 +52,7 @@ import { checkFreshness } from './freshness.js';
 import { detectWorkspaceHint, type WorkspaceHint } from './monorepo.js';
 import { MUSHI_CLI_VERSION } from './version.js';
 import { printAuthBanner } from './auth-ui.js';
+import { formatDoctorResult, runDoctor } from './doctor.js';
 
 export interface InitOptions {
   cwd?: string;
@@ -62,6 +63,8 @@ export interface InitOptions {
   yes?: boolean;
   endpoint?: string;
   sendTestReport?: boolean;
+  /** Audit an existing install (doctor checks) instead of running the wizard. */
+  audit?: boolean;
 }
 
 const ENV_FILES = ['.env.local', '.env'] as const;
@@ -79,6 +82,11 @@ const API_KEY_PATTERN = /^(mushi_|mush_pk_)[A-Za-z0-9_-]{10,}$/;
 export async function runInit(options: InitOptions = {}): Promise<void> {
   const cwd = options.cwd ?? process.cwd();
 
+  if (options.audit) {
+    await runInitAudit(cwd);
+    return;
+  }
+
   ensureInteractiveOrBailOut(options);
 
   p.intro('Mushi setup');
@@ -87,6 +95,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
   warnIfWorkspaceRoot(cwd);
 
   const pkg = readPackageJson(cwd);
+  maybeSuggestAudit(pkg);
   if (!pkg) {
     p.log.warn('No package.json found in this directory.');
     const cont = await p.confirm({
@@ -149,6 +158,39 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
   await maybeOfferConnect(credentials, options, consoleBase);
 
   p.outro('Setup complete.');
+}
+
+/**
+ * `--audit` branch: the project already has Mushi (or the user wants a
+ * health check, not a re-install). Delegate to the existing doctor checks —
+ * SDK install + import, host-app wiring, MCP config, ingest readiness —
+ * instead of re-running the wizard over a working setup. Mirrors the
+ * PostHog wizard's audit-existing-install behavior.
+ */
+async function runInitAudit(cwd: string): Promise<void> {
+  p.intro('Mushi setup audit');
+  const config = loadConfig();
+  const result = await runDoctor(config, { cwd, hostApp: true, mcp: true });
+  p.log.message(formatDoctorResult(result));
+  if (result.ready) {
+    p.outro('Audit complete — setup looks healthy.');
+  } else {
+    p.outro('Audit found issues — each FAIL line above has a → Fix hint. `mushi doctor --fix` applies the safe ones.');
+    process.exitCode = 1;
+  }
+}
+
+/** Point users who re-run the wizard on an already-wired project at --audit. */
+function maybeSuggestAudit(pkg: ReturnType<typeof readPackageJson>): void {
+  const deps = {
+    ...pkg?.dependencies,
+    ...pkg?.devDependencies,
+  };
+  if (Object.keys(deps).some((d) => d.startsWith('@mushi-mushi/'))) {
+    p.log.info(
+      'A Mushi SDK is already installed here. To health-check the existing setup instead, run `npx mushi-mushi --audit`.',
+    );
+  }
 }
 
 /**
