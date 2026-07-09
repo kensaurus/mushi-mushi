@@ -7,6 +7,7 @@ import {
   buildMcpServerName,
   writeMcpServerEntry,
 } from './mcp-config.js'
+import { MUSHI_MCP_PIN_SPEC } from './version.js'
 
 describe('buildMcpServerName', () => {
   it('uses legacy mushi key when requested', () => {
@@ -30,7 +31,7 @@ describe('buildMcpServerBlock', () => {
       apiKey: 'mushi_test_key',
     })).toEqual({
       command: 'npx',
-      args: ['-y', '@mushi-mushi/mcp@latest'],
+      args: ['-y', MUSHI_MCP_PIN_SPEC],
       env: {
         MUSHI_API_ENDPOINT: 'https://api.example.test',
         MUSHI_PROJECT_ID: 'proj-1',
@@ -38,6 +39,11 @@ describe('buildMcpServerBlock', () => {
         MUSHI_FEATURES: 'triage,fixes,inventory,setup,docs',
       },
     })
+  })
+
+  it('pins the MCP package to an exact version (never @latest)', () => {
+    expect(MUSHI_MCP_PIN_SPEC).toMatch(/^@mushi-mushi\/mcp@\d+\.\d+\.\d+/)
+    expect(MUSHI_MCP_PIN_SPEC).not.toContain('@latest')
   })
 })
 

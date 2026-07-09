@@ -16,6 +16,7 @@ import {
 } from '../../_shared/entitlements.ts';
 import { requireSuperAdmin } from '../../_shared/super-admin.ts';
 import { checkIngestQuota } from '../../_shared/quota.ts';
+import { classifyIngestRateLimitError } from './ingest-rate-limit.ts';
 import { currentRegion, lookupProjectRegion, regionEndpoint } from '../../_shared/region.ts';
 import { createWebhookMiddleware, ReplayAttackError, RateLimitError } from '../../_shared/webhook-middleware.ts';
 import { getStorageAdapter, invalidateStorageCache } from '../../_shared/storage.ts';
@@ -247,32 +248,47 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
 
       // Per-project burst rate limit: default 120 reports/minute.
       // Reads the configurable cap from project_settings.report_ingest_max_per_minute
-      // (null = use the default). Raises P0001 on breach.
-      try {
-        const { data: burstCap } = await db
-          .from('project_settings')
-          .select('report_ingest_max_per_minute')
-          .eq('project_id', projectId)
-          .maybeSingle();
-        const cap = (burstCap as { report_ingest_max_per_minute?: number | null } | null)
-          ?.report_ingest_max_per_minute ?? 120;
-        await db.rpc('report_ingest_rate_limit_claim', {
-          p_project_id: projectId,
-          p_max_per_minute: cap,
+      // (null = use the default). Raises P0001 on breach. supabase-js returns RPC
+      // failures in `error` (it does not throw), so the breach must be read from
+      // the result object. Fails CLOSED on unexpected RPC errors, matching
+      // claimIpRateLimit in cli-auth.ts: ingest already needs this database for
+      // its real work, so rejecting costs no availability a DB outage wouldn't
+      // already cost. The single deliberate fail-open is Postgres 42883
+      // (function missing during a migration window).
+      const { data: burstCap } = await db
+        .from('project_settings')
+        .select('report_ingest_max_per_minute')
+        .eq('project_id', projectId)
+        .maybeSingle();
+      const cap = (burstCap as { report_ingest_max_per_minute?: number | null } | null)
+        ?.report_ingest_max_per_minute ?? 120;
+      const { error: rateErr } = await db.rpc('report_ingest_rate_limit_claim', {
+        p_project_id: projectId,
+        p_max_per_minute: cap,
+      });
+      const rateOutcome = classifyIngestRateLimitError(rateErr);
+      if (rateOutcome === 'breach') {
+        c.header('Retry-After', '60');
+        return c.json(
+          { ok: false, error: { code: 'RATE_LIMITED', message: 'Report ingest rate limit exceeded. Retry in 60 seconds.' } },
+          429,
+        );
+      }
+      if (rateOutcome === 'fail-open') {
+        // Migration window: the claim function isn't deployed yet. Log and
+        // continue so SDK ingestion is not blocked by a missing migration.
+        log.warn('report_ingest_rate_limit_claim missing (fail-open, migration window)', { err: rateErr?.message });
+      }
+      if (rateOutcome === 'fail-closed') {
+        log.error('report_ingest_rate_limit_claim failed — failing closed', {
+          err: rateErr?.message,
+          pgCode: (rateErr as { code?: string } | null)?.code,
         });
-      } catch (rateErr) {
-        const msg = (rateErr instanceof Error ? rateErr.message : String(rateErr));
-        if (msg.includes('rate_limit_exceeded')) {
-          c.header('Retry-After', '60');
-          return c.json(
-            { ok: false, error: { code: 'RATE_LIMITED', message: 'Report ingest rate limit exceeded. Retry in 60 seconds.' } },
-            429,
-          );
-        }
-        // Non-rate-limit errors from the RPC (e.g. function missing during migration)
-        // are non-fatal: log and continue so SDK ingestion is not blocked by a
-        // missing migration window.
-        log.warn('report_ingest_rate_limit_claim failed (non-fatal)', { err: msg });
+        c.header('Retry-After', '30');
+        return c.json(
+          { ok: false, error: { code: 'RATE_LIMITED', message: 'Report ingest temporarily throttled. Retry in 30 seconds.' } },
+          429,
+        );
       }
 
       const quota = await checkIngestQuota(db, projectId);
@@ -1447,19 +1463,27 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     const projectId = c.get('projectId') as string;
     const db = getServiceClient();
 
-    // Burst cap: 500 spans/minute per project.
-    try {
-      await db.rpc('report_ingest_rate_limit_claim', {
+    // Burst cap: 500 spans/minute per project. supabase-js returns RPC
+    // failures in { error } (it does not throw) — same classifier as
+    // POST /v1/reports: breach → 429, missing function → fail-open during
+    // the migration window, anything else → fail closed.
+    {
+      const { error: rateErr } = await db.rpc('report_ingest_rate_limit_claim', {
         p_project_id: projectId,
         p_max_per_minute: 500,
       });
-    } catch (rateErr) {
-      const msg = rateErr instanceof Error ? rateErr.message : String(rateErr);
-      if (msg.includes('rate_limit_exceeded')) {
+      const rateOutcome = classifyIngestRateLimitError(rateErr);
+      if (rateOutcome === 'breach') {
         c.header('Retry-After', '60');
         return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: 'Span ingest rate limit exceeded.' } }, 429);
       }
-      log.warn('span ingest rate limit check failed (non-fatal)', { err: msg });
+      if (rateOutcome === 'fail-open') {
+        log.warn('report_ingest_rate_limit_claim missing (fail-open, migration window)', { err: rateErr?.message });
+      } else if (rateOutcome === 'fail-closed') {
+        log.error('span ingest rate limit claim failed — failing closed', { err: rateErr?.message });
+        c.header('Retry-After', '30');
+        return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: 'Span ingest temporarily unavailable. Retry shortly.' } }, 429);
+      }
     }
 
     let body: Record<string, unknown>;
@@ -1542,17 +1566,24 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
 
     // Burst cap: 60 calls/minute per project.
     // supabase-js returns { data, error } and does NOT throw on PostgREST errors
-    // unless .throwOnError() is used — so we check { error } directly.
+    // unless .throwOnError() is used — so we check { error } directly via the
+    // same classifier as POST /v1/reports (breach → 429, missing function →
+    // fail-open during migration, anything else → fail closed).
     const { error: rateErr } = await db.rpc('report_ingest_rate_limit_claim', {
       p_project_id: projectId,
       p_max_per_minute: 60,
     });
-    if (rateErr) {
-      if (rateErr.message.includes('rate_limit_exceeded')) {
-        c.header('Retry-After', '60');
-        return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: 'Metric ingest rate limit exceeded. Retry in 60 seconds.' } }, 429);
-      }
-      log.warn('metric ingest rate limit check failed (non-fatal)', { err: rateErr.message });
+    const rateOutcome = classifyIngestRateLimitError(rateErr);
+    if (rateOutcome === 'breach') {
+      c.header('Retry-After', '60');
+      return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: 'Metric ingest rate limit exceeded. Retry in 60 seconds.' } }, 429);
+    }
+    if (rateOutcome === 'fail-open') {
+      log.warn('report_ingest_rate_limit_claim missing (fail-open, migration window)', { err: rateErr?.message });
+    } else if (rateOutcome === 'fail-closed') {
+      log.error('metric ingest rate limit claim failed — failing closed', { err: rateErr?.message });
+      c.header('Retry-After', '30');
+      return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: 'Metric ingest temporarily unavailable. Retry shortly.' } }, 429);
     }
 
     let rawBody: unknown;

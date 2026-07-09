@@ -9,6 +9,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
+import { MUSHI_MCP_PIN_SPEC } from './version.js'
+
 /** Lean default — mirrors DEFAULT_FEATURE_GROUPS in @mushi-mushi/mcp/feature-groups */
 const DEFAULT_MUSHI_FEATURES = 'triage,fixes,inventory,setup,docs'
 
@@ -81,7 +83,7 @@ export function buildMcpServerBlock(opts: {
 }): McpServerEntry {
   return {
     command: 'npx',
-    args: ['-y', '@mushi-mushi/mcp@latest'],
+    args: ['-y', MUSHI_MCP_PIN_SPEC],
     env: {
       MUSHI_API_ENDPOINT: opts.endpoint,
       MUSHI_PROJECT_ID: opts.projectId,

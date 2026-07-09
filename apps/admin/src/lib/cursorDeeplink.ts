@@ -25,7 +25,7 @@ import {
   featuresQueryString,
 } from '@mushi-mushi/mcp/feature-groups'
 import { MUSHI_ICON_PNG_URL } from '@mushi-mushi/mcp/branding'
-import { projectServerName } from '@mushi-mushi/mcp/clients'
+import { MCP_PIN_SPEC, projectServerName } from '@mushi-mushi/mcp/clients'
 
 interface McpStdioConfig {
   command: string
@@ -51,7 +51,7 @@ export function buildStdioConfig(
   const features = options?.features ?? DEFAULT_FEATURE_GROUPS
   return {
     command: 'npx',
-    args: ['-y', '@mushi-mushi/mcp@latest'],
+    args: ['-y', MCP_PIN_SPEC],
     env: {
       MUSHI_API_ENDPOINT: apiEndpoint,
       MUSHI_API_KEY: apiKey,
@@ -93,7 +93,7 @@ export function buildOrgStdioConfig(
   const features = options?.features ?? DEFAULT_FEATURE_GROUPS
   return {
     command: 'npx',
-    args: ['-y', '@mushi-mushi/mcp@latest'],
+    args: ['-y', MCP_PIN_SPEC],
     env: {
       MUSHI_API_ENDPOINT: apiEndpoint,
       MUSHI_API_KEY: apiKey,

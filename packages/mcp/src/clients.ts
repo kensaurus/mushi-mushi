@@ -46,6 +46,14 @@ import {
 } from './feature-groups.js'
 import { MUSHI_ICON_PNG_URL } from './branding.js'
 
+/**
+ * Pinned npm spec written into persistent MCP configs (mcp.json, settings.json).
+ * Pinning avoids the supply-chain and cold-start costs of `@latest` on every
+ * editor launch. Synced to package.json by `scripts/sync-mcp-pin.mjs` — never
+ * hand-edit the version.
+ */
+export const MCP_PIN_SPEC = '@mushi-mushi/mcp@0.19.0'
+
 // ─── Internal config shapes ────────────────────────────────────────────────────
 
 interface StdioConfig {
@@ -155,7 +163,7 @@ function buildStdioConfigObj(
   if (projectId) env.MUSHI_PROJECT_ID = projectId
   return {
     command: 'npx',
-    args: ['-y', '@mushi-mushi/mcp@latest'],
+    args: ['-y', MCP_PIN_SPEC],
     env,
     icon: MUSHI_ICON_PNG_URL,
   }
@@ -311,7 +319,7 @@ export const MCP_CLIENTS: McpClientDef[] = [
       if (projectId) env.MUSHI_PROJECT_ID = projectId
       const clineConfig = {
         mcpServers: {
-          [name]: { command: 'npx', args: ['-y', '@mushi-mushi/mcp@latest'], env },
+          [name]: { command: 'npx', args: ['-y', MCP_PIN_SPEC], env },
         },
       }
       return {
@@ -363,7 +371,7 @@ export const MCP_CLIENTS: McpClientDef[] = [
       if (projectId) env.MUSHI_PROJECT_ID = projectId
       const desktopConfig = {
         mcpServers: {
-          [name]: { command: 'npx', args: ['-y', '@mushi-mushi/mcp@latest'], env },
+          [name]: { command: 'npx', args: ['-y', MCP_PIN_SPEC], env },
         },
       }
       // macOS: ~/Library/Application Support/Claude/claude_desktop_config.json
@@ -399,7 +407,7 @@ export const MCP_CLIENTS: McpClientDef[] = [
           [name]: {
             command: {
               path: 'npx',
-              args: ['-y', '@mushi-mushi/mcp@latest'],
+              args: ['-y', MCP_PIN_SPEC],
               env,
             },
             settings: {},
