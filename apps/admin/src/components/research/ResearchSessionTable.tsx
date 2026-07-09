@@ -105,7 +105,7 @@ export function ResearchSessionTable({
                 onModeFilterChange('all')
                 onAgeFilterChange('all')
               }}
-              className="text-2xs font-medium text-brand hover:underline"
+              className="text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
             >
               Clear filters
             </button>

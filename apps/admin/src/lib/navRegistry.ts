@@ -121,6 +121,29 @@ export const CHECK_SUB_GROUPS: Record<
 
 export const CHECK_HUB_PATH = '/health?hub=check'
 
+/**
+ * Quick-mode sidebar sub-groups (Jul 2026 navigation pass): the flat 10-item
+ * "Quickstart" list read as an unordered pile — users reported the console was
+ * hard to navigate. Same progressive-disclosure pattern as CHECK_SUB_GROUPS:
+ * one section, labeled clusters inside it. Paths not listed here render in a
+ * trailing unlabeled cluster so new quickstart routes never vanish.
+ */
+export interface QuickSubGroup {
+  id: string
+  title: string
+  paths: readonly string[]
+}
+
+export const QUICK_SUB_GROUPS: readonly QuickSubGroup[] = [
+  { id: 'quick-setup', title: 'Set up', paths: ['/onboarding', '/connect'] },
+  {
+    id: 'quick-loop',
+    title: 'Daily loop',
+    paths: ['/dashboard', '/inbox', '/reports', '/fixes', '/code-health'],
+  },
+  { id: 'quick-tools', title: 'More tools', paths: ['/skills', '/mcp', '/feedback'] },
+]
+
 export const NAV_SECTION_META: Record<
   NavSectionId,
   {

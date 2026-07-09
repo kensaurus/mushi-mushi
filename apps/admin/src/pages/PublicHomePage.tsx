@@ -31,6 +31,7 @@ import {
 } from '@mushi-mushi/marketing-ui'
 import type { User } from '@supabase/supabase-js'
 import { useAuth } from '../lib/auth'
+import { Btn } from '../components/ui'
 
 const DOCS_BASE = 'https://kensaur.us/mushi-mushi/docs'
 const REPO_BASE = 'https://github.com/kensaurus/mushi-mushi'
@@ -305,14 +306,17 @@ function SignedInChrome({ user, consoleHref }: { user: User; consoleHref: string
       >
         Open console
       </Link>
-      <button
+      <Btn
         type="button"
+        variant="ghost"
+        size="sm"
         onClick={handleSignOut}
         disabled={signingOut}
-        className="rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)] disabled:cursor-wait disabled:opacity-60"
+        loading={signingOut}
+        className="rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)] !border-transparent shadow-none"
       >
-        {signingOut ? '…' : 'Sign out'}
-      </button>
+        Sign out
+      </Btn>
     </>
   )
 }

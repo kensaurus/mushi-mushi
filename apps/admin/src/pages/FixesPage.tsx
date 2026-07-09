@@ -14,7 +14,7 @@ import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { pluralize, pluralizeWithCount } from '../lib/format'
-import { SegmentedControl, ErrorAlert, FreshnessPill, HelpBanner } from '../components/ui'
+import { Btn, SegmentedControl, ErrorAlert, FreshnessPill, HelpBanner } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
@@ -682,15 +682,16 @@ export function FixesPage() {
           {pluralizeWithCount(fixes.length, 'attempt')}
         </span>
         {failedFixes.length > 0 && (
-          <button
+          <Btn
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => setRetryAllConfirm(true)}
-            disabled={retryingAll}
-            className="text-xs px-2.5 py-1 rounded-md border border-edge-subtle bg-surface-overlay hover:bg-surface-raised text-fg-secondary disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-colors"
+            loading={retryingAll}
             title={`Re-dispatch every fix attempt currently in failed state (${pluralizeWithCount(failedFixes.length, 'job')}).`}
           >
             {retryingAll ? 'Retrying\u2026' : `Retry ${failedFixes.length} failed`}
-          </button>
+          </Btn>
         )}
       </PageHeaderBar>
 

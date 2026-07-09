@@ -1,43 +1,4 @@
-/**
- * FILE: apps/docs/components/ComparisonTable.tsx
- * PURPOSE: A 3-column "X vs Y" comparison table with the right column
- *   visually emphasised (vermillion wash) to point the eye at what *Mushi*
- *   uniquely offers vs the named compare-against (usually Sentry).
- *
- * WHY THIS COMPONENT EXISTS
- * -------------------------
- * Plain markdown tables on the docs site render with the Nextra default:
- * thin grey border, neutral headers, no semantic differentiation between
- * columns. On a "Why Mushi vs. Sentry alone" comparison this loses the
- * editorial point — both columns look equally weighted, and the reader
- * has to read every row to find the contrast. NN/g visual hierarchy +
- * Gestalt common-region say: when one column is the answer and the other
- * is the foil, give the answer column more visual weight.
- *
- * The CSS for the wash lives in `app/globals.css` under
- * `.nextra-content table[data-compare]` so the component is purely a
- * structural wrapper. Authors can also reach the same effect by writing
- * a plain markdown table and setting `data-compare="2"` via a small
- * `<table>` post-processor — the component just makes the common case
- * (3 columns: row label, foil, mushi) ergonomic.
- *
- * USAGE
- * -----
- *   <ComparisonTable
- *     foil="Sentry alone"
- *     rows={[
- *       { label: 'What it sees', foil: 'Errors your code throws', mushi: 'Friction your users feel' },
- *       …
- *     ]}
- *   />
- *
- * VOICE NOTE
- * ----------
- * Row labels and foil/mushi cells should describe *user-visible impact*,
- * not internal product features ("Source of bugs" / "Triage" → "What it
- * sees" / "What lands in your queue"). The reader is here to figure out
- * what changes for them, not to inventory architecture.
- */
+/** A 3-column "X vs Y" comparison table with the right column */
 
 interface ComparisonRow {
   label: string

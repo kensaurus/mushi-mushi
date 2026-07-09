@@ -180,8 +180,7 @@ function FolderTabButton({
     return (
       <button
         type="button"
-        role="tab"
-        aria-selected={isActive}
+        aria-current={isActive ? 'true' : undefined}
         onClick={() => onSelect(project.id, project.name)}
         className={[
           'inline-flex shrink-0 max-w-[14rem] items-center gap-2 rounded-md border px-2.5 py-2 text-left',
@@ -208,8 +207,7 @@ function FolderTabButton({
   return (
     <button
       type="button"
-      role="tab"
-      aria-selected={isActive}
+      aria-current={isActive ? 'true' : undefined}
       onClick={() => onSelect(project.id, project.name)}
       className={[
         'group flex w-full min-w-0 items-start gap-2 rounded-l-md px-2.5 py-2.5 text-left',
@@ -230,7 +228,7 @@ function FolderTabButton({
           {project.member_count != null && project.member_count > 0 ? (
             <>
               <span className="text-fg-faint">·</span>
-              <span className="tabular-nums">{project.member_count} members</span>
+              <span className="tabular-nums">{project.member_count} member{project.member_count === 1 ? '' : 's'}</span>
             </>
           ) : null}
           {lastReport ? (
@@ -254,7 +252,6 @@ export function ProjectFolderTabRail({ projects, activeId, onSelect }: ProjectFo
       <nav
         aria-label="Projects"
         className="flex gap-1.5 overflow-x-auto pb-2 lg:hidden"
-        role="tablist"
       >
         {projects.map((project) => (
           <FolderTabButton
@@ -271,7 +268,6 @@ export function ProjectFolderTabRail({ projects, activeId, onSelect }: ProjectFo
         <nav
           aria-label="Projects"
           className="flex flex-col gap-0.5 border-r border-edge-subtle bg-surface-root/50 p-1.5"
-          role="tablist"
         >
           <p className="px-2 pb-1 pt-0.5 text-2xs font-semibold text-fg-muted">
             Projects

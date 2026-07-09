@@ -1,8 +1,4 @@
-/**
- * FILE: apps/docs/components/Pillars.tsx
- * PURPOSE: A 4-up rhythmic strip of named pipeline stages used on the docs
- *   landing to summarise the Mushi loop in one glance.
- */
+/** A 4-up rhythmic strip of named pipeline stages used on the docs */
 
 import { LANDING_PILLARS, type LandingPillar } from '@/lib/landing-copy'
 

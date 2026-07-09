@@ -118,14 +118,21 @@ If your PR changes **user-visible SDK or CLI behavior**, update docs in the **sa
 Guardrails (run locally before pushing):
 
 ```bash
-pnpm check:docs-stats          # root README stat badges
+pnpm check:docs-stats          # root README stat badges + glance <sub> line
 pnpm check:sdk-version-matrix  # apps/docs/content/sdks/index.mdx versions
 pnpm check:internal-doc-links  # dead /foo links in MDX
-pnpm check:onboarding-drift    # phantom MCP env vars / stale tool names
+pnpm check:onboarding-drift    # phantom MCP env vars / stale tool names / native install coords
+pnpm check:catalog-sync        # MCP catalog ↔ admin counts ↔ prose "N tools"
+pnpm check:mcp-tools-doc       # mcp-tools.generated.mdx stale check
 pnpm check:bundle-docs         # @mushi-mushi/web size-limit vs README
+pnpm check:docs-drift          # versions + public docs links
 pnpm gen:llms-txt              # regenerate apps/docs/public/llms.txt after nav changes
 pnpm gen:mcp-tools-doc         # regenerate sdks/mcp-tools.generated.mdx from catalog.ts
 ```
+
+**Same-PR rule:** if behavior, env vars, CLI commands, MCP tools, or install
+coordinates change, update the matching docs in this PR and run
+`pnpm check:docs-drift && pnpm check:onboarding-drift && pnpm check:catalog-sync`.
 
 README changes on npm packages only appear on [npmjs.com](https://www.npmjs.com) after the next **Changesets publish**.
 

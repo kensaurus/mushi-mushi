@@ -55,7 +55,7 @@ function TesterMainContent() {
         <p className="text-xs text-fg-muted text-pretty">{error}</p>
         <button
           type="button"
-          className="text-sm font-medium text-brand hover:underline"
+          className="text-sm font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
           onClick={() => reload()}
         >
           Retry

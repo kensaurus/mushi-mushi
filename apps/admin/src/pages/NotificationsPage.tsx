@@ -587,7 +587,7 @@ export function NotificationsPage() {
                   <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
                   <span>
                     Operator routing (Slack, PagerDuty) lives on{' '}
-                    <Link to="/integrations/config" className="text-brand hover:underline">
+                    <Link to="/integrations/config" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
                       Integrations
                     </Link>{' '}
                     — separate from reporter widget messages

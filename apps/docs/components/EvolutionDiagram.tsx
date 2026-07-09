@@ -1,8 +1,4 @@
-/**
- * FILE: apps/docs/components/EvolutionDiagram.tsx
- * PURPOSE: Closed-loop pipeline diagram — HTML/CSS, same visual language as
- *   LoopComparison.tsx so theme tokens resolve correctly in light + dark mode.
- */
+/** Closed-loop pipeline diagram — HTML/CSS, same visual language as */
 'use client'
 
 import { VIZ } from '../lib/viz-tokens'

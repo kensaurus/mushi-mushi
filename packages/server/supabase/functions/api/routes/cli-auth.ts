@@ -873,7 +873,7 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       metadata: { key_prefix: prefix, scopes },
     })
 
-    return c.json({ ok: true, data: { key: rawKey, prefix, scopes: LOGIN_SCOPES } }, 201)
+    return c.json({ ok: true, data: { key: rawKey, prefix, scopes } }, 201)
   })
 
   // ─── CLI funnel signal (authenticated with API key) ───────────────────────

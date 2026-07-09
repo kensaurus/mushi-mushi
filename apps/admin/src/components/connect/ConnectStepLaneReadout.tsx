@@ -85,7 +85,7 @@ export function ConnectStepLaneReadout({ lane, icon, className = '' }: ConnectSt
           </div>
           <p className="mt-1.5 text-xs leading-relaxed text-fg-secondary">
             {lane.actionHref ? (
-              <Link to={lane.actionHref} className="text-brand hover:underline">
+              <Link to={lane.actionHref} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
                 {model.body}
               </Link>
             ) : (

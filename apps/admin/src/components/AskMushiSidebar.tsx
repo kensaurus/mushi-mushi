@@ -992,7 +992,7 @@ function MessageActions({ message, onCopy }: { message: AskMushiMessage; onCopy:
         <a
           key={`${c.kind}:${c.id}`}
           href={c.kind === 'report' ? `/reports/${c.id}` : c.kind === 'fix' ? `/fixes` : '#'}
-          className="text-2xs text-brand hover:underline"
+          className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
         >
           Open {c.kind} ↗
         </a>

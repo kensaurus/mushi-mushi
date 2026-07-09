@@ -24,7 +24,7 @@ export const FEATURE_EXPLAIN_BURNDOWN: FeatureExplainBurndownItem[] = [
   { route: '/projects', label: 'Projects', status: 'done', liveData: 'done', notes: 'ProjectsHubGuide + projectsHealthOverlay' },
   { route: '/reports', label: 'Reports', status: 'done', liveData: 'done', notes: 'ReportsTriageGuide + reportsSeverityOverlay' },
   { route: '/fixes', label: 'Fixes', status: 'done', liveData: 'done', notes: 'FixesPipelineGuide + live fix stats overlays' },
-  { route: '/connect', label: 'Connect', status: 'done', liveData: 'done', notes: 'ConnectHubGuide lane overlays + upgrade flag' },
+  { route: '/connect', label: 'Connect', status: 'done', liveData: 'done', notes: 'ConnectStudio operator surface + SectionAnchorNav + JobStatusPill' },
   { route: '/billing', label: 'Billing', status: 'done', liveData: 'done', notes: 'BillingSeatFaqCallout + Callout unlimited seats' },
   { route: '/integrations', label: 'Integrations', status: 'done', liveData: 'done', notes: 'IntegrationsPageIntro + integrationsStepOverlay' },
   { route: '/health', label: 'Health', status: 'done', liveData: 'done', notes: 'HealthProbesGuide + healthProbeOverlay' },

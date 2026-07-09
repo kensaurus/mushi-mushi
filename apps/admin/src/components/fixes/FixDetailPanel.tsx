@@ -134,7 +134,7 @@ export function FixDetailPanel({
             CI synced <RelativeTime value={fix.check_run_updated_at} />
           </span>
         )}
-        <Link to={`/reports/${fix.report_id}`} className="text-brand hover:underline">
+        <Link to={`/reports/${fix.report_id}`} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
           Source report →
         </Link>
         {fix.failure_category && (

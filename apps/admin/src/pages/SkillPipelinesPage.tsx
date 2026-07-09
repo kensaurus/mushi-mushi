@@ -35,7 +35,8 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
-import { Card, SurfacePanel, HelpBanner, SegmentedControl, FreshnessPill } from '../components/ui'
+import { Card, SurfacePanel, HelpBanner, SegmentedControl, FreshnessPill, Btn } from '../components/ui'
+import { LINK_ACCENT } from '../lib/chipTone'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
@@ -283,7 +284,7 @@ export function SkillPipelinesPage() {
             Skill pipelines attach cursor-kenji workflows to bug reports. Select a project in the header, then sync skill sources or start a handoff run.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Link to="/onboarding" className="text-xs text-brand underline">Open setup cockpit</Link>
+            <Link to="/onboarding" className="text-xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">Open setup cockpit</Link>
             <Link to="/skills?tab=sources" className="text-xs text-fg-muted underline">Manage skill sources</Link>
           </div>
         </Card>
@@ -365,14 +366,16 @@ function SkillDetailPanel({
           <p className="text-2xs font-mono text-fg-muted">{selected.slug}</p>
         </div>
         {!embedded ? (
-          <button
+          <Btn
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={onClose}
-            className="btn btn-xs btn-ghost flex-shrink-0"
+            className="flex-shrink-0"
             aria-label="Close skill details"
           >
             <IconClose size={14} />
-          </button>
+          </Btn>
         ) : null}
       </div>
       <p className="text-xs text-fg-muted">{selected.description}</p>
@@ -403,7 +406,7 @@ function SkillDetailPanel({
       <div className="border-t border-edge-subtle pt-3 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <p className="text-2xs font-semibold text-fg">Apply to a report</p>
-          <Link to="/reports" className="text-2xs text-brand hover:underline">Browse reports →</Link>
+          <Link to="/reports" className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">Browse reports →</Link>
         </div>
         <div className="space-y-1">
           <label className="text-2xs text-fg-muted" htmlFor={embedded ? 'skill-report-id-drawer' : 'skill-report-id'}>
@@ -436,35 +439,36 @@ function SkillDetailPanel({
         {mode === 'cloud' && cloudReadiness && !cloudReadiness.cloudReady ? (
           <HelpBanner tone="neutral" className="rounded-lg">
             Cloud mode needs a Cursor API key and GitHub repo URL.{' '}
-            <Link to="/integrations/config#cursor_cloud" className="text-brand hover:underline">
+            <Link to="/integrations/config#cursor_cloud" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
               Open Integrations → Cursor Cloud
             </Link>
             {!cloudReadiness.githubRepoConfigured ? (
               <>
                 {' '}and{' '}
-                <Link to="/integrations/config#github" className="text-brand hover:underline">
+                <Link to="/integrations/config#github" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
                   GitHub repo
                 </Link>
               </>
             ) : null}
           </HelpBanner>
         ) : null}
-        <button
+        <Btn
           type="button"
+          variant="primary"
+          size="sm"
           onClick={onStartPipeline}
           disabled={
             startingSlug === selected.slug ||
             !projectId ||
             (mode === 'cloud' && !cloudReadiness?.cloudReady)
           }
-          className="btn btn-primary text-xs"
         >
           {startingSlug === selected.slug ? 'Starting…' : mode === 'cloud' ? 'Start cloud pipeline' : 'Start pipeline →'}
-        </button>
+        </Btn>
         {!reportId ? (
           <p className="text-2xs text-fg-faint">
             Tip: paste a report ID above so the skill gets your exact bug context. Find IDs in{' '}
-            <Link to="/reports" className="text-brand hover:underline">Reports</Link>.
+            <Link to="/reports" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">Reports</Link>.
           </p>
         ) : null}
       </div>
@@ -641,14 +645,17 @@ function CatalogTab({
               <SkillCategoryHeader meta={meta} count={catSkills.length} />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 {catSkills.map((skill) => (
-                  <button
+                  <Btn
                     key={skill.slug}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => selectSkill(skill)}
                     className={[
-                      'text-left p-3 rounded-lg border transition-colors',
+                      '!justify-start !items-start !text-left !p-3 !rounded-lg !w-full !h-auto transition-colors',
                       selected?.slug === skill.slug
-                        ? 'border-brand bg-surface-raised ring-1 ring-brand/30'
-                        : 'border-edge-subtle bg-surface-raised hover:border-brand/40 hover:bg-surface-overlay',
+                        ? '!border-brand !bg-surface-raised ring-1 ring-brand/30'
+                        : '!border-edge-subtle !bg-surface-raised hover:!border-brand/40 hover:!bg-surface-overlay',
                     ].join(' ')}
                   >
                     <div className="flex items-start gap-2">
@@ -664,7 +671,7 @@ function CatalogTab({
                         )}
                       </div>
                     </div>
-                  </button>
+                  </Btn>
                 ))}
               </div>
             </section>
@@ -844,16 +851,18 @@ function PipelinesTab({
               <p className="font-semibold text-fg text-2xs uppercase tracking-wide">How to start your first run</p>
               <ol className="list-decimal pl-4 space-y-1 text-fg-secondary">
                 <li>Open a report and copy its ID from the URL</li>
-                <li>Go to <button type="button" onClick={onGoToCatalog} className="text-brand hover:underline">Catalog</button> and pick a skill (try <em>workflow-fix-and-ship</em> to close a bug end-to-end)</li>
+                <li>Go to <Btn type="button" variant="ghost" size="sm" onClick={onGoToCatalog} className={`!px-0 !py-0 !border-0 !bg-transparent hover:!bg-transparent ${LINK_ACCENT}`}>Catalog</Btn> and pick a skill (try <em>workflow-fix-and-ship</em> to close a bug end-to-end)</li>
                 <li>Paste the report ID in the "Apply to a report" field, click <strong>Start pipeline</strong></li>
                 <li>Copy the context packet into your Cursor agent — the skill walks you through each step</li>
               </ol>
             </div>
             <div className="flex gap-2">
-              <button type="button" onClick={onGoToCatalog} className="btn btn-primary text-xs">
+              <Btn type="button" variant="primary" size="sm" onClick={onGoToCatalog}>
                 Browse Catalog →
-              </button>
-              <Link to="/reports" className="btn btn-ghost text-xs">Open Reports</Link>
+              </Btn>
+              <Link to="/reports">
+                <Btn size="sm" variant="ghost">Open Reports</Btn>
+              </Link>
             </div>
           </div>
         ) : (
@@ -867,10 +876,12 @@ function PipelinesTab({
                   : 'border-edge-subtle bg-surface-raised hover:bg-surface-overlay',
               ].join(' ')}
             >
-              <button
+              <Btn
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => loadRunDetail(run)}
-                className="flex flex-1 items-start gap-3 min-w-0 text-left hover:opacity-90"
+                className="!flex !flex-1 !items-start !gap-3 !min-w-0 !text-left hover:opacity-90 !border-0 !bg-transparent !p-0 !justify-start !h-auto !shadow-none hover:!bg-transparent hover:!translate-y-0"
               >
                 <StatusDot status={run.status} />
                 <div className="flex-1 min-w-0">
@@ -879,26 +890,30 @@ function PipelinesTab({
                   {run.report_id && <p className="text-2xs text-fg-muted">Report: {run.report_id.slice(0, 8)}</p>}
                 </div>
                 {loadingRunId === run.id && <span className="text-2xs text-fg-muted animate-pulse">Loading…</span>}
-              </button>
+              </Btn>
               <div className="flex flex-col gap-1 flex-shrink-0">
-                <button
+                <Btn
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => onOpenSkill(run.root_skill_slug)}
-                  className="btn btn-xs btn-ghost text-brand"
+                  className="text-brand"
                   title="Open skill in catalog"
                 >
                   Skill
-                </button>
+                </Btn>
                 {['pending', 'running'].includes(run.status) && (
-                  <button
+                  <Btn
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => abortRun(run.id)}
                     disabled={abortingId === run.id}
-                    className="btn btn-xs btn-ghost text-fg-muted hover:text-danger"
-                  title="Cancel pipeline run"
-                >
-                  {abortingId === run.id ? '…' : 'Cancel'}
-                  </button>
+                    className="text-fg-muted hover:text-danger"
+                    title="Cancel pipeline run"
+                  >
+                    {abortingId === run.id ? '…' : 'Cancel'}
+                  </Btn>
                 )}
               </div>
             </div>
@@ -1013,13 +1028,15 @@ function RunDetail({
       <div className="px-4 py-3 border-b border-edge-subtle flex items-center gap-2">
         <StatusDot status={run.status} />
         <div className="flex-1 min-w-0">
-          <button
+          <Btn
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => onOpenSkill(run.root_skill_slug)}
-            className="text-xs font-bold text-brand hover:underline truncate block text-left"
+            className={`!px-0 !py-0 !border-0 !bg-transparent hover:!bg-transparent truncate block text-left font-bold ${LINK_ACCENT}`}
           >
             {run.root_skill_slug}
-          </button>
+          </Btn>
           <p className="text-2xs text-fg-muted">
             {run.id.slice(0, 8)} · {run.mode}
             {run.mode === 'cloud' && run.status === 'running' && ' · Cursor Cloud dispatching'}
@@ -1027,23 +1044,25 @@ function RunDetail({
         </div>
         <div className="flex gap-1">
           {run.context_packet ? (
-            <button type="button" onClick={copyPacket} disabled={copying} className="btn btn-xs btn-ghost" title="Copy run packet for local Cursor agent">
+            <Btn type="button" variant="ghost" size="sm" onClick={copyPacket} disabled={copying} title="Copy run packet for local Cursor agent">
               {copying ? 'Copied!' : 'Copy packet'}
-            </button>
+            </Btn>
           ) : null}
           {['pending', 'running'].includes(run.status) ? (
-            <button
+            <Btn
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => onAbort(run.id)}
               disabled={aborting}
-              className="btn btn-xs btn-ghost text-danger"
+              className="text-danger"
               title="Cancel pipeline run"
             >
               {aborting ? '…' : 'Cancel'}
-            </button>
+            </Btn>
           ) : null}
           {!embedded ? (
-            <button type="button" onClick={onClose} className="btn btn-xs btn-ghost" aria-label="Close">✕</button>
+            <Btn type="button" variant="ghost" size="sm" onClick={onClose} aria-label="Close">✕</Btn>
           ) : null}
         </div>
       </div>
@@ -1084,14 +1103,14 @@ function RunDetail({
                 href={`https://cursor.com/agents/${step.agent_ref}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-brand hover:underline text-2xs"
+                className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors text-2xs"
                 title={`Cursor agent ${step.agent_ref}`}
               >
                 Agent
               </a>
             ) : null}
             {step.pr_url ? (
-              <a href={step.pr_url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline text-2xs">PR</a>
+              <a href={step.pr_url} target="_blank" rel="noopener noreferrer" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors text-2xs">PR</a>
             ) : null}
           </div>
         ))}
@@ -1255,9 +1274,9 @@ function SourcesTab({
             onChange={(e) => setRef(e.target.value)}
             className="input w-24 text-sm"
           />
-          <button onClick={addSource} disabled={adding || !repoSlug} className="btn btn-primary text-sm">
+          <Btn type="button" variant="primary" size="md" onClick={addSource} disabled={adding || !repoSlug}>
             {adding ? 'Adding…' : 'Add source'}
-          </button>
+          </Btn>
         </div>
       </SurfacePanel>
 
@@ -1285,21 +1304,26 @@ function SourcesTab({
               )}
             </div>
             <div className="flex flex-col gap-1 flex-shrink-0">
-              <button
+              <Btn
+                type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => syncSource(src.id, false)}
                 disabled={syncingId === src.id || forceSyncingId === src.id}
-                className="btn btn-xs btn-ghost"
               >
                 {syncingId === src.id ? 'Syncing…' : 'Sync now'}
-              </button>
-              <button
+              </Btn>
+              <Btn
+                type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => syncSource(src.id, true)}
                 disabled={syncingId === src.id || forceSyncingId === src.id}
-                className="btn btn-xs btn-ghost text-brand"
+                className="text-brand"
                 title="Re-fetch every SKILL.md even if unchanged"
               >
                 {forceSyncingId === src.id ? 'Re-syncing…' : 'Full re-sync'}
-              </button>
+              </Btn>
             </div>
           </SurfacePanel>
         ))
@@ -1380,9 +1404,9 @@ function EmptySearchResults({ query, onClear }: { query: string; onClear: () => 
       <p className="text-xs text-fg-muted max-w-sm">
         Try a shorter term, a category like &ldquo;audit&rdquo;, or the skill slug (e.g. workflow-fix-and-ship).
       </p>
-      <button type="button" onClick={onClear} className="btn btn-ghost text-xs">
+      <Btn type="button" variant="ghost" size="sm" onClick={onClear}>
         Clear search
-      </button>
+      </Btn>
     </div>
   )
 }
@@ -1395,9 +1419,9 @@ function EmptySkills({ onGoToSources }: { onGoToSources: () => void }) {
         Add a GitHub source and sync it to load skills.{' '}
         <code className="font-mono text-brand">kensaurus/cursor-kenji</code> brings in 70+ workflows instantly.
       </p>
-      <button type="button" onClick={onGoToSources} className="btn btn-primary text-xs">
+      <Btn type="button" variant="primary" size="sm" onClick={onGoToSources}>
         Go to Sources
-      </button>
+      </Btn>
     </div>
   )
 }

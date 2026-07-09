@@ -1,15 +1,4 @@
-/**
- * FILE: apps/docs/app/connect/page.tsx
- * PURPOSE: Public "Connect your AI client" landing page.
- *
- * OVERVIEW:
- * - Hero + stats + console CTA.
- * - Shared ConnectLanePicker with placeholder keys (no auth, no real mint).
- *
- * DEPENDENCIES:
- * - @mushi-mushi/marketing-ui (ConnectLanePicker, useConnectSelection)
- * - @mushi-mushi/mcp/clients
- */
+/** Public Connect landing — client picker + install lanes. */
 
 'use client'
 
@@ -271,35 +260,32 @@ export default function ConnectPage() {
 
   return (
     <div className="min-h-screen bg-[var(--mushi-paper)]">
-      <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20">
-
-        <div className="mb-12 text-center">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[var(--mushi-rule)] bg-[var(--mushi-paper-wash)] px-3 py-1 text-xs font-medium text-[var(--mushi-ink-muted)]">
-            Editor setup
-          </div>
-          <h1 className="text-4xl font-bold tracking-tight text-[var(--mushi-ink)] sm:text-5xl">
-            Hook Mushi into Cursor (or whatever you use)
+      <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--mushi-ink)] sm:text-4xl">
+            Connect your editor
           </h1>
-          <p className="mt-4 text-lg text-[var(--mushi-ink-muted)]">
-            Pick your client. Connect in one click. Start debugging with context in under
-            two minutes.
+          <p className="mt-2 text-base text-[var(--mushi-ink-muted)]">
+            Pick a client below. Demo needs no signup; sign in when you want your own project.
           </p>
-
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <a href={CONSOLE_CONNECT_URL} className="mushi-connect-primary-btn">
-              Sign in to one-click install
+          <p className="mt-3 text-xs text-[var(--mushi-ink-muted)]">
+            {MCP_CLIENTS.length} clients · {MCP_TOOL_COUNT} MCP tools · usually under 2 minutes
+            {' · '}
+            <a href={CONSOLE_CONNECT_URL} className="underline decoration-[var(--mushi-rule)] underline-offset-2 hover:text-[var(--mushi-ink)]">
+              Sign in to mint a key
             </a>
+            {' · '}
             <a
               href="https://kensaur.us/mushi-mushi/docs/quickstart/mcp"
-              className="mushi-connect-secondary-btn"
+              className="underline decoration-[var(--mushi-rule)] underline-offset-2 hover:text-[var(--mushi-ink)]"
             >
-              Read the docs →
+              MCP docs
             </a>
-          </div>
-        </div>
+          </p>
+        </header>
 
         {DEMO_INPUT ? (
-          <div className="mb-6 flex flex-wrap items-center justify-center gap-2" aria-label="Install mode">
+          <div className="mb-6 flex flex-wrap items-center gap-2" aria-label="Install mode">
             <button
               type="button"
               onClick={() => setMode('demo')}
@@ -319,43 +305,15 @@ export default function ConnectPage() {
           </div>
         ) : null}
 
-        <div className="mb-8">
-          <ConnectLanePicker
-            clients={clients}
-            selectedId={selectedId}
-            onSelectClient={selectClient}
-            activeLane={activeLane}
-            onLaneChange={setActiveLane}
-            renderLane={renderLane}
-            renderClientIcon={(id) => renderConnectClientIcon(id, 16)}
-          />
-        </div>
-
-        <div className="mt-10 grid grid-cols-3 gap-4 text-center">
-          {[
-            { label: 'AI clients', value: String(MCP_CLIENTS.length) },
-            { label: 'MCP tools', value: String(MCP_TOOL_COUNT) },
-            { label: 'Setup time', value: '< 2 min' },
-          ].map((item) => (
-            <div key={item.label} className="rounded-md border border-[var(--mushi-rule)] bg-[var(--mushi-paper-wash)] p-4">
-              <p className="text-2xl font-bold text-[var(--mushi-ink)]">{item.value}</p>
-              <p className="mt-0.5 text-xs text-[var(--mushi-ink-muted)]">{item.label}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-12 rounded-md border border-[color-mix(in_oklch,var(--mushi-vermillion)_25%,var(--mushi-rule))] bg-[var(--mushi-vermillion-wash)] p-6 text-center">
-          <p className="text-sm font-semibold text-[var(--mushi-vermillion-ink)]">
-            Ready to go live?
-          </p>
-          <p className="mt-1 text-sm text-[var(--mushi-ink-muted)]">
-            Sign in to the console and mint a project key. The client picker above will
-            auto-fill your key and open your IDE in one click.
-          </p>
-          <a href={CONSOLE_CONNECT_URL} className="mt-4 inline-flex mushi-connect-primary-btn">
-            Sign in &amp; connect →
-          </a>
-        </div>
+        <ConnectLanePicker
+          clients={clients}
+          selectedId={selectedId}
+          onSelectClient={selectClient}
+          activeLane={activeLane}
+          onLaneChange={setActiveLane}
+          renderLane={renderLane}
+          renderClientIcon={(id) => renderConnectClientIcon(id, 16)}
+        />
 
         <p className="mt-10 text-center text-xs text-[var(--mushi-ink-muted)]">
           Also on{' '}
@@ -366,7 +324,7 @@ export default function ConnectPage() {
           >
             Smithery
           </a>
-          {' '}— one-click MCP install for Cursor, VS Code, and Claude Code.
+          {' '}for one-click MCP install.
         </p>
       </div>
     </div>

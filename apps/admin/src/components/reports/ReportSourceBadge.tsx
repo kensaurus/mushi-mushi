@@ -78,7 +78,7 @@ function captureLabel(trigger: string | null | undefined): { label: string; tone
   if (trigger === 'shake') {
     return {
       label: 'shake',
-      tone: 'bg-accent-muted/60 text-[var(--color-accent-foreground)] border-accent/35',
+      tone: 'bg-accent-muted/60 text-accent-foreground border-accent/35',
       tooltip:
         'User shook their device to file a report — strong "I really feel something is off" signal from mobile testers.',
     }

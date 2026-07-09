@@ -132,7 +132,7 @@ function RowStatus({
   }
   if (status === 'failed') {
     return wrap(
-      <span className="inline-flex items-center gap-1 rounded-full bg-danger/10 border border-danger/25 px-2.5 py-0.5 text-2xs font-medium text-[var(--color-error-foreground)]">
+      <span className="inline-flex items-center gap-1 rounded-full bg-danger/10 border border-danger/25 px-2.5 py-0.5 text-2xs font-medium text-danger-foreground">
         {label}
       </span>,
       'assertive',
@@ -163,7 +163,7 @@ function FreshnessChip({
 
   const toneClass = (() => {
     if (resolution.kind === 'deprecated') {
-      return 'bg-danger/10 border-danger/25 text-[var(--color-error-foreground)]'
+      return 'bg-danger/10 border-danger/25 text-danger-foreground'
     }
     if (resolution.kind === 'upgrade-available') {
       return conflict
@@ -211,14 +211,14 @@ const RELEASE_STATUS_LABELS: Record<string, string> = {
 }
 const RELEASE_STATUS_COLORS: Record<string, string> = {
   pr_opened: 'bg-accent/10 border-accent/25 text-accent',
-  blocked: 'bg-danger/10 border-danger/25 text-[var(--color-error-foreground)]',
+  blocked: 'bg-danger/10 border-danger/25 text-danger-foreground',
   ready_to_merge: 'bg-ok/10 border-ok/25 text-ok',
   merging: 'bg-accent/10 border-accent/25 text-accent',
   merged: 'bg-ok/10 border-ok/25 text-ok',
   deploying: 'bg-accent/10 border-accent/25 text-accent',
   deployed: 'bg-ok/10 border-ok/25 text-ok',
   verified: 'bg-ok/10 border-ok/25 text-ok',
-  failed: 'bg-danger/10 border-danger/25 text-[var(--color-error-foreground)]',
+  failed: 'bg-danger/10 border-danger/25 text-danger-foreground',
 }
 
 function ReleaseStatusPill({
@@ -552,7 +552,7 @@ export function BulkSdkUpgradePanel({ projects }: { projects: BulkUpgradeProject
                 </Tooltip>
               )}
               {failedCount > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-danger/10 border border-danger/25 px-2 py-0.5 text-2xs font-medium text-[var(--color-error-foreground)]">
+                <span className="inline-flex items-center gap-1 rounded-full bg-danger/10 border border-danger/25 px-2 py-0.5 text-2xs font-medium text-danger-foreground">
                   {failedCount} PR{failedCount === 1 ? '' : 's'} failed
                 </span>
               )}

@@ -17,6 +17,31 @@ import {
 import { IconProjects } from './icons'
 import { projectInitials, projectInitialsChipClass } from '../lib/resolveProjectDomain'
 
+/**
+ * The console's CSP (scripts/cloudfront-mushi-spa-response.js, img-src) only
+ * allows self + supabase/google/github-avatar hosts. First-party favicon
+ * candidates on other origins (e.g. a monitored app's vercel.app domain) can
+ * never load here — attempting them just spams the console with CSP
+ * violations before the initials fallback kicks in. Filter them up front.
+ * Keep this list in sync with the CloudFront function's img-src directive.
+ */
+function isCspLoadableImageUrl(url: string): boolean {
+  try {
+    const u = new URL(url, window.location.href)
+    if (u.protocol === 'data:' || u.protocol === 'blob:') return true
+    if (u.origin === window.location.origin) return true
+    const host = u.hostname.toLowerCase()
+    return (
+      host.endsWith('.supabase.co') ||
+      host === 'www.google.com' ||
+      host.endsWith('.googleusercontent.com') ||
+      host === 'avatars.githubusercontent.com'
+    )
+  } catch {
+    return false
+  }
+}
+
 interface ProjectFaviconProps extends ProjectFaviconSource {
   /** Inner icon size — chip wrapper is size + 8px. Default 16. */
   size?: number
@@ -34,6 +59,7 @@ export function ProjectFavicon({
   const label = `${source.project_name} icon`
 
   const candidates = projectFaviconUrlCandidates({ ...source, icon_url }, Math.max(32, size * 2))
+    .filter(isCspLoadableImageUrl)
 
   const [candidateIndex, setCandidateIndex] = useState(0)
   const [exhausted, setExhausted] = useState(false)

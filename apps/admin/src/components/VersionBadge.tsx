@@ -514,7 +514,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
                   <button
                     type="button"
                     onClick={handleReadFull}
-                    className="inline-flex w-full items-center justify-between gap-2 rounded-sm px-1 py-0.5 text-2xs font-medium text-brand hover:text-brand-hover hover:bg-surface-overlay/60 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                    className="inline-flex w-full items-center justify-between gap-2 rounded-sm px-1 py-0.5 text-2xs font-medium text-accent-foreground hover:text-accent hover:bg-surface-overlay/60 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
                   >
                     Read full changelog
                     <span aria-hidden>→</span>

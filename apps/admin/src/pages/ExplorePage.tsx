@@ -695,12 +695,13 @@ export function ExplorePage() {
             {layerEntries.map(([layer, count]) => {
               const active = activeLayerFilter === layer
               return (
-                <button
+                <Btn
                   key={layer}
-                  type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => toggleLayerFilter(layer)}
                   className={[
-                    'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs border transition-[background-color,border-color,color,box-shadow,transform,opacity]',
+                    'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs transition-[background-color,border-color,color,box-shadow,transform,opacity]',
                     active ? 'font-semibold shadow-sm' : 'hover:border-current',
                   ].join(' ')}
                   style={{
@@ -712,7 +713,7 @@ export function ExplorePage() {
                 >
                   <span className="font-mono">{count}</span>
                   <span>{LAYER_LABELS[layer]}</span>
-                </button>
+                </Btn>
               )
             })}
             {activeLayerFilter && (
@@ -730,14 +731,15 @@ export function ExplorePage() {
                 aria-label="Filter files by name"
               />
               {filenameFilter && (
-                <button
-                  type="button"
+                <Btn
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setFilenameFilter('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-faint hover:text-fg"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 border-0 bg-transparent shadow-none hover:bg-transparent px-0 py-0 min-h-0 text-fg-faint hover:text-fg"
                   aria-label="Clear filename filter"
                 >
                   ×
-                </button>
+                </Btn>
               )}
             </div>
           </div>

@@ -20,7 +20,7 @@ bun create mushi-mushi
 1. **Detects your framework** — Next.js, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, or vanilla JS.
 2. **Picks the right SDK** — `@mushi-mushi/react`, `@mushi-mushi/vue`, `@mushi-mushi/svelte`, `@mushi-mushi/angular`, `@mushi-mushi/react-native`, `@mushi-mushi/capacitor`, or `@mushi-mushi/web`.
 3. **Detects your package manager** — uses `npm`, `pnpm`, `yarn`, or `bun` based on your lockfile.
-4. **Writes env vars** — `MUSHI_PROJECT_ID` and `MUSHI_API_KEY` land in `.env.local` with the right framework prefix (`NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`).
+4. **Writes env vars** — framework-prefixed keys (e.g. `VITE_MUSHI_PROJECT_ID` / `NEXT_PUBLIC_MUSHI_API_KEY`) land in `.env.local`.
 5. **Warns about `.gitignore`** — won't ship secrets if your env file isn't ignored.
 6. **Prints the provider snippet** — framework-specific code to paste in.
 7. **Sends a test report** (opt-in) — closes the loop so you see your first classified bug immediately.

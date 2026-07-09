@@ -23,18 +23,13 @@ npx mushi-mushi
 <sub>What is Mushi, exactly? Read the one-page constitution: **[VISION.md](./VISION.md)** — the single source of truth for positioning, the north-star sentence, and who this is for.</sub>
 
 [![Add to Cursor](https://img.shields.io/badge/Add%20to-Cursor-0098FF)](https://kensaur.us/mushi-mushi/docs/connect)
-[![Add to VS Code](https://img.shields.io/badge/Add%20to-VS%20Code-007ACC?logo=visualstudiocode&logoColor=white)](https://kensaur.us/mushi-mushi/docs/connect)
 [![Try the demo — no signup](https://img.shields.io/badge/Try%20the%20demo-no%20signup-E34234)](https://kensaur.us/mushi-mushi/docs/connect)
-
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=%40mushi-mushi%2Freact&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
-[![Node](https://img.shields.io/badge/Node-%E2%89%A522-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![CI](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml/badge.svg)](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/SDK-MIT-blue.svg)](./LICENSE)
 [![Server](https://img.shields.io/badge/server-AGPL--3.0-brightgreen.svg)](./packages/server/LICENSE)
-[![Enterprise](https://img.shields.io/badge/enterprise-commercial-orange.svg)](./packages/server/ee/README.md)
-[![smithery badge](https://smithery.ai/badge/kensaurus/mushi-mushi)](https://smithery.ai/servers/kensaurus/mushi-mushi)
 
-[Vision](./VISION.md) · [Quick start](#60-second-proof) · [Connect your editor](https://kensaur.us/mushi-mushi/docs/connect) · [Self-host](#self-host-in-under-5-minutes) · [Already on Sentry?](#already-on-sentry) · [Packages](#framework-coverage) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Live demo](https://kensaur.us/mushi-mushi/admin/) · [Operators / platform](./docs/operators/) · [Roadmap](https://kensaur.us/mushi-mushi/docs/roadmap)
+<sub>Node ≥22 · [CI](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml) · SDK MIT · [enterprise](./packages/server/ee/README.md) · [Smithery](https://smithery.ai/servers/kensaurus/mushi-mushi)</sub>
+
+[Vision](./VISION.md) · [Quick start](#60-second-proof) · [Connect your editor](https://kensaur.us/mushi-mushi/docs/connect) · [Self-host](#self-host-in-under-5-minutes) · [Sentry enrichment](#sentry-enrichment) · [Packages](#framework-coverage) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Live demo](https://kensaur.us/mushi-mushi/admin/) · [Operators / platform](./docs/operators/) · [Roadmap](https://kensaur.us/mushi-mushi/docs/roadmap)
 
 <!-- TODO(loop-video): embed the 20–30s incident-loop gif when recut (docs/screenshots/incident-loop.gif).
      Until then the static diagnosis screenshot above shows error → diagnosis → fix.
@@ -56,11 +51,11 @@ npx mushi-mushi
 npx mushi-mushi
 ```
 
-The wizard auto-detects your framework, installs the right SDK, writes `MUSHI_PROJECT_ID` + `MUSHI_API_KEY` to `.env.local`, and prints the snippet to paste. Those two vars are **all the SDK needs** — no Supabase, no LLM key (see [`examples/sdk.env.example`](./examples/sdk.env.example); the root `.env.example` is for self-hosting the backend only). Then, the moment something breaks:
+The wizard auto-detects your framework, installs the right SDK, writes framework-prefixed env vars (e.g. `VITE_MUSHI_PROJECT_ID` / `VITE_MUSHI_API_KEY`, or `NEXT_PUBLIC_MUSHI_*`) to `.env.local`, and prints the snippet to paste. Those two vars are **all the SDK needs** — no Supabase, no LLM key (see [`examples/sdk.env.example`](./examples/sdk.env.example); the root `.env.example` is for self-hosting the backend only). Then, the moment something breaks:
 
 1. The bug lands in your queue — screenshot, the user's note, the route, the last console + network events, device context.
-2. Mushi produces **the diagnosis**: a plain-English root cause + a ready-to-apply fix.
-3. You pull it straight into your editor over MCP and paste the fix:
+2. Mushi produces **the diagnosis**: a plain-English root cause + a fix you can paste.
+3. You pull it into your editor over MCP:
 
 ```bash
 npx mushi-mushi setup --ide cursor    # then ask Cursor: "what's broken in prod?"
@@ -72,10 +67,7 @@ npx mushi-mushi setup --ide cursor    # then ask Cursor: "what's broken in prod?
 
 ## What this is
 
-- **Built for the solo, AI-first builder — the _vibe coder_.** You ship fast with Cursor, Claude Code, Lovable, or Bolt to real users, then lose afternoons when something breaks in code you didn't fully write. (Small teams and agencies feel the same pain — it works for them too.)
-- **The comprehension layer for AI-built apps.** AI lets you ship in an afternoon. But when it breaks, you're alone with a stack trace for code you didn't really write. Mushi makes *understanding* the bug as fast as *creating* the feature that caused it.
-- **It pays the momentum tax for you.** A two-hour incident shouldn't eat your whole day — the real cost is the flow state you lose. Mushi turns "something broke" into "here's exactly why, and here's the fix" so a bug costs you five minutes, not your afternoon.
-- **It lives in your editor.** Plain-English diagnosis + a paste-ready fix arrive over MCP inside Cursor / Claude Code — no dashboard to go read, no second LLM key for MCP.
+For the solo AI-first builder (the _vibe coder_): you ship fast with Cursor, Claude Code, Lovable, or Bolt, then lose afternoons when something breaks in code you didn't fully write. Mushi is the **comprehension layer** — plain-English diagnosis in your editor over MCP, so a bug costs five minutes instead of your afternoon. (Small teams and agencies hit the same pain.)
 
 These are the bugs your monitoring can't see, and the ones you didn't write:
 
@@ -86,20 +78,18 @@ These are the bugs your monitoring can't see, and the ones you didn't write:
 
 ## What it is not
 
-- **Not another dashboard you have to go read.** The answer comes to your editor.
-- **Not an enterprise monitoring stack.** No Sentry/Datadog/Firebase required to get value — standalone first.
-- **Not something you configure for an afternoon.** One command in, diagnosis out.
+Not another dashboard you have to go read, and not an enterprise monitoring stack — standalone first, no Sentry/Datadog/Firebase required. Full positioning: [`VISION.md`](./VISION.md).
 
 ---
 
 ## The diagnosis loop
 
-When a user shakes their phone (or clicks the reporter), four things happen in the order a careful colleague would do them:
+When a user shakes their phone (or clicks the reporter):
 
-1. **Capture.** The widget grabs the screenshot, the route, the user's note, the last few console + network events, and the device context.
-2. **Classify.** A two-stage LLM pipeline tags severity, category, and a plain-English root-cause hint — the screenshot goes through an air-gapped vision pass that can't see the text prompt, so a malicious screenshot can't inject one. A nightly judge scores the classifier's own work and feeds a prompt-A/B loop.
-3. **Connect.** The report embeds into a knowledge graph (Postgres + pgvector). The same broken button reported twenty times shows up as **one** row, not twenty.
-4. **Fix.** _Optional._ Click _Dispatch fix_ (or from Slack / MCP / CI) and an agent in a sandbox tries the change, runs your tests, and opens a **draft** PR. You review it like any other PR — merge, edit, or close.
+1. **Capture** — screenshot, route, user note, recent console + network events, device context.
+2. **Classify** — two-stage LLM tags severity, category, and a plain-English root-cause hint. The screenshot goes through an air-gapped vision pass that can't see the text prompt. A nightly judge scores the classifier and feeds a prompt-A/B loop.
+3. **Connect** — the report embeds into a knowledge graph (Postgres + pgvector). The same broken button reported twenty times shows up as **one** row, not twenty.
+4. **Fix** _(optional)_ — _Dispatch fix_ (or Slack / MCP / CI) runs an agent in a sandbox, runs your tests, and opens a **draft** PR. You review it like any other PR.
 
 ```mermaid
 flowchart LR
@@ -143,9 +133,9 @@ cp .env.example .env   # ANTHROPIC_API_KEY, Supabase creds
 docker compose up -d
 ```
 
-[`SELF_HOSTED.md`](./SELF_HOSTED.md) and the [Self-host in minutes](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose) guide are the long-form walkthroughs. A production-ready **Helm chart** lives at [`deploy/helm/`](./deploy/helm/README.md) — one `helm install` on any cluster.
+[`SELF_HOSTED.md`](./SELF_HOSTED.md) and the [Self-host in minutes](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose) guide are the long-form walkthroughs. A **Helm chart** lives at [`deploy/helm/`](./deploy/helm/README.md) — one `helm install` on any cluster.
 
-**Hosted (zero-config).** Prefer we run it? Sign up at [`kensaur.us/mushi-mushi/`](https://kensaur.us/mushi-mushi/), click _Start free, no card_, create a project, and copy your `projectId` + `apiKey`. The free tier covers 50 diagnoses a month (no card required).
+**Hosted:** sign up at [`kensaur.us/mushi-mushi/`](https://kensaur.us/mushi-mushi/), click _Start free, no card_, create a project, and copy your `projectId` + `apiKey`. The free tier covers 50 diagnoses a month (no card required).
 
 > **One BYOK rule, both ways.** Self-host and you bring your own Anthropic / OpenAI key — you pay the vendor at list rate, we never mark up a token. On hosted you bring no key at all: we meter by **diagnosis** (the plain-English root cause + fix), never by tokens, with a per-project **spend cap** and **50 / 80 / 100% alerts** so the bill can't surprise you. Full numbers: [pricing](https://kensaur.us/mushi-mushi/docs/pricing).
 
@@ -153,9 +143,9 @@ docker compose up -d
 
 ---
 
-## Already on Sentry?
+## Sentry enrichment
 
-You don't need it — Mushi works standalone — but if you already run it, Mushi enriches it. Sentry owns "errors your code throws"; Mushi owns the bugs that *don't* throw (dead buttons, 12-second screens, layouts that break on one phone) and the **plain-English diagnosis + fix** Sentry's $80/mo Seer tier reserves for bigger teams.
+Mushi works standalone. If you already run Sentry, Mushi enriches it: Sentry owns "errors your code throws"; Mushi owns the bugs that *don't* throw (dead buttons, 12-second screens, layouts that break on one phone) and the **plain-English diagnosis + fix** Sentry's $80/mo Seer tier reserves for bigger teams.
 
 Inbound adapters forward Sentry (and Datadog, Bugsnag, Rollbar, Crashlytics, New Relic, Honeycomb, Grafana Loki, CloudWatch, Opsgenie, Firebase) alerts into Mushi for deeper fix context; outbound plugins send Mushi's verdicts back so a Sentry issue auto-resolves the moment Mushi merges its fix. The full enrichment / synthesis story lives in [`docs/operators/`](./docs/operators/#where-mushi-fits) — it's the upgrade path, never the front door.
 
@@ -221,26 +211,7 @@ iOS (Swift PM, v0.4.0): `.package(url: "https://github.com/kensaurus/mushi-mushi
 
 > Want a runnable example? [`examples/react-demo`](./examples/react-demo) is a minimal Vite + React app with test buttons for dead clicks, thrown errors, failed API calls, and console errors.
 
-<details>
-<summary><b>All packages</b> — SDKs, plugins, adapters, and backend</summary>
-
-| Install | Framework | What you get |
-| ------- | --------- | ------------ |
-| `npx mushi-mushi` | **Any** (auto-detects) | One-command wizard — installs the right SDK, writes env vars, prints the snippet |
-| `npm i @mushi-mushi/react` | React / Next.js | `<MushiProvider>`, `useMushi()`, `<MushiErrorBoundary>` |
-| `npm i @mushi-mushi/vue` | Vue 3 / Nuxt | `MushiPlugin`, `useMushi()` composable, error handler |
-| `npm i @mushi-mushi/svelte` | Svelte / SvelteKit | `initMushi()`, SvelteKit error hook |
-| `npm i @mushi-mushi/angular` | Angular 17+ | `provideMushi()`, `MushiService`, error handler |
-| `npm i @mushi-mushi/react-native` | React Native / Expo | Shake-to-report, bottom-sheet widget, navigation capture, offline queue |
-| `npm i @mushi-mushi/capacitor` | Capacitor / Ionic | iOS + Android via Capacitor |
-| `pub add mushi_mushi` | Flutter / Dart | Shake-to-report, screenshot capture, offline queue |
-| `npm i @mushi-mushi/web` | Vanilla / any framework | Framework-agnostic SDK |
-| `npm i @mushi-mushi/node` | Node (Express / Fastify / Hono) | Server-side SDK — error-handler middleware, `uncaughtException` hook |
-| `npm i @mushi-mushi/adapters` | Any Node webhook server | Translate alerts from **11 sources** into Mushi reports |
-
-Backend packages — `@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify` (AGPLv3) — power the classification pipeline, knowledge graph, fix dispatch, and Playwright verification. Plugins: Jira, Slack, Linear, PagerDuty, Zapier, Sentry, Discord, MS Teams, GitHub Issues, Bugsnag, Rollbar, Crashlytics, Cursor Cloud. Inventory tooling: `inventory-schema`, `inventory-auth-runner`, `eslint-plugin-mushi-mushi`, `mcp-ci`.
-
-</details>
+Full package list and maturity table: [SDK reference](https://kensaur.us/mushi-mushi/docs/sdks).
 
 ---
 
@@ -278,7 +249,7 @@ npx skills add kensaurus/mushi-mushi
 
 Then: `/mushi-setup` (guided SDK install + MCP wiring), `/mushi-debug` (diagnose ingest / MCP / pipeline failures), `/mushi-health` (pass/fail check across CLI, API, edge functions, BYOK keys), `/mushi-integration` (two-way loop, fix dispatch, lessons). The admin **Connect & Update** page (`/connect`) mirrors the same flows with one-click **Add to Cursor** deeplinks.
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~339K TS lines · 1,610 source files · 44 workspace / 36 npm packages · 51 edge functions · 298 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~348K TS lines · 1,680 source files · 44 workspace / 36 npm packages · 51 edge functions · 310 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ---
 

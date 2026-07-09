@@ -4,19 +4,14 @@
  *          for the active project.
  */
 
-import { Link, useSearchParams } from 'react-router-dom'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Section,
-  Card,
   Badge,
   Btn,
   ErrorAlert,
   SegmentedControl,
-  CopyButton,
-  FreshnessPill,
-  RecommendedAction,
-  RelativeTime, } from '../components/ui'
-import { IconIntegrations, IconArrowRight } from '../components/icons'
+  FreshnessPill, } from '../components/ui'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
@@ -28,323 +23,30 @@ import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { useMcpUx, resolveQuickMcpTab } from '../lib/mcpModeUx'
-import { ConfigHelp } from '../components/ConfigHelp'
-import { detectFromPackageJson } from '../lib/frameworkDetect'
 import { McpStatusBanner } from '../components/mcp/McpStatusBanner'
 import { McpConnectGuide } from '../components/mcp/McpConnectGuide'
 import { McpSnapshotStrip } from '../components/mcp/McpSnapshotStrip'
-import { McpEndpointReadout } from '../components/mcp/McpEndpointReadout'
-import { McpQuickstartStep, type McpQuickstartStepProps } from '../components/mcp/McpQuickstartStep'
-import { McpToolCard, scopeBadgeTone } from '../components/mcp/McpToolCard'
-import {
-  ActionPill,
-  ActionPillRow,
-  ContainedBlock,
-  InlineProof,
-  SignalChip,
-} from '../components/report-detail/ReportSurface'
+import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import { EMPTY_MCP_STATS } from '../components/mcp/types'
 import type { CatalogTabId, McpProjectsResponse, McpStats, McpTabId } from '../components/mcp/types'
-import {
-  TOOL_CATALOG,
-  RESOURCE_CATALOG,
-  PROMPT_CATALOG,
-} from '../lib/mcpCatalog'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../lib/env'
+import { McpExamplesPanel } from '../components/mcp/McpExamplesPanel'
+import { McpOverviewPanel } from '../components/mcp/McpOverviewPanel'
+import { McpCatalogPanel } from '../components/mcp/McpCatalogPanel'
+import { McpSetupPanel } from '../components/mcp/McpSetupPanel'
+import type { McpQuickstartStepProps } from '../components/mcp/McpQuickstartStep'
 import {
-  buildHttpConfig,
-  buildStdioConfig,
-  projectServerName,
-} from '../lib/cursorDeeplink'
-import { MCP_CLIENTS, MCP_PIN_SPEC } from '@mushi-mushi/mcp/clients'
-import { ClientConnectButton } from '../components/ClientConnectButton'
-import { McpAccountKeyCard } from '../components/McpAccountKeyCard'
+  MCP_PAGE_TABS,
+  buildCursorJson,
+  buildEnvBlock,
+  buildHttpCursorJson,
+  isCatalogTabId,
+  resolveMcpTab,
+  validateMcpJsonSyntax,
+} from '../lib/mcpPageHelpers'
 import { CHIP_TONE } from '../lib/chipTone'
-
-const CURSOR_CLIENT = MCP_CLIENTS.find((c) => c.id === 'cursor')!
-const VSCODE_CLIENT = MCP_CLIENTS.find((c) => c.id === 'vscode')!
-
-const TABS: Array<{ id: McpTabId; label: string; description: string }> = [
-  {
-    id: 'overview',
-    label: 'Overview',
-    description: 'MCP posture — key scopes, connection status, and recommended next steps for agent access.',
-  },
-  {
-    id: 'setup',
-    label: 'Setup',
-    description: 'Mint a key, copy the snippet, and confirm your IDE sees all Mushi tools.',
-  },
-  {
-    id: 'catalog',
-    label: 'Catalog',
-    description: 'Every tool, resource URI, and slash prompt the MCP server advertises.',
-  },
-  {
-    id: 'examples',
-    label: 'Examples',
-    description: 'Real agent asks you can paste into Cursor or Claude Desktop today.',
-  },
-]
-
-const CATALOG_TABS: Array<{ id: CatalogTabId; label: string }> = [
-  { id: 'tools', label: 'Tools' },
-  { id: 'resources', label: 'Resources' },
-  { id: 'prompts', label: 'Prompts' },
-]
-
-const MUSHI_MCP_API = RESOLVED_EXTERNAL_API_URL
-
-interface UseCase {
-  title: string
-  ask: string
-  calls: string[]
-}
-
-const USE_CASES: UseCase[] = [
-  {
-    title: 'Start my day',
-    ask: 'What should I focus on right now?',
-    calls: ['triage_next_steps', 'project://dashboard', 'get_recent_reports'],
-  },
-  {
-    title: 'Fix a specific bug',
-    ask: 'Fix rep_abc123.',
-    calls: ['summarize_report_for_fix', 'get_fix_context', 'get_blast_radius', 'submit_fix_result'],
-  },
-  {
-    title: 'Debug a failed fix',
-    ask: 'Why did fix_xyz fail?',
-    calls: ['get_fix_timeline', 'explain_judge_result'],
-  },
-  {
-    title: 'Spot duplicates fast',
-    ask: 'Have we seen a bug like this before in Checkout?',
-    calls: ['get_similar_bugs'],
-  },
-  {
-    title: 'Ask production data in English',
-    ask: 'Which components had the most critical bugs this week?',
-    calls: ['run_nl_query'],
-  },
-  {
-    title: 'Triage across all my apps',
-    ask: 'What are my most urgent bugs across all my projects?',
-    calls: ['get_account_overview', 'get_recent_reports (project_id=X)', 'get_recent_reports (project_id=Y)'],
-  },
-  {
-    title: 'New project check-in',
-    ask: 'Is the SDK sending data? Any critical issues?',
-    calls: ['list_projects', 'get_project_context', 'diagnose_setup'],
-  },
-]
-
-function resolveMcpTab(value: string | null): McpTabId {
-  if (value === 'setup' || value === 'catalog' || value === 'examples') return value
-  return 'overview'
-}
-
-function isCatalogTabId(v: string | null): v is CatalogTabId {
-  return CATALOG_TABS.some((t) => t.id === v)
-}
-
-function buildSdkInstallSnippet(pkgManager: 'npm' | 'yarn' | 'pnpm'): string {
-  const cmds: Record<'npm' | 'yarn' | 'pnpm', string> = {
-    npm: 'npm install @mushi-mushi/web',
-    yarn: 'yarn add @mushi-mushi/web',
-    pnpm: 'pnpm add @mushi-mushi/web',
-  }
-  return cmds[pkgManager]
-}
-
-function buildSdkInitSnippet(projectId: string): string {
-  return `import Mushi from '@mushi-mushi/web';
-
-// Call once at app startup (e.g. in _app.tsx / main.tsx).
-// Use a report:write key — NOT your MCP key.
-Mushi.init({
-  apiKey: 'mushi_<your-report-write-key>',
-  projectId: '${projectId}',
-});
-
-// Identify users so reports are tied to real people:
-Mushi.identify({ id: user.id, email: user.email });`
-}
-
-function buildCursorJson(projectId: string, projectName: string): string {
-  const serverName = projectServerName(projectId, projectName)
-  return JSON.stringify(
-    {
-      mcpServers: {
-        [serverName]: buildStdioConfig(projectId, 'paste-your-mushi-api-key-here', MUSHI_MCP_API),
-      },
-    },
-    null,
-    2,
-  )
-}
-
-function buildHttpCursorJson(projectId: string, projectName: string): string {
-  const serverName = projectServerName(projectId, projectName)
-  return JSON.stringify(
-    {
-      mcpServers: {
-        [serverName]: buildHttpConfig(projectId, 'paste-your-mushi-api-key-here', RESOLVED_MCP_HTTP_URL),
-      },
-    },
-    null,
-    2,
-  )
-}
-
-function buildEnvBlock(projectId: string): string {
-  return [
-    '# Mushi MCP — paste into .env.local (gitignored).',
-    `MUSHI_API_ENDPOINT=${MUSHI_MCP_API}`,
-    'MUSHI_API_KEY=paste-your-mushi-api-key-here',
-    `MUSHI_PROJECT_ID=${projectId}`,
-    '# Optional: lean tool set (default in admin snippets). Omit or set to "all" for full catalog.',
-    'MUSHI_FEATURES=triage,fixes,inventory,setup,docs',
-    '',
-  ].join('\n')
-}
-
-interface McpJsonCheck {
-  ok: boolean
-  title: string
-  details: string[]
-}
-
-function validateMcpJsonSyntax(raw: string): McpJsonCheck {
-  if (!raw.trim()) {
-    return {
-      ok: false,
-      title: 'Paste an mcp.json block to check it.',
-      details: ['Tip: click "Load generated snippet" below to start from the active project config.'],
-    }
-  }
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch (err) {
-    return {
-      ok: false,
-      title: 'Invalid JSON syntax.',
-      details: [err instanceof Error ? err.message : 'The config is not valid JSON.'],
-    }
-  }
-
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return { ok: false, title: 'Root must be an object.', details: ['Expected { "mcpServers": { ... } }.'] }
-  }
-
-  const root = parsed as { mcpServers?: unknown }
-  if (!root.mcpServers || typeof root.mcpServers !== 'object' || Array.isArray(root.mcpServers)) {
-    return {
-      ok: false,
-      title: 'Missing mcpServers object.',
-      details: ['Cursor expects { "mcpServers": { "mushi-...": { ... } } }.'],
-    }
-  }
-
-  const entries = Object.entries(root.mcpServers as Record<string, unknown>)
-  const mushiEntries = entries.filter(([name, value]) => {
-    if (!value || typeof value !== 'object') return false
-    const server = value as { command?: unknown; args?: unknown; url?: unknown; env?: unknown }
-    const args = Array.isArray(server.args) ? server.args.join(' ') : ''
-    const env = server.env && typeof server.env === 'object' ? server.env as Record<string, unknown> : {}
-    return name.includes('mushi') ||
-      String(server.command ?? '').includes('mushi') ||
-      args.includes('mushi') ||
-      Boolean(env.MUSHI_API_KEY || env.MUSHI_API_ENDPOINT)
-  })
-
-  if (mushiEntries.length === 0) {
-    return {
-      ok: false,
-      title: 'No Mushi server entry found.',
-      details: ['Add a server named like "mushi-my-app" or paste the generated snippet.'],
-    }
-  }
-
-  const details: string[] = []
-  let ok = true
-
-  for (const [name, value] of mushiEntries) {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      ok = false
-      details.push(`${name}: server config must be an object.`)
-      continue
-    }
-
-    const server = value as {
-      type?: unknown
-      command?: unknown
-      args?: unknown
-      env?: unknown
-      url?: unknown
-      headers?: unknown
-    }
-    const isHttp = server.type === 'http' || typeof server.url === 'string'
-
-    if (isHttp) {
-      if (typeof server.url !== 'string' || !server.url.startsWith('http')) {
-        ok = false
-        details.push(`${name}: hosted HTTP config needs a valid url.`)
-      }
-      const headers = server.headers && typeof server.headers === 'object'
-        ? server.headers as Record<string, unknown>
-        : {}
-      if (!headers.Authorization && !headers['X-Mushi-Api-Key']) {
-        ok = false
-        details.push(`${name}: hosted HTTP config needs Authorization or X-Mushi-Api-Key headers.`)
-      }
-      continue
-    }
-
-    if (typeof server.command !== 'string') {
-      ok = false
-      details.push(`${name}: stdio config needs a command, usually "npx" or "node".`)
-    }
-    if (!Array.isArray(server.args) || server.args.some((arg) => typeof arg !== 'string')) {
-      ok = false
-      details.push(`${name}: stdio config needs args as a string array.`)
-    }
-
-    const env = server.env && typeof server.env === 'object'
-      ? server.env as Record<string, unknown>
-      : null
-    if (!env) {
-      ok = false
-      details.push(`${name}: stdio config needs an env object with MUSHI_* values.`)
-      continue
-    }
-    if (typeof env.MUSHI_API_ENDPOINT !== 'string' || !env.MUSHI_API_ENDPOINT.includes('/functions/v1/api')) {
-      ok = false
-      details.push(`${name}: MUSHI_API_ENDPOINT should end with /functions/v1/api.`)
-    }
-    if (typeof env.MUSHI_API_KEY !== 'string' || !env.MUSHI_API_KEY.startsWith('mushi_')) {
-      ok = false
-      details.push(`${name}: MUSHI_API_KEY should start with mushi_.`)
-    }
-    if (!env.MUSHI_PROJECT_ID) {
-      details.push(`${name}: no MUSHI_PROJECT_ID means account mode; use an org-scoped key or pass project_id in tool calls.`)
-    }
-    if (Array.isArray(server.args) && server.args.includes('@mushi-mushi/mcp@latest')) {
-      details.push(`${name}: uses npm @latest — re-pin it (run "npx mushi-mushi setup" or replace with ${MCP_PIN_SPEC}) to avoid supply-chain and cold-start surprises.`)
-    }
-  }
-
-  return {
-    ok,
-    title: ok ? 'Syntax looks valid.' : 'Config needs changes.',
-    details: details.length > 0 ? details : ['Restart Cursor MCP after saving the file, then run diagnose_setup.'],
-  }
-}
 
 export function McpPage() {
   const activeProjectId = useActiveProjectId()
@@ -357,7 +59,7 @@ export function McpPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const param = searchParams.get('tab')
   const activeTab: McpTabId = resolveMcpTab(param)
-  const activeMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
+  const activeMeta = MCP_PAGE_TABS.find((t) => t.id === activeTab) ?? MCP_PAGE_TABS[0]
   const catalogParam = searchParams.get('catalog')
   const catalogTab: CatalogTabId = isCatalogTabId(catalogParam) ? catalogParam : 'tools'
 
@@ -373,7 +75,6 @@ export function McpPage() {
   const [revealedMcpKey, setRevealedMcpKey] = useState<string | null>(null)
   const [sdkSnippetLang, setSdkSnippetLang] = useState<'npm' | 'yarn' | 'pnpm'>('npm')
   const [mcpJsonDraft, setMcpJsonDraft] = useState('')
-  const detectTaRef = useRef<HTMLTextAreaElement>(null)
 
   const projectsPath = activeProjectId ? '/v1/admin/projects' : null
   const statsPath = activeProjectId ? '/v1/admin/mcp/stats' : null
@@ -544,27 +245,6 @@ export function McpPage() {
     }
   }
 
-  const readTools = TOOL_CATALOG.filter((t) => t.scope === 'mcp:read')
-  const writeTools = TOOL_CATALOG.filter((t) => t.scope === 'mcp:write')
-
-  // Use-case groups for the Catalog display — derived from USE_CASES.calls
-  const USE_CASE_GROUPS: Array<{ label: string; tools: string[]; description: string }> = [
-    {
-      label: 'Start my day / triage',
-      tools: ['triage_next_steps', 'get_recent_reports', 'get_account_overview', 'project://dashboard'],
-      description: 'Survey the queue, understand what needs attention, check project health.',
-    },
-    {
-      label: 'Fix a bug end-to-end',
-      tools: ['summarize_report_for_fix', 'get_fix_context', 'get_blast_radius', 'submit_fix_result', 'get_fix_timeline', 'explain_judge_result'],
-      description: 'Get full context on a report, dispatch a fix, track CI, and merge.',
-    },
-    {
-      label: 'Query production data',
-      tools: ['run_nl_query', 'get_similar_bugs', 'list_projects', 'get_project_context', 'diagnose_setup'],
-      description: 'Query report data from your editor.',
-    },
-  ]
 
   const hasReadKey = stats.mcpReadKeyCount > 0
   const hasWriteKey = stats.mcpWriteKeyCount > 0
@@ -774,126 +454,14 @@ export function McpPage() {
       )}
 
       {activeTab === 'overview' && (
-        <div className="space-y-4">
-          <McpEndpointReadout stats={stats} fetchedAt={lastFetchedAt} validating={isValidating} />
-          {/* Capability framing strip — leads with what the user can DO, not connection metrics */}
-          <div className="rounded-md border border-edge-subtle bg-surface-raised px-4 py-3">
-            <p className="text-xs font-semibold text-fg mb-2">What you can do with MCP connected</p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {USE_CASES.slice(0, 4).map((uc) => (
-                <div key={uc.title} className="rounded-md border border-edge-subtle bg-surface-raised px-3 py-2">
-                  <p className="text-2xs font-semibold text-fg">{uc.title}</p>
-                  <p className="mt-0.5 text-2xs italic text-fg-secondary line-clamp-2">
-                    &ldquo;{uc.ask}&rdquo;
-                  </p>
-                  <p className="mt-1 text-2xs text-fg-faint line-clamp-1">
-                    {uc.calls.slice(0, 2).join(', ')}
-                    {uc.calls.length > 2 ? ` +${uc.calls.length - 2} more` : ''}
-                  </p>
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setTab('examples')}
-              className="mt-2 text-2xs text-brand hover:underline"
-            >
-              See all {USE_CASES.length} examples →
-            </button>
-          </div>
-
-          {/* RecommendedAction is shown for all modes — every user benefits from a
-              clear next step rather than staring at blank space below the KPI snapshot. */}
-          {stats.topPriority === 'healthy' && (
-            <RecommendedAction
-              tone="success"
-              title="Agent access live"
-              description={stats.topPriorityLabel ?? `${stats.connectedKeyCount} MCP key(s) connected with heartbeat.`}
-              cta={{ label: 'Browse catalog', to: '/mcp?tab=catalog' }}
-            />
-          )}
-          {!ux.hideOverviewChrome && (
-          <>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Card className="space-y-2 border-edge p-3 sm:col-span-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Connection cockpit</p>
-                <SignalChip tone={stats.connectedKeyCount > 0 ? 'ok' : stats.mcpReadKeyCount > 0 ? 'warn' : 'neutral'}>
-                  {stats.connectedKeyCount > 0 ? 'Handshake OK' : stats.mcpReadKeyCount > 0 ? 'Awaiting IDE' : 'No MCP key'}
-                </SignalChip>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-3 text-xs">
-                <div>
-                  <p className="text-fg-faint text-3xs uppercase tracking-wide">Expected endpoint</p>
-                  <p className="font-mono text-fg-secondary truncate" title={stats.expectedEndpointHost ?? MUSHI_MCP_API}>
-                    {stats.expectedEndpointHost ?? new URL(MUSHI_MCP_API).host}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-fg-faint text-3xs uppercase tracking-wide">Last agent host</p>
-                  <p className="font-mono text-fg-secondary truncate" title={stats.lastSeenEndpointHost ?? undefined}>
-                    {stats.lastSeenEndpointHost ?? '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-fg-faint text-3xs uppercase tracking-wide">Try in Cursor</p>
-                  <ActionPillRow>
-                    <ActionPill
-                      tone="brand"
-                      onClick={() => void copySnippet('List all Mushi MCP tools for this project.', 'Try command')}
-                    >
-                      Copy: list tools
-                    </ActionPill>
-                    <ActionPill
-                      tone="neutral"
-                      onClick={() => void copySnippet('get_recent_reports limit=5', 'Try command')}
-                    >
-                      Copy: recent reports
-                    </ActionPill>
-                  </ActionPillRow>
-                </div>
-              </div>
-            </Card>
-            <Card className="space-y-2 border-edge p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Read scope</p>
-                <SignalChip tone={stats.mcpReadKeyCount > 0 ? 'ok' : 'warn'}>
-                  {stats.mcpReadKeyCount > 0 ? 'Ready' : 'Missing'}
-                </SignalChip>
-              </div>
-              <p className="text-lg font-semibold tabular-nums text-fg-primary">{stats.mcpReadKeyCount}</p>
-              <InlineProof>Required to list tools + read triage</InlineProof>
-            </Card>
-            <Card className="space-y-2 border-edge p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Write scope</p>
-                <SignalChip tone={stats.mcpWriteKeyCount > 0 ? 'ok' : 'neutral'}>
-                  {stats.mcpWriteKeyCount > 0 ? 'Enabled' : 'Optional'}
-                </SignalChip>
-              </div>
-              <p className="text-lg font-semibold tabular-nums text-warn">{stats.mcpWriteKeyCount}</p>
-              <InlineProof>Optional — dispatch fixes from agents</InlineProof>
-            </Card>
-            <Card className="space-y-2 border-edge p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Last heartbeat</p>
-                <SignalChip tone={stats.lastSeenAt ? 'brand' : 'neutral'}>
-                  {stats.lastSeenAt ? 'Live' : 'Silent'}
-                </SignalChip>
-              </div>
-              <p className="text-sm font-semibold text-fg-primary">
-                {stats.lastSeenAt ? <RelativeTime value={stats.lastSeenAt} /> : 'Never'}
-              </p>
-              <InlineProof className="truncate font-mono">
-                <span title={stats.lastSeenEndpointHost ?? undefined}>
-                  {stats.lastSeenEndpointHost ?? 'No MCP traffic yet'}
-                </span>
-              </InlineProof>
-            </Card>
-          </div>
-          </>
-          )}
-        </div>
+        <McpOverviewPanel
+          stats={stats}
+          lastFetchedAt={lastFetchedAt}
+          isValidating={isValidating}
+          hideOverviewChrome={ux.hideOverviewChrome}
+          onOpenExamples={() => setTab('examples')}
+          onCopySnippet={copySnippet}
+        />
       )}
 
       {activeTab !== 'overview' && (
@@ -905,657 +473,57 @@ export function McpPage() {
         )}
 
         {activeTab === 'setup' && (
-          <div className="space-y-4" data-dav-anchor="mcp:decide">
-            <Card className="p-5 space-y-4" data-testid="mcp-quickstart">
-              <div className="flex items-baseline justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <span className="text-fg-muted [&>svg]:h-4 [&>svg]:w-4"><IconIntegrations /></span>
-                  <h3 className="text-sm font-semibold text-fg">Get an agent talking in 60 seconds</h3>
-                </div>
-                <div className="flex items-center gap-1.5" data-testid="mcp-status-strip">
-                  <Badge
-                    className={
-                      hasReadKey
-                        ? CHIP_TONE.okSubtle + ' border border-ok/30'
-                        : 'bg-surface-overlay text-fg-muted border border-edge-subtle'
-                    }
-                    data-testid="mcp-read-status"
-                  >
-                    {hasReadKey ? 'mcp:read ✓' : 'mcp:read —'}
-                  </Badge>
-                  <Badge
-                    className={
-                      hasWriteKey
-                        ? CHIP_TONE.okSubtle + ' border border-ok/30'
-                        : 'bg-surface-overlay text-fg-muted border border-edge-subtle'
-                    }
-                    data-testid="mcp-write-status"
-                  >
-                    {hasWriteKey ? 'mcp:write ✓' : 'mcp:write —'}
-                  </Badge>
-                </div>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-3">
-                <McpQuickstartStep
-                  n={1}
-                  tone={step1Tone}
-                  title="Generate an API key"
-                  body={
-                    hasReadKey ? (
-                      <span>
-                        <span className="text-ok">{stats.mcpReadKeyCount} MCP key{stats.mcpReadKeyCount === 1 ? '' : 's'}</span>{' '}
-                        on <span className="font-mono text-fg-secondary">{displayName}</span>.
-                      </span>
-                    ) : (
-                      <span>
-                        Pick <span className="text-fg">MCP read</span> to browse or{' '}
-                        <span className="text-fg">MCP read + write</span> to dispatch fixes.
-                      </span>
-                    )
-                  }
-                />
-                <McpQuickstartStep
-                  n={2}
-                  tone={step2Tone}
-                  title="Paste the snippet"
-                  body={
-                    <>
-                      Drop the <span className="font-mono text-fg-secondary">.cursor/mcp.json</span> block into your IDE, then restart.
-                    </>
-                  }
-                />
-                <McpQuickstartStep
-                  n={3}
-                  tone={step3Tone}
-                  title="Ask the agent"
-                  body={
-                    <>
-                      Type <span className="font-mono text-fg-secondary">"list mushi tools"</span> — expect {stats.toolCount} tools.
-                    </>
-                  }
-                />
-              </div>
-
-              <div className="pt-1 space-y-3">
-                {!hasReadKey && (
-                  <div className="space-y-2">
-                    <Btn size="sm" data-testid="mcp-status-mint" loading={mintingKey} onClick={() => void mintMcpReadKey()}>
-                      Mint mcp:read key here
-                      <IconArrowRight className="h-3.5 w-3.5 ml-1" />
-                    </Btn>
-                  </div>
-                )}
-                <div className="flex flex-wrap items-center gap-2">
-                  {activeProjectId ? (
-                    <>
-                      <ClientConnectButton
-                        client={CURSOR_CLIENT}
-                        projectId={activeProjectId}
-                        projectName={displayName}
-                        endpoint={RESOLVED_EXTERNAL_API_URL}
-                        mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
-                        variant="primary"
-                        size="sm"
-                      />
-                      <ClientConnectButton
-                        client={CURSOR_CLIENT}
-                        projectId={activeProjectId}
-                        projectName={displayName}
-                        endpoint={RESOLVED_EXTERNAL_API_URL}
-                        mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
-                        scopes={['mcp:write']}
-                        variant="ghost"
-                        size="sm"
-                      />
-                      <ClientConnectButton
-                        client={VSCODE_CLIENT}
-                        projectId={activeProjectId}
-                        projectName={displayName}
-                        endpoint={RESOLVED_EXTERNAL_API_URL}
-                        mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
-                        variant="ghost"
-                        size="sm"
-                      />
-                    </>
-                  ) : (
-                    <Btn size="sm" variant="primary" disabled>
-                      Add to Cursor
-                    </Btn>
-                  )}
-                </div>
-                <ContainedBlock tone="muted">
-                  <p className="text-2xs text-fg-muted">
-                    <strong>"Add to Cursor"</strong> mints a fresh key and opens your IDE's install dialog — no copy-paste needed.
-                    The key is embedded in the deeplink and will not be shown again unless you save it.
-                  </p>
-                </ContainedBlock>
-                {revealedMcpKey ? (
-                  <ContainedBlock tone="muted">
-                    <p className="text-2xs text-fg-muted">
-                      Key minted — paste into your snippet if the deeplink did not open your IDE. Not shown again after you leave.
-                    </p>
-                  </ContainedBlock>
-                ) : null}
-              </div>
-            </Card>
-
-            <Card className="p-5 space-y-4" data-testid="mcp-install">
-              <div>
-                <h3 className="text-sm font-semibold text-fg">Configuration values</h3>
-                <ContainedBlock tone="muted" className="mt-2">
-                  <p className="text-xs text-fg-muted">
-                    Three env vars wire the MCP binary to <span className="font-mono text-fg-secondary">{displayName}</span>.
-                  </p>
-                </ContainedBlock>
-              </div>
-
-              <div className="rounded-md border border-edge-subtle bg-surface-raised">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDetectOpen((v) => !v)
-                    if (!detectOpen) setTimeout(() => detectTaRef.current?.focus(), 50)
-                  }}
-                  className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs hover:bg-surface-overlay rounded-md transition-colors"
-                  aria-expanded={detectOpen}
-                >
-                  <span className="font-medium text-fg">Detect monorepo / workspace (optional)</span>
-                  <SignalChip tone="neutral" className="text-2xs" aria-hidden>
-                    {detectOpen ? '▲ hide' : '▼ paste package.json'}
-                  </SignalChip>
-                </button>
-                {detectOpen && (
-                  <div className="px-3 pb-3 pt-1 space-y-2">
-                    <ContainedBlock tone="muted">
-                      <InlineProof className="border-0 bg-transparent px-0 py-0 text-2xs leading-snug">
-                        Paste your <SignalChip tone="neutral" className="font-mono">package.json</SignalChip> for monorepo install guidance.
-                      </InlineProof>
-                    </ContainedBlock>
-                    <textarea
-                      ref={detectTaRef}
-                      value={detectText}
-                      onChange={(e) => setDetectText(e.target.value)}
-                      placeholder={'{\n  "workspaces": ["apps/*", "packages/*"],\n  ...\n}'}
-                      className="w-full h-28 font-mono text-2xs bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1.5 text-fg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand resize-y placeholder:text-fg-faint"
-                      spellCheck={false}
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        disabled={!detectText.trim()}
-                        onClick={() => {
-                          const result = detectFromPackageJson(detectText)
-                          const globalNote = result.monorepo
-                            ? `Detected ${result.monorepo} monorepo.\n\n@mushi-mushi/mcp is a global CLI — install once:\n\n  npm install -g @mushi-mushi/mcp\n\nOr run on demand:\n\n  npx -y ${MCP_PIN_SPEC}`
-                            : null
-                          setMonorepoNote(globalNote)
-                          setMonoWarnings(result.warnings)
-                          setDetectOpen(false)
-                        }}
-                        className="px-3 py-1 rounded-sm text-xs font-medium bg-brand text-brand-fg hover:bg-brand-hover disabled:opacity-40 transition-colors"
-                      >
-                        Detect
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDetectText('')
-                          setDetectOpen(false)
-                          setMonorepoNote(null)
-                          setMonoWarnings([])
-                        }}
-                        className="px-2 py-1 rounded-sm text-xs text-fg-muted hover:text-fg transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {!detectOpen && (monorepoNote || monoWarnings.length > 0) && (
-                  <div className="px-3 pb-3 space-y-1.5">
-                    {monorepoNote && (
-                      <div className="rounded-sm border border-info/30 bg-info-muted/10 px-2 py-1.5">
-                        <p className="text-2xs text-info font-semibold mb-0.5">Monorepo install guidance</p>
-                        <pre className="text-2xs text-fg-secondary whitespace-pre-wrap font-mono leading-snug">{monorepoNote}</pre>
-                      </div>
-                    )}
-                    {monoWarnings.map((w, i) => (
-                      <p key={i} className="text-2xs text-warn flex gap-1">
-                        <span aria-hidden>⚠</span>
-                        <span>{w}</span>
-                      </p>
-                    ))}
-                    <ActionPill
-                      onClick={() => {
-                        setMonorepoNote(null)
-                        setMonoWarnings([])
-                      }}
-                    >
-                      Dismiss
-                    </ActionPill>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 border-b border-edge-subtle pb-2 flex-wrap">
-                <ConfigHelp helpId="mcp.snippet_mode" />
-                <SegmentedControl
-                  value={snippetMode}
-                  onChange={setSnippetMode}
-                  options={[
-                    { id: 'cursor' as const, label: 'Stdio (.cursor/mcp.json)' },
-                    { id: 'http' as const, label: 'Hosted HTTP' },
-                    { id: 'env' as const, label: '.env.local' },
-                  ]}
-                  ariaLabel="Snippet format"
-                  size="sm"
-                  scrollable
-                />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Btn
-                    size="sm"
-                    variant="ghost"
-                    loading={testingConnection}
-                    onClick={() => void testMcpConnection()}
-                    data-testid="mcp-test-connection"
-                  >
-                    {connectionTestResult ? 'Re-test' : 'Test connection'}
-                  </Btn>
-                  <Link
-                    to="/docs-bridge?topic=cli-setup"
-                    className="text-xs text-brand hover:underline"
-                  >
-                    CLI: mushi setup --ide cursor
-                  </Link>
-                </div>
-                {connectionTestResult && (
-                  <div
-                    data-testid="mcp-connection-result"
-                    className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-xs ${
-                      connectionTestResult.ok
-                        ? 'border-ok/30 bg-ok/8 text-ok'
-                        : 'border-danger/30 bg-danger/8 text-danger-foreground'
-                    }`}
-                  >
-                    <span className="shrink-0 text-sm leading-none mt-0.5" aria-hidden>
-                      {connectionTestResult.ok ? '✓' : '✕'}
-                    </span>
-                    <div className="min-w-0 space-y-0.5">
-                      <p className="font-medium">{connectionTestResult.message}</p>
-                      {!connectionTestResult.ok && (
-                        <p className="text-fg-muted">
-                          Run <code className="font-mono bg-surface px-1 rounded">mushi doctor --server</code> for a full diagnostic, or check the Supabase Edge Function logs.
-                        </p>
-                      )}
-                      <p className="text-fg-muted">
-                        Tested at {new Date(connectionTestResult.testedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <SignalChip tone="neutral" className="uppercase tracking-wider font-medium">
-                    {snippetMode === 'cursor'
-                      ? 'Stdio — drop into IDE settings (recommended — shows Mushi icon in Cursor)'
-                      : snippetMode === 'http'
-                        ? 'Hosted HTTP — no subprocess (URL host may show Supabase icon in Cursor; use stdio for branding)'
-                        : 'Drop into your repo root'}
-                  </SignalChip>
-                  <CopyButton
-                    onCopy={() =>
-                      copySnippet(
-                        snippet,
-                        snippetMode === 'cursor'
-                          ? '.cursor/mcp.json block'
-                          : snippetMode === 'http'
-                            ? 'Hosted HTTP MCP block'
-                            : '.env.local block',
-                      )
-                    }
-                    copied={copied}
-                    label={
-                      snippetMode === 'cursor'
-                        ? 'Copy .cursor/mcp.json block'
-                        : snippetMode === 'http'
-                          ? 'Copy hosted HTTP block'
-                          : 'Copy .env.local block'
-                    }
-                    copiedLabel="Snippet copied"
-                    data-testid="mcp-snippet-copy"
-                  />
-                </div>
-                <pre
-                  className="mushi-code-block mushi-code-body border border-code-surface-border rounded-sm px-3 py-2 mt-1 text-2xs font-mono overflow-auto whitespace-pre-wrap wrap-anywhere max-h-64 select-all"
-                  data-testid="mcp-snippet"
-                >
-                  {snippet}
-                </pre>
-              </div>
-
-              <div className="rounded-md border border-edge-subtle bg-surface-raised p-3 space-y-2" data-testid="mcp-json-helper">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div>
-                    <h3 className="text-sm font-semibold text-fg">mcp.json syntax helper</h3>
-                    <p className="text-xs text-fg-muted">
-                      Paste the block Cursor is using. We check JSON shape, stdio/HTTP fields, and Mushi env names.
-                    </p>
-                  </div>
-                  <Btn
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setMcpJsonDraft(snippetMode === 'env' ? buildCursorJson(projectId, displayName) : snippet)}
-                    data-testid="mcp-json-helper-load"
-                  >
-                    Load generated snippet
-                  </Btn>
-                </div>
-                <textarea
-                  className="w-full min-h-32 rounded-sm border border-edge-subtle bg-surface px-3 py-2 font-mono text-2xs text-fg-secondary outline-none focus-visible:border-brand"
-                  value={mcpJsonDraft}
-                  onChange={(event) => setMcpJsonDraft(event.target.value)}
-                  placeholder="Paste your ~/.cursor/mcp.json block here..."
-                  spellCheck={false}
-                  data-testid="mcp-json-helper-input"
-                />
-                <ContainedBlock tone={syntaxCheck.ok ? 'ok' : 'warn'}>
-                  <p className="text-xs font-semibold text-fg">{syntaxCheck.title}</p>
-                  <ul className="mt-1 list-disc pl-4 space-y-0.5 text-2xs text-fg-muted">
-                    {syntaxCheck.details.map((detail) => (
-                      <li key={detail}>{detail}</li>
-                    ))}
-                  </ul>
-                </ContainedBlock>
-              </div>
-            </Card>
-
-            {/* Multi-project connections */}
-            {projectsQuery.data && projectsQuery.data.projects.length > 0 && (
-              <Card className="p-5 space-y-4" data-testid="mcp-multi-project">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm font-semibold text-fg">Connect all your projects</h3>
-                    <Badge className={`${CHIP_TONE.infoSubtle} text-2xs`}>
-                      {projectsQuery.data.projects.length} project{projectsQuery.data.projects.length === 1 ? '' : 's'}
-                    </Badge>
-                  </div>
-                  <ContainedBlock tone="muted" className="mt-2">
-                    <p className="text-xs text-fg-muted leading-relaxed">
-                      Each Mushi project uses its own API key and gets a uniquely-named MCP server entry
-                      (<span className="font-mono text-fg-secondary">mushi-{'{'}name{'}'}-{'{'}id{'}'}</span>).
-                      Click <strong>Add to Cursor</strong> for each project below — all of them will appear
-                      simultaneously in your IDE so you can triage bugs across all your apps in one session.
-                    </p>
-                  </ContainedBlock>
-                </div>
-                <div className="space-y-2">
-                  {projectsQuery.data.projects.map((p) => {
-                    const serverSlug = projectServerName(p.id, p.name)
-                    const isActive = p.id === activeProjectId
-                    return (
-                      <div
-                        key={p.id}
-                        className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2.5 ${
-                          isActive ? 'border-brand/40 bg-surface-raised' : 'border-edge-subtle bg-surface-raised/20'
-                        }`}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-medium text-fg truncate">{p.name}</span>
-                            {isActive && (
-                              <Badge className="bg-brand/15 text-brand border border-brand/20 text-2xs">active</Badge>
-                            )}
-                          </div>
-                          <p className="text-2xs text-fg-faint font-mono truncate mt-0.5">{serverSlug}</p>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <ClientConnectButton
-                            client={CURSOR_CLIENT}
-                            projectId={p.id}
-                            projectName={p.name}
-                            endpoint={RESOLVED_EXTERNAL_API_URL}
-                            mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
-                            scopes={['mcp:write']}
-                            variant={isActive ? 'primary' : 'ghost'}
-                            size="sm"
-                          />
-                          <ClientConnectButton
-                            client={VSCODE_CLIENT}
-                            projectId={p.id}
-                            projectName={p.name}
-                            endpoint={RESOLVED_EXTERNAL_API_URL}
-                            mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
-                            scopes={['mcp:write']}
-                            variant="ghost"
-                            size="sm"
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-                <ContainedBlock tone="muted">
-                  <p className="text-2xs text-fg-muted">
-                    Once connected, call <span className="font-mono text-fg-secondary">get_account_overview</span> on
-                    any server to see all your projects and their health. Ask the agent:
-                    <em className="not-italic text-fg-secondary"> "What are my most urgent bugs across all projects?"</em>
-                  </p>
-                </ContainedBlock>
-              </Card>
-            )}
-
-            {/* Account-level key — one key for all projects (org-scoped) */}
-            <Card className="p-5 space-y-4" data-testid="mcp-account-key">
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-sm font-semibold text-fg">Account key (all projects, one server)</h3>
-                  <Badge className={`${CHIP_TONE.infoSubtle} text-2xs`}>org-scoped</Badge>
-                </div>
-                <ContainedBlock tone="muted" className="mt-2">
-                  <p className="text-xs text-fg-muted leading-relaxed">
-                    Alternative to per-project keys — one org-scoped key with no{' '}
-                    <span className="font-mono text-fg-secondary">MUSHI_PROJECT_ID</span> covers all your projects.
-                    The agent calls <span className="font-mono text-fg-secondary">get_account_overview</span> to
-                    discover accessible projects and auto-selects when you only have one.
-                    Use this when you want a single MCP server entry across your entire account.
-                  </p>
-                </ContainedBlock>
-              </div>
-              <McpAccountKeyCard compact />
-            </Card>
-
-            {/* SDK install for end users */}
-            {activeProjectId && (
-              <Card className="p-5 space-y-4" data-testid="mcp-sdk-install">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm font-semibold text-fg">Wire your app (SDK)</h3>
-                    <Badge className="bg-surface-overlay text-fg-muted border border-edge-subtle text-2xs">
-                      end users → Mushi
-                    </Badge>
-                  </div>
-                  <ContainedBlock tone="muted" className="mt-2">
-                    <p className="text-xs text-fg-muted leading-relaxed">
-                      The MCP connects <em>your coding agent</em> to Mushi. The SDK connects
-                      <em> real users in your app</em> so their bug reports flow into your reports inbox.
-                      Use a <strong>report:write</strong> key for the SDK — never your MCP key.
-                    </p>
-                  </ContainedBlock>
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <div className="flex items-center gap-1 mb-1.5">
-                      <SegmentedControl
-                        value={sdkSnippetLang}
-                        onChange={setSdkSnippetLang}
-                        options={[
-                          { id: 'npm' as const, label: 'npm' },
-                          { id: 'yarn' as const, label: 'yarn' },
-                          { id: 'pnpm' as const, label: 'pnpm' },
-                        ]}
-                        ariaLabel="Package manager"
-                        size="sm"
-                      />
-                    </div>
-                    <pre className="mushi-code-block mushi-code-body border border-code-surface-border rounded-sm px-3 py-2 text-2xs font-mono overflow-auto select-all">
-                      {buildSdkInstallSnippet(sdkSnippetLang)}
-                    </pre>
-                  </div>
-                  <div>
-                    <p className="text-2xs text-fg-faint uppercase tracking-wide font-medium mb-1">Init snippet</p>
-                    <pre className="mushi-code-block mushi-code-body border border-code-surface-border rounded-sm px-3 py-2 text-2xs font-mono overflow-auto whitespace-pre-wrap select-all max-h-52">
-                      {buildSdkInitSnippet(projectId)}
-                    </pre>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Btn
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => void copySnippet(buildSdkInstallSnippet(sdkSnippetLang), 'Install command')}
-                  >
-                    Copy install command
-                  </Btn>
-                  <Link to={`/onboarding?tab=sdk&project=${activeProjectId}`}>
-                    <Btn variant="ghost" size="sm">Open SDK wizard →</Btn>
-                  </Link>
-                </div>
-              </Card>
-            )}
-          </div>
+          <McpSetupPanel
+            stats={stats}
+            activeProjectId={activeProjectId}
+            displayName={displayName}
+            projectId={projectId}
+            projects={projectsQuery.data?.projects}
+            hasReadKey={hasReadKey}
+            hasWriteKey={hasWriteKey}
+            step1Tone={step1Tone}
+            step2Tone={step2Tone}
+            step3Tone={step3Tone}
+            snippetMode={snippetMode}
+            onSnippetModeChange={setSnippetMode}
+            copied={copied}
+            snippet={snippet}
+            syntaxCheck={syntaxCheck}
+            testingConnection={testingConnection}
+            connectionTestResult={connectionTestResult}
+            onTestConnection={() => void testMcpConnection()}
+            monorepoNote={monorepoNote}
+            onMonorepoNoteChange={setMonorepoNote}
+            monoWarnings={monoWarnings}
+            onMonoWarningsChange={setMonoWarnings}
+            detectOpen={detectOpen}
+            onDetectOpenChange={setDetectOpen}
+            detectText={detectText}
+            onDetectTextChange={setDetectText}
+            mintingKey={mintingKey}
+            revealedMcpKey={revealedMcpKey}
+            onMintMcpReadKey={() => void mintMcpReadKey()}
+            sdkSnippetLang={sdkSnippetLang}
+            onSdkSnippetLangChange={setSdkSnippetLang}
+            mcpJsonDraft={mcpJsonDraft}
+            onMcpJsonDraftChange={setMcpJsonDraft}
+            onCopySnippet={(payload, label) => void copySnippet(payload, label)}
+            onLoadGeneratedSnippet={() =>
+              setMcpJsonDraft(snippetMode === 'env' ? buildCursorJson(projectId, displayName) : snippet)
+            }
+          />
         )}
 
         {activeTab === 'catalog' && (
-          <div className="space-y-4" data-dav-anchor="mcp:verify">
-            <SegmentedControl
-              value={catalogTab}
-              onChange={setCatalogTab}
-              options={catalogOptions}
-              ariaLabel="MCP catalog sections"
-            />
-
-            {catalogTab === 'tools' && (
-              <div className="space-y-6">
-                {/* Use-case groups — the "what can I do?" view */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs font-semibold text-fg">By use-case</p>
-                    <span className="text-2xs text-fg-faint">(quick orientation)</span>
-                  </div>
-                  {USE_CASE_GROUPS.map((group) => {
-                    const groupTools = TOOL_CATALOG.filter((t) => group.tools.includes(t.name))
-                    if (groupTools.length === 0) return null
-                    return (
-                      <div key={group.label} className="rounded-md border border-edge-subtle bg-surface-raised p-3">
-                        <p className="text-xs font-semibold text-fg mb-0.5">{group.label}</p>
-                        <p className="text-2xs text-fg-muted mb-2">{group.description}</p>
-                        <div className="flex flex-wrap gap-1">
-                          {groupTools.map((t) => (
-                            <span key={t.name} className="font-mono text-2xs rounded-sm border border-edge-subtle bg-surface-overlay px-1.5 py-0.5 text-fg-secondary" title={t.useCase}>
-                              {t.name}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-
-                <div>
-                  <SignalChip tone="info" className="mb-2 uppercase tracking-wider font-medium">
-                    Read — always safe to loop on ({readTools.length})
-                  </SignalChip>
-                  <div className="grid gap-2 md:grid-cols-2" data-testid="mcp-tool-catalog-read">
-                    {readTools.map((tool) => (
-                      <McpToolCard key={tool.name} tool={tool} />
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <SignalChip tone="warn" className="mb-2 uppercase tracking-wider font-medium">
-                    Write — mutate project state ({writeTools.length})
-                  </SignalChip>
-                  <div className="grid gap-2 md:grid-cols-2" data-testid="mcp-tool-catalog-write">
-                    {writeTools.map((tool) => (
-                      <McpToolCard key={tool.name} tool={tool} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {catalogTab === 'resources' && (
-              <div className="space-y-2" data-testid="mcp-resource-catalog">
-                {RESOURCE_CATALOG.map((r) => (
-                  <div
-                    key={r.name}
-                    className="rounded-md border border-edge-subtle bg-surface-raised p-3 motion-safe:transition-colors hover:border-edge"
-                  >
-                    <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
-                      <SignalChip tone="neutral" className="font-mono text-xs wrap-anywhere max-w-full">
-                        {r.uri}
-                      </SignalChip>
-                      <Badge className={scopeBadgeTone(r.scope)}>{r.scope}</Badge>
-                    </div>
-                    <ContainedBlock tone="muted" className="text-xs leading-snug">
-                      {r.description}
-                    </ContainedBlock>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {catalogTab === 'prompts' && (
-              <div className="space-y-2" data-testid="mcp-prompt-catalog">
-                {PROMPT_CATALOG.map((p) => (
-                  <div
-                    key={p.name}
-                    className="rounded-md border border-edge-subtle bg-surface-raised p-3 motion-safe:transition-colors hover:border-edge"
-                  >
-                    <div className="text-sm font-semibold text-fg">{p.title}</div>
-                    <SignalChip tone="neutral" className="font-mono text-2xs mt-0.5 mb-1">
-                      /{p.name}
-                    </SignalChip>
-                    <ContainedBlock tone="muted" className="text-xs leading-snug">
-                      {p.description}
-                    </ContainedBlock>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <McpCatalogPanel
+            catalogTab={catalogTab}
+            catalogOptions={catalogOptions}
+            onCatalogTab={setCatalogTab}
+            toolCount={stats.toolCount}
+          />
         )}
 
-        {activeTab === 'examples' && (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="mcp-use-cases">
-            {USE_CASES.map((uc) => (
-              <div
-                key={uc.title}
-                className="rounded-md border border-edge-subtle bg-surface-raised p-3 space-y-2 motion-safe:transition-colors hover:border-edge"
-              >
-                <div className="text-xs font-semibold text-fg">{uc.title}</div>
-                <div className="text-sm text-fg-secondary leading-snug">
-                  <span className="text-accent">“</span>
-                  {uc.ask}
-                  <span className="text-accent">”</span>
-                </div>
-                <div className="flex flex-wrap gap-1 pt-1">
-                  {uc.calls.map((c) => (
-                    <SignalChip key={c} tone="neutral" className="font-mono text-2xs">
-                      {c}
-                    </SignalChip>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {activeTab === 'examples' && <McpExamplesPanel />}
       </Section>
       )}
     </div>

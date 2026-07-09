@@ -4,11 +4,7 @@ title: Vue 3 quickstart
 
 # Vue 3 quickstart
 
-## Try it live
-
-<Playground scenario="vue" file="src/App.vue" title="Vue 3 + Vite" />
-
-## Install
+Same loop as [React](/quickstart/react) — swap the install and boot call.
 
 ```bash
 pnpm add @mushi-mushi/vue
@@ -27,16 +23,4 @@ createApp(App)
   .mount('#app')
 ```
 
-```vue filename="src/components/ReportButton.vue"
-<script setup lang="ts">
-import { useMushi } from '@mushi-mushi/vue'
-
-const { submitReport } = useMushi()
-</script>
-
-<template>
-  <button @click="submitReport({ description: 'Cart total is wrong' })">
-    Report a bug
-  </button>
-</template>
-```
+API detail: [`@mushi-mushi/vue`](/sdks/vue). Widget behavior: [`@mushi-mushi/web`](/sdks/web).

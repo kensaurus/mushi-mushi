@@ -138,7 +138,7 @@ export function ClaudeCodeSetupPanel({ configured }: Props) {
         href="https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions"
         target="_blank"
         rel="noreferrer noopener"
-        className="inline-flex items-center gap-1 text-2xs text-brand hover:text-brand-hover"
+        className="inline-flex items-center gap-1 text-2xs text-accent-foreground hover:text-accent"
       >
         GitHub secrets docs <IconExternalLink size={10} />
       </a>

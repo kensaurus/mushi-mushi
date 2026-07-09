@@ -24,7 +24,7 @@ export function ResearchSnippetCard({ snippet, attachValue, onAttachValueChange,
             href={snippet.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="block truncate text-sm font-medium text-brand hover:underline"
+            className="block truncate text-sm font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
           >
             {snippet.title ?? snippet.url}
           </a>
@@ -46,7 +46,7 @@ export function ResearchSnippetCard({ snippet, attachValue, onAttachValueChange,
           <span>Linked to report</span>
           <Link
             to={`/reports/${snippet.attached_to_report_id}`}
-            className="font-mono text-brand hover:underline"
+            className="font-mono text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
           >
             {snippet.attached_to_report_id.slice(0, 8)}…
           </Link>

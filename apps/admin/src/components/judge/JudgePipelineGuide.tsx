@@ -77,7 +77,7 @@ export function JudgePipelineGuide({ topPriority, stats }: Props) {
       </div>
       <p className="text-2xs text-fg-faint">
         Tune classifier prompts in{' '}
-        <Link to="/prompt-lab?tab=prompts" className="text-brand hover:underline">
+        <Link to="/prompt-lab?tab=prompts" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
           Prompt Lab
         </Link>
         . Disagreements appear under the Evaluations tab.

@@ -1,18 +1,4 @@
-/**
- * FILE: apps/docs/components/PricingEstimator.tsx
- * PURPOSE: Interactive pricing estimator for the Pricing page. Renders a
- *   diagnosis-count slider that updates the estimated monthly cost in real
- *   time, using the live tier pricing from the plan catalog.
- *
- * USAGE:
- *   <PricingEstimator />   (no props — defaults to Indie tier)
- *
- * TECHNICAL DETAILS:
- * - Pure client-side React with a range input (slider).
- * - Tier math in ../lib/pricing-estimator.ts (unit-tested).
- * - No API calls at render time — pricing constants are hardcoded so the
- *   estimator works while Nextra is doing static generation.
- */
+/** Interactive pricing estimator for the Pricing page. Renders a */
 'use client'
 
 import { useState } from 'react'

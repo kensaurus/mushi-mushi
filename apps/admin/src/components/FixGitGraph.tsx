@@ -367,7 +367,7 @@ export function FixGitGraph({
               href={branchUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="truncate font-mono normal-case text-brand hover:text-brand-hover underline-offset-2 hover:underline"
+              className="truncate font-mono normal-case text-accent-foreground hover:text-accent underline-offset-2 hover:underline"
               title={`View branch ${branchName} on GitHub`}
             >
               {branchName}
@@ -429,7 +429,7 @@ export function FixGitGraph({
                         href={prUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-brand hover:text-brand-hover underline-offset-2 hover:underline font-mono"
+                        className="text-accent-foreground hover:text-accent underline-offset-2 hover:underline font-mono"
                         onClick={(ev) => ev.stopPropagation()}
                       >
                         {prNumber ? `#${prNumber}` : e.detail} ↗
@@ -439,7 +439,7 @@ export function FixGitGraph({
                         href={commitUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-brand hover:text-brand-hover underline-offset-2 hover:underline font-mono"
+                        className="text-accent-foreground hover:text-accent underline-offset-2 hover:underline font-mono"
                         onClick={(ev) => ev.stopPropagation()}
                       >
                         {commitSha ? commitSha.slice(0, 7) : e.detail} ↗
@@ -449,7 +449,7 @@ export function FixGitGraph({
                         href={branchUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-brand hover:text-brand-hover underline-offset-2 hover:underline font-mono"
+                        className="text-accent-foreground hover:text-accent underline-offset-2 hover:underline font-mono"
                         onClick={(ev) => ev.stopPropagation()}
                       >
                         {e.detail} ↗
@@ -459,7 +459,7 @@ export function FixGitGraph({
                         href={checksUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-brand hover:text-brand-hover underline-offset-2 hover:underline font-mono"
+                        className="text-accent-foreground hover:text-accent underline-offset-2 hover:underline font-mono"
                         onClick={(ev) => ev.stopPropagation()}
                       >
                         {e.detail} ↗
@@ -526,7 +526,7 @@ function CommitDiffModal({
             href={commitUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-brand hover:text-brand-hover underline-offset-2 hover:underline font-mono"
+            className="text-xs text-accent-foreground hover:text-accent underline-offset-2 hover:underline font-mono"
           >
             View on GitHub ↗
           </a>

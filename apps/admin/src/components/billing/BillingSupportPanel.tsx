@@ -47,7 +47,7 @@ export function BillingSupportPanel({ projects }: { projects: BillingProject[] }
         <div className="flex items-center gap-1.5">
           <a
             href={`mailto:${info.email}?subject=${encodeURIComponent('[Mushi Mushi support]')}`}
-            className="text-2xs text-brand hover:text-brand-hover font-mono"
+            className="text-2xs text-accent-foreground hover:text-accent font-mono"
           >
             {info.email}
           </a>

@@ -101,7 +101,7 @@ export function captureMode(trigger: string | null | undefined): CaptureMode {
   if (trigger === 'shake') {
     return {
       label: 'shake',
-      tone: 'bg-accent-muted/60 text-[var(--color-accent-foreground)] border-accent/35',
+      tone: 'bg-accent-muted/60 text-accent-foreground border-accent/35',
       tooltip: 'Shake-to-report from mobile.',
     }
   }
@@ -158,7 +158,7 @@ export const LAYER_PILL: Record<
   },
   mobile: {
     label: 'RN',
-    tone: 'bg-accent-muted/50 text-[var(--color-accent-foreground)] border-accent/35',
+    tone: 'bg-accent-muted/50 text-accent-foreground border-accent/35',
     tooltip: 'React Native mobile surface',
   },
 }

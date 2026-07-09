@@ -1,11 +1,13 @@
-# Archived operator docs
+# Archive
 
-Files under `docs/HANDOVER-*` and dated `docs/audit-*` are **historical snapshots**. Routes, auth scopes, and scale counts may differ from current code.
+Historical docs moved out of the live operator path so agents and humans do not
+treat them as current runbooks.
 
-Live truth:
+| Folder | Contents |
+|--------|----------|
+| [`handovers-2026-04-05/`](./handovers-2026-04-05/) | Dated Apr–May 2026 HANDOVER snapshots |
+| [`audits-2026-04-05/`](./audits-2026-04-05/) | Apr–May 2026 audits, dogfood notes, wave-s2 manual steps |
+| [`plan-antislop/`](./plan-antislop/) | Antislop plan archives |
 
-- [`AGENTS.md`](../AGENTS.md)
-- Runtime `GET /openapi.json`
-- `pnpm docs-stats`
-
-Closed audit burndowns (including anti-slop plans) live under [`plan-antislop/`](plan-antislop/).
+For current conventions see [`../AGENTS.md`](../../AGENTS.md) and
+[`../operators/`](../operators/).

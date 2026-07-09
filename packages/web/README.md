@@ -40,13 +40,13 @@ trigger, capture flags) win over console defaults.
 → [Runtime config docs](https://kensaur.us/mushi-mushi/docs/concepts/runtime-config) ·
 maintainer deep-dive: [SDK_RUNTIME_CONFIG.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_RUNTIME_CONFIG.md)
 
-## What you get
+## Features
 
-- **Shadow-DOM widget** — full CSS isolation, light/dark auto-theme, keyboard-first (`Esc` / `⌘+Enter`), honours `prefers-reduced-motion`.
-- **Capture** — screenshot, console ring buffer, network (fetch interceptor), Web Vitals, and a repro timeline of routes + clicks.
-- **Resilient by default** — IndexedDB offline queue with auto-sync, on-device spam pre-filter, client-side rate limiting, and a payload-size guard that degrades gracefully instead of wedging the queue.
-- **Never blocks your UI** — the host element is zero-sized with `pointer-events: none`; only the visible controls opt back in. Verify at runtime with `Mushi.diagnose()`.
-- **Privacy-first** — selector-level screenshot masking/blocking, a one-tap "Remove screenshot" control, and a built-in PII scrubber.
+- Shadow-DOM widget with CSS isolation, light/dark auto-theme, keyboard-first (`Esc` / `⌘+Enter`), and `prefers-reduced-motion`.
+- Screenshot, console ring buffer, network (fetch interceptor), Web Vitals, and a repro timeline of routes + clicks.
+- IndexedDB offline queue with auto-sync, on-device spam pre-filter, client-side rate limiting, and a payload-size guard that degrades instead of wedging the queue.
+- Host element is zero-sized with `pointer-events: none`; only visible controls opt back in. Verify with `Mushi.diagnose()`.
+- Selector-level screenshot masking/blocking, a one-tap "Remove screenshot" control, and a built-in PII scrubber.
 
 ## Trigger modes
 

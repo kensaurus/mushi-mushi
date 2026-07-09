@@ -49,12 +49,17 @@
     "check:changeset-orphans": "node scripts/check-changeset-orphans.mjs",
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
     "check:design-tokens": "node scripts/check-design-tokens.mjs",
+    "check:raw-css-var-classes": "node scripts/audit-raw-css-var-classes.mjs",
+    "check:secondary-link-brand": "node scripts/audit-secondary-link-brand.mjs",
+    "check:hand-rolled-tablist": "node scripts/audit-hand-rolled-tablist.mjs",
+    "check:raw-button-in-pages": "node scripts/audit-raw-button-in-pages.mjs",
+    "check:blast-radius-buttons": "node scripts/audit-blast-radius-buttons.mjs",
     "check:chip-contrast": "node scripts/audit-chip-contrast.mjs --strict",
     "build:brand-tokens": "pnpm --filter @mushi-mushi/brand build:tokens",
     "check:brand-tokens-fresh": "node scripts/check-brand-tokens-fresh.mjs",
     "check:nav-registry": "node scripts/check-nav-registry.mjs",
     "check:ia-labels": "node scripts/check-ia-labels.mjs",
-    "check:catalog-sync": "node scripts/check-mcp-catalog-sync.mjs && node scripts/sync-mcp-tool-count.mjs --check && node scripts/sync-mcp-discovery-card.mjs --check && node scripts/sync-mcp-pin.mjs --check",
+    "check:catalog-sync": "node scripts/check-mcp-catalog-sync.mjs && node scripts/sync-mcp-tool-count.mjs --check && node scripts/check-mcp-prose-tool-count.mjs && node scripts/sync-mcp-discovery-card.mjs --check && node scripts/sync-mcp-pin.mjs --check",
     "sync:mcp-pin": "node scripts/sync-mcp-pin.mjs",
     "sync:mcp-tool-count": "node scripts/sync-mcp-tool-count.mjs",
     "sync:mcp-discovery-card": "node scripts/sync-mcp-discovery-card.mjs",
@@ -119,7 +124,8 @@
     "test:cloudfront": "node --test scripts/cloudfront-functions.test.mjs",
     "test:verify-hosted-mcp": "node --test scripts/verify-hosted-mcp-helpers.test.mjs",
     "verify:pipeline": "pnpm --filter @mushi-mushi/server test && cd packages/server/supabase && deno check functions/_shared/rag.ts functions/_shared/observability.ts functions/_shared/env-int.ts functions/api/routes/doctor.ts functions/api/routes/project-codebase.ts functions/webhooks-github-indexer/index.ts",
-    "check:drift": "pnpm check:catalog-sync && pnpm check:internal-doc-links && pnpm check:onboarding-drift && pnpm check:env-docs && pnpm check:docs-drift"
+    "check:drift": "pnpm check:catalog-sync && pnpm check:mcp-tools-doc && pnpm check:internal-doc-links && pnpm check:onboarding-drift && pnpm check:env-docs && pnpm check:docs-drift",
+    "check:mcp-tools-doc": "node scripts/gen-mcp-tools-doc.mjs --check"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

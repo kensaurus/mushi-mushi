@@ -359,7 +359,7 @@ function ChecklistRow({
       {!step.complete && (
         <Link
           to={step.cta_to}
-          className="shrink-0 text-2xs text-brand hover:text-brand-hover"
+          className="shrink-0 text-2xs text-accent-foreground hover:text-accent"
         >
           {step.cta_label} →
         </Link>

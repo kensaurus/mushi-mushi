@@ -91,7 +91,7 @@ export function BackendModePanel() {
             <button
               type="button"
               onClick={handleReset}
-              className="underline text-brand hover:text-brand-hover"
+              className="underline text-accent-foreground hover:text-accent"
             >
               Reset to build defaults
             </button>

@@ -92,7 +92,7 @@ export function InboxStatusBanner({
         tone="danger"
         title={
           plainBanner
-            ? `${stats.openActions} thing${stats.openActions === 1 ? '' : 's'} need you`
+            ? `${stats.openActions} thing${stats.openActions === 1 ? ' needs' : 's need'} you`
             : `${stats.openActions} open action${stats.openActions === 1 ? '' : 's'} — start with ${stats.topPriorityStage ?? 'Plan'}`
         }
         subtitle={

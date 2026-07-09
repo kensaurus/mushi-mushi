@@ -4,6 +4,8 @@ title: Angular quickstart
 
 # Angular quickstart
 
+Same loop as [React](/quickstart/react) — swap the install and boot call.
+
 ```bash
 pnpm add @mushi-mushi/angular
 ```
@@ -14,25 +16,11 @@ import { provideMushi } from '@mushi-mushi/angular'
 export const appConfig = {
   providers: [
     provideMushi({
-      projectId: 'YOUR_PROJECT_ID',
-      apiKey: 'YOUR_PUBLIC_API_KEY',
+      projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+      apiKey: import.meta.env.VITE_MUSHI_API_KEY,
     }),
   ],
 }
 ```
 
-```ts filename="src/app/report.component.ts"
-import { Component, inject } from '@angular/core'
-import { MushiService } from '@mushi-mushi/angular'
-
-@Component({
-  selector: 'app-report',
-  template: `<button (click)="report()">Report a bug</button>`,
-})
-export class ReportComponent {
-  private mushi = inject(MushiService)
-  report() {
-    this.mushi.submitReport({ description: 'Calendar shows wrong week' })
-  }
-}
-```
+API detail: [`@mushi-mushi/angular`](/sdks/angular). Widget behavior: [`@mushi-mushi/web`](/sdks/web).

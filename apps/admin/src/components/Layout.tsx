@@ -24,7 +24,7 @@ import { ProjectSwitcher, useActiveProjectId } from './ProjectSwitcher'
 import { OrgSwitcher } from './OrgSwitcher'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { buildOperatorNav, CHECK_SUB_GROUPS, type BuiltNavItem, type BuiltNavSection } from '../lib/buildNav'
-import { CHECK_HUB_PATH } from '../lib/navRegistry'
+import { CHECK_HUB_PATH, QUICK_SUB_GROUPS } from '../lib/navRegistry'
 import { useAdminMode } from '../lib/mode'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { Tooltip } from './ui'
@@ -67,6 +67,44 @@ import { NavSectionStagger } from './motion/NavSectionStagger'
 import { CHIP_TONE } from '../lib/chipTone'
 
 interface NavItem extends BuiltNavItem {}
+
+/**
+ * Quick mode's flat 10-item list is why users called the console hard to
+ * navigate — cluster it under plain labels (Set up / Daily loop / More
+ * tools). Items whose path isn't in any group render in a trailing cluster
+ * so new quickstart routes never silently disappear.
+ */
+function renderQuickSubGroups(
+  items: NavItem[],
+  renderItem: (item: NavItem) => ReactNode,
+): ReactNode {
+  const basePath = (p: string) => p.split('?')[0] ?? p
+  const grouped = new Set<NavItem>()
+  const clusters = QUICK_SUB_GROUPS.map((group) => {
+    const subItems = group.paths
+      .map((p) => items.find((i) => basePath(i.path) === p))
+      .filter((i): i is NavItem => i != null)
+    subItems.forEach((i) => grouped.add(i))
+    return { ...group, subItems }
+  }).filter((g) => g.subItems.length > 0)
+  const leftovers = items.filter((i) => !grouped.has(i))
+
+  return (
+    <>
+      {clusters.map((group) => (
+        <div key={group.id} className="space-y-0.5">
+          <p className="px-2 pt-1.5 pb-0.5 text-3xs font-medium uppercase tracking-wide text-fg-faint">
+            {group.title}
+          </p>
+          {group.subItems.map(renderItem)}
+        </div>
+      ))}
+      {leftovers.length > 0 && (
+        <div className="space-y-0.5 pt-1.5">{leftovers.map(renderItem)}</div>
+      )}
+    </>
+  )
+}
 
 interface NavSection extends Omit<BuiltNavSection, 'id'> {
   id: BuiltNavSection['id'] | 'quick'
@@ -906,7 +944,9 @@ export function Layout({ children }: { children: ReactNode }) {
                   animate={!compact}
                   className={compact ? 'space-y-0.5 flex flex-col items-stretch' : 'space-y-0.5'}
                 >
-                  {section.id === 'check' && isAdvanced && !compact
+                  {section.id === 'quick' && !compact
+                    ? renderQuickSubGroups(section.items, (item) => renderNavLink(item, compact))
+                    : section.id === 'check' && isAdvanced && !compact
                     ? CHECK_SUB_GROUP_ORDER.map((subId) => {
                         const subItems = section.items.filter((i) => i.checkSubGroup === subId)
                         if (subItems.length === 0) return null

@@ -1344,6 +1344,74 @@ select, input, textarea {
 }
 
 /* ---------------------------------------------------------------------------
+   CONNECT LANE PICKER — operator surface bridge
+   Maps marketing-ui editorial vermillion to admin @theme brand micro-indicators
+   when ConnectStudio passes surface="operator" (data-connect-surface="operator").
+--------------------------------------------------------------------------- */
+
+[data-connect-surface="operator"] .mushi-connect-section-label {
+  color: var(--color-fg-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+[data-connect-surface="operator"] .mushi-connect-chip {
+  border-color: var(--color-edge-subtle);
+  background: var(--color-surface-raised);
+  color: var(--color-fg-muted);
+  border-radius: 0.25rem;
+  font-size: 0.8125rem;
+}
+
+[data-connect-surface="operator"] .mushi-connect-chip:hover {
+  border-color: color-mix(in oklch, var(--color-brand) 25%, var(--color-edge-subtle));
+  background: var(--color-surface-hover);
+  color: var(--color-fg-secondary);
+}
+
+[data-connect-surface="operator"] .mushi-connect-chip:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--color-brand) 55%, transparent);
+  outline-offset: 2px;
+}
+
+[data-connect-surface="operator"] .mushi-connect-chip--selected {
+  border-color: color-mix(in oklch, var(--color-brand) 40%, var(--color-edge-subtle));
+  background: color-mix(in oklch, var(--color-brand) 12%, var(--color-surface-raised));
+  color: var(--color-brand-foreground);
+  box-shadow: none;
+}
+
+[data-connect-surface="operator"] .mushi-connect-tablist {
+  border-bottom-color: var(--color-edge-subtle);
+}
+
+[data-connect-surface="operator"] .mushi-connect-tab {
+  color: var(--color-fg-muted);
+  font-size: 0.8125rem;
+}
+
+[data-connect-surface="operator"] .mushi-connect-tab:hover {
+  color: var(--color-fg-secondary);
+}
+
+[data-connect-surface="operator"] .mushi-connect-tab:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--color-brand) 55%, transparent);
+  outline-offset: -2px;
+}
+
+[data-connect-surface="operator"] .mushi-connect-tab--selected {
+  border-bottom-color: var(--color-brand);
+  color: var(--color-brand-foreground);
+}
+
+[data-connect-surface="operator"] .mushi-connect-panel {
+  border-color: var(--color-edge-subtle);
+  background: transparent;
+}
+
+/* ---------------------------------------------------------------------------
    APP CHROME — shared top-row rhythm (sidebar logo row + desktop sub-header)
    Lives in @layer components so Tailwind utilities (e.g. hidden md:flex) win.
 --------------------------------------------------------------------------- */

@@ -199,6 +199,20 @@ test.describe('Admin chrome budget (PagePosture)', () => {
   }
 
   for (const theme of ['light', 'dark'] as const) {
+    test(`connect operator surface — brand bridge mounted (${theme})`, async ({ page, request }) => {
+      await seedSession(page, 'advanced', theme, request)
+      await page.goto(`${ADMIN_URL}/connect?project=${PROJECT_ID}`, { waitUntil: 'domcontentloaded' })
+      await page.getByRole('button', { name: 'Dismiss' }).click({ timeout: 2000 }).catch(() => {})
+      await page.waitForTimeout(500)
+
+      await expect(page.locator('[data-connect-surface="operator"]')).toHaveCount(1)
+      await expect(page.getByRole('navigation', { name: 'Connect page sections' })).toBeVisible()
+      const selectedTab = page.locator('[data-connect-surface="operator"] .mushi-connect-tab--selected')
+      await expect(selectedTab).toHaveCount(1)
+    })
+  }
+
+  for (const theme of ['light', 'dark'] as const) {
     test(`contrast spot-check — /health and /reports (${theme})`, async ({ page, request }) => {
       await seedSession(page, 'advanced', theme, request)
       for (const route of ['/health', '/reports'] as const) {
