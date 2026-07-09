@@ -25,7 +25,7 @@ import {
 } from 'react'
 import { Link } from 'react-router-dom'
 
-import { DetailRows, type DetailRowItem } from '../ui'
+import { Btn, DetailRows, type DetailRowItem } from '../ui'
 import { getConfigDoc } from '../../lib/configDocs'
 import { getDavManifest, type DavEvidence } from '../../lib/davManifest'
 import type { PageHeroDecide, PageHeroVerify } from '../PageHero'
@@ -220,40 +220,28 @@ function DetailCta({
   variant?: 'primary' | 'ghost'
 }) {
   if (cta.kind === 'link') {
-    return variant === 'primary'
-      ? (
-        <Link
-          to={cta.to}
-          className="inline-flex items-center gap-1 rounded-sm bg-brand px-3 py-1.5 text-2xs font-bold text-brand-fg hover:bg-brand-hover shadow-sm shadow-brand/25 motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity]"
-          data-dav-action="follow-cta"
-        >
-          {cta.label} <span aria-hidden>→</span>
-        </Link>
-      )
-      : (
-        <Link
-          to={cta.to}
-          className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay/60 px-2 py-0.5 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors"
-          data-dav-action="follow-cta"
+    return (
+      <Link to={cta.to} data-dav-action="follow-cta">
+        <Btn
+          size="sm"
+          variant={variant === 'primary' ? 'primary' : 'ghost'}
         >
           {cta.label}
-        </Link>
-      )
+          {variant === 'primary' ? <span aria-hidden> →</span> : null}
+        </Btn>
+      </Link>
+    )
   }
   return (
-    <button
-      type="button"
+    <Btn
+      size="sm"
+      variant={variant === 'primary' ? 'primary' : 'ghost'}
       onClick={cta.onClick}
       disabled={cta.disabled}
-      className={
-        variant === 'primary'
-          ? 'inline-flex items-center gap-1 rounded-sm bg-brand px-3 py-1.5 text-2xs font-bold text-brand-fg hover:bg-brand-hover shadow-sm disabled:opacity-50'
-          : 'inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay/60 px-2 py-0.5 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay disabled:opacity-50'
-      }
       data-dav-action="follow-cta"
     >
       {cta.label}
-    </button>
+    </Btn>
   )
 }
 

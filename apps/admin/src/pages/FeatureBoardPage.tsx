@@ -224,20 +224,19 @@ function FeatureRow({
 
   return (
     <li className="flex gap-3 px-3 py-3 first:pt-2 last:pb-2">
-      <button
-        type="button"
+      <Btn
+        variant="ghost"
+        size="sm"
         onClick={handleVote}
         disabled={voting}
         aria-pressed={ticket.my_vote}
         aria-label={ticket.my_vote ? 'Remove your vote' : 'Upvote this request'}
         title={ticket.my_vote ? 'Remove your vote' : 'Upvote this request'}
         className={[
-          'flex h-14 w-11 shrink-0 flex-col items-center justify-center rounded-sm border motion-safe:transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60',
+          'flex h-14 w-11 shrink-0 flex-col items-center justify-center gap-0 px-0 py-0',
           ticket.my_vote
             ? 'border-brand/50 bg-brand/10 text-brand'
             : 'border-edge-subtle bg-surface-raised/60 text-fg-muted hover:border-brand/40 hover:text-brand',
-          voting ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
         ].join(' ')}
       >
         <svg
@@ -251,7 +250,7 @@ function FeatureRow({
           <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
         </svg>
         <span className="font-mono text-xs font-semibold leading-none tabular-nums">{ticket.vote_count}</span>
-      </button>
+      </Btn>
 
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
@@ -281,13 +280,14 @@ function FeatureRow({
                 {' '}
                 ·{' '}
               </span>
-              <button
-                type="button"
-                className="text-accent-foreground hover:text-accent hover:underline"
+              <Btn
+                variant="ghost"
+                size="sm"
+                className="inline border-0 bg-transparent shadow-none hover:bg-transparent px-0 py-0 text-accent-foreground hover:text-accent hover:underline"
                 onClick={() => setExpanded((v) => !v)}
               >
                 {ticket.comment_count} comment{ticket.comment_count !== 1 ? 's' : ''}
-              </button>
+              </Btn>
             </>
           )}
         </InlineProof>

@@ -70,7 +70,7 @@ export default [
     },
   },
   {
-    files: ['src/components/connect/**/*.tsx', 'src/components/sdk-install/**/*.tsx'],
+    files: ['src/components/connect/**/*.tsx', 'src/components/sdk-install/**/*.tsx', 'src/components/hero-flow/**/*.tsx', 'src/components/projects/**/*.tsx'],
     rules: {
       'mushi-mushi/no-hand-rolled-tablist': ['error', { pageFilesOnly: false }],
       'mushi-mushi/no-raw-css-var-text': 'error',

@@ -238,6 +238,31 @@ export function buildReadmeClaimChecks(stats) {
     stats.monorepo.workspacePackages,
     "README at-a-glance workspace packages"
   )
+  // Compact glance <sub> line under the hero stats table
+  add(
+    "README.md",
+    /~(\d+)K TS lines/g,
+    Math.round(stats.monorepo.tsLines / 1000),
+    "README glance TS lines (K)"
+  )
+  add(
+    "README.md",
+    /(\d{1,3}(?:,\d{3})*) source files/g,
+    stats.monorepo.tsFiles,
+    "README glance source files"
+  )
+  add(
+    "README.md",
+    /(\d+) edge functions · \d+ SQL migrations/g,
+    stats.server.edgeFunctions,
+    "README glance edge functions"
+  )
+  add(
+    "README.md",
+    /\d+ edge functions · (\d+) SQL migrations/g,
+    stats.server.sqlMigrations,
+    "README glance SQL migrations"
+  )
   add(
     "deploy/helm/README.md",
     /(\d+) files\b/g,
@@ -295,7 +320,8 @@ export function scanReadmeClaims(root, stats) {
     check.pattern.lastIndex = 0
     let match
     while ((match = check.pattern.exec(source)) !== null) {
-      const value = Number(match[1])
+      const raw = match[1]
+      const value = Number(String(raw).replace(/,/g, ""))
       if (!Number.isFinite(value)) continue
       if (value !== check.expected) {
         const lineIndex = source.slice(0, match.index).split(/\r?\n/).length

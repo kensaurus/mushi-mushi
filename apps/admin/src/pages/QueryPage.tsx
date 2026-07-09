@@ -477,40 +477,43 @@ export function QueryPage() {
         {/* Mode toggle */}
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="inline-flex items-center gap-0.5 rounded-sm border border-edge-subtle bg-surface-raised p-0.5">
-            <button
-              type="button"
+            <Btn
+              variant={queryMode === 'nl' ? 'primary' : 'ghost'}
+              size="sm"
               onClick={() => setQueryMode('nl')}
               aria-pressed={queryMode === 'nl'}
-              className={`px-3 py-1 rounded-[2px] text-2xs font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
+              className={`px-3 py-1 rounded-[2px] text-2xs shadow-none hover:-translate-y-0 ${
                 queryMode === 'nl'
-                  ? 'bg-brand text-brand-fg'
-                  : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50'
+                  ? ''
+                  : 'border-0 bg-transparent hover:bg-surface-overlay/50'
               }`}
             >
               Natural language
-            </button>
-            <button
-              type="button"
+            </Btn>
+            <Btn
+              variant={queryMode === 'raw' ? 'primary' : 'ghost'}
+              size="sm"
               onClick={() => { setQueryMode('raw'); setTimeout(() => rawTextareaRef.current?.focus(), 0) }}
               aria-pressed={queryMode === 'raw'}
-              className={`px-3 py-1 rounded-[2px] text-2xs font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
+              className={`px-3 py-1 rounded-[2px] text-2xs shadow-none hover:-translate-y-0 ${
                 queryMode === 'raw'
-                  ? 'bg-brand text-brand-fg'
-                  : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50'
+                  ? ''
+                  : 'border-0 bg-transparent hover:bg-surface-overlay/50'
               }`}
             >
               Raw SQL
-            </button>
+            </Btn>
           </div>
           {queryMode === 'raw' && (
-            <button
-              type="button"
+            <Btn
+              variant="ghost"
+              size="sm"
               onClick={() => setSchemaOpen((o) => !o)}
-              className="text-2xs text-fg-secondary hover:text-fg inline-flex items-center gap-1 px-2 py-1 rounded-sm border border-edge-subtle hover:bg-surface-overlay/30 motion-safe:transition-colors"
               aria-expanded={schemaOpen}
+              className="text-2xs inline-flex items-center gap-1 hover:-translate-y-0"
             >
               {schemaOpen ? '▾' : '▸'} Schema
-            </button>
+            </Btn>
           )}
         </div>
 
@@ -571,7 +574,14 @@ export function QueryPage() {
                   <span>Read-only · sandboxed · every query is logged</span>
                 </span>
                 {question.trim() && (
-                  <button type="button" onClick={() => setQuestion('')} className="text-fg-faint hover:text-fg motion-safe:transition-colors">Clear</button>
+                  <Btn
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setQuestion('')}
+                    className="border-0 shadow-none px-0 py-0 text-2xs text-fg-faint hover:bg-transparent hover:-translate-y-0"
+                  >
+                    Clear
+                  </Btn>
                 )}
               </div>
             </>
@@ -610,13 +620,14 @@ export function QueryPage() {
                   <span className="opacity-40">·</span>
                   <span>SELECT only · $1 = project_id · max 100 rows · every query is logged</span>
                 </span>
-                <button
-                  type="button"
+                <Btn
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setRawSql(RAW_SQL_TEMPLATE)}
-                  className="text-fg-faint hover:text-fg motion-safe:transition-colors"
+                  className="border-0 shadow-none px-0 py-0 text-2xs text-fg-faint hover:bg-transparent hover:-translate-y-0"
                 >
                   Reset template
-                </button>
+                </Btn>
               </div>
             </>
           )}
@@ -628,15 +639,16 @@ export function QueryPage() {
             {PROMPT_CATEGORIES.flatMap((c) => c.prompts)
               .slice(0, 5)
               .map((p) => (
-                <button
+                <Btn
                   key={p.prompt}
-                  type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => { setQuestion(p.prompt); handleSubmit(p.prompt, 'nl') }}
                   disabled={loading}
-                  className="text-2xs px-2.5 py-1 rounded-full border border-edge-subtle text-fg-secondary hover:bg-brand/10 hover:border-brand/30 hover:text-fg motion-safe:transition-colors disabled:opacity-40"
+                  className="text-2xs px-2.5 py-1 rounded-full hover:bg-brand/10 hover:border-brand/30 hover:text-fg hover:-translate-y-0"
                 >
                   {p.prompt.length > 48 ? p.prompt.slice(0, 48) + '…' : p.prompt}
-                </button>
+                </Btn>
               ))}
           </div>
         )}
@@ -675,15 +687,16 @@ export function QueryPage() {
                         )}
                         {run.result && run.mode === 'nl' && (
                           <Tooltip content={alreadySaved ? 'Already in Saved' : 'Pin to Saved'} side="left">
-                            <button
-                              type="button"
+                            <Btn
+                              variant="ghost"
+                              size="sm"
                               onClick={() => void saveQuestion(run.question)}
                               disabled={alreadySaved}
-                              className={`text-base motion-safe:transition-colors ${alreadySaved ? 'text-brand cursor-default' : 'text-fg-faint hover:text-brand'}`}
                               aria-label={alreadySaved ? 'Already saved' : 'Pin to Saved'}
+                              className={`text-base border-0 shadow-none px-1 py-0 min-w-0 hover:bg-transparent hover:-translate-y-0 ${alreadySaved ? 'text-brand cursor-default' : 'text-fg-faint hover:text-brand'}`}
                             >
                               {alreadySaved ? '★' : '☆'}
-                            </button>
+                            </Btn>
                           </Tooltip>
                         )}
                         {run.result && (

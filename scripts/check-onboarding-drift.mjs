@@ -20,6 +20,7 @@ const SCAN_PATHS = [
   'docs/operators',
   'docs/DEPLOYMENT.md',
   'AGENTS.md',
+  'README.md',
   'CONTRIBUTING.md',
   'packages/cli/README.md',
   'packages/mcp/README.md',
@@ -29,7 +30,7 @@ const SCAN_PATHS = [
 
 const EXT = new Set(['.md', '.mdx'])
 
-const SKIP_PATH_RE = /CHANGELOG\.md$|docs\/audit-/
+const SKIP_PATH_RE = /CHANGELOG\.md$|docs\/audit-|docs\/archive\//
 
 const RULES = [
   {
@@ -80,6 +81,37 @@ const RULES = [
     id: 'check_destructive_npm_script',
     pattern: /npm run check:destructive-migrations/,
     message: 'Use node scripts/check-destructive-migrations.mjs',
+  },
+  {
+    id: 'android_sdk_artifact',
+    pattern: /dev\.mushimushi:sdk\b/,
+    message: 'Maven artifact is dev.mushimushi:mushi-android (not :sdk)',
+  },
+  {
+    id: 'ios_pod_0_8',
+    pattern: /pod ['"]MushiMushi['"],\s*['"]~> 0\.8['"]/,
+    message: "CocoaPods pin is ~> 0.4 — see packages/ios",
+  },
+  {
+    id: 'npx_create_mushi',
+    pattern: /npx create mushi-mushi/,
+    message: 'Use npm create mushi-mushi or npx mushi-mushi',
+  },
+  {
+    id: 'mushi_qa_audit',
+    pattern: /mushi qa audit/,
+    message: 'Use top-level mushi audit — not mushi qa audit',
+  },
+  {
+    id: 'get_lessons_tool',
+    pattern: /`get_lessons`/,
+    message: 'No get_lessons tool — use query_lessons / list_lessons',
+  },
+  {
+    id: 'bare_wizard_env',
+    pattern: /writes `MUSHI_PROJECT_ID`/,
+    message:
+      'Wizard writes framework-prefixed keys (VITE_/NEXT_PUBLIC_/…) — see examples/sdk.env.example',
   },
 ]
 

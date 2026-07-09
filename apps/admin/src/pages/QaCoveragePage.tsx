@@ -649,9 +649,10 @@ function StoryDrawer({
                     className={`rounded-md border overflow-hidden transition-colors ${STATUS_BG[run.status] ?? 'bg-surface-raised border-edge-subtle'}`}
                   >
                     {/* Run summary row — click to expand */}
-                    <button
+                    <Btn
                       type="button"
-                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-surface-overlay transition-colors"
+                      variant="ghost"
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-surface-overlay !border-0 !rounded-none !bg-transparent hover:!bg-surface-overlay shadow-none hover:-translate-y-0"
                       onClick={() => setExpandedRunId(isExpanded ? null : run.id)}
                       aria-expanded={isExpanded}
                     >
@@ -678,7 +679,7 @@ function StoryDrawer({
                           : <IconChevronDown className="h-3 w-3 text-fg-faint shrink-0" />
                         }
                       </div>
-                    </button>
+                    </Btn>
 
                     {/* Expanded run detail */}
                     {isExpanded && (

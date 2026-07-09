@@ -13,7 +13,7 @@ import { useToast } from '../../lib/toast'
 import { Btn, Badge, SegmentedControl } from '../../components/ui'
 import { TableSkeleton } from '../../components/skeletons/TableSkeleton'
 import { TesterPageIntro } from '../../components/tester/tester-ui'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { CHIP_TONE, LINK_ACCENT } from '../../lib/chipTone'
 
 interface BountyTier {
   action: string
@@ -246,14 +246,16 @@ function AppCard({ app, onJoin, onLeave, acting }: {
       {/* Bounty schedule (expandable) */}
       {app.bountySchedule.length > 0 && (
         <div className="border-t border-edge-subtle">
-          <button
+          <Btn
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => setShowBounties(v => !v)}
-            className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-fg-muted hover:text-fg hover:bg-surface-overlay transition-colors"
+            className="w-full justify-between px-4 py-2.5 text-xs text-fg-muted hover:text-fg hover:bg-surface-overlay !rounded-none !border-transparent shadow-none"
           >
             <span>Bounty schedule — {app.bountySchedule.length} active tiers</span>
             <span>{showBounties ? '▲' : '▼'}</span>
-          </button>
+          </Btn>
           {showBounties && (
             <div className="px-4 pb-3 space-y-1.5">
               {app.bountySchedule.map((tier, i) => (
@@ -436,13 +438,15 @@ export function TesterAppsPage() {
                 : 'Check back soon — developers are publishing their apps.'}
             </p>
             {chip !== 'all' && (
-              <button
+              <Btn
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => { setChip('all'); setSearch('') }}
-                className="mt-3 text-sm text-accent hover:underline"
+                className={`mt-3 !px-0 !py-0 text-sm ${LINK_ACCENT}`}
               >
                 Show all apps →
-              </button>
+              </Btn>
             )}
             <div className="mt-4">
               <Link to="/tester/learn" className="text-xs text-fg-faint hover:text-fg-secondary motion-safe:transition-colors">

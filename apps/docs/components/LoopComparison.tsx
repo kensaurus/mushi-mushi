@@ -1,31 +1,4 @@
-/**
- * FILE: apps/docs/components/LoopComparison.tsx
- * PURPOSE: Side-by-side visual argument for why cumulative selection beats the
- *   50-year-old linear SDLC random walk.
- *
- * FRAMING
- * -------
- * The left column shows the traditional waterfall as a **random walk without
- * selection memory** — bugs repeat because nothing is encoded between cycles.
- * The right column shows the Mushi loop as **cumulative selection** — each
- * friction event is a selection pressure that promotes a named rule into the
- * codebase genome (.mushi/lessons.json). The next developer inherits the
- * fitness gains; the fitness floor never resets.
- *
- * Key biology concepts made explicit:
- *   - Selection event: a user report that clusters above the coherence threshold.
- *   - Genome encoding: the promoted rule written to .mushi/lessons.json.
- *   - Inheritance: every subsequent PR review and agent run reads the genome.
- *   - Memory: each loop starts from a fitter baseline, not a blank slate.
- *
- * Two accent nodes (highlighted in vermillion) mark where the selection happens:
- *   "Mistake DB clusters"  → selection pressure accumulates here.
- *   "Lesson encoded"       → the genome update — the permanent fitness gain.
- *
- * Styling: pure inline CSS so the component is self-contained and survives
- * Nextra theme changes. References brand CSS custom properties for colours
- * so dark-mode works without a secondary stylesheet.
- */
+/** Side-by-side visual argument for why cumulative selection beats the */
 'use client'
 
 import { VIZ } from '../lib/viz-tokens'

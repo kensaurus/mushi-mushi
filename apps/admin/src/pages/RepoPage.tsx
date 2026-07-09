@@ -37,6 +37,7 @@ import { FixGitGraph, type FixTimelineEvent } from '../components/FixGitGraph'
 import { useRealtimeReload } from '../lib/realtime'
 import { IconGit } from '../components/icons'
 import { pluralize, pluralizeWithCount } from '../lib/format'
+import { LINK_ACCENT } from '../lib/chipTone'
 import { RepoStatusBanner } from '../components/repo/RepoStatusBanner'
 import { RepoSnapshotStrip } from '../components/repo/RepoSnapshotStrip'
 import { RepoProvenanceReadout } from '../components/repo/RepoProvenanceReadout'
@@ -429,13 +430,15 @@ export function RepoPage() {
         activity.length === 0 && activityError ? (
           <div className="space-y-2">
             <p className="text-2xs text-danger">{activityError}</p>
-            <button
+            <Btn
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={reload}
-              className="text-2xs text-accent-foreground hover:text-accent underline-offset-2 hover:underline"
+              className={`!px-0 !py-0 !border-0 !bg-transparent hover:!bg-transparent ${LINK_ACCENT}`}
             >
               Retry
-            </button>
+            </Btn>
           </div>
         ) : (
           <LogBlock

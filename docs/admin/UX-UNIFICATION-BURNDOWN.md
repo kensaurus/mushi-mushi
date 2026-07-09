@@ -1,5 +1,9 @@
 # Admin Console UX Unification Burndown
 
+> **Status: CLOSED (Jul 2026).** P0–P2 and Phase 8 cross-surface work are done.
+> Keep this file as the adoption matrix / verification reference — do not treat
+> it as an open burndown.
+>
 > Living burndown for Design System v2 chrome budget, snapshot strips, and responsive tab patterns.
 > Updated Jul 1 2026 after Phase 6 admin burndown (human alerts + guide liveData + brand token pipeline).
 
@@ -291,6 +295,11 @@ Manual (localhost:6464): `/health`, `/drift`, `/code-health`, `/anomalies`, `/co
 | Playwright `/connect` operator-surface regression | ✅ | `admin-chrome-budget.spec.ts` |
 | McpPage secondary links → `LINK_ACCENT` / `Btn` | ✅ | brand budget per zone |
 | Secondary inline links console-wide → accent hue | ✅ | 137 codemod hits · `scripts/codemod-link-accent.mjs` · `check:secondary-link-brand` |
+| Hand-rolled tablists → SegmentedControl / nav pattern | ✅ | OperatorTraceLog, ProjectFolderTabRail · `check:hand-rolled-tablist` |
+| McpPage decomposition (helpers + overview/catalog/examples panels) | ✅ | 1565 → 531 LOC orchestrator |
+| `McpSetupPanel` + `mcp-clients.ts` extraction | ✅ | setup tab 632 LOC; 0 raw `<button>` in McpPage |
+| Operator pages raw `<button>` → `Btn` (72 migrated) | ✅ | `check:raw-button-in-pages` |
+| Blast-radius components → `Btn` / `SegmentedControl` | ✅ | HeroIntro · HeroDetailPanel · QueryPromptLibrary · `check:blast-radius-buttons` |
 
 **Verify:**
 
@@ -298,5 +307,8 @@ Manual (localhost:6464): `/health`, `/drift`, `/code-health`, `/anomalies`, `/co
 cd apps/admin && pnpm typecheck && pnpm test && pnpm lint && pnpm lint:tokens
 node scripts/audit-raw-css-var-classes.mjs
 node scripts/audit-secondary-link-brand.mjs
+node scripts/audit-hand-rolled-tablist.mjs
+node scripts/audit-raw-button-in-pages.mjs
+node scripts/audit-blast-radius-buttons.mjs
 node scripts/check-design-tokens.mjs
 ```

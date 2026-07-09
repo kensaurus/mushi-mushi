@@ -3,6 +3,7 @@
  * Generate the MCP tool reference MDX from the built @mushi-mushi/mcp catalog.
  *
  *   pnpm gen:mcp-tools-doc
+ *   pnpm gen:mcp-tools-doc --check   # fail if generated MDX is stale
  *
  * Imports the REAL catalog from packages/mcp/dist (build it first:
  * `pnpm --filter @mushi-mushi/mcp build`) instead of regex-scraping the
@@ -12,7 +13,7 @@
  * catalog is the single source of truth and stays correct as fields evolve.
  */
 
-import { writeFileSync } from 'node:fs'
+import { writeFileSync, readFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -20,6 +21,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const CATALOG_DIST = path.join(ROOT, 'packages/mcp/dist/catalog.js')
 const OUT = path.join(ROOT, 'apps/docs/content/sdks/mcp-tools.generated.mdx')
+const CHECK_MODE = process.argv.includes('--check')
 
 let catalog
 try {
@@ -105,6 +107,25 @@ ${resources.map((r) => `| ${esc(r.name)} | \`${esc(r.uri)}\` | ${esc(r.descripti
 |--------|-------------|
 ${prompts.map((p) => `| \`${esc(p.name)}\` | ${esc(p.description)} |`).join('\n')}
 `
+
+if (CHECK_MODE) {
+  if (!existsSync(OUT)) {
+    console.error(`✗ ${path.relative(ROOT, OUT)} missing — run pnpm gen:mcp-tools-doc`)
+    process.exit(1)
+  }
+  const existing = readFileSync(OUT, 'utf8')
+  if (existing !== body) {
+    console.error(
+      `✗ ${path.relative(ROOT, OUT)} is stale vs packages/mcp/dist/catalog.js\n` +
+        '  Run: pnpm gen:mcp-tools-doc\n',
+    )
+    process.exit(1)
+  }
+  console.log(
+    `✓ mcp-tools.generated.mdx in sync (${tools.length} tools, ${resources.length} resources, ${prompts.length} prompts)`,
+  )
+  process.exit(0)
+}
 
 writeFileSync(OUT, body, 'utf8')
 console.log(

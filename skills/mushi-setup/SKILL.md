@@ -32,8 +32,9 @@ npx mushi-mushi
 
 What it does: detects the framework and package manager, opens a browser
 sign-in (device auth — no copy-paste), lets you pick/create a project,
-installs the matching `@mushi-mushi/*` SDK, writes `MUSHI_PROJECT_ID` +
-`MUSHI_API_KEY` to `.env.local`, and prints the init snippet to paste.
+installs the matching `@mushi-mushi/*` SDK, writes framework-prefixed env vars
+(e.g. `VITE_MUSHI_PROJECT_ID` / `VITE_MUSHI_API_KEY`, or `NEXT_PUBLIC_MUSHI_*`)
+to `.env.local`, and prints the init snippet to paste.
 
 Those two env vars are all the SDK needs — no Supabase, no LLM key
 (the repo-root `.env.example` you may see in the mushi-mushi source repo is

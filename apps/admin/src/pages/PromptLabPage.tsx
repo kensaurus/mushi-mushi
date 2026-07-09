@@ -12,6 +12,7 @@
 
 import { useMemo, useState } from 'react'
 import {
+  Btn,
   ErrorAlert,
 } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -331,22 +332,24 @@ export function PromptLabPage() {
             const count = grouped[stage]?.length ?? 0
             const active = visibleStage === stage
             return (
-              <button
+              <Btn
                 key={stage}
                 type="button"
+                variant={active ? 'primary' : 'ghost'}
+                size="sm"
                 onClick={() => setActiveStage(stage)}
                 aria-pressed={active}
-                className={`px-2.5 py-1.5 text-xs rounded-sm motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
+                className={`px-2.5 py-1.5 text-xs rounded-sm shadow-none hover:-translate-y-0 ${
                   active
                     ? 'bg-surface-raised text-fg font-medium shadow-raised'
-                    : 'text-fg-muted hover:text-fg hover:bg-surface-overlay/60'
+                    : 'text-fg-muted hover:text-fg hover:bg-surface-overlay/60 border-0 bg-transparent'
                 }`}
               >
                 {STAGE_LABEL[stage] ?? stage}
                 <span className={`ml-1.5 text-2xs font-mono ${active ? 'text-brand' : 'text-fg-faint'}`}>
                   {count}
                 </span>
-              </button>
+              </Btn>
             )
           })}
         </div>

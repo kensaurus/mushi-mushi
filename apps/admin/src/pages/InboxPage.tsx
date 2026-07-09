@@ -536,8 +536,10 @@ function FilterChip({
 }) {
   const groupTone = tone === 'do' ? 'text-brand' : tone === 'act' ? 'text-ok' : 'text-fg-muted'
   return (
-    <button
+    <Btn
       type="button"
+      variant="ghost"
+      size="sm"
       onClick={onClick}
       aria-pressed={active}
       className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-2xs font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
@@ -550,7 +552,7 @@ function FilterChip({
       {typeof count === 'number' ? (
         <span className={`tabular-nums ${active ? 'text-brand' : groupTone}`}>{count}</span>
       ) : null}
-    </button>
+    </Btn>
   )
 }
 

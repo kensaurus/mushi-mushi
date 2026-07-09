@@ -1,9 +1,7 @@
-/**
- * FILE: apps/docs/components/QuickstartGrid.tsx
- * PURPOSE: Platform quickstart cards for the landing page "Try it" section.
- */
+/** Platform quickstart cards for the landing "Try it" section. */
 'use client'
 
+import Link from 'next/link'
 import { LANDING_QUICKSTART_PLATFORMS, type LandingPlatformCard } from '@/lib/landing-copy'
 
 interface QuickstartGridProps {
@@ -15,10 +13,15 @@ export function QuickstartGrid({ platforms = LANDING_QUICKSTART_PLATFORMS }: Qui
     <ul className="docs-quickstart-grid not-prose list-none p-0 m-0" aria-label="Platform quickstarts">
       {platforms.map((p) => (
         <li key={p.title} className="list-none">
-          <a href={p.href} className="docs-quickstart-card" aria-label={`${p.title} quickstart`}>
+          <Link href={p.href} className="docs-quickstart-card" aria-label={`${p.title} quickstart`}>
             <div className="docs-quickstart-card__header">
               <span className="docs-quickstart-card__icon" aria-hidden="true">
-                {p.icon}
+                {p.icon.startsWith('/') || p.icon.startsWith('http') ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- small static brand mark
+                  <img src={p.icon} alt="" width={20} height={20} className="docs-quickstart-card__icon-img" />
+                ) : (
+                  p.icon
+                )}
               </span>
               <span className="docs-quickstart-card__title">{p.title}</span>
               {p.badge ? (
@@ -30,7 +33,7 @@ export function QuickstartGrid({ platforms = LANDING_QUICKSTART_PLATFORMS }: Qui
             <span className="docs-quickstart-card__cta" aria-hidden="true">
               Quickstart →
             </span>
-          </a>
+          </Link>
         </li>
       ))}
     </ul>

@@ -43,6 +43,7 @@ import {
   type ResearchTabId,
 } from '../components/research/ResearchStatsTypes'
 import { ResearchSnippetCard } from '../components/research/ResearchSnippetCard'
+import { LINK_ACCENT } from '../lib/chipTone'
 import { ResearchSessionTable } from '../components/research/ResearchSessionTable'
 import type { SearchResponse, SessionRow } from '../components/research/types'
 import { CHIP_TONE } from '../lib/chipTone'
@@ -452,9 +453,15 @@ export function ResearchPage() {
                 <InlineProof>
                   Last search <RelativeTime value={stats.lastSessionAt} />
                   {' · '}
-                  <button type="button" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors" onClick={() => setActiveTab('history')}>
+                  <Btn
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={`!px-0 !py-0 !border-0 !bg-transparent hover:!bg-transparent ${LINK_ACCENT}`}
+                    onClick={() => setActiveTab('history')}
+                  >
                     View history
-                  </button>
+                  </Btn>
                 </InlineProof>
               )}
             </div>

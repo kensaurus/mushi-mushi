@@ -111,7 +111,7 @@ MUSHI_API_KEY=mushi_xxx mushi connect \
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.17.0"],
+      "args": ["-y", "@mushi-mushi/mcp@latest"],
       "env": { "MUSHI_PROJECT_ID": "<per-repo uuid>", … }
     }
   }

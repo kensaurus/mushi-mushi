@@ -1005,46 +1005,50 @@ export function JudgePage() {
         action={
           <div className="flex flex-wrap items-center gap-1.5">
             {disagreementOnly && (
-              <button
-                type="button"
+              <Btn
+                variant="ghost"
+                size="sm"
                 onClick={() => {
                   const next = new URLSearchParams(searchParams)
                   next.delete('filter')
                   setSearchParams(next, { replace: true })
                 }}
-                className={`inline-flex items-center gap-1 px-2 py-0.5 text-2xs rounded-sm border border-warn/40 ${CHIP_TONE.warnSubtle} hover:bg-warn/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-warn/60`}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 text-2xs border-warn/40 ${CHIP_TONE.warnSubtle} hover:bg-warn/20 focus-visible:ring-1 focus-visible:ring-warn/60`}
                 aria-label="Clear disagreement filter"
               >
                 <span>Disagreements only</span>
                 <span aria-hidden="true">×</span>
-              </button>
+              </Btn>
             )}
             {promptFilter && (
-              <button
-                type="button"
+              <Btn
+                variant="ghost"
+                size="sm"
                 onClick={() => setPromptFilter(null)}
-                className="inline-flex items-center gap-1 px-2 py-0.5 text-2xs rounded-sm border border-brand/40 bg-brand/10 text-brand hover:bg-brand/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/60"
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-2xs border-brand/40 bg-brand/10 text-brand hover:bg-brand/20 focus-visible:ring-1 focus-visible:ring-brand/60"
                 aria-label={`Clear filter on prompt ${promptFilter.version}`}
                 title="Clear prompt filter"
               >
                 <span>Filtered: {promptFilter.version}</span>
                 <span aria-hidden="true">×</span>
-              </button>
+              </Btn>
             )}
-            <button
-              type="button"
+            <Btn
+              variant="ghost"
+              size="sm"
               onClick={() => setSort('recent')}
-              className={`px-2 py-0.5 text-2xs rounded-sm border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/60 ${sort === 'recent' ? 'border-edge bg-surface-raised text-fg' : 'border-edge-subtle text-fg-faint'}`}
+              className={`px-2 py-0.5 text-2xs ${sort === 'recent' ? 'border-edge bg-surface-raised text-fg' : 'border-edge-subtle text-fg-faint'}`}
             >
               Recent
-            </button>
-            <button
-              type="button"
+            </Btn>
+            <Btn
+              variant="ghost"
+              size="sm"
               onClick={() => setSort('score_asc')}
-              className={`px-2 py-0.5 text-2xs rounded-sm border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/60 ${sort === 'score_asc' ? 'border-edge bg-surface-raised text-fg' : 'border-edge-subtle text-fg-faint'}`}
+              className={`px-2 py-0.5 text-2xs ${sort === 'score_asc' ? 'border-edge bg-surface-raised text-fg' : 'border-edge-subtle text-fg-faint'}`}
             >
               Lowest score
-            </button>
+            </Btn>
           </div>
         }
       >

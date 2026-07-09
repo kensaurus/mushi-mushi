@@ -1,23 +1,4 @@
-/**
- * FILE: apps/docs/components/Playground.tsx
- * PURPOSE: StackBlitz embed with a click-to-launch card as the default state.
- *
- * WHY CLICK-TO-LAUNCH?
- * ────────────────────
- * The previous version auto-loaded the StackBlitz iframe on page mount.
- * StackBlitz WebContainers require specific COOP/COEP security headers
- * (`Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy:
- * require-corp`) on the host page. The docs site is a static export served via
- * S3/CloudFront without those headers, so the WebContainer boot fails and the
- * iframe shows a sad-face error page. The `onLoad` callback fires because
- * StackBlitz's own error page loads — we can't detect the failure.
- *
- * The click-to-launch pattern solves this by:
- *   1. Showing a visually clear launch card instead of a broken iframe.
- *   2. Loading the iframe only after a deliberate user gesture.
- *   3. Keeping the "Open in StackBlitz ↗" link always visible so users who
- *      can't boot WebContainers locally can still access the example.
- */
+/** StackBlitz embed with a click-to-launch card as the default state. */
 'use client'
 
 import { useState } from 'react'

@@ -182,18 +182,20 @@ export function TesterSettingsPage() {
                 {EXPERTISE_OPTIONS.map(tag => {
                   const selected = (form.expertiseTags ?? []).includes(tag)
                   return (
-                    <button
+                    <Btn
                       key={tag}
                       type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={() => toggleTag(tag)}
-                      className={`rounded-full border px-3 py-1 text-2xs font-medium motion-safe:transition-colors ${
+                      className={`rounded-full px-3 py-1 text-2xs font-medium ${
                         selected
                           ? 'border-brand/60 bg-brand/10 text-brand'
                           : 'border-edge text-fg-muted hover:border-edge-strong'
                       }`}
                     >
                       {tag}
-                    </button>
+                    </Btn>
                   )
                 })}
               </div>

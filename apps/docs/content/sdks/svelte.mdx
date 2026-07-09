@@ -4,75 +4,49 @@ title: '@mushi-mushi/svelte'
 
 # `@mushi-mushi/svelte`
 
-Svelte stores + context. Wraps `@mushi-mushi/web` — everything in the web SDK is available, with an idiomatic Svelte surface.
+Svelte / SvelteKit boot helpers over [`@mushi-mushi/web`](/sdks/web). Shared
+wrapper notes: [Framework wrappers](/sdks/framework-wrappers).
 
 ```bash
 npm install @mushi-mushi/svelte
 ```
 
-See [Quickstart → Svelte](/quickstart/svelte) for the full setup walkthrough.
+See [Quickstart → Svelte](/quickstart/svelte) for the short install path.
 
 ## API surface
 
 ```ts
-import { setMushiContext, getMushi, mushiStore } from '@mushi-mushi/svelte'
+import { initMushi, getMushi, createMushiErrorHandler } from '@mushi-mushi/svelte'
 ```
 
 | Export | Purpose |
 | --- | --- |
-| `setMushiContext(config)` | Call in root layout `onMount` to boot the SDK and set the Svelte context |
-| `getMushi()` | Retrieve the SDK instance from context inside any component |
-| `mushiStore` | Svelte readable store — reactive access to session state and submission status |
+| `initMushi(config)` | Boot once (SSR-safe) — calls `Mushi.init` internally |
+| `getMushi()` | SDK instance after init |
+| `createMushiErrorHandler()` | SvelteKit `handleError` helper |
+| `mushiHandleError(opts?)` | Lower-level handleError helper |
 
-## Setup (SvelteKit)
+## Setup
 
-```svelte
-<!-- +layout.svelte -->
-<script lang="ts">
-  import { onMount } from 'svelte'
-  import { setMushiContext } from '@mushi-mushi/svelte'
+```ts
+import { initMushi } from '@mushi-mushi/svelte'
 
-  onMount(() => {
-    setMushiContext({
-      projectId: 'YOUR_PROJECT_ID',
-      apiKey: 'YOUR_PUBLIC_API_KEY',
-    })
-  })
-</script>
-
-<slot />
+initMushi({
+  projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+  apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+})
 ```
 
-## Identifying users
-
-```svelte
-<script lang="ts">
-  import { getMushi } from '@mushi-mushi/svelte'
-  import { page } from '$app/stores'
-
-  const mushi = getMushi()
-
-  $: if ($page.data.user) {
-    mushi?.identify($page.data.user.id, {
-      email: $page.data.user.email,
-      name: $page.data.user.name,
-    })
-  }
-</script>
-```
+Call from `hooks.client.ts` or a top-level `+layout.svelte` `onMount`.
 
 ## Submitting a report
 
-```svelte
-<script lang="ts">
-  import { getMushi } from '@mushi-mushi/svelte'
+```ts
+import { getMushi } from '@mushi-mushi/svelte'
 
-  const mushi = getMushi()
-
-  async function report() {
-    await mushi?.submit({ title: 'Something feels off', severity: 'p2' })
-  }
-</script>
-
-<button on:click={report}>Report issue</button>
+const mushi = getMushi()
+await mushi.captureEvent({
+  description: 'Something feels off',
+  category: 'bug',
+})
 ```

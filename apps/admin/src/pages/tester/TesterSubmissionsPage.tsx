@@ -236,10 +236,12 @@ export function TesterSubmissionsPage() {
             const isExpanded = expandedId === sub.id
             return (
               <div key={sub.id} className="overflow-hidden rounded-md border border-edge-subtle bg-surface-raised">
-                <button
+                <Btn
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setExpandedId(isExpanded ? null : sub.id)}
-                  className="flex w-full items-start justify-between gap-3 p-4 text-left motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-inset"
+                  className="w-full items-start justify-between gap-3 p-4 text-left hover:bg-surface-overlay !rounded-none !border-transparent shadow-none focus-visible:ring-inset"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-fg">{sub.title}</p>
@@ -255,7 +257,7 @@ export function TesterSubmissionsPage() {
                     )}
                     <span className={`text-2xs font-medium ${statusMeta.tone}`}>{statusMeta.label}</span>
                   </div>
-                </button>
+                </Btn>
 
                 {isExpanded && (
                   <div className="space-y-2 border-t border-edge-subtle px-4 pb-4 pt-0">

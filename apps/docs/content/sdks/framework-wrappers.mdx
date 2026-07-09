@@ -1,0 +1,18 @@
+---
+title: Framework wrappers (Vue / Svelte / Angular)
+---
+
+# Framework wrappers
+
+`@mushi-mushi/vue`, `@mushi-mushi/svelte`, and `@mushi-mushi/angular` are thin
+idiomatic shells over [`@mushi-mushi/web`](/sdks/web). Each package depends on
+`web` and calls `Mushi.init` once — do not call `Mushi.init` a second time.
+
+| Package | Boot | Docs |
+| --- | --- | --- |
+| [`@mushi-mushi/vue`](/sdks/vue) | `app.use(MushiPlugin, config)` | [Quickstart](/quickstart/vue) |
+| [`@mushi-mushi/svelte`](/sdks/svelte) | `initMushi(config)` | [Quickstart](/quickstart/svelte) |
+| [`@mushi-mushi/angular`](/sdks/angular) | `provideMushi(config)` / `provideMushiAngular` | [Quickstart](/quickstart/angular) |
+
+For capture, widget triggers, runtime config, and privacy, read the
+[web SDK](/sdks/web). React has its own package: [`@mushi-mushi/react`](/sdks/react).

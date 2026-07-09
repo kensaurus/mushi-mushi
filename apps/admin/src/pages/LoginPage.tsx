@@ -19,7 +19,7 @@ import {
 import { LOGIN_HERO } from '../lib/public-copy-shared'
 import { canUsePasskeys } from '../lib/passkeys'
 import { useEnabledAuthProviders } from '../lib/authProviders'
-import { CHIP_TONE } from '../lib/chipTone'
+import { CHIP_TONE, LINK_ACCENT } from '../lib/chipTone'
 
 type HealthStatus = 'checking' | 'ok' | 'error' | 'unknown'
 type FormMode = 'login' | 'magic' | 'signup' | 'forgot'
@@ -235,13 +235,15 @@ export function LoginPage() {
             </p>
             <p className="text-2xs text-fg-faint text-center">
               Didn't receive it? Check your spam folder or{' '}
-              <button
+              <Btn
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => { switchMode('signup'); setEmail(email) }}
-                className="text-accent-foreground hover:text-accent"
+                className={`inline !px-0 !py-0 text-2xs ${LINK_ACCENT}`}
               >
                 try again
-              </button>.
+              </Btn>.
             </p>
             <div className="pt-1">
               <Btn
@@ -343,20 +345,24 @@ export function LoginPage() {
 
             {mode === 'login' || mode === 'magic' ? (
               <div className="grid grid-cols-2 rounded-md border border-edge-subtle bg-surface-root/40 p-1">
-                <button
+                <Btn
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => switchMode('login')}
-                  className={`rounded-sm px-2 py-1.5 text-2xs font-medium motion-safe:transition-colors ${mode === 'login' ? 'bg-surface-raised text-fg shadow-card' : 'text-fg-faint hover:text-fg-muted'}`}
+                  className={`rounded-sm !border-transparent px-2 py-1.5 text-2xs font-medium shadow-none motion-safe:transition-colors ${mode === 'login' ? 'bg-surface-raised text-fg shadow-card' : 'text-fg-faint hover:text-fg-muted'}`}
                 >
                   Password
-                </button>
-                <button
+                </Btn>
+                <Btn
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => switchMode('magic')}
-                  className={`rounded-sm px-2 py-1.5 text-2xs font-medium motion-safe:transition-colors ${mode === 'magic' ? 'bg-surface-raised text-fg shadow-card' : 'text-fg-faint hover:text-fg-muted'}`}
+                  className={`rounded-sm !border-transparent px-2 py-1.5 text-2xs font-medium shadow-none motion-safe:transition-colors ${mode === 'magic' ? 'bg-surface-raised text-fg shadow-card' : 'text-fg-faint hover:text-fg-muted'}`}
                 >
                   Email link
-                </button>
+                </Btn>
               </div>
             ) : null}
 
@@ -368,24 +374,28 @@ export function LoginPage() {
               (authProviders.github || authProviders.google) && (
               <div className="space-y-2">
                 {authProviders.github && (
-                  <button
+                  <Btn
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     disabled={loading}
                     onClick={() => void signInWithGitHub()}
-                    className="flex w-full items-center justify-center gap-2 rounded-md border border-edge bg-surface px-3 py-2.5 text-xs font-medium text-fg hover:bg-surface-raised motion-safe:transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                    className="w-full justify-center gap-2 rounded-md bg-surface px-3 py-2.5 text-xs font-medium text-fg hover:bg-surface-raised"
                   >
                     <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                       <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
                     </svg>
                     Continue with GitHub
-                  </button>
+                  </Btn>
                 )}
                 {authProviders.google && (
-                  <button
+                  <Btn
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     disabled={loading}
                     onClick={() => void signInWithGoogle()}
-                    className="flex w-full items-center justify-center gap-2 rounded-md border border-edge bg-surface px-3 py-2.5 text-xs font-medium text-fg hover:bg-surface-raised motion-safe:transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                    className="w-full justify-center gap-2 rounded-md bg-surface px-3 py-2.5 text-xs font-medium text-fg hover:bg-surface-raised"
                   >
                     {/* mushi-mushi-allowlist: Google "G" logo official brand colors (#4285F4/#34A853/#FBBC05/#EA4335) — mandated by Google branding guidelines, cannot be tokenized */}
                     <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
@@ -395,7 +405,7 @@ export function LoginPage() {
                       <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                     </svg>
                     Continue with Google
-                  </button>
+                  </Btn>
                 )}
                 <div className="relative flex items-center gap-2">
                   <div className="h-px flex-1 bg-edge-subtle" />
@@ -406,11 +416,13 @@ export function LoginPage() {
             )}
 
             {mode === 'login' && !authProvidersLoading && authProviders.passkeys && (
-              <button
+              <Btn
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={handlePasskeySignIn}
                 disabled={loading || !passkeyAvailable}
-                className="group flex w-full items-center justify-between rounded-md border border-brand/30 bg-brand/10 px-3 py-2.5 text-left text-xs text-fg motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] hover:border-brand/60 hover:bg-brand/15 disabled:cursor-not-allowed disabled:opacity-60"
+                className="group w-full justify-between rounded-md border-brand/30 bg-brand/10 px-3 py-2.5 text-left text-xs text-fg hover:border-brand/60 hover:bg-brand/15"
               >
                 <span>
                   <span className="block font-semibold">Continue with passkey</span>
@@ -421,7 +433,7 @@ export function LoginPage() {
                 <span className="text-brand motion-safe:transition-transform group-hover:translate-x-0.5" aria-hidden="true">
                   -&gt;
                 </span>
-              </button>
+              </Btn>
             )}
 
             <p className="text-xs text-fg-muted text-center">
@@ -443,13 +455,15 @@ export function LoginPage() {
                     <p className="text-2xs uppercase tracking-wider text-fg-faint">Last used email</p>
                     <p className="truncate text-xs font-medium text-fg-secondary">{rememberedEmail}</p>
                   </div>
-                  <button
+                  <Btn
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={clearRememberedEmail}
-                    className="shrink-0 text-2xs text-accent-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors"
+                    className={`shrink-0 !px-0 !py-0 text-2xs ${LINK_ACCENT}`}
                   >
                     Not you?
-                  </button>
+                  </Btn>
                 </div>
               </div>
             )}
@@ -522,43 +536,45 @@ export function LoginPage() {
             </Btn>
 
             {mode === 'login' && (
-              <button
+              <Btn
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => switchMode('forgot')}
-                className="block w-full text-center text-2xs text-fg-faint hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors"
+                className="block w-full justify-center !px-0 !py-0 text-2xs text-fg-faint hover:text-brand"
               >
                 Forgot your password?
-              </button>
+              </Btn>
             )}
 
             <p className="text-center text-2xs text-fg-faint">
               {mode === 'forgot' ? (
                 <>
                   Remember your password?{' '}
-                  <button type="button" onClick={() => switchMode('login')} className="text-accent-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                  <Btn type="button" variant="ghost" size="sm" onClick={() => switchMode('login')} className={`inline !px-0 !py-0 text-2xs ${LINK_ACCENT}`}>
                     Sign in
-                  </button>
+                  </Btn>
                 </>
               ) : mode === 'magic' ? (
                 <>
                   Prefer a password?{' '}
-                  <button type="button" onClick={() => switchMode('login')} className="text-accent-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                  <Btn type="button" variant="ghost" size="sm" onClick={() => switchMode('login')} className={`inline !px-0 !py-0 text-2xs ${LINK_ACCENT}`}>
                     Use password
-                  </button>
+                  </Btn>
                 </>
               ) : mode === 'login' ? (
                 <>
                   Don't have an account?{' '}
-                  <button type="button" onClick={() => switchMode('signup')} className="text-accent-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                  <Btn type="button" variant="ghost" size="sm" onClick={() => switchMode('signup')} className={`inline !px-0 !py-0 text-2xs ${LINK_ACCENT}`}>
                     Sign up
-                  </button>
+                  </Btn>
                 </>
               ) : (
                 <>
                   Already have an account?{' '}
-                  <button type="button" onClick={() => switchMode('login')} className="text-accent-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                  <Btn type="button" variant="ghost" size="sm" onClick={() => switchMode('login')} className={`inline !px-0 !py-0 text-2xs ${LINK_ACCENT}`}>
                     Sign in
-                  </button>
+                  </Btn>
                 </>
               )}
             </p>

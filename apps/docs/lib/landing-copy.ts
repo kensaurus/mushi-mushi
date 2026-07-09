@@ -78,10 +78,13 @@ export interface LandingPlatformCard {
   badge?: string
 }
 
+/** Shared brand mark path (served from apps/docs/public). */
+export const LANDING_BRAND_MARK = '/brand/logo-mark.svg'
+
 export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
   {
     title: 'Incident loop',
-    icon: '⚡',
+    icon: LANDING_BRAND_MARK,
     href: '/quickstart/incident-loop',
     cmd: 'npx mushi-mushi',
     desc: 'Broken prod → plain-English read → paste-ready fix prompt in Cursor.',
@@ -89,7 +92,7 @@ export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
   },
   {
     title: 'MCP server',
-    icon: '◉',
+    icon: LANDING_BRAND_MARK,
     href: '/quickstart/mcp',
     cmd: 'npx mushi-mushi setup --ide cursor',
     desc: 'Ask your editor what broke — fix briefs from Claude, Cursor, or Codex. No second LLM key.',
@@ -97,14 +100,14 @@ export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
   },
   {
     title: 'React',
-    icon: '⚛',
+    icon: LANDING_BRAND_MARK,
     href: '/quickstart/react',
     cmd: 'npx mushi-mushi',
     desc: 'Wizard installs the SDK, writes env vars, optional test report.',
   },
   {
     title: 'iOS · Android · Flutter',
-    icon: '◈',
+    icon: LANDING_BRAND_MARK,
     href: '/quickstart/mobile',
     cmd: 'npx mushi-mushi',
     desc: 'Native shake, offline queue, and a Sentry bridge already wired up.',

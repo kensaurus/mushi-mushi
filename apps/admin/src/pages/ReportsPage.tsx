@@ -685,14 +685,16 @@ export function ReportsPage() {
           {total} total{total > PAGE_SIZE ? ` · page ${page + 1}/${totalPages}` : ''}
         </span>
         <Tooltip content="Show keyboard shortcuts (?)">
-          <button
+          <Btn
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => setShowHelp((v) => !v)}
-            className="inline-flex items-center gap-1 text-2xs text-fg-faint hover:text-fg-muted px-1.5 py-0.5 rounded-sm border border-edge-subtle"
+            className="inline-flex items-center gap-1 text-2xs text-fg-faint hover:text-fg-muted px-1.5 py-0.5"
             aria-label="Show keyboard shortcuts"
           >
             <Kbd>?</Kbd>
-          </button>
+          </Btn>
         </Tooltip>
       </PageHeaderBar>
 

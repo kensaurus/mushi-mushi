@@ -1,16 +1,4 @@
-/**
- * FILE: apps/docs/components/MigrationBadges.tsx
- * PURPOSE: Two small chips for migration metadata — effort and risk.
- *
- *   <EffortBadge level="Days" />   - Hours | Days | Weeks
- *   <RiskBadge   level="Med"  />   - Low   | Med  | High
- *
- * Used at the top of every guide ("here's what you're in for") AND in the
- * <MigrationHub /> grid card so users can scan the catalogue quickly without
- * opening each page. Colors are neutral-with-accent so they read in both
- * Nextra light and dark themes; we deliberately avoid the page's vermillion
- * brand color for the high-risk chip so it doesn't fight Mushi's identity.
- */
+/** Two small chips for migration metadata — effort and risk. */
 
 import type { ReactNode } from 'react'
 

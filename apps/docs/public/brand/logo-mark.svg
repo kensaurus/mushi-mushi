@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 100 100">
+  <title>Mushi Mushi</title>
+  <defs>
+    <filter id="stamp-shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#8B1A0E" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <g transform="rotate(-3 50 50)" filter="url(#stamp-shadow)">
+    <rect x="8" y="8" width="84" height="84" rx="12" fill="#E03C2C"/>
+    <text x="50" y="78"
+          text-anchor="middle"
+          fill="#F8F4ED"
+          font-family="'Hiragino Mincho ProN','Yu Mincho Pr6N','Yu Mincho','Source Han Serif JP','Noto Serif CJK JP','SimSun',serif"
+          font-weight="700"
+          font-size="62">&#x866B;</text>
+  </g>
+</svg>

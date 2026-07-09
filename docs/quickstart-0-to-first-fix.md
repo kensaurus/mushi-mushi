@@ -14,8 +14,8 @@ Two paths: **developers** wire the SDK; **PMs/founders** read the console only.
 
 ```bash
 cd your-app-repo
-npx create mushi-mushi
-# or: npx mushi-mushi init
+npm create mushi-mushi
+# or: npx mushi-mushi
 ```
 
 The wizard auto-detects your framework, writes env vars, and can send a **test report** to verify ingest.
