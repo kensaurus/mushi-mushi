@@ -393,6 +393,16 @@ export async function mintProjectKey(
   endpoint: string,
   cliToken: string,
   projectId: string,
+  opts: {
+    /**
+     * Narrow the minted key. Must be a subset of the server's LOGIN_SCOPES
+     * (report:write, mcp:read, mcp:write) — e.g. ['mcp:read'] for a
+     * read-only key written into an editor's mcp.json.
+     */
+    scopes?: readonly string[];
+    /** Console-visible key label, e.g. 'mcp-cursor'. Default: 'cli-login'. */
+    label?: string;
+  } = {},
 ): Promise<string> {
   const base = trimTrailingSlash(endpoint);
   // No withOneRetry here, unlike listProjects: minting isn't idempotent — the
@@ -405,7 +415,10 @@ export async function mintProjectKey(
     res = await deviceFetch(`${base}/v1/cli/projects/${projectId}/keys`, {
       method: 'POST',
       headers: cliAuthHeaders(cliToken),
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        ...(opts.scopes ? { scopes: opts.scopes } : {}),
+        ...(opts.label ? { label: opts.label } : {}),
+      }),
     });
   } catch (err) {
     throw new DeviceAuthRequestError(

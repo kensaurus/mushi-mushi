@@ -1,0 +1,19 @@
+{
+  "name": "mushi-mushi",
+  "owner": {
+    "name": "kensaurus",
+    "url": "https://github.com/kensaurus"
+  },
+  "metadata": {
+    "description": "Mushi Mushi — bug capture with plain-English AI diagnosis and paste-ready fixes, wired into Claude Code",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "mushi-debugger",
+      "source": "./plugins/mushi-debugger",
+      "description": "Triage and fix Mushi bug reports without leaving Claude Code: hosted MCP (OAuth sign-in, no keys) + a mushi-debugger subagent that pulls reports, diagnosis, and fix context",
+      "category": "debugging"
+    }
+  ]
+}
