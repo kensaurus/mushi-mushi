@@ -34,6 +34,7 @@ const PINNED_FILES = [
   'packages/cli/src/version.ts',
   'packages/vscode-extension/src/extension.ts',
   'apps/docs/public/integrations/claude-hooks.json',
+  'apps/docs/content/quickstart/mcp.mdx',
 ]
 
 const SPEC_RE = /@mushi-mushi\/mcp@(?:latest|\d+\.\d+\.\d+(?:-[\w.]+)?)/g

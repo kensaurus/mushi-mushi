@@ -447,6 +447,20 @@ describe('mintProjectKey', () => {
     await expect(mintProjectKey(ENDPOINT, 'tok', 'p1')).resolves.toBe('mushi_y');
   });
 
+  it('sends an empty body by default and passes scopes/label through when narrowing', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ ok: true, data: { key: 'mushi_y' } }, { status: 201 }),
+    );
+    await mintProjectKey(ENDPOINT, 'tok', 'p1');
+    expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body as string)).toEqual({});
+
+    await mintProjectKey(ENDPOINT, 'tok', 'p1', { scopes: ['mcp:read'], label: 'mcp-cursor' });
+    expect(JSON.parse(fetchMock.mock.calls[1]![1]!.body as string)).toEqual({
+      scopes: ['mcp:read'],
+      label: 'mcp-cursor',
+    });
+  });
+
   it('throws a typed error when the mint fails', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: false }, { ok: false, status: 403 }));
     await expect(mintProjectKey(ENDPOINT, 'tok', 'p1')).rejects.toMatchObject({

@@ -14,11 +14,19 @@ import { MUSHI_MCP_PIN_SPEC } from './version.js'
 /** Lean default — mirrors DEFAULT_FEATURE_GROUPS in @mushi-mushi/mcp/feature-groups */
 const DEFAULT_MUSHI_FEATURES = 'triage,fixes,inventory,setup,docs'
 
-export interface McpServerEntry {
-  command: string
-  args: string[]
-  env: Record<string, string>
-}
+export type McpServerEntry =
+  | {
+      command: string
+      args: string[]
+      env: Record<string, string>
+    }
+  /**
+   * Hosted Streamable HTTP entry. Deliberately URL-only: adding a static
+   * `Authorization` header tells MCP clients OAuth isn't needed and disables
+   * the browser login flow. The client mints and stores its own revocable
+   * key via the consent page.
+   */
+  | { url: string }
 
 export interface WriteMcpOptions {
   /** Absolute path to the IDE config file, e.g. `/repo/.cursor/mcp.json` */

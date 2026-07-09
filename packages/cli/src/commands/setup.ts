@@ -29,21 +29,30 @@ program
   .option('--verify', 'Probe the MCP key after writing to confirm it has mcp:read scope (default: on)')
   .option('--no-verify', 'Skip the post-write key probe')
   .option('--endpoint <url>', 'Override the Mushi API endpoint (self-hosted) — used for first-run login if not yet configured')
+  .option('--stdio', 'Write a local stdio entry with an API key instead of the hosted OAuth URL (cursor/claude default is hosted OAuth — no key on disk)')
+  .option('--ci', 'Alias for --stdio: headless environments cannot drive the browser OAuth flow')
   .addHelpText('after', `
 Examples:
-  mushi setup                         # wire Cursor (default)
-  mushi setup --all-projects          # one server entry per accessible project
+  mushi setup                         # wire Cursor (default: hosted OAuth — sign in from the IDE, no key on disk)
+  mushi setup --stdio                 # local stdio entry with an API key (previous behavior)
+  mushi setup --ci                    # same as --stdio, for headless/CI environments
+  mushi setup --all-projects          # one server entry per accessible project (stdio)
   mushi setup --ide claude            # wire Claude Code
   mushi setup --ide cursor --with-rules  # also write .cursorrules
 
 Supported IDEs:
   cursor    — writes .cursor/mcp.json
   claude    — writes .claude/mcp.json (Claude Code / Claude Desktop)
-  continue  — writes .continue/mcp.json
-  zed       — writes ~/.config/zed/settings.json mcpServers block
+  continue  — writes .continue/mcp.json (stdio only)
+  zed       — writes ~/.config/zed/settings.json mcpServers block (stdio only)
+
+For cursor and claude the default entry is the hosted MCP URL: your IDE opens
+the browser consent page on first use (OAuth + PKCE) and stores a revocable
+key for you — nothing sensitive is written to the repo. Pass --stdio/--ci to
+get the local subprocess entry with an API key instead.
 
 The command reads credentials from ~/.config/mushi/config.json. If you are not logged in yet, it runs browser sign-in first, then writes MCP config.`)
-  .action(async (opts: { ide: string; projectSlug?: string; allProjects?: boolean; withRules?: boolean; dryRun?: boolean; verify?: boolean; endpoint?: string }) => {
+  .action(async (opts: { ide: string; projectSlug?: string; allProjects?: boolean; withRules?: boolean; dryRun?: boolean; verify?: boolean; endpoint?: string; stdio?: boolean; ci?: boolean }) => {
     const { writeFile, mkdir, readFile } = await import('node:fs/promises')
     const { existsSync } = await import('node:fs')
     const nodePath = await import('node:path')
@@ -149,6 +158,31 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
 
     const serverName = `mushi-${slug}`
 
+    // ── Hosted OAuth vs local stdio ──────────────────────────────────────
+    // Default for cursor/claude is the hosted MCP URL: the IDE drives the
+    // browser OAuth (PKCE) consent flow on first use and stores a revocable
+    // key itself — no API key lands in the repo's mcp.json. --stdio/--ci
+    // opts back into the local subprocess entry (headless environments
+    // can't open a browser; --all-projects needs one keyed entry per
+    // project, which OAuth's consent-time project pick doesn't cover).
+    // The hosted MCP function is a sibling of the API function:
+    // …/functions/v1/api → …/functions/v1/mcp. If the configured endpoint
+    // does not end in /api (assertEndpoint allows arbitrary paths), no
+    // sibling URL can be derived — writing the API URL as an MCP server
+    // would break sign-in, so fall back to the stdio entry instead.
+    const canDeriveHostedUrl = /\/api\/?$/.test(config.endpoint ?? '')
+    const useHostedOauth =
+      (opts.ide === 'cursor' || opts.ide === 'claude') &&
+      !opts.stdio && !opts.ci && !opts.allProjects && canDeriveHostedUrl
+    if ((opts.ide === 'cursor' || opts.ide === 'claude') &&
+        !opts.stdio && !opts.ci && !opts.allProjects && !canDeriveHostedUrl) {
+      console.log('Note: endpoint does not end in /api — cannot derive the hosted MCP URL; writing a local stdio entry instead.')
+    }
+    const hostedMcpUrl = (config.endpoint ?? '').replace(/\/api\/?$/, '/mcp')
+    // NO Authorization header here — a static header tells the client OAuth
+    // isn't needed and disables the login flow (see mcp-config.ts).
+    const hostedServerBlock = { url: hostedMcpUrl }
+
     const mcpServerBlock = {
       command: 'npx',
       args: ['-y', MUSHI_MCP_PIN_SPEC],
@@ -184,13 +218,19 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
           console.log(`✓ Added ${allProjectsList.length} mushi-* server entries (${allProjectsList.map((p) => p.name ?? p.id.slice(0, 8)).join(', ')})`)
         }
       } else {
+        const chosenBlock = useHostedOauth ? hostedServerBlock : mcpServerBlock
         if (opts.dryRun) {
-          const preview = JSON.stringify({ mcpServers: { [serverName]: mcpServerBlock } }, null, 2) + '\n'
+          const preview = JSON.stringify({ mcpServers: { [serverName]: chosenBlock } }, null, 2) + '\n'
           console.log(`[dry-run] Would write ${configPath}:`)
           console.log(redactKeyForDisplay(preview))
         } else {
-          await writeMcpServerEntry({ configPath, serverName, serverBlock: mcpServerBlock })
+          await writeMcpServerEntry({ configPath, serverName, serverBlock: chosenBlock })
           console.log(`✓ Written ${configPath}`)
+          if (useHostedOauth) {
+            console.log('  Hosted MCP with OAuth login — no API key was written to this file.')
+            console.log(`  Restart ${opts.ide === 'cursor' ? 'Cursor' : 'Claude Code'}, open the MCP panel (/mcp in Claude Code), pick "${serverName}" and sign in via the browser.`)
+            console.log('  Prefer a local key-based entry (headless/CI)? Re-run with --stdio.')
+          }
         }
       }
     } else if (ideEntry.format === 'zed') {
@@ -278,7 +318,10 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
       // Probes /v1/admin/mcp/account-overview — the canonical lightweight
       // mcp:read endpoint — to confirm the configured key can actually drive the
       // MCP server. Fails gracefully so a network hiccup never blocks the user.
-      const shouldVerify = opts.verify !== false
+      // Hosted-OAuth entries carry no key — the probe would validate the CLI's
+      // saved key, which is not what the IDE will use. Skip it; the sign-in
+      // guidance above is the verification path.
+      const shouldVerify = opts.verify !== false && !useHostedOauth
       if (shouldVerify && config.endpoint && config.apiKey && config.projectId) {
         try {
           const probeRes = await fetch(
@@ -384,13 +427,17 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
       if (!opts.withRules) {
         console.log(`Tip: run with --with-rules to also write the lesson-library coding hook.`)
       }
-      // Security: the config file contains the API key in plaintext. For
+      // Security: a stdio config file contains the API key in plaintext. For
       // repo-local configs, append it to .gitignore ourselves (idempotent)
-      // instead of hoping the user reads a reminder.
+      // instead of hoping the user reads a reminder. Hosted-OAuth entries are
+      // the opposite case: URL-only, no secret — committing them is how a
+      // team shares the MCP hookup, so don't gitignore those.
       const configRelPath = ideEntry.dir.startsWith('/')
         ? configPath
         : nodePath.relative(cwd, configPath)
-      if (!ideEntry.dir.startsWith('/')) {
+      if (useHostedOauth) {
+        console.log(`\nNote: ${configRelPath} holds no secrets (OAuth login) — safe to commit and share with your team.`)
+      } else if (!ideEntry.dir.startsWith('/')) {
         const gitignorePath = nodePath.join(cwd, '.gitignore')
         const ignoreLine = configRelPath.replaceAll('\\', '/')
         try {
