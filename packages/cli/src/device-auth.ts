@@ -359,17 +359,21 @@ export interface CreatedProject {
   apiKey: string | null;
 }
 
-/** Create a project (server auto-mints a report:write key). Throws on failure. */
+/** Create a project (server auto-mints a key). Throws on failure. */
 export async function createProject(
   endpoint: string,
   cliToken: string,
   name: string,
+  opts: {
+    /** Narrow the auto-minted key (subset of report:write, mcp:read, mcp:write). */
+    scopes?: readonly string[];
+  } = {},
 ): Promise<CreatedProject> {
   const base = trimTrailingSlash(endpoint);
   const res = await deviceFetch(`${base}/v1/cli/projects`, {
     method: 'POST',
     headers: cliAuthHeaders(cliToken),
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, ...(opts.scopes ? { scopes: opts.scopes } : {}) }),
   });
   const json = (await res.json().catch(() => null)) as {
     ok?: boolean;

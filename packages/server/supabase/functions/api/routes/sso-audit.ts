@@ -5,6 +5,7 @@ import { log } from '../../_shared/logger.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
 import { requireFeature, resolveActiveEntitlement } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
+import { requireEeLicense } from '../../_shared/ee-gate.ts';
 import { callerProjectIds, resolveOwnedProject } from '../shared.ts';
 
 export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -12,7 +13,7 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
   // PHASE 4: ENTERPRISE — SSO, AUDIT, RETENTION, FINE-TUNING
   // ============================================================
 
-  app.get('/v1/admin/sso/stats', jwtAuth, async (c) => {
+  app.get('/v1/admin/sso/stats', jwtAuth, requireEeLicense('sso'), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -154,7 +155,7 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
     });
   });
 
-  app.get('/v1/admin/sso', jwtAuth, async (c) => {
+  app.get('/v1/admin/sso', jwtAuth, requireEeLicense('sso'), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
@@ -183,7 +184,7 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
   //
   // Returns the canonical Auth provider ID + status so the UI can show the
   // admin which step they're on (config saved → registered → active).
-  app.post('/v1/admin/sso', jwtAuth, requireFeature('sso'), async (c) => {
+  app.post('/v1/admin/sso', jwtAuth, requireEeLicense('sso'), requireFeature('sso'), async (c) => {
     const userId = c.get('userId') as string;
     const body = (await c.req.json()) as {
       providerType: 'saml' | 'oidc';
@@ -395,7 +396,7 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
   // Allow disconnecting an SSO provider. We deregister from GoTrue first,
   // then mark the config row 'disabled'. We never hard-delete rows because the
   // audit log + sso_state attempts reference them.
-  app.delete('/v1/admin/sso/:id', jwtAuth, requireFeature('sso'), async (c) => {
+  app.delete('/v1/admin/sso/:id', jwtAuth, requireEeLicense('sso'), requireFeature('sso'), async (c) => {
     const userId = c.get('userId') as string;
     const configId = c.req.param('id')!;
     const db = getServiceClient();
@@ -444,7 +445,7 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
     return c.json({ ok: true });
   });
 
-  app.get('/v1/admin/audit/stats', jwtAuth, async (c) => {
+  app.get('/v1/admin/audit/stats', jwtAuth, requireEeLicense('audit-export'), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -611,7 +612,7 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
     });
   });
 
-  app.get('/v1/admin/audit', jwtAuth, async (c) => {
+  app.get('/v1/admin/audit', jwtAuth, requireEeLicense('audit-export'), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectIds = await callerProjectIds(c, db, userId);

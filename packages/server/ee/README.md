@@ -6,9 +6,9 @@
             lives. The core server is AGPLv3; this directory is the
             source-available commercial boundary (see ./LICENSE).
   USAGE: Read this before building, moving, or gating an enterprise feature.
-  NOTES: This is the *licensing* boundary. The runtime enforcement gate
-         (MUSHI_EE_LICENSE_KEY) is a tracked follow-up — until it ships, the
-         boundary is contractual (see ./LICENSE §3) and documented here.
+  NOTES: This is the *licensing* boundary. The runtime gate ships in
+         _shared/ee-license.ts + _shared/ee-gate.ts (see below); the legal
+         boundary remains ./LICENSE §3.
 -->
 
 # Mushi Mushi — Enterprise Edition (EE)
@@ -53,9 +53,23 @@ production**, free to read and to run for development/evaluation:
 
 ## The license gate (`MUSHI_EE_LICENSE_KEY`)
 
-- **Unset / invalid** → EE features run only for development, testing, and
-  evaluation. Production Use is not licensed (see [`./LICENSE`](./LICENSE) §3).
-- **Valid** → Production Use of EE features is licensed for the term of the key.
+Enforced at runtime by
+[`_shared/ee-gate.ts`](../supabase/functions/_shared/ee-gate.ts) on the SSO,
+audit-export, and retention routes:
+
+- **Unset / invalid / expired** → **eval mode**: EE routes still respond
+  (development, testing, and evaluation are licensed uses), but every response
+  carries `X-Mushi-Ee: eval` and the server logs an eval banner. Production
+  Use in this state is a license violation (see [`./LICENSE`](./LICENSE) §3) —
+  the gate is deliberately **not** a hard-off switch, matching the license
+  text.
+- **Valid** → `X-Mushi-Ee: licensed`; Production Use is licensed for the term
+  of the key.
+
+Keys are Ed25519-signed and verified **offline**
+([`_shared/ee-license.ts`](../supabase/functions/_shared/ee-license.ts)) — no
+phone-home, air-gapped deployments work. Maintainer tooling:
+`node scripts/ee-license-tool.mjs keygen|sign|verify`.
 
 Hosted **Mushi Cloud Enterprise** includes the key automatically — nothing to
 configure. Self-hosters who need EE features in production obtain a key from
