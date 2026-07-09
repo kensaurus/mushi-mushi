@@ -30,6 +30,7 @@ export const KNOWN_GUIDE_SLUGS: readonly string[] = [
   'nextjs-pages-to-app-router',
   'pendo-feedback-to-mushi',
   'react-native-cli-to-expo',
+  'sentry-to-mushi',
   'shake-to-mushi',
   'spa-to-ssr',
   'vue-2-to-vue-3',

@@ -72,6 +72,11 @@ export const MIGRATIONS_CATALOG: readonly AdminMigrationGuideMeta[] = [
     summary: 'Move from a Vite SPA to a server-rendered framework with env-var prefix mapping.',
   },
   {
+    slug: 'sentry-to-mushi',
+    title: 'Sentry + Mushi (enrich or standalone)',
+    summary: 'Keep Sentry — Mushi adds plain-English diagnosis + paste-ready fixes alongside it.',
+  },
+  {
     slug: 'instabug-to-mushi',
     title: 'Instabug (Luciq) → Mushi',
     summary: 'Rebrand-aware API mapping: Luciq.init → Mushi.init, identifyUser → setUser.',

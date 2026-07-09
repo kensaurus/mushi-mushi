@@ -26,6 +26,7 @@ program
   .option('--cwd <path>', 'Run the wizard in a different directory')
   .option('--endpoint <url>', 'Override the Mushi API endpoint (self-hosted)')
   .option('--skip-test-report', 'Skip the end-of-wizard "send a test report" prompt')
+  .option('--audit', 'Audit an existing install (doctor checks) instead of running the wizard')
   .action(async (opts: {
     projectId?: string
     apiKey?: string
@@ -35,6 +36,7 @@ program
     cwd?: string
     endpoint?: string
     skipTestReport?: boolean
+    audit?: boolean
   }) => {
     await runInit({
       projectId: opts.projectId,
@@ -45,6 +47,7 @@ program
       cwd: opts.cwd,
       endpoint: opts.endpoint,
       sendTestReport: opts.skipTestReport ? false : undefined,
+      audit: opts.audit,
     })
   })
 
