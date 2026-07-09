@@ -7,6 +7,7 @@ import { currentRegion } from '../../_shared/region.ts';
 import { getStorageAdapter, getStorageAdapterForHealthCheck, invalidateStorageCache } from '../../_shared/storage.ts';
 import { log } from '../../_shared/logger.ts';
 import { logAudit } from '../../_shared/audit.ts';
+import { requireEeLicense } from '../../_shared/ee-gate.ts';
 import { logAntiGamingEvent } from '../../_shared/telemetry.ts';
 import {
   createBillingPortalSession,
@@ -662,7 +663,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     });
   });
 
-  app.get('/v1/admin/compliance/retention', jwtAuth, async (c) => {
+  app.get('/v1/admin/compliance/retention', jwtAuth, requireEeLicense('retention'), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
@@ -676,7 +677,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     return c.json({ ok: true, data: { policies: data ?? [] } });
   });
 
-  app.put('/v1/admin/compliance/retention/:projectId', jwtAuth, async (c) => {
+  app.put('/v1/admin/compliance/retention/:projectId', jwtAuth, requireEeLicense('retention'), async (c) => {
     const userId = c.get('userId') as string;
     const projectId = c.req.param('projectId')!;
     const db = getServiceClient();

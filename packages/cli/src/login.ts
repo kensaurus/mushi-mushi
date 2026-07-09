@@ -245,6 +245,16 @@ export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
   let chosenProjectId = projectId
   let chosenProjectName: string | undefined
 
+  // Least-privilege default: the everyday key covers SDK ingest + MCP read
+  // tools. mcp:write (billing cap, pipeline start, fix merge — the
+  // money-moving admin surface) is an explicit opt-in via --upgrade-scope,
+  // so a leaked mcp.json or .env can't merge fixes or change billing.
+  // Applies to BOTH the create-project auto-mint and the select-project
+  // mint below, so the post-login scope output is always accurate.
+  const mintScopes: readonly string[] = opts.upgradeScope
+    ? ['report:write', 'mcp:read', 'mcp:write']
+    : ['report:write', 'mcp:read']
+
   if (!chosenProjectId) {
     const { createInterface } = await import('node:readline')
     const rl = createInterface({ input: process.stdin, output: process.stdout })
@@ -264,7 +274,7 @@ export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
       chosenProjectName = choice.name
     } else {
       try {
-        const created = await createProject(endpoint, cliToken, choice.name)
+        const created = await createProject(endpoint, cliToken, choice.name, { scopes: mintScopes })
         chosenProjectId = created.id
         chosenProjectName = created.name
         apiKey = created.apiKey ?? undefined
@@ -278,7 +288,7 @@ export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
 
   if (!apiKey && chosenProjectId) {
     try {
-      apiKey = (await mintProjectKey(endpoint, cliToken, chosenProjectId)) ?? undefined
+      apiKey = (await mintProjectKey(endpoint, cliToken, chosenProjectId, { scopes: mintScopes })) ?? undefined
     } catch {
       /* non-fatal — user can copy from console */
     }
@@ -294,8 +304,14 @@ export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
   console.log('')
   if (chosenProjectName) console.log(`  ✓ Project: ${chosenProjectName}`)
   if (apiKey) {
-    console.log(`  ✓ Full-scope CLI key saved (${apiKey.slice(0, 12)}…)`)
-    console.log(`    Scopes: report:write · mcp:read · mcp:write — SDK + MCP + admin CLI (incl. writes) all work with this key`)
+    if (opts.upgradeScope) {
+      console.log(`  ✓ Full-scope CLI key saved (${apiKey.slice(0, 12)}…)`)
+      console.log(`    Scopes: report:write · mcp:read · mcp:write — SDK + MCP + admin CLI (incl. writes) all work with this key`)
+    } else {
+      console.log(`  ✓ CLI key saved (${apiKey.slice(0, 12)}…)`)
+      console.log(`    Scopes: report:write · mcp:read — SDK ingest + MCP read tools.`)
+      console.log(`    Admin writes (billing cap, fix merge, pipeline start) need: mushi login --upgrade-scope`)
+    }
   } else {
     console.log(`  ℹ  Get an SDK key at: ${apiKeyHint(consoleBase)}`)
   }
