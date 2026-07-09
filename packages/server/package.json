@@ -24,7 +24,7 @@
   "devDependencies": {
     "@mushi-mushi/tsconfig": "workspace:*",
     "@supabase/supabase-js": "^2.108.2",
-    "supabase": "^2.108.0",
+    "supabase": "^2.109.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
     "yaml": "^2.9.0",
