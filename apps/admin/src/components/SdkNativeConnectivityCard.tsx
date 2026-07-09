@@ -35,7 +35,7 @@ import { mushiEnvVarsForProjectSlug } from '../lib/projectMushiEnv'
 
 const STATUS_ICON: Record<SdkDiagnosticStatus, React.ReactNode> = {
   healthy: <IconCheck className="h-4 w-4 text-ok shrink-0" aria-hidden />,
-  'ci-secret-missing': <IconAlertTriangle className="h-4 w-4 text-[var(--color-error-foreground)] shrink-0" aria-hidden />,
+  'ci-secret-missing': <IconAlertTriangle className="h-4 w-4 text-danger-foreground shrink-0" aria-hidden />,
   'native-never-seen': <IconAlertTriangle className="h-4 w-4 text-warn shrink-0" aria-hidden />,
   'banner-disabled': <IconAlertTriangle className="h-4 w-4 text-warn shrink-0" aria-hidden />,
   unknown: <IconRefresh className="h-4 w-4 text-fg-muted shrink-0" aria-hidden />,
@@ -43,7 +43,7 @@ const STATUS_ICON: Record<SdkDiagnosticStatus, React.ReactNode> = {
 
 const STATUS_CHIP_CLASS: Record<SdkDiagnosticStatus, string> = {
   healthy: 'bg-ok/10 text-ok border-ok/25',
-  'ci-secret-missing': 'bg-danger/10 text-[var(--color-error-foreground)] border-danger/25',
+  'ci-secret-missing': 'bg-danger/10 text-danger-foreground border-danger/25',
   'native-never-seen': 'bg-warn/10 text-warn border-warn/25',
   'banner-disabled': 'bg-warn/10 text-warn border-warn/25',
   unknown: 'bg-surface-overlay text-fg-muted border-edge-subtle',
@@ -175,7 +175,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
 
         {/* Error state */}
         {fetchError && !loading && (
-          <p className="text-xs text-[var(--color-error-foreground)]">{fetchError}</p>
+          <p className="text-xs text-danger-foreground">{fetchError}</p>
         )}
 
         {/* Diagnosis detail — missing vars only; playbook holds fix steps */}
@@ -185,7 +185,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
             <ul className="space-y-0.5">
               {diag.missingVars.map((v) => (
                 <li key={v}>
-                  <code className="font-mono text-2xs text-[var(--color-error-foreground)] bg-danger/5 rounded px-1 py-0.5">
+                  <code className="font-mono text-2xs text-danger-foreground bg-danger/5 rounded px-1 py-0.5">
                     {v}
                   </code>
                 </li>

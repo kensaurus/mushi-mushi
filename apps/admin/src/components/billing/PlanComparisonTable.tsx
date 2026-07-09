@@ -338,7 +338,7 @@ export function PlanComparisonTable({
               {p.id === 'enterprise' && !isCurrent && (
                 <a
                   href="mailto:kensaurus@gmail.com?subject=Enterprise%20inquiry"
-                  className="mt-2 block text-2xs text-brand hover:text-brand-hover"
+                  className="mt-2 block text-2xs text-accent-foreground hover:text-accent"
                 >
                   Email sales →
                 </a>

@@ -13,3 +13,4 @@ export * from './ui/forms';
 export * from './ui/misc';
 export * from './ui/chat';
 export * from './ui/prose';
+export * from './ui/job-status-pill';

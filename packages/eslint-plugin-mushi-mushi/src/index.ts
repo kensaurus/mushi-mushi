@@ -41,6 +41,7 @@ import noAccentForSelection from './rules/no-accent-for-selection.js'
 import noRawHexInWidget from './rules/no-raw-hex-in-widget.js'
 import noCardElevatedOutsideAllowlist from './rules/no-card-elevated-outside-allowlist.js'
 import noRawSemanticOnMuted from './rules/no-raw-semantic-on-muted.js'
+import noRawCssVarText from './rules/no-raw-css-var-text.js'
 
 const PLUGIN_NAME = 'mushi-mushi'
 
@@ -57,6 +58,7 @@ const rules: Record<string, Rule.RuleModule> = {
   'no-raw-hex-in-widget': noRawHexInWidget,
   'no-card-elevated-outside-allowlist': noCardElevatedOutsideAllowlist,
   'no-raw-semantic-on-muted': noRawSemanticOnMuted,
+  'no-raw-css-var-text': noRawCssVarText,
 }
 
 const recommendedRules: Linter.RulesRecord = {

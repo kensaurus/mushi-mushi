@@ -691,8 +691,16 @@ main :not(pre) > code {
   font-size: 1.25rem;
   line-height: 1;
   flex-shrink: 0;
-  /* Optical alignment — emoji have extra descender space. */
-  margin-top: -1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.docs-quickstart-card__icon-img {
+  width: 1.25rem;
+  height: 1.25rem;
+  display: block;
+  border-radius: 0.2rem;
 }
 
 .docs-quickstart-card__title {

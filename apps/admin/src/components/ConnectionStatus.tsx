@@ -128,7 +128,7 @@ export function ConnectionStatus({ compact, className = '' }: ConnectionStatusPr
           type="button"
           onClick={runChecks}
           disabled={running}
-          className="text-2xs text-brand hover:text-brand-hover disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors motion-safe:active:scale-[0.97]"
+          className="text-2xs text-accent-foreground hover:text-accent disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors motion-safe:active:scale-[0.97]"
         >
           {running ? 'Checking…' : anyPending ? 'Run check' : 'Re-check'}
         </button>

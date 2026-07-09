@@ -22,13 +22,13 @@ describe('buildInboxCards judge staleness', () => {
   it('opens judge card when eval is stale (>48h)', () => {
     const card = judgeCard(emptyDashboard, { judgeStale: true, judgeStaleHours: 72 })
     expect(card?.action).not.toBeNull()
-    expect(card?.action?.title).toMatch(/judge batch|stale/i)
+    expect(card?.action?.title).toMatch(/quality of recent auto-fixes|stale/i)
   })
 
   it('opens judge card when no eval exists (matches server judgeStale)', () => {
     const card = judgeCard(emptyDashboard, { judgeStale: true, judgeStaleHours: null })
     expect(card?.action).not.toBeNull()
-    expect(card?.action?.title).toMatch(/No judge scores yet/)
+    expect(card?.action?.title).toMatch(/No quality scores yet/)
   })
 
   it('does not hardcode stale judge when ctx omitted', () => {

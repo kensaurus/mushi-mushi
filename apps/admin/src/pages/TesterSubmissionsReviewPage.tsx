@@ -105,7 +105,7 @@ export function TesterSubmissionsReviewPage() {
       >
         <Link
           to="/rewards?tab=publishing"
-          className="text-xs font-medium text-brand hover:underline shrink-0"
+          className="text-xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors shrink-0"
         >
           ← Marketplace settings
         </Link>
@@ -140,7 +140,7 @@ export function TesterSubmissionsReviewPage() {
           action={
             <Link
               to="/rewards?tab=publishing"
-              className="text-sm font-medium text-brand hover:underline"
+              className="text-sm font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
             >
               Open marketplace listing →
             </Link>

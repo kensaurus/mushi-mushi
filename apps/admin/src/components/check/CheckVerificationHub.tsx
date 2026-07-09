@@ -20,7 +20,7 @@ import {
   type CheckSubGroupId,
 } from '../../lib/navRegistry'
 import { Card, SegmentedControl, Btn } from '../ui'
-import { LINK_BRAND } from '../../lib/chipTone'
+import { LINK_ACCENT } from '../../lib/chipTone'
 
 const SUB_GROUP_ORDER: CheckSubGroupId[] = [
   'quality-gates',
@@ -98,7 +98,7 @@ export function CheckVerificationHub() {
         <Card className="p-4">
           <p className="text-xs text-fg-muted">
             Need LLM call rates, cron job status, and provider probes?{' '}
-            <Link to="/health" className={LINK_BRAND}>
+            <Link to="/health" className={LINK_ACCENT}>
               Open the Health dashboard →
             </Link>
           </p>

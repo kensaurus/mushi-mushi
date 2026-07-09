@@ -200,7 +200,7 @@ export function HotkeysModal({ open, onClose }: Props) {
             <button
               type="button"
               onClick={() => setSearch('')}
-              className="mt-2 text-2xs text-brand hover:text-brand-hover motion-safe:transition-colors"
+              className="mt-2 text-2xs text-accent-foreground hover:text-accent motion-safe:transition-colors"
             >
               Clear search
             </button>

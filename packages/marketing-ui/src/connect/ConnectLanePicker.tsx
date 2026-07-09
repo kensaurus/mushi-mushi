@@ -30,6 +30,11 @@ export interface ConnectLanePickerProps {
   className?: string
   /** When true, wraps picker + panel in a bordered card shell (docs default). */
   bordered?: boolean
+  /**
+   * `editorial` — docs/marketing `--mushi-vermillion` accents (default).
+   * `operator` — admin console maps selections to `@theme` brand micro-indicators.
+   */
+  surface?: 'editorial' | 'operator'
 }
 
 function joinClasses(...parts: (string | false | undefined)[]): string {
@@ -77,6 +82,7 @@ export function ConnectLanePicker({
   clientSectionLabel = 'Your AI client',
   className,
   bordered = true,
+  surface = 'editorial',
 }: ConnectLanePickerProps) {
   const lanePanelLabel =
     CONNECT_LANE_OPTIONS.find((o) => o.id === activeLane)?.label ?? 'Setup'
@@ -139,12 +145,15 @@ export function ConnectLanePicker({
     </>
   )
 
-  if (!bordered) {
-    return <div className={joinClasses('mushi-connect-root', className)}>{pickerBody}</div>
-  }
+  const rootClass = joinClasses(
+    'mushi-connect-root',
+    bordered && 'mushi-connect-card',
+    className,
+  )
+  const surfaceAttr = surface === 'operator' ? 'operator' : undefined
 
   return (
-    <div className={joinClasses('mushi-connect-root mushi-connect-card', className)}>
+    <div className={rootClass} data-connect-surface={surfaceAttr}>
       {pickerBody}
     </div>
   )

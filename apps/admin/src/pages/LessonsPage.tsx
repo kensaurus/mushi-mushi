@@ -230,8 +230,11 @@ function LessonsTab() {
                 <span className="text-xs text-fg-faint hidden sm:block">
                   <RelativeTime value={lesson.last_reinforced_at} />
                 </span>
-                <button
-                  className="text-xs text-fg-faint hover:text-fg px-2 py-1 rounded border border-transparent hover:border-edge motion-safe:transition-colors"
+                <Btn
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-fg-faint hover:text-fg !border-transparent hover:!border-edge shadow-none hover:-translate-y-0"
                   onClick={(e) => {
                     e.stopPropagation()
                     handleRetire(lesson.id, !!lesson.retired_at)
@@ -239,7 +242,7 @@ function LessonsTab() {
                   disabled={retiring === lesson.id}
                 >
                   {lesson.retired_at ? 'Restore' : 'Retire'}
-                </button>
+                </Btn>
                 <IconChevronRight className="w-4 h-4 text-fg-faint" />
               </div>
             </div>

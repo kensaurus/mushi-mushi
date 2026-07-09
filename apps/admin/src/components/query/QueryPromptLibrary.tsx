@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Card, Kbd, Tooltip } from '../ui'
+import { Btn, Card, Kbd, SegmentedControl, Tooltip } from '../ui'
 import {
   IconClock,
   IconReports,
@@ -153,36 +153,19 @@ export function QueryPromptLibrary({
       </div>
 
       <div className="overflow-x-auto -mx-1 mb-2 pb-1">
-        <div className="inline-flex items-center gap-0.5 px-1 rounded-md border border-edge-subtle bg-surface-raised/50 p-0.5 min-w-max">
-          {PROMPT_CATEGORIES.map((c) => {
-            const active = c.id === activeCat
-            return (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setActiveCat(c.id)}
-                aria-pressed={active}
-                className={`inline-flex items-center gap-1 px-2 py-1 rounded-sm text-2xs font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
-                  active
-                    ? 'bg-brand text-brand-fg'
-                    : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50'
-                }`}
-              >
-                <span className={`shrink-0 [&>svg]:h-3 [&>svg]:w-3 ${active ? '' : c.tone}`}>
-                  {c.icon}
-                </span>
-                <span>{c.label}</span>
-                <span
-                  className={`font-mono ${
-                    active ? 'text-brand-fg/70' : 'text-fg-faint'
-                  }`}
-                >
-                  {c.prompts.length}
-                </span>
-              </button>
-            )
-          })}
-        </div>
+        <SegmentedControl
+          value={activeCat}
+          onChange={setActiveCat}
+          ariaLabel="Prompt library categories"
+          size="md"
+          scrollable
+          className="min-w-max bg-surface-raised/50"
+          options={PROMPT_CATEGORIES.map((c) => ({
+            id: c.id,
+            label: c.label,
+            count: c.prompts.length,
+          }))}
+        />
       </div>
 
       <p className="text-2xs text-fg-faint mb-2 leading-relaxed">{cat.blurb}</p>
@@ -205,17 +188,18 @@ export function QueryPromptLibrary({
               </span>
             </button>
             <Tooltip content="Run now" side="left">
-              <button
-                type="button"
+              <Btn
+                size="sm"
+                variant="ghost"
+                className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 motion-safe:transition-opacity"
                 onClick={(e) => {
                   e.stopPropagation()
                   onRun(p.prompt)
                 }}
                 aria-label={`Run prompt: ${p.prompt}`}
-                className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 motion-safe:transition-opacity px-2 py-1.5 text-2xs font-medium text-brand hover:text-brand-fg hover:bg-brand/15 rounded-sm"
               >
                 Run →
-              </button>
+              </Btn>
             </Tooltip>
           </li>
         ))}

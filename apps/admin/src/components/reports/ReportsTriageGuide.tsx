@@ -76,7 +76,7 @@ export function ReportsTriageGuide({ topPriority, stats }: Props) {
       </div>
       <p className="text-2xs text-fg-faint">
         After triage, dispatch fixes from a report row or bulk-select several. Track PR progress on{' '}
-        <Link to="/fixes" className="text-brand hover:underline">
+        <Link to="/fixes" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
           Fixes
         </Link>
         .

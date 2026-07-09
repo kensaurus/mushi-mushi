@@ -328,19 +328,21 @@ export function ContentQualityPage() {
                           {new Date(item.created_at).toLocaleDateString()}
                         </td>
 
-                        {/* Chevron — real <button> so keyboard and screen-reader users can
+                        {/* Chevron — Btn so keyboard and screen-reader users can
                             activate the row without the table's row semantics being overridden
                             by role="button". focus-visible:opacity-100 makes it reappear for
                             sighted keyboard users; opacity-0 is purely cosmetic for mouse. */}
                         <td className="px-3 py-3">
-                          <button
-                            className="text-fg-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-current rounded-sm"
+                          <Btn
+                            variant="ghost"
+                            size="sm"
+                            className="border-0 bg-transparent shadow-none hover:bg-transparent px-1 py-0 min-h-0 text-fg-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity focus-visible:ring-1 focus-visible:ring-current"
                             tabIndex={0}
                             aria-label={`Open ${label}`}
                             onClick={e => { e.stopPropagation(); navigate(`/content/${item.id}`) }}
                           >
                             →
-                          </button>
+                          </Btn>
                         </td>
                       </tr>
                     )

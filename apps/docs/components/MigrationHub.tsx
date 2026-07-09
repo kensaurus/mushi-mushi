@@ -1,28 +1,6 @@
 'use client'
 
-/**
- * FILE: apps/docs/components/MigrationHub.tsx
- * PURPOSE: Filterable, searchable grid that drives the /migrations index page.
- *
- *   <MigrationHub guides={CATALOG} />
- *
- * UX
- *   - Category chips group guides into Mobile / Web / Switch to Mushi /
- *     SDK upgrade. The "All" chip resets to the full list.
- *   - Free-text search matches title, summary, and the optional fromLabel
- *     (so typing "instabug" or "luciq" both find the same guide).
- *   - Effort + risk badges render on every card so users can pick by
- *     "what fits in my afternoon" without opening anything.
- *   - Empty-state guides users to file an issue requesting a new guide.
- *
- * NOT in scope:
- *   - Sorting controls. The catalog order is editorially curated; sorting
- *     here would let users re-order it but also lets them hide what we
- *     consider the most-relevant guide. Skip until users ask.
- *   - Personalisation ("guides for your stack"). That's the CLI's job
- *     (`mushi migrate`) — keeping the docs hub framework-agnostic so it
- *     stays useful pre-install.
- */
+/** Filterable, searchable grid that drives the /migrations index page. */
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -32,7 +10,7 @@ import {
   type GuideMeta,
   type MigrationCategory,
 } from '../content/migrations/_catalog'
-import { EffortBadge, RiskBadge } from './MigrationBadges'
+import { EffortBadge } from './MigrationBadges'
 
 interface Props {
   guides: readonly GuideMeta[]
@@ -171,11 +149,12 @@ export function MigrationHub({ guides }: Props) {
                   {g.summary}
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                  <span className="rounded-full bg-[var(--mushi-paper-wash)] px-2 py-0.5 font-mono text-[11px] font-medium uppercase tracking-wide text-[var(--mushi-ink-muted)]">
-                    {CATEGORY_LABELS[g.category]}
-                  </span>
+                  {filter === 'all' ? (
+                    <span className="rounded-full bg-[var(--mushi-paper-wash)] px-2 py-0.5 font-mono text-[11px] font-medium uppercase tracking-wide text-[var(--mushi-ink-muted)]">
+                      {CATEGORY_LABELS[g.category]}
+                    </span>
+                  ) : null}
                   <EffortBadge level={g.effort} />
-                  <RiskBadge level={g.risk} />
                   <span className="ml-auto text-xs text-[var(--mushi-ink-faint)] [@media(hover:hover)]:group-hover:text-[var(--mushi-ink-muted)]">
                     Read →
                   </span>

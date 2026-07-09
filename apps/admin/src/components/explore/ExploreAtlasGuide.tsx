@@ -56,11 +56,11 @@ export function ExploreAtlasGuide({ topPriority, stats }: Props) {
       </div>
       <p className="text-2xs text-fg-faint">
         Index not working? Open the{' '}
-        <Link to="/explore?tab=index" className="text-brand hover:underline">
+        <Link to="/explore?tab=index" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
           Index
         </Link>{' '}
         tab or connect your repo on{' '}
-        <Link to="/connect" className="text-brand hover:underline">
+        <Link to="/connect" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
           Connect
         </Link>
         .

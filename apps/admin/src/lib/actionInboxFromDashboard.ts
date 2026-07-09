@@ -37,9 +37,9 @@ function resolveJudgeAction(ctx: InboxCardBuildContext): PageAction | null {
   if (ctx?.judgeStale && staleHoursAgo == null) {
     return {
       tone: 'plan',
-      title: 'No judge scores yet — run an evaluation',
-      reason: 'The judge audits classifier quality — run after prompt changes.',
-      primary: { kind: 'link', to: '/judge?action=run', label: 'Run judge batch' },
+      title: 'No quality scores yet — run a first check',
+      reason: 'Mushi grades its own bug triage so you can trust the severity labels. One click starts the first check.',
+      primary: { kind: 'link', to: '/judge?action=run', label: 'Run quality check' },
     }
   }
   return null

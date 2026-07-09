@@ -934,7 +934,7 @@ function HealthPageContent() {
                       <span className="text-fg-muted ml-auto">{r.latency_ms ?? '?'}ms</span>
                       <span className="text-fg-faint w-24 text-right">{(r.input_tokens ?? 0) + (r.output_tokens ?? 0)} tok</span>
                       {r.report_id && (
-                        <Link to={`/reports/${r.report_id}`} className="text-brand hover:underline shrink-0" title="Open report">
+                        <Link to={`/reports/${r.report_id}`} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors shrink-0" title="Open report">
                           report
                         </Link>
                       )}
@@ -943,7 +943,7 @@ function HealthPageContent() {
                           href={traceUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-brand hover:underline shrink-0"
+                          className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors shrink-0"
                           title="Open Langfuse trace"
                         >
                           trace ↗

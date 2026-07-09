@@ -545,15 +545,17 @@ export function StoragePage() {
 
             {existing && debugSteps && debugSteps.length > 0 && (
               <div className="mt-3">
-                <button
+                <Btn
                   type="button"
-                  className="text-2xs text-fg-muted hover:text-fg flex items-center gap-1 focus-visible:outline-none"
+                  variant="ghost"
+                  size="sm"
+                  className="text-2xs text-fg-muted hover:text-fg flex items-center gap-1 !px-0 !py-0 !border-0 !bg-transparent hover:!bg-transparent shadow-none hover:-translate-y-0"
                   onClick={() => setDebugOpen((prev) => ({ ...prev, [s.project_id]: !prev[s.project_id] }))}
                 >
                   <span className={`inline-block transition-transform duration-150 ${isDebugOpen ? 'rotate-90' : ''}`}>▶</span>
                   <span>{isDebugOpen ? 'Hide' : 'Show'} debug log</span>
                   <span className="opacity-50">({debugSteps.length} steps)</span>
-                </button>
+                </Btn>
                 {isDebugOpen && (
                   <div className="mt-1 overflow-x-auto rounded border border-edge-subtle bg-surface-overlay">
                     <table className="w-full text-2xs font-mono">

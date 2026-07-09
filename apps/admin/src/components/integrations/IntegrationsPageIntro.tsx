@@ -60,7 +60,7 @@ export function IntegrationsPageIntro({ topPriority, flags }: Props) {
       </div>
       <p className="text-2xs text-fg-faint">
         Each card below has setup steps and a Test button. See also{' '}
-        <Link to="/health?fn=integration-probe" className="text-brand hover:underline">
+        <Link to="/health?fn=integration-probe" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
           Health probes
         </Link>{' '}
         if a connection keeps failing.

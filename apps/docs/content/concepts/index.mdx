@@ -17,20 +17,21 @@ The loop in plain terms:
 5. **Verify** — automated replay checks the fix before you ship.
 6. **Remember** — past fixes become rules your editor sees on the next PR.
 
-Every step is observable, auditable, and improves over time — details below when you need the wiring diagram.
+## Primary paths
 
-import { Cards } from 'nextra/components'
+- [Architecture](/concepts/architecture) — components and data flow
+- [How classification works](/concepts/classification) — Stage 1 / Stage 2
+- [How fixes get drafted](/concepts/fix-orchestrator) — sandbox → draft PR
 
-<Cards>
-  <Cards.Card title="Architecture" href="/concepts/architecture" arrow />
-  <Cards.Card title="How classification works" href="/concepts/classification" arrow />
-  <Cards.Card title="Knowledge graph" href="/concepts/knowledge-graph" arrow />
-  <Cards.Card title="How fixes get drafted" href="/concepts/fix-orchestrator" arrow />
-  <Cards.Card title="Inventory & gates" href="/concepts/inventory-and-gates" arrow />
-  <Cards.Card title="Orchestrator hooks" href="/concepts/orchestrator-interop" arrow />
-  <Cards.Card title="Quality scoring" href="/concepts/judge-loop" arrow />
-  <Cards.Card title="Anti-gaming & reputation" href="/concepts/anti-gaming" arrow />
-  <Cards.Card title="Trigger modes" href="/concepts/trigger-modes" arrow />
-  <Cards.Card title="Rewards" href="/concepts/rewards" arrow />
-  <Cards.Card title="Closed-loop evolution" href="/concepts/closed-loop" arrow />
-</Cards>
+## Everything else
+
+[Knowledge graph](/concepts/knowledge-graph) ·
+[Inventory & gates](/concepts/inventory-and-gates) ·
+[Orchestrator hooks](/concepts/orchestrator-interop) ·
+[Quality scoring](/concepts/judge-loop) ·
+[Anti-gaming & reputation](/concepts/anti-gaming) ·
+[Trigger modes](/concepts/trigger-modes) ·
+[Rewards](/concepts/rewards) ·
+[Closed-loop evolution](/concepts/closed-loop) ·
+[Credentials](/concepts/credentials) ·
+[Runtime config](/concepts/runtime-config)

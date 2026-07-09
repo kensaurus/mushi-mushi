@@ -116,7 +116,7 @@ export function ModernizationFindings({
         ))}
       </ul>
       <div className="border-t border-edge-subtle bg-surface-raised/30 px-3 py-2 text-2xs text-fg-faint">
-        Dispatched fixes track on <Link to="/fixes" className="text-brand hover:underline">Fixes</Link>.
+        Dispatched fixes track on <Link to="/fixes" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">Fixes</Link>.
       </div>
     </Card>
   )

@@ -5,7 +5,7 @@
  */
 import { useMemo, useState } from 'react'
 
-import { Btn, Tooltip } from '../ui'
+import { Btn, SegmentedControl, Tooltip } from '../ui'
 import type { OperatorTraceLine, OperatorTraceLevel } from './operatorTrace'
 import { summarizeOperatorTrace, traceToClipboardText } from './operatorTrace'
 import { CHIP_TONE } from '../../lib/chipTone'
@@ -150,28 +150,17 @@ export function OperatorTraceLog({ lines, variant = 'full' }: OperatorTraceLogPr
         </Btn>
       </div>
       {variant === 'full' && (
-        <div className="flex flex-wrap gap-1" role="tablist" aria-label="Filter trace lines">
-          {filters.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              role="tab"
-              aria-selected={filter === f.id}
-              onClick={() => setFilter(f.id)}
-              className={[
-                'rounded-sm px-2 py-0.5 text-3xs font-medium motion-safe:transition-colors',
-                filter === f.id
-                  ? 'bg-brand/20 text-brand'
-                  : 'text-fg-muted hover:bg-surface-overlay hover:text-fg',
-              ].join(' ')}
-            >
-              {f.label}
-              {f.count != null && f.count > 0 && (
-                <span className="ml-1 font-mono tabular-nums opacity-70">{f.count}</span>
-              )}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          value={filter}
+          onChange={setFilter}
+          options={filters.map((f) => ({
+            id: f.id,
+            label: f.label,
+            count: f.count != null && f.count > 0 ? f.count : undefined,
+          }))}
+          ariaLabel="Filter trace lines"
+          size="sm"
+        />
       )}
       <div
         className={`overflow-y-auto rounded-md border border-edge-subtle/80 bg-viz-terminal-bg/90 px-2.5 py-2 font-mono text-3xs leading-relaxed ${maxH}`}

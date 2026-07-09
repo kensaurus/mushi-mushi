@@ -61,7 +61,7 @@ export function ProjectsCreatePanel({
             <ContainedBlock tone="warn" className="mb-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-[var(--color-warning-foreground)]">
+                  <p className="text-xs font-semibold text-warning-foreground">
                     {activeOrgRole === 'member' || activeOrgRole === 'viewer'
                       ? 'Owner or admin access required'
                       : 'No team found'}

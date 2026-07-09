@@ -21,7 +21,7 @@ import {
 } from '@mushi-mushi/marketing-ui'
 import { ClientConnectButton } from '../ClientConnectButton'
 import { CopyButton, Panel } from '../ui'
-import { LINK_BRAND } from '../../lib/chipTone'
+import { LINK_ACCENT } from '../../lib/chipTone'
 import { IconTerminal } from '../icons'
 import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../../lib/env'
 import { CONNECT_SKILLS } from '../../lib/public-copy-shared'
@@ -104,7 +104,7 @@ function SkillsLane({ client }: { client: McpClientDef }) {
           href={CONNECT_SKILLS.learnMoreHref}
           target="_blank"
           rel="noopener noreferrer"
-          className={`inline-block text-xs ${LINK_BRAND}`}
+          className={`inline-block text-xs ${LINK_ACCENT}`}
         >
           {CONNECT_SKILLS.learnMoreLabel}
         </a>
@@ -181,6 +181,7 @@ export function ConnectStudio({ projectId, projectName }: ConnectStudioProps) {
         <div className="p-4 sm:p-5">
           <ConnectLanePicker
             bordered={false}
+            surface="operator"
             clients={clients}
             selectedId={selectedId}
             onSelectClient={selectClient}
@@ -196,7 +197,7 @@ export function ConnectStudio({ projectId, projectName }: ConnectStudioProps) {
         <IconTerminal size={12} aria-hidden />
         <span>
           Want the full manual setup?{' '}
-          <Link to="/mcp" className={LINK_BRAND}>
+          <Link to="/mcp" className={LINK_ACCENT}>
             Open MCP console →
           </Link>
         </span>

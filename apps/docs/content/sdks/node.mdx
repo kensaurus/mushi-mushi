@@ -14,68 +14,88 @@ every report with the route, request id, and user (when supplied).
 pnpm add @mushi-mushi/node
 ```
 
-## Bootstrap
-
-```ts filename="server/instrumentation.ts"
-import { initMushi } from '@mushi-mushi/node'
-
-initMushi({
-  projectId: process.env.MUSHI_PROJECT_ID!,
-  apiKey:    process.env.MUSHI_API_KEY!,
-  // Optional — pin the region. Defaults to auto-routing.
-  region: 'us',
-  // Optional — capture every uncaughtException + unhandledRejection.
-  captureGlobals: true,
-})
-```
-
-Import this file once at the top of your server entry point, before any
-other module that might throw at import time.
-
 ## Express
 
 ```ts
 import express from 'express'
-import { mushiErrorHandler } from '@mushi-mushi/node/express'
+import { mushiExpressErrorHandler } from '@mushi-mushi/node/express'
 
 const app = express()
 // …all your routes…
-app.use(mushiErrorHandler())   // mount LAST so it sees every other route
+app.use(
+  mushiExpressErrorHandler({
+    apiKey: process.env.MUSHI_API_KEY!,
+    projectId: process.env.MUSHI_PROJECT_ID!,
+    environment: process.env.NODE_ENV,
+    release: process.env.GIT_SHA,
+  }),
+) // mount LAST so it sees every other route
 ```
 
 ## Fastify
 
 ```ts
 import Fastify from 'fastify'
-import { mushiPlugin } from '@mushi-mushi/node/fastify'
+import { mushiFastifyPlugin } from '@mushi-mushi/node/fastify'
 
 const app = Fastify()
-await app.register(mushiPlugin)
+mushiFastifyPlugin(app, {
+  apiKey: process.env.MUSHI_API_KEY!,
+  projectId: process.env.MUSHI_PROJECT_ID!,
+})
 ```
 
 ## Hono
 
 ```ts
 import { Hono } from 'hono'
-import { mushiHonoMiddleware } from '@mushi-mushi/node/hono'
+import { mushiHonoErrorHandler } from '@mushi-mushi/node/hono'
 
 const app = new Hono()
-app.onError(mushiHonoMiddleware())
+app.onError(
+  mushiHonoErrorHandler({
+    apiKey: process.env.MUSHI_API_KEY!,
+    projectId: process.env.MUSHI_PROJECT_ID!,
+  }),
+)
+```
+
+## Process-level fallbacks
+
+Attach `uncaughtException` + `unhandledRejection` hooks so nothing escapes:
+
+```ts
+import { attachUnhandledHook } from '@mushi-mushi/node'
+
+attachUnhandledHook({
+  apiKey: process.env.MUSHI_API_KEY!,
+  projectId: process.env.MUSHI_PROJECT_ID!,
+})
 ```
 
 ## Programmatic submit
 
-```ts
-import { submitReport } from '@mushi-mushi/node'
+Use the client directly when you want to report outside the request cycle
+(cron jobs, queue workers, integration failures):
 
-await submitReport({
+```ts
+import { MushiNodeClient } from '@mushi-mushi/node'
+
+const mushi = new MushiNodeClient({
+  apiKey: process.env.MUSHI_API_KEY!,
+  projectId: process.env.MUSHI_PROJECT_ID!,
+  environment: 'production',
+  release: process.env.GIT_SHA,
+})
+
+await mushi.captureReport({
   description: 'Refund webhook returned 500',
   severity: 'high',
-  category: 'bug',
+  component: 'billing',
   metadata: { invoiceId, attempt },
 })
 ```
 
 The Node SDK speaks the same wire protocol as the web SDK and shares
 classification quotas — server-thrown bugs and user-side bugs land in
-the same reports inbox.
+the same queue.

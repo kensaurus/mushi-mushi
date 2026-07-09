@@ -125,7 +125,7 @@ export function FixesSnapshotStrip({
       </MetricStrip>
       {!hideLinks ? (
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-2xs text-fg-muted">
-          <Link to="/reports" className="text-brand hover:underline">
+          <Link to="/reports" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
             Source reports →
           </Link>
           <Link to="/judge" className="hover:text-fg underline-offset-2 hover:underline">

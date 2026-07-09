@@ -144,7 +144,7 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
           <div className="flex flex-wrap gap-2 pt-1">
             <Link
               to="/settings?panel=byok"
-              className="text-2xs text-brand underline hover:no-underline"
+              className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors hover:no-underline"
               onClick={() => setPopoverOpen(false)}
             >
               {isByok ? 'View BYOK settings →' : 'Configure BYOK →'}

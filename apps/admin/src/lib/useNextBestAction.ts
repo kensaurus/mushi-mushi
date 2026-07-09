@@ -113,9 +113,9 @@ export function computeNextBestAction(input: Input): PageAction | null {
       if (input.staleHoursAgo != null && input.staleHoursAgo > 48) {
         return {
           tone: 'plan',
-          title: 'Trigger a fresh judge batch',
-          reason: `Last evaluation ran ${Math.round(input.staleHoursAgo)}h ago — scores are going stale.`,
-          primary: { kind: 'link', to: '/judge?action=run', label: 'Run judge batch' },
+          title: 'Re-check the quality of recent auto-fixes',
+          reason: `The last quality check ran ${Math.round(input.staleHoursAgo)}h ago — run a fresh one so the scores you see reflect current fixes.`,
+          primary: { kind: 'link', to: '/judge?action=run', label: 'Run quality check' },
         }
       }
       if (input.disagreementRate != null && input.disagreementRate > 0.25) {

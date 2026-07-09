@@ -68,7 +68,7 @@ export function GraphTableView({ nodes, edges, selectedNodeId, blastRadiusIds, o
                         type="button"
                         onClick={() => onSelect(n)}
                         aria-pressed={isSelected}
-                        className="text-2xs text-brand hover:text-brand-hover px-1"
+                        className="text-2xs text-accent-foreground hover:text-accent px-1"
                       >
                         Select
                       </button>

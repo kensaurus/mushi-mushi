@@ -63,6 +63,7 @@ import { shouldHideGuideWhenBannerActive } from '../lib/pagePostureHelpers'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { DangerConfirm } from '../components/DangerConfirm'
 import { BulkSdkUpgradePanel } from '../components/projects/BulkSdkUpgradePanel'
+import { ProjectNextStepsPanel } from '../components/projects/ProjectNextStepsPanel'
 import { CHIP_TONE } from '../lib/chipTone'
 import { IconProjects } from '../components/icons'
 
@@ -682,6 +683,7 @@ export function ProjectsPage() {
               cta={{ label: 'Open Reports', to: '/reports' }}
             />
           )}
+          <ProjectNextStepsPanel projects={projects} />
           <BulkSdkUpgradePanel
             projects={projects.map((p) => ({
               id: p.id,

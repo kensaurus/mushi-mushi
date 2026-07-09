@@ -329,13 +329,16 @@ function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
               <p className="text-2xs font-mono text-fg-muted">{skill.slug}</p>
               <p className="text-2xs text-fg-muted mt-0.5">{skill.rationale}</p>
             </div>
-            <button
+            <Btn
+              type="button"
+              variant="primary"
+              size="sm"
               onClick={() => startPipeline(skill.slug)}
-              disabled={startingSlug === skill.slug}
-              className="btn btn-xs btn-primary flex-shrink-0"
+              loading={startingSlug === skill.slug}
+              className="flex-shrink-0"
             >
               {startingSlug === skill.slug ? 'Starting…' : 'Run pipeline →'}
-            </button>
+            </Btn>
           </div>
         ))}
 

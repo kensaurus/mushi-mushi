@@ -83,7 +83,9 @@ pass/fail results on a dashboard tile and dedicated page.
   - Browserbase REST delegation for `browserbase`
   - `status='skipped'` for `local` (operator CLI handles these)
   - Writes `qa_story_runs` + `qa_story_evidence`
-  - A2A push notification on failure
+  - ~~A2A push notification on failure~~ — **superseded**: QA failure notification
+    routes through Slack Block Kit + `dispatchPluginEvent` (see `AGENTS.md`).
+    The earlier A2A insert path was schema-mismatched and removed.
 
 #### 3d — AI-Assisted Authoring
 - [x] `test-gen-from-report` extended to write a `qa_stories` row after PR creation
@@ -271,7 +273,12 @@ multi-region operator deliverables that Plan 011 marked complete prematurely.
 
 ---
 
-## Plan 015 — Code Health Console: Bundle Trends + Refactor Findings (2026-06-12) `COMPLETE`
+## Plan 015 — Code Health Console: Bundle Trends + Refactor Findings (2026-06-12) `COMPLETE` (verify checklist open)
+
+> **Status note (Jul 2026):** Implementation checklist items above are marked
+> done in-repo. The **Verification checklist** below remains open until remote
+> migration / RLS / yen-yen CI push evidence is confirmed — do not treat those
+> unchecked boxes as complete.
 
 ### Goal
 Surface a host app's **bundle-size trends** and **god-file / refactor

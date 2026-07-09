@@ -38,7 +38,7 @@ export function ChartsRow({ reportsByDay, llmByDay, chartEvents = [] }: Props) {
         <PanelHeader
           title="Report intake (14d)"
           action={
-            <Link to="/reports" className="shrink-0 text-2xs text-brand hover:text-brand-hover">
+            <Link to="/reports" className="shrink-0 text-2xs text-accent-foreground hover:text-accent">
               All reports →
             </Link>
           }
@@ -50,7 +50,7 @@ export function ChartsRow({ reportsByDay, llmByDay, chartEvents = [] }: Props) {
         <PanelHeader
           title="LLM activity (14d)"
           action={
-            <Link to="/health" className="shrink-0 text-2xs text-brand hover:text-brand-hover">
+            <Link to="/health" className="shrink-0 text-2xs text-accent-foreground hover:text-accent">
               Health →
             </Link>
           }

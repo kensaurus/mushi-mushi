@@ -121,7 +121,7 @@ export function AcceptInvitePage() {
               {previewError ?? 'This invite link is invalid. Ask the person who sent it to resend.'}
             </p>
           </ContainedBlock>
-          <Link to="/dashboard" className="mt-4 inline-flex text-sm text-brand hover:text-brand-hover">
+          <Link to="/dashboard" className="mt-4 inline-flex text-sm text-accent-foreground hover:text-accent">
             Back to dashboard
           </Link>
         </Card>
@@ -146,7 +146,7 @@ export function AcceptInvitePage() {
               {' to send a fresh one.'}
             </p>
           </ContainedBlock>
-          <Link to="/dashboard" className="mt-4 inline-flex text-sm text-brand hover:text-brand-hover">
+          <Link to="/dashboard" className="mt-4 inline-flex text-sm text-accent-foreground hover:text-accent">
             Back to dashboard
           </Link>
         </Card>
@@ -164,7 +164,7 @@ export function AcceptInvitePage() {
               This invitation was already accepted. Open the workspace to pick up where you left off.
             </p>
           </ContainedBlock>
-          <Link to="/dashboard" className="mt-4 inline-flex text-sm text-brand hover:text-brand-hover">
+          <Link to="/dashboard" className="mt-4 inline-flex text-sm text-accent-foreground hover:text-accent">
             Open dashboard
           </Link>
         </Card>
@@ -294,7 +294,7 @@ export function AcceptInvitePage() {
             )}
             <InlineProof className="mt-3">
               Signed in as <span className="font-medium">{session.user.email}</span>.{' '}
-              <Link to="/dashboard" className="text-brand hover:text-brand-hover">
+              <Link to="/dashboard" className="text-accent-foreground hover:text-accent">
                 Decide later
               </Link>
             </InlineProof>
