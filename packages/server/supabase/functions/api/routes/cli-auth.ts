@@ -759,7 +759,54 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
     // mcp:read + mcp:write. mcp:write powers owner-only admin commands (billing
     // cap / alert-email, pipeline start, fixes merge). Owner/admin-gated above,
     // so the key never exceeds the caller's existing privileges.
+    //
+    // The caller may request a NARROWER key via the body — e.g. the CLI mints
+    // a dedicated `mcp:read`-only, per-editor-labelled key for stdio mcp.json
+    // entries so the key on disk can't dispatch or merge. Requested scopes
+    // must be a subset of LOGIN_SCOPES; anything else is a 400, never a
+    // silent widen.
     const LOGIN_SCOPES = ['report:write', 'mcp:read', 'mcp:write'] as const
+    const body = (await c.req.json().catch(() => ({}))) as {
+      scopes?: unknown
+      label?: unknown
+    }
+    let scopes: readonly string[] = LOGIN_SCOPES
+    if (body.scopes !== undefined) {
+      if (
+        !Array.isArray(body.scopes) ||
+        body.scopes.length === 0 ||
+        !body.scopes.every((s) => typeof s === 'string' && (LOGIN_SCOPES as readonly string[]).includes(s))
+      ) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'INVALID_SCOPES',
+              message: `scopes must be a non-empty subset of: ${LOGIN_SCOPES.join(', ')}`,
+            },
+          },
+          400,
+        )
+      }
+      scopes = [...new Set(body.scopes as string[])]
+    }
+    const LABEL_RE = /^[a-z0-9][a-z0-9-]{0,39}$/
+    let label = 'cli-login'
+    if (body.label !== undefined) {
+      if (typeof body.label !== 'string' || !LABEL_RE.test(body.label)) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'INVALID_LABEL',
+              message: 'label must be 1-40 chars of lowercase alphanumerics and hyphens',
+            },
+          },
+          400,
+        )
+      }
+      label = body.label
+    }
     const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`
     const prefix = rawKey.slice(0, 12)
     const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawKey))
@@ -773,8 +820,8 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       project_id: projectId,
       key_hash: keyHash,
       key_prefix: prefix,
-      label: 'cli-login',
-      scopes: LOGIN_SCOPES,
+      label,
+      scopes,
       is_active: true,
     })
     if (keyErr) {
@@ -788,7 +835,7 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       'api_key.created',
       'project_api_key',
       keyId,
-      { source: 'cli_login_automint', scopes: LOGIN_SCOPES, key_prefix: prefix },
+      { source: 'cli_login_automint', scopes, key_prefix: prefix, label },
       { actorType: 'cli' },
     )
 
@@ -798,7 +845,7 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       eventName: 'cli_key_minted',
       dedupKey: keyId,
       source: 'cli',
-      metadata: { key_prefix: prefix, scopes: LOGIN_SCOPES },
+      metadata: { key_prefix: prefix, scopes },
     })
 
     return c.json({ ok: true, data: { key: rawKey, prefix, scopes: LOGIN_SCOPES } }, 201)

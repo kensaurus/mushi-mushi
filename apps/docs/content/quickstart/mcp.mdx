@@ -49,7 +49,26 @@ npx mushi-mushi setup --ide cursor
 # or: npx mushi-mushi setup --ide claude
 ```
 
-This reads CLI config at **`~/.config/mushi/config.json`** (written by `mushi login`; legacy `~/.mushirc` auto-migrates on first load), detects the IDE config path, and writes the `mcpServers` block for you. Restart the IDE and ask the agent: **"list mushi tools"**.
+For Cursor and Claude Code this writes the **hosted MCP URL with OAuth login**
+by default — no API key lands in your repo, the entry is safe to commit and
+share with your team, and each teammate signs in from the IDE on first use.
+Pass `--stdio` (or `--ci` in headless environments) for the previous local
+subprocess entry with a key.
+
+It reads CLI config at **`~/.config/mushi/config.json`** (written by `mushi login`; legacy `~/.mushirc` auto-migrates on first load), detects the IDE config path, and writes the `mcpServers` block for you. Restart the IDE and ask the agent: **"list mushi tools"**.
+
+## Claude Code plugin
+
+One command installs the hosted MCP hookup plus a `mushi-debugger` subagent
+(report triage → fix context → implement → close the loop):
+
+```
+/plugin marketplace add kensaurus/mushi-mushi
+/plugin install mushi-debugger@mushi-mushi
+```
+
+Then: `/mcp` → pick `mushi` → sign in via the browser. Ask Claude to
+"use mushi-debugger to fix the top report".
 
 ## Smithery (hosted MCP)
 
@@ -73,7 +92,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@latest"],
+      "args": ["-y", "@mushi-mushi/mcp@0.19.0"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -99,7 +118,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@latest"],
+      "args": ["-y", "@mushi-mushi/mcp@0.19.0"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
