@@ -122,6 +122,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Vue 2 → Vue 3](https://kensaur.us/mushi-mushi/docs/migrations/vue-2-to-vue-3)
 - [Operating (maintainers)](https://kensaur.us/mushi-mushi/docs/operating)
 - [Deployment & releases](https://kensaur.us/mushi-mushi/docs/operating/deployment)
+- [Status & Uptime](https://kensaur.us/mushi-mushi/docs/operating/status)
 - [Plugin marketplace](https://kensaur.us/mushi-mushi/docs/plugins)
 - [Bugsnag](https://kensaur.us/mushi-mushi/docs/plugins/bugsnag)
 - [Building a plugin](https://kensaur.us/mushi-mushi/docs/plugins/building)

@@ -3,6 +3,7 @@ import { requireConfig } from '../cli-shared.js';
 import { loadConfig } from '../config.js';
 import { runLogin } from '../login.js';
 import { buildMcpServerBlock, buildMcpServerName, writeMcpServerEntry } from '../mcp-config.js';
+import { MUSHI_MCP_PIN_SPEC } from '../version.js';
 
 // Exported for unit testing — resolving the login endpoint has three sources
 // of truth and a wrong precedence here silently redirects a self-hosted
@@ -150,7 +151,7 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
 
     const mcpServerBlock = {
       command: 'npx',
-      args: ['-y', '@mushi-mushi/mcp@latest'],
+      args: ['-y', MUSHI_MCP_PIN_SPEC],
       env: {
         MUSHI_API_ENDPOINT: config.endpoint,
         MUSHI_PROJECT_ID: config.projectId ?? '',
@@ -204,7 +205,7 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
       servers[serverName] = {
         command: {
           path: 'npx',
-          args: ['-y', '@mushi-mushi/mcp@latest'],
+          args: ['-y', MUSHI_MCP_PIN_SPEC],
           env: {
             MUSHI_API_ENDPOINT: config.endpoint,
             MUSHI_PROJECT_ID: config.projectId ?? '',
@@ -293,7 +294,8 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
           if (probeRes.ok) {
             console.log('✓ MCP key valid — restart Cursor (or your IDE) to activate')
             // Fire-and-forget: signal mcp_setup_done to the backend for funnel tracking.
-            void fetch(
+            // Opt out with MUSHI_NO_TELEMETRY=1.
+            if (!process.env.MUSHI_NO_TELEMETRY) void fetch(
               `${config.endpoint.replace(/\/$/, '')}/v1/cli/funnel`,
               {
                 method: 'POST',

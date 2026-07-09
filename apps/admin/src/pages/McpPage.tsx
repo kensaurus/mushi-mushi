@@ -59,7 +59,7 @@ import {
   buildStdioConfig,
   projectServerName,
 } from '../lib/cursorDeeplink'
-import { MCP_CLIENTS } from '@mushi-mushi/mcp/clients'
+import { MCP_CLIENTS, MCP_PIN_SPEC } from '@mushi-mushi/mcp/clients'
 import { ClientConnectButton } from '../components/ClientConnectButton'
 import { McpAccountKeyCard } from '../components/McpAccountKeyCard'
 import { CHIP_TONE } from '../lib/chipTone'
@@ -335,7 +335,7 @@ function validateMcpJsonSyntax(raw: string): McpJsonCheck {
       details.push(`${name}: no MUSHI_PROJECT_ID means account mode; use an org-scoped key or pass project_id in tool calls.`)
     }
     if (Array.isArray(server.args) && server.args.includes('@mushi-mushi/mcp@latest')) {
-      details.push(`${name}: uses npm @latest. If Cursor still shows a transport error before the next publish, use Hosted HTTP or restart Cursor after upgrading.`)
+      details.push(`${name}: uses npm @latest — re-pin it (run "npx mushi-mushi setup" or replace with ${MCP_PIN_SPEC}) to avoid supply-chain and cold-start surprises.`)
     }
   }
 
@@ -1087,7 +1087,7 @@ export function McpPage() {
                         onClick={() => {
                           const result = detectFromPackageJson(detectText)
                           const globalNote = result.monorepo
-                            ? `Detected ${result.monorepo} monorepo.\n\n@mushi-mushi/mcp is a global CLI — install once:\n\n  npm install -g @mushi-mushi/mcp\n\nOr run on demand:\n\n  npx -y @mushi-mushi/mcp@latest`
+                            ? `Detected ${result.monorepo} monorepo.\n\n@mushi-mushi/mcp is a global CLI — install once:\n\n  npm install -g @mushi-mushi/mcp\n\nOr run on demand:\n\n  npx -y ${MCP_PIN_SPEC}`
                             : null
                           setMonorepoNote(globalNote)
                           setMonoWarnings(result.warnings)

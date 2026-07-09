@@ -111,7 +111,7 @@ What we treat as in-scope attacker capabilities, and what we don't.
 | User pasting a Stripe / OpenAI / GitHub PAT into a bug report | ✅ | PII scrubber redacts ~15 vendor token formats client-side before the report leaves the device. Mirrors `packages/core/src/pii-scrubber.ts` across iOS, Android, Flutter, React Native. |
 | Stolen end-user device with the SDK installed | ⚠️ partial | Offline queue is AsyncStorage / Keychain / SharedPreferences — no app-level encryption beyond the OS default. Reports waiting to flush are vulnerable to a forensic attacker. |
 | Compromised Supabase service-role key | ❌ | Treated as a tier-0 incident; would require key rotation and audit-log forensics. Not defendable in software. |
-| Compromise of `kensaurus@gmail.com` | ❌ | Treated as a project-fork event; downstream consumers should pin to the last known-good version and follow the new release channel. |
+| Compromise of `kensaurus@gmail.com` mail account | ❌ | Treated as a project-fork event; downstream consumers should pin to the last known-good version and follow the new release channel. |
 | Physical / OS-level attacker on an end-user device | ❌ | Out of scope. |
 | Malicious fork using the Mushi name to ship malware | ❌ (technical) ✅ (legal) | The MIT / AGPLv3 grant lets the fork exist; the trademark policy (`TRADEMARK.md`) makes shipping it under the Mushi name an infringement we will pursue. |
 
@@ -156,6 +156,29 @@ Structured fields you set explicitly (`metadata.userEmail`,
 `metadata.userId`, etc.) are intentionally **not** scrubbed — those are
 opt-in attribution data, and silently rewriting them would break
 support workflows.
+
+### CLI funnel telemetry
+
+The Mushi CLI sends two fire-and-forget signals to `/v1/cli/funnel` on your
+project's endpoint to help us detect where the onboarding wizard drops off:
+
+| Signal | When | What is sent |
+|--------|------|-------------|
+| `wizard_env_written` | After `npx mushi-mushi` writes `.env.local` | `event`, `source: "cli"` |
+| `mcp_setup_done` | After `mushi setup --ide` verifies the MCP key | `event`, `source: "cli"` |
+
+No file contents, stack traces, or identifiers beyond your project ID and API
+key are sent. The key is already on the endpoint — this adds no new disclosure.
+
+**Opt out** by setting `MUSHI_NO_TELEMETRY=1` in your shell or CI environment:
+
+```bash
+MUSHI_NO_TELEMETRY=1 npx mushi-mushi
+MUSHI_NO_TELEMETRY=1 mushi setup --ide cursor
+```
+
+These signals never block or delay the wizard — they time out silently after
+4 seconds and errors are discarded.
 
 ### Where data lives
 

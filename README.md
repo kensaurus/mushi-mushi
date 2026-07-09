@@ -56,7 +56,7 @@ npx mushi-mushi
 npx mushi-mushi
 ```
 
-The wizard auto-detects your framework, installs the right SDK, writes `MUSHI_PROJECT_ID` + `MUSHI_API_KEY` to `.env.local`, and prints the snippet to paste. Then, the moment something breaks:
+The wizard auto-detects your framework, installs the right SDK, writes `MUSHI_PROJECT_ID` + `MUSHI_API_KEY` to `.env.local`, and prints the snippet to paste. Those two vars are **all the SDK needs** — no Supabase, no LLM key (see [`examples/sdk.env.example`](./examples/sdk.env.example); the root `.env.example` is for self-hosting the backend only). Then, the moment something breaks:
 
 1. The bug lands in your queue — screenshot, the user's note, the route, the last console + network events, device context.
 2. Mushi produces **the diagnosis**: a plain-English root cause + a ready-to-apply fix.
@@ -276,7 +276,7 @@ Install Mushi skills in your Cursor or Claude Code project for one-command setup
 npx skills add kensaurus/mushi-mushi
 ```
 
-Then: `/mushi-setup` (guided SDK install + MCP wiring), `/mushi-debug` (diagnose ingest / MCP / pipeline failures), `/mushi-health` (pass/fail check across CLI, API, edge functions, BYOK keys). The admin **Connect & Update** page (`/connect`) mirrors the same flows with one-click **Add to Cursor** deeplinks.
+Then: `/mushi-setup` (guided SDK install + MCP wiring), `/mushi-debug` (diagnose ingest / MCP / pipeline failures), `/mushi-health` (pass/fail check across CLI, API, edge functions, BYOK keys), `/mushi-integration` (two-way loop, fix dispatch, lessons). The admin **Connect & Update** page (`/connect`) mirrors the same flows with one-click **Add to Cursor** deeplinks.
 
 <sub>Repo at a glance (run `pnpm docs-stats`): ~339K TS lines · 1,610 source files · 44 workspace / 36 npm packages · 51 edge functions · 298 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 

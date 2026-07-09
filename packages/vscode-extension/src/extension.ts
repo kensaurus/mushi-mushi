@@ -17,6 +17,8 @@ const SECRET_KEY = 'mushiMushi.apiKey'
 const SERVER_LABEL_STDIO = 'Mushi Mushi (npx)'
 const SERVER_LABEL_HTTP = 'Mushi Mushi (hosted)'
 const VERSION = '0.17.0'
+// Pinned MCP npm spec — synced to packages/mcp/package.json by scripts/sync-mcp-pin.mjs.
+const MCP_PIN_SPEC = '@mushi-mushi/mcp@0.19.0'
 const DEFAULT_API = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
 const DEFAULT_MCP = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp'
 
@@ -94,7 +96,7 @@ function buildDefinition(config: MushiConfig, apiKey: string): vscode.McpServerD
   return new vscode.McpStdioServerDefinition(
     SERVER_LABEL_STDIO,
     'npx',
-    ['-y', '@mushi-mushi/mcp@latest'],
+    ['-y', MCP_PIN_SPEC],
     buildStdioEnv(config, apiKey),
     VERSION,
   )
