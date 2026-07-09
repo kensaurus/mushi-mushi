@@ -67,8 +67,20 @@ describe('detectMigrations — competitor SDK paths', () => {
     expect(matches.map((m) => m.guide.slug)).toEqual(['pendo-feedback-to-mushi'])
   })
 
-  it('returns no match for an unrelated bug-tracking dep (Sentry stays where it is)', () => {
-    expect(detectMigrations(new Set(['@sentry/react']))).toEqual([])
+  it('detects Sentry and suggests the enrich-or-standalone guide (never rip-out)', () => {
+    const matches = detectMigrations(new Set(['@sentry/react']))
+    expect(matches.map((m) => m.guide.slug)).toEqual(['sentry-to-mushi'])
+    /* Pin the coexistence framing: the summary must invite keeping Sentry,
+     * not replacing it. If someone rewrites this into a rip-out pitch, the
+     * VISION.md "standalone OR enrich" drift guard fails here first. */
+    expect(matches[0].guide.summary).toContain('Keep it')
+  })
+
+  it('detects Sentry via server and mobile packages too', () => {
+    expect(detectMigrations(new Set(['@sentry/node'])).map((m) => m.guide.slug))
+      .toEqual(['sentry-to-mushi'])
+    expect(detectMigrations(new Set(['@sentry/react-native'])).map((m) => m.guide.slug))
+      .toEqual(['sentry-to-mushi'])
   })
 })
 

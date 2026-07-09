@@ -117,6 +117,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Next.js Pages → App Router](https://kensaur.us/mushi-mushi/docs/migrations/nextjs-pages-to-app-router)
 - [Pendo Feedback → Mushi](https://kensaur.us/mushi-mushi/docs/migrations/pendo-feedback-to-mushi)
 - [React Native CLI ↔ Expo](https://kensaur.us/mushi-mushi/docs/migrations/react-native-cli-to-expo)
+- [Sentry + Mushi (enrich or standalone)](https://kensaur.us/mushi-mushi/docs/migrations/sentry-to-mushi)
 - [Shake → Mushi](https://kensaur.us/mushi-mushi/docs/migrations/shake-to-mushi)
 - [SPA → SSR (Next.js / Nuxt / SvelteKit)](https://kensaur.us/mushi-mushi/docs/migrations/spa-to-ssr)
 - [Vue 2 → Vue 3](https://kensaur.us/mushi-mushi/docs/migrations/vue-2-to-vue-3)
