@@ -50,7 +50,7 @@ const eventId = Sentry.lastEventId()
 if (eventId) Mushi.setMetadata({ sentryEventId: eventId })
 ```
 
-With [`@mushi-mushi/plugin-sentry`](/sdks/plugin-sentry) installed on the
+With [`@mushi-mushi/plugin-sentry`](/plugins/sentry) installed on the
 server side, reports carry a one-click "Open in Sentry" link and Mushi's
 diagnosis includes the Sentry stack trace as evidence.
 
@@ -114,7 +114,7 @@ next to it.
 
 ## References
 
-- [`@mushi-mushi/plugin-sentry`](/sdks/plugin-sentry)
+- [`@mushi-mushi/plugin-sentry`](/plugins/sentry)
 - [Sentry Replay coexistence](/sdks/sentry-replay-coexistence)
 - [Mushi MCP server](/quickstart/mcp)
 - [Sentry User Feedback docs](https://docs.sentry.io/product/user-feedback/)
