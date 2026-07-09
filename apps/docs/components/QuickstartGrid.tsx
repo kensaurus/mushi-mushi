@@ -17,7 +17,6 @@ export function QuickstartGrid({ platforms = LANDING_QUICKSTART_PLATFORMS }: Qui
             <div className="docs-quickstart-card__header">
               <span className="docs-quickstart-card__icon" aria-hidden="true">
                 {p.icon.startsWith('/') || p.icon.startsWith('http') ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- small static brand mark
                   <img src={p.icon} alt="" width={20} height={20} className="docs-quickstart-card__icon-img" />
                 ) : (
                   p.icon
