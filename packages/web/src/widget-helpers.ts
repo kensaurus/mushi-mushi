@@ -233,6 +233,10 @@ export interface WidgetSubmitOutcome {
    *  optimistic copy ("queued offline, we'll send it when you're back")
    *  versus the confirmed copy ("received — track at #abc12345"). */
   queuedOffline?: boolean;
+  /** The report went through but its screenshot had to be shed (couldn't
+   *  compress under the wire budget, or the server said PAYLOAD_TOO_LARGE).
+   *  The success receipt says so instead of implying the image landed. */
+  screenshotDropped?: boolean;
 }
 
 export interface WidgetCallbacks {
