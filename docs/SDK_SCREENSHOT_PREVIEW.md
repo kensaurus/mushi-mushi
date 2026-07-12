@@ -146,7 +146,7 @@ Console help: **ConfigHelp** id `sdk-install.screenshot_sensitive_hint` in
 
 ### Database
 
-Migration: `packages/server/supabase/migrations/20260619100000_sdk_screenshot_sensitive_hint.sql`
+Migration: `packages/server/supabase/migrations/20260619102932_sdk_screenshot_sensitive_hint.sql`
 
 ```sql
 -- project_settings.sdk_screenshot_sensitive_hint text

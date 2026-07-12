@@ -76,7 +76,7 @@ or absent token cannot widen the blast radius.
 
 ### `project_settings` (assistant columns)
 
-Added by `supabase/migrations/20260618150000_sdk_assistant.sql`.
+Added by `supabase/migrations/20260618001234_sdk_assistant.sql`.
 
 | Column | Type | Description |
 |---|---|---|

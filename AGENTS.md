@@ -770,7 +770,7 @@ Operator checklist: [`docs/operators/sdk-reliability-overhaul.md`](docs/operator
 | `GET /v1/cli/auth/device/status` | JWT | Approval page polls until claimed |
 
 Shared logic: `_shared/cli-auth-helpers.ts` (`parseClientId`, `evaluateTokenDelivery`,
-60s re-delivery grace). Migration: `20260702090000_cli_auth_two_phase_claim.sql`.
+60s re-delivery grace). Migration: `20260702015655_cli_auth_two_phase_claim.sql`.
 
 ### SDK runtime config
 
@@ -786,8 +786,8 @@ Full precedence: [`docs/SDK_RUNTIME_CONFIG.md`](docs/SDK_RUNTIME_CONFIG.md).
 
 | Change | Migration / file |
 | --- | --- |
-| Idempotency cache not readable by project viewers | `20260702100000_request_idempotency_restrict_member_read.sql` |
-| Rate limits work for IP-derived actors | `20260702110000_scoped_rate_limits_generalize_actor.sql` |
+| Idempotency cache not readable by project viewers | `20260702034746_request_idempotency_restrict_member_read.sql` |
+| Rate limits work for IP-derived actors | `20260702035407_scoped_rate_limits_generalize_actor.sql` |
 | MCP JWT validation for write scope | `functions/mcp/index.ts` |
 | Canonical hosted tool manifest | `_shared/mcp-hosted-tool-manifest.json` |
 | Readiness probe | `GET /health/ready` in `api/routes/discovery.ts` |
