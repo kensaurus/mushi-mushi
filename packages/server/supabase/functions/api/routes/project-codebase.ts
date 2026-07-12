@@ -148,7 +148,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     }
     const repoUrl = `https://github.com/${parsed.owner}/${parsed.repo}`;
     const defaultBranch = (body.default_branch ?? 'main').trim() || 'main';
-    const installationId =
+    let installationId =
       body.installation_id != null && String(body.installation_id).trim() !== ''
         ? Number(body.installation_id)
         : null;
@@ -167,6 +167,23 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     const pathGlobs = Array.isArray(body.path_globs)
       ? body.path_globs.filter((g) => typeof g === 'string')
       : [];
+
+    // Promote a pending GitHub App installation (user installed the App before
+    // registering a repo — the install callback parked the id on project_settings).
+    let promotedPendingInstallation = false;
+    if (installationId === null) {
+      const { data: pendingRow } = await db
+        .from('project_settings')
+        .select('github_app_installation_id_pending')
+        .eq('project_id', projectId)
+        .maybeSingle();
+      const pending = (pendingRow as { github_app_installation_id_pending?: number | null } | null)
+        ?.github_app_installation_id_pending ?? null;
+      if (pending != null && Number.isFinite(Number(pending)) && Number(pending) > 0) {
+        installationId = Number(pending);
+        promotedPendingInstallation = true;
+      }
+    }
 
     // Credential pre-flight: fail fast rather than enabling with 0 indexed files.
     // Check the same resolution chain the indexer sweep uses:
@@ -262,6 +279,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
         codebase_index_enabled: true,
         codebase_repo_url: repoUrl,
         github_webhook_secret: webhookSecret,
+        ...(promotedPendingInstallation ? { github_app_installation_id_pending: null } : {}),
       })
       .eq('project_id', projectId);
     if (settingsErr) return dbError(c, settingsErr);

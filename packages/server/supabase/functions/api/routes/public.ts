@@ -1356,6 +1356,17 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     const stateRaw = c.req.query('state') ?? ''
     const adminBase = Deno.env.get('ADMIN_BASE_URL')?.replace(/\/$/, '') ?? ''
 
+    // Org installs that need admin approval come back as setup_action=request
+    // with no installation_id — that's a pending request, not an error. GitHub
+    // fires the callback again with setup_action=install once approved.
+    if (setupAction === 'request') {
+      log.info('installation requested, awaiting org admin approval', {
+        scope: 'github-app-callback',
+        projectId: stateRaw.trim() || null,
+      })
+      return c.redirect(`${adminBase}/integrations/config?github_pending_approval=1`, 302)
+    }
+
     if (!installationId || !Number.isFinite(installationId) || installationId <= 0) {
       return c.redirect(`${adminBase}/integrations/config?github_error=missing_installation_id`, 302)
     }
@@ -1375,31 +1386,61 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     const db = getServiceClient()
 
     // Find the primary repo for this project and link the installation ID
-    const { data: repos } = await db
-      .from('repos')
+    const { data: primaryRepo, error: repoLookupError } = await db
+      .from('project_repos')
       .select('id, github_app_installation_id, repo_url')
       .eq('project_id', projectId)
       .eq('is_primary', true)
       .limit(1)
       .maybeSingle()
 
-    if (repos) {
-      await db.from('repos').update({
+    if (repoLookupError) {
+      log.error('primary repo lookup failed', {
+        scope: 'github-app-callback',
+        installationId,
+        projectId,
+        err: repoLookupError.message,
+      })
+      return c.redirect(`${adminBase}/integrations/config?github_error=link_failed`, 302)
+    }
+
+    if (primaryRepo) {
+      const { error: linkError } = await db.from('project_repos').update({
         github_app_installation_id: installationId,
         indexing_enabled: true,
-      }).eq('id', repos.id)
+      }).eq('id', primaryRepo.id)
+      if (linkError) {
+        log.error('installation link failed', {
+          scope: 'github-app-callback',
+          installationId,
+          repoId: primaryRepo.id,
+          projectId,
+          err: linkError.message,
+        })
+        return c.redirect(`${adminBase}/integrations/config?github_error=link_failed`, 302)
+      }
       log.info('linked installation to repo', {
         scope: 'github-app-callback',
         installationId,
-        repoId: repos.id,
+        repoId: primaryRepo.id,
         projectId,
       })
     } else {
-      // No primary repo yet — store on project_settings for pickup when user adds a repo
-      await db.from('project_settings').upsert({
+      // No primary repo yet — store on project_settings; the codebase/enable
+      // route promotes it onto the repo row when the user registers one.
+      const { error: pendingError } = await db.from('project_settings').upsert({
         project_id: projectId,
         github_app_installation_id_pending: installationId,
       } as Record<string, unknown>, { onConflict: 'project_id' })
+      if (pendingError) {
+        log.error('pending installation store failed', {
+          scope: 'github-app-callback',
+          installationId,
+          projectId,
+          err: pendingError.message,
+        })
+        return c.redirect(`${adminBase}/integrations/config?github_error=link_failed`, 302)
+      }
       log.info('no primary repo — stored pending installation', {
         scope: 'github-app-callback',
         installationId,
@@ -1408,11 +1449,13 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     }
 
     // Auto-register the webhook on the repo using the installation token
-    // (best-effort; skip if GitHub_APP credentials are not available server-side)
+    // (best-effort; skip if GitHub App credentials are not available server-side).
+    // GITHUB_APP_PRIVATE_KEY is the canonical name (see _shared/github.ts);
+    // GITHUB_APP_PRIVATE_KEY_PEM is accepted for envs configured before the rename.
     const appId = Deno.env.get('GITHUB_APP_ID')
-    const privateKeyPem = Deno.env.get('GITHUB_APP_PRIVATE_KEY_PEM')
-    if (appId && privateKeyPem && repos?.repo_url) {
-      void autoRegisterWebhook({ appId, privateKeyPem, installationId, repoUrl: repos.repo_url, adminBase })
+    const privateKeyPem = Deno.env.get('GITHUB_APP_PRIVATE_KEY') ?? Deno.env.get('GITHUB_APP_PRIVATE_KEY_PEM')
+    if (appId && privateKeyPem && primaryRepo?.repo_url) {
+      void autoRegisterWebhook({ appId, privateKeyPem, installationId, repoUrl: primaryRepo.repo_url, adminBase })
         .catch((err: unknown) => log.warn('webhook auto-register failed (non-fatal)', {
           scope: 'github-app-callback',
           err: String(err),
