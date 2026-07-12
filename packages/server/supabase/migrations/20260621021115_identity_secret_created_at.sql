@@ -1,0 +1,1 @@
+alter table project_settings add column if not exists identity_secret_created_at timestamptz; comment on column project_settings.identity_secret_created_at is 'When the identity signing secret was last minted or rotated via the console API.'; notify pgrst, 'reload schema';;

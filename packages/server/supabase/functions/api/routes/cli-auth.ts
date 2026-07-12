@@ -35,7 +35,7 @@
  *   - Expired rows (>10 min) are rejected at the query layer.
  *
  * DEPENDENCIES:
- *   - public.cli_auth_requests  (migration 20260620100000_cli_auth_requests.sql)
+ *   - public.cli_auth_requests  (migration 20260620013015_cli_auth_requests.sql)
  *   - _shared/auth.ts jwtAuth
  *   - _shared/db.ts getServiceClient
  *   - _shared/audit.ts logAudit
@@ -85,7 +85,7 @@ async function sha256hex(value: string): Promise<string> {
 // caller's IP (SHA-256, first 16 bytes formatted as 8-4-4-4-12 hex) and reuse
 // the same RPC — `scoped_rate_limits.user_id` was generalized to an opaque
 // actor id for exactly this reason (see
-// 20260702110000_scoped_rate_limits_generalize_actor.sql, which also fixed a
+// 20260702035407_scoped_rate_limits_generalize_actor.sql, which also fixed a
 // live FK-violation bug the same generalization uncovered in
 // report_ingest_rate_limit_claim). Postgres's `uuid` type only validates the
 // 8-4-4-4-12 hex shape, not RFC 4122 version/variant bits, so a raw hash

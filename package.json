@@ -118,13 +118,15 @@
     "check:route-manifest": "node scripts/gen-route-manifest.mjs --check",
     "check:env-docs": "node scripts/check-env-docs.mjs",
     "check:onboarding-drift": "node scripts/check-onboarding-drift.mjs",
+    "check:edge-fn-deploy-docs": "node scripts/check-edge-fn-deploy-docs.mjs",
+    "check:admin-docs-coverage": "node scripts/check-admin-docs-coverage.mjs",
     "check:edge-fn-imports": "node scripts/check-edge-fn-imports.mjs",
     "bootstrap:new-npm-packages": "node scripts/bootstrap-publish-new-packages.mjs",
     "e2e": "pnpm --filter @mushi-mushi/e2e-dogfood e2e",
     "test:cloudfront": "node --test scripts/cloudfront-functions.test.mjs",
     "test:verify-hosted-mcp": "node --test scripts/verify-hosted-mcp-helpers.test.mjs",
     "verify:pipeline": "pnpm --filter @mushi-mushi/server test && cd packages/server/supabase && deno check functions/_shared/rag.ts functions/_shared/observability.ts functions/_shared/env-int.ts functions/api/routes/doctor.ts functions/api/routes/project-codebase.ts functions/webhooks-github-indexer/index.ts",
-    "check:drift": "pnpm check:catalog-sync && pnpm check:mcp-tools-doc && pnpm check:internal-doc-links && pnpm check:onboarding-drift && pnpm check:env-docs && pnpm check:docs-drift",
+    "check:drift": "pnpm check:catalog-sync && pnpm check:mcp-tools-doc && pnpm check:internal-doc-links && pnpm check:onboarding-drift && pnpm check:env-docs && pnpm check:docs-drift && pnpm check:docs-stats && pnpm check:route-manifest && pnpm check:edge-fn-deploy-docs && pnpm check:admin-docs-coverage",
     "check:mcp-tools-doc": "node scripts/gen-mcp-tools-doc.mjs --check"
   },
   "pnpm": {

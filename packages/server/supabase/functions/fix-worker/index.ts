@@ -88,6 +88,7 @@ import { FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import { checkAutofixBudget } from '../_shared/autofix-budget.ts';
 import { dispatchPluginEvent } from '../_shared/plugins.ts';
+import { notifyTeamFixEvent } from '../_shared/team-notify.ts';
 import { notifyReportStatusTransition } from '../_shared/report-status-notify.ts';
 
 // ----------------------------------------------------------------------------
@@ -990,6 +991,16 @@ ${
         log.warn('Plugin dispatch failed', { event: 'fix.proposed', err: String(e) }),
       );
 
+      // Team channels (Slack thread / Discord / Teams): the draft-PR link,
+      // threaded onto the report's original Slack card when one exists.
+      void notifyTeamFixEvent(db, dispatch.project_id, dispatch.report_id, 'fix_pr_opened', {
+        prUrl: prResult.url,
+        prNumber: prResult.number,
+        branch: prResult.branch,
+      }).catch((e) =>
+        log.warn('Team fix notification failed', { event: 'fix_pr_opened', err: String(e) }),
+      );
+
       // Loop-closure (deferred-6): multi-repo coordination. If the project
       // has >1 repos AND the RAG retrieval pulled in code from outside the
       // primary repo's path globs, the fix we just opened is almost
@@ -1140,6 +1151,13 @@ ${
           failureCategory,
         },
       }).catch((e) => log.warn('Plugin dispatch failed', { event: 'fix.failed', err: String(e) }));
+
+      void notifyTeamFixEvent(db, dispatch.project_id, dispatch.report_id, 'fix_failed', {
+        error: errMsg.slice(0, 500),
+        failureCategory,
+      }).catch((e) =>
+        log.warn('Team fix notification failed', { event: 'fix_failed', err: String(e) }),
+      );
 
       await trace.end();
 

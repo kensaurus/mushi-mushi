@@ -8,7 +8,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const MIGRATION = readFileSync(
-  resolve(__dirname, '../../supabase/migrations/20260617195000_tenant_rls_and_org_audit.sql'),
+  resolve(__dirname, '../../supabase/migrations/20260616060017_tenant_rls_and_org_audit.sql'),
   'utf8',
 );
 

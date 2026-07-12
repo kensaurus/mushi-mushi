@@ -1041,7 +1041,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     description: string,
     intent?: string,
     userCategory?: string,
-  ): Promise<{ reportId: string | null; queuedOffline?: boolean } | undefined> {
+  ): Promise<{ reportId: string | null; queuedOffline?: boolean; screenshotDropped?: boolean } | undefined> {
     const filterResult = preFilter.check(description);
     if (!filterResult.passed) {
       log.info('Report blocked by pre-filter', { reason: filterResult.reason });
@@ -1112,7 +1112,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     const screenshotForWire = pendingScreenshot
       ? (await compressScreenshotDataUrl(pendingScreenshot).catch(() => null))
       : null;
+    // Surfaced on the success receipt — a report that quietly lost its
+    // screenshot must not look identical to one that kept it.
+    let screenshotDropped = false;
     if (pendingScreenshot && !screenshotForWire) {
+      screenshotDropped = true;
       log.warn('Screenshot dropped — could not compress under wire budget');
     }
 
@@ -1239,6 +1243,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         log.warn('Report still too large — dropping screenshot and retrying', {
           reportId: finalReport.id,
         });
+        screenshotDropped = true;
         finalReport = { ...finalReport, screenshotDataUrl: undefined };
         result = await apiClient.submitReport(finalReport);
       }
@@ -1320,7 +1325,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     // queued-offline outcome so the widget can degrade gracefully.
     if (result?.ok) {
       const serverId = (result.data?.reportId as string | undefined) ?? report.id;
-      return { reportId: serverId, queuedOffline: false };
+      return { reportId: serverId, queuedOffline: false, screenshotDropped };
     }
     return { reportId: null, queuedOffline: true };
   }

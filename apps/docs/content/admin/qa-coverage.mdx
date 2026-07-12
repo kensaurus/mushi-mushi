@@ -28,7 +28,7 @@ Create story (NL prompt or Playwright script)
   → execute via provider
   → write qa_story_runs (status, latency_ms, provider_session_url, assertion_failures)
   → write qa_story_evidence (screenshots, console logs, HAR)
-  → if failed + A2A endpoint configured → push notification
+  → on fail/recover → Slack Block Kit (transition-aware) + Discord webhook + dispatchPluginEvent
 ```
 
 ---

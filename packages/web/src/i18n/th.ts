@@ -159,6 +159,7 @@ export const th: MushiLocale = {
       queuedHint: 'จะส่งทันทีที่คุณกลับมาออนไลน์',
       trackOnMushi: 'ติดตามบน Mushi',
       slaDefault: 'เราจะตรวจสอบรายงานของคุณ',
+      screenshotDropped: 'ส่งรายงานโดยไม่มีภาพหน้าจอ — ไฟล์ใหญ่เกินกว่าจะแนบได้',
     },
     featureRequest: {
       label: 'ขอฟีเจอร์',

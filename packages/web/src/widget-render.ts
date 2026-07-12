@@ -100,6 +100,7 @@ export interface WidgetRenderCtx {
   leaderboardLoading: boolean;
   leaderboardEntries: Array<{ display_name: string; tier_name: string | null; total_points: number; points_30d: number }> | null;
   lastSubmitQueuedOffline: boolean;
+  lastSubmitScreenshotDropped: boolean;
   featureBoard: Array<Record<string, unknown>>;
   crossAppReports: MushiCrossAppReport[] | null;
   allowScreenshotRemove: boolean;
@@ -986,6 +987,13 @@ export function renderSuccessReceipt(ctx: WidgetRenderCtx): string {
     const idShort = `#${ctx.lastReportId.slice(0, 8)}`;
     const dashboard = (ctx.config.dashboardUrl ?? '').replace(/\/$/, '');
     const trackHref = dashboard ? `${dashboard}/reports/${encodeURIComponent(ctx.lastReportId)}` : '';
+    const screenshotDroppedNote = ctx.lastSubmitScreenshotDropped
+      ? `
+        <div class="mushi-success-receipt-row mushi-success-receipt-warn">
+          <span class="mushi-success-receipt-hint">${escapeHtml(s.screenshotDropped)}</span>
+        </div>
+      `
+      : '';
 
     return `
       <div class="mushi-success-receipt" role="status">
@@ -1008,6 +1016,7 @@ export function renderSuccessReceipt(ctx: WidgetRenderCtx): string {
             rel="noopener noreferrer"
           >${escapeHtml(s.trackOnMushi)} <span aria-hidden="true">\u2197</span></a>
         ` : ''}
+        ${screenshotDroppedNote}
         ${renderSlaLine(ctx)}
       </div>
     `;

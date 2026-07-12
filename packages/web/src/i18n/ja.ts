@@ -159,6 +159,7 @@ export const ja: MushiLocale = {
       queuedHint: 'オンラインに戻り次第送信します。',
       trackOnMushi: 'Mushiで追跡',
       slaDefault: 'レポートを確認します。',
+      screenshotDropped: 'スクリーンショットはサイズ超過のため添付できず、レポートのみ送信しました。',
     },
     featureRequest: {
       label: '機能リクエスト',

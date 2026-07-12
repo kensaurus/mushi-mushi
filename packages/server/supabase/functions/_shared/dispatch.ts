@@ -17,6 +17,7 @@
 
 import { getServiceClient } from './db.ts'
 import { log } from './logger.ts'
+import { notifyTeamFixEvent } from './team-notify.ts'
 
 export interface DispatchResult {
   ok: boolean
@@ -139,6 +140,19 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
       err: String(err),
     })
   })
+
+  // Team channels: "auto-fix started" (gated by the 'fix.dispatched' pref).
+  // Skip Slack-originated dispatches — slack-interactions already posts its
+  // own threaded acknowledgement, and doubling up reads as spam.
+  if ((input.metadata as { source?: string } | undefined)?.source !== 'slack') {
+    void notifyTeamFixEvent(db, input.projectId, input.reportId, 'fix_dispatched').catch((err) => {
+      log.warn('team dispatch notification failed', {
+        scope: 'dispatch',
+        dispatchId: job.id,
+        err: String(err),
+      })
+    })
+  }
 
   return {
     ok: true,
