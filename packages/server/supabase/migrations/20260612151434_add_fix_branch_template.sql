@@ -1,0 +1,1 @@
+alter table project_settings add column if not exists fix_branch_template text default null; comment on column project_settings.fix_branch_template is 'Optional branch name template for fix-worker PRs. Tokens: {date}, {category}, {shortId}. NULL uses the default scheme: mushi/fix-<shortId>-<ts36>.';;
