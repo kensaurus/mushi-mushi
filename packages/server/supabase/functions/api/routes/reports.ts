@@ -732,6 +732,48 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     return c.json({ ok: true, data: { report_id: reportId, timeline } });
   });
 
+  // Short-lived signed URL for the report's stored rrweb replay JSON. The SDK
+  // uploads replays > 120 events to object storage (custom_metadata.replayPath)
+  // instead of inlining them; the console player fetches through here.
+  app.get('/v1/admin/reports/:id/replay-url', adminOrApiKey(), async (c) => {
+    const idParsed = parseUuidParam(c);
+    if (!idParsed.ok) return idParsed.error;
+    const reportId = idParsed.value;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const projectIds = await callerProjectIds(c, db, userId);
+
+    const { data: report, error } = await db
+      .from('reports')
+      .select('id, project_id, custom_metadata')
+      .eq('id', reportId)
+      .in('project_id', projectIds)
+      .maybeSingle();
+
+    if (error) return dbError(c, error);
+    if (!report) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+    }
+
+    const replayPath = (report.custom_metadata as { replayPath?: unknown } | null)?.replayPath;
+    if (typeof replayPath !== 'string' || !replayPath) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No stored replay for this report' } }, 404);
+    }
+
+    try {
+      const adapter = await getStorageAdapter(report.project_id as string);
+      const url = await adapter.signedUrl(replayPath, 600);
+      return c.json({ ok: true, data: { url, expires_in: 600 } });
+    } catch (err) {
+      log.error('Replay signed URL failed', { reportId, err: String(err) });
+      return c.json(
+        { ok: false, error: { code: 'STORAGE_ERROR', message: 'Could not sign replay URL' } },
+        502,
+      );
+    }
+  });
+
   // Admin/MCP twin of POST /v1/sync/reports/:id/reply. Behind adminOrApiKey so
   // org-scoped MCP keys can reply (the /v1/sync route's apiKeyAuth rejects
   // them). Shares postReporterReply() with the SDK/CLI route — one impl.

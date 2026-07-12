@@ -43,6 +43,7 @@ import { FixCiFeedback } from '../components/fixes/FixCiFeedback'
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
 import { PdcaReceiptStrip } from '../components/report-detail/PdcaReceiptStrip'
 import { ReportPdcaStory } from '../components/report-detail/ReportPdcaStory'
+import { BeforeAfterCard } from '../components/report-detail/BeforeAfterCard'
 import { ReportPipelineFlow } from '../components/report-detail/ReportPipelineFlow'
 import { ReportBranchGraph } from '../components/report-detail/ReportBranchGraph'
 import { useAdminMode } from '../lib/mode'
@@ -494,6 +495,8 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         className="mb-3"
       />
 
+      <BeforeAfterCard report={report} />
+
       {latestFix && (
         <ReportBranchGraph
           fix={latestFix}
@@ -657,6 +660,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
       <div className="mt-3 grid gap-3 ff-medium:grid-cols-2">
         <ReportReplayPlayer
           events={(report.custom_metadata?.replayEvents as unknown[] | undefined) ?? null}
+          reportId={report.id}
           replayPath={(report.custom_metadata?.replayPath as string | undefined) ?? null}
         />
         <AgentTracePanel report={report} />

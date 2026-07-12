@@ -58,6 +58,37 @@ export function IntegrationsPage() {
   useEffect(() => {
     if (activeProjectId) setActiveProjectIdSnapshot(activeProjectId)
   }, [activeProjectId])
+  // The GitHub App install callback redirects here with result params. Surface
+  // them once as toasts, then strip them so a refresh doesn't re-toast.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const connected = params.get('github_connected')
+    const pendingApproval = params.get('github_pending_approval')
+    const githubError = params.get('github_error')
+    if (!connected && !pendingApproval && !githubError) return
+    if (connected) {
+      toast.success('GitHub App connected', 'Installation linked to this project.')
+    } else if (pendingApproval) {
+      toast.success(
+        'GitHub install requested',
+        'An org admin must approve the installation on GitHub. It links automatically once approved.',
+      )
+    } else if (githubError) {
+      const detail =
+        githubError === 'missing_installation_id'
+          ? 'GitHub did not return an installation id. Retry the install from this page.'
+          : githubError === 'link_failed'
+            ? 'The installation could not be saved. Retry, or check server logs for github-app-callback.'
+            : githubError
+      toast.error('GitHub App install failed', detail)
+    }
+    for (const key of ['github_connected', 'github_pending_approval', 'github_error', 'installation_id']) {
+      params.delete(key)
+    }
+    const next = params.toString()
+    window.history.replaceState(null, '', `${window.location.pathname}${next ? `?${next}` : ''}`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount for the redirect params
+  }, [])
   const setup = useSetupStatus(activeProjectId)
   const copy = usePageCopy('/integrations')
   const platformQuery = usePageData<PlatformResponse>('/v1/admin/integrations/platform')
