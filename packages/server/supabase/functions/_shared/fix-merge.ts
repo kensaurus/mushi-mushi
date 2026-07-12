@@ -13,6 +13,7 @@ import {
 } from './github.ts';
 import { log } from './logger.ts';
 import { dispatchPluginEvent } from './plugins.ts';
+import { notifyTeamFixEvent } from './team-notify.ts';
 import { notifyReportStatusTransition } from './report-status-notify.ts';
 import { resolveExternalIssue } from './integrations.ts';
 
@@ -185,6 +186,12 @@ export async function finalizeFixMerge(
         repository: meta.repository,
       },
     }).catch((e) => log.warn('Plugin dispatch failed', { event: 'fix.applied', err: String(e) }));
+
+    void notifyTeamFixEvent(db, attempt.project_id, attempt.report_id, 'fix_merged', {
+      prUrl: meta.prUrl,
+      prNumber: meta.prNumber ?? attempt.pr_number,
+      branch: attempt.branch,
+    }).catch((e) => log.warn('Team fix notification failed', { event: 'fix_merged', err: String(e) }));
 
     const { data: existing } = await db
       .from('usage_events')
