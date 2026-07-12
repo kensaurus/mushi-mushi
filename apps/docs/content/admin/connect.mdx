@@ -14,8 +14,23 @@ import { Callout, Steps } from 'nextra/components'
 > can't ask Mushi what broke — and you're a couple versions behind on `@mushi-mushi/web`.
 > This page wires GitHub, SDK, MCP, CLI, and upgrade PRs in one place.
 
-Work through the sections top-to-bottom. Connecting GitHub enables the
-**Create Upgrade PR** flow; SDK and MCP sections work without it.
+The page opens with **ConnectStudio** — pick your AI client, then choose a
+lane (MCP / CLI / Skills). Work through the sections below top-to-bottom.
+Connecting GitHub enables the **Create Upgrade PR** flow; SDK and MCP
+sections work without it.
+
+---
+
+## ConnectStudio hero (3 lanes)
+
+| Lane | What it does |
+|------|--------------|
+| **MCP** | One-click install for Cursor, VS Code, Claude Code, Windsurf, and other clients (`ClientConnectButton` mints a scoped key + deeplink / config JSON) |
+| **CLI** | Install `@mushi-mushi/cli`, `mushi login`, then wire the selected IDE |
+| **Skills** | Copy skill / pipeline setup for the selected client |
+
+A collapsible **Connection status** disclosure summarizes activation, snapshot,
+and provenance chips that used to live as separate strips.
 
 ---
 
@@ -23,12 +38,13 @@ Work through the sections top-to-bottom. Connecting GitHub enables the
 
 | # | Section | What it does |
 |---|---------|--------------|
-| 1 | **Connect GitHub** | Link the primary repo so upgrade PRs and CI secret sync can resolve tokens |
-| 2 | **Install SDK** | Framework tabs + copy snippet (`SdkInstallCard`) |
-| 3 | **Native app CI secrets** | Diagnose + one-click sync of `NEXT_PUBLIC_MUSHI_*` into GitHub Actions |
-| 4 | **Install MCP** | **Add to Cursor** / **Add to VS Code** deeplinks (`McpInstallButtons`) |
-| 5 | **Install CLI** | `npm i -g @mushi-mushi/cli@latest` + copy `mushi connect` / `mushi init` |
-| 6 | **Update center** | Per-package freshness chips + **Create Upgrade PR** (`SdkUpgradeCTA`) |
+| 1 | **ConnectStudio** | Client picker + MCP / CLI / Skills lanes (above) |
+| 2 | **Connect GitHub** | Link the primary repo so upgrade PRs and CI secret sync can resolve tokens |
+| 3 | **Install SDK** | Framework tabs + copy snippet (`SdkInstallCard`) |
+| 4 | **Native app CI secrets** | Diagnose + one-click sync of `NEXT_PUBLIC_MUSHI_*` into GitHub Actions |
+| 5 | **Install MCP** | **Add to Cursor** / **Add to VS Code** deeplinks (`McpInstallButtons`) |
+| 6 | **Install CLI** | `npm i -g @mushi-mushi/cli@latest` + copy `mushi connect` / `mushi init` |
+| 7 | **Update center** | Per-package freshness chips + **Create Upgrade PR** (`SdkUpgradeCTA`) |
 
 ---
 

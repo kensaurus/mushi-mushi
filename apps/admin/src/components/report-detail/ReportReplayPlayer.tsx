@@ -31,6 +31,21 @@ export function ReportReplayPlayer({ reportId, events, replayPath }: Props) {
     events?.length ? events : null,
   )
 
+  // Keep state in sync when the report changes (detail page reuses this
+  // component instance across reports) or when inline events arrive after a
+  // refetch — otherwise the previous report's replay would keep playing.
+  const lastReportRef = useRef(reportId)
+  useEffect(() => {
+    if (lastReportRef.current !== reportId) {
+      lastReportRef.current = reportId
+      setPlaying(false)
+      setFetchState('idle')
+      setLoadedEvents(events?.length ? events : null)
+    } else if (events?.length && !loadedEvents?.length) {
+      setLoadedEvents(events)
+    }
+  }, [reportId, events, loadedEvents])
+
   // Pull the stored replay from object storage when there are no inline events.
   useEffect(() => {
     if (loadedEvents?.length || !replayPath) return

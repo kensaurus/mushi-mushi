@@ -275,9 +275,15 @@ function serializeSheet(sheet: CSSStyleSheet): string {
  */
 function isCanvasBlank(ctx: CanvasRenderingContext2D, width: number, height: number): boolean {
   try {
-    const { data } = ctx.getImageData(0, 0, width, height);
-    for (let i = 3; i < data.length; i += 64) {
-      if (data[i] !== 0) return false;
+    // Probe a coarse grid of single pixels instead of copying the whole
+    // bitmap — a full-viewport getImageData allocates megabytes on the
+    // report-submit path just to answer "did anything draw?".
+    const stepX = Math.max(1, Math.floor(width / 8));
+    const stepY = Math.max(1, Math.floor(height / 8));
+    for (let y = 0; y < height; y += stepY) {
+      for (let x = 0; x < width; x += stepX) {
+        if (ctx.getImageData(x, y, 1, 1).data[3] !== 0) return false;
+      }
     }
     return true;
   } catch {

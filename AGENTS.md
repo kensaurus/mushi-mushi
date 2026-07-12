@@ -34,7 +34,7 @@ The "is this drift?" test for any feature you build or surface you write: *"Does
 
 ## Agent Inventory
 
-<sub>19 pipeline agents — run <code>pnpm docs-stats</code> for live edge-function, migration, and package counts. Updated Jun 18 2026 (reporter incentives: automatic report.submitted/report.triaged point awards + one-click reward presets + vault-backed reward webhooks + `@mushi-mushi/node` receiver; page-aware in-SDK assistant: `POST /v1/sdk/assistant` BYOK + knowledge corpus + audit log).</sub>
+<sub>19 pipeline agents — run <code>pnpm docs-stats</code> for live edge-function, migration, and package counts. Updated Jul 12 2026 (docs drift sync: infra workers completed; migration IDs corrected; reporter incentives + in-SDK assistant + SDK reliability overhaul remain as below).</sub>
 
 | Agent | Location | Trigger | Description |
 |-------|----------|---------|-------------|
@@ -64,6 +64,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 
 | Function | Role |
 | --- | --- |
+| `fast-filter` | Stage-1 cheap triage before `classify-report` (invoked by `api`) |
 | `ci-sync` | Polls GitHub check-runs for open fix PRs |
 | `retention-sweep` | Applies data-retention policies |
 | `stripe-webhooks` | Stripe subscription + invoice events |
@@ -83,6 +84,15 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `status-reconciler` | Inventory action status derivation |
 | `synthetic-monitor` | Periodic health-check + post-PR probes |
 | `tremendous-redemption-worker` | Reward payout fulfillment |
+| `mistake-clusterer` / `mistake-summarizer` | Closed-loop mistake clustering + lesson summarization |
+| `release-builder` | Auto-drafts release notes / changelog credit |
+| `contract-graph-builder` / `drift-walker` | API contract graph + live-route drift crawl |
+| `experiment-analyzer` | A/B experiment analysis |
+| `prompt-auto-tune` | Classifier / prompt A-B tuning from judge feedback |
+| `library-modernizer` | Library modernization proposals |
+| `invitation-reminders` | Pending invite reminder cron |
+| `recompute-tester-reputation` | Tester marketplace reputation recompute |
+| `reward-payout-aggregator` | Aggregates reward payout batches |
 
 Also: **`api`** (Hono REST router) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
 
@@ -653,7 +663,7 @@ setup before customizability.
 
 ### Vault-backed reward webhook secrets + `@mushi-mushi/node` receiver
 
-- `reward_webhooks.vault_secret_id` (migration `20260618140000`) stores the raw
+- `reward_webhooks.vault_secret_id` (migration `20260617235151_reward_webhook_vault_secrets.sql`) stores the raw
   HMAC signing secret in Supabase Vault; `secret_hash` is retained for
   display/equality only. `_shared/reward-webhooks.ts` `loadWebhookSecret` reads
   the raw value back via `vault_get_secret`, falling back to the legacy env var.
@@ -669,7 +679,7 @@ setup before customizability.
 
 ### Cross-app "My Reports" fix
 
-`mushi_get_my_cross_app_reports` (migration `20260618130000`) selected
+`mushi_get_my_cross_app_reports` (migration `20260617234653_fix_cross_app_reports_columns.sql`) selected
 `reports.short_id` / `reports.title`, neither of which exists — every call 500'd.
 Now derives `short_id` from the UUID's first 8 hex chars and `title` from
 `summary` (falling back to a trimmed `description`). The web widget's My Reports
@@ -695,7 +705,7 @@ Widget "Ask" tab → apiClient.askAssistant({ message, threadId, context })
 
 | Object | Role |
 |--------|------|
-| `project_settings.assistant_*` | `assistant_enabled`, `assistant_label`, `assistant_greeting`, `assistant_suggestions`, `assistant_knowledge` (corpus, 40k cap) — migration `20260618150000` |
+| `project_settings.assistant_*` | `assistant_enabled`, `assistant_label`, `assistant_greeting`, `assistant_suggestions`, `assistant_knowledge` (corpus, 40k cap) — migration `20260618001234_sdk_assistant.sql` |
 | `sdk_assistant_messages` | Per-turn audit log; RLS `RESTRICTIVE` deny-all (service-role/edge-fn only) |
 | `POST /v1/sdk/assistant` | `apiKeyAuth` — the assistant turn (security-hardened system prompt, BYOK, structured output, logging) |
 | `GET /v1/sdk/config` | Now returns the `assistant` block so the widget shows the tab without a rebuild |
@@ -735,7 +745,7 @@ Reporter opens widget (capture.screenshot on-report/auto)
 | Object | Role |
 |--------|------|
 | `MushiWidgetConfig.screenshotSensitiveHint` | `true` = localized default, `string` = custom, `false` = hide caption |
-| `project_settings.sdk_screenshot_sensitive_hint` | Console/runtime store: `NULL` = default, `''` = hidden, string = custom (≤ 200 chars) — migration `20260619100000` |
+| `project_settings.sdk_screenshot_sensitive_hint` | Console/runtime store: `NULL` = default, `''` = hidden, string = custom (≤ 200 chars) — migration `20260619102932_sdk_screenshot_sensitive_hint.sql` |
 | `GET /v1/sdk/config` | Emits `widget.screenshotSensitiveHint` for runtime merge |
 | `PUT /v1/admin/projects/:id/sdk-config` | Persists via `coerceSdkConfigUpdate()` in `api/helpers.ts` |
 

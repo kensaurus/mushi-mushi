@@ -49,6 +49,15 @@ const EVENT_EMOJI: Record<TeamFixEvent, string> = {
   fix_merged: '✅', // ✅
 }
 
+/**
+ * Escape Slack mrkdwn control characters in interpolated values (report
+ * summaries, error strings) so user content can't inject links/formatting.
+ * Our own `<url|label>` markup is added after escaping.
+ */
+function escapeMrkdwn(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 function eventText(
   event: TeamFixEvent,
   reportSummary: string,
@@ -56,6 +65,7 @@ function eventText(
   reportUrl: string | null,
 ): string {
   const emoji = EVENT_EMOJI[event]
+  const summary = escapeMrkdwn(reportSummary)
   const pr = details.prUrl
     ? details.prNumber
       ? `<${details.prUrl}|PR #${details.prNumber}>`
@@ -63,13 +73,13 @@ function eventText(
     : null
   switch (event) {
     case 'fix_dispatched':
-      return `${emoji} Auto-fix dispatched for *${reportSummary}*${reportUrl ? ` — <${reportUrl}|follow along>` : ''}`
+      return `${emoji} Auto-fix dispatched for *${summary}*${reportUrl ? ` — <${reportUrl}|follow along>` : ''}`
     case 'fix_pr_opened':
-      return `${emoji} Fix ${pr ?? 'PR'} opened for *${reportSummary}*${reportUrl ? ` — <${reportUrl}|review in console>` : ''}`
+      return `${emoji} Fix ${pr ?? 'PR'} opened for *${summary}*${reportUrl ? ` — <${reportUrl}|review in console>` : ''}`
     case 'fix_failed':
-      return `${emoji} Fix attempt failed for *${reportSummary}*${details.failureCategory ? ` (${details.failureCategory})` : ''}${details.error ? `\n\`\`\`${details.error.slice(0, 300)}\`\`\`` : ''}${reportUrl ? `\n<${reportUrl}|Open report>` : ''}`
+      return `${emoji} Fix attempt failed for *${summary}*${details.failureCategory ? ` (${escapeMrkdwn(details.failureCategory)})` : ''}${details.error ? `\n\`\`\`${escapeMrkdwn(details.error.slice(0, 300))}\`\`\`` : ''}${reportUrl ? `\n<${reportUrl}|Open report>` : ''}`
     case 'fix_merged':
-      return `${emoji} Fix merged for *${reportSummary}*${pr ? ` — ${pr}` : ''}`
+      return `${emoji} Fix merged for *${summary}*${pr ? ` — ${pr}` : ''}`
   }
 }
 

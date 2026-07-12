@@ -172,11 +172,19 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     // registering a repo — the install callback parked the id on project_settings).
     let promotedPendingInstallation = false;
     if (installationId === null) {
-      const { data: pendingRow } = await db
+      const { data: pendingRow, error: pendingReadError } = await db
         .from('project_settings')
         .select('github_app_installation_id_pending')
         .eq('project_id', projectId)
         .maybeSingle();
+      if (pendingReadError) {
+        // Best-effort promotion: on a read failure the credential pre-flight
+        // below still decides (and reports) whether we can proceed.
+        console.warn('[project-codebase] pending GitHub App installation lookup failed', {
+          projectId,
+          error: pendingReadError.message,
+        });
+      }
       const pending = (pendingRow as { github_app_installation_id_pending?: number | null } | null)
         ?.github_app_installation_id_pending ?? null;
       if (pending != null && Number.isFinite(Number(pending)) && Number(pending) > 0) {

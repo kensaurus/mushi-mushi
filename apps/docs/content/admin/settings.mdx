@@ -47,6 +47,18 @@ Optional web research provider. When configured, enables the
 | **Firecrawl API key** | Your BYOK key from firecrawl.dev |
 | **Firecrawl base URL** | Optional self-hosted endpoint override |
 
+### Browserbase
+
+Cloud Chromium provider for [QA Coverage](/admin/qa-coverage) when a story’s
+provider is `browserbase`. Keys are stored in Vault via
+`GET|PUT /v1/admin/byok/browserbase`. Without a project key, the runner falls
+back to the platform global key in `mushi_runtime_config`.
+
+| Field | Description |
+|-------|-------------|
+| **Browserbase API key** | Your BYOK key from browserbase.com |
+| **Test connection** | Probes auth / network / quota and shows last test status |
+
 ### Health
 
 Live connection status for all configured integrations. Shows the same provider probe

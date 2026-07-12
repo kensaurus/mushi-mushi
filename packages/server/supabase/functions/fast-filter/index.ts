@@ -387,7 +387,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
         : 'low'
       const notifyClassified =
         notifPrefs['report.classified'] !== false &&
-        (SEVERITY_RANK[String(classification.severity)] ?? 4) >= (SEVERITY_RANK[severityMin] ?? 1)
+        (SEVERITY_RANK[String(classification.severity)] ?? 0) >= (SEVERITY_RANK[severityMin] ?? 1)
       if (!notifyClassified) {
         log.info('Team notification suppressed by notification_prefs', {
           reportId,

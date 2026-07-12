@@ -761,9 +761,14 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No stored replay for this report' } }, 404);
     }
 
+    // replayPath is the canonical storage URL (storage://<provider>/<bucket>/<key>);
+    // signedUrl() takes the bare key. Accept a bare key too, just in case.
+    const keyMatch = replayPath.match(/^storage:\/\/[^/]+\/[^/]+\/(.+)$/);
+    const objectKey = keyMatch ? keyMatch[1] : replayPath;
+
     try {
       const adapter = await getStorageAdapter(report.project_id as string);
-      const url = await adapter.signedUrl(replayPath, 600);
+      const url = await adapter.signedUrl(objectKey, 600);
       return c.json({ ok: true, data: { url, expires_in: 600 } });
     } catch (err) {
       log.error('Replay signed URL failed', { reportId, err: String(err) });

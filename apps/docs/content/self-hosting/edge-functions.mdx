@@ -6,38 +6,56 @@ import { Callout } from 'nextra/components'
 
 # Edge Functions deploy
 
-Mushi ships 15 core Supabase Edge Functions. Deploy them from `packages/server/` (the repo contains additional experimental functions — only the 15 below are required for a fully functional self-hosted instance):
+Mushi ships **51** Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). For a working self-host you only need the **minimal ingest + classification** set below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. The repo root guide [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md) remains the authoritative step-by-step.
+
+## Minimal required (ingest + classify)
 
 ```bash
 cd packages/server
 
-npx supabase functions deploy api
-npx supabase functions deploy classify-report
-npx supabase functions deploy fix-worker
-npx supabase functions deploy judge-batch
-npx supabase functions deploy intelligence-report
-npx supabase functions deploy drift-walker
-npx supabase functions deploy contract-graph-builder
-npx supabase functions deploy pdca-runner
-npx supabase functions deploy qa-story-runner
-npx supabase functions deploy generate-synthetic
-npx supabase functions deploy inventory-crawler
-npx supabase functions deploy inventory-propose
-npx supabase functions deploy inventory-gates
-npx supabase functions deploy a2a-push-notify
-npx supabase functions deploy test-gen-from-report
+npx supabase functions deploy api --no-verify-jwt
+npx supabase functions deploy fast-filter --no-verify-jwt
+npx supabase functions deploy classify-report --no-verify-jwt
+```
+
+Also deploy **`mcp`** if you use the hosted MCP transport:
+
+```bash
+npx supabase functions deploy mcp --no-verify-jwt
 ```
 
 <Callout type="warning">
   Run every deploy command from `packages/server/` — the Supabase CLI looks for `supabase/functions/` relative to the current directory. Running from the repo root will fail with "entrypoint path does not exist".
 </Callout>
 
-## Function inventory
+## Common optional functions
+
+```bash
+npx supabase functions deploy fix-worker --no-verify-jwt
+npx supabase functions deploy judge-batch --no-verify-jwt
+npx supabase functions deploy intelligence-report --no-verify-jwt
+npx supabase functions deploy generate-synthetic --no-verify-jwt
+npx supabase functions deploy qa-story-runner --no-verify-jwt
+npx supabase functions deploy pdca-runner --no-verify-jwt
+npx supabase functions deploy inventory-crawler --no-verify-jwt
+npx supabase functions deploy inventory-propose --no-verify-jwt
+npx supabase functions deploy inventory-gates --no-verify-jwt
+npx supabase functions deploy drift-walker --no-verify-jwt
+npx supabase functions deploy contract-graph-builder --no-verify-jwt
+npx supabase functions deploy a2a-push-notify --no-verify-jwt
+npx supabase functions deploy test-gen-from-report --no-verify-jwt
+```
+
+For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `release-builder`, `experiment-analyzer`, `anomaly-detector`, …) and cron setup, follow [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md).
+
+## Function inventory (core pipeline)
 
 | Function | Trigger | What it does |
 | --- | --- | --- |
-| `api` | HTTP (Hono gateway) | All admin console API calls — routes under `/v1/` |
+| `api` | HTTP (Hono gateway) | All admin console + SDK API calls — routes under `/v1/` |
+| `fast-filter` | Invoked by `api` | Stage-1 cheap triage before full classification |
 | `classify-report` | `reports` INSERT | LLM triage: severity, category, blast-radius |
+| `mcp` | HTTP | Hosted MCP transport for Cursor / Claude |
 | `fix-worker` | `fix_attempts` INSERT | Generates a git-diff fix via `generateObject` + Zod validation |
 | `judge-batch` | cron | Grades fix quality; writes `judge_results` |
 | `intelligence-report` | cron / manual | Weekly LLM narrative from KPI trends |
@@ -52,9 +70,11 @@ npx supabase functions deploy test-gen-from-report
 | `a2a-push-notify` | manual / agents | Sends A2A protocol notifications to connected agents |
 | `test-gen-from-report` | manual | Generates a Playwright test from a report, opens draft PR |
 
+The remaining workers (billing, retention, SDK upgrade, skill-sync, rewards payout, …) live alongside these. Full list: `ls packages/server/supabase/functions/` or `pnpm docs-stats`.
+
 ## Required secrets
 
-Set all secrets before deploying — functions read them at cold-start:
+Set secrets before deploying — functions read them at cold-start:
 
 ```bash
 cd packages/server
@@ -69,15 +89,16 @@ npx supabase secrets set GITHUB_APP_ID=…
 npx supabase secrets set GITHUB_APP_PRIVATE_KEY="$(cat path/to/key.pem)"
 npx supabase secrets set E2B_API_KEY=…
 npx supabase secrets set FIRECRAWL_API_KEY=…
+npx supabase secrets set ADMIN_BASE_URL=https://your-domain.example.com/admin
 ```
 
 Tenants can override `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` per project via [BYOK](/security/byok).
 
 ## JWT verification
 
-All 15 functions set `verify_jwt = false` in `packages/server/supabase/config.toml`. Auth is enforced **inside** each handler via one of two patterns:
+Functions set `verify_jwt = false` in `packages/server/supabase/config.toml`. Auth is enforced **inside** each handler via one of two patterns:
 
 - **Service-role guard** (`requireServiceRoleAuth`) — cron-triggered functions (`intelligence-report`, `pdca-runner`, `judge-batch`, etc.) verify the Supabase service-role key in the `Authorization` header, so only the Supabase scheduler can call them.
-- **User JWT guard** (`requireAuth`) — user-facing functions (`api`, `fix-worker`, `classify-report`, etc.) extract and verify the user JWT themselves, giving them full control over RBAC and error responses.
+- **User / API-key guard** — user-facing functions (`api`, `mcp`, `classify-report`, etc.) authenticate via API key or JWT inside the handler.
 
 This two-layer approach lets functions be deployed with `--no-verify-jwt` while keeping security equivalent to the platform default. See `packages/server/supabase/config.toml` for the per-function settings.

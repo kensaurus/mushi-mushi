@@ -31,8 +31,8 @@ npx mushi-mushi
 
 [Vision](./VISION.md) · [Quick start](#60-second-proof) · [Connect your editor](https://kensaur.us/mushi-mushi/docs/connect) · [Self-host](#self-host-in-under-5-minutes) · [Sentry enrichment](#sentry-enrichment) · [Packages](#framework-coverage) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Live demo](https://kensaur.us/mushi-mushi/admin/) · [Operators / platform](./docs/operators/) · [Roadmap](https://kensaur.us/mushi-mushi/docs/roadmap)
 
-<!-- TODO(loop-video): embed the 20–30s incident-loop gif when recut (docs/screenshots/incident-loop.gif).
-     Until then the static diagnosis screenshot above shows error → diagnosis → fix.
+<!-- TODO(loop-video): embed a 20–30s incident-loop gif when recut.
+     Until then use the static frame at docs/screenshots/incident-loop.png.
      Script + target metric (time-to-first-diagnosis < 2 min) in docs/marketing/STOREFRONTS.md. -->
 
 <a href="https://kensaur.us/mushi-mushi/admin/reports" title="Open a classified report in the live demo">

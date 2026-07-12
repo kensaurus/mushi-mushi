@@ -8,3 +8,7 @@ ALTER TABLE project_settings
 
 COMMENT ON COLUMN project_settings.github_app_installation_id_pending IS
   'GitHub App installation id received before any primary repo existed; promoted to project_repos.github_app_installation_id on repo registration, then cleared.';
+
+-- Both NOTIFYs are needed because PostgREST listens on each.
+NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';
