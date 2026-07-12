@@ -87,7 +87,7 @@ export function IntegrationsPage() {
     }
     const next = params.toString()
     window.history.replaceState(null, '', `${window.location.pathname}${next ? `?${next}` : ''}`)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount for the redirect params
+    // Empty deps: runs once on mount to consume the redirect params.
   }, [])
   const setup = useSetupStatus(activeProjectId)
   const copy = usePageCopy('/integrations')
