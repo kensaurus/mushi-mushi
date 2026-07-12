@@ -77,9 +77,9 @@ supabase db push
 
 | Migration | Purpose |
 | --- | --- |
-| `20260702090000_cli_auth_two_phase_claim.sql` | `cli_token_claimed_at`, `client_id` on `cli_auth_requests`; hardened expiry cron |
-| `20260702100000_request_idempotency_restrict_member_read.sql` | Drop member read RLS on `request_idempotency` |
-| `20260702110000_scoped_rate_limits_generalize_actor.sql` | Drop `scoped_rate_limits.user_id` FK for IP-derived actors |
+| `20260702015655_cli_auth_two_phase_claim.sql` | `cli_token_claimed_at`, `client_id` on `cli_auth_requests`; hardened expiry cron |
+| `20260702034746_request_idempotency_restrict_member_read.sql` | Drop member read RLS on `request_idempotency` |
+| `20260702035407_scoped_rate_limits_generalize_actor.sql` | Drop `scoped_rate_limits.user_id` FK for IP-derived actors |
 
 Verify:
 

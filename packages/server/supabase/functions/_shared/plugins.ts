@@ -108,6 +108,22 @@ export type MushiEventName =
   // Skill pipelines (cloud mode step dispatch)
   | 'skill_pipeline.step.dispatched'
 
+/** Plugins that deliver human notifications (vs automation). Only these are
+ *  gated by the console's per-event notification toggles. */
+const NOTIFICATION_PLUGIN_SLUGS = new Set(['slack', 'slack-app', 'discord', 'teams', 'msteams'])
+
+/** Bus event → notification_prefs key (NotificationPrefsMatrix). Events with
+ *  no entry (report.created, judge.score_recorded, …) have no toggle and
+ *  always deliver. `false` suppresses; absent = enabled. */
+const NOTIFICATION_EVENT_PREF_KEYS: Record<string, string> = {
+  'report.classified': 'report.classified',
+  'fix.proposed': 'fix.pr_opened',
+  'fix.failed': 'fix.failed',
+  'fix.applied': 'fix.merged',
+  'qa_story.failed': 'qa_story.failed',
+  'qa_story.recovered': 'qa_story.recovered',
+}
+
 interface WebhookPlugin {
   plugin_slug: string
   webhook_url: string
@@ -136,9 +152,39 @@ export async function dispatchPluginEvent(
   }
 
   const allPlugins = (rows ?? []) as Array<WebhookPlugin & { config?: Record<string, unknown> | null }>
-  const subscribedPlugins = allPlugins.filter(
+  let subscribedPlugins = allPlugins.filter(
     (p) => p.subscribed_events.length === 0 || p.subscribed_events.includes('*') || p.subscribed_events.includes(event),
   )
+
+  // Honor the console NotificationPrefsMatrix (project_settings.notification_prefs)
+  // for NOTIFICATION-type plugins only. Automation plugins (cursor-cloud-agent,
+  // jira, linear, github-issues, …) keep firing regardless — a "notifications"
+  // toggle must not silently disable issue creation or agent dispatch.
+  const prefKey = NOTIFICATION_EVENT_PREF_KEYS[event]
+  if (prefKey && subscribedPlugins.some((p) => NOTIFICATION_PLUGIN_SLUGS.has(p.plugin_slug))) {
+    const { data: ps } = await db
+      .from('project_settings')
+      .select('notification_prefs, report_severity_min')
+      .eq('project_id', projectId)
+      .maybeSingle()
+    const settingsRow = ps as
+      | { notification_prefs?: Record<string, unknown> | null; report_severity_min?: string | null }
+      | null
+    const prefs = (settingsRow?.notification_prefs ?? {}) as Record<string, unknown>
+    let muted = prefs[prefKey] === false
+    // report.classified additionally honors the severity floor, matching the
+    // direct Slack/Discord/Teams cards in classify-report and fast-filter.
+    if (!muted && event === 'report.classified' && settingsRow?.report_severity_min) {
+      const severity = (data as { classification?: { severity?: unknown } } | null | undefined)
+        ?.classification?.severity
+      const rank = CURSOR_SEVERITY_RANK[String(severity ?? '')] ?? 0
+      const minRank = CURSOR_SEVERITY_RANK[settingsRow.report_severity_min] ?? 1
+      muted = rank < minRank
+    }
+    if (muted) {
+      subscribedPlugins = subscribedPlugins.filter((p) => !NOTIFICATION_PLUGIN_SLUGS.has(p.plugin_slug))
+    }
+  }
 
   const tasks: Promise<unknown>[] = []
 

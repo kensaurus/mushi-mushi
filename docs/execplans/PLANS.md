@@ -332,7 +332,7 @@ in CI logs; this plan persists it and renders it.
 ### Deliverables
 
 #### Phase 1 — Migration (mushi backend)
-- [x] `packages/server/supabase/migrations/20260612140000_code_health_gate.sql`:
+- [x] `packages/server/supabase/migrations/20260612061520_20260612140000_code_health_gate.sql`:
   - Extend `gate_runs_gate_check` to add `'code_health'`. **Re-list the full
     current set** so the constraint stays complete:
     `dead_handler, mock_leak, api_contract, crawl, status_claim, spec_drift,

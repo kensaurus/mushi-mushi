@@ -9,7 +9,7 @@ import { Callout } from 'nextra/components'
 Mushi is built in the open. The whitepaper documents the full architectural target — code catches up release by release.
 
 <Callout type="info">
-  **Currently shipping:** v1.15.x (Wave D complete). See the [Changelog](/changelog) for what landed.
+  **Currently shipping:** v1.23.x (Wave D complete; Wave E in progress). See the [Changelog](/changelog) for what landed.
 </Callout>
 
 ## Live boards
@@ -25,7 +25,7 @@ Mushi is built in the open. The whitepaper documents the full architectural targ
 | **A** | Vision air-gap, MCP correctness, RAG, sandbox | ✅ Shipped |
 | **B** | WASM SLM classifier, real-time collab, AG-UI, fine-tuning pipeline | ✅ Shipped |
 | **C** | Mobile parity (RN + iOS + Android + Flutter + Capacitor), A2A protocol, SOC 2 readiness, data residency pinning, BYOK, BYO storage | ✅ Shipped |
-| **D** | Plugin marketplace GA, docs site, Mushi Cloud GA, multi-repo coordinated fixes, PDCA console enhancements, QA coverage stories, SDK install & upgrade one-click, Skill-driven triage, Codebase Atlas | ✅ Shipped (v1.15.x) |
+| **D** | Plugin marketplace GA, docs site, Mushi Cloud GA, multi-repo coordinated fixes, PDCA console enhancements, QA coverage stories, SDK install & upgrade one-click, Skill-driven triage, Codebase Atlas | ✅ Shipped |
 | **E** | v1.0.0 cross-platform stable API, Launch Week, frictionless onboarding, self-hosting one-click | 🔄 In-flight |
 
 ## Wave E details (in-flight)
@@ -33,11 +33,11 @@ Mushi is built in the open. The whitepaper documents the full architectural targ
 | Feature | Status | Notes |
 | --- | --- | --- |
 | `@mushi-mushi/*` 1.0.0 stable API locks | 🔄 In-flight | Coordinated 1.0 across all 0.x packages (capacitor, node, vue, svelte, angular) |
-| Frictionless onboarding | 🔄 In-flight | GitHub/Google OAuth signup, auto-provisioned project+key, `mushi login` device flow |
+| Frictionless onboarding | 🔄 In-flight | GitHub/Google OAuth signup, auto-provisioned project+key; **`mushi login` device flow shipped** (Jul 2026) |
 | Self-hosting one-click | 🔄 In-flight | Railway / Render deploy button, `MUSHI_INIT_*` headless bootstrap |
 | Launch Week | ⏭ Next | Public Show HN + Product Hunt + Reddit coordinated launch |
 
-## Wave D highlights (v1.15.x, shipped)
+## Wave D highlights (shipped)
 
 - **One-click SDK install & upgrade** — `npx mushi-mushi` + `npm create mushi-mushi` wizard, SDK upgrade PRs from the Connect hub
 - **Skill-driven triage** — `skill-sync`, `classify-report` Stage 2, pipeline runs, cursor-kenji integration

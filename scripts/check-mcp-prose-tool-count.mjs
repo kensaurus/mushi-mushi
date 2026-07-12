@@ -43,6 +43,7 @@ const PROSE_FILES = [
   'apps/docs/content/admin/mcp.mdx',
   'packages/mcp/README.md',
   'apps/docs/data/admin-screenshots.ts',
+  'docs/SCREENSHOTS.md',
 ]
 
 const claimRe = /(\d+)\s*-?\s*tools?\b/gi

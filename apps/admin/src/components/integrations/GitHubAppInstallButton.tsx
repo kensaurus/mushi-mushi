@@ -25,7 +25,14 @@ const APP_SLUG = import.meta.env.VITE_GITHUB_APP_SLUG as string | undefined
 
 export function GitHubAppInstallButton({ projectId, hasInstallation = false, className = '' }: Props) {
   if (!APP_SLUG) {
-    return null
+    // Hiding the button entirely made a misconfigured deploy look like the
+    // feature doesn't exist — surface the missing env var instead.
+    return (
+      <p className={`text-2xs text-fg-muted ${className}`}>
+        GitHub App install unavailable: <code>VITE_GITHUB_APP_SLUG</code> is not set for this console.
+        Self-hosted? Use the PAT option below.
+      </p>
+    )
   }
 
   const installUrl = `https://github.com/apps/${APP_SLUG}/installations/new?state=${encodeURIComponent(projectId)}`

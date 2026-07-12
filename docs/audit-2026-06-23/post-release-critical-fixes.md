@@ -179,7 +179,7 @@ These were flagged in the same post-release review but were **already fixed** be
 - Requires `https:` protocol.
 - Host suffix allowlist per field (Teams: `office.com`, `logic.azure.com`, `powerplatform.com`).
 
-Migration comment in `20260622150000_teams_webhook_url.sql` matches this behavior.
+Migration comment in `20260622075328_teams_webhook_url.sql` matches this behavior.
 
 ### Test endpoint — no response-body reflection
 

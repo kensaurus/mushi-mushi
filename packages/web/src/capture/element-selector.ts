@@ -10,6 +10,8 @@ export interface ElementSelector {
 export function createElementSelector(): ElementSelector {
   let active = false;
   let overlay: HTMLDivElement | null = null;
+  let captureLayer: HTMLDivElement | null = null;
+  let hoveredElement: Element | null = null;
   let resolvePromise: ((el: MushiSelectedElement | null) => void) | null = null;
 
   /**
@@ -54,10 +56,14 @@ export function createElementSelector(): ElementSelector {
 
   function captureElement(el: Element): MushiSelectedElement {
     const rect = el.getBoundingClientRect();
+    // SVG elements expose className as SVGAnimatedString, not string —
+    // icons are common click targets, so read the attribute instead.
+    const className =
+      typeof el.className === 'string' ? el.className : el.getAttribute('class') ?? '';
     return {
       tagName: el.tagName.toLowerCase(),
       id: el.id || undefined,
-      className: el.className || undefined,
+      className: className || undefined,
       textContent: el.textContent?.trim().slice(0, 200) || undefined,
       xpath: getXPath(el),
       rect: {
@@ -91,6 +97,52 @@ export function createElementSelector(): ElementSelector {
     return el;
   }
 
+  /**
+   * Full-viewport transparent layer that owns every pointer event while the
+   * picker is active. Hit-testing the page is done via elementsFromPoint()
+   * underneath it instead of relying on `e.target`, which fixes two dead
+   * zones the old listener-on-document approach had:
+   * - <iframe>: mouse events inside a frame never reach the parent document,
+   *   so hover did nothing and a click was swallowed — the picker hung with
+   *   the panel hidden. With the layer, the frame element itself is pickable.
+   * - Shadow DOM: `e.target` is retargeted to the shadow host; we descend
+   *   into open shadow roots to capture the element the user actually sees.
+   * It also stops the page's own handlers from firing mid-pick (the old code
+   * only cancelled `click`, so mousedown/pointerdown still leaked through).
+   */
+  function createCaptureLayer(): HTMLDivElement {
+    const el = document.createElement('div');
+    el.style.cssText = `
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      cursor: crosshair;
+      background: transparent;
+    `;
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function resolveTargetAt(x: number, y: number): Element | null {
+    const stack = document.elementsFromPoint(x, y);
+    let target: Element | null = null;
+    for (const el of stack) {
+      if (el === captureLayer || el === overlay) continue;
+      if (el.id === 'mushi-mushi-widget' || el.closest('#mushi-mushi-widget')) return null;
+      target = el;
+      break;
+    }
+    // Descend through open shadow roots to the rendered element.
+    let hops = 0;
+    while (target?.shadowRoot && hops < 20) {
+      const inner = target.shadowRoot.elementFromPoint(x, y);
+      if (!inner || inner === target) break;
+      target = inner;
+      hops++;
+    }
+    return target;
+  }
+
   function positionOverlay(target: Element) {
     if (!overlay) return;
     const rect = target.getBoundingClientRect();
@@ -102,31 +154,39 @@ export function createElementSelector(): ElementSelector {
   }
 
   function handleMouseMove(e: MouseEvent) {
-    const target = e.target as Element;
-    if (target === overlay) return;
+    const target = resolveTargetAt(e.clientX, e.clientY);
+    if (!target) {
+      hoveredElement = null;
+      if (overlay) overlay.style.display = 'none';
+      return;
+    }
+    hoveredElement = target;
     positionOverlay(target);
+  }
+
+  function swallow(e: Event) {
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   function handleClick(e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    const target = e.target as Element;
-    if (target === overlay) return;
-    // Guard: ignore clicks that originated inside the Mushi widget host so
-    // the user can't accidentally capture the widget panel itself.
-    const path = e.composedPath ? e.composedPath() : [];
-    const hitsMushiHost = path.some(
-      (node) => node instanceof Element && (node as Element).id === 'mushi-mushi-widget',
-    );
-    if (hitsMushiHost) return;
-    const captured = captureElement(target);
-    finish(captured);
+    const target = resolveTargetAt(e.clientX, e.clientY);
+    // Click landed on the Mushi widget host — ignore, keep picking.
+    if (!target) return;
+    finish(captureElement(target));
   }
 
   function handleKeyDown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       finish(null);
     }
+  }
+
+  function handleScroll() {
+    // Keep the highlight glued to the hovered element while the page scrolls.
+    if (hoveredElement?.isConnected) positionOverlay(hoveredElement);
   }
 
   function finish(result: MushiSelectedElement | null) {
@@ -142,22 +202,30 @@ export function createElementSelector(): ElementSelector {
       resolvePromise = resolve;
       active = true;
       overlay = createOverlay();
-      document.body.style.cursor = 'crosshair';
+      captureLayer = createCaptureLayer();
 
-      document.addEventListener('mousemove', handleMouseMove, true);
-      document.addEventListener('click', handleClick, true);
+      captureLayer.addEventListener('mousemove', handleMouseMove);
+      captureLayer.addEventListener('click', handleClick);
+      captureLayer.addEventListener('pointerdown', swallow);
+      captureLayer.addEventListener('mousedown', swallow);
+      captureLayer.addEventListener('mouseup', swallow);
       document.addEventListener('keydown', handleKeyDown, true);
+      window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
     });
   }
 
   function deactivate() {
     if (!active) return;
     active = false;
-    document.body.style.cursor = '';
-    document.removeEventListener('mousemove', handleMouseMove, true);
-    document.removeEventListener('click', handleClick, true);
+    hoveredElement = null;
     document.removeEventListener('keydown', handleKeyDown, true);
+    window.removeEventListener('scroll', handleScroll, { capture: true });
 
+    // Capture-layer listeners die with the node.
+    if (captureLayer) {
+      captureLayer.remove();
+      captureLayer = null;
+    }
     if (overlay) {
       overlay.remove();
       overlay = null;

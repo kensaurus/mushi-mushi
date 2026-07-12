@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-07-03",
+  "capturedAt": "2026-07-12",
   "source": "Filesystem + package.json derivation (scripts/lib/docs-stats.mjs)",
   "monorepo": {
     "workspacePackages": 44,
@@ -8,7 +8,7 @@
   },
   "server": {
     "edgeFunctions": 51,
-    "sqlMigrations": 302,
+    "sqlMigrations": 318,
     "pipelineAgents": 19
   },
   "integrations": {

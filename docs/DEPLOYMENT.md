@@ -200,9 +200,9 @@ findings before declaring the deploy done.
 
 | Migration | Purpose |
 | --- | --- |
-| `20260702090000_cli_auth_two_phase_claim.sql` | Two-phase CLI token claim + `client_id` |
-| `20260702100000_request_idempotency_restrict_member_read.sql` | Drop member read on idempotency cache (secret exposure) |
-| `20260702110000_scoped_rate_limits_generalize_actor.sql` | Generalize rate-limit actor column (IP-derived IDs) |
+| `20260702015655_cli_auth_two_phase_claim.sql` | Two-phase CLI token claim + `client_id` |
+| `20260702034746_request_idempotency_restrict_member_read.sql` | Drop member read on idempotency cache (secret exposure) |
+| `20260702035407_scoped_rate_limits_generalize_actor.sql` | Generalize rate-limit actor column (IP-derived IDs) |
 
 ---
 
