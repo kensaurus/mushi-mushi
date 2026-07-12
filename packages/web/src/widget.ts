@@ -133,6 +133,7 @@ export class MushiWidget {
    *  Drives a different success copy so the user knows the report
    *  hasn't actually reached the console yet. */
   private lastSubmitQueuedOffline = false;
+  private lastSubmitScreenshotDropped = false;
   /** Whether the user has clicked ✕ on the header banner this session. */
   private bannerDismissed = false;
   private bannerResizeObserver: ResizeObserver | null = null;
@@ -349,6 +350,7 @@ export class MushiWidget {
     this.removeSelectorHint();
     this.lastReportId = null;
     this.lastSubmitQueuedOffline = false;
+    this.lastSubmitScreenshotDropped = false;
     this.viaFeatureRequest = false;
     // A fresh session starts with a clean slate — drafts only need to
     // survive re-renders WITHIN a session, not across open/close cycles.
@@ -1732,6 +1734,7 @@ export class MushiWidget {
       leaderboardLoading: this.leaderboardLoading,
       leaderboardEntries: this.leaderboardEntries,
       lastSubmitQueuedOffline: this.lastSubmitQueuedOffline,
+      lastSubmitScreenshotDropped: this.lastSubmitScreenshotDropped,
       featureBoard: this.featureBoard,
       crossAppReports: this.crossAppReports,
       allowScreenshotRemove: this.allowScreenshotRemove,
@@ -2063,6 +2066,7 @@ export class MushiWidget {
       this.submittedAt = new Date();
       this.lastReportId = null;
       this.lastSubmitQueuedOffline = false;
+      this.lastSubmitScreenshotDropped = false;
       this.render();
 
       // Kick off the host's submission handler. We treat both
@@ -2123,6 +2127,7 @@ export class MushiWidget {
           if (outcome) {
             this.lastReportId = outcome.reportId ?? null;
             this.lastSubmitQueuedOffline = Boolean(outcome.queuedOffline);
+            this.lastSubmitScreenshotDropped = Boolean(outcome.screenshotDropped);
             this.render();
           }
           if (this.autoCloseTimer !== null) {

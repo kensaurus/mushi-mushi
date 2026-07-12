@@ -156,7 +156,7 @@ Deno.serve(withSentry('fast-filter', async (req) => {
 
     const { data: settings } = await db
       .from('project_settings')
-      .select('stage2_model, stage1_confidence_threshold, slack_webhook_url, slack_channel_id, discord_webhook_url, teams_webhook_url, reporter_notifications_enabled')
+      .select('stage2_model, stage1_confidence_threshold, slack_webhook_url, slack_channel_id, discord_webhook_url, teams_webhook_url, reporter_notifications_enabled, notification_prefs')
       .eq('project_id', projectId)
       .single()
 
@@ -377,7 +377,26 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       const { data: project } = await db.from('projects').select('name').eq('id', projectId).single()
       const projectName = project?.name ?? 'Unknown'
 
-      if (settings?.slack_channel_id || settings?.slack_webhook_url || Deno.env.get('SLACK_BOT_TOKEN')) {
+      // Same NotificationPrefsMatrix gate as classify-report: 'report.classified'
+      // toggle + report_severity_min floor apply to all team channels below.
+      const notifPrefs = ((settings as unknown as { notification_prefs?: Record<string, unknown> | null } | null)
+        ?.notification_prefs ?? {}) as Record<string, unknown>
+      const SEVERITY_RANK: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 }
+      const severityMin = typeof notifPrefs['report_severity_min'] === 'string'
+        ? (notifPrefs['report_severity_min'] as string)
+        : 'low'
+      const notifyClassified =
+        notifPrefs['report.classified'] !== false &&
+        (SEVERITY_RANK[String(classification.severity)] ?? 0) >= (SEVERITY_RANK[severityMin] ?? 1)
+      if (!notifyClassified) {
+        log.info('Team notification suppressed by notification_prefs', {
+          reportId,
+          severity: classification.severity,
+          severityMin,
+        })
+      }
+
+      if (notifyClassified && (settings?.slack_channel_id || settings?.slack_webhook_url || Deno.env.get('SLACK_BOT_TOKEN'))) {
         log.info('Sending Slack notification', { severity: classification.severity })
         Promise.all([
           report.end_user_id
@@ -423,7 +442,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
         }).catch((e) => log.warn('Rich Slack context failed — no message sent', { err: String(e) }))
       }
 
-      if (settings?.discord_webhook_url) {
+      if (notifyClassified && settings?.discord_webhook_url) {
         sendDiscordNotification(settings.discord_webhook_url, {
           projectName,
           category: classification.category,
@@ -433,7 +452,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
         }).catch(e => log.error('Discord notification failed', { err: String(e) }))
       }
 
-      if (settings?.teams_webhook_url) {
+      if (notifyClassified && settings?.teams_webhook_url) {
         sendTeamsNotification(settings.teams_webhook_url, {
           projectName,
           category: classification.category,

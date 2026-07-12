@@ -17,11 +17,17 @@ export default {
 
   // Do — make the fix
   connect: 'Connect hub (console)',
+  'cli-auth': 'CLI device auth',
+  'mcp-auth': 'MCP OAuth consent',
+  'setup-copilot': 'Setup Copilot',
   'skill-pipelines': 'Skill Pipelines',
   fixes: 'Fix orchestrator',
   repo: 'Repo graph',
   'prompt-lab': 'Prompt lab',
   releases: 'Releases',
+  feedback: 'Feedback hub',
+  'feature-board': 'Feature board',
+  content: 'Content quality',
 
   // Check — measure quality
   judge: 'Judge dashboard',

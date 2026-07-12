@@ -156,7 +156,7 @@ A walk through the rooms inside. Click any panel to land on it in the live demo.
 </tr>
 <tr>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/admin/mcp"><img src="./screenshots/mcp-dark.png" alt="MCP — Model Context Protocol page with Add to Cursor deeplink, feature-group selector, and 72-tool catalog synced from packages/mcp/src/catalog.ts." /></a>
+    <a href="https://kensaur.us/mushi-mushi/admin/mcp"><img src="./screenshots/mcp-dark.png" alt="MCP — Model Context Protocol page with Add to Cursor deeplink, feature-group selector, and 68-tool catalog synced from packages/mcp/src/catalog.ts." /></a>
     <p align="center"><b>MCP — Model Context Protocol</b> · <sub>lean default (<code>triage,fixes,inventory,setup,docs</code>), one-click Cursor deeplink, hosted Streamable HTTP at <code>/functions/v1/mcp</code>, catalog parity guarded by <code>pnpm check:catalog-sync</code>. The same install block also lives on <a href="https://kensaur.us/mushi-mushi/admin/connect">Connect & Update</a>.</sub></p>
   </td>
   <td width="50%" valign="top">

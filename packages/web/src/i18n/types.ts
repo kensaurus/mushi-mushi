@@ -143,6 +143,7 @@ export interface MushiLocale {
       queuedHint: string;
       trackOnMushi: string;
       slaDefault: string;
+      screenshotDropped: string;
     };
     featureRequest: {
       label: string;

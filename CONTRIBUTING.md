@@ -69,6 +69,7 @@ packages/
 apps/
   admin/         Admin dashboard (React + Tailwind)
   docs/          Documentation site (Nextra — apps/docs)
+  testers/       Tester marketplace portal (Next.js)
 tooling/
   eslint-config/ Shared ESLint flat config
   tsconfig/      Shared TypeScript configs

@@ -17,7 +17,22 @@ The Explore page turns the raw indexed source files into a visual, navigable map
 
 ---
 
-## Three views
+## Tab groups
+
+The page is organized into three rails (URL `?tab=`):
+
+| Rail | Tabs | Purpose |
+|------|------|---------|
+| **Summary** | Summary | Index health, file counts, last index attempt / error |
+| **Understand** | Ask · Tour · Domains · Knowledge | Chat with citations, guided walkthrough, business domains, wiki/docs knowledge merged into Ask |
+| **Map** | Graph · Layers · Search | Visual architecture map and semantic search (detailed below) |
+| **Index** | Index | Indexer debug — repo, webhook, embedding coverage, last error |
+
+MCP equivalents: `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `search_codebase`, `get_codebase_domains`, `analyze_codebase_impact`, `analyze_wiki_knowledge`.
+
+---
+
+## Map views
 
 ### Graph
 
@@ -100,7 +115,7 @@ Clicking any node (in any view) opens a detail panel with:
 
 ## Layer filter chips
 
-The **Filter:** row above any view lets you narrow all three tabs simultaneously. Click `64 Tests` and the graph shows only test nodes and their inter-test edges, the Layers lane collapses to just the Tests column, and Search results are pre-scoped to Tests.
+The **Filter:** row above Map views lets you narrow Graph, Layers, and Search simultaneously. Click `64 Tests` and the graph shows only test nodes and their inter-test edges, the Layers lane collapses to just the Tests column, and Search results are pre-scoped to Tests.
 
 Click the chip again (or **Clear**) to restore the full view.
 

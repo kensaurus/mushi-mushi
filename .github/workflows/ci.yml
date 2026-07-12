@@ -193,6 +193,16 @@ jobs:
         # functions, npm packages, etc.) must match scripts/lib/docs-stats.mjs.
         run: pnpm check:docs-stats
 
+      - name: Check edge-function deploy docs
+        # Fail when SELF_HOSTED.md / edge-functions.mdx deploy a name that is
+        # not a directory under packages/server/supabase/functions/.
+        run: pnpm check:edge-fn-deploy-docs
+
+      - name: Check admin docs coverage (warn)
+        # Soft report: App.tsx routes missing apps/docs/content/admin/*.mdx.
+        # Set ADMIN_DOCS_COVERAGE_STRICT=1 to fail.
+        run: pnpm check:admin-docs-coverage
+
       - name: Check narrative & positioning consistency
         # Anti-drift guard for the VISION.md constitution: the v2 hero must lead
         # every primary README (no stale taglines), the north-star / category /

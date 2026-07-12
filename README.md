@@ -31,8 +31,8 @@ npx mushi-mushi
 
 [Vision](./VISION.md) · [Quick start](#60-second-proof) · [Connect your editor](https://kensaur.us/mushi-mushi/docs/connect) · [Self-host](#self-host-in-under-5-minutes) · [Sentry enrichment](#sentry-enrichment) · [Packages](#framework-coverage) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Live demo](https://kensaur.us/mushi-mushi/admin/) · [Operators / platform](./docs/operators/) · [Roadmap](https://kensaur.us/mushi-mushi/docs/roadmap)
 
-<!-- TODO(loop-video): embed the 20–30s incident-loop gif when recut (docs/screenshots/incident-loop.gif).
-     Until then the static diagnosis screenshot above shows error → diagnosis → fix.
+<!-- TODO(loop-video): embed a 20–30s incident-loop gif when recut.
+     Until then use the static frame at docs/screenshots/incident-loop.png.
      Script + target metric (time-to-first-diagnosis < 2 min) in docs/marketing/STOREFRONTS.md. -->
 
 <a href="https://kensaur.us/mushi-mushi/admin/reports" title="Open a classified report in the live demo">
@@ -249,7 +249,7 @@ npx skills add kensaurus/mushi-mushi
 
 Then: `/mushi-setup` (guided SDK install + MCP wiring), `/mushi-debug` (diagnose ingest / MCP / pipeline failures), `/mushi-health` (pass/fail check across CLI, API, edge functions, BYOK keys), `/mushi-integration` (two-way loop, fix dispatch, lessons). The admin **Connect & Update** page (`/connect`) mirrors the same flows with one-click **Add to Cursor** deeplinks.
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~348K TS lines · 1,680 source files · 44 workspace / 36 npm packages · 51 edge functions · 310 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~349K TS lines · 1,682 source files · 44 workspace / 36 npm packages · 51 edge functions · 318 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ---
 

@@ -193,7 +193,10 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
       },
     }
 
-    const configDir = ideEntry.dir.startsWith('/')
+    // isAbsolute, not startsWith('/'): zed's dir is under os.homedir(), which
+    // on Windows is a drive-letter path that startsWith('/') misclassifies as
+    // repo-relative (writing to <cwd>\C:\Users\… instead of the real home dir).
+    const configDir = nodePath.isAbsolute(ideEntry.dir)
       ? ideEntry.dir
       : nodePath.join(cwd, ideEntry.dir)
     const configPath = nodePath.join(configDir, ideEntry.file)
@@ -432,12 +435,12 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
       // instead of hoping the user reads a reminder. Hosted-OAuth entries are
       // the opposite case: URL-only, no secret — committing them is how a
       // team shares the MCP hookup, so don't gitignore those.
-      const configRelPath = ideEntry.dir.startsWith('/')
+      const configRelPath = nodePath.isAbsolute(ideEntry.dir)
         ? configPath
         : nodePath.relative(cwd, configPath)
       if (useHostedOauth) {
         console.log(`\nNote: ${configRelPath} holds no secrets (OAuth login) — safe to commit and share with your team.`)
-      } else if (!ideEntry.dir.startsWith('/')) {
+      } else if (!nodePath.isAbsolute(ideEntry.dir)) {
         const gitignorePath = nodePath.join(cwd, '.gitignore')
         const ignoreLine = configRelPath.replaceAll('\\', '/')
         try {

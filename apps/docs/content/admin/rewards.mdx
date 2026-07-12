@@ -65,6 +65,23 @@ Realtime so you see activity without a page refresh.
 
 ---
 
+## One-click recommended defaults
+
+On an empty Activity rules tab, click **Use recommended defaults** (or call
+`POST /v1/admin/rewards/presets/apply`). That idempotently installs:
+
+| Action | Default points | When it fires |
+|--------|---------------:|---------------|
+| `report.submitted` | 10 | After ingest links the report to an `end_user` |
+| `report.triaged` | 50 | After `classify-report` finishes (idempotent) |
+| `comment_posted` | (preset) | Reporter comments |
+
+Plus a 4-tier ladder (Explorer → Contributor → Champion → Legend). Safe to
+re-run — existing custom rules/slugs are never clobbered. Full operator guide:
+[`docs/REWARDS.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/REWARDS.md).
+
+---
+
 ## Activity Rules tab
 
 Rules define which user actions earn points and what the caps are.

@@ -16,6 +16,8 @@ interface NotifPrefs {
   'qa_story.recovered': boolean
   'fix.dispatched': boolean
   'fix.pr_opened': boolean
+  'fix.failed': boolean
+  'fix.merged': boolean
   'intelligence.report': boolean
   'report_severity_min': 'low' | 'medium' | 'high' | 'critical'
 }
@@ -26,6 +28,8 @@ const DEFAULT_PREFS: NotifPrefs = {
   'qa_story.recovered': true,
   'fix.dispatched': true,
   'fix.pr_opened': true,
+  'fix.failed': true,
+  'fix.merged': true,
   'intelligence.report': true,
   'report_severity_min': 'low',
 }
@@ -55,6 +59,16 @@ const EVENTS: Array<{ key: keyof Omit<NotifPrefs, 'report_severity_min'>; label:
     key: 'fix.pr_opened',
     label: 'Fix PR opened',
     description: 'Notify when a draft PR is opened on GitHub',
+  },
+  {
+    key: 'fix.failed',
+    label: 'Fix attempt failed',
+    description: 'Notify when an auto-fix attempt fails',
+  },
+  {
+    key: 'fix.merged',
+    label: 'Fix merged',
+    description: 'Notify when a fix PR is merged',
   },
   {
     key: 'intelligence.report',

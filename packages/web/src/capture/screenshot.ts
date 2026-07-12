@@ -48,27 +48,40 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
       const url = URL.createObjectURL(blob);
 
       return new Promise((resolve) => {
+        let settled = false;
+        const settle = (value: string | null, reason?: 'taint' | 'error') => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          URL.revokeObjectURL(url);
+          if (reason) {
+            activeOptions.onFailed?.(reason);
+            emitScreenshotFailed(reason);
+          }
+          resolve(value);
+        };
+        // WebKit can leave the SVG image in limbo (neither load nor error) for
+        // pathological documents — never let the report submit hang on it.
+        const timer = setTimeout(() => settle(null, 'error'), 5000);
+
         img.onload = () => {
           try {
             ctx.drawImage(img, 0, 0, width, height);
-            URL.revokeObjectURL(url);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-            resolve(dataUrl);
+            // Safari/WebKit sometimes "loads" a foreignObject SVG but rasterises
+            // nothing. A fully transparent canvas would export as a solid black
+            // JPEG — report failure instead of attaching a useless image.
+            if (isCanvasBlank(ctx, width, height)) {
+              settle(null, 'error');
+              return;
+            }
+            settle(canvas.toDataURL('image/jpeg', 0.7));
           } catch {
-            URL.revokeObjectURL(url);
-            // Canvas tainted — emit event and return null so the report is submitted
-            // without a screenshot rather than with a misleading gray placeholder.
-            activeOptions.onFailed?.('taint');
-            emitScreenshotFailed('taint');
-            resolve(null);
+            // Canvas tainted — return null so the report is submitted without a
+            // screenshot rather than with a misleading gray placeholder.
+            settle(null, 'taint');
           }
         };
-        img.onerror = () => {
-          URL.revokeObjectURL(url);
-          activeOptions.onFailed?.('error');
-          emitScreenshotFailed('error');
-          resolve(null);
-        };
+        img.onerror = () => settle(null, 'error');
         img.src = url;
       });
     } catch {
@@ -107,6 +120,7 @@ function buildPrivacySafeDocument(privacy?: MushiPrivacyConfig): Element {
   // SVG foreignObject serialisation so capture doesn't fail on shadow DOM.
   clone.querySelector('#mushi-mushi-widget')?.remove();
   stripTaintSources(clone);
+  inlineDocumentStyles(clone);
 
   // Redact: black-out matching elements. Applied before mask/block so that
   // password fields are always blacked out even if not explicitly listed
@@ -168,10 +182,12 @@ function stripTaintSources(root: Element): void {
     el.remove();
   }
 
-  // Remove cross-origin external stylesheets.
+  // Remove ALL external stylesheets. An SVG rendered through <img> runs in
+  // secure static mode and cannot fetch any subresource — even same-origin
+  // <link> sheets never load there. Their rules are re-injected as inline
+  // <style> text by inlineDocumentStyles() instead.
   for (const link of root.querySelectorAll('link[rel="stylesheet"], link[as="style"]')) {
-    const href = link.getAttribute('href');
-    if (!href || isCrossOriginUrl(href, pageOrigin)) link.remove();
+    link.remove();
   }
 
   // Strip cross-origin url() references from <style> content.
@@ -204,6 +220,76 @@ function stripCssUrlRefs(css: string, pageOrigin: string): string {
     if (isCrossOriginUrl(trimmed, pageOrigin)) return 'none';
     return _match;
   });
+}
+
+/**
+ * Re-inject the page's stylesheet rules as one inline <style> block. The live
+ * page has them in <link> sheets (and constructable adoptedStyleSheets), but
+ * the SVG-in-<img> capture path loads zero subresources, so without this the
+ * capture renders unstyled. Same-origin (and CORS-enabled) sheets expose
+ * cssRules via CSSOM with no network fetch; unreadable ones are skipped.
+ */
+function inlineDocumentStyles(clone: Element): void {
+  const pageOrigin = typeof location !== 'undefined' ? location.origin : '';
+  const chunks: string[] = [];
+  const sheets: CSSStyleSheet[] = [
+    ...Array.from(document.styleSheets),
+    ...(document.adoptedStyleSheets ?? []),
+  ];
+  for (const sheet of sheets) {
+    const owner = sheet.ownerNode;
+    // Inline <style> elements are already present in the clone.
+    if (owner instanceof Element && owner.tagName === 'STYLE') continue;
+    chunks.push(serializeSheet(sheet));
+  }
+  const css = stripCssUrlRefs(chunks.filter(Boolean).join('\n'), pageOrigin);
+  if (!css) return;
+  const styleEl = document.createElement('style');
+  styleEl.textContent = css;
+  (clone.querySelector('head') ?? clone).appendChild(styleEl);
+}
+
+function serializeSheet(sheet: CSSStyleSheet): string {
+  let rules: CSSRuleList;
+  try {
+    rules = sheet.cssRules; // throws for cross-origin sheets without CORS
+  } catch {
+    return '';
+  }
+  let text = '';
+  for (const rule of Array.from(rules)) {
+    // Expand @import inline — the imported sheet will never be fetched.
+    if (rule instanceof CSSImportRule) {
+      if (rule.styleSheet) text += serializeSheet(rule.styleSheet);
+      continue;
+    }
+    text += `${rule.cssText}\n`;
+  }
+  return text;
+}
+
+/**
+ * WebKit sometimes fires `load` for a foreignObject SVG but rasterises nothing.
+ * Sample the canvas on a coarse grid; a fully transparent bitmap means the
+ * draw silently produced nothing.
+ */
+function isCanvasBlank(ctx: CanvasRenderingContext2D, width: number, height: number): boolean {
+  try {
+    // Probe a coarse grid of single pixels instead of copying the whole
+    // bitmap — a full-viewport getImageData allocates megabytes on the
+    // report-submit path just to answer "did anything draw?".
+    const stepX = Math.max(1, Math.floor(width / 8));
+    const stepY = Math.max(1, Math.floor(height / 8));
+    for (let y = 0; y < height; y += stepY) {
+      for (let x = 0; x < width; x += stepX) {
+        if (ctx.getImageData(x, y, 1, 1).data[3] !== 0) return false;
+      }
+    }
+    return true;
+  } catch {
+    // Tainted canvas — let toDataURL raise the taint path instead.
+    return false;
+  }
 }
 
 function isCrossOriginUrl(raw: string, pageOrigin: string): boolean {

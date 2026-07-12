@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-07-07 · **509** routes.
+> Generated: 2026-07-12 · **510** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 81 |
+| `adminOrApiKey` | 82 |
 | `apiKeyAuth` | 43 |
 | `jwtAuth` | 323 |
 | `jwtOrApiKey` | 3 |
@@ -333,6 +333,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/reports` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | GET | `/v1/admin/reports/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | PATCH | `/v1/admin/reports/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
+| GET | `/v1/admin/reports/:id/replay-url` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | POST | `/v1/admin/reports/:id/reply` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | GET | `/v1/admin/reports/:id/timeline` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | POST | `/v1/admin/reports/bulk` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reports.ts` |
