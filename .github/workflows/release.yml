@@ -316,7 +316,15 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add CHANGELOG.md apps/docs/data/changelog.json
-            git commit -m "chore: refresh public changelog [skip ci]"
+            # No "[skip ci]" here: this push uses GITHUB_TOKEN, so GitHub's
+            # anti-loop protection already prevents it from triggering
+            # workflows. Worse, when this commit lands on the
+            # changeset-release/master branch, "[skip ci]" leaks into the
+            # squash-merge commit body of the Version Packages PR and
+            # suppresses ALL master workflows — including this Release
+            # workflow, silently skipping the npm publish (observed on
+            # PR #310, 2026-07-12; recovered via workflow_dispatch).
+            git commit -m "chore: refresh public changelog"
             # Use HEAD:<branch> form because changesets/action checks out
             # `changeset-release/master` (or master itself on a publish) without
             # setting upstream tracking on the local ref. A bare `git push`
