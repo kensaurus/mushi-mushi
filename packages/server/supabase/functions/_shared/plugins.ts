@@ -164,21 +164,25 @@ export async function dispatchPluginEvent(
   if (prefKey && subscribedPlugins.some((p) => NOTIFICATION_PLUGIN_SLUGS.has(p.plugin_slug))) {
     const { data: ps } = await db
       .from('project_settings')
-      .select('notification_prefs, report_severity_min')
+      .select('notification_prefs')
       .eq('project_id', projectId)
       .maybeSingle()
-    const settingsRow = ps as
-      | { notification_prefs?: Record<string, unknown> | null; report_severity_min?: string | null }
-      | null
+    const settingsRow = ps as { notification_prefs?: Record<string, unknown> | null } | null
     const prefs = (settingsRow?.notification_prefs ?? {}) as Record<string, unknown>
     let muted = prefs[prefKey] === false
     // report.classified additionally honors the severity floor, matching the
     // direct Slack/Discord/Teams cards in classify-report and fast-filter.
-    if (!muted && event === 'report.classified' && settingsRow?.report_severity_min) {
+    // NOTE: report_severity_min is a key INSIDE the notification_prefs JSONB,
+    // not a project_settings column — selecting it as a column errors (42703)
+    // and would silently disable this whole gate.
+    const severityMin = typeof prefs['report_severity_min'] === 'string'
+      ? (prefs['report_severity_min'] as string)
+      : null
+    if (!muted && event === 'report.classified' && severityMin) {
       const severity = (data as { classification?: { severity?: unknown } } | null | undefined)
         ?.classification?.severity
       const rank = CURSOR_SEVERITY_RANK[String(severity ?? '')] ?? 0
-      const minRank = CURSOR_SEVERITY_RANK[settingsRow.report_severity_min] ?? 1
+      const minRank = CURSOR_SEVERITY_RANK[severityMin] ?? 1
       muted = rank < minRank
     }
     if (muted) {
