@@ -68,11 +68,12 @@ export interface HealthCheckResult {
 export interface StorageAdapter {
   upload(input: UploadInput): Promise<UploadResult>
   /**
-   * `key` may be either the bare upload key or the fully-prefixed key
-   * extracted from a stored `storage://` path — adapters with a configured
-   * path prefix must not prepend it twice.
+   * For both signedUrl() and delete(), `key` may be either the bare upload
+   * key or the fully-prefixed key extracted from a stored `storage://` path —
+   * adapters with a configured path prefix must not prepend it twice.
    */
   signedUrl(key: string, ttlSecs?: number): Promise<string>
+  /** Same key contract as signedUrl(). */
   delete(key: string): Promise<void>
   healthCheck(): Promise<HealthCheckResult>
 }
