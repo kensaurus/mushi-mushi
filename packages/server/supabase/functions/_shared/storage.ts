@@ -67,7 +67,13 @@ export interface HealthCheckResult {
 
 export interface StorageAdapter {
   upload(input: UploadInput): Promise<UploadResult>
+  /**
+   * For both signedUrl() and delete(), `key` may be either the bare upload
+   * key or the fully-prefixed key extracted from a stored `storage://` path —
+   * adapters with a configured path prefix must not prepend it twice.
+   */
   signedUrl(key: string, ttlSecs?: number): Promise<string>
+  /** Same key contract as signedUrl(). */
   delete(key: string): Promise<void>
   healthCheck(): Promise<HealthCheckResult>
 }
@@ -405,8 +411,12 @@ interface S3Opts {
 class S3CompatibleAdapter implements StorageAdapter {
   constructor(private opts: S3Opts) {}
 
+  // Idempotent: keys recovered from a stored storage:// path already carry
+  // the prefix (upload() embeds fullKey in storagePath) — don't re-prepend.
   private fullKey(key: string): string {
-    return this.opts.prefix ? `${this.opts.prefix.replace(/\/$/, '')}/${key}` : key
+    if (!this.opts.prefix) return key
+    const prefix = this.opts.prefix.replace(/\/$/, '')
+    return key === prefix || key.startsWith(`${prefix}/`) ? key : `${prefix}/${key}`
   }
 
   private hostedUrl(key: string): string {
@@ -503,8 +513,12 @@ interface GcsOpts {
 class GcsAdapter implements StorageAdapter {
   constructor(private opts: GcsOpts) {}
 
+  // Idempotent: keys recovered from a stored storage:// path already carry
+  // the prefix (upload() embeds fullKey in storagePath) — don't re-prepend.
   private fullKey(key: string): string {
-    return this.opts.prefix ? `${this.opts.prefix.replace(/\/$/, '')}/${key}` : key
+    if (!this.opts.prefix) return key
+    const prefix = this.opts.prefix.replace(/\/$/, '')
+    return key === prefix || key.startsWith(`${prefix}/`) ? key : `${prefix}/${key}`
   }
 
   private async accessToken(): Promise<string> {
