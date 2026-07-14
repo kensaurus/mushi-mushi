@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { PageHeader, StatGrid } from '../components/ui'
 import { LineSparkline } from '../components/charts'
+import { CHIP_TONE } from '../lib/chipTone'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ export function ActivityPage() {
         <div className="flex items-center justify-center py-16 text-fg-faint text-sm">Loading activity…</div>
       )}
       {error && (
-        <div className="rounded border border-danger/30 bg-danger-muted/20 px-4 py-3 text-sm text-danger">
+        <div className={`rounded px-4 py-3 text-sm ${CHIP_TONE.dangerSubtle}`}>
           Failed to load activity data.{' '}
           <button onClick={reload} className="underline">Retry</button>
         </div>
