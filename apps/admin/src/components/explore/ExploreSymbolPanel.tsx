@@ -4,6 +4,7 @@ import { apiFetch } from '../../lib/supabase'
 import { useExploreUx } from '../../lib/exploreModeUx'
 import { Btn, Card } from '../ui'
 import { ExploreUnderstandEmpty } from './ExploreUnderstandEmpty'
+import { readVizToken } from '../../lib/vizTokens'
 import { LAYER_COLORS, LAYER_LABELS } from './exploreLayers'
 import type { CodebaseUnderstandError } from './exploreUnderstandTypes'
 import type { ExploreLayer, ExploreNode } from './exploreTypes'
@@ -24,12 +25,12 @@ type Complexity = { label: string; pct: number; color: string }
 
 function fileComplexity(lineCount: number | null): Complexity | null {
   if (lineCount == null) return null
-  if (lineCount <= 50)   return { label: 'Tiny',   pct: 6,   color: 'oklch(0.70 0.15 145)' }
-  if (lineCount <= 200)  return { label: 'Small',   pct: 22,  color: 'oklch(0.68 0.17 145)' }
-  if (lineCount <= 500)  return { label: 'Medium',  pct: 45,  color: 'oklch(0.70 0.18 80)'  }
-  if (lineCount <= 1000) return { label: 'Large',   pct: 68,  color: 'oklch(0.68 0.19 50)'  }
-  if (lineCount <= 2000) return { label: 'XLarge',  pct: 84,  color: 'oklch(0.65 0.20 30)'  }
-  return                        { label: 'Huge',    pct: 100, color: 'oklch(0.60 0.22 25)'  }
+  if (lineCount <= 50)   return { label: 'Tiny',   pct: 6,   color: readVizToken('viz-complexity-tiny') }
+  if (lineCount <= 200)  return { label: 'Small',   pct: 22,  color: readVizToken('viz-complexity-small') }
+  if (lineCount <= 500)  return { label: 'Medium',  pct: 45,  color: readVizToken('viz-complexity-medium') }
+  if (lineCount <= 1000) return { label: 'Large',   pct: 68,  color: readVizToken('viz-complexity-large') }
+  if (lineCount <= 2000) return { label: 'XLarge',  pct: 84,  color: readVizToken('viz-complexity-xlarge') }
+  return                        { label: 'Huge',    pct: 100, color: readVizToken('viz-complexity-huge') }
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -260,7 +261,7 @@ export function ExploreSymbolPanel({
               {node.metadata.language_notes.map((note) => (
                 <span
                   key={note}
-                  className="text-2xs px-1.5 py-0.5 rounded border border-info/30 bg-info/10 text-info"
+                  className="text-2xs px-1.5 py-0.5 rounded border border-info/30 bg-info-muted/50 text-info-foreground border border-info/25"
                 >
                   {note}
                 </span>

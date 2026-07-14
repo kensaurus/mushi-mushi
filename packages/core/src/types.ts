@@ -1493,6 +1493,8 @@ export interface MushiApiClient {
    * to over-emit on the throttle window — the server picks the freshest.
    */
   postDiscoveryEvent(event: MushiDiscoveryEventPayload): Promise<MushiApiResponse<{ accepted: boolean }>>;
+  /** POST /v1/sdk/session — lightweight session lifecycle event (best-effort). */
+  postSessionEvent(payload: MushiSessionEventPayload): Promise<MushiApiResponse<{ accepted: boolean }>>;
   listReporterReports(reporterToken: string): Promise<MushiApiResponse<{ reports: MushiReporterReport[] }>>;
   listReporterComments(
     reportId: string,
@@ -1620,6 +1622,29 @@ export interface MushiDiscoveryEventPayload {
   user_id_hash?: string | null;
   sdk_version?: string;
   observed_at: string;
+}
+
+/** Payload for /v1/sdk/session — lightweight session lifecycle tracking.
+ *  Best-effort, no offline queue. Privacy-safe: no PII by default;
+ *  `user_id_hash` is the same device-fingerprint hash used elsewhere. */
+export interface MushiSessionEventPayload {
+  /** Lifecycle event kind. */
+  kind: 'session_start' | 'session_heartbeat' | 'session_end' | 'page_view';
+  session_id: string;
+  /** ISO timestamp of the event. */
+  ts: string;
+  /** Entry route for session_start; current route for page_view. */
+  route?: string | null;
+  /** document.referrer on session_start. */
+  referrer?: string | null;
+  /** Total page views in this session so far (updated on heartbeat/end). */
+  page_view_count?: number;
+  /** Device fingerprint hash — same token used in reports. */
+  reporter_token_hash?: string | null;
+  /** user_id_hash when the host app called Mushi.identify(). */
+  user_id_hash?: string | null;
+  user_agent?: string | null;
+  sdk_version?: string;
 }
 
 export interface MushiApiResponse<T> {

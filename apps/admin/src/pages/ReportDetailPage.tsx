@@ -216,7 +216,7 @@ export function ReportDetailPage() {
           }
           lead="It may have been deleted, retention-swept, or it never existed under this id. If you use multiple projects, switch the ProjectSwitcher to the report's project (or add ?project=<uuid> to the URL) — a mismatched active project is the most common cause of this 404."
           detail={
-            <code className="break-all rounded bg-[var(--mushi-paper-wash)] px-2 py-0.5">
+            <code className="break-all rounded bg-editorial-paper-wash px-2 py-0.5">
               {id}
             </code>
           }
@@ -688,7 +688,7 @@ function describeTriageUpdate(updates: Record<string, string>): string | null {
 const PLATFORM_BADGE: Record<string, string> = {
   ios:     CHIP_TONE.infoSubtle + ' border-info/20',
   android: CHIP_TONE.okSubtle + ' border-ok/20',
-  web:     'bg-brand/15 text-brand border-brand/20',
+  web:     'bg-brand/12 text-brand border border-brand/28',
   macos:   'bg-surface-overlay text-fg-secondary border-edge-subtle',
   windows: 'bg-surface-overlay text-fg-secondary border-edge-subtle',
 }

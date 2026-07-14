@@ -695,7 +695,7 @@ export function JudgePage() {
                 : bannerSeverity === 'warn'
                   ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
-                    ? 'bg-brand/15 text-brand'
+                    ? 'bg-brand/12 text-brand border border-brand/28'
                     : 'bg-surface-overlay text-fg-muted'
           }
         >
@@ -974,10 +974,10 @@ export function JudgePage() {
                       <td className="py-1.5 px-3 font-mono text-fg">{p.version}</td>
                       <td className="py-1.5 px-3">
                         {p.is_active && (
-                          <Badge className="bg-ok/15 text-ok border border-ok/30">active</Badge>
+                          <Badge className="bg-ok-muted/50 text-ok-foreground border border-ok/25">active</Badge>
                         )}
                         {p.is_candidate && (
-                          <Badge className="bg-info/15 text-info border border-info/30 ml-1">candidate</Badge>
+                          <Badge className="bg-info-muted/50 text-info-foreground border border-info/25 ml-1">candidate</Badge>
                         )}
                       </td>
                       <td className="py-1.5 px-3 text-right">
@@ -1025,7 +1025,7 @@ export function JudgePage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setPromptFilter(null)}
-                className="inline-flex items-center gap-1 px-2 py-0.5 text-2xs border-brand/40 bg-brand/10 text-brand hover:bg-brand/20 focus-visible:ring-1 focus-visible:ring-brand/60"
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-2xs bg-brand/12 text-brand border border-brand/28 hover:bg-brand/20 focus-visible:ring-1 focus-visible:ring-brand/60"
                 aria-label={`Clear filter on prompt ${promptFilter.version}`}
                 title="Clear prompt filter"
               >

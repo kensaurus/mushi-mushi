@@ -40,7 +40,7 @@ describe('resolveProjectFaviconDomains', () => {
         project_slug: 'solo-boss-cloud',
         sdk_origin: 'https://kensaur.us/',
       }),
-    ).toEqual(['sbc-front.vercel.app']);
+    ).toEqual(['solo-boss.kensaur.us']);
   });
 
   it('skips kensaur.us for yen-yen native app — no domain, initials fallback', () => {
@@ -98,7 +98,7 @@ describe('projectFaviconUrlCandidates', () => {
       project_name: 'solo boss',
       project_slug: 'solo-boss-cloud',
     });
-    expect(urls[0]).toBe('https://sbc-front.vercel.app/favicon.svg');
+    expect(urls[0]).toBe('https://solo-boss.kensaur.us/favicon.svg');
     expect(new Set(urls).size).toBe(urls.length);
   });
 

@@ -477,7 +477,7 @@ function StoryCard({
       >
         <div
           aria-hidden
-          className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center bg-brand/15 text-brand text-sm font-semibold ring-1 ring-brand/30"
+          className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center bg-brand/12 text-brand border border-brand/28 text-sm font-semibold ring-1 ring-brand/30"
         >
           {personaInitial}
         </div>

@@ -21,7 +21,7 @@ import { reportDetailPath } from '../../lib/reportUrl'
 import { useActiveProjectId } from '../ProjectSwitcher'
 import { StatusStepper } from './StatusStepper'
 import { BreadcrumbPeek } from './BreadcrumbPeek'
-import { ReportRowMeta, ReportRowLayerPill } from './ReportRowSummaryMeta'
+import { ReportRowMeta, ReportRowLayerPill, ReportTagChips } from './ReportRowSummaryMeta'
 import { DispatchFixPreflight } from './DispatchFixPreflight'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import { IconShare, IconExternalLink, IconClose } from '../icons'
@@ -91,6 +91,9 @@ function ReportRowViewInner({
   const activeProjectId = useActiveProjectId()
   const stagger = useStaggeredAppear({ stepMs: 18, max: 12 })
   const detailPath = reportDetailPath(row.id, activeProjectId)
+  // Friendly title (non-engineer headline) falls back to technical summary
+  // then raw description so old rows still render.
+  const displayTitle = row.title ?? row.summary ?? row.description
   const summary = row.summary ?? row.description
   const dedupCount = row.dedup_count ?? 1
   // Real blast radius — distinct people who felt this. Falls back to the raw
@@ -204,11 +207,23 @@ function ReportRowViewInner({
               sentryRelease={row.sentry_release}
               sentryEnvironment={row.sentry_environment}
             >
-              <div
-                className="w-full min-w-0 flex-1 truncate text-sm leading-snug text-fg-secondary"
-                title={typeof summary === 'string' ? summary : undefined}
-              >
-                {summary}
+              <div className="w-full min-w-0 flex-1 min-w-0">
+                {/* Primary display: friendly title (non-engineer headline) */}
+                <div
+                  className="truncate text-sm font-medium leading-snug text-fg"
+                  title={typeof displayTitle === 'string' ? displayTitle : undefined}
+                >
+                  {displayTitle}
+                </div>
+                {/* Subtext: technical summary, only when title differs (i.e. title exists) */}
+                {row.title && summary && row.title !== summary && (
+                  <div
+                    className="mt-0.5 truncate text-xs leading-snug text-fg-faint"
+                    title={typeof summary === 'string' ? summary : undefined}
+                  >
+                    {summary}
+                  </div>
+                )}
               </div>
             </BreadcrumbPeek>
             <div className="shrink-0 flex items-center gap-1 pt-px">
@@ -240,6 +255,7 @@ function ReportRowViewInner({
             </div>
           </div>
           <ReportRowMeta row={row} />
+          <ReportTagChips row={row} className="mt-1" />
         </div>
       </td>
       <td className={`reports-metric-cell ${REPORTS_TABLE_COL.status} ${TABLE_CELL.pxMeta}`}>

@@ -105,7 +105,7 @@ function RowStatus({
   }
   if (status === 'running') {
     return wrap(
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-0.5 text-2xs font-medium text-accent border border-accent/25">
+      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-2xs font-medium ${CHIP_TONE.accentSubtle}`}>
         {spinner} {label}
       </span>,
     )
@@ -116,7 +116,7 @@ function RowStatus({
         href={prUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 rounded-full bg-ok/10 border border-ok/25 px-2.5 py-0.5 text-2xs font-medium text-ok hover:bg-ok/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-2xs font-medium hover:bg-ok-muted/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${CHIP_TONE.okSubtle}`}
       >
         <IconCheck className="h-3.5 w-3.5" aria-hidden /> {label}
         <IconExternalLink className="h-3.5 w-3.5 opacity-60" aria-hidden />
@@ -132,7 +132,7 @@ function RowStatus({
   }
   if (status === 'failed') {
     return wrap(
-      <span className="inline-flex items-center gap-1 rounded-full bg-danger/10 border border-danger/25 px-2.5 py-0.5 text-2xs font-medium text-danger-foreground">
+      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-2xs font-medium ${CHIP_TONE.dangerSubtle}`}>
         {label}
       </span>,
       'assertive',
@@ -163,20 +163,20 @@ function FreshnessChip({
 
   const toneClass = (() => {
     if (resolution.kind === 'deprecated') {
-      return 'bg-danger/10 border-danger/25 text-danger-foreground'
+      return CHIP_TONE.dangerSubtle
     }
     if (resolution.kind === 'upgrade-available') {
       return conflict
-        ? 'bg-warn-muted/40 border-warn/30 text-warning-foreground ring-1 ring-info/25'
-        : 'bg-warn-muted/40 border-warn/30 text-warning-foreground'
+        ? `${CHIP_TONE.warnSubtle} ring-1 ring-info/25`
+        : CHIP_TONE.warnSubtle
     }
     if (resolution.kind === 'up-to-date') {
-      return 'bg-ok/10 border-ok/25 text-ok'
+      return CHIP_TONE.okSubtle
     }
     if (resolution.kind === 'catalog-ahead') {
       return CHIP_TONE.infoSubtle
     }
-    return 'bg-surface-overlay border-edge-subtle text-fg-muted'
+    return CHIP_TONE.neutral
   })()
 
   return (
@@ -210,15 +210,15 @@ const RELEASE_STATUS_LABELS: Record<string, string> = {
   failed: 'Release failed',
 }
 const RELEASE_STATUS_COLORS: Record<string, string> = {
-  pr_opened: 'bg-accent/10 border-accent/25 text-accent',
-  blocked: 'bg-danger/10 border-danger/25 text-danger-foreground',
-  ready_to_merge: 'bg-ok/10 border-ok/25 text-ok',
-  merging: 'bg-accent/10 border-accent/25 text-accent',
-  merged: 'bg-ok/10 border-ok/25 text-ok',
-  deploying: 'bg-accent/10 border-accent/25 text-accent',
-  deployed: 'bg-ok/10 border-ok/25 text-ok',
-  verified: 'bg-ok/10 border-ok/25 text-ok',
-  failed: 'bg-danger/10 border-danger/25 text-danger-foreground',
+  pr_opened: CHIP_TONE.accentSubtle,
+  blocked: CHIP_TONE.dangerSubtle,
+  ready_to_merge: CHIP_TONE.okSubtle,
+  merging: CHIP_TONE.accentSubtle,
+  merged: CHIP_TONE.okSubtle,
+  deploying: CHIP_TONE.accentSubtle,
+  deployed: CHIP_TONE.okSubtle,
+  verified: CHIP_TONE.okSubtle,
+  failed: CHIP_TONE.dangerSubtle,
 }
 
 function ReleaseStatusPill({
@@ -234,7 +234,7 @@ function ReleaseStatusPill({
 }) {
   if (!releaseStatus) return null
   const label = RELEASE_STATUS_LABELS[releaseStatus] ?? releaseStatus
-  const color = RELEASE_STATUS_COLORS[releaseStatus] ?? 'bg-surface-overlay border-edge-subtle text-fg-muted'
+  const color = RELEASE_STATUS_COLORS[releaseStatus] ?? CHIP_TONE.neutral
   return (
     <Tooltip
       content={
@@ -532,12 +532,12 @@ export function BulkSdkUpgradePanel({ projects }: { projects: BulkUpgradeProject
           {(prCount > 0 || upToDateCount > 0 || failedCount > 0 || readyToMergeCount > 0) && (
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5" role="status" aria-live="polite">
               {prCount > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-ok/10 border border-ok/25 px-2 py-0.5 text-2xs font-medium text-ok">
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ${CHIP_TONE.okSubtle}`}>
                   {prCount} PR{prCount === 1 ? '' : 's'} to review
                 </span>
               )}
               {readyToMergeCount > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-ok/10 border border-ok/25 px-2 py-0.5 text-2xs font-medium text-ok">
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ${CHIP_TONE.okSubtle}`}>
                   {readyToMergeCount} ready to merge
                 </span>
               )}
@@ -546,13 +546,13 @@ export function BulkSdkUpgradePanel({ projects }: { projects: BulkUpgradeProject
                   content="No package.json bump PR was created — registry pins already latest or only workspace:* deps."
                   side="top"
                 >
-                  <span className="inline-flex cursor-help items-center gap-1 rounded-full bg-surface-overlay border border-edge-subtle px-2 py-0.5 text-2xs text-fg-muted">
+                  <span className={`inline-flex cursor-help items-center gap-1 rounded-full px-2 py-0.5 text-2xs ${CHIP_TONE.neutral}`}>
                     {upToDateCount} no PR needed
                   </span>
                 </Tooltip>
               )}
               {failedCount > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-danger/10 border border-danger/25 px-2 py-0.5 text-2xs font-medium text-danger-foreground">
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ${CHIP_TONE.dangerSubtle}`}>
                   {failedCount} PR{failedCount === 1 ? '' : 's'} failed
                 </span>
               )}

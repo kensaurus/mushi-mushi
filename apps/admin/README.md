@@ -770,7 +770,9 @@ When changing admin console UI (`apps/admin/src`), verify:
 - [ ] Loading/saving copy uses Unicode ellipsis (`Loading…`, not `Loading...`)
 - [ ] `<img>` tags include explicit `width`/`height` or a fixed aspect-ratio wrapper
 - [ ] Icon-only buttons include `aria-label`; decorative icons use `aria-hidden="true"`
-- [ ] Run `pnpm check:design-tokens` before push
+- [ ] New status chrome uses `CHIP_TONE` / `statusChipTone` / `runStatusChipTone` only (no `bg-ok/15 text-ok` opacity chips)
+- [ ] Operator TSX uses `editorial-*` utilities — not raw `var(--mushi-*)` — for paper islands
+- [ ] Run `pnpm --filter @mushi-mushi/admin lint:tokens` before push (`check-design-tokens` + `audit-chip-contrast --strict`)
 
 ## License
 

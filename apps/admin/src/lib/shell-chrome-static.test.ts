@@ -34,7 +34,7 @@ describe('shell chrome static contract', () => {
   })
 
   it('chrome-top-row lives in @layer components so hidden md:flex wins on mobile', () => {
-    const css = readFileSync(resolve(root, 'index.css'), 'utf8')
+    const css = readFileSync(resolve(root, 'styles/components.css'), 'utf8')
     expect(css).toMatch(/@layer components\s*\{[^}]*\.chrome-top-row\s*\{/)
   })
 

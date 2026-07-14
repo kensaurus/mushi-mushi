@@ -214,7 +214,7 @@ function ModeCard({ active, onClick, title, badge, description }: ModeCardProps)
             'inline-flex items-center rounded-full px-1.5 py-0.5 text-2xs font-medium',
             badge === 'Free'
               ? CHIP_TONE.okSubtle
-              : 'bg-brand/10 text-brand',
+              : 'bg-brand/12 text-brand border border-brand/28',
           ].join(' ')}
         >
           {badge}

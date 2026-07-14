@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { RelativeTime } from '../ui'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   fixId: string
@@ -24,10 +25,10 @@ function checksUrl(prUrl: string): string {
 
 function toneForConclusion(conclusion: string | null | undefined): string {
   const c = conclusion?.toLowerCase()
-  if (c === 'success') return 'text-ok border-ok/30 bg-ok/10'
-  if (c === 'failure' || c === 'timed_out' || c === 'cancelled') return 'text-danger border-danger/30 bg-danger/10'
-  if (c === 'neutral' || c === 'skipped') return 'text-fg-secondary border-edge-subtle bg-surface-overlay'
-  return 'text-warn border-warn/30 bg-warn/10'
+  if (c === 'success') return CHIP_TONE.okSubtle
+  if (c === 'failure' || c === 'timed_out' || c === 'cancelled') return CHIP_TONE.dangerSubtle
+  if (c === 'neutral' || c === 'skipped') return CHIP_TONE.neutral
+  return CHIP_TONE.warnSubtle
 }
 
 function labelForConclusion(conclusion: string | null | undefined, status: string | null | undefined): string {

@@ -241,7 +241,7 @@ export function CrawlerSettingsCard({ projectId }: Props) {
                   onClick={() => setAuthType(t)}
                   className={`text-2xs font-mono px-2 py-1 rounded-sm border ${
                     authType === t
-                      ? 'bg-brand/15 text-brand border-brand/40'
+                      ? 'bg-brand/12 text-brand border border-brand/28'
                       : 'bg-surface-overlay text-fg-muted border-edge-subtle hover:bg-surface-overlay/80'
                   }`}
                 >

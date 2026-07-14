@@ -452,7 +452,7 @@ Mushi.init({
     <Card className="p-4 ring-1 ring-brand/25 bg-brand/[0.04]">
       <div className="flex flex-col md:flex-row md:items-center gap-3">
         <div className="flex items-start gap-3 flex-1 min-w-0">
-          <div className="shrink-0 w-10 h-10 rounded-lg bg-brand/20 ring-1 ring-brand/40 text-brand flex items-center justify-center">
+          <div className="shrink-0 w-10 h-10 rounded-lg bg-brand/12 border border-brand/28 text-brand flex items-center justify-center">
             <IconNote size={16} />
           </div>
           <div className="min-w-0">

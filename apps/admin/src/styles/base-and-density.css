@@ -1,0 +1,337 @@
+/** Base resets, density, light/HC/tester theme overrides */
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ---------------------------------------------------------------------------
+   BASE RESETS
+--------------------------------------------------------------------------- */
+
+/* Single scroll owner: the app shell is h-dvh; page chrome scrolls inside
+   <main>, not on <body>. Without this, BetaBanner (sibling above Layout's
+   old h-screen) + flex children missing min-h-0 produced nested scrollbars
+   and phantom whitespace below the projects list. */
+html,
+body,
+#root {
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+body {
+  background-color: var(--color-surface);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* The four typography vars below drive the per-density personality —
+     see the matrix table next to the html[data-density] block above.
+     Defaults are inlined so consumers without a density attribute
+     still pick up tabular-nums + standard rhythm. */
+  font-size: calc(14px * var(--ui-scale, 1));
+  line-height: calc(1.5 * var(--ui-line-scale, 1));
+  letter-spacing: var(--ui-tracking, 0);
+  font-variant-numeric: var(--ui-numeric, tabular-nums);
+}
+
+/* Headings get their own tracking — Inter's optical kerning at heading
+   sizes needs slightly more negative tracking than body. The density
+   token contributes the *delta*; the base is set on the heading
+   itself. `text-wrap` is permissive at comfortable, defensive at
+   compact (see --ui-balance). */
+h1, h2, h3, h4, h5, h6,
+.heading-rhythm {
+  letter-spacing: var(--ui-tracking-heading, -0.015em);
+  text-wrap: var(--ui-balance, pretty);
+}
+
+/* ── UI Density ────────────────────────────────────────────────────────
+   html[data-density] toggle set by useDensity(). The density preference
+   persists in localStorage and is applied pre-React via hydrateDensity()
+   so the first paint already reflects the user's choice.
+
+   Each density mode now ships its own *typographic personality* — not
+   just a font-size scale. Research anchors:
+
+   • Cloudscape (AWS), Halstack (DXC), and Salt (J.P. Morgan) all keep
+     a single typeface and shift spacing/tracking/leading per density
+     (NOT a font swap).
+   • Cloud Four — small text needs slight *positive* tracking
+     (~+0.006em) for legibility at small sizes; larger text needs
+     *negative* tracking (Inter goes airy at 16px+).
+   • Type Network / variable fonts — the "grade" axis is the textbook
+     handle for density without weight change; we approximate with
+     `font-variant-numeric` swaps and tracking instead because the
+     project ships static Inter, not Inter Variable.
+   • Linear, Stripe, Vercel — `tabular-nums` is universal on
+     dashboards; `slashed-zero` (Inter `cv11`) adds engineering
+     legibility at the smallest sizes.
+   • NN/g — `text-wrap: balance` improves headlines when the user has
+     dwell time (comfortable / tablet); skip it at compact where the
+     extra layout pass burns ms with little visual upside.
+
+   Density typography matrix:
+
+   | Mode        | font   | line   | tracking  | numerics                | headings        |
+   | ----------- | ------ | ------ | --------- | ----------------------- | --------------- |
+   | compact     | ×0.86  | ×0.92  | +0.006em  | tabular + slashed-zero  | tighter         |
+   | default     | ×1.00  | ×1.00  |  0        | tabular-nums            | -0.015em        |
+   | comfortable | ×1.14  | ×1.08  | -0.012em  | tabular-nums            | -0.025em + balance |
+
+   `--ui-pad` is the spacing multiplier (0.65 / 1 / 1.35) wired into
+   nav link padding, section header padding, page-stack margins, and
+   command-palette item padding. Layout primitives (cards, dialogs,
+   table cells outside the row tokens) intentionally don't read this
+   var so we don't warp grid math; the goal is "more rows visible",
+   not "everything half-size". */
+html {
+  /* Base values so consumers without a density attribute (storybook,
+     marketing shell, tests) render at the standard rhythm. */
+  --ui-scale: 1;
+  --ui-line-scale: 1;
+  --ui-pad: 1;
+  --ui-tracking: 0;
+  --ui-tracking-heading: -0.015em;
+  --ui-numeric: tabular-nums;
+  --ui-balance: pretty;
+}
+
+html[data-density="compact"] {
+  --ui-scale: 0.86;
+  --ui-line-scale: 0.92;
+  --ui-pad: 0.65;
+  --ui-tracking: 0.006em;
+  --ui-tracking-heading: -0.005em;
+  --ui-numeric: tabular-nums slashed-zero;
+  /* `pretty` balances orphans without doing the more expensive layout
+     pass `balance` triggers — right at compact's "scan, don't read"
+     intent. */
+  --ui-balance: pretty;
+}
+
+html[data-density="comfortable"] {
+  --ui-scale: 1.14;
+  --ui-line-scale: 1.08;
+  --ui-pad: 1.35;
+  --ui-tracking: -0.012em;
+  --ui-tracking-heading: -0.025em;
+  --ui-numeric: tabular-nums;
+  /* `balance` is fine on comfortable — the user has chosen dwell time. */
+  --ui-balance: balance;
+}
+
+/* ── Light theme ────────────────────────────────────────────────────────
+   html[data-theme="light"] overrides the @theme tokens so every Tailwind
+   utility (bg-surface, text-fg, border-edge …) automatically adapts.
+   The mapping preserves the same information hierarchy as dark — root
+   is the chrome shade (sidebar), surface is the content bg, raised is
+   slightly lighter for cards. Contrast ratios audited against WCAG AA
+   at each foreground/background pairing.
+
+   Surface lightness choices:
+     root    0.99   – sidebar, nav chrome (near-white with a whisper of blue)
+     surface 0.97   – main canvas
+     raised  0.995  – cards / wells (subtly brighter than canvas)
+     overlay 1.00   – hover & active states
+
+   Brand/accent chroma is nudged up slightly because light backgrounds
+   desaturate colour perception relative to dark ones.
+*/
+html[data-theme="light"] {
+  --color-surface-root:    oklch(0.98 0.002 285);
+  --color-surface:         oklch(0.965 0.002 285);
+  --color-surface-raised:  oklch(0.995 0.002 285);
+  --color-surface-overlay: oklch(0.92 0.004 285);
+  --color-surface-hover:   oklch(0.94 0.003 285);
+  --color-surface-2:       var(--color-surface-raised);
+  --color-surface-3:       var(--color-surface-overlay);
+
+  /* 2026-05-07 contrast pass — light mode dividers were near-invisible
+     (edge L=0.82 vs surface L=0.965 ≈ 1.4:1). Pulled to L=0.78 / L=0.84
+     so cell borders, tab dividers, and card outlines actually delineate
+     regions. fg-faint nudged from L=0.60 → L=0.50 so helper copy reads
+     comfortably on white instead of fading into the background. */
+  --color-edge:         oklch(0.78 0.004 285);
+  --color-edge-subtle:  oklch(0.84 0.003 285);
+
+  --color-fg:           oklch(0.22 0.008 285);
+  --color-fg-secondary: oklch(0.36 0.006 285);
+  --color-fg-muted:     oklch(0.44 0.005 285);
+  --color-fg-faint:     oklch(0.50 0.004 285);
+
+  --color-brand:        var(--mushi-vermillion);
+  --color-brand-hover:  color-mix(in oklch, var(--mushi-vermillion) 82%, black);
+  --color-brand-fg:     oklch(0.985 0.01 80);
+  --color-brand-subtle: oklch(0.95 0.05 80);
+
+  --color-accent:        oklch(0.48 0.22 280);
+  --color-accent-hover:  oklch(0.42 0.22 280);
+  --color-accent-muted:  oklch(0.92 0.05 280);
+  --color-accent-foreground: oklch(0.38 0.18 280);
+  --color-warning-foreground: oklch(0.42 0.14 80);
+  --color-danger-foreground: oklch(0.45 0.20 25);
+  --color-ok-foreground: oklch(0.42 0.17 155);
+  --color-info-foreground: oklch(0.42 0.16 240);
+  --color-brand-foreground: oklch(0.48 0.16 80);
+  --color-lime-foreground: oklch(0.28 0.12 128);
+
+  --color-ok:            oklch(0.48 0.19 155);
+  --color-ok-fg:         oklch(0.99 0.02 155);
+  --color-ok-muted:      oklch(0.93 0.06 155);
+  --color-lime:          oklch(0.46 0.22 128);
+  --color-lime-fg:       oklch(0.99 0.01 128);
+  --color-lime-muted:    oklch(0.91 0.09 128);
+  --color-warn:          oklch(0.68 0.18 80);
+  --color-warn-fg:       oklch(0.99 0.02 80);
+  --color-warn-muted:    oklch(0.96 0.06 80);
+  --color-danger:        oklch(0.58 0.24 25);
+  --color-danger-fg:     oklch(0.99 0.02 25);
+  --color-danger-muted:  oklch(0.95 0.07 25);
+  --color-info:          oklch(0.48 0.17 240);
+  --color-info-fg:       oklch(0.99 0.02 240);
+  --color-info-muted:    oklch(0.94 0.05 240);
+  /* Light-mode rose: chroma kept at ~0.20 for a true salmon-pink against
+     paper, lightness lowered to L=0.55 so it clears AA against
+     `--color-surface-raised`. */
+  --color-rose:          oklch(0.55 0.20 5);
+  --color-rose-muted:    oklch(0.93 0.06 5);
+
+  --color-overlay:       oklch(0.22 0.006 285 / 0.35);
+
+  --flow-grid-dot:       oklch(0.74 0.007 285);
+  --flow-grid-line:      oklch(0.82 0.005 285);
+  --flow-grid-major:     oklch(0.78 0.006 285);
+  --flow-grid-dot-opacity: 0.55;
+  --flow-grid-line-opacity: 0.42;
+  --flow-grid-major-opacity: 0.32;
+
+  --color-chrome:        oklch(0.975 0.002 285);
+  --color-chrome-border: oklch(0.80 0.003 285);
+
+  --color-nav-active-bg:     oklch(0.94 0.003 285);
+  --color-nav-active-border: oklch(0.48 0.16 80);
+  --color-nav-hover-bg:      oklch(0.94 0.004 285);
+  --color-nav-section-label: oklch(0.50 0.005 285);
+
+  --shadow-card:   0 1px 2px oklch(0.35 0.01 285 / 0.10);
+  --shadow-raised: 0 2px 8px oklch(0.35 0.01 285 / 0.12);
+
+  /* Card elevation flips on paper. The "from" stop is full white so the
+     tile reads as a brighter wedge against the slightly-tinted page
+     surface (--color-surface = 0.965), and the "to" stop carries a
+     whisper of warmth (chroma 0.003 at 80°) to hint at the brand without
+     introducing visible amber on a quiet metric tile. The inset white
+     highlight is zero'd out — on a white card it's invisible, and the
+     hairline border + soft drop-shadow already provide all the lift the
+     eye needs in a light context. */
+  --card-elevated-bg-from: oklch(1 0 0);
+  --card-elevated-bg-to: oklch(0.985 0.003 80);
+  --card-elevated-inset-highlight: oklch(0 0 0 / 0);
+
+  /* Data viz — light-mode perceptual mapping (higher chroma on paper). */
+  --color-viz-edge-dark: oklch(0.78 0.012 285);
+  --color-viz-edge-light: oklch(0.88 0.008 285);
+  --color-viz-flow-info: oklch(0.48 0.17 250);
+  --color-viz-flow-brand: oklch(0.55 0.16 80);
+  --color-viz-flow-danger: oklch(0.52 0.22 25);
+  --color-viz-score-ok: oklch(0.45 0.19 155);
+  --color-viz-score-warn: oklch(0.58 0.16 80);
+  --color-viz-score-danger: oklch(0.52 0.22 25);
+  --color-viz-terminal-bg: oklch(0.17 0.014 285);
+  --color-viz-terminal-fg: oklch(0.92 0.005 285);
+  --color-code-surface: var(--color-viz-terminal-bg);
+  --color-code-surface-fg: var(--color-viz-terminal-fg);
+  --color-code-surface-fg-muted: oklch(0.74 0.008 285);
+  --color-code-surface-border: oklch(0.32 0.012 285);
+  --color-viz-canvas-bg: oklch(0.97 0.004 265);
+  --color-viz-canvas-dot: oklch(0.84 0.004 285);
+  --color-viz-node-subtext: oklch(0.48 0.004 265);
+
+  /* Syntax on inverted-dark code surfaces — same bright palette as :root. */
+  --color-code-kw: oklch(0.78 0.18 280);
+  --color-code-str: oklch(0.72 0.17 155);
+  --color-code-cmd: oklch(0.72 0.14 240);
+  --color-code-type: oklch(0.74 0.16 280);
+  --color-code-tag: oklch(0.68 0.20 5);
+  --color-code-attr: oklch(0.75 0.15 80);
+}
+html[data-theme="light"] body {
+  color-scheme: light;
+}
+html[data-theme="light"] select,
+html[data-theme="light"] input,
+html[data-theme="light"] textarea {
+  color-scheme: light;
+}
+
+/* ── High-contrast theme (optional third mode via sidebar System→future or OS) ─ */
+html[data-theme="high-contrast"] {
+  --color-surface-root: oklch(0 0 0);
+  --color-surface: oklch(0.05 0 0);
+  --color-surface-raised: oklch(0.10 0 0);
+  --color-surface-overlay: oklch(0.18 0 0);
+  --color-surface-2: var(--color-surface-raised);
+  --color-surface-3: var(--color-surface-overlay);
+  --color-edge: oklch(0.85 0 0);
+  --color-edge-subtle: oklch(0.70 0 0);
+  --color-fg: oklch(1 0 0);
+  --color-fg-secondary: oklch(0.92 0 0);
+  --color-fg-muted: oklch(0.85 0 0);
+  --color-fg-faint: oklch(0.78 0 0);
+  --color-brand: oklch(0.88 0.18 80);
+  --color-brand-hover: oklch(0.92 0.16 80);
+  --color-brand-fg: oklch(0 0 0);
+  --color-chrome: oklch(0.12 0 0);
+  --color-chrome-border: oklch(0.75 0 0);
+  --shadow-card: none;
+  --shadow-raised: 0 0 0 1px oklch(0.85 0 0);
+}
+html[data-theme="high-contrast"] body {
+  color-scheme: dark;
+}
+
+@media (forced-colors: active) {
+  :root {
+    --color-edge: CanvasText;
+    --color-fg: CanvasText;
+    --color-brand: LinkText;
+  }
+}
+
+/* ── Portal switch tokens (admin orange stays visible on tester purple) ─ */
+:root {
+  --portal-admin-brand-subtle: oklch(0.28 0.06 80);
+  --portal-admin-brand-text: oklch(0.85 0.14 80);
+  --portal-admin-brand-border: oklch(0.72 0.14 80);
+}
+html[data-theme="light"] {
+  --portal-admin-brand-subtle: oklch(0.95 0.05 80);
+  --portal-admin-brand-text: oklch(0.48 0.16 80);
+  --portal-admin-brand-border: oklch(0.62 0.16 80);
+}
+
+/* Tester portal — remap brand/nav chrome to accent (purple) for a distinct but familiar shell */
+html[data-portal="tester"] {
+  --color-brand: var(--color-accent);
+  --color-brand-hover: var(--color-accent-hover);
+  --color-brand-subtle: var(--color-accent-muted);
+  --color-brand-foreground: var(--color-accent-foreground);
+  --color-brand-fg: oklch(0.98 0.01 280);
+  --color-nav-active-bg: oklch(0.24 0.04 280);
+  --color-nav-active-border: oklch(0.58 0.22 280);
+  --card-elevated-bg-to: oklch(0.20 0.03 280);
+}
+html[data-theme="light"][data-portal="tester"] {
+  --color-brand-fg: oklch(0.99 0.01 280);
+  --color-nav-active-bg: oklch(0.94 0.04 280);
+  --color-nav-active-border: oklch(0.48 0.22 280);
+  --card-elevated-bg-to: oklch(0.985 0.003 280);
+}
+

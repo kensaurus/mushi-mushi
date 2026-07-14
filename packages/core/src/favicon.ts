@@ -27,7 +27,7 @@ const MULTI_TENANT_PARENT_HOSTS = new Set(['kensaur.us', 'www.kensaur.us']);
 const SLUG_DOMAIN_HINTS: Record<string, string> = {
   'glot-it': 'glot.it',
   glotit: 'glot.it',
-  'solo-boss-cloud': 'sbc-front.vercel.app',
+  'solo-boss-cloud': 'solo-boss.kensaur.us',
   'mushi-mushi': 'kensaur.us',
 };
 
@@ -37,7 +37,7 @@ const SLUG_DOMAIN_HINTS: Record<string, string> = {
  */
 const SLUG_ICON_URL_HINTS: Record<string, string> = {
   'mushi-mushi': 'https://kensaur.us/mushi-mushi/admin/favicon.svg',
-  'solo-boss-cloud': 'https://sbc-front.vercel.app/favicon.svg',
+  'solo-boss-cloud': 'https://solo-boss.kensaur.us/favicon.svg',
   'glot-it': 'https://kensaur.us/glot-it/apple-touch-icon.png',
   glotit: 'https://kensaur.us/glot-it/apple-touch-icon.png',
 };

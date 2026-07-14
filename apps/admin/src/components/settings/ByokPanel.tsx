@@ -15,7 +15,7 @@ import { useEntitlements } from '../../lib/useEntitlements'
 import { UpgradePrompt } from '../billing/UpgradePrompt'
 import { SettingsPanelLayout } from './SettingsPanelLayout'
 import { ContainedBlock } from '../report-detail/ReportSurface'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { CHIP_TONE, runStatusChipTone } from '../../lib/chipTone'
 
 type PoolKeyStatus = 'active' | 'disabled' | 'quota_exhausted' | 'auth_failed'
 
@@ -57,8 +57,8 @@ const PROVIDER_META: Record<string, { name: string; placeholder: string; console
 }
 
 const STATUS_CHIP: Record<PoolKeyStatus, { label: string; className: string }> = {
-  active: { label: 'active', className: CHIP_TONE.okSubtle },
-  disabled: { label: 'disabled', className: 'bg-surface-raised text-fg-muted' },
+  active: { label: 'active', className: runStatusChipTone('active') },
+  disabled: { label: 'disabled', className: runStatusChipTone('disabled') },
   quota_exhausted: { label: 'quota exhausted', className: CHIP_TONE.warnSubtle },
   auth_failed: { label: 'auth failed', className: CHIP_TONE.dangerSubtle },
 }
@@ -166,10 +166,10 @@ export function ByokPanel() {
 
         {/* Quota exhaustion banner */}
         {hasExhausted && (
-          <div className="flex items-start gap-3 bg-warn/5 border border-warn/20 rounded-md px-3 py-2.5">
-            <span className="text-warn mt-0.5">⚠</span>
+          <div className={`flex items-start gap-3 rounded-md px-3 py-2.5 ${CHIP_TONE.warnSubtle}`}>
+            <span className="mt-0.5" aria-hidden>⚠</span>
             <div className="flex-1 min-w-0">
-              <p className="text-2xs font-medium text-warn">
+              <p className="text-2xs font-medium">
                 {exhaustedProviders.map(p => PROVIDER_META[p.provider]?.name ?? p.provider).join(', ')} {exhaustedProviders.length === 1 ? 'has' : 'have'} exhausted keys.
               </p>
               <p className="text-2xs text-fg-muted mt-0.5">

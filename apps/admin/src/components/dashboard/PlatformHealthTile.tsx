@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom'
 import { usePageData } from '../../lib/usePageData'
 import { CardPanel } from '../ui'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface PlatformRow {
   platform: string
@@ -24,11 +25,11 @@ interface PlatformRollupData {
 }
 
 const PLATFORM_BADGE: Record<string, string> = {
-  ios:     'bg-info/15 text-info',
-  android: 'bg-ok/15 text-ok',
-  web:     'bg-brand/15 text-brand',
-  macos:   'bg-surface-overlay text-fg-secondary',
-  windows: 'bg-surface-overlay text-fg-secondary',
+  ios:     CHIP_TONE.infoSubtle,
+  android: CHIP_TONE.okSubtle,
+  web:     CHIP_TONE.brandSubtle,
+  macos:   CHIP_TONE.neutral,
+  windows: CHIP_TONE.neutral,
 }
 
 function sdkShortName(pkg: string | null): string {
@@ -89,7 +90,7 @@ export function PlatformHealthTile({ projectId }: { projectId: string }) {
                 className="group flex items-center gap-2 rounded-sm px-2 py-1.5 motion-safe:transition-colors hover:bg-surface-overlay"
               >
                 <span
-                  className={`inline-flex w-14 shrink-0 items-center justify-center rounded-sm px-1.5 py-0.5 text-center text-3xs font-semibold uppercase tracking-wider ${PLATFORM_BADGE[row.platform] ?? 'bg-surface-overlay text-fg-secondary'}`}
+                  className={`inline-flex w-14 shrink-0 items-center justify-center rounded-sm px-1.5 py-0.5 text-center text-3xs font-semibold uppercase tracking-wider ${PLATFORM_BADGE[row.platform] ?? CHIP_TONE.neutral}`}
                 >
                   {row.platform}
                 </span>
@@ -102,12 +103,12 @@ export function PlatformHealthTile({ projectId }: { projectId: string }) {
                   <span className="font-mono text-2xs text-fg">{row.reports_24h}</span>
                   <span className="text-3xs text-fg-faint">reports</span>
                   {hasCritical && (
-                    <span className="rounded-sm bg-danger/15 px-1 font-mono text-3xs text-danger">
+                    <span className={`rounded-sm px-1 font-mono text-3xs ${CHIP_TONE.dangerSubtle}`}>
                       {row.critical_24h} crit
                     </span>
                   )}
                   {!hasCritical && hasHigh && (
-                    <span className="rounded-sm bg-warn/15 px-1 font-mono text-3xs text-warn">
+                    <span className={`rounded-sm px-1 font-mono text-3xs ${CHIP_TONE.warnSubtle}`}>
                       {row.high_24h} high
                     </span>
                   )}

@@ -41,5 +41,5 @@ export interface FirecrawlConfig {
 
 export const MODE_TONE: Record<SessionRow['mode'], string> = {
   search: CHIP_TONE.infoSubtle,
-  scrape: 'bg-brand/15 text-brand border border-brand/30',
+  scrape: 'bg-brand/12 text-brand border border-brand/28',
 }

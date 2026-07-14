@@ -85,17 +85,10 @@ interface Evidence {
   generated_at: string
 }
 
-const STATUS_CHIP: Record<Evidence['status'], string> = {
-  pass: runStatusChipTone('pass'),
-  warn: runStatusChipTone('warn'),
-  fail: runStatusChipTone('fail'),
-}
-
-const DSAR_STATUS_CHIP: Record<Dsar['status'], string> = {
-  pending: runStatusChipTone('pending'),
-  in_progress: runStatusChipTone('in_progress'),
-  completed: runStatusChipTone('completed'),
-  rejected: CHIP_TONE.neutral,
+/** DSAR `rejected` stays neutral (not the lifecycle danger tone). */
+function dsarStatusChipTone(status: Dsar['status']): string {
+  if (status === 'rejected') return CHIP_TONE.neutral
+  return runStatusChipTone(status)
 }
 
 /**
@@ -759,7 +752,7 @@ export function CompliancePage() {
                             )}
                           </td>
                           <td>
-                            <span className={`inline-flex rounded px-2 py-0.5 text-3xs ${STATUS_CHIP[ev.status]}`}>
+                            <span className={`inline-flex rounded px-2 py-0.5 text-3xs ${runStatusChipTone(ev.status)}`}>
                               {ev.status.toUpperCase()}
                             </span>
                           </td>
@@ -1077,7 +1070,7 @@ export function CompliancePage() {
                             </td>
                             <td>
                               <span
-                                className={`inline-flex rounded px-2 py-0.5 text-3xs uppercase tracking-wider font-medium ${DSAR_STATUS_CHIP[d.status]}`}
+                                className={`inline-flex rounded px-2 py-0.5 text-3xs uppercase tracking-wider font-medium ${dsarStatusChipTone(d.status)}`}
                               >
                                 {d.status.replace('_', ' ')}
                               </span>
@@ -1154,7 +1147,7 @@ export function CompliancePage() {
         size="lg"
         headerAction={
           payloadModalEvidence && (
-            <span className={`inline-flex rounded px-2 py-0.5 text-3xs ${STATUS_CHIP[payloadModalEvidence.status]}`}>
+            <span className={`inline-flex rounded px-2 py-0.5 text-3xs ${runStatusChipTone(payloadModalEvidence.status)}`}>
               {payloadModalEvidence.status.toUpperCase()}
             </span>
           )

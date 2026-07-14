@@ -503,7 +503,7 @@ function AnomaliesTab({
                     </>
                   )}
                   {a.auto_report_id && (
-                    <Badge className="bg-brand/10 text-brand border border-brand/20 text-xs">
+                    <Badge className="bg-brand/12 text-brand border border-brand/28 text-xs">
                       Auto-reported
                     </Badge>
                   )}

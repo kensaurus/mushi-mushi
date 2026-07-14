@@ -33,7 +33,7 @@ const RESOURCES: Record<string, AuditResourceInfo> = {
   integration: {
     label: 'Integration',
     description: 'GitHub, Sentry, Slack, or another connector.',
-    className: 'border-brand/25 bg-brand/10 text-brand hover:bg-brand/15',
+    className: 'border-brand/25 bg-brand/12 text-brand border border-brand/28 hover:bg-brand/15',
     listPath: '/integrations',
   },
   project: {

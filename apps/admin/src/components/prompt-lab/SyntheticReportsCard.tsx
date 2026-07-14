@@ -95,7 +95,7 @@ export function SyntheticReportsCard() {
                 const matchTone = match == null
                   ? 'bg-fg-faint/15 text-fg-muted border border-edge-subtle'
                   : match >= 0.8
-                    ? 'bg-ok/15 text-ok border border-ok/30'
+                    ? 'bg-ok-muted/50 text-ok-foreground border border-ok/25'
                     : match >= 0.5
                       ? CHIP_TONE.warnSubtle
                       : CHIP_TONE.dangerSubtle + ' border border-danger/30'

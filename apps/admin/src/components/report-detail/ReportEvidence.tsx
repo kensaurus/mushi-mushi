@@ -113,7 +113,7 @@ export function EnvironmentFields({ environment, sessionId }: {
           label: 'Session',
           hint: 'Unique browser session at report time.',
           value: (
-            <code className="break-all rounded-sm border border-brand/20 bg-brand/8 px-1.5 py-0.5 font-mono text-2xs text-brand">
+            <code className="break-all rounded-sm px-1.5 py-0.5 font-mono text-2xs bg-brand/12 text-brand border border-brand/28">
               {sessionId}
             </code>
           ),
@@ -394,9 +394,9 @@ function BackendSpanCorrelation({
         return (
           <div
             key={span.id}
-            className="flex items-center gap-1.5 rounded-sm border border-edge-subtle/40 bg-[var(--mushi-paper-wash)] px-2 py-1"
+            className="flex items-center gap-1.5 rounded-sm border border-edge-subtle/40 bg-editorial-paper-wash px-2 py-1"
           >
-            <span className="shrink-0 rounded-sm bg-accent/10 px-1 py-0.5 font-mono text-3xs font-semibold text-accent">
+            <span className="shrink-0 rounded-sm px-1 py-0.5 font-mono text-3xs font-semibold bg-accent-muted/55 text-accent-foreground border border-accent/30">
               backend
             </span>
             <code
@@ -475,7 +475,7 @@ export function NetworkLogs({
               </span>
               {hasTrace && (
                 <span
-                  className="shrink-0 rounded-sm bg-accent/15 px-1 py-0.5 font-mono text-3xs font-semibold text-accent"
+                  className="shrink-0 rounded-sm px-1 py-0.5 font-mono text-3xs font-semibold bg-accent-muted/55 text-accent-foreground border border-accent/30"
                   title={`W3C trace: ${traceId}`}
                 >
                   {isExpanded ? '▲ trace' : '▼ trace'}
@@ -527,7 +527,7 @@ export function DeviceAndBuildPanel({ report }: { report: ReportDetail }) {
           label: 'App version',
           hint: 'Host application version from the SDK.',
           value: (
-            <code className="rounded-sm border border-brand/20 bg-brand/8 px-1.5 py-0.5 font-mono tabular-nums text-brand">
+            <code className="rounded-sm px-1.5 py-0.5 font-mono tabular-nums bg-brand/12 text-brand border border-brand/28">
               {report.app_version}
             </code>
           ),

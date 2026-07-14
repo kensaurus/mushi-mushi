@@ -7,10 +7,10 @@ Authoritative catalog for Design System v2 primitives used in the operator conso
 | Layer | Source | Consumed by |
 |-------|--------|-------------|
 | **Primitives (DTCG)** | [`packages/brand/tokens/brand.tokens.json`](../../../packages/brand/tokens/brand.tokens.json) → `pnpm build:brand-tokens` → [`packages/brand/src/editorial.css`](../../../packages/brand/src/editorial.css) + `tokens.generated.ts` | Public/marketing (`--mushi-*`), docs, editorial pages |
-| **Semantic (`@theme`)** | [`apps/admin/src/index.css`](../index.css) — ~139 oklch color roots, spacing, type scale | Operator console Tailwind utilities (`bg-surface`, `text-fg-muted`, …) |
+| **Semantic (`@theme`)** | [`apps/admin/src/index.css`](../index.css) → [`styles/theme-tokens.css`](../styles/theme-tokens.css) (+ modes / ask-mushi / components partials) — oklch color roots, spacing, type scale | Operator console Tailwind utilities (`bg-surface`, `text-fg-muted`, …) |
 | **Component recipes** | [`lib/chipTone.ts`](../lib/chipTone.ts), [`lib/tokens.ts`](../lib/tokens.ts), [`lib/motion-tokens.ts`](../lib/motion-tokens.ts) | Badges, banners, posture chips, viz runtime |
 
-**Rule of thumb:** never hand-roll `bg-*-muted text-*` on chips — use `CHIP_TONE.*`, `statusChipTone()`, or `runStatusChipTone()`. ESLint enforces this via `mushi-mushi/no-raw-semantic-on-muted`.
+**Rule of thumb:** never hand-roll `bg-*-muted text-*` or opacity chips (`bg-ok/15 text-ok`) — use `CHIP_TONE.*`, `statusChipTone()`, or `runStatusChipTone()`. ESLint enforces muted pairings via `mushi-mushi/no-raw-semantic-on-muted`; CI also runs `scripts/audit-chip-contrast.mjs --strict` (muted + opacity). Prefer `editorial-*` utilities over raw `var(--mushi-*)` in operator TSX.
 
 Editorial (`data-mushi-theme`) and operator (`data-theme`) stacks stay intentionally separate. The SDK widget uses [`packages/core/src/design-tokens.ts`](../../../packages/core/src/design-tokens.ts).
 
@@ -45,8 +45,9 @@ Primary work UI
 - ESLint `mushi-mushi/no-missing-page-posture` — warn when operator pages omit `PagePosture`
 - ESLint `mushi-mushi/no-raw-semantic-on-muted` — error on WCAG-failing chip pairings
 - ESLint `mushi-mushi/no-text-3xs-on-interactive` — error (12px floor on buttons/links)
-- `node scripts/audit-chip-contrast.mjs --strict` — CI gate for chip contrast drift
+- `node scripts/audit-chip-contrast.mjs --strict` — CI gate for muted **and** opacity chip contrast drift
+- `node scripts/check-design-tokens.mjs` — unknown roots, hex, raw `var(--mushi-*)` in operator TSX, theme pairs
 - `node scripts/audit-admin-hint-duplication.mjs` — PageHeaderBar hint dedupe audit
-- Playwright `admin-chrome-budget.spec.ts` — posture row budget + contrast spot-checks
+- Playwright `admin-chrome-budget.spec.ts` — posture row budget + contrast spot-checks (`/health`, `/reports`, `/marketplace`)
 
-See also: `docs/admin/UX-UNIFICATION-BURNDOWN.md`
+See also: `docs/admin/UX-UNIFICATION-BURNDOWN.md` (chrome wave — closed); this token/CSS debt pass is the follow-on.

@@ -13,7 +13,7 @@ import {
   IconTrash,
 } from '../icons'
 import type { FineTuningJob } from './types'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { CHIP_TONE, runStatusChipTone } from '../../lib/chipTone'
 
 // See PromptStageTable for the icon-button pattern. Same `!px-1.5` trick
 // gives us a square inset for icon-only Btns while still inheriting
@@ -26,16 +26,11 @@ interface FineTuningJobsCardProps {
   onChange: () => void | Promise<void>
 }
 
-const STATUS_TONE: Record<string, string> = {
-  pending: 'bg-fg-faint/15 text-fg-muted border border-edge-subtle',
-  exporting: 'bg-info/15 text-info border border-info/30',
-  exported: 'bg-info/15 text-info border border-info/30',
-  trained: 'bg-info/15 text-info border border-info/30',
-  validating: 'bg-info/15 text-info border border-info/30',
-  validated: 'bg-ok/15 text-ok border border-ok/30',
-  promoted: 'bg-ok/15 text-ok border border-ok/30',
-  rejected: CHIP_TONE.warnSubtle,
-  failed: CHIP_TONE.dangerSubtle + ' border border-danger/30',
+/** Fine-tune lifecycle chips — pending stays quiet; rejected is warn (not danger). */
+function fineTuneStatusTone(status: string): string {
+  if (status === 'pending') return CHIP_TONE.neutral
+  if (status === 'rejected') return CHIP_TONE.warnSubtle
+  return runStatusChipTone(status)
 }
 
 const VENDOR_OPTIONS = [
@@ -228,7 +223,7 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
             <tbody>
               {jobs.map((job) => {
                 const actions = nextActions(job)
-                const tone = STATUS_TONE[job.status] ?? STATUS_TONE.pending
+                const tone = fineTuneStatusTone(job.status)
                 const acc = job.validation_report?.accuracy
                 return (
                   <tr key={job.id} className="border-t border-edge-subtle align-top">

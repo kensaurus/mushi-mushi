@@ -179,10 +179,10 @@ function actionTone(action: string): string {
     action.endsWith('.installed') ||
     action.endsWith('.fulfilled')
   ) {
-    return 'bg-ok/15 text-ok'
+    return 'bg-ok-muted/50 text-ok-foreground border border-ok/25'
   }
   if (action.endsWith('.dispatched') || action.endsWith('.classified') || action.endsWith('.connected')) {
-    return 'bg-brand/15 text-brand'
+    return 'bg-brand/12 text-brand border border-brand/28'
   }
   return 'bg-surface-overlay text-fg-secondary'
 }

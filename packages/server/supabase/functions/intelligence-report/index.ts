@@ -16,7 +16,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { mapWithConcurrency } from '../_shared/concurrency.ts'
 import { INTELLIGENCE_MODEL } from '../_shared/models.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
-import { resolveLlmKey } from '../_shared/byok.ts'
+import { withLlmFailover, LlmFailoverError } from '../_shared/llm-failover.ts'
 
 const intelLog = log.child('intelligence-report')
 
@@ -39,6 +39,7 @@ Deno.serve(withSentry('intelligence-report', async (req) => {
   const trace = createTrace('intelligence-report', { projectId })
   const reportIds: string[] = []
   const digests: string[] = []
+  const skipped: Array<{ projectId: string; reason: string }> = []
 
   // Reporting week = the most recently completed Monday→Sunday window.
   const weekStart = mostRecentMondayUtc()
@@ -48,17 +49,6 @@ Deno.serve(withSentry('intelligence-report', async (req) => {
   // cached / indexed. Weekly digests for 50 projects dropped from ~12 min
   // to ~2.5 min (measured during the 2026-04-21 audit).
   await mapWithConcurrency(projects ?? [], 5, async (project) => {
-    const anthropicResolved = await resolveLlmKey(db, project.id, 'anthropic')
-    if (!anthropicResolved) {
-      const msg =
-        `No Anthropic API key configured for project ${project.name}. ` +
-        'Add one in Settings → LLM Keys (BYOK) or set ANTHROPIC_API_KEY on the host.'
-      intelLog.error('No Anthropic API key for intelligence digest', { projectId: project.id })
-      // Single-project manual runs should surface a clear error to the job row.
-      if (projectId) throw new Error(msg)
-      return
-    }
-
     const stats = await computeWeeklyStats(db, project.id, weekStart)
     const benchmarks = await fetchBenchmarks(db, project.id)
 
@@ -72,29 +62,57 @@ Fix attempts: ${stats.fixes.total} (${stats.fixes.completed} completed, completi
 Judge scores: ${JSON.stringify(stats.judgeScores.slice(0, 2))}
 Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project not opted in or k-anonymity unmet)'}`
 
-    const anthropic = createAnthropic({ apiKey: anthropicResolved.key })
     const span = trace.span(`digest.${project.name}`)
     const digestStart = Date.now()
     const intelSelection = await getPromptForStage(db, project.id, 'intelligence')
     const intelSystemPrompt = intelSelection.promptTemplate ??
       'You are a bug intelligence analyst. Write a concise weekly digest summarizing bug trends, fix velocity, areas of concern, and 2-3 actionable recommendations. Be specific and data-driven. Use Markdown with short paragraphs and bullet lists. Do NOT mention other tenants by name; benchmarks are anonymised aggregates.'
-    // Wave S (2026-04-23): cache the stable system prompt. The weekly
-    // digest fans out over every active project; the prompt text is
-    // identical for the full batch, so ephemeral caching halves the
-    // prompt-tokens bill on runs 2..N within a 5-minute window.
-    const { text: digest, usage } = await generateText({
-      model: anthropic(INTELLIGENCE_MODEL),
-      messages: [
-        {
-          role: 'system',
-          content: intelSystemPrompt,
-          experimental_providerMetadata: {
-            anthropic: { cacheControl: { type: 'ephemeral' } },
-          },
-        },
-        { role: 'user', content: statsContext },
-      ],
-    })
+
+    let digest: string
+    let usage: { promptTokens?: number; completionTokens?: number } | undefined
+    try {
+      // MUSHI-MUSHI-SERVER-1Q: use withLlmFailover so an invalid/expired key
+      // is marked auth_failed and the next candidate (or env fallback) is
+      // tried — previously resolveLlmKey + bare generateText crashed the
+      // whole cron on Anthropic's "invalid x-api-key".
+      const result = await withLlmFailover(db, project.id, 'anthropic', async (resolved) => {
+        const anthropic = createAnthropic({ apiKey: resolved.key })
+        // Wave S (2026-04-23): cache the stable system prompt. The weekly
+        // digest fans out over every active project; the prompt text is
+        // identical for the full batch, so ephemeral caching halves the
+        // prompt-tokens bill on runs 2..N within a 5-minute window.
+        return generateText({
+          model: anthropic(INTELLIGENCE_MODEL),
+          messages: [
+            {
+              role: 'system',
+              content: intelSystemPrompt,
+              experimental_providerMetadata: {
+                anthropic: { cacheControl: { type: 'ephemeral' } },
+              },
+            },
+            { role: 'user', content: statsContext },
+          ],
+        })
+      })
+      digest = result.text
+      usage = result.usage
+    } catch (err) {
+      const reason = err instanceof LlmFailoverError
+        ? `${err.code}: ${err.lastError.slice(0, 200)}`
+        : String(err).slice(0, 300)
+      intelLog.error('Intelligence digest LLM failed — skipping project', {
+        projectId: project.id,
+        projectName: project.name,
+        reason,
+      })
+      skipped.push({ projectId: project.id, reason })
+      span.end({ model: INTELLIGENCE_MODEL, error: reason })
+      // Single-project manual runs should surface a clear error to the job row.
+      if (projectId) throw err instanceof Error ? err : new Error(reason)
+      return
+    }
+
     const digestLatency = Date.now() - digestStart
     span.end({
       model: INTELLIGENCE_MODEL,
@@ -165,6 +183,7 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
     metadata: {
       projectIds: (projects ?? []).map((p) => p.id),
       reportIds,
+      skipped,
       weekStart: weekStart.toISOString().slice(0, 10),
     },
   })
@@ -175,6 +194,7 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
       data: {
         reports: reportIds.length,
         reportIds,
+        skipped,
         digest: digests.join('\n\n---\n\n'),
       },
     }),

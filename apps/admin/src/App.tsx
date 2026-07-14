@@ -36,6 +36,8 @@ const envStatus = checkEnv()
 
 const ContentQualityPage = lazy(() => import('./pages/ContentQualityPage').then(m => ({ default: m.ContentQualityPage })))
 const ContentQualityDetailPage = lazy(() => import('./pages/ContentQualityDetailPage').then(m => ({ default: m.ContentQualityDetailPage })))
+const ActivityPage = lazy(() => import('./pages/ActivityPage').then(m => ({ default: m.ActivityPage })))
+const OverviewPage = lazy(() => import('./pages/OverviewPage').then(m => ({ default: m.OverviewPage })))
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const ReportsPage = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })))
 const ReportDetailPage = lazy(() => import('./pages/ReportDetailPage').then(m => ({ default: m.ReportDetailPage })))
@@ -150,7 +152,7 @@ function NotFoundPage() {
           : "The link you followed doesn't match any page on this site. It may have been moved or renamed — head home, or check the docs for what you're looking for."
       }
       detail={
-        <code className="break-all rounded bg-[var(--mushi-paper-wash)] px-2 py-0.5">
+        <code className="break-all rounded bg-editorial-paper-wash px-2 py-0.5">
           {pathname}
         </code>
       }
@@ -348,6 +350,8 @@ export function App() {
                 <ErrorBoundary source="protected-route">
                 <Suspense fallback={<Loading text="Loading…" />}>
                 <SentryRoutes>
+                  <Route path="/overview" element={<OverviewPage />} />
+                  <Route path="/activity" element={<ActivityPage />} />
                   <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/console" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/reports" element={<ReportsPage />} />

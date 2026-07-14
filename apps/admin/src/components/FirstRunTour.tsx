@@ -265,7 +265,7 @@ export function FirstRunTour() {
         }}
       >
         <div className="flex items-center gap-2 px-3 py-2 border-b border-edge/60">
-          <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-brand/15 text-brand text-2xs font-bold">
+          <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-brand/12 text-brand border border-brand/28 text-2xs font-bold">
             {stopIdx + 1}
           </span>
           <span className="text-2xs text-fg-muted font-medium uppercase tracking-wider">

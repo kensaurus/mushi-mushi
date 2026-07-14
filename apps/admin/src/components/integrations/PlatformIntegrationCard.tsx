@@ -20,6 +20,7 @@ import { ClaudeCodeSetupPanel } from './ClaudeCodeSetupPanel'
 import { IntegrationSetupGuide } from './IntegrationSetupGuide'
 import { IntegrationCredentialChips } from './IntegrationCredentialChips'
 import { PLATFORM_STATUS_MAP, type FieldSource, type HealthRow, type PlatformDef } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 /**
  * Triggers a one-shot success-pulse signal when the latest probe transitions
@@ -173,7 +174,7 @@ export function PlatformIntegrationCard({
       <div className="px-3 pt-3 pb-2">
         {/* Blocking banner — GitHub must be connected before fix agents work */}
         {hasDependencyBlock && (
-          <div className="mb-2 flex items-start gap-2 rounded-sm border border-warn/30 bg-warn/8 px-3 py-2 text-2xs text-warn">
+          <div className={`mb-2 flex items-start gap-2 rounded-sm px-3 py-2 text-2xs ${CHIP_TONE.warnSubtle}`}>
             <IconAlertTriangle size={11} className="mt-0.5 shrink-0" />
             <span className="leading-snug">
               <strong>{dependencyLabel ?? 'GitHub'} must be connected first</strong> — this fix agent needs a repo URL and token to open pull requests.{' '}
@@ -217,7 +218,7 @@ export function PlatformIntegrationCard({
               {/* Inheritance source badges */}
               {orgFields > 0 && (
                 <Tooltip content={`${orgFields} field${orgFields > 1 ? 's' : ''} inherited from org defaults — project-level values take precedence when set.`}>
-                  <Badge className="bg-brand/10 text-brand border border-brand/30 cursor-default">
+                  <Badge className={`${CHIP_TONE.brandSubtle} cursor-default`}>
                     Inherited from org
                   </Badge>
                 </Tooltip>
@@ -231,7 +232,7 @@ export function PlatformIntegrationCard({
               )}
               {hasInheritance && projectFields > 0 && (
                 <Tooltip content="Some fields use project-level credentials; others fall back to org defaults or environment variables.">
-                  <Badge className="bg-ok/10 text-ok border border-ok/30 cursor-default">
+                  <Badge className={`${CHIP_TONE.okSubtle} cursor-default`}>
                     Overridden here
                   </Badge>
                 </Tooltip>
@@ -240,7 +241,7 @@ export function PlatformIntegrationCard({
 
             {/* Down/degraded error banner — high-signal inline alert */}
             {(isDown || isDegraded) && latestProbe?.message && (
-              <div className={`mt-1.5 flex items-start gap-1.5 rounded-sm px-2 py-1 text-2xs ${isDown ? 'bg-danger/8 border border-danger/20 text-danger' : 'bg-warn/8 border border-warn/20 text-warn'}`}>
+              <div className={`mt-1.5 flex items-start gap-1.5 rounded-sm px-2 py-1 text-2xs ${isDown ? CHIP_TONE.dangerSubtle : CHIP_TONE.warnSubtle}`}>
                 <IconAlertTriangle size={11} className="mt-0.5 shrink-0" />
                 <span className="leading-snug font-mono truncate">{latestProbe.message}</span>
               </div>

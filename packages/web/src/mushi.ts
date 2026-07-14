@@ -70,6 +70,11 @@ import { setupProactiveTriggers, type ProactiveTriggerCleanup } from './proactiv
 import { createProactiveManager, type ProactiveManager } from './proactive-manager';
 import { MUSHI_SDK_PACKAGE, MUSHI_SDK_VERSION } from './version';
 import { subscribeHistory, uninstallHistoryPatchForce } from './history-patch';
+import {
+  initSessionTracker,
+  updateSessionIdentity,
+  destroySessionTracker,
+} from '@mushi-mushi/core';
 
 /** Resolve `reports.app_version` from SDK config and captured environment. */
 export function resolveReportAppVersion(
@@ -171,6 +176,15 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     sdkPackage: MUSHI_SDK_PACKAGE,
     sdkVersion: MUSHI_SDK_VERSION,
   });
+
+  // Session tracking — opt-out via trackSessions:false in MushiConfig
+  if ((bootstrapConfig as unknown as Record<string, unknown>)['trackSessions'] !== false) {
+    initSessionTracker({
+      client: apiClient,
+      sdkVersion: MUSHI_SDK_VERSION,
+      reporterTokenHash: getReporterToken(bootstrapConfig.projectId) ?? null,
+    });
+  }
 
   const preFilter = createPreFilter(bootstrapConfig.preFilter);
   const offlineQueue = createOfflineQueue(bootstrapConfig.offline);
@@ -1428,6 +1442,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       replayCap = null;
       offlineQueue.stopAutoSync();
       stopReporterInboxPolling();
+      destroySessionTracker();
       breadcrumbs.clear();
       listeners.clear();
       instance = null;
@@ -1620,6 +1635,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
             breadcrumbs.add({ category: 'lifecycle', level: 'info', message: 'Mushi.identifyWithToken() refreshed' });
             return;
           }
+          // Propagate identity to session tracker so subsequent heartbeats
+          // carry the user_id_hash and the activity dashboard can show the
+          // identified vs anonymous split.
+          updateSessionIdentity(claims.sub);
           // Hydrate display identity from the (unverified) claims so the
           // widget can greet the user; the server re-verifies for trust.
           userInfo = {

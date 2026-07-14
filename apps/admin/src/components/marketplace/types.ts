@@ -4,6 +4,8 @@
  *          subcomponents. Keeps the page itself focused on data + actions.
  */
 
+import { runStatusChipTone } from '../../lib/chipTone'
+
 export type MarketplaceTabId = 'overview' | 'browse' | 'installed' | 'deliveries'
 
 export type MarketplaceTopPriority =
@@ -100,11 +102,11 @@ export const EMPTY_MARKETPLACE_STATS: MarketplaceStats = {
 }
 
 export const STATUS_CHIP: Record<string, string> = {
-  ok: 'bg-ok/15 text-ok border border-ok/30',
-  error: 'bg-danger-muted/50 text-danger-foreground border border-danger/30',
-  timeout: 'bg-warn-muted/50 text-warning-foreground border border-warn/30',
-  skipped: 'bg-fg-muted/10 text-fg-muted border border-edge-subtle',
-  pending: 'bg-info/15 text-info border border-info/30',
+  ok: runStatusChipTone('ok'),
+  error: runStatusChipTone('error'),
+  timeout: runStatusChipTone('timeout'),
+  skipped: runStatusChipTone('skipped'),
+  pending: runStatusChipTone('pending'),
 }
 
 export const CATEGORY_LABEL: Record<string, string> = {

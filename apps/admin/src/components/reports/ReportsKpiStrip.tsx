@@ -123,7 +123,7 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
         <button
           type="button"
           onClick={reload}
-          className="shrink-0 rounded-sm border border-danger/40 bg-danger/10 px-2 py-1 text-2xs font-medium text-danger hover:bg-danger/15 motion-safe:transition-colors"
+          className="shrink-0 rounded-sm px-2 py-1 text-2xs font-medium hover:bg-danger-muted/40 bg-danger-muted/50 text-danger-foreground border border-danger/25 motion-safe:transition-colors"
         >
           Retry
         </button>

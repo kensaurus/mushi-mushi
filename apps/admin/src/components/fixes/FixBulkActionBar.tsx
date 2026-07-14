@@ -91,7 +91,7 @@ export function FixBulkActionBar({
                 ? 'None of the selected fixes have an open PR that can be merged from the console'
                 : `Squash-merge ${pluralizeWithCount(mergeableCount, 'PR')} and mark the linked ${pluralizeWithCount(mergeableCount, 'report')} Fixed`
             }
-            className="inline-flex items-center gap-1 rounded-sm border border-ok/35 bg-ok/15 px-2.5 py-1 text-xs font-medium text-ok hover:bg-ok/25 disabled:cursor-not-allowed disabled:opacity-40 motion-safe:transition-colors"
+            className={`inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium hover:bg-ok-muted/40 disabled:cursor-not-allowed disabled:opacity-40 motion-safe:transition-colors ${CHIP_TONE.okSubtle}`}
           >
             {busy && progressLabel?.startsWith('Merging') ? progressLabel : `Merge ${mergeableCount}`}
           </button>
