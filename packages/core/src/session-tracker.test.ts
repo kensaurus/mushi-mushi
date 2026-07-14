@@ -25,16 +25,13 @@ async function freshTracker() {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('initSessionTracker', () => {
-  let fakeTimers: ReturnType<typeof vi.useFakeTimers> | null = null;
-
   beforeEach(() => {
     sessionStorage.clear();
-    fakeTimers = vi.useFakeTimers();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    fakeTimers = null;
   });
 
   it('sends session_start immediately on init', async () => {
