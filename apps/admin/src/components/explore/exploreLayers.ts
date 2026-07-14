@@ -12,6 +12,7 @@
  * are categorised.
  */
 
+import { readVizToken } from '../../lib/vizTokens'
 import type { ExploreLayer } from './exploreTypes'
 
 /**
@@ -53,18 +54,17 @@ export const LAYER_LABELS: Record<ExploreLayer, string> = {
 }
 
 /**
- * Colour tokens per layer — oklch values chosen to be distinct but still
- * harmonise with the existing `NODE_COLORS` palette in lib/tokens.ts.
- * These are resolved CSS colours (not CSS variables) because ReactFlow strips
- * CSS variable references from SVG attributes.
+ * Colour tokens per layer — resolved via `readVizToken` because ReactFlow
+ * strips CSS variable references from SVG attributes. Fallbacks in
+ * vizTokens.ts match the @theme `--color-viz-layer-*` values.
  */
 export const LAYER_COLORS: Record<ExploreLayer, string> = {
-  ui:      'oklch(0.72 0.19 240)',  // blue — visual surfaces
-  lib:     'oklch(0.72 0.19 155)',  // green — shared logic
-  backend: 'oklch(0.65 0.22 25)',   // red/amber — server/API
-  test:    'oklch(0.72 0.19 300)',  // purple — test files
-  config:  'oklch(0.60 0.08 240)',  // muted blue — config/tooling
-  other:   'oklch(0.50 0 0)',       // grey — unclassified
+  get ui() { return readVizToken('viz-layer-ui') },
+  get lib() { return readVizToken('viz-layer-lib') },
+  get backend() { return readVizToken('viz-layer-backend') },
+  get test() { return readVizToken('viz-layer-test') },
+  get config() { return readVizToken('viz-layer-config') },
+  get other() { return readVizToken('viz-layer-other') },
 }
 
 export const LAYER_ORDER: ExploreLayer[] = ['ui', 'lib', 'backend', 'test', 'config', 'other']

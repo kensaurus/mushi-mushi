@@ -14,7 +14,7 @@ import {
   type NodeMouseHandler,
 } from '@xyflow/react'
 import { useTheme } from '../../lib/useTheme'
-import { extBadgeColor, exploreNodeChrome } from '../../lib/vizTokens'
+import { extBadgeColor, exploreNodeChrome, readVizToken } from '../../lib/vizTokens'
 import type { ExploreLayer, ExploreNode } from './exploreTypes'
 import { LAYER_COLORS, LAYER_LABELS, LAYER_ORDER } from './exploreLayers'
 
@@ -216,8 +216,8 @@ function LayerLegend({ layerCounts }: { layerCounts?: Record<string, number> }) 
           })}
           <div className="mt-1 pt-1 border-t border-edge-subtle text-fg-faint flex items-center gap-1.5">
             <svg width="16" height="6" viewBox="0 0 16 6" fill="none" aria-hidden="true">
-              <path d="M1 3h12" stroke="oklch(0.50 0 0)" strokeWidth="1.2" strokeOpacity="0.6" />
-              <path d="M11 1l2 2-2 2" stroke="oklch(0.50 0 0)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.6" />
+              <path d="M1 3h12" stroke={readVizToken('viz-graph-muted')} strokeWidth="1.2" strokeOpacity="0.6" />
+              <path d="M11 1l2 2-2 2" stroke={readVizToken('viz-graph-muted')} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.6" />
             </svg>
             import edge
           </div>
@@ -299,11 +299,11 @@ function InnerCanvas({
           const layer = d?.node?.metadata?.layer as string | undefined
           return (LAYER_COLORS as Record<string, string>)[layer ?? ''] ?? LAYER_COLORS.other
         }}
-        maskColor={resolved === 'dark' ? 'oklch(0.12 0 0 / 0.7)' : 'oklch(0.96 0 0 / 0.7)'}
+        maskColor={readVizToken(resolved === 'dark' ? 'viz-mask-dark' : 'viz-mask-light')}
         position="top-right"
         style={{
-          background: resolved === 'dark' ? 'oklch(0.14 0 0 / 0.90)' : 'oklch(0.98 0 0 / 0.90)',
-          border: '1px solid oklch(0.5 0 0 / 0.18)',
+          background: readVizToken(resolved === 'dark' ? 'viz-minimap-bg-dark' : 'viz-minimap-bg-light'),
+          border: `1px solid ${readVizToken('viz-minimap-border')}`,
           borderRadius: '6px',
         }}
         pannable

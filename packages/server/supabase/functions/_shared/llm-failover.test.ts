@@ -24,6 +24,11 @@ Deno.test('classifyLlmError detects quota errors from message text', () => {
 Deno.test('classifyLlmError detects auth errors from message text', () => {
   assertEquals(classifyLlmError(new Error('401 Unauthorized')), 'auth')
   assertEquals(classifyLlmError(new Error('Invalid API Key provided')), 'auth')
+  // Anthropic's exact rejection string (MUSHI-MUSHI-SERVER-1Q) — must not
+  // fall through as 'other' or withLlmFailover rethrows without marking
+  // the key auth_failed / rotating to the next candidate.
+  assertEquals(classifyLlmError(new Error('AI_APICallError: invalid x-api-key')), 'auth')
+  assertEquals(classifyLlmError(new Error('authentication_error: invalid x-api-key')), 'auth')
 })
 
 Deno.test('classifyLlmError detects quota/auth from structured status codes', () => {

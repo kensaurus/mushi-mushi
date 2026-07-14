@@ -1,15 +1,15 @@
-import { CHIP_TONE } from '../../lib/chipTone'
+import { CHIP_TONE, statusChipTone } from '../../lib/chipTone'
 /**
  * Six-state inventory status (whitepaper §3.3) — semantic tokens match /graph health language.
  */
 
 const STATUS_CLASS: Record<string, string> = {
-  stub: CHIP_TONE.dangerSubtle,
-  mocked: CHIP_TONE.warnSubtle + ' border border-warn/20',
-  wired: CHIP_TONE.infoSubtle + ' border border-info/20',
-  verified: CHIP_TONE.okSubtle,
-  regressed: CHIP_TONE.dangerSubtle + ' border border-danger/30',
-  unknown: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
+  stub: statusChipTone('danger'),
+  mocked: statusChipTone('warn'),
+  wired: statusChipTone('info'),
+  verified: statusChipTone('ok'),
+  regressed: statusChipTone('danger'),
+  unknown: CHIP_TONE.neutral,
 }
 
 const GLYPH: Record<string, string> = {

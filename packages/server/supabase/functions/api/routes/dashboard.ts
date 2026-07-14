@@ -1072,4 +1072,57 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     });
   });
 
+  // ─── GET /v1/admin/activity ────────────────────────────────────────────────
+  // Per-project activity dashboard powered by the project_activity_summary RPC.
+  // Query param: ?window=30 (days, default 30, max 90).
+  app.get('/v1/admin/activity', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project found for this account' } }, 404),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const projectId = resolvedProject.project.id as string;
+
+    const windowDays = Math.min(90, Math.max(1, parseInt(c.req.query('window') ?? '30', 10) || 30));
+
+    const { data, error } = await db.rpc('project_activity_summary', {
+      p_project_id: projectId,
+      p_window_days: windowDays,
+    });
+    if (error) return c.json({ ok: false, error: { code: 'RPC_ERROR', message: error.message } }, 500);
+
+    return c.json({ ok: true, data });
+  });
+
+  // ─── GET /v1/admin/portfolio ───────────────────────────────────────────────
+  // Org-scoped portfolio summary for the Overview page.
+  // Returns one card per project with 7-day sessions/users/reports + sparkline.
+  app.get('/v1/admin/portfolio', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    // Resolve the active org from context (x-org-id header set by apiFetch).
+    const orgId = c.req.header('x-org-id') ?? c.get('orgId') as string | undefined;
+    if (!orgId) return c.json({ ok: false, error: { code: 'NO_ORG', message: 'x-org-id header required' } }, 400);
+
+    // Verify the caller is a member of this org.
+    const { data: membership, error: memErr } = await db
+      .from('organization_members')
+      .select('role')
+      .eq('organization_id', orgId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (memErr || !membership) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this organisation' } }, 403);
+    }
+
+    const { data, error } = await db.rpc('org_portfolio_summary', { p_org_id: orgId });
+    if (error) return c.json({ ok: false, error: { code: 'RPC_ERROR', message: error.message } }, 500);
+
+    return c.json({ ok: true, data: data ?? [] });
+  });
+
 }

@@ -127,7 +127,7 @@ interface ProjectOption {
 const TIER_BADGE: Record<string, string> = {
   free:        'bg-surface-overlay text-fg-secondary',
   explorer:    CHIP_TONE.infoSubtle,
-  contributor: 'bg-brand/15 text-brand',
+  contributor: 'bg-brand/12 text-brand border border-brand/28',
   champion:    CHIP_TONE.warnSubtle,
 }
 
@@ -244,7 +244,7 @@ export function OverviewTab() {
       </Section>
 
       {pendingLiability > 0 && (
-        <div className="rounded-xl border border-warn/20 bg-warn/5 p-3 text-xs text-warn">
+        <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warning-foreground border border-warn/25">
           <strong>${pendingLiability.toFixed(2)} USD</strong> in payouts are queued for the next
           monthly aggregator run. Stripe Connect KYC must be complete before funds transfer.
         </div>
@@ -390,7 +390,7 @@ export function ActivityRulesTab({ canEdit }: { canEdit: boolean }) {
   return (
     <div className="space-y-4">
       {!canEdit && (
-        <div className="rounded-xl border border-warn/20 bg-warn/5 p-3 text-xs text-warn">
+        <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warning-foreground border border-warn/25">
           Upgrade to Starter or higher to configure activity rules.
         </div>
       )}
@@ -530,7 +530,7 @@ export function TierLadderTab({ canEdit }: { canEdit: boolean }) {
   return (
     <div className="space-y-4">
       {!canEdit && (
-        <div className="rounded-xl border border-warn/20 bg-warn/5 p-3 text-xs text-warn">
+        <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warning-foreground border border-warn/25">
           Upgrade to Starter or higher to edit tier thresholds.
         </div>
       )}
@@ -727,7 +727,7 @@ export function ContributorDrawer({
   const ACTION_TONE: Record<string, string> = {
     report_submit:                 CHIP_TONE.okSubtle,
     screen_view_unique_per_day:    CHIP_TONE.infoSubtle,
-    session_minute:                'bg-brand/15 text-brand',
+    session_minute:                'bg-brand/12 text-brand border border-brand/28',
     comment_posted:                CHIP_TONE.okSubtle,
     app_launch:                    'bg-surface-overlay text-fg-secondary',
     quest_completed:               CHIP_TONE.warnSubtle,
@@ -1935,13 +1935,13 @@ export function RetentionAnalyticsTab() {
           </div>
 
           {(data.lift_pct ?? 0) >= 50 && (
-            <div className="rounded-xl border border-ok/20 bg-ok/5 p-3 text-xs text-ok">
+            <div className="rounded-xl p-3 text-xs bg-ok-muted/50 text-ok-foreground border border-ok/25">
               Top contributors retain <strong>{data.lift_pct}% longer</strong> than average — a strong
               signal to invest further in the rewards program.
             </div>
           )}
           {(data.lift_pct ?? 0) < 0 && (
-            <div className="rounded-xl border border-warn/20 bg-warn/5 p-3 text-xs text-warn">
+            <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warning-foreground border border-warn/25">
               Top contributors are retaining <strong>less</strong> than average. Consider adding
               recurring incentives or time-gated perks to retain power users after they hit the top tier.
             </div>

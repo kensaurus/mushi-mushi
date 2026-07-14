@@ -13,6 +13,7 @@ import type {
   MushiSdkVersionInfo,
   MushiTesterReputation,
   MushiTierResult,
+  MushiSessionEventPayload,
 } from './types';
 import { checkReportPayloadSize } from './payload-guard';
 import { sha256Hex, hmacSha256Hex } from './digest';
@@ -421,6 +422,18 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
     },
 
     // ─── Rewards program (P1) ──────────────────────────────────
+
+    /** POST /v1/sdk/session — lightweight session lifecycle events.
+     *  Best-effort (1 retry, no offline queue) — mirrors postDiscoveryEvent. */
+    async postSessionEvent(payload: MushiSessionEventPayload) {
+      return request<{ accepted: boolean }>(
+        'POST',
+        '/v1/sdk/session',
+        payload,
+        1,
+        'discovery',
+      );
+    },
 
     async submitActivity(userId, events, opts?: { userTraits?: { email?: string; name?: string; provider?: string }; reporterTokenHash?: string; optedIn?: boolean; hostJwt?: string }) {
       return request<{ accepted: number; total: number }>(

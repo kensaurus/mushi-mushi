@@ -185,7 +185,7 @@ function StoryCard({
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-sm font-medium text-fg truncate leading-snug">{coverage.name}</span>
             {isQueued && (
-              <span className="inline-flex items-center gap-1 text-3xs border px-1.5 py-0.5 rounded-full font-medium bg-brand/10 border-brand/20 text-brand">
+              <span className="inline-flex items-center gap-1 text-3xs px-1.5 py-0.5 rounded-full font-medium bg-brand/12 text-brand border border-brand/28">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-brand motion-safe:animate-pulse" />
                 queued
               </span>
@@ -277,8 +277,8 @@ function StoryCard({
 // ── Evidence kind badge ────────────────────────────────────────────────────
 
 const EVIDENCE_BADGE: Record<string, string> = {
-  screenshot: 'bg-brand/10 text-brand border-brand/20',
-  video:      'bg-brand/10 text-brand border-brand/20',
+  screenshot: 'bg-brand/12 text-brand border border-brand/28',
+  video:      'bg-brand/12 text-brand border border-brand/28',
   console:    'bg-surface-overlay text-fg-secondary border-edge-subtle',
   network:    'bg-surface-overlay text-fg-secondary border-edge-subtle',
   har:        'bg-surface-overlay text-fg-secondary border-edge-subtle',

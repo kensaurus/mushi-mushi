@@ -33,9 +33,9 @@ const ROLES = ['frontend', 'backend', 'monorepo', 'mobile', 'ai', 'infra', 'docs
 type RepoRole = (typeof ROLES)[number]
 
 const ROLE_BADGE_CLASS: Record<string, string> = {
-  frontend: 'bg-brand/15 text-brand border-brand/30',
-  backend:  'bg-ok/15 text-ok border-ok/30',
-  monorepo: 'bg-info/15 text-info border-info/30',
+  frontend: 'bg-brand/12 text-brand border border-brand/28',
+  backend:  'bg-ok-muted/50 text-ok-foreground border border-ok/25',
+  monorepo: 'bg-info-muted/50 text-info-foreground border border-info/25',
   mobile:   CHIP_TONE.accentSubtle + ' border-accent/30',
 }
 
@@ -178,7 +178,7 @@ export function ProjectReposCard({ projectId }: Props) {
             <div className="flex items-center gap-2 flex-wrap justify-between">
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 {repo.is_primary && (
-                  <Badge className="text-3xs bg-brand/15 text-brand border-brand/30">primary</Badge>
+                  <Badge className="text-3xs bg-brand/12 text-brand border border-brand/28">primary</Badge>
                 )}
                 <Badge className={`text-3xs border ${ROLE_BADGE_CLASS[repo.role] ?? 'border-edge-subtle text-fg-muted'}`}>
                   {repo.role}

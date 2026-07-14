@@ -88,7 +88,7 @@ export function TabbedSubNav({ ariaLabel, tabs, trailing }: TabbedSubNavProps) {
                     className={[
                       'inline-flex items-center justify-center rounded-full text-2xs font-semibold',
                       'min-w-[1.25rem] h-5 px-1.5',
-                      isActive ? 'bg-brand/20 text-brand' : 'bg-surface-raised text-fg-muted',
+                      isActive ? 'bg-brand/12 text-brand border border-brand/28' : 'bg-surface-raised text-fg-muted',
                     ].join(' ')}
                   >
                     {tab.badge}

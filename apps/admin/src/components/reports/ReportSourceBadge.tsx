@@ -55,7 +55,7 @@ function captureLabel(trigger: string | null | undefined): { label: string; tone
   if (!trigger) {
     return {
       label: 'user',
-      tone: 'bg-brand/10 text-brand border-brand/30',
+      tone: 'bg-brand/12 text-brand border border-brand/28',
       tooltip:
         'A real person opened the widget and described what they felt. These are the highest-signal reports — somebody actually noticed the bug.',
     }

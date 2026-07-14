@@ -13,7 +13,14 @@ import { useReportPresence } from '../../lib/reportPresence'
 import type { ReportDetail } from './types'
 
 export function ReportDetailHeader({ report, reporterShort }: { report: ReportDetail; reporterShort: string }) {
-  const title = (report.summary ?? report.description ?? 'Untitled report').trim() || 'Untitled report'
+  // Friendly display title: prefer the Stage-2 generated `title` (non-engineer
+  // headline), fall back to technical summary, then raw description.
+  const displayTitle = (report.title ?? report.summary ?? report.description ?? 'Untitled report').trim() || 'Untitled report'
+  // Breadcrumb still uses a compact technical summary (shorter context)
+  const breadcrumbLabel = (report.summary ?? report.title ?? report.description ?? 'Untitled report').trim() || 'Untitled report'
+  // Provenance: page route where the bug was felt
+  const pageRoute = (report.environment as { route?: string } | null)?.route
+    ?? (report.environment as { url?: string } | null)?.url
   const glow = severityGlowClass(report.severity)
   return (
     <div
@@ -22,7 +29,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
       <Breadcrumbs
         items={[
           { label: 'Reports', to: '/reports' },
-          { label: title, hint: report.id },
+          { label: breadcrumbLabel, hint: report.id },
         ]}
       />
       <div className="flex items-start justify-between gap-3">
@@ -44,7 +51,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
         </div>
         <ContainedBlock tone="info" className="mt-2">
           <h2 className="text-lg font-semibold leading-snug text-balance text-fg wrap-break-word max-w-4xl">
-            {title}
+            {displayTitle}
           </h2>
         </ContainedBlock>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -83,6 +90,34 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
             <MetaChip label="Session" title={report.session_id}>
               <span className="font-mono">{report.session_id.slice(0, 8)}</span>
             </MetaChip>
+          )}
+          {pageRoute && (
+            <MetaChip
+              label="Page"
+              title={`Activity for page: ${pageRoute}`}
+              to={`/activity?route=${encodeURIComponent(pageRoute)}`}
+            >
+              <span className="font-mono max-w-[14rem] truncate">{pageRoute}</span>
+            </MetaChip>
+          )}
+          {report.area_tag && (
+            <MetaChip
+              label="Area"
+              to={`/reports?area=${encodeURIComponent(report.area_tag)}`}
+            >
+              {report.area_tag}
+            </MetaChip>
+          )}
+          {report.screenshot_url && (
+            <a
+              href={report.screenshot_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col gap-0.5 rounded border border-edge bg-surface-overlay px-2 py-1 text-xs hover:bg-surface-raised transition-colors"
+            >
+              <span className="text-2xs font-medium uppercase tracking-wide text-fg-faint">Screenshot</span>
+              <span className="text-fg-muted">view →</span>
+            </a>
           )}
         </div>
       </div>

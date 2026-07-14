@@ -76,6 +76,8 @@ export type NavIconKey =
   | 'storage'
   | 'query'
   | 'user'
+  | 'activity'
+  | 'overview'
 
 export interface NavRegistryEntry {
   id: string
@@ -209,6 +211,18 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     beginner: true,
     paletteDescription: 'Connect GitHub, install SDK + MCP, and create upgrade PRs.',
     paletteKeywords: ['connect', 'install', 'sdk', 'upgrade', 'update', 'mcp', 'cursor', 'npm', 'package'],
+    paletteGroup: 'Start',
+  },
+  {
+    id: 'nav:overview',
+    path: '/overview',
+    label: 'Overview',
+    quickstartLabel: 'Overview',
+    sectionId: 'start',
+    iconKey: 'overview',
+    beginner: true,
+    paletteDescription: 'Portfolio view — all connected projects at a glance with activity and open tickets.',
+    paletteKeywords: ['overview', 'portfolio', 'all projects', 'health', 'consolidated'],
     paletteGroup: 'Start',
   },
   {
@@ -429,6 +443,19 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     iconKey: 'lessons',
     paletteDescription: 'Patterns learned from past bugs and fixes.',
     paletteKeywords: ['lessons', 'learned', 'patterns'],
+    paletteGroup: 'Check',
+  },
+  {
+    id: 'nav:activity',
+    path: '/activity',
+    label: 'Activity',
+    quickstartLabel: 'User Activity',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    iconKey: 'activity',
+    beginner: true,
+    paletteDescription: 'Per-project activity — sessions, page views, identified vs. anonymous users, top routes.',
+    paletteKeywords: ['sessions', 'users', 'page views', 'analytics', 'dau', 'activity', 'engagement'],
     paletteGroup: 'Check',
   },
   {

@@ -143,7 +143,7 @@ function CommentThread({
     <div className="mt-3 border-t border-edge-subtle pt-3 space-y-2">
       {comments.map((c) => (
         <div key={c.id} className="flex gap-2 text-sm">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand/10 text-xs font-medium text-brand">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium bg-brand/12 text-brand border border-brand/28">
             {c.author_email.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
@@ -235,7 +235,7 @@ function FeatureRow({
         className={[
           'flex h-14 w-11 shrink-0 flex-col items-center justify-center gap-0 px-0 py-0',
           ticket.my_vote
-            ? 'border-brand/50 bg-brand/10 text-brand'
+            ? 'border-brand/50 bg-brand/12 text-brand border border-brand/28'
             : 'border-edge-subtle bg-surface-raised/60 text-fg-muted hover:border-brand/40 hover:text-brand',
         ].join(' ')}
       >

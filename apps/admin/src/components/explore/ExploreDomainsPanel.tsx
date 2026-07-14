@@ -69,12 +69,12 @@ export function ExploreDomainsPanel({ projectId, onFileClick }: Props) {
         </p>
         <div className="flex items-center gap-2 shrink-0">
           {source === 'fallback' && (
-            <Badge className="bg-warn/15 text-warning-foreground">
+            <Badge className="bg-warn-muted/50 text-warning-foreground border border-warn/25ing-foreground">
               Layer fallback
             </Badge>
           )}
           {source === 'llm' && (
-            <Badge className="bg-ok/15 text-ok">LLM extracted</Badge>
+            <Badge className="bg-ok-muted/50 text-ok-foreground border border-ok/25">LLM extracted</Badge>
           )}
           <Btn size="sm" variant="ghost" onClick={() => void load(true)} loading={loading}>
             Refresh

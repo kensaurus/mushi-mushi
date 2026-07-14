@@ -234,7 +234,7 @@ export function CliAuthPage() {
             Your terminal picked up the connection. Setup is continuing there.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-xl border border-ok/30 bg-ok/10 px-6 py-4 text-ok">
+        <div className="flex items-center gap-2 rounded-xl px-6 py-4 bg-ok-muted/50 text-ok-foreground border border-ok/25">
           <ArrowLeftIcon />
           <span className="font-medium">Switch back to your terminal now</span>
         </div>

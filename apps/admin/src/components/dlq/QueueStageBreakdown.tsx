@@ -16,12 +16,14 @@ interface Props {
 }
 
 const STATUS_ORDER = ['pending', 'running', 'completed', 'failed', 'dead_letter'] as const
+
+/** Solid bar fills aligned to CHIP_TONE severity (bg portion only). */
 const STATUS_BAR_CLS: Record<(typeof STATUS_ORDER)[number], string> = {
-  pending: 'bg-info',
+  pending: 'bg-info-muted',
   running: 'bg-brand',
-  completed: 'bg-ok',
-  failed: 'bg-warn',
-  dead_letter: 'bg-danger',
+  completed: 'bg-ok-muted',
+  failed: 'bg-warn-muted',
+  dead_letter: 'bg-danger-muted',
 }
 
 export function QueueStageBreakdown({ summary, selectedStage, onSelect }: Props) {

@@ -5,7 +5,7 @@
  *          copy, and docs links. Publicly accessible (no auth gate).
  *
  * VISUAL SYSTEM: matches PublicHomePage — same MarketingProvider wrapper,
- *   same sticky nav header, same --mushi-* token usage, same MarketingFooter.
+ *   same sticky nav header, same editorial bridge token usage, same MarketingFooter.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -298,7 +298,7 @@ function CopyButton({ text }: { text: string }) {
       variant="ghost"
       size="sm"
       onClick={() => { void handleCopy() }}
-      className="inline-flex items-center gap-1 rounded-full border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-2.5 py-1 font-mono text-2xs text-[var(--mushi-ink-muted)] hover:border-[var(--mushi-vermillion)]/40 hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
+      className="inline-flex items-center gap-1 rounded-full border-editorial-rule bg-editorial-paper px-2.5 py-1 font-mono text-2xs text-editorial-ink-muted hover:border-editorial-vermillion/40 hover:bg-editorial-vermillion/10 hover:text-editorial-vermillion"
       title={`Copy: ${text}`}
       aria-label={label}
     >
@@ -329,7 +329,7 @@ function IntegrationTile({ integration }: { integration: Integration }) {
   const docsHref = `${DOCS_BASE}/integrations/${integration.name.toLowerCase().replace(/\s+/g, '-')}`
 
   return (
-    <article className="group flex flex-col gap-3 rounded-xl border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_96%,white)] p-4 transition hover:border-[color-mix(in_oklch,var(--mushi-ink)_25%,var(--mushi-rule))] hover:shadow-[0_4px_20px_-8px_rgba(14,13,11,0.12)]">
+    <article className="group flex flex-col gap-3 rounded-xl border border-editorial-rule bg-editorial-paper p-4 transition hover:border-editorial-ink/25 hover:shadow-[0_4px_20px_-8px_rgba(14,13,11,0.12)]">
       {/* Header row */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
@@ -338,19 +338,19 @@ function IntegrationTile({ integration }: { integration: Integration }) {
             aria-hidden
             className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg font-serif text-sm font-semibold shadow-[inset_0_-2px_0_rgba(0,0,0,0.15)] ${
               isInbound
-                ? 'bg-[var(--mushi-vermillion)] text-white'
+                ? 'bg-editorial-vermillion text-editorial-paper'
                 : isSdk
-                  ? 'bg-[var(--mushi-ink)] text-[var(--mushi-paper)]'
-                  : 'bg-[color-mix(in_oklch,var(--mushi-ink)_85%,white)] text-[var(--mushi-paper)]'
+                  ? 'bg-editorial-ink text-editorial-paper'
+                  : 'bg-[color-mix(in_oklch,var(--color-editorial-ink)_85%,white)] text-editorial-paper'
             }`}
           >
             {letterIcon(integration.name)}
           </div>
           <div>
-            <p className="font-medium leading-none text-[var(--mushi-ink)]">
+            <p className="font-medium leading-none text-editorial-ink">
               {integration.name}
             </p>
-            <p className="mt-1 font-mono text-2xs text-[var(--mushi-ink-faint)]">
+            <p className="mt-1 font-mono text-2xs text-editorial-ink-faint">
               {integration.pkg}
             </p>
           </div>
@@ -359,10 +359,10 @@ function IntegrationTile({ integration }: { integration: Integration }) {
         <span
           className={`shrink-0 self-start rounded-full border px-2 py-0.5 font-mono text-2xs uppercase tracking-[0.18em] ${
             isInbound
-              ? 'border-[var(--mushi-vermillion)]/30 bg-[var(--mushi-vermillion-wash)] text-[var(--mushi-vermillion)]'
+              ? 'border-editorial-vermillion/30 bg-editorial-vermillion/10 text-editorial-vermillion'
               : isSdk
-                ? 'border-[var(--mushi-rule)] bg-[var(--mushi-paper-wash)] text-[var(--mushi-ink-muted)]'
-                : 'border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_88%,white)] text-[var(--mushi-ink-muted)]'
+                ? 'border-editorial-rule bg-editorial-paper-wash text-editorial-ink-muted'
+                : 'border-editorial-rule bg-editorial-paper text-editorial-ink-muted'
           }`}
         >
           {isInbound ? '→ inbound' : isSdk ? 'sdk' : '← outbound'}
@@ -370,7 +370,7 @@ function IntegrationTile({ integration }: { integration: Integration }) {
       </div>
 
       {/* Description */}
-      <p className="text-[0.8125rem] leading-relaxed text-[var(--mushi-ink-muted)]">
+      <p className="text-[0.8125rem] leading-relaxed text-editorial-ink-muted">
         {integration.description}
       </p>
 
@@ -381,7 +381,7 @@ function IntegrationTile({ integration }: { integration: Integration }) {
           href={docsHref}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-mono text-2xs text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-paper-wash)] hover:text-[var(--mushi-ink)]"
+          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-mono text-2xs text-editorial-ink-muted transition hover:bg-editorial-paper-wash hover:text-editorial-ink"
         >
           Docs
           <span aria-hidden className="text-2xs opacity-50">↗</span>
@@ -448,15 +448,15 @@ export function PublicIntegrationsPage() {
         <div className="mx-auto max-w-6xl space-y-10 px-6 pb-16 pt-4">
 
           {/* ── Sticky nav (mirrors PublicHomePage) ──────────────────── */}
-          <header className="sticky top-3 z-30 flex items-center justify-between rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_88%,white)] px-4 py-2 shadow-[0_18px_40px_-32px_rgba(14,13,11,0.5)] backdrop-blur sm:px-5">
+          <header className="sticky top-3 z-30 flex items-center justify-between rounded-full border border-editorial-rule bg-editorial-paper px-4 py-2 shadow-[0_18px_40px_-32px_rgba(14,13,11,0.5)] backdrop-blur sm:px-5">
             <Link
               to="/"
-              className="flex items-center gap-2 font-serif text-base font-semibold text-[var(--mushi-ink)]"
+              className="flex items-center gap-2 font-serif text-base font-semibold text-editorial-ink"
               aria-label="Mushi Mushi home"
             >
               <span
                 aria-hidden
-                className="grid h-7 w-7 place-items-center rounded-sm bg-[var(--mushi-vermillion)] font-mono text-xs text-white shadow-[inset_0_-2px_0_rgba(0,0,0,0.25)]"
+                className="grid h-7 w-7 place-items-center rounded-sm bg-editorial-vermillion font-mono text-xs text-editorial-paper shadow-[inset_0_-2px_0_rgba(0,0,0,0.25)]"
               >
                 虫
               </span>
@@ -467,19 +467,19 @@ export function PublicIntegrationsPage() {
                 href={`${DOCS_BASE}/`}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
+                className="rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-editorial-ink-muted transition hover:bg-editorial-vermillion/10 hover:text-editorial-vermillion focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
               >
                 Docs
               </a>
               <Link
                 to="/login"
-                className="rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
+                className="rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-editorial-ink-muted transition hover:bg-editorial-vermillion/10 hover:text-editorial-vermillion focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
               >
                 Sign in
               </Link>
               <Link
                 to="/dashboard"
-                className="ml-1 rounded-full bg-[var(--mushi-ink)] px-3 py-1.5 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
+                className="ml-1 rounded-full bg-editorial-ink px-3 py-1.5 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--color-editorial-ink)_82%,var(--color-editorial-vermillion))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
               >
                 Get started
               </Link>
@@ -489,20 +489,20 @@ export function PublicIntegrationsPage() {
           {/* ── Hero ─────────────────────────────────────────────────── */}
           <section
             aria-labelledby="integrations-heading"
-            className="rounded-[1.5rem] border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_94%,white)] px-5 py-8 sm:px-8 sm:py-10"
+            className="rounded-[1.5rem] border border-editorial-rule bg-editorial-paper px-5 py-8 sm:px-8 sm:py-10"
           >
-            <p className="font-mono text-2xs uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
-              <span className="text-[var(--mushi-ink)]">Ecosystem</span>
+            <p className="font-mono text-2xs uppercase tracking-[0.32em] text-editorial-ink-muted">
+              <span className="text-editorial-ink">Ecosystem</span>
               <span className="mx-2 opacity-40">/</span>
               plug in, don&rsquo;t rip out
             </p>
             <h1
               id="integrations-heading"
-              className="mt-2 max-w-2xl font-serif text-2xl leading-snug tracking-[-0.02em] text-[var(--mushi-ink)] sm:text-3xl"
+              className="mt-2 max-w-2xl font-serif text-2xl leading-snug tracking-[-0.02em] text-editorial-ink sm:text-3xl"
             >
               {inboundCount} sources in. {outboundCount} destinations out.
             </h1>
-            <p className="mt-3 max-w-2xl text-[1.0625rem] leading-relaxed text-[var(--mushi-ink-muted)]">
+            <p className="mt-3 max-w-2xl text-[1.0625rem] leading-relaxed text-editorial-ink-muted">
               Mushi is the layer between your existing observability stack and your
               team&rsquo;s workflow tools. Wire an inbound adapter to receive alerts from
               Datadog, Sentry, or Crashlytics — then route triaged reports out to
@@ -518,12 +518,12 @@ export function PublicIntegrationsPage() {
               ].map(({ n, label, hint }) => (
                 <div
                   key={label}
-                  className="rounded-xl border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_88%,white)] px-4 py-3"
+                  className="rounded-xl border border-editorial-rule bg-editorial-paper px-4 py-3"
                 >
-                  <p className="font-serif text-2xl font-semibold leading-none text-[var(--mushi-ink)]">
+                  <p className="font-serif text-2xl font-semibold leading-none text-editorial-ink">
                     {n}
                   </p>
-                  <p className="mt-1 font-mono text-2xs uppercase tracking-[0.16em] text-[var(--mushi-ink-muted)]">
+                  <p className="mt-1 font-mono text-2xs uppercase tracking-[0.16em] text-editorial-ink-muted">
                     {hint ? <span className="opacity-60">{hint} </span> : null}
                     {label}
                   </p>
@@ -548,8 +548,8 @@ export function PublicIntegrationsPage() {
                 aria-pressed={filter === cat}
                 className={`rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.16em] ${
                   filter === cat
-                    ? 'border-[var(--mushi-vermillion)]/50 bg-[var(--mushi-vermillion-wash)] text-[var(--mushi-vermillion)]'
-                    : 'border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_94%,white)] text-[var(--mushi-ink-muted)] hover:border-[color-mix(in_oklch,var(--mushi-ink)_20%,var(--mushi-rule))] hover:text-[var(--mushi-ink)]'
+                    ? 'border-editorial-vermillion/50 bg-editorial-vermillion/10 text-editorial-vermillion'
+                    : 'border-editorial-rule bg-editorial-paper text-editorial-ink-muted hover:border-editorial-ink/20 hover:text-editorial-ink'
                 }`}
               >
                 {cat}
@@ -617,7 +617,7 @@ export function PublicIntegrationsPage() {
               )}
             </section>
           ) : (
-            <p className="py-10 text-center text-[var(--mushi-ink-muted)]">
+            <p className="py-10 text-center text-editorial-ink-muted">
               No integrations in this category yet.
             </p>
           )}
@@ -625,22 +625,22 @@ export function PublicIntegrationsPage() {
           {/* ── SDK call-out ─────────────────────────────────────────── */}
           <aside
             aria-label="Build your own integration"
-            className="rounded-[1.5rem] border border-[var(--mushi-rule)] px-5 py-8 sm:px-8"
+            className="rounded-[1.5rem] border border-editorial-rule px-5 py-8 sm:px-8"
             style={{
               background:
-                'linear-gradient(135deg, color-mix(in oklch, var(--mushi-paper) 94%, white) 0%, var(--mushi-vermillion-wash) 100%)',
+                'linear-gradient(135deg, var(--color-editorial-paper) 0%, color-mix(in oklch, var(--color-editorial-vermillion) 8%, var(--color-editorial-paper)) 100%)',
             }}
           >
-            <p className="font-mono text-2xs uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
-              <span className="text-[var(--mushi-vermillion)]">Plugin SDK</span>
+            <p className="font-mono text-2xs uppercase tracking-[0.32em] text-editorial-ink-muted">
+              <span className="text-editorial-vermillion">Plugin SDK</span>
               <span className="mx-2 opacity-40">/</span>
               yours in minutes
             </p>
-            <h2 className="mt-2 font-serif text-xl leading-snug tracking-[-0.02em] text-[var(--mushi-ink)] sm:text-2xl">
+            <h2 className="mt-2 font-serif text-xl leading-snug tracking-[-0.02em] text-editorial-ink sm:text-2xl">
               Don&rsquo;t see your tool? Build the adapter.
             </h2>
-            <p className="mt-2 max-w-xl text-[0.9375rem] leading-relaxed text-[var(--mushi-ink-muted)]">
-              <code className="rounded bg-[var(--mushi-paper-wash)] px-1.5 py-0.5 font-mono text-[0.8125rem] text-[var(--mushi-ink)]">
+            <p className="mt-2 max-w-xl text-[0.9375rem] leading-relaxed text-editorial-ink-muted">
+              <code className="rounded bg-editorial-paper-wash px-1.5 py-0.5 font-mono text-[0.8125rem] text-editorial-ink">
                 @mushi-mushi/plugin-sdk
               </code>{' '}
               exposes the same webhook-to-report and report-to-destination
@@ -652,7 +652,7 @@ export function PublicIntegrationsPage() {
                 href={`${DOCS_BASE}/integrations/plugin-sdk`}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-full bg-[var(--mushi-ink)] px-4 py-2 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
+                className="rounded-full bg-editorial-ink px-4 py-2 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--color-editorial-ink)_82%,var(--color-editorial-vermillion))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
               >
                 Read the SDK docs
               </a>
@@ -660,7 +660,7 @@ export function PublicIntegrationsPage() {
                 href={`${REPO_BASE}/blob/main/packages/plugin-sdk`}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-4 py-2 font-mono text-2xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:border-[color-mix(in_oklch,var(--mushi-ink)_30%,var(--mushi-rule))] hover:text-[var(--mushi-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
+                className="rounded-full border border-editorial-rule bg-editorial-paper px-4 py-2 font-mono text-2xs uppercase tracking-[0.18em] text-editorial-ink-muted transition hover:border-editorial-ink/30 hover:text-editorial-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
               >
                 View on GitHub
               </a>
@@ -685,9 +685,9 @@ function GroupLabel({
 }) {
   return (
     <div className="mb-3 mt-2 flex items-center gap-3">
-      <p className="font-mono text-2xs font-semibold uppercase tracking-[0.24em] text-[var(--mushi-ink)]">
+      <p className="font-mono text-2xs font-semibold uppercase tracking-[0.24em] text-editorial-ink">
         <span
-          className={`mr-1.5 ${direction === 'inbound' ? 'text-[var(--mushi-vermillion)]' : 'text-[var(--mushi-ink-muted)]'}`}
+          className={`mr-1.5 ${direction === 'inbound' ? 'text-editorial-vermillion' : 'text-editorial-ink-muted'}`}
           aria-hidden
         >
           {direction === 'inbound' ? '→' : '←'}
@@ -698,7 +698,7 @@ function GroupLabel({
       <div
         aria-hidden
         className="h-px flex-1"
-        style={{ background: 'var(--mushi-rule)' }}
+        style={{ background: 'var(--color-editorial-rule)' }}
       />
     </div>
   )

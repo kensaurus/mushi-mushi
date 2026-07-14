@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { Tooltip } from '../ui'
 import { IconBolt } from '../icons'
 import { ReportCodeText } from './ReportCodeText'
@@ -11,6 +12,85 @@ import {
   resolveReportPath,
   type ReportLayer,
 } from './reportRowAttribution'
+
+/** Derives deterministic tag chips from already-present report fields.
+ *  - page: route / URL path where the bug was felt
+ *  - screenshot: report has an attached screenshot
+ *  - area: AI-generated product-area label (e.g. "Checkout")
+ *  No LLM call — purely from existing row data. */
+export function ReportTagChips({ row, className = '' }: { row: ReportRow; className?: string }) {
+  const route =
+    (row.environment as { route?: string } | null | undefined)?.route
+    ?? (row.environment as { url?: string } | null | undefined)?.url
+  // Derive the displayable page path — strip origin, keep path
+  const pagePath = (() => {
+    if (!route) return null
+    try {
+      const u = new URL(route)
+      return u.pathname === '/' ? null : u.pathname
+    } catch {
+      // Not a full URL — treat as a path segment
+      return route.startsWith('/') && route !== '/' ? route : null
+    }
+  })()
+  // screenshot_url / screenshot_path are not on ReportRow (they live on
+  // ReportDetail) but may be present when the row is used in a wider context.
+  // Access via unknown to avoid TS index-signature complaint.
+  const rowAny = row as unknown as Record<string, unknown>
+  const hasScreenshot = Boolean(rowAny['screenshot_url'] || rowAny['screenshot_path'])
+  const area = row.area_tag
+
+  const screenshotUrl = (rowAny['screenshot_url'] as string | undefined) ?? null
+
+  if (!pagePath && !hasScreenshot && !area) return null
+
+  return (
+    <div className={`flex min-w-0 flex-wrap items-center gap-1 ${className}`}>
+      {pagePath && (
+        <Tooltip portal content={`Activity for page: ${route}`}>
+          <Link
+            to={`/activity?route=${encodeURIComponent(pagePath)}`}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex shrink-0 items-center gap-0.5 rounded-sm border border-edge-subtle bg-surface-overlay px-1 py-0.5 text-2xs font-mono text-fg-muted hover:text-brand hover:border-brand/40 transition-colors max-w-[10rem] truncate"
+          >
+            📄 {pagePath}
+          </Link>
+        </Tooltip>
+      )}
+      {hasScreenshot && screenshotUrl && (
+        <Tooltip portal content="Open screenshot">
+          <a
+            href={screenshotUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex shrink-0 items-center gap-0.5 rounded-sm border border-edge-subtle bg-surface-overlay px-1 py-0.5 text-2xs text-fg-muted hover:text-brand hover:border-brand/40 transition-colors"
+          >
+            📷 screenshot
+          </a>
+        </Tooltip>
+      )}
+      {hasScreenshot && !screenshotUrl && (
+        <Tooltip portal content="Screenshot attached">
+          <span className="inline-flex shrink-0 items-center gap-0.5 rounded-sm border border-edge-subtle bg-surface-overlay px-1 py-0.5 text-2xs text-fg-muted cursor-help">
+            📷 screenshot
+          </span>
+        </Tooltip>
+      )}
+      {area && (
+        <Tooltip portal content={`Filter reports by area: ${area}`}>
+          <Link
+            to={`/reports?area=${encodeURIComponent(area)}`}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex shrink-0 items-center rounded-sm border border-brand/25 bg-brand-muted/30 px-1 py-0.5 text-2xs font-medium text-brand-foreground hover:bg-brand-muted/50 transition-colors"
+          >
+            {area}
+          </Link>
+        </Tooltip>
+      )}
+    </div>
+  )
+}
 
 interface Props {
   row: ReportRow

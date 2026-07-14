@@ -298,7 +298,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         // end_user_id + reporter_token_hash: needed to render reporter
         // display name + verified badge in the list row without an extra
         // round-trip (batch-fetched below).
-        'id, project_id, description, category, severity, summary, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id',
+        'id, project_id, description, category, severity, summary, title, area_tag, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id',
         { count: 'exact' },
       )
       .in('project_id', projectIds)
@@ -320,6 +320,8 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     if (severity) query = query.eq('severity', severity);
     if (component) query = query.eq('component', component);
     if (reporter) query = query.eq('reporter_token_hash', reporter);
+    const area = c.req.query('area')?.trim().slice(0, 60);
+    if (area) query = query.eq('area_tag', area);
     if (search) {
       // Bilateral OR — summary or description matches the search prefix.
       const escaped = search.replace(/[%,]/g, '');

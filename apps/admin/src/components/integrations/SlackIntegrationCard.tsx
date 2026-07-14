@@ -14,6 +14,7 @@ import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { HealthSparkline } from './HealthSparkline'
 import type { HealthRow } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   projectId: string | null
@@ -198,7 +199,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
           )}
           {/* Always show the Add/Re-add button so the user can refresh scopes */}
           <button
-            className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${slackConfigured ? 'border border-edge-subtle hover:bg-surface-hover' : 'bg-accent text-white hover:bg-accent-hover'}`}
+            className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${slackConfigured ? 'border border-edge-subtle hover:bg-surface-hover' : 'bg-accent text-fg-on-accent hover:bg-accent-hover'}`}
             onClick={handleAddToSlack}
             disabled={!projectId}
             title={slackConfigured ? 'Reinstall Mushi Slack bot to refresh scopes or reconnect' : 'Install Mushi Slack bot'}
@@ -216,10 +217,10 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
         <div className="pt-1 space-y-3">
           {/* Active channel status — shown prominently when a channel is configured */}
           {channelId ? (
-            <div className="flex items-center gap-2 rounded-lg border border-ok/30 bg-ok/8 px-3 py-2">
-              <span className="shrink-0 text-ok text-sm" aria-hidden="true">✓</span>
+            <div className={`flex items-center gap-2 rounded-lg px-3 py-2 ${CHIP_TONE.okSubtle}`}>
+              <span className="shrink-0 text-sm" aria-hidden="true">✓</span>
               <div className="min-w-0">
-                <p className="text-xs font-medium text-ok leading-tight">Notifications active</p>
+                <p className="text-xs font-medium leading-tight">Notifications active</p>
                 <p className="text-2xs text-fg-secondary leading-snug mt-0.5">
                   Sending to channel <code className="font-mono bg-surface-hover rounded px-1">{channelId}</code>
                   {' — '}use "Send test" above to verify.
@@ -235,7 +236,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
             {loadingChannels ? (
               <div className="h-9 rounded-lg bg-surface-hover animate-pulse" />
             ) : channelLoadError ? (
-              <div className="rounded-sm border border-warn/30 bg-warn/8 px-2.5 py-2 text-xs text-warn space-y-2">
+              <div className={`rounded-sm px-2.5 py-2 text-xs space-y-2 ${CHIP_TONE.warnSubtle}`}>
                 <p className="leading-snug font-medium">Channel picker unavailable</p>
                 <p className="leading-snug text-fg-secondary">{channelLoadError}</p>
                 <div className="flex items-center gap-3 flex-wrap">
@@ -303,7 +304,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
                 </button>
               </div>
             ) : (
-              <p className="rounded-sm border border-warn/30 bg-warn/10 px-2.5 py-2 text-xs text-warn">
+              <p className={`rounded-sm px-2.5 py-2 text-xs ${CHIP_TONE.warnSubtle}`}>
                 No channels found — invite the Mushi bot to at least one Slack channel first, then retry.
               </p>
             )}

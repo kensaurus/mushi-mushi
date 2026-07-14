@@ -67,19 +67,24 @@ const RUN_STATUS_SEVERITY: Record<string, StatusSeverity> = {
   // success family
   passed: 'ok', pass: 'ok', completed: 'ok', resolved: 'ok', published: 'ok',
   healthy: 'ok', done: 'ok', merged: 'ok', verified: 'ok', active: 'ok',
-  connected: 'ok', success: 'ok',
+  connected: 'ok', success: 'ok', succeeded: 'ok', validated: 'ok',
+  promoted: 'ok', classified: 'ok', fixed: 'ok',
+  // GitHub PR lifecycle aliases (FixGitGraph) — open is healthy/green
+  pr_open: 'ok', pr_merged: 'ok', pr_closed: 'neutral', pr_draft: 'warn',
   // failure family
   failed: 'danger', fail: 'danger', error: 'danger', failing: 'danger',
   rejected: 'danger', dead_letter: 'danger', critical: 'danger', blocked: 'danger',
   // attention family
   timeout: 'warn', degraded: 'warn', warn: 'warn', pending: 'warn',
-  draft: 'warn', open: 'warn', high: 'warn', stale: 'warn',
+  draft: 'warn', open: 'warn', high: 'warn', stale: 'warn', new: 'warn',
   // in-flight / informational family
   running: 'info', in_progress: 'info', queued: 'info', info: 'info',
   validating: 'info', deploying: 'info', syncing: 'info',
+  exporting: 'info', exported: 'info', trained: 'info', fixing: 'info',
   // neutral / terminal-quiet family
   skipped: 'neutral', closed: 'neutral', cancelled: 'neutral', stopped: 'neutral',
   disabled: 'neutral', unknown: 'neutral', archived: 'neutral', optional: 'neutral',
+  aborted: 'neutral', dismissed: 'neutral',
 }
 
 export function runStatusChipTone(status: string | null | undefined): string {

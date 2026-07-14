@@ -11,7 +11,7 @@
 import type { ReactNode } from 'react'
 
 const TURN_HEADER = {
-  user: 'border-brand/20 bg-brand/10 text-brand',
+  user: 'border-brand/20 bg-brand/12 text-brand border border-brand/28',
   assistant: 'border-edge-subtle bg-surface-overlay text-fg-faint',
 } as const
 

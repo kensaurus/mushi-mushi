@@ -105,7 +105,7 @@ export function ActionDetailDrawer({
                   key={`${a.method}-${a.path}-${i}`}
                   className="flex items-center gap-2 rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-1"
                 >
-                  <Badge className="bg-brand/10 text-brand border border-brand/20 font-mono">
+                  <Badge className="bg-brand/12 text-brand border border-brand/28 font-mono">
                     {a.method}
                   </Badge>
                   <code className="text-2xs font-mono text-fg-secondary truncate">{a.path}</code>

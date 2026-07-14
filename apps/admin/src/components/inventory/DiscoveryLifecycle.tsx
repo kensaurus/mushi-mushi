@@ -50,7 +50,7 @@ const STATE_STYLES: Record<LifecycleStepState, {
   done: {
     ring: 'ring-1 ring-ok/30',
     bg: 'bg-ok-muted/40',
-    iconWrap: 'bg-ok/15 text-ok',
+    iconWrap: 'bg-ok-muted/50 text-ok-foreground border border-ok/25',
     iconColor: 'text-ok',
     numberColor: 'text-ok',
     labelColor: 'text-fg',
@@ -58,7 +58,7 @@ const STATE_STYLES: Record<LifecycleStepState, {
   active: {
     ring: 'ring-1 ring-brand/30',
     bg: 'bg-brand/[0.06]',
-    iconWrap: 'bg-brand/15 text-brand',
+    iconWrap: 'bg-brand/12 text-brand border border-brand/28',
     iconColor: 'text-brand',
     numberColor: 'text-fg',
     labelColor: 'text-fg',

@@ -171,6 +171,10 @@ export interface ReportDetail {
   category: string
   severity: string | null
   summary: string | null
+  /** Friendly, non-engineer headline from Stage 2 (falls back to summary). */
+  title?: string | null
+  /** Coarse product-area label from Stage 2 (e.g. "Checkout"). */
+  area_tag?: string | null
   component: string | null
   confidence: number | null
   status: string
