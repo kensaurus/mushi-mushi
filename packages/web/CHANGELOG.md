@@ -1,5 +1,16 @@
 # @mushi-mushi/web
 
+## 1.25.0
+
+### Minor Changes
+
+- 0d018ba: Add SDK session tracking (session start/heartbeat/end, page views, identity propagation) that powers the new per-project Activity dashboard and portfolio Overview page in the console. Opt out via `trackSessions: false` in `MushiConfig`.
+
+### Patch Changes
+
+- Updated dependencies [0d018ba]
+  - @mushi-mushi/core@1.25.0
+
 ## 1.24.0
 
 ### Minor Changes
