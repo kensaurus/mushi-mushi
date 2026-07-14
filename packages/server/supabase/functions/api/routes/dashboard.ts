@@ -1105,7 +1105,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     const db = getServiceClient();
 
     // Resolve the active org from context (x-org-id header set by apiFetch).
-    const orgId = c.req.header('x-org-id') ?? c.get('orgId') as string | undefined;
+    const orgId = c.req.header('x-org-id');
     if (!orgId) return c.json({ ok: false, error: { code: 'NO_ORG', message: 'x-org-id header required' } }, 400);
 
     // Verify the caller is a member of this org.
