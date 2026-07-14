@@ -2,15 +2,15 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-07-12 · **510** routes.
+> Generated: 2026-07-14 · **513** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
 | `adminOrApiKey` | 82 |
-| `apiKeyAuth` | 43 |
-| `jwtAuth` | 323 |
+| `apiKeyAuth` | 44 |
+| `jwtAuth` | 325 |
 | `jwtOrApiKey` | 3 |
 | `unknown` | 59 |
 
@@ -28,6 +28,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/a2a/tasks/:id{[^:]+}:cancel` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/a2a-tasks.ts` |
 | GET | `/v1/a2a/tasks/:id{[^:]+}:subscribe` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/a2a-tasks.ts` |
 | GET | `/v1/admin/activation` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/activation.ts` |
+| GET | `/v1/admin/activity` | `jwtAuth` | `packages/server/supabase/functions/api/routes/dashboard.ts` |
 | GET | `/v1/admin/anti-gaming/devices` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
 | POST | `/v1/admin/anti-gaming/devices/:id/flag` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
 | POST | `/v1/admin/anti-gaming/devices/:id/unflag` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
@@ -215,6 +216,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/plugins/:slug/rotate-secret` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | POST | `/v1/admin/plugins/:slug/test-event` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | GET | `/v1/admin/plugins/dispatch-log` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
+| GET | `/v1/admin/portfolio` | `jwtAuth` | `packages/server/supabase/functions/api/routes/dashboard.ts` |
 | GET | `/v1/admin/privacy-status` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/evolution.ts` |
 | GET | `/v1/admin/projects` | `jwtAuth` | `packages/server/supabase/functions/api/routes/projects-crud.ts` |
 | POST | `/v1/admin/projects` | `jwtAuth` | `packages/server/supabase/functions/api/routes/projects-crud.ts` |
@@ -484,6 +486,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/sdk/me/payout/status` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/rewards.ts` |
 | GET | `/v1/sdk/me/points` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/rewards.ts` |
 | GET | `/v1/sdk/me/tier` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/rewards.ts` |
+| POST | `/v1/sdk/session` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/sessions.ts` |
 | GET | `/v1/super-admin/metrics` | `jwtAuth` | `packages/server/supabase/functions/api/routes/modernization-health-super.ts` |
 | PATCH | `/v1/super-admin/support/tickets/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
 | GET | `/v1/super-admin/users` | `jwtAuth` | `packages/server/supabase/functions/api/routes/modernization-health-super.ts` |
