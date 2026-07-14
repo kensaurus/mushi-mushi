@@ -51,7 +51,7 @@ export function HeaderContextChip({
       : ''
   const variantClass =
     variant === 'accent'
-      ? 'border-brand/30 bg-brand/5 text-brand hover:bg-brand/10 hover:text-brand'
+      ? 'bg-brand/12 text-brand border border-brand/28 hover:bg-brand-subtle'
       : ''
   return (
     <button type={type} className={`${TRIGGER_BASE} ${variantClass} ${className}`.trim()} {...props}>

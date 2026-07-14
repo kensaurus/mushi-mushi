@@ -1,0 +1,313 @@
+/** Admin @theme design tokens — imported from index.css */
+
+/* ---------------------------------------------------------------------------
+   DESIGN TOKENS
+   All tokens follow Tailwind v4 @theme convention: --color-*, --font-*, etc.
+   These become utilities automatically (e.g. bg-surface, text-fg-muted, etc.)
+--------------------------------------------------------------------------- */
+
+@theme {
+  /* ── Surface hierarchy (darkest → lightest) ───────────────────────── */
+  --color-surface-root: oklch(0.145 0.005 285);    /* sidebar, modals */
+  --color-surface: oklch(0.175 0.005 285);          /* main bg */
+  --color-surface-raised: oklch(0.215 0.007 285);   /* cards, wells */
+  --color-surface-overlay: oklch(0.255 0.007 285);  /* hover, active cards */
+  /* Subtle hover wash between surface and surface-raised — used by list rows,
+     icon buttons, and table hover states (bg-surface-hover). */
+  --color-surface-hover: oklch(0.195 0.006 285);
+  /* Aliases used by skill pipelines + inline panels — must stay opaque so
+     category tints / page wash never bleed through stacked surfaces. */
+  --color-surface-2: var(--color-surface-raised);
+  --color-surface-3: var(--color-surface-overlay);
+
+  /* ── Border ──────────────────────────────────────────────────────────
+     2026-05-07 contrast pass: bumped from L=0.35/0.30 to L=0.45/0.40 so
+     borders/dividers clear WCAG 1.4.11's 3:1 non-text contrast threshold
+     against the L=0.175 surface. The previous values gave dividers a
+     ~1.6:1 ratio — visible if you squinted, invisible at a glance, and
+     a documented "the UI feels mushy" complaint from triage operators. */
+  --color-edge: oklch(0.45 0.005 285);
+  --color-edge-subtle: oklch(0.40 0.005 285);
+
+  /* ── Foreground (text) ───────────────────────────────────────────────
+     2026-05-07 contrast pass: bumped fg-faint from L=0.42 (~2.4:1, fails
+     WCAG 1.4.3 AA for normal text) to L=0.58 (~4.4:1, clears AA for the
+     14px+ helper / metadata copy where this token is most often used —
+     timestamps, footer hints, "press [" key cues, kbd labels). fg-muted
+     also nudged from 0.55 → 0.62 so secondary-rank text is comfortably
+     readable instead of sitting right at the AA threshold. */
+  --color-fg: oklch(0.93 0.005 285);
+  --color-fg-secondary: oklch(0.72 0.005 285);
+  --color-fg-muted: oklch(0.62 0.005 285);
+  --color-fg-faint: oklch(0.63 0.005 285);
+
+  /* ── Brand (amber / beetle-chitin) ─────────────────────────────────── */
+  --color-brand: oklch(0.80 0.16 80);
+  --color-brand-hover: oklch(0.85 0.14 80);
+  --color-brand-fg: oklch(0.18 0.02 80);
+  --color-brand-subtle: oklch(0.28 0.06 80);
+
+  /* ── Accent (violet) ───────────────────────────────────────────────── */
+  --color-accent: oklch(0.58 0.22 280);
+  --color-accent-hover: oklch(0.53 0.22 280);
+  --color-accent-muted: oklch(0.30 0.08 280);
+  /* Readable copy on accent-tinted chips (dark bg uses light violet). */
+  --color-accent-foreground: oklch(0.78 0.14 280);
+  --color-warning-foreground: oklch(0.85 0.13 80);
+  --color-danger-foreground: oklch(0.78 0.18 25);
+  --color-ok-foreground: oklch(0.78 0.16 155);
+  --color-info-foreground: oklch(0.78 0.14 240);
+  --color-brand-foreground: oklch(0.85 0.14 80);
+  --color-lime-foreground: oklch(0.88 0.12 128);
+
+  /* ── Semantic status ───────────────────────────────────────────────── */
+  --color-ok: oklch(0.72 0.19 155);
+  --color-ok-fg: oklch(0.16 0.04 155);
+  --color-ok-muted: oklch(0.30 0.06 155);
+  --color-warn: oklch(0.80 0.15 80);
+  --color-warn-fg: oklch(0.18 0.04 80);
+  --color-warn-muted: oklch(0.30 0.05 80);
+  --color-danger: oklch(0.65 0.22 25);
+  --color-danger-fg: oklch(0.16 0.04 25);
+  --color-danger-muted: oklch(0.28 0.06 25);
+  --color-info: oklch(0.68 0.16 240);
+  --color-info-fg: oklch(0.16 0.04 240);
+  --color-info-muted: oklch(0.28 0.05 240);
+  /* On tinted semantic surfaces (banners, chips, toasts), use *-foreground
+     tokens for copy — never raw text-ok / text-warn / text-danger / text-accent
+     on matching bg-*-muted tints (fails WCAG AA). See semanticBannerTone(). */
+  /* Rose — pink-leaning destructive shade reserved for the sidebar
+     sign-out icon. Distinct from `--color-danger` (red/orange, used
+     by failed-fix banners) so a user scanning the sidebar doesn't
+     confuse "permanent action" with "in-flight error". Hue 0° lands
+     on a true rose pink at L=0.72, which is close enough to "pink"
+     to satisfy the user's literal ask while staying inside the
+     project's oklch palette. */
+  --color-rose: oklch(0.72 0.18 0);
+  --color-rose-muted: oklch(0.30 0.07 0);
+
+  /* ── Third-party brand marks (SVG logos only — not for general UI chrome) ─ */
+  --color-brand-slack-pink: #E01E5A;
+  --color-brand-slack-blue: #36C5F0;
+  --color-brand-slack-green: #2EB67D;
+  --color-brand-slack-yellow: #ECB22E;
+  --color-brand-teams-primary: #5059C9;
+  --color-brand-teams-accent: #7B83EB;
+  --color-brand-discord-blurple: #5865F2;
+  /* macOS traffic-light mock in SdkInstallCard widget preview */
+  --color-preview-traffic-red: #E06C5A;
+  --color-preview-traffic-yellow: #D4B158;
+  --color-preview-traffic-green: #7BA476;
+  /* Mobile browser chrome — synced by useTheme.ts */
+  --color-meta-theme-dark: #09090b;
+  --color-meta-theme-light: #fafafa;
+
+  /* ── Aliases — older code references these names. Keep them mapped to
+       the canonical tokens above so stale class names still render the
+       right colour instead of silently dropping out. */
+  --color-err: var(--color-danger);       /* text-err / bg-err / border-err shorthand */
+  --color-err-muted: var(--color-danger-muted);
+  --color-warning: var(--color-warn);
+  --color-warning-subtle: var(--color-warn-muted);
+  --color-danger-subtle: var(--color-danger-muted);
+  --color-info-subtle: var(--color-info-muted);
+  --color-ok-subtle: var(--color-ok-muted);
+
+  /* ── Editorial bridge (packages/brand editorial.css) ────────────────
+     Use bg-editorial-paper / text-editorial-ink in admin islands that
+     share the SDK/marketing washi identity instead of text-[var(--mushi-*)]. */
+  --color-editorial-paper: var(--mushi-paper);
+  --color-editorial-paper-wash: var(--mushi-paper-wash);
+  --color-editorial-ink: var(--mushi-ink);
+  --color-editorial-ink-muted: var(--mushi-ink-muted);
+  --color-editorial-ink-faint: var(--mushi-ink-faint);
+  --color-editorial-rule: var(--mushi-rule);
+  --color-editorial-vermillion: var(--mushi-vermillion);
+  --color-editorial-vermillion-wash: var(--mushi-vermillion-wash);
+  --color-editorial-jade: var(--mushi-jade);
+
+  /* ── Data viz (xyflow edges, sparklines, lang chips) ─────────────── */
+  --color-viz-edge-dark: oklch(0.22 0.01 285);
+  --color-viz-edge-light: oklch(0.91 0.01 285);
+  --color-viz-flow-info: oklch(0.68 0.15 250);
+  --color-viz-flow-brand: oklch(0.78 0.14 80);
+  --color-viz-flow-danger: oklch(0.63 0.22 25);
+  --color-viz-score-ok: oklch(0.72 0.19 155);
+  --color-viz-score-warn: oklch(0.75 0.15 80);
+  --color-viz-score-danger: oklch(0.63 0.22 25);
+  --color-viz-lang-default: oklch(0.55 0.01 285);
+  --color-viz-terminal-bg: oklch(0.12 0.01 285);
+  --color-viz-terminal-fg: oklch(0.88 0.006 285);
+  --color-code-surface: var(--color-viz-terminal-bg);
+  --color-code-surface-fg: var(--color-viz-terminal-fg);
+  --color-code-surface-fg-muted: oklch(0.72 0.008 285);
+  --color-code-surface-border: oklch(0.28 0.01 285);
+  --color-viz-step-pending: oklch(0.65 0.02 285);
+  --color-viz-step-running: oklch(0.68 0.15 250);
+  --color-viz-step-passed: oklch(0.72 0.17 160);
+  --color-viz-step-failed: oklch(0.63 0.22 25);
+  --color-viz-step-skipped: oklch(0.55 0.01 285);
+  --color-viz-neutral: oklch(0.65 0.02 285);
+  --color-viz-lang-typescript: oklch(0.52 0.15 250);
+  --color-viz-lang-javascript: oklch(0.86 0.16 95);
+  --color-viz-lang-python: oklch(0.48 0.12 250);
+  --color-viz-lang-go: oklch(0.62 0.12 220);
+  --color-viz-lang-rust: oklch(0.72 0.06 55);
+  --color-viz-lang-react: oklch(0.72 0.12 220);
+  --color-viz-sentry: oklch(0.55 0.12 300);
+  --color-viz-graph-muted: oklch(0.55 0 0);
+  --color-viz-node-bg-dark: oklch(0.19 0.007 265);
+  --color-viz-node-bg-light: oklch(0.99 0.004 265);
+  --color-viz-node-text-dark: oklch(0.90 0.006 265);
+  --color-viz-node-text-light: oklch(0.16 0.006 265);
+  --color-viz-node-subtext: oklch(0.52 0.004 265);
+  --color-viz-node-border-dark: oklch(0.30 0.006 265);
+  --color-viz-node-border-light: oklch(0.82 0.004 265);
+  --color-viz-node-selected-dark: oklch(0.24 0.014 265);
+  --color-viz-node-selected-light: oklch(0.94 0.010 265);
+  --color-viz-canvas-bg: oklch(0.11 0.004 265);
+  --color-viz-canvas-dot: oklch(0.28 0 0);
+  /* Explore atlas layers */
+  --color-viz-layer-ui: oklch(0.72 0.19 240);
+  --color-viz-layer-lib: oklch(0.72 0.19 155);
+  --color-viz-layer-backend: oklch(0.65 0.22 25);
+  --color-viz-layer-test: oklch(0.72 0.19 300);
+  --color-viz-layer-config: oklch(0.60 0.08 240);
+  --color-viz-layer-other: oklch(0.50 0 0);
+  /* File complexity ramp */
+  --color-viz-complexity-tiny: oklch(0.70 0.15 145);
+  --color-viz-complexity-small: oklch(0.68 0.17 145);
+  --color-viz-complexity-medium: oklch(0.70 0.18 80);
+  --color-viz-complexity-large: oklch(0.68 0.19 50);
+  --color-viz-complexity-xlarge: oklch(0.65 0.20 30);
+  --color-viz-complexity-huge: oklch(0.60 0.22 25);
+  /* FixGitGraph lane / focus chrome */
+  --color-viz-git-main: oklch(0.30 0 0);
+  --color-viz-git-branch: oklch(0.40 0.10 250);
+  --color-viz-git-focus: oklch(0.82 0.16 240);
+  --color-viz-git-node-stroke: oklch(0.10 0 0);
+  /* ExploreCanvas minimap mask / chrome */
+  --color-viz-mask-dark: oklch(0.12 0 0 / 0.7);
+  --color-viz-mask-light: oklch(0.96 0 0 / 0.7);
+  --color-viz-minimap-bg-dark: oklch(0.14 0 0 / 0.90);
+  --color-viz-minimap-bg-light: oklch(0.98 0 0 / 0.90);
+  --color-viz-minimap-border: oklch(0.5 0 0 / 0.18);
+
+  /* Syntax highlighting — shared by .mushi-code-* blocks in both themes. */
+  --color-code-kw: oklch(0.78 0.18 280);
+  --color-code-str: oklch(0.72 0.17 155);
+  --color-code-cmd: oklch(0.72 0.14 240);
+  --color-code-type: oklch(0.74 0.16 280);
+  --color-code-tag: oklch(0.68 0.20 5);
+  --color-code-attr: oklch(0.75 0.15 80);
+
+  /* Lime-green accent — used exclusively for the beta announcement banner
+     so it reads as "active / live" rather than the teal-ish canonical ok.
+     Hue 128° is more yellow-shifted than ok's 155°, giving a vivid lime
+     at identical chroma. */
+  --color-lime:       oklch(0.83 0.27 128);
+  --color-lime-fg:    oklch(0.16 0.04 128);
+  --color-lime-muted: oklch(0.23 0.09 128);
+  /* Copy on bg-lime-muted — use text-lime-foreground, not text-lime-fg. */
+
+  --color-fg-primary: var(--color-fg);
+  --color-fg-on-accent: var(--color-fg);
+  --color-border: var(--color-edge);
+  --color-border-subtle: var(--color-edge-subtle);
+
+  /* ── Chrome (page-level UI chrome: help banners, info panels, section
+     frames). Distinct from brand-amber so semantic colours (ok/warn/danger)
+     stand out against a neutral chrome background instead of competing with
+     an amber help banner. Callers should use `bg-chrome` / `border-chrome`
+     instead of `bg-warn/10 border-warn/40` for structural page chrome. */
+  --color-chrome: oklch(0.225 0.004 285);
+  --color-chrome-border: oklch(0.38 0.004 285);
+
+  /* ── Overlay ──────────────────────────────────────────────────────── */
+  --color-overlay: oklch(0 0 0 / 0.6);
+
+  /* ── React Flow canvas grid ─────────────────────────────────────────── */
+  --flow-grid-dot: oklch(0.52 0.012 285);
+  --flow-grid-line: oklch(0.46 0.008 285);
+  --flow-grid-major: oklch(0.50 0.010 285);
+  --flow-grid-dot-opacity: 0.65;
+  --flow-grid-line-opacity: 0.48;
+  --flow-grid-major-opacity: 0.28;
+
+  /* ── Typography ────────────────────────────────────────────────────── */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, monospace;
+  /* 2026-06-01 type-floor pass: raised from 11px/10px so every call site
+     (1550+ usages of text-2xs/text-3xs) lifts to the dev-console legibility
+     floor — Supabase/Linear/Vercel all use 12-13px for metadata copy.
+     Reserve text-3xs (11px) for non-interactive micro-meta (freshness pills,
+     kbd labels, timestamps); text-2xs (12px) for all label/badge copy. */
+  --text-2xs: 0.75rem;
+  --text-3xs: 0.6875rem;
+
+  /* ── Border radius ─────────────────────────────────────────────────── */
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  /* Hairline / micro — metric bars, SQL chips (replaces rounded-[1px|2px|3px]) */
+  --radius-hairline: 1px;
+  --radius-micro: 2px;
+  /* Diet / Supabase-style flat panels — border-first, no gradient lift */
+  --radius-panel: 0.375rem;
+  --color-panel: var(--color-surface-raised);
+  --color-panel-border: var(--color-edge-subtle);
+  --shadow-panel: none;
+  --chrome-row-height: 2.5rem;
+
+  /* ── Shadows (for dark UI — subtle inset glow) ─────────────────────── */
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.4);
+  --shadow-raised: 0 2px 8px oklch(0 0 0 / 0.5);
+
+  /* ── Navigation-specific ───────────────────────────────────────────────
+     2026-05-07 contrast pass: section-label was L=0.38 against the L=0.145
+     sidebar root (~2.0:1 — invisible at a glance, the "PLAN / DO / CHECK /
+     ACT" headers reading as a smudge). Bumped to L=0.62 (~4.5:1) so the
+     PDCA scaffolding actually communicates structure instead of decorating
+     it. Nav-hover-bg also nudged so the row lift is perceptible against
+     the sidebar root, not just visible if you stare for a second. */
+  /* Diet nav: neutral wash + brand left-bar only (not full amber fill) */
+  --color-nav-active-bg: oklch(0.195 0.006 285);
+  --color-nav-active-border: oklch(0.72 0.14 80);
+  --color-nav-hover-bg: oklch(0.235 0.005 285);
+  --color-nav-section-label: oklch(0.62 0.005 285);
+
+  /* ── Transition timing ───────────────────────────────────────────────── */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Motion duration tokens — replace ad-hoc 100/120/150/180/220ms values
+     scattered through the components so timing reads consistent.
+     micro = button press feedback, fast = hover/colour swaps,
+     base = page-level transitions, slow = modals + skeletons fading out. */
+  --duration-micro: 100ms;
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --duration-slow: 320ms;
+
+  /* Responsive table density tokens. `ResponsiveTable` reads the active
+     density off a CSS variable on its wrapper so child rows pick it up via
+     inheritance without prop drilling.
+     2026-06-01: compact tightened from 6px to 4px py → 32-36px row height
+     at 14px base, matching the expert-density standard (AWS Cloudscape, Linear). */
+  --row-py-comfy: 0.5rem;
+  --row-py-compact: 0.25rem;
+  --table-cell-px-meta: 0.25rem;
+  --table-cell-px-lead: 0.375rem;
+
+  /* ── Card elevation tokens ────────────────────────────────────────────
+     `.card-elevated` (used by every KpiTile, Card elevated wrapper, and
+     the Graph "AGE drift audit" / "Bug ontology" panels) reads these
+     three vars so the gradient flips per theme. Without these tokens
+     the card was a hardcoded near-black ink-on-ink gradient that stayed
+     dark even when the user picked light mode in the sidebar — the
+     audit found the entire stat-tile strip on Dashboard / Reports /
+     Judge / Health rendering as a black band on a paper page. */
+  --card-elevated-bg-from: oklch(0.23 0.007 285);
+  --card-elevated-bg-to: oklch(0.20 0.006 285);
+  --card-elevated-inset-highlight: oklch(1 0 0 / 0.03);
+}

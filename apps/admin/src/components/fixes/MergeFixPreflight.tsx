@@ -102,7 +102,7 @@ export function MergeFixPreflight({
         className={
           compact
             ? 'text-ok hover:text-ok font-medium underline-offset-2 hover:underline disabled:opacity-50 text-xs'
-            : 'inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-sm bg-ok/15 text-ok border border-ok/30 hover:bg-ok/25 disabled:opacity-50 disabled:cursor-wait'
+            : `inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-sm hover:bg-ok-muted/40 disabled:opacity-50 disabled:cursor-wait ${CHIP_TONE.okSubtle}`
         }
       >
         {merging ? 'Merging…' : compact ? 'Merge in console' : 'Merge PR in console →'}

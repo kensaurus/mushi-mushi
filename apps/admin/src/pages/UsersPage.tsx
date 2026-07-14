@@ -117,7 +117,7 @@ function planBadgeTone(plan: string | null): {
   if (!plan || plan === 'hobby') return { chipClass: CHIP_TONE.neutral, label: 'Hobby' }
   if (plan === 'starter') return { chipClass: CHIP_TONE.infoSubtle, label: 'Starter' }
   if (plan === 'pro') return { chipClass: CHIP_TONE.brandSubtle, label: 'Pro' }
-  if (plan === 'enterprise') return { chipClass: 'bg-[var(--mushi-vermillion-wash)] text-[var(--mushi-vermillion)] border border-[var(--mushi-vermillion)]/30', label: 'Enterprise' }
+  if (plan === 'enterprise') return { chipClass: 'bg-editorial-vermillion-wash text-editorial-vermillion border border-editorial-vermillion/30', label: 'Enterprise' }
   return { chipClass: CHIP_TONE.neutral, label: plan }
 }
 
@@ -292,7 +292,7 @@ export function UsersPage() {
                         <div className="flex items-center gap-2">
                           <span className="text-fg">{u.email ?? <em className="text-fg-faint">no email</em>}</span>
                           {u.role === 'super_admin' && (
-                            <Badge className="bg-brand/15 text-brand text-2xs">operator</Badge>
+                            <Badge className="bg-brand/12 text-brand border border-brand/28 text-2xs">operator</Badge>
                           )}
                         </div>
                       </td>

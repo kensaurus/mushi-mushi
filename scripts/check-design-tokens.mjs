@@ -41,6 +41,21 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
 const ADMIN_SRC = resolve(ROOT, 'apps/admin/src')
 const TOKEN_CSS = resolve(ADMIN_SRC, 'index.css')
+const TOKEN_STYLES_DIR = resolve(ADMIN_SRC, 'styles')
+
+/** Concatenate index.css + styles/*.css so @theme can live in partials. */
+function loadAdminTokenCss() {
+  const parts = [readFileSync(TOKEN_CSS, 'utf8')]
+  try {
+    for (const name of readdirSync(TOKEN_STYLES_DIR).sort()) {
+      if (!name.endsWith('.css')) continue
+      parts.push(readFileSync(resolve(TOKEN_STYLES_DIR, name), 'utf8'))
+    }
+  } catch {
+    /* styles/ optional during migration */
+  }
+  return parts.join('\n')
+}
 
 // Additional directories whose source gets the type-floor check only
 // (they use --mushi-* CSS vars, NOT the admin @theme layer, so the
@@ -194,7 +209,7 @@ function extractSemanticColorHits(src, file, allow) {
   return { deniedHits, unknownHits }
 }
 
-const css = readFileSync(TOKEN_CSS, 'utf8')
+const css = loadAdminTokenCss()
 const allow = parseColorRoots(css)
 const files = walk(ADMIN_SRC)
 
@@ -489,6 +504,43 @@ if (hexHits.length > 0) {
   )
 }
 
+// ── Raw --mushi-* in operator TSX ─────────────────────────────────────────
+// Prefer editorial-* @theme bridge utilities (bg-editorial-paper, …).
+// Allowlist: retired PublicHomePage + explicit mushi-mushi-allowlist comments.
+const MUSHI_VAR_RE = /var\(--mushi-(?!beta-banner-offset)[a-z0-9-]+\)/g
+const MUSHI_VAR_ALLOW_FILES = [/PublicHomePage\.tsx$/]
+const mushiVarHits = []
+
+for (const file of files) {
+  if (!/\.tsx?$/.test(file)) continue
+  if (MUSHI_VAR_ALLOW_FILES.some((re) => re.test(file))) continue
+  if (/[/\\]tester[/\\]/.test(file)) continue
+  const src = readFileSync(file, 'utf8')
+  for (const match of src.matchAll(MUSHI_VAR_RE)) {
+    const index = match.index ?? 0
+    const lineNum = extractLineNumber(src, index)
+    const lines = src.split('\n')
+    const line = lines[lineNum - 1] ?? ''
+    if (/mushi-mushi-allowlist:/i.test(line)) continue
+    mushiVarHits.push({ file, line: lineNum, token: match[0] })
+  }
+}
+
+if (mushiVarHits.length > 0) {
+  console.error(`\n[mushi-var] Raw var(--mushi-*) in operator TSX — use editorial-* bridge utilities:\n`)
+  for (const hit of mushiVarHits.slice(0, 40)) {
+    const rel = relative(ROOT, hit.file).replace(/\\/g, '/')
+    console.error(`  ${rel}:${hit.line}  ${hit.token}`)
+  }
+  if (mushiVarHits.length > 40) {
+    console.error(`  … and ${mushiVarHits.length - 40} more`)
+  }
+  console.error(
+    `\nFix: bg-editorial-paper / text-editorial-ink / border-editorial-rule (see @theme in styles/theme-tokens.css).\n` +
+      `Allowlist with // mushi-mushi-allowlist: <reason> on the same line when intentional.\n`,
+  )
+}
+
 // ── Light/dark theme pair guard ───────────────────────────────────────────
 // Tokens that must appear in at least one html[data-theme="light"] block.
 const THEME_PAIR_REQUIRED = [
@@ -652,6 +704,7 @@ const lintFailures =
   docsAliasHits.length > 0 ||
   heroDupHits.length > 0 ||
   hexHits.length > 0 ||
+  mushiVarHits.length > 0 ||
   widgetHexHits.length > 0 ||
   themePairMissing.length > 0 ||
   pageElevatedHits.length > 0 ||

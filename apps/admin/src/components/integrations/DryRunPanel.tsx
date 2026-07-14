@@ -81,7 +81,7 @@ export function DryRunPanel({ projectId }: { projectId: string }) {
       </div>
 
       {error && (
-        <p className="text-2xs text-danger bg-danger/5 border border-danger/20 rounded px-2 py-1">
+        <p className="text-2xs bg-danger-muted/50 text-danger-foreground border border-danger/25 rounded px-2 py-1">
           {error}
         </p>
       )}

@@ -41,6 +41,31 @@ const VIZ_FALLBACKS: Record<string, string> = {
   'viz-canvas-bg': 'oklch(0.11 0.004 265)',
   'viz-canvas-dot': 'oklch(0.28 0 0)',
   'viz-graph-muted': 'oklch(0.55 0 0)',
+  // Explore atlas layers
+  'viz-layer-ui': 'oklch(0.72 0.19 240)',
+  'viz-layer-lib': 'oklch(0.72 0.19 155)',
+  'viz-layer-backend': 'oklch(0.65 0.22 25)',
+  'viz-layer-test': 'oklch(0.72 0.19 300)',
+  'viz-layer-config': 'oklch(0.60 0.08 240)',
+  'viz-layer-other': 'oklch(0.50 0 0)',
+  // File complexity ramp (ExploreSymbolPanel)
+  'viz-complexity-tiny': 'oklch(0.70 0.15 145)',
+  'viz-complexity-small': 'oklch(0.68 0.17 145)',
+  'viz-complexity-medium': 'oklch(0.70 0.18 80)',
+  'viz-complexity-large': 'oklch(0.68 0.19 50)',
+  'viz-complexity-xlarge': 'oklch(0.65 0.20 30)',
+  'viz-complexity-huge': 'oklch(0.60 0.22 25)',
+  // FixGitGraph lane / focus chrome
+  'viz-git-main': 'oklch(0.30 0 0)',
+  'viz-git-branch': 'oklch(0.40 0.10 250)',
+  'viz-git-focus': 'oklch(0.82 0.16 240)',
+  'viz-git-node-stroke': 'oklch(0.10 0 0)',
+  // ExploreCanvas minimap mask / chrome
+  'viz-mask-dark': 'oklch(0.12 0 0 / 0.7)',
+  'viz-mask-light': 'oklch(0.96 0 0 / 0.7)',
+  'viz-minimap-bg-dark': 'oklch(0.14 0 0 / 0.90)',
+  'viz-minimap-bg-light': 'oklch(0.98 0 0 / 0.90)',
+  'viz-minimap-border': 'oklch(0.5 0 0 / 0.18)',
 }
 
 const STEP_STATUS_TOKEN: Record<string, keyof typeof VIZ_FALLBACKS> = {

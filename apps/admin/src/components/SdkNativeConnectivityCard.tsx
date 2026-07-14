@@ -28,6 +28,7 @@ import { apiFetch } from '../lib/supabase'
 import { useCiSecretSync } from '../lib/useCiSecretSync'
 import { sdkCiStatusMeta, type SdkDiagnosticsResult, type SdkDiagnosticStatus } from '../lib/sdkCiSecrets'
 import { mushiEnvVarsForProjectSlug } from '../lib/projectMushiEnv'
+import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
 // ---------------------------------------------------------------------------
 // Status visual helpers
@@ -42,11 +43,11 @@ const STATUS_ICON: Record<SdkDiagnosticStatus, React.ReactNode> = {
 }
 
 const STATUS_CHIP_CLASS: Record<SdkDiagnosticStatus, string> = {
-  healthy: 'bg-ok/10 text-ok border-ok/25',
-  'ci-secret-missing': 'bg-danger/10 text-danger-foreground border-danger/25',
-  'native-never-seen': 'bg-warn/10 text-warn border-warn/25',
-  'banner-disabled': 'bg-warn/10 text-warn border-warn/25',
-  unknown: 'bg-surface-overlay text-fg-muted border-edge-subtle',
+  healthy: runStatusChipTone('healthy'),
+  'ci-secret-missing': CHIP_TONE.dangerSubtle,
+  'native-never-seen': CHIP_TONE.warnSubtle,
+  'banner-disabled': CHIP_TONE.warnSubtle,
+  unknown: CHIP_TONE.neutral,
 }
 
 // ---------------------------------------------------------------------------
@@ -185,7 +186,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
             <ul className="space-y-0.5">
               {diag.missingVars.map((v) => (
                 <li key={v}>
-                  <code className="font-mono text-2xs text-danger-foreground bg-danger/5 rounded px-1 py-0.5">
+                  <code className="font-mono text-2xs text-danger-foreground bg-danger-muted/50 border border-danger/25 rounded px-1 py-0.5">
                     {v}
                   </code>
                 </li>
@@ -217,7 +218,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
 
         {/* Healthy summary */}
         {!loading && diag && status === 'healthy' && (
-          <div className="flex items-center gap-2 rounded-sm border border-ok/20 bg-ok/5 px-3 py-2 text-xs text-ok">
+          <div className={`flex items-center gap-2 rounded-sm px-3 py-2 text-xs ${CHIP_TONE.okSubtle}`}>
             <IconCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span>{meta.subtitle}</span>
           </div>
@@ -225,14 +226,14 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
 
         {/* Sync result */}
         {syncDone && (
-          <div className="rounded-sm border border-ok/20 bg-ok/5 px-3 py-2 text-xs text-ok space-y-1">
+          <div className={`rounded-sm px-3 py-2 text-xs space-y-1 ${CHIP_TONE.okSubtle}`}>
             <p className="font-medium">
               {syncState.written && syncState.written.length > 0
                 ? `Written to GitHub: ${syncState.written.join(', ')}`
                 : 'Sync complete (all vars already present or written).'}
             </p>
             {syncState.failed && syncState.failed.length > 0 && (
-              <p className="text-warn">
+              <p className="text-warning-foreground">
                 Partial: {syncState.failed.map((f) => f.name).join(', ')} could not be written.
                 Use the copy commands below.
               </p>
@@ -242,7 +243,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
 
         {/* Forbidden / no-repo result → show guided fallback */}
         {(syncFailed) && syncState.errorMessage && (
-          <div className="rounded-sm border border-warn/20 bg-warn/5 px-3 py-2 text-xs text-warn">
+          <div className={`rounded-sm px-3 py-2 text-xs ${CHIP_TONE.warnSubtle}`}>
             <p className="font-medium">
               {syncState.errorCode === 'GH_SECRETS_FORBIDDEN'
                 ? 'GitHub returned 403 — write permission denied.'

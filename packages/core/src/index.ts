@@ -9,6 +9,7 @@ export type {
   MushiCaptureConfig,
   MushiDiscoverInventoryConfig,
   MushiDiscoveryEventPayload,
+  MushiSessionEventPayload,
   MushiPrivacyConfig,
   MushiProactiveConfig,
   MushiApiCascadeConfig,
@@ -97,6 +98,13 @@ export { sha256Hex, hmacSha256Hex } from './digest';
 export { newUuid } from './uuid';
 export { getDeviceFingerprintHash } from './fingerprint';
 export { getSessionId } from './session';
+export {
+  initSessionTracker,
+  trackPageView,
+  updateSessionIdentity,
+  destroySessionTracker,
+  type SessionTrackerOptions,
+} from './session-tracker';
 export { createRateLimiter, type RateLimiter, type RateLimiterConfig } from './rate-limiter';
 export { createPiiScrubber, scrubPii, type PiiScrubberConfig } from './pii-scrubber';
 export {

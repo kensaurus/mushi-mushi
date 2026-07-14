@@ -240,14 +240,14 @@ function PlanPicker({ plans, currentPlanId, busy, onPick }: PlanPickerProps) {
           <button
             type="button"
             onClick={() => setBillingInterval('monthly')}
-            className={`px-2 py-0.5 rounded transition-colors ${billingInterval === 'monthly' ? 'bg-brand text-white' : 'text-fg-muted hover:text-fg'}`}
+            className={`px-2 py-0.5 rounded transition-colors ${billingInterval === 'monthly' ? 'bg-brand text-brand-fg' : 'text-fg-muted hover:text-fg'}`}
           >
             Monthly
           </button>
           <button
             type="button"
             onClick={() => setBillingInterval('annual')}
-            className={`px-2 py-0.5 rounded transition-colors ${billingInterval === 'annual' ? 'bg-brand text-white' : 'text-fg-muted hover:text-fg'}`}
+            className={`px-2 py-0.5 rounded transition-colors ${billingInterval === 'annual' ? 'bg-brand text-brand-fg' : 'text-fg-muted hover:text-fg'}`}
           >
             Annual <span className="text-ok font-medium">−{annualDiscountPct}%</span>
           </button>
@@ -363,7 +363,7 @@ function InvoicesSection({ projectId, hasCustomer, isComplimentary }: InvoicesSe
         <button
           type="button"
           onClick={invoicesQuery.reload}
-          className="rounded-sm border border-danger/40 bg-danger/10 px-2 py-0.5 text-2xs text-danger hover:bg-danger/15 motion-safe:transition-colors"
+          className="rounded-sm bg-danger-muted/50 text-danger-foreground border border-danger/25 px-2 py-0.5 text-2xs hover:bg-danger-muted/40 motion-safe:transition-colors"
         >
           Retry
         </button>

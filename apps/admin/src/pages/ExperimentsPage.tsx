@@ -83,6 +83,7 @@ interface AnalysisResult {
   variant_stats: Array<{ id: string; name: string; total: number; converted: number; rate: number }>
 }
 
+/** Draft stays quiet (not lifecycle warn); other statuses use the shared map. */
 const STATUS_CLS: Record<Experiment['status'], string> = {
   draft: CHIP_TONE.neutral,
   running: runStatusChipTone('running'),
@@ -453,7 +454,7 @@ function ExperimentsTab({ experiments, loading, error, onOpen, onLaunch, onStop,
               <td className="px-3 py-2 tabular-nums text-xs">{e.experiment_variants?.length ?? 0}</td>
               <td className="px-3 py-2">
                 {e.bandit_enabled
-                  ? <Badge className="bg-brand/10 text-brand border border-brand/20">Bandit</Badge>
+                  ? <Badge className={CHIP_TONE.brandSubtle}>Bandit</Badge>
                   : <span className="text-xs text-fg-muted">Static</span>}
               </td>
               <td className="px-3 py-2 text-xs text-fg-muted"><RelativeTime value={e.created_at} /></td>
@@ -591,10 +592,10 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
         <div className="flex flex-wrap gap-2 items-center">
           {statusBadge(experiment.status)}
           {experiment.bandit_enabled && (
-            <Badge className="bg-brand/10 text-brand border border-brand/20">Bandit</Badge>
+            <Badge className={CHIP_TONE.brandSubtle}>Bandit</Badge>
           )}
           {experiment.winner_variant_id && (
-            <Badge className={`${CHIP_TONE.okSubtle} border border-ok/20`}>Winner found</Badge>
+            <Badge className={CHIP_TONE.okSubtle}>Winner found</Badge>
           )}
           <div className="ml-auto flex gap-2">
             {experiment.status === 'draft' && variants.length >= 2 && (
@@ -624,7 +625,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
                   </div>
                 </div>
                 {experiment.winner_variant_id === v.id && (
-                  <Badge className={`${CHIP_TONE.okSubtle} border border-ok/20`}>Winner</Badge>
+                  <Badge className={CHIP_TONE.okSubtle}>Winner</Badge>
                 )}
               </div>
             ))}

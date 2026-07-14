@@ -28,7 +28,7 @@ export function HistoryItem({
       >
         <span className="inline-flex items-center gap-1.5 w-full min-w-0">
           {row.mode === 'raw' && (
-            <span className={`inline-flex shrink-0 px-1 py-0.5 rounded-[2px] text-2xs font-mono font-medium ${CHIP_TONE.warnSubtle} border border-warn/20`}>SQL</span>
+            <span className={`inline-flex shrink-0 px-1 py-0.5 rounded-micro text-2xs font-mono font-medium ${CHIP_TONE.warnSubtle} border border-warn/20`}>SQL</span>
           )}
           <span className="line-clamp-2">{row.prompt}</span>
         </span>
@@ -89,7 +89,7 @@ export function TeamItem({ row, onRerun }: { row: TeamRow; onRerun: () => void }
       <div className="flex items-center justify-between mt-1.5 text-2xs gap-1">
         <span className="flex items-center gap-1 min-w-0">
           <span
-            className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-brand/15 text-brand font-medium text-2xs shrink-0"
+            className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-brand/12 text-brand border border-brand/28 font-medium text-2xs shrink-0"
             aria-hidden="true"
           >
             {initial}

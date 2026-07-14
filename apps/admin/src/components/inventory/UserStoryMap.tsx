@@ -169,7 +169,7 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
                   {tags.map((t) => (
                     <Badge
                       key={t}
-                      className="bg-brand/10 text-brand border border-brand/20 font-mono text-2xs"
+                      className="bg-brand/12 text-brand border border-brand/28 font-mono text-2xs"
                     >
                       #{t}
                     </Badge>

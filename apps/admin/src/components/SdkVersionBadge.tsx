@@ -29,10 +29,10 @@ type SdkDisplayResolutionTone =
   | 'unknown'
 
 const STATUS_TONE: Record<Exclude<SdkDisplayResolutionTone, 'unknown'>, string> = {
-  'up-to-date': CHIP_TONE.okSubtle + ' border border-ok/30',
+  'up-to-date': CHIP_TONE.okSubtle,
   'catalog-ahead': CHIP_TONE.infoSubtle,
-  'upgrade-available': CHIP_TONE.warnSubtle + ' border border-warn/30',
-  deprecated: CHIP_TONE.dangerSubtle + ' border border-danger/30',
+  'upgrade-available': CHIP_TONE.warnSubtle,
+  deprecated: CHIP_TONE.dangerSubtle,
 }
 
 function shortPackageName(package_: string | null): string {
@@ -146,7 +146,7 @@ export function SdkVersionBadge({
 
   const toneKey = resolution.kind as SdkDisplayResolutionTone
   const toneClass =
-    toneKey === 'unknown' ? 'bg-surface-overlay text-fg-muted border border-edge-subtle' : STATUS_TONE[toneKey]
+    toneKey === 'unknown' ? CHIP_TONE.neutral : STATUS_TONE[toneKey]
 
   const label = (() => {
     const base = `${shortPackage} v${observedVersion}`

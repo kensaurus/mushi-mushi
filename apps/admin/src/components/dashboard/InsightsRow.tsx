@@ -151,7 +151,7 @@ function ActivityCard({ activity }: { activity: ActivityItem[] }) {
               {/* P4 — square for fix (deliberate action), circle for report (event) */}
               {a.kind === 'fix' ? (
                 <span
-                  className="inline-block h-1.5 w-1.5 shrink-0 rounded-[2px] bg-brand"
+                  className="inline-block h-1.5 w-1.5 shrink-0 rounded-micro bg-brand"
                   aria-label="fix"
                 />
               ) : (

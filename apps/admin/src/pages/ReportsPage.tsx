@@ -71,6 +71,7 @@ export function ReportsPage() {
   const sdkPackage = searchParams.get('sdkPackage') ?? ''
   const component = searchParams.get('component') ?? ''
   const reporter = searchParams.get('reporter') ?? ''
+  const area = searchParams.get('area') ?? ''
   const sort = (searchParams.get('sort') as SortField | null) ?? 'created_at'
   const dir = (searchParams.get('dir') as SortDir | null) ?? 'desc'
   const page = Math.max(0, Number(searchParams.get('page') ?? '0') || 0)
@@ -108,13 +109,14 @@ export function ReportsPage() {
     if (sdkPackage) p.set('sdkPackage', sdkPackage)
     if (component) p.set('component', component)
     if (reporter) p.set('reporter', reporter)
+    if (area) p.set('area', area)
     if (q) p.set('q', q)
     p.set('sort', sort)
     p.set('dir', dir)
     p.set('limit', String(PAGE_SIZE))
     p.set('offset', String(page * PAGE_SIZE))
     return p.toString()
-  }, [status, category, userCategory, severity, platform, sdkPackage, component, reporter, q, sort, dir, page])
+  }, [status, category, userCategory, severity, platform, sdkPackage, component, reporter, area, q, sort, dir, page])
 
   const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<{ reports: ReportRow[]; total: number }>(
     // Wait for ProjectSwitcher to hydrate active project so the first fetch
@@ -556,8 +558,9 @@ export function ReportsPage() {
   if (component) contextChips.push({ key: 'component', label: 'Component', value: component })
   if (reporter)
     contextChips.push({ key: 'reporter', label: 'Reporter', value: `${reporter.slice(0, 12)}…` })
+  if (area) contextChips.push({ key: 'area', label: 'Area', value: area })
 
-  const hasFilters = Boolean(status || category || userCategory || severity || platform || sdkPackage || component || reporter || q)
+  const hasFilters = Boolean(status || category || userCategory || severity || platform || sdkPackage || component || reporter || area || q)
   const queuedCount = reports.filter((r) => r.status === 'queued' || r.status === 'new').length
   const criticalQueuedCount = reports.filter(
     (r) => (r.status === 'queued' || r.status === 'new') && r.severity === 'critical',

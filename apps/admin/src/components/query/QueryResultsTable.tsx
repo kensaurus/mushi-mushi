@@ -57,7 +57,7 @@ function formatDate(v: string): string {
 
 function CellBadge({ children, cls }: { children: string; cls: string }) {
   return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-[3px] text-2xs font-medium leading-none ${cls}`}>
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-micro text-2xs font-medium leading-none ${cls}`}>
       {children}
     </span>
   )
@@ -93,7 +93,7 @@ function renderCell(col: string, val: unknown): ReactNode {
   // Status
   if (colL === 'status') {
     const map: Record<string, string> = {
-      new:        'bg-brand/10 text-brand border border-brand/25',
+      new:        'bg-brand/12 text-brand border border-brand/28',
       pending:    CHIP_TONE.infoSubtle + ' border border-info/25',
       submitted:  CHIP_TONE.infoSubtle + ' border border-info/25',
       queued:     CHIP_TONE.infoSubtle + ' border border-info/25',

@@ -6,6 +6,7 @@
  */
 
 import { Btn, Card } from '../ui'
+import { CHIP_TONE } from '../../lib/chipTone'
 import {
   CATEGORY_LABEL,
   type InstalledPlugin,
@@ -30,7 +31,7 @@ export function PluginCard({ plugin: p, installed: inst, stats, busy, onInstall,
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold">{p.name}</h3>
             {p.is_official ? (
-              <span className="inline-flex rounded px-1.5 py-0.5 text-3xs bg-brand/10 text-brand">
+              <span className={`inline-flex rounded px-1.5 py-0.5 text-3xs ${CHIP_TONE.brandSubtle}`}>
                 Official
               </span>
             ) : null}
@@ -42,7 +43,7 @@ export function PluginCard({ plugin: p, installed: inst, stats, busy, onInstall,
         </div>
         {inst ? (
           <span
-            className={`inline-flex rounded-sm px-2 py-0.5 text-3xs border ${inst.is_active ? 'bg-ok/15 text-ok border-ok/30' : 'bg-fg-muted/10 text-fg-muted border-edge-subtle'}`}
+            className={`inline-flex rounded-sm px-2 py-0.5 text-3xs ${inst.is_active ? CHIP_TONE.okSubtle : CHIP_TONE.neutral}`}
           >
             {inst.is_active ? 'Installed' : 'Disabled'}
           </span>

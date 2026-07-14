@@ -1,0 +1,2112 @@
+/** Connect bridge, diet chrome, motion, table, and other component CSS */
+
+/* Tabular numbers for data */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Anchor targets under sticky chrome (Connect section nav, page headers) */
+.scroll-mt-chrome {
+  scroll-margin-top: 4.5rem;
+}
+
+/* ---------------------------------------------------------------------------
+   CONNECT LANE PICKER — operator surface bridge
+   Maps marketing-ui editorial vermillion to admin @theme brand micro-indicators
+   when ConnectStudio passes surface="operator" (data-connect-surface="operator").
+--------------------------------------------------------------------------- */
+
+[data-connect-surface="operator"] .mushi-connect-section-label {
+  color: var(--color-fg-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+[data-connect-surface="operator"] .mushi-connect-chip {
+  border-color: var(--color-edge-subtle);
+  background: var(--color-surface-raised);
+  color: var(--color-fg-muted);
+  border-radius: 0.25rem;
+  font-size: 0.8125rem;
+}
+
+[data-connect-surface="operator"] .mushi-connect-chip:hover {
+  border-color: color-mix(in oklch, var(--color-brand) 25%, var(--color-edge-subtle));
+  background: var(--color-surface-hover);
+  color: var(--color-fg-secondary);
+}
+
+[data-connect-surface="operator"] .mushi-connect-chip:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--color-brand) 55%, transparent);
+  outline-offset: 2px;
+}
+
+[data-connect-surface="operator"] .mushi-connect-chip--selected {
+  border-color: color-mix(in oklch, var(--color-brand) 40%, var(--color-edge-subtle));
+  background: color-mix(in oklch, var(--color-brand) 12%, var(--color-surface-raised));
+  color: var(--color-brand-foreground);
+  box-shadow: none;
+}
+
+[data-connect-surface="operator"] .mushi-connect-tablist {
+  border-bottom-color: var(--color-edge-subtle);
+}
+
+[data-connect-surface="operator"] .mushi-connect-tab {
+  color: var(--color-fg-muted);
+  font-size: 0.8125rem;
+}
+
+[data-connect-surface="operator"] .mushi-connect-tab:hover {
+  color: var(--color-fg-secondary);
+}
+
+[data-connect-surface="operator"] .mushi-connect-tab:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--color-brand) 55%, transparent);
+  outline-offset: -2px;
+}
+
+[data-connect-surface="operator"] .mushi-connect-tab--selected {
+  border-bottom-color: var(--color-brand);
+  color: var(--color-brand-foreground);
+}
+
+[data-connect-surface="operator"] .mushi-connect-panel {
+  border-color: var(--color-edge-subtle);
+  background: transparent;
+}
+
+/* ---------------------------------------------------------------------------
+   APP CHROME — shared top-row rhythm (sidebar logo row + desktop sub-header)
+   Lives in @layer components so Tailwind utilities (e.g. hidden md:flex) win.
+--------------------------------------------------------------------------- */
+
+@layer components {
+  .chrome-top-row {
+    display: flex;
+    align-items: center;
+    min-height: var(--chrome-row-height, 2.5rem);
+    flex-shrink: 0;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   NAVIGATION
+--------------------------------------------------------------------------- */
+
+/* Nav link — base.
+   Padding scales with `--ui-pad` (set by html[data-density]) so flipping
+   to compact visibly tightens the sidebar rhythm — the user's primary
+   visual feedback that the density change took effect. Defaults to 1
+   so consumers without a density attribute (storybook, tests, marketing
+   shell) render at the standard rhythm. */
+.nav-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding:
+    calc(0.4rem * var(--ui-pad, 1))
+    calc(0.5rem * var(--ui-pad, 1))
+    calc(0.4rem * var(--ui-pad, 1))
+    calc(0.625rem * var(--ui-pad, 1));
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  color: var(--color-fg-muted);
+  transition:
+    color 180ms var(--ease-out-expo),
+    background-color 180ms var(--ease-out-expo),
+    transform 120ms var(--ease-out-expo);
+  user-select: none;
+}
+
+.nav-link:hover {
+  color: var(--color-fg-secondary);
+  background-color: var(--color-nav-hover-bg);
+}
+
+.nav-link:active {
+  transform: scale(0.98);
+}
+
+.nav-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-brand);
+}
+
+/* ---------------------------------------------------------------------------
+   GLOBAL FOCUS SAFETY NET (WCAG 2.4.13, 2026-05-07)
+   ---------------------------------------------------------------------------
+   Many components use `focus-visible:outline-none focus-visible:ring-2
+   focus-visible:ring-brand/50` which pairs an explicit Tailwind ring with
+   `outline-none`. That's fine on its own. But anything that DIDN'T opt
+   into that ring utility — third-party widgets, plain native buttons, the
+   long tail of icon buttons — was getting only the browser default
+   focus highlight, which is system-dependent and often invisible on dark
+   chrome.
+
+   This rule adds a 2px brand outline (with 2px offset for a clean halo)
+   to every focus-visible element. Where a component has its own
+   `outline: none`, theirs wins via specificity / cascade — so the explicit
+   ring utilities still render unchanged. Where there's no explicit
+   outline rule, this kicks in and meets WCAG 2.4.13 Focus Appearance
+   (≥2 CSS pixels, ≥3:1 contrast vs. unfocused state).
+--------------------------------------------------------------------------- */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+/* Nav link icon */
+.nav-link-icon {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  opacity: 0.5;
+  transition: opacity 180ms var(--ease-out-expo);
+}
+
+.nav-link:hover .nav-link-icon {
+  opacity: 0.75;
+}
+
+/* Nav link — active state */
+.nav-link[aria-current="page"] {
+  color: var(--color-fg);
+  background-color: var(--color-nav-active-bg);
+  font-weight: 500;
+}
+
+.nav-link[aria-current="page"] .nav-link-icon {
+  opacity: 1;
+  color: var(--color-brand);
+}
+
+/* Active indicator bar — left edge accent */
+.nav-link[aria-current="page"]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 25%;
+  bottom: 25%;
+  width: 2.5px;
+  border-radius: 1px;
+  background: var(--color-nav-active-border);
+  box-shadow: 0 0 6px oklch(0.72 0.14 80 / 0.4);
+}
+
+/* Section label — same `--ui-pad` story as `.nav-link` above. */
+.nav-section {
+  padding:
+    calc(0.625rem * var(--ui-pad, 1))
+    calc(0.625rem * var(--ui-pad, 1))
+    calc(0.25rem * var(--ui-pad, 1));
+  font-size: var(--text-3xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-nav-section-label);
+  user-select: none;
+}
+
+.nav-section:not(:first-child) {
+  margin-top: calc(0.375rem * var(--ui-pad, 1));
+  border-top: 1px solid var(--color-edge-subtle);
+  padding-top: calc(0.625rem * var(--ui-pad, 1));
+}
+
+/* Active PDCA stage — the section header where the current route lives
+   breathes with a soft brand-tinted glow instead of a text "← here"
+   annotation. The animation is subtle enough to stay calm but distinct
+   enough to answer "where am I in the loop?" at a glance. */
+@keyframes nav-stage-breathe {
+  0%, 100% {
+    background-color: transparent;
+    color: var(--color-nav-section-label);
+  }
+  50% {
+    background-color: color-mix(in oklch, var(--color-brand) 8%, transparent);
+    color: color-mix(in oklch, var(--color-brand) 65%, var(--color-nav-section-label));
+  }
+}
+
+.nav-section-active {
+  animation: nav-stage-breathe 3s ease-in-out infinite;
+  border-radius: 0.25rem;
+}
+
+/* Expanded category — solid highlight (no infinite pulse). */
+.nav-section-expanded {
+  border-radius: 0.25rem;
+}
+
+/* Route-active PDCA stage hint when section is collapsed. */
+.nav-section-stage-hint {
+  animation: nav-stage-breathe 3s ease-in-out infinite;
+  border-radius: 0.25rem;
+  color: var(--color-fg-secondary);
+}
+
+/* ---------------------------------------------------------------------------
+   CARD DEPTH
+--------------------------------------------------------------------------- */
+
+.card-elevated {
+  background:
+    linear-gradient(
+      180deg,
+      var(--card-elevated-bg-from) 0%,
+      var(--card-elevated-bg-to) 100%
+    );
+  border: 1px solid var(--color-edge-subtle);
+  border-radius: var(--radius-md);
+  box-shadow:
+    var(--shadow-card),
+    inset 0 1px 0 var(--card-elevated-inset-highlight);
+}
+
+/* Diet chrome — flat bordered panels (Supabase Settings / Add-ons pattern) */
+.card-flat,
+.panel {
+  background-color: var(--color-panel);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel);
+}
+
+.panel-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.75rem 1rem;
+  transition: background-color var(--duration-fast) ease;
+}
+
+.panel-row + .panel-row,
+.panel > .panel-row:not(:first-child) {
+  border-top: 1px solid var(--color-panel-border);
+}
+
+.panel-row:hover,
+.panel-row:focus-within {
+  background-color: var(--color-surface-hover);
+}
+
+.panel-row--interactive {
+  cursor: pointer;
+}
+
+.panel-section-label {
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-fg-faint);
+}
+
+.panel--metrics {
+  overflow: hidden;
+}
+
+.panel--metrics > [role='group'] {
+  gap: 0;
+}
+
+.panel--metrics > [role='group'] > * {
+  border-right: 1px solid var(--color-panel-border);
+  border-radius: 0;
+  border-top: none;
+  border-bottom: none;
+  border-left: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+.panel--metrics > [role='group'] > *:last-child {
+  border-right: none;
+}
+
+/* Stat card — number emphasis */
+.stat-value {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Linked snapshot StatCards — staged, subtle hover (StatCard with `to`). */
+.stat-card-link {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    border-color 420ms var(--ease-out-expo),
+    transform 480ms var(--ease-out-expo),
+    box-shadow 480ms var(--ease-out-expo),
+    background-color 380ms var(--ease-out-expo);
+}
+
+.stat-card-link::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 0;
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--color-brand) 28%, transparent),
+    0 0 10px color-mix(in oklch, var(--color-brand) 22%, transparent),
+    0 0 22px color-mix(in oklch, var(--color-brand) 10%, transparent);
+  transition: opacity 520ms var(--ease-out-expo);
+}
+
+.stat-card-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 0;
+  background: radial-gradient(
+    120% 80% at 50% 100%,
+    color-mix(in oklch, var(--color-brand) 7%, transparent) 0%,
+    transparent 72%
+  );
+  transition: opacity 560ms var(--ease-out-expo);
+}
+
+.stat-card-link:hover,
+.stat-card-link:focus-within {
+  border-color: color-mix(in oklch, var(--color-brand) 30%, var(--color-edge-subtle));
+  background-color: var(--color-surface-hover);
+  transition-delay: 0ms, 0ms, 0ms;
+}
+
+.stat-card-link:hover::before,
+.stat-card-link:focus-within::before {
+  opacity: 0.72;
+  transition-delay: 140ms;
+}
+
+.stat-card-link:hover::after,
+.stat-card-link:focus-within::after {
+  opacity: 0.55;
+  transition-delay: 180ms;
+}
+
+.stat-card-value {
+  transform-origin: left center;
+  transition:
+    transform 520ms var(--ease-out-expo),
+    text-shadow 520ms var(--ease-out-expo),
+    color 380ms var(--ease-out-expo);
+}
+
+.stat-card-link:hover .stat-card-value,
+.stat-card-link:focus-within .stat-card-value {
+  text-shadow: 0 0 12px color-mix(in oklch, var(--color-brand) 24%, transparent);
+  transform: scale(1.012);
+  transition-delay: 160ms, 160ms, 0ms;
+}
+
+/* Text swap — small slide + crossfade, staggered after hover settles */
+.stat-card-swap-line {
+  position: relative;
+  display: block;
+  min-height: 1em;
+  overflow: hidden;
+}
+
+.stat-card-swap-primary,
+.stat-card-swap-secondary {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    transform 480ms var(--ease-out-expo),
+    opacity 380ms var(--ease-out-expo);
+}
+
+.stat-card-swap-primary {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.stat-card-swap-secondary {
+  position: absolute;
+  inset: 0;
+  transform: translateY(0.35em);
+  opacity: 0;
+}
+
+.group\/stat:hover .stat-card-swap-primary,
+.group\/stat:focus-visible .stat-card-swap-primary {
+  transform: translateY(-0.35em);
+  opacity: 0;
+  transition-delay: 100ms;
+}
+
+.group\/stat:hover .stat-card-swap-secondary,
+.group\/stat:focus-visible .stat-card-swap-secondary {
+  transform: translateY(0);
+  opacity: 1;
+  transition-delay: 220ms;
+}
+
+.stat-card-swap-line--detail .stat-card-swap-primary,
+.stat-card-swap-line--detail .stat-card-swap-secondary {
+  transition-duration: 440ms, 340ms;
+}
+
+.group\/stat:hover .stat-card-swap-line--detail .stat-card-swap-primary,
+.group\/stat:focus-visible .stat-card-swap-line--detail .stat-card-swap-primary {
+  transition-delay: 180ms;
+}
+
+.group\/stat:hover .stat-card-swap-line--detail .stat-card-swap-secondary,
+.group\/stat:focus-visible .stat-card-swap-line--detail .stat-card-swap-secondary {
+  transition-delay: 300ms;
+}
+
+.stat-card-arrow {
+  opacity: 0;
+  transform: translateX(-3px);
+  transition:
+    transform 480ms var(--ease-out-expo),
+    opacity 420ms var(--ease-out-expo);
+}
+
+.group\/stat:hover .stat-card-arrow,
+.group\/stat:focus-visible .stat-card-arrow {
+  opacity: 0.72;
+  transform: translateX(2px);
+  transition-delay: 280ms;
+}
+
+.stat-card-cta-hint {
+  opacity: 0;
+  transform: translateY(3px);
+  transition:
+    transform 440ms var(--ease-out-expo),
+    opacity 360ms var(--ease-out-expo);
+}
+
+.group\/stat:hover .stat-card-cta-hint,
+.group\/stat:focus-visible .stat-card-cta-hint {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 320ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stat-card-link,
+  .stat-card-link::before,
+  .stat-card-link::after,
+  .stat-card-value,
+  .stat-card-swap-primary,
+  .stat-card-swap-secondary,
+  .stat-card-arrow,
+  .stat-card-cta-hint {
+    transition: none !important;
+    transition-delay: 0ms !important;
+  }
+
+  .stat-card-link:hover,
+  .stat-card-link:focus-within {
+    transform: none;
+  }
+
+  .stat-card-link:hover .stat-card-value,
+  .stat-card-link:focus-within .stat-card-value {
+    transform: none;
+  }
+
+  .group\/stat:hover .stat-card-swap-primary,
+  .group\/stat:focus-visible .stat-card-swap-primary {
+    opacity: 0;
+  }
+
+  .group\/stat:hover .stat-card-swap-secondary,
+  .group\/stat:focus-visible .stat-card-swap-secondary {
+    opacity: 1;
+    transform: none;
+  }
+
+  .group\/stat:hover .stat-card-arrow,
+  .group\/stat:focus-visible .stat-card-arrow {
+    opacity: 0.72;
+    transform: none;
+  }
+
+  .group\/stat:hover .stat-card-cta-hint,
+  .group\/stat:focus-visible .stat-card-cta-hint {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   TOOLTIP ANIMATION
+--------------------------------------------------------------------------- */
+
+@keyframes tooltip-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.tooltip-enter {
+  animation: tooltip-in 120ms var(--ease-out-expo) forwards;
+}
+
+/* Shared Tooltip primitive — max-width only applies on inline-block/block (not bare inline). */
+.mushi-tooltip {
+  display: inline-block;
+  box-sizing: border-box;
+  max-width: min(20rem, calc(100vw - 24px));
+  vertical-align: top;
+}
+
+.mushi-tooltip--wrap {
+  width: max-content;
+  min-width: min(8rem, 100%);
+  white-space: normal;
+  text-align: left;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.mushi-tooltip--single {
+  width: max-content;
+  max-width: min(20rem, calc(100vw - 24px));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------------------------------------------------------------------------
+   PAGEHERO — FLOWING ARROW BETWEEN DECIDE / ACT / VERIFY
+   The "bezel-less ReactFlow" feel without pulling @xyflow/react into every
+   page bundle. Two layered elements:
+     • `.flow-arrow-channel` — a narrow horizontal lane with a marching-dot
+       pattern. The dots move left→right via a background-position keyframe,
+       which is GPU-cheap (no layout, no paint of foreground elements).
+     • `.flow-arrow-head` — a static chevron pointing into the next tile so
+       direction reads even when motion is disabled.
+   The colour comes from the parent `--mushi-flow-color` custom property so
+   each arrow inherits the upstream tile's severity (a danger Decide bleeds
+   red into the channel toward Act, visually wiring cause to action).
+   Reduced motion: the channel keeps its colour but the dots stop moving —
+   direction is still legible from the chevron alone.
+--------------------------------------------------------------------------- */
+
+@keyframes flow-march {
+  from { background-position: 0 0; }
+  to   { background-position: 14px 0; }
+}
+
+.flow-arrow-channel {
+  display: inline-block;
+  height: 2px;
+  width: 32px;
+  background-image: linear-gradient(
+    to right,
+    color-mix(in oklch, var(--mushi-flow-color, var(--color-fg-muted)) 70%, transparent) 50%,
+    transparent 50%
+  );
+  background-size: 14px 100%;
+  background-repeat: repeat-x;
+  background-position: 0 center;
+  animation: var(--mushi-flow-anim, none);
+  border-radius: 1px;
+}
+
+.flow-arrow-head {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid color-mix(in oklch, var(--mushi-flow-color, var(--color-fg-muted)) 80%, transparent);
+  margin-left: -1px;
+}
+
+/* ---------------------------------------------------------------------------
+   PERSONALITY
+   Soft pulsing glow used by HeroIntro and the cockpit bottleneck dot so the
+   loop visibly *breathes* when there's something to act on. Reduced motion
+   media query at the bottom of the file disables this for users who opt out.
+--------------------------------------------------------------------------- */
+
+@keyframes mushi-pulse-glow {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+.mushi-pulse {
+  animation: mushi-pulse-glow 2.4s var(--ease-out-expo) infinite;
+}
+
+/* Ask Mushi header launcher — replaced by inline pulse dot (see AskMushiLauncherButton.tsx) */
+
+/* ---------------------------------------------------------------------------
+   Sidebar micro toggles — segmented control (portal, mode, density, theme)
+   Single source of truth for hover / selected / press / focus on sidebar
+   icon+label strips.    Consumers: MicroSegmentedTrack, SidebarBrandToggles,
+   SidebarFooterControls, ResponsiveTable TableDensityToggle.
+--------------------------------------------------------------------------- */
+
+:root {
+  --sidebar-micro-seg-min: min(1.75rem, max(1.125rem, calc(1.375rem * var(--ui-pad, 1))));
+  --sidebar-micro-solo-w: 2.75rem;
+}
+
+.sidebar-micro-track {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in oklch, var(--color-edge) 55%, transparent);
+  background: color-mix(in oklch, var(--color-surface-overlay) 65%, var(--color-surface-raised));
+  box-shadow: inset 0 1px 2px color-mix(in oklch, var(--color-fg) 4%, transparent);
+}
+
+.sidebar-micro-seg {
+  position: relative;
+  display: flex;
+  min-height: 1.375rem;
+  width: 100%;
+  min-width: min(100%, var(--sidebar-micro-seg-min, 2.25rem));
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  overflow: hidden;
+  padding-inline: 0.125rem;
+  border-radius: calc(var(--radius-sm) - 2px);
+  border: 1px solid transparent;
+  color: var(--color-fg-muted);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 160ms var(--ease-out-expo),
+    background-color 160ms var(--ease-out-expo),
+    border-color 160ms var(--ease-out-expo),
+    box-shadow 160ms var(--ease-out-expo),
+    transform 100ms var(--ease-out-expo);
+}
+
+.sidebar-micro-seg__label {
+  transition: color 160ms var(--ease-out-expo), font-weight 160ms var(--ease-out-expo);
+}
+
+.sidebar-micro-seg:hover:not(.sidebar-micro-seg--active):not([aria-checked='true']):not([aria-pressed='true']) {
+  color: var(--color-fg-secondary);
+  background: color-mix(in oklch, var(--color-surface-hover) 55%, transparent);
+  border-color: color-mix(in oklch, var(--color-edge) 35%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-micro-seg:active {
+    transform: scale(0.96);
+  }
+}
+
+.sidebar-micro-seg--active,
+.sidebar-micro-seg[aria-checked='true'],
+.sidebar-micro-seg[aria-pressed='true'] {
+  color: var(--color-brand-foreground);
+  font-weight: 600;
+  background: color-mix(in oklch, var(--color-brand) 14%, var(--color-surface-raised));
+  border-color: color-mix(in oklch, var(--color-brand) 32%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 12%, transparent),
+    0 1px 2px color-mix(in oklch, var(--color-brand) 10%, transparent);
+}
+
+.sidebar-micro-seg--active .sidebar-micro-seg__label,
+.sidebar-micro-seg[aria-checked='true'] .sidebar-micro-seg__label {
+  font-weight: 600;
+}
+
+.sidebar-micro-seg--active:hover,
+.sidebar-micro-seg[aria-checked='true']:hover,
+.sidebar-micro-seg[aria-pressed='true']:hover {
+  background: color-mix(in oklch, var(--color-brand) 20%, var(--color-surface-raised));
+  border-color: color-mix(in oklch, var(--color-brand) 42%, transparent);
+}
+
+.sidebar-micro-seg--active svg,
+.sidebar-micro-seg[aria-checked='true'] svg,
+.sidebar-micro-seg[aria-pressed='true'] svg {
+  opacity: 1;
+  color: var(--color-brand-foreground);
+}
+
+.sidebar-micro-seg:not(.sidebar-micro-seg--active):not([aria-checked='true']):not([aria-pressed='true']) svg {
+  opacity: 0.72;
+}
+
+.sidebar-micro-seg:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-brand) 50%, transparent);
+}
+
+.sidebar-micro-seg--active:focus-visible,
+.sidebar-micro-seg[aria-checked='true']:focus-visible,
+.sidebar-micro-seg[aria-pressed='true']:focus-visible {
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 12%, transparent),
+    0 0 0 2px color-mix(in oklch, var(--color-brand) 50%, transparent);
+}
+
+/* Sliding pill — Framer layoutId indicator (MicroSegmentedTrack) */
+.sidebar-micro-track--sliding {
+  position: relative;
+}
+
+.sidebar-micro-track--inline {
+  width: auto;
+  display: inline-flex;
+}
+
+/* Single-segment track (focus toggle) — parent grid assigns the column width. */
+.sidebar-micro-track--solo {
+  width: 100%;
+  min-width: var(--sidebar-micro-solo-w, 2.75rem);
+  flex: none;
+}
+
+.sidebar-micro-track--solo .sidebar-micro-seg-cell {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sidebar-micro-seg-cell {
+  position: relative;
+  display: flex;
+  min-width: var(--sidebar-micro-seg-min, 2.25rem);
+  flex: 1 1 0%;
+  align-items: stretch;
+}
+
+/* Tap layer — indicator is pinned to this box so pill and icon always match. */
+.sidebar-micro-seg-interaction {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-width: 0;
+  width: 100%;
+  min-height: 1.375rem;
+}
+
+.sidebar-micro-seg-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  width: 100%;
+  min-height: 1.375rem;
+}
+
+/* Tooltip wrappers in portal/mode rows — stretch to the content shell. */
+.sidebar-micro-seg-content > * {
+  flex: 1 1 auto;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: min(100%, var(--sidebar-micro-seg-min, 2.25rem));
+  min-height: 1.375rem;
+}
+
+.sidebar-micro-seg-content .sidebar-micro-seg,
+.sidebar-micro-seg-content a.sidebar-micro-seg {
+  height: 100%;
+  min-height: 1.375rem;
+}
+
+.sidebar-micro-seg svg {
+  display: block;
+  flex: none;
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.sidebar-micro-track--inline .sidebar-micro-seg-cell {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.sidebar-micro-indicator {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  border: 1px solid color-mix(in oklch, var(--color-brand) 32%, transparent);
+  background: color-mix(in oklch, var(--color-brand) 14%, var(--color-surface-raised));
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 12%, transparent),
+    0 1px 2px color-mix(in oklch, var(--color-brand) 10%, transparent);
+  pointer-events: none;
+}
+
+.sidebar-micro-track--sliding .sidebar-micro-seg--active,
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-checked='true'],
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-pressed='true'] {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.sidebar-micro-track--sliding .sidebar-micro-seg--active:hover,
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-checked='true']:hover,
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-pressed='true']:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+.sidebar-micro-track--sliding .sidebar-micro-seg--active:focus-visible,
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-checked='true']:focus-visible,
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-pressed='true']:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-brand) 50%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-micro-seg {
+    transition: none;
+  }
+
+  .sidebar-micro-seg:active {
+    transform: none;
+  }
+
+  .sidebar-micro-indicator {
+    transition: none !important;
+  }
+}
+
+
+/* Ask Mushi header launcher — brand glow until first open */
+@keyframes ask-mushi-launcher-glow {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(1);
+    box-shadow:
+      0 0 0 0 color-mix(in oklch, var(--color-brand) 0%, transparent),
+      0 0 10px -2px color-mix(in oklch, var(--color-brand) 35%, transparent);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.12);
+    box-shadow:
+      0 0 0 3px color-mix(in oklch, var(--color-brand) 22%, transparent),
+      0 0 18px -2px color-mix(in oklch, var(--color-brand) 55%, transparent);
+  }
+}
+
+.ask-mushi-launcher--glow {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--color-brand) 45%, transparent),
+    0 0 14px -3px color-mix(in oklch, var(--color-brand) 50%, transparent);
+}
+
+.ask-mushi-launcher__ring {
+  inset: -2px;
+  border-radius: inherit;
+  border: 1px solid color-mix(in oklch, var(--color-brand) 55%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ask-mushi-launcher--glow .ask-mushi-launcher__ring {
+    animation: ask-mushi-launcher-glow 2.2s var(--ease-out-expo) infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ask-mushi-launcher--glow {
+    outline: 2px solid color-mix(in oklch, var(--color-brand) 65%, transparent);
+    outline-offset: 2px;
+  }
+  .ask-mushi-launcher__ring {
+    display: none;
+  }
+}
+
+@keyframes portal-toggle-caret-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.portal-toggle__caret {
+  animation: portal-toggle-caret-blink 900ms step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-toggle__caret {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   STAMP GLOW UTILITIES (used by PDCA receipts)
+   A static box-shadow ring that signals "this stage has landed". Matches the
+   pattern Linear / Vercel / GitHub use for closed states on dark dashboards:
+   inset 1px saturated border + outer tinted halo. No animation — motion is
+   reserved for *in-flight* stages (.mushi-pulse) so finished work stays still.
+
+   We cap the outer halo at `0 0 16px -6px` so it reads as a soft lift, not a
+   neon rim. Users on `prefers-reduced-motion` keep the glow because it's a
+   static decoration, not motion. That matches WCAG 2.3 which only restricts
+   motion, not decorative colour/shadow.
+--------------------------------------------------------------------------- */
+
+.mushi-glow-ok {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--color-ok) 35%, transparent),
+    0 0 16px -6px color-mix(in oklch, var(--color-ok) 45%, transparent);
+}
+
+.mushi-glow-danger {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--color-danger) 35%, transparent),
+    0 0 16px -6px color-mix(in oklch, var(--color-danger) 40%, transparent);
+}
+
+.mushi-glow-info {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--color-info) 30%, transparent),
+    0 0 14px -6px color-mix(in oklch, var(--color-info) 35%, transparent);
+}
+
+/* A breathing halo for the *active* done stage — fires once on mount so the
+   eye is pulled to the newly-closed stamp, then settles into the static glow.
+   Keyframe animates from 0 alpha → peak → current, so the static box-shadow
+   above takes over once the animation ends. */
+@keyframes mushi-closed-pop {
+  0%   { box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-ok) 0%, transparent),  0 0 0 0   color-mix(in oklch, var(--color-ok) 0%, transparent); }
+  40%  { box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-ok) 50%, transparent), 0 0 24px -2px color-mix(in oklch, var(--color-ok) 55%, transparent); }
+  100% { box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-ok) 35%, transparent), 0 0 16px -6px color-mix(in oklch, var(--color-ok) 45%, transparent); }
+}
+.mushi-closed-pop {
+  animation: mushi-closed-pop 900ms var(--ease-out-expo) 1;
+  animation-fill-mode: forwards;
+}
+
+/* ---------------------------------------------------------------------------
+   MODAL + TOAST MOTION
+   Backdrop fade, panel scale-in, toast slide-in microinteractions —
+   gives async UI a perceived weight without bloating bundle with framer-motion.
+--------------------------------------------------------------------------- */
+
+@keyframes mushi-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes mushi-modal-in {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes mushi-toast-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes mushi-toast-out {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(16px); }
+}
+
+/* Toast progress bar — drains left → right over the auto-dismiss budget so
+   the user can see how long they have to read. Pause-on-hover is wired by
+   toggling animation-play-state in the toast component. Round 2 polish. */
+@keyframes mushi-toast-progress {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+
+/* Card pulse — fires once when an async test transitions to success so the
+   user's eye is pulled to the receipt. Border colour is provided by the
+   caller via `text-*` so the keyframe stays tone-agnostic. */
+@keyframes mushi-success-pulse {
+  0%   { box-shadow: 0 0 0 0 currentColor; }
+  60%  { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Git-pulse — gentle radiating halo on pending nodes in FixGitGraph so the
+   timeline visibly breathes while CI / a fix is still running. Used as an
+   inline animation via the arbitrary variant in FixGitGraph.tsx so it shows
+   up on the SVG <circle> that represents the pending node. */
+@keyframes mushi-git-pulse {
+  0%   { r: 5; stroke-opacity: 0.8; }
+  70%  { r: 14; stroke-opacity: 0; }
+  100% { r: 14; stroke-opacity: 0; }
+}
+
+/* Confetti burst — pure CSS celebration for the first merged fix. Single
+   shape that drifts and rotates while fading. We render ~14 of these in
+   different colours/positions for the burst effect. */
+@keyframes mushi-confetti-fall {
+  0%   { opacity: 0; transform: translate(0, -8px) rotate(0deg); }
+  10%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--mushi-tx, 40px), var(--mushi-ty, 120px)) rotate(var(--mushi-rot, 360deg)); }
+}
+
+/* Wave T.2.5 row-state-flash.
+   Single-shot background wash fired on `ReportRowView` / `FixCard` when the
+   row's `status` or `severity` changes (not on mount). Tone is provided by
+   the caller via `--flash-tone` CSS var so the keyframe stays tone-agnostic
+   and every page can feed in its own status colour. The 4-stop curve is:
+   0 → 25 % → 15 % → 0 which reads as "notice → hold → settle" in ~650 ms. */
+@keyframes mushi-row-flash {
+  0%   { background-color: transparent; }
+  20%  { background-color: color-mix(in oklch, var(--flash-tone, var(--color-brand)) 25%, transparent); }
+  60%  { background-color: color-mix(in oklch, var(--flash-tone, var(--color-brand)) 15%, transparent); }
+  100% { background-color: transparent; }
+}
+@utility animate-mushi-row-flash { animation: mushi-row-flash 650ms var(--ease-out-expo) 1; }
+
+/* ---------------------------------------------------------------------------
+   DAV SPOTLIGHT  (Decide → Act → Verify on-page anchor highlight)
+   Applied via JS to [data-dav-anchor] elements when the operator clicks a
+   hero tile. The keyframe pulses in then fades the branded outline so the
+   eye can follow the hero's "act here" pointer without a hard flash.
+--------------------------------------------------------------------------- */
+
+@keyframes mushi-spotlight {
+  0%   { outline-color: transparent; outline-offset: 8px; }
+  12%  { outline-color: var(--color-brand); outline-offset: 4px; }
+  75%  { outline-color: var(--color-brand); outline-offset: 4px; }
+  100% { outline-color: transparent; outline-offset: 4px; }
+}
+
+[data-dav-spotlight="active"] {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 4px;
+  border-radius: 6px;
+  animation: mushi-spotlight 1800ms var(--ease-out-expo) forwards;
+  /* Layer above surrounding content so the outline isn't clipped. */
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-dav-spotlight="active"] {
+    animation: none;
+    outline: 2px solid var(--color-brand);
+    outline-offset: 4px;
+  }
+}
+
+/* Declared as Tailwind `@utility` (not plain classes) so variant prefixes —
+ * notably `motion-safe:` — compile. A bare `.animate-mushi-*` selector is
+ * invisible to Tailwind v4, so `motion-safe:animate-mushi-fade-in` (used by
+ * MetricStrip's stagger and ~10 other components) produced NO rule and the
+ * animation silently never ran. `@utility` keeps the bare class working and
+ * makes every variant (motion-safe, hover, dark, …) resolve. */
+@utility animate-mushi-fade-in   { animation: mushi-fade-in 160ms var(--ease-out-expo) both; }
+@utility animate-mushi-modal-in  { animation: mushi-modal-in 220ms var(--ease-out-expo) both; }
+@utility animate-mushi-toast-in  { animation: mushi-toast-in 180ms var(--ease-out-expo) both; }
+@utility animate-mushi-toast-out { animation: mushi-toast-out 140ms var(--ease-out-expo) both; }
+@utility animate-mushi-toast-progress { animation: mushi-toast-progress linear forwards; }
+@utility animate-mushi-success-pulse  { animation: mushi-success-pulse 600ms var(--ease-out-expo) both; }
+@utility animate-mushi-confetti-fall  { animation: mushi-confetti-fall 1400ms cubic-bezier(.18,.78,.42,1) both; }
+
+/* ---------------------------------------------------------------------------
+   FLOW-CANVAS MOTION (PDCA loop + FixAttemptFlow)
+   Animations used inside the React Flow canvases. Kept here (not inline)
+   so one @media (prefers-reduced-motion) clause at the bottom of the file
+   can disable them all. Count-pop highlights a freshly-incremented counter;
+   celebrate-burst is fired once when a bottleneck clears; drawer-in is the
+   side-sheet slide-in; dot-travel drives the animated dots along edges.
+--------------------------------------------------------------------------- */
+
+@keyframes mushi-count-pop {
+  0%   { transform: scale(1); color: var(--color-fg); }
+  40%  { transform: scale(1.25); color: var(--color-brand); }
+  100% { transform: scale(1); }
+}
+@utility animate-mushi-count-pop { animation: mushi-count-pop 420ms var(--ease-out-expo) both; }
+
+@keyframes mushi-celebrate-burst {
+  0%   { opacity: 0; transform: scale(0.6); }
+  30%  { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.8); }
+}
+.mushi-celebrate-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 2px solid var(--color-ok);
+  pointer-events: none;
+  animation: mushi-celebrate-burst 900ms var(--ease-out-expo) both;
+}
+
+@keyframes mushi-drawer-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@utility animate-mushi-drawer-in { animation: mushi-drawer-in 220ms var(--ease-out-expo) both; }
+
+@keyframes mushi-drawer-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@utility animate-mushi-drawer-backdrop-in { animation: mushi-drawer-backdrop-in 160ms var(--ease-out-expo) both; }
+
+/* Traveling dots along an edge. Each dot gets its own animation-delay so
+   the pulse reads as a moving caravan rather than a simultaneous blink.
+   The SVG path length is normalised to 1 via pathLength="1" at the
+   consumer site so stroke-dashoffset produces the "cursor" effect. */
+@keyframes mushi-dot-travel {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* Running-node glow — applied to a node when it's the currently-executing
+   stage (e.g. a dispatch is in flight on Do). Enhanced to be more visible. */
+@keyframes mushi-running-glow {
+  0%   { box-shadow: 0 0 0 0   color-mix(in oklch, var(--color-brand) 55%, transparent),
+                     0 0 12px 0 color-mix(in oklch, var(--color-brand) 20%, transparent); }
+  50%  { box-shadow: 0 0 0 5px color-mix(in oklch, var(--color-brand) 20%, transparent),
+                     0 0 20px 4px color-mix(in oklch, var(--color-brand) 12%, transparent); }
+  100% { box-shadow: 0 0 0 0   color-mix(in oklch, var(--color-brand) 55%, transparent),
+                     0 0 12px 0 color-mix(in oklch, var(--color-brand) 20%, transparent); }
+}
+.mushi-running-glow { animation: mushi-running-glow 1.6s ease-in-out infinite; }
+
+/* Focus-ring blink — applied to the currently-focused PDCA node so it
+   catches the eye without being distracting on idle stages. */
+@keyframes mushi-node-focus-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+.mushi-focus-blink { animation: mushi-node-focus-pulse 2.2s ease-in-out infinite; }
+
+/* Edge hover flash — used by PdcaGradientEdge when the mouse enters. */
+@keyframes mushi-edge-hover-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Node click press — one-shot scale dip, applied via JS class toggle. */
+@keyframes mushi-node-press {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+.mushi-node-press { animation: mushi-node-press 220ms var(--ease-out-expo) both; }
+
+/* React Flow v12 sets `pointer-events: none` on `.react-flow__node` when
+   `nodesDraggable && nodesConnectable && selectable` are all false. Our
+   custom nodes host real <button>/<a> children that MUST stay clickable
+   (they open the stage drawer / navigate to stage pages). Opt back in
+   globally so every custom node in the app inherits interactivity — no
+   per-node Tailwind class to forget. Panels (legend, controls, activity
+   log) also need this since they're rendered above `.react-flow__pane`. */
+.react-flow__node { pointer-events: auto !important; }
+
+/* Shared chrome for narrative flow canvases (PageHero lane, dashboard PDCA). */
+.flow-canvas-chrome {
+  position: relative;
+  isolation: isolate;
+  z-index: 0;
+  border: 1px solid var(--color-edge-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.flow-canvas-chrome--hero {
+  border-color: color-mix(in oklch, var(--color-edge) 35%, transparent);
+  background: var(--color-surface-raised);
+  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--color-fg) 4%, transparent);
+}
+
+/* Hero instrument strip — fused zones, neutral surfaces, accent bar only */
+.hero-flow-lane .react-flow__node {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+.hero-flow-lane .react-flow__node > div {
+  overflow: visible !important;
+}
+
+.hero-node-shell {
+  background: var(--color-surface-raised);
+  border: 1px solid color-mix(in oklch, var(--color-edge) 40%, transparent);
+  border-radius: var(--radius-md);
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--color-fg) 5%, transparent);
+  outline: none;
+}
+
+.hero-node-shell--hover {
+  background: var(--color-surface-raised);
+  border-color: color-mix(in oklch, var(--hero-accent, var(--color-brand)) 38%, var(--color-edge));
+  box-shadow:
+    0 6px 18px color-mix(in oklch, var(--color-fg) 9%, transparent),
+    0 0 0 1px color-mix(in oklch, var(--hero-accent, var(--color-brand)) 18%, transparent);
+  transform: translateY(-2px);
+}
+
+.hero-node-shell--glow-up {
+  animation: hero-node-glow-up 520ms var(--ease-out-expo) both;
+}
+
+@keyframes hero-node-glow-up {
+  0% {
+    box-shadow:
+      inset 0 0 0 0 color-mix(in oklch, var(--hero-accent, var(--color-brand)) 0%, transparent),
+      0 0 0 0 color-mix(in oklch, var(--hero-accent, var(--color-brand)) 0%, transparent);
+  }
+  45% {
+    box-shadow:
+      inset 0 0 0 2px color-mix(in oklch, var(--hero-accent, var(--color-brand)) 45%, transparent),
+      0 0 18px 2px color-mix(in oklch, var(--hero-accent, var(--color-brand)) 18%, transparent);
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+
+.hero-node-shell--focus {
+  box-shadow: inset 0 0 0 2px color-mix(in oklch, var(--color-brand) 35%, transparent);
+}
+
+.hero-node-shell--expanded {
+  background: var(--color-surface-overlay);
+}
+
+.hero-node-shell--active {
+  background: var(--color-surface-overlay);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--color-brand) 30%, transparent),
+    0 2px 12px color-mix(in oklch, var(--color-brand) 8%, transparent);
+}
+
+.hero-node-shell--celebrate {
+  animation: hero-celebrate-ring 950ms var(--ease-out-expo) both;
+}
+
+.hero-node-severity-warn .hero-node-accent {
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--color-warn) 25%, transparent);
+}
+
+.hero-node-severity-crit .hero-node-accent {
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--color-danger) 30%, transparent);
+}
+
+.hero-snapshot-shell--warn {
+  border-top: 2px solid color-mix(in oklch, var(--color-warn) 45%, transparent);
+}
+
+.hero-snapshot-shell--crit {
+  border-top: 2px solid color-mix(in oklch, var(--color-danger) 50%, transparent);
+}
+
+.hero-proof-link:hover {
+  border-color: color-mix(in oklch, var(--color-ok) 55%, transparent);
+  background: color-mix(in oklch, var(--color-ok-muted) 60%, var(--color-surface-overlay));
+}
+
+.hero-cta-primary {
+  display: inline-flex;
+  flex-shrink: 0;
+  min-height: 1.75rem;
+  max-width: 100%;
+  overflow: visible;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.hero-cta-primary--full {
+  display: flex;
+  width: 100%;
+}
+
+.hero-cta-primary:hover {
+  filter: brightness(1.04);
+}
+
+.hero-cta-primary:active {
+  transform: scale(0.98);
+}
+
+@keyframes hero-count-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+@keyframes hero-celebrate-ring {
+  0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-ok) 45%, transparent); }
+  70% { box-shadow: 0 0 0 6px color-mix(in oklch, var(--color-ok) 0%, transparent); }
+  100% { box-shadow: none; }
+}
+
+@keyframes hero-edge-shimmer {
+  0%, 100% { opacity: 0.78; }
+  50% { opacity: 1; }
+}
+
+.hero-edge-refresh-pulse {
+  animation: hero-edge-shimmer 320ms ease-out;
+}
+
+.hero-count-pop-animate {
+  animation: hero-count-pop 480ms var(--ease-out-expo);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-node-shell--hover,
+  .hero-node-shell--celebrate,
+  .hero-node-shell--glow-up,
+  .hero-edge-refresh-pulse,
+  .hero-count-pop-animate {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+.flow-canvas-chrome--hero .react-flow__renderer,
+.flow-canvas-chrome--hero .react-flow__edges,
+.flow-canvas-chrome--hero .react-flow__edge-path {
+  overflow: visible;
+}
+.flow-canvas-chrome .react-flow {
+  background: transparent !important;
+}
+/* Dashboard PDCA: keep loop-back markers inside the chrome box. */
+.flow-canvas-chrome--pdca .react-flow__renderer,
+.flow-canvas-chrome--pdca .react-flow__edges,
+.flow-canvas-chrome--pdca .react-flow__edge-path {
+  overflow: visible;
+}
+
+/* Connect hub stepper — tight canvas, no ghost pane / attribution chrome. */
+.connect-step-flow {
+  isolation: isolate;
+  max-width: 100%;
+}
+.connect-step-flow__scroll {
+  scrollbar-gutter: stable;
+}
+.connect-step-flow .react-flow,
+.connect-step-flow__graph {
+  background: transparent !important;
+}
+.connect-step-flow .react-flow__viewport,
+.connect-step-flow .react-flow__renderer {
+  overflow: visible !important;
+}
+.connect-step-flow .react-flow__pane {
+  cursor: default !important;
+  pointer-events: none !important;
+}
+.connect-step-flow .react-flow__node {
+  pointer-events: all !important;
+}
+.connect-step-flow .react-flow__panel,
+.connect-step-flow .react-flow__attribution,
+.connect-step-flow .react-flow__controls {
+  display: none !important;
+}
+
+/* Hidden Mushi dogfood launcher — suppress empty bottom-right shell. */
+[data-mushi-widget-root][data-mushi-trigger='hidden'],
+[data-mushi-widget-root][data-mushi-trigger='hidden']:empty {
+  pointer-events: none !important;
+}
+[data-mushi-widget-root][data-mushi-trigger='hidden']:not(:has([data-mushi-launcher]:not([hidden]))) {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+[data-mushi-launcher][hidden] {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+   RESPONSIVE TABLE
+   Chrome for `ResponsiveTable`: density-driven row padding, edge fade masks
+   when the table horizontally overflows, and a sticky-first-column helper.
+--------------------------------------------------------------------------- */
+
+.responsive-table {
+  --row-py: var(--row-py-comfy);
+  position: relative;
+}
+.responsive-table[data-density="compact"] {
+  --row-py: var(--row-py-compact);
+}
+.responsive-table table td,
+.responsive-table table th {
+  padding-top: var(--row-py);
+  padding-bottom: var(--row-py);
+}
+.responsive-table-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.responsive-table::before,
+.responsive-table::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 8;
+  width: 1.75rem;
+  opacity: 0;
+  transition: opacity var(--duration-fast, 150ms) ease;
+}
+.responsive-table::before {
+  left: 0;
+  background: linear-gradient(to right, var(--color-surface-raised), transparent);
+}
+.responsive-table::after {
+  right: 0;
+  background: linear-gradient(to left, var(--color-surface-raised), transparent);
+}
+.responsive-table[data-overflow-left="true"]::before,
+.responsive-table[data-overflow-right="true"]::after {
+  opacity: 1;
+}
+
+.responsive-table[data-sticky-first="true"] table thead th:first-child,
+.responsive-table[data-sticky-first="true"] table tbody td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--color-surface-raised);
+  z-index: 1;
+}
+.responsive-table[data-sticky-first="true"] table thead th:first-child {
+  z-index: 2;
+}
+
+/* Sticky lead columns — pin identity columns (summary / report) during
+   horizontal scroll. Offsets come from --sticky-col-* on the wrapper. */
+.responsive-table[data-sticky-lead="3"] table thead th:nth-child(1),
+.responsive-table[data-sticky-lead="3"] table tbody td:nth-child(1) {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+.responsive-table[data-sticky-lead="3"] table thead th:nth-child(2),
+.responsive-table[data-sticky-lead="3"] table tbody td:nth-child(2) {
+  position: sticky;
+  left: var(--sticky-col-2-left, 4px);
+  z-index: 2;
+}
+.responsive-table[data-sticky-lead="3"] table thead th:nth-child(3),
+.responsive-table[data-sticky-lead="3"] table tbody td:nth-child(3) {
+  position: sticky;
+  left: var(--sticky-col-3-left, 2.25rem);
+  z-index: 2;
+  min-width: 14rem;
+  box-shadow: none;
+}
+.responsive-table[data-sticky-lead="3"] table thead th:nth-child(-n+3) {
+  background: var(--color-surface-raised);
+  z-index: 3;
+}
+.responsive-table[data-sticky-lead="3"] table tbody td:nth-child(-n+3) {
+  background-color: inherit;
+}
+.responsive-table[data-overflow-left="true"][data-sticky-lead="3"] table thead th:nth-child(3),
+.responsive-table[data-overflow-left="true"][data-sticky-lead="3"] table tbody td:nth-child(3) {
+  box-shadow: 6px 0 10px -4px color-mix(in oklch, var(--color-fg) 18%, transparent);
+}
+
+/* Row kebab — visible on touch; hover-reveal on fine pointers (NN/g #7). */
+@media (hover: hover) and (pointer: fine) {
+  .row-kebab-reveal {
+    opacity: 0;
+  }
+  tr:hover .row-kebab-reveal,
+  tr:focus-within .row-kebab-reveal {
+    opacity: 1;
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  .row-kebab-reveal {
+    opacity: 0.92;
+  }
+}
+.row-kebab-reveal {
+  transition: opacity var(--duration-fast, 150ms) ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-kebab-reveal {
+    transition: none;
+  }
+}
+
+/* Generic row action reveal — touch-visible, hover/focus on fine pointers (Wave 5). */
+@media (hover: hover) and (pointer: fine) {
+  .action-reveal {
+    opacity: 0;
+  }
+  .group:hover .action-reveal,
+  .group:focus-within .action-reveal,
+  :hover > .action-reveal,
+  :focus-within > .action-reveal {
+    opacity: 1;
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  .action-reveal {
+    opacity: 0.92;
+  }
+}
+.action-reveal {
+  transition: opacity var(--duration-fast, 150ms) ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .action-reveal {
+    transition: none;
+  }
+}
+
+@utility text-link {
+  color: var(--color-fg-secondary);
+  transition: color var(--duration-fast, 150ms) ease;
+  &:hover {
+    color: var(--color-brand);
+  }
+}
+
+@utility text-link-emphasis {
+  color: var(--color-brand);
+  font-weight: 500;
+  transition: color var(--duration-fast, 150ms) ease;
+  &:hover {
+    color: color-mix(in oklch, var(--color-brand) 85%, white);
+  }
+}
+
+/* Reports triage — `<td>` children can't use flex `h-full` reliably. Stretch
+   the cell with `height: 1px`, then absolutely position slots: metrics at
+   vertical center, recency bar at the row bottom. */
+.reports-triage-table tbody td.reports-metric-cell,
+.reports-triage-table tbody td.reports-action-cell {
+  position: relative;
+  height: 1px;
+  vertical-align: top;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.reports-triage-table tbody td.reports-metric-cell .reports-metric-cell-slot {
+  position: absolute;
+  top: var(--row-py);
+  right: 0.25rem;
+  bottom: var(--row-py);
+  left: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  pointer-events: none;
+}
+.reports-triage-table tbody td.reports-metric-cell .reports-metric-cell-slot > * {
+  pointer-events: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.reports-triage-table tbody td.reports-metric-cell--confidence .reports-metric-cell-slot--confidence {
+  align-items: center;
+  justify-content: center;
+}
+.reports-triage-table tbody td.reports-metric-cell--confidence .reports-metric-cell-slot--confidence > * {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.reports-triage-table tbody td.reports-action-cell .reports-action-stack {
+  position: absolute;
+  top: var(--row-py);
+  right: 0.25rem;
+  bottom: var(--row-py);
+  left: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.125rem;
+  min-width: 0;
+  pointer-events: none;
+}
+.reports-triage-table tbody td.reports-action-cell .reports-action-stack > * {
+  pointer-events: auto;
+}
+.reports-triage-table tbody td.reports-action-cell .reports-action-top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.125rem;
+  flex-shrink: 0;
+}
+.reports-triage-table tbody td.reports-action-cell .reports-action-age {
+  position: relative;
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 9.75rem;
+  margin-left: auto;
+  pointer-events: none;
+}
+.reports-triage-table tbody td.reports-action-cell .reports-action-age > * {
+  pointer-events: auto;
+}
+
+/* Inventory / route paths in triage rows — left-rail monospace, not pill chips. */
+.report-path-code {
+  display: inline-block;
+  vertical-align: baseline;
+  max-width: 100%;
+  margin: 0;
+  padding: 0 0.125rem 0 0.4375rem;
+  border: 0;
+  border-left: 2px solid color-mix(in oklch, var(--color-info) 58%, var(--color-edge));
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: color-mix(in oklch, var(--color-info-foreground) 92%, var(--color-fg-secondary));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  letter-spacing: 0.015em;
+  overflow-wrap: anywhere;
+}
+.report-path-code--block {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.report-path-code--inline {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html[data-theme="light"] .report-path-code {
+  border-left-color: color-mix(in oklch, var(--color-info) 72%, var(--color-edge));
+  color: color-mix(in oklch, var(--color-info) 78%, #1a3d52);
+}
+
+
+/* Section + page rhythm helpers — keep vertical spacing consistent across
+   pages. The audit found rhythm drifted: some pages used `mb-3`, others
+   `mb-4`, others bare `space-y-2`. Standardise on these two utilities.
+
+   Density-aware: scales with `--ui-pad` so compact mode tightens
+   between-section gaps along with nav-link padding, giving the user a
+   single coherent rhythm change across the whole shell when they
+   toggle density. */
+.page-stack > * + * { margin-top: calc(1rem * var(--ui-pad, 1)); }     /* between page sections */
+.section-stack > * + * { margin-top: calc(0.625rem * var(--ui-pad, 1)); } /* inside a card section */
+
+/* ---------------------------------------------------------------------------
+   COMMAND PALETTE (cmdk)
+   Item-level styles — colours, hover, selected. cmdk drives selection
+   via data-selected on the active Command.Item; we wire it to the brand
+   surface tint so arrow-key movement is visible at a glance.
+--------------------------------------------------------------------------- */
+
+.cmdk-list { scroll-padding-block: 0.5rem; }
+
+.cmdk-group [cmdk-group-heading] {
+  padding: 0.5rem 0.75rem 0.25rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-fg-faint);
+}
+
+.cmdk-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: calc(0.375rem * var(--ui-pad, 1)) 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-fg-secondary);
+  cursor: pointer;
+  border-radius: 0.125rem;
+  margin: 0 0.25rem;
+}
+.cmdk-item[data-selected="true"] {
+  background: color-mix(in oklch, var(--color-brand) 15%, transparent);
+  color: var(--color-fg);
+}
+.cmdk-item[data-disabled="true"] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------------------
+   ASK MUSHI — markdown prose
+   Streamdown renders the assistant's reply as semantic HTML (p, ul, code,
+   pre, table, blockquote). Without explicit styles all of that inherits
+   the bare browser defaults and clashes with the dense admin chrome —
+   wide gaps, full-width tables, default code colors. This block tunes
+   only what's needed to make a chat bubble read cleanly using the same
+   tokens the rest of the admin uses (no separate prose theme dep).
+--------------------------------------------------------------------------- */
+
+.prose-mushi { color: var(--color-fg); font-size: 0.75rem; line-height: 1.55; }
+.prose-mushi > * + * { margin-top: 0.5rem; }
+.prose-mushi p { margin: 0; }
+.prose-mushi strong { color: var(--color-fg); font-weight: 600; }
+.prose-mushi em { color: var(--color-fg-secondary); font-style: italic; }
+.prose-mushi a {
+  color: var(--color-brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in oklch, var(--color-brand) 50%, transparent);
+}
+.prose-mushi a:hover { color: var(--color-brand-hover); }
+.prose-mushi ul,
+.prose-mushi ol {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--color-fg-secondary);
+}
+.prose-mushi ul { list-style: disc; }
+.prose-mushi ol { list-style: decimal; }
+.prose-mushi li + li { margin-top: 0.15rem; }
+.prose-mushi code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.7rem;
+  background: color-mix(in oklch, var(--color-surface-overlay) 70%, transparent);
+  border: 1px solid var(--color-edge-subtle);
+  border-radius: 0.125rem;
+  padding: 0 0.25rem;
+  color: var(--color-fg);
+}
+.prose-mushi pre {
+  margin: 0;
+  padding: 0.5rem 0.625rem;
+  background: var(--color-surface-overlay);
+  border: 1px solid var(--color-edge-subtle);
+  border-radius: 0.25rem;
+  overflow-x: auto;
+  font-size: 0.7rem;
+}
+.prose-mushi pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+}
+.prose-mushi blockquote {
+  margin: 0;
+  padding: 0.25rem 0.625rem;
+  border-left: 2px solid var(--color-edge);
+  color: var(--color-fg-muted);
+  background: color-mix(in oklch, var(--color-surface-overlay) 30%, transparent);
+  border-radius: 0 0.125rem 0.125rem 0;
+}
+.prose-mushi table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.7rem;
+  border: 1px solid var(--color-edge-subtle);
+  border-radius: 0.125rem;
+  overflow: hidden;
+}
+.prose-mushi th,
+.prose-mushi td {
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--color-edge-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+.prose-mushi th {
+  background: color-mix(in oklch, var(--color-surface-raised) 60%, transparent);
+  color: var(--color-fg);
+  font-weight: 600;
+}
+.prose-mushi tr:last-child td { border-bottom: 0; }
+.prose-mushi h1,
+.prose-mushi h2,
+.prose-mushi h3,
+.prose-mushi h4 {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-fg);
+  line-height: 1.25;
+}
+.prose-mushi h1 { font-size: 0.875rem; }
+.prose-mushi h2 { font-size: 0.8125rem; }
+.prose-mushi h3 { font-size: 0.78125rem; }
+.prose-mushi h4 { font-size: 0.75rem; color: var(--color-fg-secondary); }
+.prose-mushi hr {
+  border: 0;
+  border-top: 1px solid var(--color-edge-subtle);
+  margin: 0.5rem 0;
+}
+
+/* Atlas Ask — roomier typography + clearer hierarchy for long LLM answers */
+.prose-mushi.prose-mushi-chat,
+.prose-mushi-chat {
+  color: var(--color-fg);
+  font-size: 0.8125rem;
+  line-height: 1.62;
+  max-width: none;
+}
+.prose-mushi-chat > * + * { margin-top: 0.625rem; }
+.prose-mushi-chat p {
+  margin: 0;
+  color: var(--color-fg-secondary);
+}
+.prose-mushi-chat p:first-child {
+  color: var(--color-fg);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+.prose-mushi-chat strong {
+  color: var(--color-fg);
+  font-weight: 650;
+}
+.prose-mushi-chat em {
+  color: var(--color-fg-muted);
+}
+.prose-mushi-chat h1 {
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--color-edge-subtle);
+}
+.prose-mushi-chat h2 {
+  font-size: 0.9375rem;
+  font-weight: 650;
+  letter-spacing: -0.012em;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid color-mix(in oklch, var(--color-edge-subtle) 80%, transparent);
+  margin-top: 0.75rem;
+}
+.prose-mushi-chat h2:first-child,
+.prose-mushi-chat h1:first-child { margin-top: 0; }
+.prose-mushi-chat h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-brand);
+  margin-top: 0.5rem;
+}
+.prose-mushi-chat h4 {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-fg);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, var(--color-brand) 35%, transparent);
+  text-underline-offset: 3px;
+}
+.prose-mushi-chat ul,
+.prose-mushi-chat ol {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--color-fg-secondary);
+}
+.prose-mushi-chat li + li { margin-top: 0.35rem; }
+.prose-mushi-chat li::marker {
+  color: var(--color-brand);
+  font-weight: 600;
+}
+.prose-mushi-chat li > p { margin-top: 0.15rem; }
+.prose-mushi-chat li > strong:first-child {
+  color: var(--color-fg);
+  font-size: 0.84375rem;
+}
+.prose-mushi-chat code {
+  font-size: 0.75rem;
+  background: color-mix(in oklch, var(--color-info) 8%, var(--color-surface-overlay));
+  border-color: color-mix(in oklch, var(--color-info) 22%, var(--color-edge-subtle));
+  color: var(--color-info);
+}
+.prose-mushi-chat pre {
+  margin-top: 0.35rem;
+  padding: 0.625rem 0.75rem;
+  background: var(--color-surface-root);
+  border-color: var(--color-edge);
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.prose-mushi-chat pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+}
+.prose-mushi-chat blockquote {
+  padding: 0.35rem 0.75rem;
+  border-left-width: 3px;
+  border-left-color: var(--color-brand);
+  background: color-mix(in oklch, var(--color-brand) 6%, var(--color-surface-overlay));
+  color: var(--color-fg-secondary);
+  font-size: 0.8125rem;
+}
+.prose-mushi-chat a {
+  font-weight: 500;
+  text-decoration-thickness: 1px;
+}
+.prose-mushi-chat hr {
+  margin: 0.75rem 0;
+  border-top-color: color-mix(in oklch, var(--color-edge) 70%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+   REDUCED MOTION
+   Disable transitions and animations for users who prefer reduced motion.
+--------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   PRINT (compliance PDF export, audit log printouts)
+   Strips chrome (sidebar, headers, action buttons) and forces a printable
+   palette. Pages opt out of printing via the .no-print utility on transient
+   elements (banners, toasts, tooltips). Compliance print hygiene.
+--------------------------------------------------------------------------- */
+
+/* ---------------------------------------------------------------------------
+   CODE SURFACES — install snippets, env values, SDK diagnostics
+--------------------------------------------------------------------------- */
+
+.mushi-code-block {
+  background: var(--color-code-surface);
+  border-color: var(--color-code-surface-border);
+  box-shadow: inset 0 1px 0 color-mix(in oklch, white 8%, transparent);
+}
+
+.mushi-code-toolbar {
+  background: color-mix(in oklch, var(--color-code-surface) 82%, var(--color-surface-overlay));
+  border-color: var(--color-code-surface-border);
+}
+
+.mushi-code-glyph {
+  color: color-mix(in oklch, var(--color-brand) 78%, var(--color-code-surface-fg-muted));
+}
+
+.mushi-code-lang {
+  color: var(--color-code-surface-fg-muted);
+  background: color-mix(in oklch, var(--color-code-surface) 70%, var(--color-surface-overlay));
+  border-color: var(--color-code-surface-border);
+}
+
+.mushi-code-body {
+  color: var(--color-code-surface-fg);
+  font-size: 0.8125rem;
+  line-height: 1.625;
+  tab-size: 2;
+}
+
+.mushi-code-plain { color: var(--color-code-surface-fg-muted); }
+.mushi-code-kw { color: var(--color-code-kw); font-weight: 600; }
+.mushi-code-str { color: var(--color-code-str); }
+.mushi-code-cmt { color: var(--color-code-surface-fg-muted); font-style: italic; }
+.mushi-code-cmd { color: var(--color-code-cmd); font-weight: 600; }
+.mushi-code-type { color: var(--color-code-type); }
+.mushi-code-tag { color: var(--color-code-tag); }
+.mushi-code-attr { color: var(--color-code-attr); }
+.mushi-code-punc { color: var(--color-code-surface-fg-muted); }
+
+.mushi-code-toolbar button {
+  color: var(--color-code-surface-fg-muted);
+}
+.mushi-code-toolbar button:hover {
+  color: var(--color-code-surface-fg);
+  background: color-mix(in oklch, white 10%, transparent);
+}
+.mushi-code-toolbar button.text-ok {
+  color: var(--color-ok);
+}
+
+.mushi-code-inline {
+  display: inline-block;
+  vertical-align: middle;
+  max-width: 100%;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-sm, 0.25rem);
+  border: 1px solid var(--color-code-surface-border);
+  background: var(--color-code-surface);
+  color: var(--color-code-surface-fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92em;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+
+@media print {
+  html,
+  body,
+  #root {
+    height: auto;
+    overflow: visible;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  /* Hide app shell — sidebar, top bar, modal portals, toasts. */
+  aside,
+  nav,
+  header[role="banner"],
+  .no-print,
+  [data-print="hide"] {
+    display: none !important;
+  }
+  /* Avoid splitting cards across page breaks where possible. */
+  .card,
+  table {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* Make links printable as URLs. */
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    color: #555;
+  }
+}

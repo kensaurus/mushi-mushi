@@ -93,8 +93,8 @@ function Action({ href, label, external, kind }: ActionProps & { kind: 'primary'
     'inline-flex items-center gap-2 rounded-md px-4 py-2.5 font-mono text-3xs font-semibold uppercase tracking-[0.18em] transition motion-safe:hover:-translate-y-0.5'
   const tone =
     kind === 'primary'
-      ? 'bg-[var(--mushi-ink)] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]'
-      : 'border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_82%,white)] text-[var(--mushi-ink)] hover:border-[var(--mushi-ink)] hover:bg-[color-mix(in_oklch,var(--mushi-paper)_70%,white)]'
+      ? 'bg-editorial-ink text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] hover:bg-[color-mix(in_oklch,var(--color-editorial-ink)_82%,var(--color-editorial-vermillion))]'
+      : 'border border-editorial-rule bg-editorial-paper text-editorial-ink hover:border-editorial-ink hover:bg-editorial-paper-wash'
   return (
     <a
       href={resolveHref(href, external)}
@@ -121,12 +121,12 @@ export function EditorialErrorState({
       <article className="mx-auto w-full max-w-[38rem]">
         <p
           aria-hidden="true"
-          className="mb-5 inline-flex items-center gap-2.5 font-mono text-3xs font-semibold uppercase tracking-[0.22em] text-[var(--mushi-ink-muted)]"
+          className="mb-5 inline-flex items-center gap-2.5 font-mono text-3xs font-semibold uppercase tracking-[0.22em] text-editorial-ink-muted"
         >
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--mushi-vermillion)]" />
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-editorial-vermillion" />
           {eyebrow}
         </p>
-        <h1 className="font-serif text-[clamp(2rem,4.5vw,3rem)] font-semibold leading-[1.05] tracking-[-0.03em] text-[var(--mushi-ink)] [&_em]:not-italic [&_em]:font-bold [&_em]:text-[var(--mushi-vermillion)]">
+        <h1 className="font-serif text-[clamp(2rem,4.5vw,3rem)] font-semibold leading-[1.05] tracking-[-0.03em] text-editorial-ink [&_em]:not-italic [&_em]:font-bold [&_em]:text-editorial-vermillion">
           {headline}
         </h1>
         <div
@@ -134,14 +134,14 @@ export function EditorialErrorState({
           className="my-6 h-px"
           style={{
             background:
-              'linear-gradient(90deg, var(--mushi-vermillion) 0, var(--mushi-vermillion) 3rem, var(--mushi-rule) 3rem)',
+              'linear-gradient(90deg, var(--color-editorial-vermillion) 0, var(--color-editorial-vermillion) 3rem, var(--color-editorial-rule) 3rem)',
           }}
         />
-        <p className="max-w-[54ch] text-[1.0625rem] leading-relaxed text-[var(--mushi-ink-muted)]">
+        <p className="max-w-[54ch] text-[1.0625rem] leading-relaxed text-editorial-ink-muted">
           {lead}
         </p>
         {detail ? (
-          <div className="mt-3 font-mono text-xs text-[var(--mushi-ink-muted)]">
+          <div className="mt-3 font-mono text-xs text-editorial-ink-muted">
             {detail}
           </div>
         ) : null}

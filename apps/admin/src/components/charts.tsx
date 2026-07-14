@@ -37,7 +37,7 @@ import {
   resolveChartMax,
   shortDay,
 } from './charts/chartAxis'
-import { CHIP_TONE } from '../lib/chipTone'
+import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
 export { shortDay, formatChartCount, formatChartUsd } from './charts/chartAxis'
 export { ChartFrame } from './charts/ChartFrame'
@@ -919,7 +919,7 @@ function SeverityBarColumn({
 export function HealthPill({ status }: { status: string | null | undefined }) {
   if (status === 'ok')
     return (
-      <Badge className="bg-ok/15 text-ok border border-ok/30">Healthy</Badge>
+      <Badge className={CHIP_TONE.okSubtle}>Healthy</Badge>
     )
   if (status === 'degraded')
     return (
@@ -929,12 +929,12 @@ export function HealthPill({ status }: { status: string | null | undefined }) {
     )
   if (status === 'down')
     return (
-      <Badge className={`${CHIP_TONE.dangerSubtle} border border-danger/30`}>
+      <Badge className={CHIP_TONE.dangerSubtle}>
         Down
       </Badge>
     )
   return (
-    <Badge className="bg-fg-faint/15 text-fg-muted border border-edge-subtle">
+    <Badge className={CHIP_TONE.neutral}>
       Unknown
     </Badge>
   )
@@ -942,27 +942,20 @@ export function HealthPill({ status }: { status: string | null | undefined }) {
 
 /* ── StatusPill ─────────────────────────────────────────────────────────── */
 
-const STATUS_CLASS: Record<string, string> = {
-  new: CHIP_TONE.warnSubtle + ' border-warn/30',
-  pending: CHIP_TONE.warnSubtle + ' border-warn/30',
-  queued: 'bg-info/15 text-info border-info/30',
-  running: 'bg-info/15 text-info border-info/30',
-  classified: 'bg-ok/15 text-ok border-ok/30',
-  completed: 'bg-ok/15 text-ok border-ok/30',
-  fixing: 'bg-brand/15 text-brand border-brand/30',
-  fixed: 'bg-info/15 text-info border-info/30',
-  failed: CHIP_TONE.dangerSubtle + ' border-danger/30',
-  dead_letter: CHIP_TONE.dangerSubtle + ' border-danger/30',
-  rejected: CHIP_TONE.dangerSubtle + ' border-danger/30',
-  dismissed: 'bg-fg-faint/15 text-fg-muted border-edge-subtle',
+/** Pipeline statuses not covered by runStatusChipTone's lifecycle map. */
+const STATUS_CLASS_OVERRIDE: Record<string, string> = {
+  new: CHIP_TONE.warnSubtle,
+  classified: CHIP_TONE.okSubtle,
+  fixing: CHIP_TONE.brandSubtle,
+  fixed: CHIP_TONE.infoSubtle,
+  dismissed: CHIP_TONE.neutral,
 }
 
 export function StatusPill({ status }: { status: string | null | undefined }) {
   const cls =
-    STATUS_CLASS[status ?? ''] ??
-    'bg-fg-faint/15 text-fg-muted border-edge-subtle'
+    STATUS_CLASS_OVERRIDE[status ?? ''] ?? runStatusChipTone(status)
   return (
-    <Badge className={`border ${cls} text-3xs`}>{status ?? 'unknown'}</Badge>
+    <Badge className={`${cls} text-3xs`}>{status ?? 'unknown'}</Badge>
   )
 }
 

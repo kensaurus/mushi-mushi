@@ -5,6 +5,7 @@ import type { ExploreLayer, ExploreSearchHit } from './exploreTypes'
 import { ContainedBlock, InlineProof } from '../report-detail/ReportSurface'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { readVizToken } from '../../lib/vizTokens'
 
 interface Props {
   projectId: string
@@ -35,9 +36,9 @@ const EXAMPLE_QUERIES = [
 function SimilarityBar({ score }: { score: number }) {
   const pct = Math.round(score * 100)
   const color =
-    pct >= 70 ? 'oklch(0.70 0.18 145)' :
-    pct >= 50 ? 'oklch(0.70 0.18 80)' :
-                'oklch(0.60 0.14 30)'
+    pct >= 70 ? readVizToken('viz-score-ok') :
+    pct >= 50 ? readVizToken('viz-score-warn') :
+                readVizToken('viz-score-danger')
   return (
     <div className="flex items-center gap-1.5 shrink-0">
       <div className="w-12 h-1.5 rounded-full bg-surface-overlay overflow-hidden">

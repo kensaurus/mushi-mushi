@@ -80,7 +80,7 @@ export function CiStatusCell({ fix }: Props) {
           {Array.from({ length: CI_SEGMENTS }, (_, i) => (
             <span
               key={i}
-              className={`h-2 w-1.5 rounded-[1px] motion-safe:transition-colors ${segmentTone(phase, i < filled)}`}
+              className={`h-2 w-1.5 rounded-hairline motion-safe:transition-colors ${segmentTone(phase, i < filled)}`}
             />
           ))}
         </div>

@@ -15,6 +15,7 @@
 import { RelativeTime } from '../ui'
 import { ActionPill, InlineProof } from './ReportSurface'
 import type { ReportDetail, ReportFixAttempt } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   report: ReportDetail
@@ -22,10 +23,10 @@ interface Props {
 }
 
 const PR_STATE_TONE: Record<string, string> = {
-  merged: 'bg-ok/15 text-ok',
-  open: 'bg-brand/15 text-brand',
-  draft: 'bg-surface-overlay/60 text-fg-muted',
-  closed: 'bg-danger/15 text-danger',
+  merged: CHIP_TONE.okSubtle,
+  open: CHIP_TONE.brandSubtle,
+  draft: CHIP_TONE.neutral,
+  closed: CHIP_TONE.dangerSubtle,
 }
 
 function Chip({ tone, children }: { tone?: string; children: React.ReactNode }) {
@@ -96,7 +97,7 @@ export function BeforeAfterCard({ report, className = '' }: Props) {
             {report.severity && <Chip>severity: {report.severity}</Chip>}
             <Chip>{report.category}</Chip>
             {errorCount > 0 && (
-              <Chip tone="bg-danger/15 text-danger">
+              <Chip tone={CHIP_TONE.dangerSubtle}>
                 {errorCount} console error{errorCount === 1 ? '' : 's'}
               </Chip>
             )}
@@ -116,7 +117,7 @@ export function BeforeAfterCard({ report, className = '' }: Props) {
           <div className="flex items-center gap-2 flex-wrap">
             <Chip tone={PR_STATE_TONE[prState] ?? undefined}>PR {prState}</Chip>
             {ci && (
-              <Chip tone={ci === 'success' ? 'bg-ok/15 text-ok' : 'bg-danger/15 text-danger'}>
+              <Chip tone={ci === 'success' ? CHIP_TONE.okSubtle : CHIP_TONE.dangerSubtle}>
                 CI {ci.replace(/_/g, ' ')}
               </Chip>
             )}
@@ -124,8 +125,8 @@ export function BeforeAfterCard({ report, className = '' }: Props) {
               <Chip
                 tone={
                   judge.classification_agreed === false
-                    ? 'bg-danger/15 text-danger'
-                    : 'bg-ok/15 text-ok'
+                    ? CHIP_TONE.dangerSubtle
+                    : CHIP_TONE.okSubtle
                 }
               >
                 judge {(judge.judge_score * 100).toFixed(0)}%
