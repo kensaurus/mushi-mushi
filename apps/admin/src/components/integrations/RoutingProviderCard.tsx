@@ -15,6 +15,7 @@ import { IconPause, IconPlay, IconPencil, IconClose, IconExternalLink, IconAlert
 import { ServiceFavicon } from './ServiceFavicon'
 import { InlineProof } from '../report-detail/ReportSurface'
 import { PLATFORM_STATUS_MAP, type HealthRow, type RoutingIntegration, type RoutingProviderDef } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 /** Maps probe status to a left-border color class on the card. */
 function statusBorderClass(status: HealthRow['status'], isConnected: boolean): string {
@@ -96,7 +97,7 @@ export function RoutingProviderCard({
 
             {/* Down/degraded error banner */}
             {(isDown || isDegraded) && latestProbe?.message && (
-              <div className={`mt-1.5 flex items-start gap-1.5 rounded-sm px-2 py-1 text-2xs ${isDown ? 'bg-danger/8 border border-danger/20 text-danger' : 'bg-warn/8 border border-warn/20 text-warn'}`}>
+              <div className={`mt-1.5 flex items-start gap-1.5 rounded-sm px-2 py-1 text-2xs ${isDown ? CHIP_TONE.dangerSubtle : CHIP_TONE.warnSubtle}`}>
                 <IconAlertTriangle size={11} className="mt-0.5 shrink-0" />
                 <span className="leading-snug font-mono truncate">{latestProbe.message}</span>
               </div>

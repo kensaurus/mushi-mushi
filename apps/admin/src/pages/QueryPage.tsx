@@ -482,7 +482,7 @@ export function QueryPage() {
               size="sm"
               onClick={() => setQueryMode('nl')}
               aria-pressed={queryMode === 'nl'}
-              className={`px-3 py-1 rounded-[2px] text-2xs shadow-none hover:-translate-y-0 ${
+              className={`px-3 py-1 rounded-micro text-2xs shadow-none hover:-translate-y-0 ${
                 queryMode === 'nl'
                   ? ''
                   : 'border-0 bg-transparent hover:bg-surface-overlay/50'
@@ -495,7 +495,7 @@ export function QueryPage() {
               size="sm"
               onClick={() => { setQueryMode('raw'); setTimeout(() => rawTextareaRef.current?.focus(), 0) }}
               aria-pressed={queryMode === 'raw'}
-              className={`px-3 py-1 rounded-[2px] text-2xs shadow-none hover:-translate-y-0 ${
+              className={`px-3 py-1 rounded-micro text-2xs shadow-none hover:-translate-y-0 ${
                 queryMode === 'raw'
                   ? ''
                   : 'border-0 bg-transparent hover:bg-surface-overlay/50'
@@ -672,7 +672,7 @@ export function QueryPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 mb-0.5">
                           {run.mode === 'raw' && (
-                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-[3px] text-2xs font-mono font-medium ${CHIP_TONE.warnSubtle} border border-warn/20`}>SQL</span>
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-micro text-2xs font-mono font-medium ${CHIP_TONE.warnSubtle} border border-warn/20`}>SQL</span>
                           )}
                           <p className="text-sm text-fg font-medium break-words line-clamp-3">
                             {run.question}

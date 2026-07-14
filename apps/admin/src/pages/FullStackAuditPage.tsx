@@ -94,7 +94,7 @@ function OverallScorecard({ result }: { result: AuditResult }) {
     overall === 'fail'
       ? CHIP_TONE.dangerSubtle
       : overall === 'warn'
-        ? 'border-warn/40 bg-warn/10 text-warning-foreground'
+        ? 'border-warn/40 bg-warn-muted/50 text-warning-foreground border border-warn/25ing-foreground'
         : CHIP_TONE.okSubtle
   const overallLabel =
     overall === 'fail' ? 'Issues found' : overall === 'warn' ? 'Warnings' : 'All clear'
@@ -162,7 +162,7 @@ function FindingsList({ findings }: { findings: AuditFinding[] }) {
             <p className="mt-0.5 text-xs text-fg-secondary">{f.detail}</p>
           </div>
           {f.fix_available && (
-            <Badge className="shrink-0 bg-brand/10 text-brand">Fix available</Badge>
+            <Badge className="shrink-0 bg-brand/12 text-brand border border-brand/28">Fix available</Badge>
           )}
         </div>
       ))}

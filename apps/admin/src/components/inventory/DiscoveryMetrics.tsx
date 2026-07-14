@@ -39,7 +39,7 @@ const TONES: Record<
 > = {
   brand: {
     wrap: 'ring-1 ring-brand/25 bg-brand/[0.04]',
-    iconWrap: 'bg-brand/15 text-brand ring-1 ring-brand/30',
+    iconWrap: 'bg-brand/12 text-brand border border-brand/28 ring-1 ring-brand/30',
     value: 'text-brand',
     chip: 'text-brand',
   },

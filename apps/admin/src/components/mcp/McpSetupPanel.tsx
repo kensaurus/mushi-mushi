@@ -376,8 +376,8 @@ export function McpSetupPanel({
               data-testid="mcp-connection-result"
               className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-xs ${
                 connectionTestResult.ok
-                  ? 'border-ok/30 bg-ok/8 text-ok'
-                  : 'border-danger/30 bg-danger/8 text-danger-foreground'
+                  ? 'border-ok/30 bg-ok-muted/50 text-ok-foreground border border-ok/25'
+                  : 'border-danger/30 bg-danger-muted/50 text-danger-foreground border border-danger/25-foreground'
               }`}
             >
               <span className="shrink-0 text-sm leading-none mt-0.5" aria-hidden>
@@ -507,7 +507,7 @@ export function McpSetupPanel({
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-medium text-fg truncate">{p.name}</span>
                       {isActive && (
-                        <Badge className="bg-brand/15 text-brand border border-brand/20 text-2xs">active</Badge>
+                        <Badge className="bg-brand/12 text-brand border border-brand/28 text-2xs">active</Badge>
                       )}
                     </div>
                     <p className="text-2xs text-fg-faint font-mono truncate mt-0.5">{serverSlug}</p>

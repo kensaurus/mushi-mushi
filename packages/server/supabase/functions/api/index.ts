@@ -61,6 +61,7 @@ import { registerActivationRoutes } from './routes/activation.ts';
 import { registerSdkUpgradeRoutes } from './routes/sdk-upgrade.ts';
 import { registerBootstrapRoutes } from './routes/bootstrap.ts';
 import { registerIdentitySecretRoutes } from './routes/identity-secret.ts';
+import { registerSessionRoutes } from './routes/sessions.ts';
 
 ensureSentry('api');
 
@@ -570,6 +571,7 @@ registerSkillsRoutes(app);
 registerSdkUpgradeRoutes(app);
 registerBootstrapRoutes(app);
 registerIdentitySecretRoutes(app);
+registerSessionRoutes(app);
 
 registerA2ATaskRoutes(app);
 

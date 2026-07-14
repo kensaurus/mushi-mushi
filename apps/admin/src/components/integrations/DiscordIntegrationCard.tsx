@@ -259,7 +259,7 @@ export function DiscordIntegrationCard({
             type="button"
             onClick={() => void handleSave()}
             disabled={!webhookUrl.trim() || Boolean(urlError) || saving || !projectId}
-            className="shrink-0 rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent-hover transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
+            className="shrink-0 rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-fg-on-accent hover:bg-accent-hover transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
           >
             {saving ? 'Saving…' : connected ? 'Update' : 'Save'}
           </button>

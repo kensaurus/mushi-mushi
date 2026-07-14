@@ -4,6 +4,7 @@ import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
 import { Card, Badge, Btn, ErrorAlert, RelativeTime, DetailRows, type DetailRowItem } from '../ui'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface GraphBackendStatus {
   backend: 'sql_only' | 'age_dual' | 'age_only'
@@ -19,9 +20,9 @@ interface GraphBackendStatus {
 }
 
 const BACKEND_TONE: Record<GraphBackendStatus['backend'], string> = {
-  sql_only: 'bg-fg-faint/15 text-fg-muted border border-edge-subtle',
-  age_dual: 'bg-info/15 text-info border border-info/30',
-  age_only: 'bg-ok/15 text-ok border border-ok/30',
+  sql_only: CHIP_TONE.neutral,
+  age_dual: CHIP_TONE.infoSubtle,
+  age_only: CHIP_TONE.okSubtle,
 }
 
 const BACKEND_LABEL: Record<GraphBackendStatus['backend'], string> = {
@@ -56,7 +57,7 @@ function buildBackendRows(data: GraphBackendStatus): DetailRowItem[] {
     {
       label: 'AGE extension',
       value: data.ageAvailable
-        ? <Badge className="bg-ok/15 text-ok border border-ok/30">Available</Badge>
+        ? <Badge className={CHIP_TONE.okSubtle}>Available</Badge>
         : <Badge tone="warnSubtle">Not installed</Badge>,
       hint: 'Whether the Apache AGE Postgres extension is loaded on the database.',
     },

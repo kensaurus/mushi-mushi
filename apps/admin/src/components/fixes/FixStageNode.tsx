@@ -12,14 +12,15 @@ import type { NodeProps } from '@xyflow/react'
 import { Link } from 'react-router-dom'
 import type { FixStageNodeData } from './fixAttemptFlow.data'
 import { STAGE_HEX } from '../flow-primitives/flowTokens'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { CHIP_TONE, runStatusChipTone } from '../../lib/chipTone'
 
 const STATUS_CLS: Record<FixStageNodeData['status'], string> = {
-  pending: 'border-edge-subtle bg-surface-raised/50 text-fg-faint',
-  active: 'border-brand/60 bg-brand/10 text-fg mushi-running-glow',
-  done: 'border-ok/40 bg-ok-muted/20 text-fg',
-  failed: `border-danger/50 ${CHIP_TONE.dangerSubtle}`,
-  skipped: 'border-edge-subtle bg-surface-raised/30 text-fg-faint',
+  // Flow idle ≠ lifecycle "pending" (warn) — keep quiet until the stage activates.
+  pending: CHIP_TONE.neutral,
+  active: `${CHIP_TONE.brandSubtle} border-brand/60 text-fg mushi-running-glow`,
+  done: runStatusChipTone('done'),
+  failed: runStatusChipTone('failed'),
+  skipped: runStatusChipTone('skipped'),
 }
 
 const STATUS_GLYPH: Record<FixStageNodeData['status'], string> = {

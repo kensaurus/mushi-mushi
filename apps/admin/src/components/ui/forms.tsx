@@ -603,7 +603,7 @@ export function EditorialEmptyState({ title, description, action, hints, icon }:
       {icon && (
         <div
           aria-hidden="true"
-          className="mb-3 grid h-11 w-11 place-items-center rounded-sm border border-brand/30 bg-brand/10 font-mono text-brand shadow-[inset_0_-3px_0_var(--color-brand)]"
+          className="mb-3 grid h-11 w-11 place-items-center rounded-sm font-mono bg-brand/12 text-brand border border-brand/28 shadow-[inset_0_-3px_0_var(--color-brand)]"
         >
           {icon}
         </div>

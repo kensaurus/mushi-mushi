@@ -64,7 +64,20 @@ export function classifyLlmError(err: unknown): 'quota' | 'auth' | 'transient' |
   if (msg.includes('429') || msg.includes('rate limit') || msg.includes('quota')) {
     return 'quota'
   }
-  if (msg.includes('401') || msg.includes('403') || msg.includes('unauthorized') || msg.includes('invalid api key')) {
+  // Anthropic returns "invalid x-api-key" (note the hyphenated header name) —
+  // that string does NOT contain the substring "invalid api key", so we match
+  // both forms. Also catch authentication_error / permission_error JSON codes.
+  if (
+    msg.includes('401') ||
+    msg.includes('403') ||
+    msg.includes('unauthorized') ||
+    msg.includes('invalid api key') ||
+    msg.includes('invalid x-api-key') ||
+    msg.includes('authentication_error') ||
+    msg.includes('permission_error') ||
+    msg.includes('api key not valid') ||
+    msg.includes('incorrect api key')
+  ) {
     return 'auth'
   }
 

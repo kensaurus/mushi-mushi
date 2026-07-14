@@ -3,7 +3,7 @@
  * PURPOSE: Shared shapes and status styling for the Iterate (PDCA) page.
  */
 
-import { CHIP_TONE } from '../../lib/chipTone'
+import { runStatusChipTone } from '../../lib/chipTone'
 
 export interface PdcaRun {
   id: string
@@ -50,11 +50,11 @@ export interface PdcaStats {
 }
 
 export const STATUS_CLS: Record<PdcaRun['status'], string> = {
-  queued: 'bg-surface-raised text-fg-muted border border-edge-subtle',
-  running: CHIP_TONE.warnSubtle,
-  succeeded: CHIP_TONE.okSubtle,
-  aborted: 'bg-surface-raised text-fg-faint border border-edge-subtle',
-  failed: CHIP_TONE.dangerSubtle,
+  queued: runStatusChipTone('queued'),
+  running: runStatusChipTone('running'),
+  succeeded: runStatusChipTone('succeeded'),
+  aborted: runStatusChipTone('aborted'),
+  failed: runStatusChipTone('failed'),
 }
 
 export const STATUS_LABEL: Record<PdcaRun['status'], string> = {

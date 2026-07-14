@@ -30,6 +30,7 @@ import { Modal } from './Modal'
 import { Badge, CodeValue } from './ui'
 import { SignalChip } from './report-detail/ReportSurface'
 import { CHIP_TONE } from '../lib/chipTone'
+import { readVizToken } from '../lib/vizTokens'
 
 export interface FixTimelineEvent {
   // Lock-step with the DB constraint on `fix_events.kind`
@@ -77,18 +78,25 @@ interface FixGitGraphProps {
   className?: string
 }
 
-const STATUS_COLOR: Record<string, string> = {
-  ok: 'oklch(0.72 0.19 155)',
-  fail: 'oklch(0.65 0.22 25)',
-  pending: 'oklch(0.68 0.16 240)',
-  default: 'oklch(0.55 0 0)',
+function statusColor(key: 'ok' | 'fail' | 'pending' | 'default'): string {
+  switch (key) {
+    case 'ok':
+      return readVizToken('viz-score-ok')
+    case 'fail':
+      return readVizToken('viz-score-danger')
+    case 'pending':
+      return readVizToken('viz-step-running')
+    default:
+      return readVizToken('viz-graph-muted')
+  }
 }
 
+/** PR lifecycle chips — accent carries the purple “merged” GitHub tone. */
 const PR_STATE_TONE: Record<PrState, string> = {
   open: CHIP_TONE.okSubtle,
-  merged: 'bg-[oklch(0.30_0.10_300)] text-[oklch(0.92_0.08_300)]',
+  merged: CHIP_TONE.accent,
   closed: CHIP_TONE.dangerSubtle,
-  draft: 'bg-surface-overlay text-fg-muted',
+  draft: CHIP_TONE.neutral,
 }
 
 const EVENT_KIND_TONE: Record<FixTimelineEvent['kind'], 'brand' | 'info' | 'ok' | 'danger' | 'warn' | 'neutral'> = {
@@ -105,10 +113,10 @@ const EVENT_KIND_TONE: Record<FixTimelineEvent['kind'], 'brand' | 'info' | 'ok' 
 }
 
 function nodeColor(e: FixTimelineEvent): string {
-  if (e.status === 'fail') return STATUS_COLOR.fail
-  if (e.status === 'pending') return STATUS_COLOR.pending
-  if (e.status === 'ok') return STATUS_COLOR.ok
-  return STATUS_COLOR.default
+  if (e.status === 'fail') return statusColor('fail')
+  if (e.status === 'pending') return statusColor('pending')
+  if (e.status === 'ok') return statusColor('ok')
+  return statusColor('default')
 }
 
 function kindLabel(kind: FixTimelineEvent['kind']): string {
@@ -252,7 +260,7 @@ export function FixGitGraph({
           y1={0}
           x2={LEFT_X}
           y2={totalH}
-          stroke="oklch(0.30 0 0)"
+          stroke={readVizToken('viz-git-main')}
           strokeWidth="2"
         />
         {/* feature lane (only spans branch->merge or end) */}
@@ -261,13 +269,13 @@ export function FixGitGraph({
           y1={branchY}
           x2={RIGHT_X}
           y2={mergeY ?? totalH - 12}
-          stroke="oklch(0.40 0.10 250)"
+          stroke={readVizToken('viz-git-branch')}
           strokeWidth="2"
         />
         {/* branch curve */}
         <path
           d={`M ${LEFT_X} ${branchY} C ${LEFT_X} ${branchY + 12}, ${RIGHT_X} ${branchY - 12}, ${RIGHT_X} ${branchY}`}
-          stroke="oklch(0.40 0.10 250)"
+          stroke={readVizToken('viz-git-branch')}
           strokeWidth="2"
           fill="none"
         />
@@ -275,14 +283,14 @@ export function FixGitGraph({
         {mergeY != null && (
           <path
             d={`M ${RIGHT_X} ${mergeY} C ${RIGHT_X} ${mergeY + 12}, ${LEFT_X} ${mergeY - 12}, ${LEFT_X} ${mergeY}`}
-            stroke="oklch(0.72 0.19 155)"
+            stroke={readVizToken('viz-score-ok')}
             strokeWidth="2"
             fill="none"
           />
         )}
 
         {/* Main branch label dot at top */}
-        <circle cx={LEFT_X} cy={10} r={4} fill="oklch(0.55 0 0)" />
+        <circle cx={LEFT_X} cy={10} r={4} fill={readVizToken('viz-graph-muted')} />
 
         {/* per-event nodes on the feature lane — each is a focusable button */}
         {events.map((e, i) => {
@@ -298,7 +306,7 @@ export function FixGitGraph({
               tabIndex={0}
               aria-pressed={selected}
               aria-label={tooltipFor(e, agentModel)}
-              className="cursor-pointer outline-none focus-visible:[&_circle]:stroke-[oklch(0.75_0.18_240)]"
+              className="cursor-pointer outline-none focus-visible:[&_circle]:stroke-[var(--color-viz-git-focus)]"
               onClick={() => {
                 select(i)
                 if (canDiff) setDiffOpen(true)
@@ -317,7 +325,7 @@ export function FixGitGraph({
                   cy={cy}
                   r={r + 4}
                   fill="none"
-                  stroke="oklch(0.82 0.16 240)"
+                  stroke={readVizToken('viz-git-focus')}
                   strokeWidth="1.5"
                 />
               )}
@@ -326,7 +334,7 @@ export function FixGitGraph({
                 cy={cy}
                 r={r}
                 fill={nodeColor(e)}
-                stroke="oklch(0.10 0 0)"
+                stroke={readVizToken('viz-git-node-stroke')}
                 strokeWidth="1"
               />
               {e.status === 'pending' && (

@@ -1,6 +1,6 @@
 /** Shared QA Coverage story/run types and display constants. */
 
-import { CHIP_TONE } from '../../lib/chipTone'
+import { CHIP_TONE, runStatusChipTone } from '../../lib/chipTone'
 
 export interface QaStoryCoverage {
   story_id: string
@@ -61,8 +61,8 @@ export interface QaEvidence {
 }
 
 export const PROVIDER_BADGE: Record<string, string> = {
-  local: 'bg-surface-overlay text-fg-secondary border-edge-subtle',
-  browserbase: 'bg-brand/15 text-brand border-brand/20',
+  local: CHIP_TONE.neutral,
+  browserbase: CHIP_TONE.brandSubtle,
   firecrawl_actions: CHIP_TONE.okSubtle,
 }
 
@@ -72,33 +72,36 @@ export const PROVIDER_LABEL: Record<string, string> = {
   firecrawl_actions: 'Firecrawl',
 }
 
+/** Text-only status labels (not chip chrome). AA foreground tokens. */
 export const STATUS_TONE: Record<string, string> = {
-  passed: 'text-ok',
-  failed: 'text-danger',
-  error: 'text-danger',
-  timeout: 'text-warn',
+  passed: 'text-ok-foreground',
+  failed: 'text-danger-foreground',
+  error: 'text-danger-foreground',
+  timeout: 'text-warning-foreground',
   skipped: 'text-fg-faint',
   running: 'text-brand',
   pending: 'text-fg-secondary',
 }
 
+/** Chip chrome per run status — pending stays quiet (not lifecycle warn). */
 export const STATUS_BG: Record<string, string> = {
-  passed: 'bg-ok/10 border-ok/20 text-ok',
-  failed: 'bg-danger/10 border-danger/20 text-danger',
-  error: 'bg-danger/10 border-danger/20 text-danger',
-  timeout: 'bg-warn/10 border-warn/20 text-warn',
-  running: 'bg-brand/10 border-brand/20 text-brand',
-  pending: 'bg-surface-overlay border-edge-subtle text-fg-secondary',
+  passed: runStatusChipTone('passed'),
+  failed: runStatusChipTone('failed'),
+  error: runStatusChipTone('error'),
+  timeout: runStatusChipTone('timeout'),
+  running: runStatusChipTone('running'),
+  skipped: runStatusChipTone('skipped'),
+  pending: CHIP_TONE.neutral,
 }
 
 export const EVIDENCE_BADGE: Record<string, string> = {
-  screenshot: 'bg-brand/10 text-brand border-brand/20',
-  video: 'bg-brand/10 text-brand border-brand/20',
-  console: 'bg-surface-overlay text-fg-secondary border-edge-subtle',
-  network: 'bg-surface-overlay text-fg-secondary border-edge-subtle',
-  har: 'bg-surface-overlay text-fg-secondary border-edge-subtle',
-  trace: 'bg-surface-overlay text-fg-secondary border-edge-subtle',
-  dom: 'bg-surface-overlay text-fg-secondary border-edge-subtle',
+  screenshot: CHIP_TONE.brandSubtle,
+  video: CHIP_TONE.brandSubtle,
+  console: CHIP_TONE.neutral,
+  network: CHIP_TONE.neutral,
+  har: CHIP_TONE.neutral,
+  trace: CHIP_TONE.neutral,
+  dom: CHIP_TONE.neutral,
 }
 
 export const ACTIVE_STATUSES = new Set(['pending', 'running'])

@@ -144,6 +144,8 @@ const ICON_MAP: Record<NavIconKey, ComponentType<{ className?: string }>> = {
   storage: IconStorage,
   query: IconQuery,
   user: IconUser,
+  activity: IconHealth,
+  overview: IconGauge,
 }
 
 function entryToNavItem(entry: NavRegistryEntry): BuiltNavItem {

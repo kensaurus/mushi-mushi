@@ -61,35 +61,35 @@ interface AccentTheme {
 
 const ACCENT_THEMES: Record<AccentTone, AccentTheme> = {
   info: {
-    chip: `${CHIP_TONE.infoSubtle} border border-info/35`,
+    chip: CHIP_TONE.infoSubtle,
     header: 'bg-info/10 border-info/25',
     rail: 'border-l-info/55',
     text: 'text-info-foreground',
     pill: 'sdk',
   },
   warn: {
-    chip: `${CHIP_TONE.warnSubtle} border border-warn/35`,
+    chip: CHIP_TONE.warnSubtle,
     header: 'bg-warn/10 border-warn/25',
     rail: 'border-l-warn/55',
     text: 'text-warning-foreground',
     pill: 'tool',
   },
   ok: {
-    chip: `${CHIP_TONE.okSubtle} border border-ok/35`,
+    chip: CHIP_TONE.okSubtle,
     header: 'bg-ok/10 border-ok/25',
     rail: 'border-l-ok/55',
     text: 'text-ok-foreground',
     pill: 'runtime',
   },
   brand: {
-    chip: `${CHIP_TONE.brandSubtle} border border-brand/35`,
+    chip: CHIP_TONE.brandSubtle,
     header: 'bg-brand/10 border-brand/25',
     rail: 'border-l-brand/55',
     text: 'text-brand',
     pill: 'neutral',
   },
   accent: {
-    chip: `${CHIP_TONE.accentSubtle} border border-accent/35`,
+    chip: CHIP_TONE.accentSubtle,
     header: 'bg-accent/10 border-accent/25',
     rail: 'border-l-accent/55',
     text: 'text-accent-foreground',
@@ -149,10 +149,10 @@ const PIPELINE_LINKS: PipelineLink[] = [
 ]
 
 const TONE_BADGE: Record<'feature' | 'fix' | 'breaking' | 'note', string> = {
-  feature:  'bg-brand/15 text-brand border border-brand/30',
-  fix:      CHIP_TONE.okSubtle + ' border border-ok/30',
-  breaking: CHIP_TONE.dangerSubtle + ' border border-danger/30',
-  note:     'bg-surface-overlay text-fg-secondary border border-edge/60',
+  feature:  CHIP_TONE.brandSubtle,
+  fix:      CHIP_TONE.okSubtle,
+  breaking: CHIP_TONE.dangerSubtle,
+  note:     CHIP_TONE.neutral,
 }
 const TONE_LABEL: Record<'feature' | 'fix' | 'breaking' | 'note', string> = {
   feature: 'New', fix: 'Fix', breaking: 'Breaking', note: 'Note',
@@ -486,7 +486,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
               theme={ACCENT_THEMES.brand}
               trailing={
                 whatsNew.hasUnread ? (
-                  <span className="inline-flex items-center rounded-full border border-brand/35 bg-brand/10 px-1.5 py-px text-2xs font-medium text-brand shrink-0">
+                  <span className={`inline-flex items-center rounded-full px-1.5 py-px text-2xs font-medium shrink-0 ${CHIP_TONE.brandSubtle}`}>
                     Unread
                   </span>
                 ) : undefined

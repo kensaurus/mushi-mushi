@@ -35,7 +35,7 @@ interface FilterChipProps {
 
 const CHIP_ACTIVE: Record<FilterChipTone, string> = {
   default: 'bg-surface-overlay text-fg border-fg-faint/40',
-  brand:   'bg-brand/15 text-brand border-brand/40',
+  brand:   CHIP_TONE.brandSubtle,
   ok:      CHIP_TONE.okSubtle + ' border-ok/40',
   warn:    CHIP_TONE.warnSubtle + ' border-warn/40',
   danger:  CHIP_TONE.dangerSubtle + ' border-danger/40',
@@ -261,8 +261,8 @@ interface ResultChipProps {
 
 const RESULT_CHIP_CLS: Record<ResultChipTone, string> = {
   idle: 'border-edge-subtle bg-surface-overlay/60 text-fg-muted',
-  running: 'border-info/35 bg-info/15 text-info font-medium',
-  success: 'border-ok/35 bg-ok/15 text-ok font-medium',
+  running: 'border-info/35 bg-info-muted/50 text-info-foreground border border-info/25 font-medium',
+  success: 'border-ok/35 bg-ok-muted/50 text-ok-foreground border border-ok/25 font-medium',
   error: `border-danger/35 ${CHIP_TONE.dangerSubtle} font-medium`,
   info: 'border-brand/35 bg-brand-subtle text-brand font-medium',
 }

@@ -567,7 +567,7 @@ export function OnboardingPage() {
                     isDone
                       ? 'text-ok bg-transparent hover:bg-transparent'
                       : isActive
-                        ? 'bg-brand/10 text-brand ring-1 ring-inset ring-brand/20'
+                        ? 'bg-brand/12 text-brand border border-brand/28 ring-1 ring-inset ring-brand/20'
                         : 'text-fg-muted hover:text-fg bg-transparent'
                   }`}
                   aria-current={isActive ? 'step' : undefined}
@@ -699,7 +699,7 @@ export function OnboardingPage() {
             <div className="flex items-start gap-3">
               <div
                 aria-hidden="true"
-                className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ok/15 text-ok text-xs font-bold"
+                className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ok-muted/50 text-ok-foreground border border-ok/25 text-xs font-bold"
               >
                 ✓
               </div>

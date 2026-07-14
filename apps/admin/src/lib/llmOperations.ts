@@ -28,7 +28,7 @@ export const OPERATION_CATEGORY_CLASS: Record<OperationCategory, string> = {
   fix: `${CHIP_TONE.accentSubtle} hover:bg-accent-muted/70`,
   iterate: `${CHIP_TONE.warnSubtle} hover:bg-warn-muted/70`,
   release: `${CHIP_TONE.okSubtle} hover:bg-ok-muted/70`,
-  intel: 'border-brand/35 bg-brand/10 text-brand hover:bg-brand/15',
+  intel: 'border-brand/35 bg-brand/12 text-brand border border-brand/28 hover:bg-brand/15',
   lessons: 'border-accent/25 bg-surface-overlay text-fg-secondary hover:bg-surface-overlay/80',
   qa: `border-info/25 ${CHIP_TONE.infoSubtle} hover:bg-info-muted/50`,
   ops: 'border-edge bg-surface-overlay text-fg-muted hover:bg-surface-overlay/80',

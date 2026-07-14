@@ -411,7 +411,7 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
                     title={f.hint}
                     className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-2xs font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
                       active
-                        ? 'border-brand/40 bg-brand/15 text-brand'
+                        ? 'bg-brand/12 text-brand border border-brand/28'
                         : 'border-edge-subtle bg-surface-raised/40 text-fg-muted hover:text-fg hover:bg-surface-overlay'
                     }`}
                   >

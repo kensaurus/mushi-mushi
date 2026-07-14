@@ -54,10 +54,10 @@ function writeLastSeen(date: string) {
 }
 
 const TONE_BADGE: Record<ChangelogHighlight['tone'], string> = {
-  feature:  'bg-brand/15 text-brand border border-brand/30',
-  fix:      CHIP_TONE.okSubtle + ' border border-ok/30',
-  breaking: CHIP_TONE.dangerSubtle + ' border border-danger/30',
-  note:     'bg-surface-overlay text-fg-secondary border border-edge/60',
+  feature:  CHIP_TONE.brandSubtle,
+  fix:      CHIP_TONE.okSubtle,
+  breaking: CHIP_TONE.dangerSubtle,
+  note:     CHIP_TONE.neutral,
 }
 
 const TONE_LABEL: Record<ChangelogHighlight['tone'], string> = {

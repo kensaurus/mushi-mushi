@@ -37,8 +37,8 @@ interface ActiveFiltersRailProps {
 }
 
 const TONE_CLASS: Record<NonNullable<ActiveFilter['tone']>, string> = {
-  neutral: 'border-edge-subtle bg-surface-overlay/60 text-fg-secondary',
-  brand:   'border-brand/40 bg-brand/10 text-brand',
+  neutral: CHIP_TONE.neutral,
+  brand:   CHIP_TONE.brandSubtle,
   ok:      CHIP_TONE.okSubtle,
   warn:    CHIP_TONE.warnSubtle,
   danger:  CHIP_TONE.dangerSubtle,

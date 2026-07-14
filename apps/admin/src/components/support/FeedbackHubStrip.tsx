@@ -57,7 +57,7 @@ export function FeedbackHubStrip({ className = '' }: { className?: string }) {
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-xs font-medium text-fg">Support</p>
             {hasNews && (
-              <Badge className="bg-brand/15 text-brand border border-brand/30 text-3xs">
+              <Badge className="bg-brand/12 text-brand border border-brand/28 text-3xs">
                 {s.with_reply > 0
                   ? `${s.with_reply} ${s.with_reply === 1 ? 'reply' : 'replies'} waiting`
                   : `${s.reopened} reopened`}

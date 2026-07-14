@@ -25,7 +25,7 @@ export function ClarifyChips({ question, options, onPick, disabled = false }: Pr
             type="button"
             disabled={disabled}
             onClick={() => onPick(opt)}
-            className="inline-flex items-center rounded-full border border-brand/40 bg-brand/10 px-2.5 py-1 text-2xs text-brand hover:bg-brand/20 hover:border-brand/60 disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            className="inline-flex items-center rounded-full px-2.5 py-1 text-2xs hover:bg-brand-subtle border border-brand/28 bg-brand/12 text-brand disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
           >
             {opt}
           </button>

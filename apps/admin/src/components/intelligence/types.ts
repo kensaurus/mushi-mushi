@@ -5,6 +5,8 @@
  *          alongside these types.
  */
 
+import { CHIP_TONE, runStatusChipTone } from '../../lib/chipTone'
+
 export interface IntelligenceReport {
   id: string
   project_id: string
@@ -54,16 +56,16 @@ export interface ModernizationFinding {
 }
 
 export const SEVERITY_TONE: Record<ModernizationFinding['severity'], string> = {
-  security: 'bg-danger-muted/50 text-danger-foreground border border-danger/30',
-  deprecated: 'bg-warn-muted/50 text-warning-foreground border border-warn/30',
-  major: 'bg-warn-muted/50 text-warning-foreground border border-warn/30',
-  minor: 'bg-fg-faint/10 text-fg-muted border border-edge-subtle',
+  security: CHIP_TONE.dangerSubtle,
+  deprecated: CHIP_TONE.warnSubtle,
+  major: CHIP_TONE.warnSubtle,
+  minor: CHIP_TONE.neutral,
 }
 
 export const JOB_STATUS_TONE: Record<IntelligenceJob['status'], string> = {
-  queued: 'bg-info/15 text-info border border-info/30',
-  running: 'bg-brand/15 text-brand border border-brand/30',
-  completed: 'bg-ok/15 text-ok border border-ok/30',
-  failed: 'bg-danger-muted/50 text-danger-foreground border border-danger/30',
-  cancelled: 'bg-fg-faint/15 text-fg-muted border border-edge-subtle',
+  queued: runStatusChipTone('queued'),
+  running: CHIP_TONE.brandSubtle,
+  completed: runStatusChipTone('completed'),
+  failed: runStatusChipTone('failed'),
+  cancelled: runStatusChipTone('cancelled'),
 }

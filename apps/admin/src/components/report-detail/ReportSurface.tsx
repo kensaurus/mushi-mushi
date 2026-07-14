@@ -17,7 +17,7 @@ import {
   CONFIDENCE_SEGMENT_COUNT,
   confidenceSegmentFilled,
 } from '../reports/reportMetricViz'
-import { CHIP_TONE as WCAG_CHIP_TONE } from '../../lib/chipTone'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 // ─── ContainedBlock ───────────────────────────────────────────
 // Inset tinted card for contextual data blocks.
@@ -67,13 +67,13 @@ export function ContainedBlock({ children, tone = 'muted', label, icon, classNam
 
 type ChipTone = 'neutral' | 'ok' | 'warn' | 'danger' | 'info' | 'brand'
 
-const CHIP_TONE: Record<ChipTone, string> = {
-  neutral: 'bg-surface-overlay text-fg-muted border-edge',
-  ok:      WCAG_CHIP_TONE.okSubtle + ' border-ok/35',
-  warn:    WCAG_CHIP_TONE.warnSubtle + ' border-warn/35',
-  danger:  WCAG_CHIP_TONE.dangerSubtle + ' border-danger/35',
-  info:    WCAG_CHIP_TONE.infoSubtle + ' border-info/35',
-  brand:   'bg-brand-subtle text-brand border-brand/35',
+const SIGNAL_CHIP_TONE: Record<ChipTone, string> = {
+  neutral: CHIP_TONE.neutral,
+  ok:      CHIP_TONE.okSubtle,
+  warn:    CHIP_TONE.warnSubtle,
+  danger:  CHIP_TONE.dangerSubtle,
+  info:    CHIP_TONE.infoSubtle,
+  brand:   CHIP_TONE.brandSubtle,
 }
 
 interface SignalChipProps {
@@ -85,7 +85,7 @@ interface SignalChipProps {
 export function SignalChip({ children, tone = 'neutral', className = '' }: SignalChipProps) {
   return (
     <span
-      className={`inline-flex max-w-full min-w-0 items-center rounded-full border px-2 py-0.5 text-2xs font-medium whitespace-nowrap ${CHIP_TONE[tone]} ${className}`}
+      className={`inline-flex max-w-full min-w-0 items-center rounded-full border px-2 py-0.5 text-2xs font-medium whitespace-nowrap ${SIGNAL_CHIP_TONE[tone]} ${className}`}
     >
       <span className="min-w-0 truncate">{children}</span>
     </span>
@@ -119,11 +119,11 @@ export function InlineProof({ children, className = '' }: InlineProofProps) {
 type PillTone = 'neutral' | 'brand' | 'ok' | 'danger' | 'warn'
 
 const PILL_TONE: Record<PillTone, string> = {
-  neutral: 'bg-surface-overlay text-fg-muted border-edge hover:bg-surface-raised hover:text-fg',
-  brand:   'bg-brand/10 text-brand border-brand/30 hover:bg-brand/20',
-  ok:      WCAG_CHIP_TONE.okSubtle + ' border-ok/30 hover:bg-ok-muted/30',
-  danger:  WCAG_CHIP_TONE.dangerSubtle + ' border-danger/30 hover:bg-danger-muted/30',
-  warn:    WCAG_CHIP_TONE.warnSubtle + ' border-warn/30 hover:bg-warn-muted/30',
+  neutral: `${CHIP_TONE.neutral} hover:bg-surface-raised hover:text-fg`,
+  brand:   `${CHIP_TONE.brandSubtle} hover:bg-brand-subtle`,
+  ok:      `${CHIP_TONE.okSubtle} hover:bg-ok-muted/30`,
+  danger:  `${CHIP_TONE.dangerSubtle} hover:bg-danger-muted/30`,
+  warn:    `${CHIP_TONE.warnSubtle} hover:bg-warn-muted/30`,
 }
 
 export interface ActionPillProps {
@@ -218,7 +218,7 @@ export function ConfidenceMeter({ confidence, className = '' }: ConfidenceMeterP
         {Array.from({ length: CONFIDENCE_SEGMENT_COUNT }, (_, i) => (
           <span
             key={i}
-            className={`flex-1 rounded-[1px] motion-safe:transition-colors ${
+            className={`flex-1 rounded-hairline motion-safe:transition-colors ${
               confidenceSegmentFilled(pct, i) ? barTone : 'bg-edge-subtle/80'
             }`}
           />

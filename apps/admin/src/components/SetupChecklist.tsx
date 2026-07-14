@@ -343,7 +343,7 @@ function ChecklistRow({
             {step.label}
           </span>
           {current && (
-            <span className="rounded-sm bg-brand/15 px-1 py-0.5 text-2xs text-brand uppercase tracking-wider">
+            <span className="rounded-sm px-1 py-0.5 text-2xs uppercase tracking-wider bg-brand/12 text-brand border border-brand/28">
               do this next
             </span>
           )}
@@ -406,7 +406,7 @@ function ChecklistCard({
               </span>
             )}
             {step.complete && (
-              <span className="rounded-sm bg-ok/15 px-1.5 py-0.5 text-2xs text-ok uppercase tracking-wider">
+              <span className="rounded-sm px-1.5 py-0.5 text-2xs uppercase tracking-wider bg-ok-muted/50 text-ok-foreground border border-ok/25">
                 done
               </span>
             )}
