@@ -1070,6 +1070,7 @@ function RunDetail({
 
       // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       {/* React Flow pipeline canvas */}
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       <div className="min-h-[220px]" style={{ height: embedded ? 220 : 240 }}>
         <ReactFlow
           nodes={nodes}
@@ -1141,6 +1142,7 @@ function RunDetail({
 
   // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
   return (
+    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
     <SurfacePanel className="w-full lg:w-[560px] flex-shrink-0 rounded-xl flex flex-col overflow-hidden p-0">
       {panelBody}
     </SurfacePanel>

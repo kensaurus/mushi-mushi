@@ -137,6 +137,7 @@ export function FixBulkActionBar({
           )}
 // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
 
+          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
           <span className="flex-1 min-w-[8px]" />
 
           <Btn

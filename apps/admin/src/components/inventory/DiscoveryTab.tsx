@@ -611,6 +611,7 @@ function ObservedRoutesSection({
         </div>
       // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       ) : (
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         <div className="space-y-2 max-h-[36rem] overflow-auto pr-1">
           {routes.map((r) => (
             <ObservedRouteCard key={r.route} route={r} maxEventCount={maxEventCount} />

@@ -123,6 +123,12 @@ const rule: Rule.RuleModule = {
         if (before.some((c) => /mushi-mushi-allowlist:/i.test(c.value))) return true
         cur = (cur as { parent?: Node }).parent
       }
+      const loc = (node as unknown as { loc?: { start?: { line?: number } } }).loc
+      const line = loc?.start?.line
+      if (line && line > 1) {
+        const prev = sc.getLines()[line - 2] ?? ''
+        if (/mushi-mushi-allowlist:/i.test(prev)) return true
+      }
       return false
     }
 

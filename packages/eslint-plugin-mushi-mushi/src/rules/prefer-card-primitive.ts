@@ -132,18 +132,28 @@ const rule: Rule.RuleModule = {
     if (!filename.replace(/\\/g, '/').includes('apps/admin/src')) return {}
     if (pathMatches(filename, allowlist)) return {}
 
-    function check(node: Node, tagName: string | undefined) {
-      if (tagName && !CONTAINER_TAGS.has(tagName)) return
-
+    function isAllowlisted(node: Node): boolean {
       const sc = context.sourceCode
-      // Allowlist comments usually sit above the opening tag / attribute, not
-      // the string literal — walk parents like no-arbitrary-length-value.
       let cur: Node | undefined = node
       for (let i = 0; i < 4 && cur; i++) {
         const before = sc.getCommentsBefore(cur as never)
-        if (before.some((c) => /mushi-mushi-allowlist:/i.test(c.value))) return
+        if (before.some((c) => /mushi-mushi-allowlist:/i.test(c.value))) return true
         cur = (cur as { parent?: Node }).parent
       }
+      // Fallback: previous source line (covers `//` between JSX children where
+      // ESLint may not attach the comment to the following element).
+      const loc = (node as unknown as { loc?: { start?: { line?: number } } }).loc
+      const line = loc?.start?.line
+      if (line && line > 1) {
+        const prev = sc.getLines()[line - 2] ?? ''
+        if (/mushi-mushi-allowlist:/i.test(prev)) return true
+      }
+      return false
+    }
+
+    function check(node: Node, tagName: string | undefined) {
+      if (tagName && !CONTAINER_TAGS.has(tagName)) return
+      if (isAllowlisted(node)) return
 
       for (const str of extractStrings(node)) {
         if (!HAND_ROLLED.test(str)) continue

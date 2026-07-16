@@ -322,7 +322,7 @@ function GettingStartedSkeleton() {
         <Skeleton className="h-3 w-72" />
       </div>
       <Skeleton className="h-12 w-full mb-4" />
-      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
+      {/* mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile) */}
       <section className="rounded-lg border border-edge-subtle bg-surface-raised/30 p-4">
         <div className="mb-3">
           <Skeleton className="h-3.5 w-40 mb-1" />
