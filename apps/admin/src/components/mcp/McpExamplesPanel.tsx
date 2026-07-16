@@ -7,7 +7,7 @@ export function McpExamplesPanel() {
       {MCP_USE_CASES.map((uc) => (
         <div
           key={uc.title}
-          className="rounded-md border border-edge-subtle bg-surface-raised p-3 space-y-2 motion-safe:transition-colors hover:border-edge"
+          className="rounded-md border border-edge-subtle bg-surface-raised p-3 space-y-2 motion-safe:transition-opacity hover:border-edge"
         >
           <div className="text-xs font-semibold text-fg">{uc.title}</div>
           <div className="text-sm text-fg-secondary leading-snug">

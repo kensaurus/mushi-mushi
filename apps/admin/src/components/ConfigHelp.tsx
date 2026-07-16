@@ -1,3 +1,4 @@
+// mushi-ui: intentional overlay — not Modal/Drawer (reason: non-modal anchored popover with viewport flip + scroll; user keeps editing the form)
 /**
  * FILE: apps/admin/src/components/ConfigHelp.tsx
  * PURPOSE: Click-to-open help popover for individual configuration controls.

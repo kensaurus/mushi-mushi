@@ -130,7 +130,7 @@ function ProjectMetaRow({ project }: { project: ProjectFolderTabItem }) {
         </SignalChip>
       ) : null}
       {critical > 0 ? (
-        <Badge className={`${CHIP_TONE.dangerSubtle} border border-danger/30 text-3xs px-1 py-0`}>
+        <Badge className={`${CHIP_TONE.dangerSubtle} text-3xs px-1 py-0`}>
           {critical} critical
         </Badge>
       ) : null}
@@ -184,7 +184,7 @@ function FolderTabButton({
         onClick={() => onSelect(project.id, project.name)}
         className={[
           'inline-flex shrink-0 max-w-[14rem] items-center gap-2 rounded-md border px-2.5 py-2 text-left',
-          'motion-safe:transition-[background-color,border-color,box-shadow]',
+          'motion-safe:transition-[transform,opacity]',
           isActive
             ? 'border-brand/50 bg-surface-raised ring-1 ring-brand/25 shadow-sm'
             : 'border-edge-subtle bg-surface-raised hover:border-edge hover:bg-surface-overlay',
@@ -211,7 +211,7 @@ function FolderTabButton({
       onClick={() => onSelect(project.id, project.name)}
       className={[
         'group flex w-full min-w-0 items-start gap-2 rounded-l-md px-2.5 py-2.5 text-left',
-        'motion-safe:transition-[background-color,border-color,box-shadow]',
+        'motion-safe:transition-[transform,opacity]',
         isActive
           ? 'relative z-10 -mr-px border border-brand/25 border-r-0 border-l-[3px] border-l-brand bg-surface-raised shadow-sm'
           : 'border border-transparent border-l-[3px] border-l-transparent hover:bg-surface-overlay',

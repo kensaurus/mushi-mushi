@@ -119,7 +119,7 @@ function Scorecard({ data }: { data: CodeHealthResponse }) {
     overall === 'fail'
       ? CHIP_TONE.dangerSubtle
       : overall === 'warn'
-        ? 'border-warn/40 bg-warn-muted/50 text-warning-foreground border border-warn/25ing-foreground'
+        ? CHIP_TONE.warnSubtle
         : CHIP_TONE.okSubtle
   const overallLabel =
     overall === 'fail' ? 'Issues found' : overall === 'warn' ? 'Warnings' : 'All clear'

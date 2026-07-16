@@ -288,7 +288,7 @@ export function LoginPage() {
           <div className="overflow-hidden bg-surface border border-brand/30 rounded-md p-5 space-y-4 shadow-raised">
             <div className="relative flex items-center justify-center">
               <span className="absolute h-16 w-16 rounded-full bg-brand/15 blur-xl" aria-hidden="true" />
-              <span className="relative inline-flex h-11 w-11 items-center justify-center rounded-full border border-brand/30 bg-brand/12 text-brand border border-brand/28">
+              <span className={`relative inline-flex h-11 w-11 items-center justify-center rounded-full ${CHIP_TONE.brandSubtle}`}>
                 @
               </span>
             </div>
@@ -350,7 +350,7 @@ export function LoginPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => switchMode('login')}
-                  className={`rounded-sm !border-transparent px-2 py-1.5 text-2xs font-medium shadow-none motion-safe:transition-colors ${mode === 'login' ? 'bg-surface-raised text-fg shadow-card' : 'text-fg-faint hover:text-fg-muted'}`}
+                  className={`rounded-sm !border-transparent px-2 py-1.5 text-2xs font-medium shadow-none motion-safe:transition-opacity ${mode === 'login' ? 'bg-surface-raised text-fg shadow-card' : 'text-fg-faint hover:text-fg-muted'}`}
                 >
                   Password
                 </Btn>
@@ -359,7 +359,7 @@ export function LoginPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => switchMode('magic')}
-                  className={`rounded-sm !border-transparent px-2 py-1.5 text-2xs font-medium shadow-none motion-safe:transition-colors ${mode === 'magic' ? 'bg-surface-raised text-fg shadow-card' : 'text-fg-faint hover:text-fg-muted'}`}
+                  className={`rounded-sm !border-transparent px-2 py-1.5 text-2xs font-medium shadow-none motion-safe:transition-opacity ${mode === 'magic' ? 'bg-surface-raised text-fg shadow-card' : 'text-fg-faint hover:text-fg-muted'}`}
                 >
                   Email link
                 </Btn>
@@ -541,7 +541,7 @@ export function LoginPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => switchMode('forgot')}
-                className="block w-full justify-center !px-0 !py-0 text-2xs text-fg-faint hover:text-brand"
+                className="block w-full justify-center !px-0 !py-0 text-xs text-fg-muted hover:text-brand"
               >
                 Forgot your password?
               </Btn>

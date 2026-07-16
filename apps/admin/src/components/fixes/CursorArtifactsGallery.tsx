@@ -55,7 +55,7 @@ export function CursorArtifactsGallery({ artifacts }: Props) {
                 target="_blank"
                 rel="noopener noreferrer"
                 title="Open screenshot in new tab"
-                className="block rounded overflow-hidden border border-edge bg-surface-overlay hover:border-accent/60 transition-colors"
+                className="block rounded overflow-hidden border border-edge bg-surface-overlay hover:border-accent/60 transition-opacity"
               >
                 <img
                   src={a.url}

@@ -242,13 +242,13 @@ export const SDK_CARD_CHIP_LABEL: Record<CardStatus, string> = {
 const STATUS_TONE: Record<CardStatus, { dot: string; chip: string; headline: string; subtitle: string }> = {
   healthy: {
     dot: 'bg-ok',
-    chip: CHIP_TONE.okSubtle + ' border border-ok/30',
+    chip: CHIP_TONE.okSubtle,
     headline: 'Feedback widget is connected',
     subtitle: 'Your app is checking in — new bug reports should appear within seconds.',
   },
   'endpoint-mismatch': {
     dot: 'bg-danger',
-    chip: CHIP_TONE.dangerSubtle + ' border border-danger/30',
+    chip: CHIP_TONE.dangerSubtle,
     headline: 'SDK is pointed at the wrong backend',
     subtitle: 'Reports may be landing somewhere else. Fix your API endpoint env var and rebuild.',
   },
@@ -266,7 +266,7 @@ const STATUS_TONE: Record<CardStatus, { dot: string; chip: string; headline: str
   },
   never: {
     dot: 'bg-danger',
-    chip: CHIP_TONE.dangerSubtle + ' border border-danger/30',
+    chip: CHIP_TONE.dangerSubtle,
     headline: 'SDK not connected yet',
     subtitle: 'Your API key exists but your app has never used it — usually missing env vars in the build.',
   },

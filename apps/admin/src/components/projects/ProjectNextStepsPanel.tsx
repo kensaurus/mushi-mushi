@@ -73,7 +73,7 @@ export function ProjectNextStepsPanel({ projects }: { projects: Project[] }) {
                       <span className="text-3xs text-fg-muted">{step.why}</span>
                       <Link
                         to={step.to}
-                        className="text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors whitespace-nowrap"
+                        className="text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity whitespace-nowrap"
                       >
                         {step.ctaLabel} →
                       </Link>

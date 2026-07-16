@@ -60,11 +60,11 @@ export function ProjectsHubGuide({ topPriority, stats }: Props) {
       </div>
       <p className="text-2xs text-fg-faint">
         First-time setup? Start on{' '}
-        <Link to="/onboarding" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+        <Link to="/onboarding" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
           Get started
         </Link>{' '}
         or{' '}
-        <Link to="/connect" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+        <Link to="/connect" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
           Connect
         </Link>
         .

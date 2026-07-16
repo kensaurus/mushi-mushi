@@ -5,8 +5,8 @@
 Shared landing and connect-page React components.
 
 
-Shared editorial marketing components used by `apps/cloud` (Next.js) and
-`apps/admin` (Vite + react-router). Components are framework-agnostic: they
+Shared editorial marketing components used by `apps/docs` (Next.js docs site) and
+`apps/admin` (Vite + react-router public pages). Components are framework-agnostic: they
 get their `Link` component and URL helpers from a `<MarketingProvider>` so
 the same `<Hero />`, `<MushiCanvas />`, `<ClosingCta />`, and
 `<MarketingFooter />` render identically in either host.
@@ -16,7 +16,7 @@ the same `<Hero />`, `<MushiCanvas />`, `<ClosingCta />`, and
 1. Add the dep (already wired in this monorepo via `workspace:*`):
 
    ```jsonc
-   // apps/cloud/package.json or apps/admin/package.json
+   // apps/docs/package.json or apps/admin/package.json
    "dependencies": {
      "@mushi-mushi/marketing-ui": "workspace:*"
    }
@@ -25,7 +25,7 @@ the same `<Hero />`, `<MushiCanvas />`, `<ClosingCta />`, and
 2. Import the styles once in the host app's CSS:
 
    ```css
-   /* apps/cloud/app/globals.css OR apps/admin/src/index.css */
+   /* apps/docs/app/globals.css OR apps/admin/src/index.css */
    @import "@mushi-mushi/marketing-ui/styles.css";
    ```
 
@@ -85,7 +85,7 @@ extend the canvas without re-declaring them.
 
 ## Why this package exists
 
-Before this package, the marketing surface lived in `apps/cloud/app/_components/`
+Before this package, the marketing surface lived in `apps/docs` landing components
 with `next/link` and `next/dynamic` baked in. When `apps/admin` (the Vite SPA)
 needed the same look at `localhost:6464`, the only options were duplication or
 a refactor. This package is the refactor: one source of truth, two consumers,
@@ -100,5 +100,5 @@ zero framework lock-in.
   `className`, `children`, `aria-label`, `lang`, `onClick`. If the host needs
   something exotic (prefetch hints, scroll restoration), wrap that in the
   adapter the host passes to `<MarketingProvider>`.
-- `apps/cloud` keeps its own `app/page.tsx` (pricing, custom layout) — this
+- `apps/docs` keeps its own `content/index.mdx` (pricing, custom layout) — this
   package only ships the cross-app components, not the page composition.

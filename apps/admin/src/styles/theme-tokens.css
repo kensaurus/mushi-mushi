@@ -118,12 +118,22 @@
      share the SDK/marketing washi identity instead of text-[var(--mushi-*)]. */
   --color-editorial-paper: var(--mushi-paper);
   --color-editorial-paper-wash: var(--mushi-paper-wash);
+  /* Raised/panel/card/sink = paper mixed toward white (or wash) for sticky
+     chrome and section surfaces — prefer these over inline color-mix(). */
+  --color-editorial-paper-raised: color-mix(in oklch, var(--mushi-paper) 88%, white);
+  --color-editorial-paper-panel: color-mix(in oklch, var(--mushi-paper) 94%, white);
+  --color-editorial-paper-card: color-mix(in oklch, var(--mushi-paper) 92%, white);
+  --color-editorial-paper-sink: color-mix(in oklch, var(--mushi-paper) 82%, white);
+  --color-editorial-paper-flush: color-mix(in oklch, var(--mushi-paper) 82%, var(--mushi-vermillion-wash));
   --color-editorial-ink: var(--mushi-ink);
   --color-editorial-ink-muted: var(--mushi-ink-muted);
   --color-editorial-ink-faint: var(--mushi-ink-faint);
+  --color-editorial-ink-emphasis: color-mix(in oklch, var(--mushi-ink) 82%, var(--mushi-vermillion));
+  --color-editorial-ink-rule: color-mix(in oklch, var(--mushi-ink) 30%, var(--mushi-rule));
   --color-editorial-rule: var(--mushi-rule);
   --color-editorial-vermillion: var(--mushi-vermillion);
   --color-editorial-vermillion-wash: var(--mushi-vermillion-wash);
+  --color-editorial-vermillion-muted: color-mix(in oklch, var(--mushi-vermillion) 60%, var(--mushi-ink-muted));
   --color-editorial-jade: var(--mushi-jade);
 
   /* ── Data viz (xyflow edges, sparklines, lang chips) ─────────────── */
@@ -244,6 +254,21 @@
      kbd labels, timestamps); text-2xs (12px) for all label/badge copy. */
   --text-2xs: 0.75rem;
   --text-3xs: 0.6875rem;
+  /* Extended type ramp (Jul 2026 unification) — prefer these over arbitrary text-[Npx]. */
+  --text-label: 0.75rem;
+  --text-body: 0.875rem;
+  --text-title: 1rem;
+  --text-heading: 1.125rem;
+  --text-display: 1.5rem;
+
+  /* ── Z-index scale (overlays / chrome) ─────────────────────────────── */
+  --z-base: 0;
+  --z-sticky: 20;
+  --z-dropdown: 40;
+  --z-drawer: 50;
+  --z-modal: 60;
+  --z-toast: 70;
+  --z-overlay-max: 80;
 
   /* ── Border radius ─────────────────────────────────────────────────── */
   --radius-xs: 0.25rem;
@@ -264,6 +289,30 @@
   --shadow-card: 0 1px 2px oklch(0 0 0 / 0.4);
   --shadow-raised: 0 2px 8px oklch(0 0 0 / 0.5);
 
+  /* ── Expressive layer (2026-07 expressive pass) ──────────────────────
+     Brand-derived gradient + glow tokens for the expressive control set.
+     Every value is derived from --color-brand via oklch relative-color
+     syntax, so a white-label brand override or theme swap cascades through
+     automatically and nothing hard-codes the amber hue. --shadow-* names
+     auto-generate `shadow-*` Tailwind utilities; --gradient-* are consumed
+     via arbitrary values (bg-[var(--gradient-brand)]). */
+  --gradient-brand: linear-gradient(160deg, var(--color-brand-hover) 0%, var(--color-brand) 100%);
+  --gradient-brand-strong: linear-gradient(160deg, var(--color-brand) 0%, var(--color-brand-subtle) 100%);
+  --gradient-danger: linear-gradient(160deg, var(--color-danger) 0%, oklch(from var(--color-danger) 0.5 c h) 100%);
+  --gradient-ok: linear-gradient(160deg, var(--color-ok) 0%, oklch(from var(--color-ok) 0.55 c h) 100%);
+  --shadow-brand-glow: 0 0 0 3px oklch(from var(--color-brand) l c h / 0.18), 0 4px 16px -4px oklch(from var(--color-brand) l c h / 0.40);
+  --shadow-brand-glow-sm: 0 0 12px -2px oklch(from var(--color-brand) l c h / 0.38);
+  /* Filled brand controls (active segment, selected pill): card depth +
+     ambient brand glow in one layer, since Tailwind shadow utilities can't
+     stack (both set --tw-shadow). */
+  --shadow-brand-raised: 0 1px 2px oklch(0 0 0 / 0.4), 0 0 12px -2px oklch(from var(--color-brand) l c h / 0.34);
+  --shadow-glow-danger: 0 0 0 3px oklch(from var(--color-danger) l c h / 0.16), 0 4px 16px -4px oklch(from var(--color-danger) l c h / 0.38);
+  --shadow-glow-ok: 0 0 0 3px oklch(from var(--color-ok) l c h / 0.16), 0 4px 16px -4px oklch(from var(--color-ok) l c h / 0.38);
+  /* Accent-hued filled CTAs (integration connect, post comment) — same
+     expressive treatment as --gradient-brand, derived from --color-accent. */
+  --gradient-accent: linear-gradient(160deg, var(--color-accent-hover) 0%, var(--color-accent) 100%);
+  --shadow-accent-glow: 0 0 0 3px oklch(from var(--color-accent) l c h / 0.18), 0 4px 16px -4px oklch(from var(--color-accent) l c h / 0.40);
+
   /* ── Navigation-specific ───────────────────────────────────────────────
      2026-05-07 contrast pass: section-label was L=0.38 against the L=0.145
      sidebar root (~2.0:1 — invisible at a glance, the "PLAN / DO / CHECK /
@@ -277,17 +326,20 @@
   --color-nav-hover-bg: oklch(0.235 0.005 285);
   --color-nav-section-label: oklch(0.62 0.005 285);
 
-  /* ── Transition timing ───────────────────────────────────────────────── */
+  /* ── Transition timing (mirrors @mushi-mushi/core MUSHI_DURATION / MOTION) ─
+     See docs/MOTION.md. Stamp ease keeps the Kinetics soft back-out. */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-stamp: cubic-bezier(0.22, 1, 0.36, 1);
 
-  /* Motion duration tokens — replace ad-hoc 100/120/150/180/220ms values
-     scattered through the components so timing reads consistent.
-     micro = button press feedback, fast = hover/colour swaps,
-     base = page-level transitions, slow = modals + skeletons fading out. */
-  --duration-micro: 100ms;
-  --duration-fast: 150ms;
+  /* instant = tooltip / chip; fast = hover; base = bloom; panel = overlay;
+     slow = stamp / deliberate; ring = long ambient (CSS animations). */
+  --duration-instant: 120ms;
+  --duration-micro: var(--duration-instant); /* alias — prefer instant */
+  --duration-fast: 200ms;
   --duration-base: 220ms;
-  --duration-slow: 320ms;
+  --duration-panel: 300ms;
+  --duration-slow: 420ms;
+  --duration-ring: 700ms;
 
   /* Responsive table density tokens. `ResponsiveTable` reads the active
      density off a CSS variable on its wrapper so child rows pick it up via

@@ -51,7 +51,17 @@ import {
   type ViewStyle,
   type TextStyle,
 } from 'react-native'
-import { mushiPalette, MUSHI_BANNER_NEON, MUSHI_COPY } from '@mushi-mushi/core'
+import {
+  mushiPalette,
+  MUSHI_BANNER_NEON,
+  MUSHI_COPY,
+  MUSHI_CONTROL_DISABLED,
+  MUSHI_INVERSE,
+  MUSHI_RADIUS,
+  MUSHI_SHADOW_INK,
+  MUSHI_SPACING,
+  MUSHI_TYPE,
+} from '@mushi-mushi/core'
 import { getLocale } from '@mushi-mushi/web/i18n'
 import { useMushiContext } from '../provider'
 import { reporterStatusShort } from '../reporter-status'
@@ -122,7 +132,8 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
 
   const [category, setCategory] = useState<string | null>(null)
   const [description, setDescription] = useState('')
-  const [phase, setPhase] = useState<'form' | 'sending' | 'sent'>('form')
+  const [phase, setPhase] = useState<'form' | 'sending' | 'sent' | 'error'>('form')
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [sheetTab, setSheetTab] = useState<'report' | 'inbox' | 'assistant'>('report')
   const [inboxReports, setInboxReports] = useState<Array<{ id: string; status: string; summary?: string | null; description?: string }>>([])
   const [inboxLoading, setInboxLoading] = useState(false)
@@ -204,6 +215,8 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
         ...prev,
         { role: 'bot', text: botText, options: reply.options },
       ])
+    } catch {
+      setAssistantError('Could not reach the assistant. Try again.')
     } finally {
       setAssistantSending(false)
     }
@@ -284,17 +297,40 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
 
   const handleSubmit = async () => {
     if (!category || !description.trim() || !mushi) return
+    const trimmed = description.trim()
+    if (trimmed.length < 20) {
+      setSubmitError('Please write at least 20 characters so we can understand the issue.')
+      return
+    }
+    setSubmitError(null)
     setPhase('sending')
     try {
-      await mushi.submitReport({
+      const outcome = await mushi.submitReport({
         category,
-        description: description.trim(),
+        description: trimmed,
         screenshotDataUrl: screenshotDataUrl && screenshotAttached ? screenshotDataUrl : undefined,
       })
+      if (!outcome.ok) {
+        if (outcome.failureKind === 'credentials' || outcome.failureKind === 'quota') {
+          setSubmitError('Could not send — check the project API key or plan quota.')
+          setPhase('error')
+          return
+        }
+        if (outcome.failureKind === 'rate_limited') {
+          setSubmitError('Sending too fast — we queued this and will retry shortly.')
+          setPhase('error')
+          return
+        }
+        // queued / retrying — still acknowledge without claiming success
+        setSubmitError('Queued for retry — we will send it when the connection is back.')
+        setPhase('error')
+        return
+      }
       setPhase('sent')
       setTimeout(handleClose, 1400)
     } catch {
-      setPhase('form')
+      setSubmitError('Something went wrong. Please try again.')
+      setPhase('error')
     }
   }
 
@@ -306,14 +342,14 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   // banner the user tapped to open this sheet.
   const pal = mushiPalette(dark ? 'dark' : 'light')
   const colors = dark
-    ? { bg: pal.paper, text: pal.ink, sub: pal.inkMuted, card: pal.paperRaised, accent: MUSHI_BANNER_NEON.bg, accentInk: MUSHI_BANNER_NEON.fg, border: pal.ruleStrong, backdrop: 'rgba(0,0,0,0.6)', disabled: '#3a3a3c', disabledText: pal.inkFaint }
-    : { bg: pal.paperRaised, text: pal.ink, sub: pal.inkMuted, card: pal.paper, accent: MUSHI_BANNER_NEON.bg, accentInk: MUSHI_BANNER_NEON.fg, border: pal.ruleStrong, backdrop: 'rgba(0,0,0,0.35)', disabled: '#d1d1d6', disabledText: pal.inkFaint }
+    ? { bg: pal.paper, text: pal.ink, sub: pal.inkMuted, card: pal.paperRaised, accent: MUSHI_BANNER_NEON.bg, accentInk: MUSHI_BANNER_NEON.fg, border: pal.ruleStrong, backdrop: 'rgba(0,0,0,0.6)', disabled: MUSHI_CONTROL_DISABLED.dark, disabledText: pal.inkFaint }
+    : { bg: pal.paperRaised, text: pal.ink, sub: pal.inkMuted, card: pal.paper, accent: MUSHI_BANNER_NEON.bg, accentInk: MUSHI_BANNER_NEON.fg, border: pal.ruleStrong, backdrop: 'rgba(0,0,0,0.35)', disabled: MUSHI_CONTROL_DISABLED.light, disabledText: pal.inkFaint }
 
   const sheetTabs = (
     ['report', 'inbox', ...(assistantEnabled ? (['assistant'] as const) : [])] as const
   )
 
-  const canSubmit = !!category && description.trim().length > 0 && phase === 'form'
+  const canSubmit = !!category && description.trim().length >= 20 && (phase === 'form' || phase === 'error')
 
   return (
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent>
@@ -355,7 +391,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
           </View>
 
           {/* Tab row */}
-          <View style={s.tabRow}>
+          <View style={[s.tabRow, { borderBottomColor: colors.border }]}>
             {sheetTabs.map((tab) => (
               <TouchableOpacity
                 key={tab}
@@ -546,16 +582,24 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                 multiline
                 textAlignVertical="top"
                 value={description}
-                onChangeText={setDescription}
-                editable={phase === 'form'}
+                onChangeText={(text) => {
+                  setDescription(text.slice(0, 4000))
+                  if (submitError) setSubmitError(null)
+                  if (phase === 'error') setPhase('form')
+                }}
+                editable={phase === 'form' || phase === 'error'}
+                maxLength={4000}
               />
+              {submitError ? (
+                <Text style={{ color: colors.accent, marginTop: 6, fontSize: 12 }}>{submitError}</Text>
+              ) : null}
 
               {/* Screenshot thumbnail — shown if a screenshot was captured */}
               {activeScreenshot ? (
                 <View style={s.screenshotRow}>
                   <Image
                     source={{ uri: activeScreenshot }}
-                    style={s.screenshotThumb}
+                    style={[s.screenshotThumb, { backgroundColor: colors.text }]}
                     accessibilityLabel={t.step3.screenshotPreviewAlt}
                   />
                   <View style={s.screenshotMeta}>
@@ -620,10 +664,10 @@ const s = StyleSheet.create({
     left: 0,
     right: 0,
     minHeight: SHEET_HEIGHT,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
-    shadowColor: '#000',
+    borderTopLeftRadius: MUSHI_RADIUS.sheet,
+    borderTopRightRadius: MUSHI_RADIUS.sheet,
+    paddingBottom: Platform.OS === 'ios' ? 34 : MUSHI_SPACING.roomy,
+    shadowColor: MUSHI_SHADOW_INK,
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.12,
     shadowRadius: 8,
@@ -631,22 +675,22 @@ const s = StyleSheet.create({
   },
   handleArea: {
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: MUSHI_SPACING.comfy,
   },
   handle: {
     width: 40,
     height: 5,
-    borderRadius: 3,
+    borderRadius: MUSHI_RADIUS.control,
     opacity: 0.5,
   },
   brandHeader: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 12,
+    paddingHorizontal: MUSHI_SPACING.lounge,
+    paddingTop: MUSHI_SPACING.comfy,
+    paddingBottom: MUSHI_SPACING.comfy,
     borderBottomWidth: 1.5,
   },
   brandEyebrow: {
-    fontSize: 10,
+    fontSize: MUSHI_TYPE.sizeLabel,
     fontWeight: '700',
     letterSpacing: 1.2,
     marginBottom: 2,
@@ -658,59 +702,61 @@ const s = StyleSheet.create({
     letterSpacing: -0.2,
   },
   body: {
-    paddingHorizontal: 20,
-    paddingTop: 4,
+    paddingHorizontal: MUSHI_SPACING.lounge,
+    paddingTop: MUSHI_SPACING.tight,
   },
   title: {
     fontSize: 20,
     fontWeight: '700',
-    marginBottom: 16,
+    marginBottom: MUSHI_SPACING.roomy,
   },
   stepLabel: {
-    fontSize: 12,
+    fontSize: MUSHI_TYPE.sizeLabel,
     fontWeight: '600',
     letterSpacing: 0.2,
-    marginTop: 8,
-    marginBottom: 10,
+    marginTop: MUSHI_SPACING.snug,
+    marginBottom: MUSHI_SPACING.comfy,
     textTransform: 'uppercase',
   },
   catRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: MUSHI_SPACING.roomy,
   },
   catBtn: {
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: MUSHI_SPACING.comfy,
     paddingHorizontal: 6,
-    borderRadius: 12,
+    borderRadius: MUSHI_RADIUS.card,
     borderWidth: 1,
     flex: 1,
     marginHorizontal: 3,
+    minHeight: 44,
   },
   catEmoji: {
     fontSize: 22,
-    marginBottom: 4,
+    marginBottom: MUSHI_SPACING.tight,
   },
   catLabel: {
-    fontSize: 11,
+    fontSize: MUSHI_TYPE.sizeLabel,
     fontWeight: '600',
   },
   input: {
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: MUSHI_RADIUS.card,
     padding: 14,
     fontSize: 15,
     minHeight: 100,
-    marginBottom: 16,
+    marginBottom: MUSHI_SPACING.roomy,
   },
   submitBtn: {
-    borderRadius: 12,
+    borderRadius: MUSHI_RADIUS.card,
     paddingVertical: 14,
     alignItems: 'center',
+    minHeight: 44,
   },
   submitText: {
-    color: '#fff',
+    color: MUSHI_INVERSE,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -741,7 +787,6 @@ const s = StyleSheet.create({
     width: 48,
     height: 36,
     borderRadius: 4,
-    backgroundColor: '#000',
     flexShrink: 0,
   },
   screenshotMeta: {
@@ -763,7 +808,6 @@ const s = StyleSheet.create({
   tabRow: {
     flexDirection: 'row',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#ccc',
     marginBottom: 8,
   },
   tabBtn: {

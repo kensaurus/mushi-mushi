@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -193,7 +194,7 @@ function ScoreBar({
         </SignalChip>
         <div className="flex-1 h-2 bg-surface-root rounded-full overflow-hidden">
           <div
-            className="h-full rounded-full motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] motion-safe:duration-500"
+            className="h-full rounded-full motion-safe:transition-[transform,opacity] motion-safe:duration-500"
             style={{ width: `${(value * 100).toFixed(0)}%`, backgroundColor: color }}
           />
         </div>
@@ -671,7 +672,7 @@ export function JudgePage() {
   )
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-judge">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-judge">
       <PageHeaderBar
         title={copy?.title ?? 'Judge'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -966,7 +967,7 @@ export function JudgePage() {
                           ? 'Click to clear the filter'
                           : `Click to filter Recent evaluations by ${p.version}`
                       }
-                      className={`cursor-pointer border-b border-edge-subtle text-fg-secondary outline-none transition-colors hover:bg-surface-overlay/40 focus-visible:bg-surface-overlay/60 focus-visible:ring-1 focus-visible:ring-brand/60 ${
+                      className={`cursor-pointer border-b border-edge-subtle text-fg-secondary outline-none transition-opacity hover:bg-surface-overlay/40 focus-visible:bg-surface-overlay/60 focus-visible:ring-1 focus-visible:ring-brand/60 ${
                         isSelected ? 'bg-brand/10 text-fg' : ''
                       }`}
                     >

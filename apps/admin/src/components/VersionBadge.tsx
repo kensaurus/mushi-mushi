@@ -339,7 +339,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
         aria-haspopup="dialog"
         aria-label={`Versions — SDK (@mushi-mushi/web) ${__SDK_WEB_VERSION__}, Admin console ${__APP_VERSION__}${whatsNew.hasUnread ? ', new updates available' : ''}`}
         title={`npm @mushi-mushi/web ${__SDK_WEB_VERSION__} · Admin app ${__APP_VERSION__} · ${__BUILD_SHA__}`}
-        className={`group relative inline-flex items-center gap-1.5 h-6 px-2 rounded-full border border-edge bg-surface-raised hover:bg-surface-overlay motion-safe:transition-[background-color,border-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+        className={`group relative inline-flex min-w-0 max-w-full items-center gap-1.5 h-6 px-2 rounded-full border border-edge bg-surface-raised hover:bg-surface-overlay motion-safe:transition-[transform,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
           open ? 'bg-surface-overlay border-edge-subtle' : ''
         }`}
       >
@@ -425,7 +425,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
                 href={REPO_URL}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="mt-1.5 inline-flex items-center gap-0.5 text-2xs text-fg-muted hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
+                className="mt-1.5 inline-flex items-center gap-0.5 text-2xs text-fg-muted hover:text-fg motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
                 title="View source on GitHub"
               >
                 GitHub <span aria-hidden>↗</span>
@@ -514,7 +514,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
                   <button
                     type="button"
                     onClick={handleReadFull}
-                    className="inline-flex w-full items-center justify-between gap-2 rounded-sm px-1 py-0.5 text-2xs font-medium text-accent-foreground hover:text-accent hover:bg-surface-overlay/60 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                    className="inline-flex w-full items-center justify-between gap-2 rounded-sm px-1 py-0.5 text-2xs font-medium text-accent-foreground hover:text-accent hover:bg-surface-overlay/60 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
                   >
                     Read full changelog
                     <span aria-hidden>→</span>
@@ -543,7 +543,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
                       target="_blank"
                       rel="noreferrer noopener"
                       title={link.hint}
-                      className="group flex items-center justify-between gap-1.5 border-b border-edge-subtle/50 px-2 py-1.5 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 min-h-[2rem]"
+                      className="group flex items-center justify-between gap-1.5 border-b border-edge-subtle/50 px-2 py-1.5 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 min-h-[2rem]"
                     >
                       <span className="flex items-center gap-1.5 min-w-0">
                         <ThemeIconChip icon={LinkIcon} theme={theme} size={12} />
@@ -610,7 +610,7 @@ function PackageRow({
     <Tag
       {...(href ? { href, target: '_blank', rel: 'noreferrer noopener' } : {})}
       className={`group col-span-1 flex items-center justify-between gap-2 border-b border-edge-subtle/50 px-1 -mx-1 py-1 min-h-[1.75rem] ${
-        href ? 'hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50' : ''
+        href ? 'hover:bg-surface-overlay motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50' : ''
       }`}
       title={hint}
     >

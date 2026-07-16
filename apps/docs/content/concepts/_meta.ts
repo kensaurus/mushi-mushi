@@ -3,6 +3,7 @@ export default {
   'open-source': 'Open source & licensing',
   credentials: 'Project ID & API keys',
   'runtime-config': 'Runtime config',
+  'error-catalog': 'API error catalog',
   architecture: 'Architecture',
   'trigger-modes': 'Trigger modes',
   classification: 'Classification pipeline',

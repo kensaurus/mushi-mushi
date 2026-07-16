@@ -59,7 +59,7 @@ export function QueueStageBreakdown({ summary, selectedStage, onSelect }: Props)
               key={s}
               type="button"
               onClick={() => onSelect(s === selectedStage ? '' : s)}
-              className={`w-full grid grid-cols-[8rem_1fr_5rem] items-center gap-3 px-2 py-1.5 rounded-sm text-left transition-colors ${
+              className={`w-full grid grid-cols-[8rem_1fr_5rem] items-center gap-3 px-2 py-1.5 rounded-sm text-left transition-opacity ${
                 selectedStage === s ? 'bg-brand/10 ring-1 ring-brand/40' : 'hover:bg-surface-overlay'
               }`}
             >

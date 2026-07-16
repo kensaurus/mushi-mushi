@@ -25,8 +25,8 @@ import { CHIP_TONE } from '../../lib/chipTone'
 
 function statusBadge(status: number): string {
   if (status >= 500) return CHIP_TONE.dangerSubtle
-  if (status >= 400) return CHIP_TONE.warnSubtle + ' border border-warn/25'
-  if (status >= 300) return CHIP_TONE.infoSubtle + ' border border-info/25'
+  if (status >= 400) return CHIP_TONE.warnSubtle
+  if (status >= 300) return CHIP_TONE.infoSubtle
   if (status >= 200) return CHIP_TONE.okSubtle
   return 'bg-surface-overlay text-fg-muted border border-edge-subtle'
 }
@@ -223,29 +223,31 @@ export function PerformanceMetrics({ metrics }: { metrics: Record<string, number
     )
   }
   return (
-    <DefinitionChips
-      className="mb-0 sm:grid-cols-2 lg:grid-cols-3"
-      items={entries.map(([key, val]) => {
-        const upper = key.toUpperCase()
-        const tooltip = PERF_TOOLTIPS[upper]
-        const tone = typeof val === 'number' ? perfVitalTone(upper, val) : 'neutral'
-        const display =
-          typeof val === 'number'
-            ? upper === 'CLS'
-              ? val.toFixed(3)
-              : `${val.toFixed(0)} ms`
-            : String(val)
-        return {
-          label: upper,
-          hint: tooltip,
-          value: (
-            <span className={`font-mono tabular-nums font-semibold ${PERF_TONE_CLASS[tone]}`}>
-              {display}
-            </span>
-          ),
-        }
-      })}
-    />
+    <div className="@container/vitals">
+      <DefinitionChips
+        className="mb-0 grid-cols-1 @sm/vitals:grid-cols-2 @xl/vitals:grid-cols-3"
+        items={entries.map(([key, val]) => {
+          const upper = key.toUpperCase()
+          const tooltip = PERF_TOOLTIPS[upper]
+          const tone = typeof val === 'number' ? perfVitalTone(upper, val) : 'neutral'
+          const display =
+            typeof val === 'number'
+              ? upper === 'CLS'
+                ? val.toFixed(3)
+                : `${val.toFixed(0)} ms`
+              : String(val)
+          return {
+            label: upper,
+            hint: tooltip,
+            value: (
+              <span className={`font-mono tabular-nums font-semibold ${PERF_TONE_CLASS[tone]}`}>
+                {display}
+              </span>
+            ),
+          }
+        })}
+      />
+    </div>
   )
 }
 

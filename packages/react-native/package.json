@@ -8,6 +8,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsup",
+    "lint": "eslint src/",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "size": "size-limit"
@@ -53,8 +54,11 @@
     "@mushi-mushi/web": "workspace:^"
   },
   "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
     "@size-limit/file": "^12.1.0",
     "@types/react": "^19.2.17",
+    "eslint": "^10.6.0",
+    "eslint-plugin-mushi-mushi": "workspace:*",
     "react": "^19.2.7",
     "react-native": "^0.86.0",
     "size-limit": "^12.1.0",

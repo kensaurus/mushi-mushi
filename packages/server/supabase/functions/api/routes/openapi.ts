@@ -41,6 +41,7 @@
 
 import type { Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
+import { API_ERROR_CODES } from '../../_shared/error-codes.ts'
 
 const OPENAPI_HEADERS: Record<string, string> = {
   'Content-Type': 'application/json; charset=utf-8',
@@ -110,13 +111,26 @@ function buildSpec(apiBase: string): Record<string, unknown> {
           type: 'object',
           required: ['error'],
           properties: {
-            ok: { type: 'boolean' },
+            ok: { type: 'boolean', description: 'Always false on error envelopes.' },
             error: {
               type: 'object',
               required: ['code', 'message'],
               properties: {
-                code: { type: 'string' },
-                message: { type: 'string' },
+                code: {
+                  type: 'string',
+                  enum: [...API_ERROR_CODES],
+                  description:
+                    'Stable machine-readable code from packages/server/supabase/functions/_shared/error-codes.ts. Prefer this over parsing `message`.',
+                },
+                message: {
+                  type: 'string',
+                  description: 'Human-safe message. Never contains Postgres / stack / secret detail.',
+                },
+                requestId: {
+                  type: 'string',
+                  description:
+                    'Correlation id echoed from X-Request-Id. Quote this when reporting a bug — it links console, Sentry, and Langfuse.',
+                },
               },
             },
           },

@@ -20,6 +20,7 @@ import { useToast } from '../lib/toast'
 import { useMilestoneCelebration } from '../lib/useMilestoneCelebration'
 import { Confetti } from '../components/Confetti'
 import { Btn, ErrorAlert, FreshnessPill, RefreshIconButton } from '../components/ui'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { DashboardSkeleton } from '../components/skeletons/DashboardSkeleton'
@@ -234,7 +235,7 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-dashboard">
       <Confetti triggerKey={confettiKey} />
       <PageHeaderBar
         title={copy?.title ?? 'Dashboard'}
@@ -272,10 +273,26 @@ export function DashboardPage() {
                 role="status"
                 aria-live="polite"
               >
-                <span className="mt-px shrink-0 text-base leading-none">
-                  {dashboardInsight.tone === 'danger' ? '🔴' : dashboardInsight.tone === 'warn' ? '🟡' : '🟢'}
+                <span
+                  className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                    dashboardInsight.tone === 'danger'
+                      ? 'bg-danger'
+                      : dashboardInsight.tone === 'warn'
+                        ? 'bg-warn'
+                        : 'bg-ok'
+                  }`}
+                  aria-hidden="true"
+                />
+                <span>
+                  <span className="sr-only">
+                    {dashboardInsight.tone === 'danger'
+                      ? 'Critical: '
+                      : dashboardInsight.tone === 'warn'
+                        ? 'Warning: '
+                        : 'OK: '}
+                  </span>
+                  {dashboardInsight.sentence}
                 </span>
-                <span>{dashboardInsight.sentence}</span>
               </div>
             ) : null,
           },

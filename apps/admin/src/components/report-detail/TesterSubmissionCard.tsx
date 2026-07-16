@@ -150,7 +150,7 @@ export function TesterSubmissionCard({ submission, onReviewed }: Props) {
             ))}
             <button
               type="button"
-              className="text-2xs text-fg-faint hover:text-fg-muted motion-safe:transition-colors"
+              className="text-2xs text-fg-faint hover:text-fg-muted motion-safe:transition-opacity"
               onClick={() => setShowNoteInput(v => !v)}
             >
               {showNoteInput ? 'Hide note' : 'Add note'}

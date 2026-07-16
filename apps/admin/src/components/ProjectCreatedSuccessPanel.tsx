@@ -60,7 +60,7 @@ function ProjectIdCopyLarge({ projectId }: { projectId: string }) {
     <button
       type="button"
       onClick={copy}
-      className="inline-flex w-full min-w-0 items-center justify-between gap-2 rounded-md border border-edge bg-surface-overlay/60 px-3 py-2.5 text-left transition-colors hover:border-edge-strong"
+      className="inline-flex w-full min-w-0 items-center justify-between gap-2 rounded-md border border-edge bg-surface-overlay/60 px-3 py-2.5 text-left transition-opacity hover:border-edge-strong"
       title="Copy project ID — paste as MUSHI_PROJECT_ID"
       data-testid={`project-created-id-${projectId}`}
       aria-label={`Copy project ID: ${projectId}`}
@@ -127,11 +127,11 @@ function ApiKeyRevealBlock({
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <p className="text-2xs font-semibold uppercase tracking-wide text-fg-muted">SDK API Key</p>
-        <span className="rounded bg-warning/10 px-1.5 py-0.5 text-2xs font-medium text-warning-foreground">
+        <span className="rounded bg-warn-muted/50 px-1.5 py-0.5 text-2xs font-medium text-warning-foreground">
           Shown once — copy now
         </span>
       </div>
-      <div className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning/5 px-3 py-2.5">
+      <div className="flex items-center gap-2 rounded-md border border-warn/40 bg-warn-muted/30 px-3 py-2.5">
         <CodeInline className="min-w-0 flex-1 break-all text-xs">
           <span className="tabular-nums select-all">{displayKey}</span>
         </CodeInline>

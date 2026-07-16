@@ -42,7 +42,7 @@ export function AskMushiLauncherButton({ onClick, panelOpen = false }: AskMushiL
         className={[
           'relative inline-flex items-center justify-center h-8 w-8 rounded-sm',
           showPulse ? 'text-brand' : 'text-fg-muted hover:text-fg hover:bg-surface-overlay',
-          'motion-safe:transition-colors',
+          'motion-safe:transition-opacity',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50',
         ].join(' ')}
       >

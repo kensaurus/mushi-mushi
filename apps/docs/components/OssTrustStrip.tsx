@@ -1,29 +1,31 @@
 /**
- * Langfuse/Supabase-style open-source trust bullets from @mushi-mushi/brand.
+ * Open-source trust strip — linked chips (license, self-host, repo, dogfood).
  */
 import { MUSHI_OSS } from '@mushi-mushi/brand'
-
-const BULLETS = [
-  { label: 'License', text: MUSHI_OSS.license },
-  { label: 'Self-host', text: MUSHI_OSS.selfHost },
-  { label: 'No lock-in', text: MUSHI_OSS.noLockIn },
-  { label: 'Dogfood', text: MUSHI_OSS.dogfood },
-] as const
+import { LANDING_TRUST_LINKS } from '@/lib/landing-copy'
 
 export function OssTrustStrip() {
   return (
-    <div
-      className="not-prose border border-[var(--mushi-rule)] rounded-md p-4 bg-[var(--mushi-paper)]"
-      aria-label="Open source trust"
-    >
-      <p className="m-0 mb-3 text-sm font-semibold">{MUSHI_OSS.trustStrip}</p>
-      <ul className="grid gap-3 sm:grid-cols-2 list-none p-0 m-0">
-        {BULLETS.map((b) => (
-          <li key={b.label} className="text-sm">
-            <span className="font-medium">{b.label}: </span>
-            <span className="text-[var(--mushi-ink-muted)]">{b.text}</span>
-          </li>
-        ))}
+    <div className="landing-trust not-prose" aria-label="Open source trust">
+      <p className="landing-trust__headline">{MUSHI_OSS.trustStrip}</p>
+      <ul className="landing-trust__list">
+        {LANDING_TRUST_LINKS.map((item) => {
+          const external = item.href.startsWith('http')
+          return (
+            <li key={item.label}>
+              <a
+                className="landing-trust__chip"
+                href={item.href}
+                {...(external
+                  ? { target: '_blank', rel: 'noopener noreferrer' }
+                  : {})}
+              >
+                <span className="landing-trust__label">{item.label}</span>
+                <span className="landing-trust__text">{item.text}</span>
+              </a>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )

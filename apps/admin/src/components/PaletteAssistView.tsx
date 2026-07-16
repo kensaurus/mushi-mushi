@@ -5,6 +5,10 @@
 
 import { useEffect, useState } from 'react'
 import { Streamdown } from 'streamdown'
+import {
+  STREAMDOWN_LINK_SAFETY,
+  streamdownUrlTransform,
+} from '../lib/streamdownSafety'
 import type { NavStep, NavTarget } from '../lib/askMushiTypes'
 import { submitAssistFeedback } from '../lib/paletteAssist'
 import { ClarifyChips } from './ClarifyChips'
@@ -87,7 +91,12 @@ export function PaletteAssistView({
         )}
         {!loading && !error && text && (
           <div className="prose prose-sm dark:prose-invert max-w-none text-fg text-xs">
-            <Streamdown>{text}</Streamdown>
+            <Streamdown
+              linkSafety={STREAMDOWN_LINK_SAFETY}
+              urlTransform={streamdownUrlTransform}
+            >
+              {text}
+            </Streamdown>
           </div>
         )}
 

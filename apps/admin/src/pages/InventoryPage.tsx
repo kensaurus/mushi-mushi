@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useEntitlements } from '../lib/useEntitlements'
 import { usePageData } from '../lib/usePageData'
@@ -369,7 +370,7 @@ export function InventoryPage() {
 
   if (!entLoading && !has('inventory_v2')) {
     return (
-      <div className="space-y-4">
+      <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-inventory">
         <PageHeaderBar title="User stories & inventory" projectScope={null} />
         <UpgradePrompt flag="inventory_v2" currentPlan={planName} />
       </div>

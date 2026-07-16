@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -48,7 +49,7 @@ import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PdcaContextHint } from '../components/PdcaContextHint'
 import { PageHero } from '../components/PageHero'
 import type { PageAction } from '../components/PageActionBar'
-import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
+import { CHIP_TONE, runStatusChipTone, HEADER_BADGE_TONE } from '../lib/chipTone'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -288,7 +289,7 @@ export function DriftPage() {
   }
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-drift">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-drift">
       <PageHeaderBar
         title={copy?.title ?? 'Drift'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -315,8 +316,8 @@ export function DriftPage() {
                 : bannerSeverity === 'warn'
                   ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
-                    ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
-                    : 'bg-surface-overlay text-fg-muted'
+                    ? HEADER_BADGE_TONE.brand
+                    : HEADER_BADGE_TONE.neutral
           }
         >
           {!stats.hasAnyProject
@@ -595,7 +596,7 @@ function FindingsTab({
           </thead>
           <tbody>
             {findings.map((f) => (
-              <tr key={f.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-colors">
+              <tr key={f.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-opacity">
                 <td className="px-3 py-2">{severityBadge(f.severity)}</td>
                 <td className="px-3 py-2 text-xs font-mono text-fg-muted">{f.surface}</td>
                 <td className="px-3 py-2 max-w-[180px] truncate font-mono text-xs">{f.path ?? '—'}</td>
@@ -756,7 +757,7 @@ function FindingDetailDrawer({
       <div className="space-y-5 pb-8">
         <div className="flex flex-wrap items-center gap-2">
           {severityBadge(finding.severity)}
-          <Badge className="bg-surface-overlay text-fg-muted">{finding.surface}</Badge>
+          <Badge className={HEADER_BADGE_TONE.neutral}>{finding.surface}</Badge>
         </div>
 
         <div className="rounded-md bg-surface-overlay px-4 py-3 text-sm text-fg-primary">{finding.message}</div>

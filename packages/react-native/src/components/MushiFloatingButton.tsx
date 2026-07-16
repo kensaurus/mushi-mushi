@@ -113,7 +113,8 @@ export const MushiFloatingButton: FC<MushiFloatingButtonProps> = ({
   // Default to the shared Mushi hanko-red accent (cross-platform coherence)
   // instead of platform blue, so the RN FAB matches the web widget. Hosts can
   // still override via the `accent` prop / console accent.
-  const accentColor = accent ?? mushiPalette(dark ? 'dark' : 'light').accent
+  const pal = mushiPalette(dark ? 'dark' : 'light')
+  const accentColor = accent ?? pal.accent
 
   useEffect(() => {
     if (!persist) return
@@ -225,7 +226,7 @@ export const MushiFloatingButton: FC<MushiFloatingButtonProps> = ({
           left: posX,
           bottom: Animated.add(new Animated.Value(baseBottom), Animated.multiply(posY, -1)),
           backgroundColor: accentColor,
-          shadowColor: dark ? accentColor : '#000',
+          shadowColor: dark ? accentColor : pal.ink,
           transform: [{ scale }],
         } as ViewStyle,
       ]}

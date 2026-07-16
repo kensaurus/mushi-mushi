@@ -5,13 +5,16 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ErrorAlert,
   Btn,
   FreshnessPill,
   AgeChip,
   SegmentedControl,
-  Badge, } from '../components/ui'
+  Badge,
+  FilterChip,
+  type FilterChipTone, } from '../components/ui'
 import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -31,7 +34,6 @@ import {
   OpenInboxCard,
 } from '../components/inbox/inbox-card-parts'
 import { EMPTY_INBOX_STATS, type InboxStats, type InboxTabId } from '../components/inbox/types'
-import type { PageAction } from '../components/PageActionBar'
 import type { ActivityItem, DashboardData } from '../components/dashboard/types'
 import { buildInboxCards, type InboxCardGroup } from '../lib/actionInboxFromDashboard'
 import { useInboxUx, resolveQuickInboxTab } from '../lib/inboxModeUx'
@@ -72,6 +74,12 @@ const INBOX_TABS: Array<{ id: InboxTabId; label: string; description: string }> 
 ]
 
 type FilterValue = 'all' | 'open' | 'clear' | Group
+
+const INBOX_FILTER_TONE: Record<'do' | 'act' | 'idle', FilterChipTone> = {
+  do: 'brand',
+  act: 'ok',
+  idle: 'default',
+}
 
 function isInboxTab(value: string | null): value is InboxTabId {
   return INBOX_TABS.some((t) => t.id === value)
@@ -229,7 +237,7 @@ export function InboxPage() {
   if (statsError) return <ErrorAlert message={`Failed to load inbox stats: ${statsError}`} onRetry={reloadAll} />
 
   return (
-    <div data-inbox-root className="space-y-4">
+    <div data-inbox-root className={PAGE_CONTENT_STACK} data-testid="mushi-page-inbox">
       <PageHeaderBar
         title={copy?.title ?? 'Action inbox'}
         projectScope={stats.projectName ?? undefined}
@@ -387,20 +395,26 @@ export function InboxPage() {
       {activeTab === 'stages' && (
         <>
           <div role="toolbar" aria-label="Filter inbox" className="flex flex-wrap items-center gap-1.5">
-            <FilterChip active={filter === 'all'} onClick={() => setFilter('all')} count={cards.length}>
-              All
-            </FilterChip>
             <FilterChip
+              label="All"
+              active={filter === 'all'}
+              onClick={() => setFilter('all')}
+              count={cards.length}
+            />
+            <FilterChip
+              label="Open"
               active={filter === 'open'}
               onClick={() => setFilter('open')}
               count={openCards.length}
-              tone={openCards.length > 0 ? 'do' : 'idle'}
-            >
-              Open
-            </FilterChip>
-            <FilterChip active={filter === 'clear'} onClick={() => setFilter('clear')} count={clearCards.length} tone="act">
-              Clear
-            </FilterChip>
+              tone={INBOX_FILTER_TONE[openCards.length > 0 ? 'do' : 'idle']}
+            />
+            <FilterChip
+              label="Clear"
+              active={filter === 'clear'}
+              onClick={() => setFilter('clear')}
+              count={clearCards.length}
+              tone={INBOX_FILTER_TONE.act}
+            />
             <span aria-hidden className="mx-1 text-fg-faint">
               ·
             </span>
@@ -411,13 +425,12 @@ export function InboxPage() {
               return (
                 <FilterChip
                   key={g}
+                  label={GROUP_LABEL[g]}
                   active={filter === g}
                   onClick={() => setFilter(g)}
                   count={groupTotal}
-                  tone={groupOpen > 0 ? 'do' : 'idle'}
-                >
-                  {GROUP_LABEL[g]}
-                </FilterChip>
+                  tone={INBOX_FILTER_TONE[groupOpen > 0 ? 'do' : 'idle']}
+                />
               )
             })}
           </div>
@@ -521,41 +534,6 @@ export function InboxPage() {
   )
 }
 
-function FilterChip({
-  children,
-  active,
-  onClick,
-  count,
-  tone = 'idle',
-}: {
-  children: React.ReactNode
-  active: boolean
-  onClick: () => void
-  count?: number
-  tone?: PageAction['tone']
-}) {
-  const groupTone = tone === 'do' ? 'text-brand' : tone === 'act' ? 'text-ok' : 'text-fg-muted'
-  return (
-    <Btn
-      type="button"
-      variant="ghost"
-      size="sm"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-2xs font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
-        active
-          ? 'bg-brand/12 text-brand border border-brand/28'
-          : 'border-edge-subtle bg-surface-overlay text-fg-muted hover:bg-surface-overlay hover:text-fg'
-      }`}
-    >
-      <span>{children}</span>
-      {typeof count === 'number' ? (
-        <span className={`tabular-nums ${active ? 'text-brand' : groupTone}`}>{count}</span>
-      ) : null}
-    </Btn>
-  )
-}
-
 function ActivityFeedRow({ item }: { item: ActivityItem }) {
   const activeProjectId = useActiveProjectId()
   const to = item.kind === 'report' ? reportDetailPath(item.id, activeProjectId) : `/fixes`
@@ -563,7 +541,7 @@ function ActivityFeedRow({ item }: { item: ActivityItem }) {
     <li>
       <Link
         to={to}
-        className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-overlay motion-safe:transition-colors"
+        className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-overlay motion-safe:transition-opacity"
       >
         <SignalChip tone={item.kind === 'report' ? 'info' : 'brand'}>{item.kind}</SignalChip>
         <ContainedBlock tone="neutral" className="min-w-0 flex-1 px-2 py-1">

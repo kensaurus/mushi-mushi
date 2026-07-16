@@ -400,7 +400,7 @@ export function FixGitGraph({
             <li
               key={i}
               className={[
-                'flex items-start gap-2 rounded-sm border border-transparent px-1.5 py-0.5 -mx-0.5 motion-safe:transition-colors',
+                'flex items-start gap-2 rounded-sm border border-transparent px-1.5 py-0.5 -mx-0.5 motion-safe:transition-opacity',
                 selected ? 'border-brand/30 bg-brand/10 ring-1 ring-brand/25' : 'hover:bg-surface-overlay/30',
               ].join(' ')}
               style={{ minHeight: `${ROW_H}px` }}

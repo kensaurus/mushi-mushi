@@ -31,6 +31,8 @@ export default withNextra({
   poweredByHeader: false,
   compress: true,
   trailingSlash: false,
+  // R3F / three need transpile for the static export + webpack client islands.
+  transpilePackages: ['three', '@react-three/fiber', '@react-three/drei'],
   // Inlined into client bundles (DocScreenshot, AdminDocHero GIFs).
   env: {
     NEXT_PUBLIC_MUSHI_BASE_PATH: basePath,
@@ -46,6 +48,6 @@ export default withNextra({
     unoptimized: true,
   },
   experimental: {
-    optimizePackageImports: ['nextra-theme-docs'],
+    optimizePackageImports: ['nextra-theme-docs', 'motion'],
   },
 })

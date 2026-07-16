@@ -150,7 +150,15 @@ export interface MushiRNInstance {
   close(): void
   attachTo(): { onPress: () => void }
   /** screenshotDataUrl is optional — pass `undefined` if not captured or removed by the user. */
-  submitReport(data: { description: string; category: string; screenshotDataUrl?: string }): Promise<void>
+  submitReport(data: {
+    description: string
+    category: string
+    screenshotDataUrl?: string
+  }): Promise<{
+    ok: boolean
+    queued?: boolean
+    failureKind?: 'offline' | 'retrying' | 'rate_limited' | 'quota' | 'permanent' | 'credentials'
+  }>
   getDeviceInfo(): ReturnType<typeof getDeviceInfo>
   getConsoleEntries(): ReturnType<ReturnType<typeof setupConsoleCapture>['getEntries']>
   getNetworkEntries(): ReturnType<ReturnType<typeof setupNetworkCapture>['getEntries']>
@@ -608,9 +616,13 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         // Credential failures (401/403) will never succeed on retry — skip the
         // offline queue and surface a clear error so the developer can fix their
         // Project ID / API key before reports are silently dropped.
+        const code = result.error?.code ?? ''
         const isCredentialError =
-          result.error?.code === 'HTTP_401' || result.error?.code === 'HTTP_403' ||
-          result.error?.code?.includes('UNAUTHORIZED') || result.error?.code?.includes('FORBIDDEN')
+          code === 'HTTP_401' ||
+          code === 'HTTP_403' ||
+          code.includes('UNAUTHORIZED') ||
+          code.includes('FORBIDDEN') ||
+          code.includes('INVALID_API_KEY')
         if (isCredentialError) {
           // Only link to the hosted console when running against Cloud; a
           // self-hosted app (custom apiEndpoint) has its own console address.
@@ -624,14 +636,21 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
             '[Mushi] Credentials rejected. Check your projectId and apiKey (must have "report:write" scope). ' +
             where,
           )
-          return
+          return { ok: false, failureKind: 'credentials' as const }
         }
+        const isRateLimited = code === 'HTTP_429' || code.includes('RATE_LIMIT')
         // Fire `onReportQueued` only after the report is actually persisted —
         // `enqueue` can no-op (AsyncStorage unavailable) or evict under cap.
         await queueRef.current?.enqueue(report)
         config.callbacks?.onReportQueued?.(report.id)
+        return {
+          ok: false,
+          queued: true,
+          failureKind: isRateLimited ? ('rate_limited' as const) : ('retrying' as const),
+        }
       } else {
         config.callbacks?.onReportSubmitted?.(report.id)
+        return { ok: true }
       }
     },
     [config.projectId, config.callbacks, apiEndpoint],

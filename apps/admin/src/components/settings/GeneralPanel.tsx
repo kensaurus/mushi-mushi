@@ -141,7 +141,7 @@ export function GeneralPanel() {
                   type="button"
                   onClick={() => void testSlack()}
                   disabled={testingSlack}
-                  className={`shrink-0 px-2.5 py-1 rounded-sm text-2xs font-medium border transition-colors ${
+                  className={`shrink-0 px-2.5 py-1 rounded-sm text-2xs font-medium border transition-opacity ${
                     slackTestResult === 'ok'
                       ? `border-ok ${CHIP_TONE.okSubtle}`
                       : slackTestResult === 'err'

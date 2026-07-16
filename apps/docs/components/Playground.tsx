@@ -80,7 +80,7 @@ export const Playground = ({
           <button
             type="button"
             onClick={() => setLaunched(true)}
-            className="absolute inset-0 flex flex-col items-center justify-center gap-3 transition-colors hover:bg-[color-mix(in_oklch,var(--mushi-vermillion,#e03c2c)_5%,white)]"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 transition-opacity hover:bg-[color-mix(in_oklch,var(--mushi-vermillion,#e03c2c)_5%,white)]"
             aria-label="Launch live playground"
           >
             {/* Play button */}
@@ -94,7 +94,7 @@ export const Playground = ({
                 justifyContent: 'center',
                 background: 'var(--mushi-vermillion, #e03c2c)',
                 boxShadow: '0 4px 24px -6px color-mix(in oklch, var(--mushi-vermillion, #e03c2c) 55%, transparent)',
-                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                transition: 'transform 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms cubic-bezier(0.22, 1, 0.36, 1)',
               }}
               aria-hidden="true"
             >

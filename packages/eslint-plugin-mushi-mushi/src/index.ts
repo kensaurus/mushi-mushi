@@ -42,6 +42,11 @@ import noRawHexInWidget from './rules/no-raw-hex-in-widget.js'
 import noCardElevatedOutsideAllowlist from './rules/no-card-elevated-outside-allowlist.js'
 import noRawSemanticOnMuted from './rules/no-raw-semantic-on-muted.js'
 import noRawCssVarText from './rules/no-raw-css-var-text.js'
+import noRedundantBorderOnChipTone from './rules/no-redundant-border-on-chip-tone.js'
+import noLegacyPageHeaderInPages from './rules/no-legacy-page-header-in-pages.js'
+import noPageRootPadding from './rules/no-page-root-padding.js'
+import noArbitraryLengthValue from './rules/no-arbitrary-length-value.js'
+import preferCardPrimitive from './rules/prefer-card-primitive.js'
 
 const PLUGIN_NAME = 'mushi-mushi'
 
@@ -59,6 +64,11 @@ const rules: Record<string, Rule.RuleModule> = {
   'no-card-elevated-outside-allowlist': noCardElevatedOutsideAllowlist,
   'no-raw-semantic-on-muted': noRawSemanticOnMuted,
   'no-raw-css-var-text': noRawCssVarText,
+  'no-redundant-border-on-chip-tone': noRedundantBorderOnChipTone,
+  'no-legacy-page-header-in-pages': noLegacyPageHeaderInPages,
+  'no-page-root-padding': noPageRootPadding,
+  'no-arbitrary-length-value': noArbitraryLengthValue,
+  'prefer-card-primitive': preferCardPrimitive,
 }
 
 const recommendedRules: Linter.RulesRecord = {
@@ -68,6 +78,19 @@ const recommendedRules: Linter.RulesRecord = {
   [`${PLUGIN_NAME}/no-text-3xs-on-interactive`]: 'warn',
   [`${PLUGIN_NAME}/no-hand-rolled-dialog`]: 'error',
   [`${PLUGIN_NAME}/no-hand-rolled-tablist`]: 'warn',
+  [`${PLUGIN_NAME}/no-missing-page-posture`]: 'warn',
+  [`${PLUGIN_NAME}/no-legacy-shadcn-tokens`]: 'warn',
+  [`${PLUGIN_NAME}/no-accent-for-selection`]: 'warn',
+  [`${PLUGIN_NAME}/no-raw-hex-in-widget`]: 'error',
+  [`${PLUGIN_NAME}/no-card-elevated-outside-allowlist`]: 'warn',
+  [`${PLUGIN_NAME}/no-raw-semantic-on-muted`]: 'warn',
+  [`${PLUGIN_NAME}/no-raw-css-var-text`]: 'warn',
+  [`${PLUGIN_NAME}/no-redundant-border-on-chip-tone`]: 'warn',
+  // Admin scaffold anti-drift — start warn; ratchet after Start-here cluster is clean.
+  [`${PLUGIN_NAME}/no-legacy-page-header-in-pages`]: 'error',
+  [`${PLUGIN_NAME}/no-page-root-padding`]: 'error',
+  [`${PLUGIN_NAME}/no-arbitrary-length-value`]: 'warn',
+  [`${PLUGIN_NAME}/prefer-card-primitive`]: 'warn',
 }
 
 /**

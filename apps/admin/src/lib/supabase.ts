@@ -211,6 +211,13 @@ async function doFetch<T>(
 
   debugLog('api', `${method} ${path}`)
 
+  // Mint outside the try so network-failure catch can still attach it.
+  const requestId =
+    (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `req-${Date.now()}`
+    ).slice(0, 12)
+
   try {
     const scope = options?.scope ?? 'project'
     const storedProjectId = scope === 'project' ? getActiveProjectIdForApi() : null
@@ -226,10 +233,15 @@ async function doFetch<T>(
         ...options,
         headers: {
           'Content-Type': 'application/json',
+          'X-Request-Id': requestId,
           ...(options?.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
           ...(activeProjectId ? { 'X-Mushi-Project-Id': activeProjectId } : {}),
-          ...(activeOrgId ? { 'X-Mushi-Org-Id': activeOrgId } : {}),
+          // Also stamp legacy `x-org-id` for any remote handlers that still
+          // read that name (portfolio briefly did before getOrgIdFromContext).
+          ...(activeOrgId
+            ? { 'X-Mushi-Org-Id': activeOrgId, 'x-org-id': activeOrgId }
+            : {}),
           ...options?.headers,
         },
       })
@@ -240,10 +252,26 @@ async function doFetch<T>(
     }
 
     if (!res) {
-      return { ok: false, error: { code: 'NETWORK_ERROR', message: 'Request failed' } }
+      return {
+        ok: false,
+        requestId,
+        error: { code: 'NETWORK_ERROR', message: 'Request failed', requestId },
+      }
     }
 
     const ms = Math.round(performance.now() - t0)
+    const responseRequestId =
+      res.headers.get('X-Request-Id')?.trim() ||
+      res.headers.get('x-request-id')?.trim() ||
+      requestId
+
+    const attachRequestId = <TResult>(result: ApiResult<TResult>): ApiResult<TResult> => ({
+      ...result,
+      requestId: responseRequestId,
+      error: result.error
+        ? { ...result.error, requestId: result.error.requestId ?? responseRequestId }
+        : result.error,
+    })
 
     if (!res.ok) {
       const body = await res.text()
@@ -297,7 +325,13 @@ async function doFetch<T>(
         category: 'api',
         type: 'http',
         level: res.status >= 500 ? 'error' : 'warning',
-        data: { method, url: path, status_code: res.status, duration_ms: ms },
+        data: {
+          method,
+          url: path,
+          status_code: res.status,
+          duration_ms: ms,
+          request_id: responseRequestId,
+        },
         message: `${method} ${path} → ${res.status}`,
       })
       if (res.status >= 500) {
@@ -308,9 +342,22 @@ async function doFetch<T>(
           // every reporter session that hit the same degraded endpoint
           // opened a fresh Sentry issue and the noise drowned the signal.
           fingerprint: ['apiFetch', method, path, String(res.status)],
-          tags: { source: 'apiFetch', http_status: String(res.status), api_path: path },
-          contexts: { http: { method, url: path, status_code: res.status, duration_ms: ms } },
-          extra: { response_snippet: body.slice(0, 500) },
+          tags: {
+            source: 'apiFetch',
+            http_status: String(res.status),
+            api_path: path,
+            request_id: responseRequestId,
+          },
+          contexts: {
+            http: {
+              method,
+              url: path,
+              status_code: res.status,
+              duration_ms: ms,
+              request_id: responseRequestId,
+            },
+          },
+          extra: { response_snippet: body.slice(0, 500), request_id: responseRequestId },
         })
       } else if (res.status === 400 || res.status === 422) {
         // FE-API-5: sample 400/422 at 5% — these are contract-drift signals
@@ -325,9 +372,18 @@ async function doFetch<T>(
               http_status: String(res.status),
               api_path: path,
               sampled: 'true',
+              request_id: responseRequestId,
             },
-            contexts: { http: { method, url: path, status_code: res.status, duration_ms: ms } },
-            extra: { response_snippet: body.slice(0, 500) },
+            contexts: {
+              http: {
+                method,
+                url: path,
+                status_code: res.status,
+                duration_ms: ms,
+                request_id: responseRequestId,
+              },
+            },
+            extra: { response_snippet: body.slice(0, 500), request_id: responseRequestId },
           })
         }
       }
@@ -336,17 +392,17 @@ async function doFetch<T>(
         // A non-2xx body without an explicit error envelope (e.g. a proxy's
         // `{ "message": "..." }`) must never coerce into a success.
         if (coerced.ok) {
-          return {
+          return attachRequestId({
             ok: false,
             error: { code: 'HTTP_ERROR', message: `${res.status}: ${body.slice(0, 200)}` },
-          }
+          })
         }
-        return coerced
+        return attachRequestId(coerced)
       } catch {
-        return {
+        return attachRequestId({
           ok: false,
           error: { code: 'HTTP_ERROR', message: `${res.status}: ${body.slice(0, 200)}` },
-        }
+        })
       }
     }
 
@@ -368,17 +424,33 @@ async function doFetch<T>(
         Sentry.captureMessage(`API response failed Zod validation ${method} ${path}`, {
           level: 'error',
           fingerprint: ['apiFetch-zod', method, path, firstIssue?.code ?? 'unknown'],
-          tags: { source: 'apiFetch', api_path: path, validation: 'zod' },
-          contexts: { http: { method, url: path, status_code: res.status, duration_ms: ms } },
-          extra: { issues: parsed.error.issues.slice(0, 5) },
+          tags: {
+            source: 'apiFetch',
+            api_path: path,
+            validation: 'zod',
+            request_id: responseRequestId,
+          },
+          contexts: {
+            http: {
+              method,
+              url: path,
+              status_code: res.status,
+              duration_ms: ms,
+              request_id: responseRequestId,
+            },
+          },
+          extra: { issues: parsed.error.issues.slice(0, 5), request_id: responseRequestId },
         })
         debugWarn('api', `Zod validation failed ${method} ${path}: ${issueSummary}`)
-        return { ok: false, error: { code: 'VALIDATION_ERROR', message: issueSummary } }
+        return attachRequestId({
+          ok: false,
+          error: { code: 'VALIDATION_ERROR', message: issueSummary },
+        })
       }
-      return { ok: true, data: parsed.data }
+      return attachRequestId({ ok: true, data: parsed.data })
     }
 
-    return result
+    return attachRequestId(result)
   } catch (err) {
     const ms = Math.round(performance.now() - t0)
     debugError('api', `${method} ${path} → NETWORK_ERROR (${ms}ms)`, { error: String(err) })
@@ -389,16 +461,31 @@ async function doFetch<T>(
       category: 'api',
       type: 'http',
       level: 'error',
-      data: { method, url: path, duration_ms: ms, error: String(err).slice(0, 200) },
+      data: {
+        method,
+        url: path,
+        duration_ms: ms,
+        error: String(err).slice(0, 200),
+        request_id: requestId,
+      },
       message: `${method} ${path} → NETWORK_ERROR`,
     })
     if (err instanceof Error && err.name !== 'AbortError') {
       Sentry.captureException(err, {
-        tags: { source: 'apiFetch', http_status: 'network_error', api_path: path },
-        contexts: { http: { method, url: path, duration_ms: ms } },
+        tags: {
+          source: 'apiFetch',
+          http_status: 'network_error',
+          api_path: path,
+          request_id: requestId,
+        },
+        contexts: { http: { method, url: path, duration_ms: ms, request_id: requestId } },
       })
     }
-    return { ok: false, error: { code: 'NETWORK_ERROR', message: String(err) } }
+    return {
+      ok: false,
+      requestId,
+      error: { code: 'NETWORK_ERROR', message: String(err), requestId },
+    }
   }
 }
 
@@ -421,7 +508,9 @@ export async function apiFetchRaw(path: string, options?: RequestInit): Promise<
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(activeProjectId ? { 'X-Mushi-Project-Id': activeProjectId } : {}),
-        ...(activeOrgId ? { 'X-Mushi-Org-Id': activeOrgId } : {}),
+        ...(activeOrgId
+          ? { 'X-Mushi-Org-Id': activeOrgId, 'x-org-id': activeOrgId }
+          : {}),
         ...options?.headers,
       },
     })

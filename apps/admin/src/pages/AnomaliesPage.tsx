@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -50,7 +51,7 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PdcaContextHint } from '../components/PdcaContextHint'
 import { BarSparkline } from '../components/charts'
-import { CHIP_TONE } from '../lib/chipTone'
+import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 
 interface AnomalyDetection {
   id: string
@@ -78,7 +79,7 @@ interface MetricPoint {
 }
 
 const METHOD_CLS: Record<string, string> = {
-  'page-hinkley': CHIP_TONE.warnSubtle + ' border border-warn/20',
+  'page-hinkley': CHIP_TONE.warnSubtle,
   'z-score': CHIP_TONE.dangerSubtle,
   'release-regression': CHIP_TONE.dangerSubtle,
 }
@@ -252,7 +253,7 @@ export function AnomaliesPage() {
               : 'info'
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-anomalies">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-anomalies">
       <PageHeaderBar
         title={copy?.title ?? 'Anomalies'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -278,8 +279,8 @@ export function AnomaliesPage() {
                 : bannerSeverity === 'warn'
                   ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
-                    ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
-                    : 'bg-surface-overlay text-fg-muted'
+                    ? HEADER_BADGE_TONE.brand
+                    : HEADER_BADGE_TONE.neutral
           }
         >
           {!stats.hasAnyProject
@@ -471,7 +472,7 @@ function AnomaliesTab({
         </thead>
         <tbody>
           {anomalies.map((a) => (
-            <tr key={a.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-colors">
+            <tr key={a.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-opacity">
               <td className="px-3 py-2 font-mono text-xs">{a.metric_name}</td>
               <td className="px-3 py-2">{methodBadge(a.method)}</td>
               <td className="px-3 py-2 text-right">

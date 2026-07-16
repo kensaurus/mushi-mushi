@@ -85,6 +85,8 @@
   .chrome-top-row {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
+    row-gap: 0.25rem;
     min-height: var(--chrome-row-height, 2.5rem);
     flex-shrink: 0;
   }
@@ -114,10 +116,7 @@
   font-size: 0.8125rem;
   line-height: 1.25rem;
   color: var(--color-fg-muted);
-  transition:
-    color 180ms var(--ease-out-expo),
-    background-color 180ms var(--ease-out-expo),
-    transform 120ms var(--ease-out-expo);
+  transition: opacity var(--duration-fast) var(--ease-stamp), transform var(--duration-fast) var(--ease-stamp);
   user-select: none;
 }
 
@@ -281,7 +280,7 @@
   gap: 0.75rem;
   min-width: 0;
   padding: 0.75rem 1rem;
-  transition: background-color var(--duration-fast) ease;
+  transition: opacity var(--duration-fast) var(--ease-stamp), transform var(--duration-fast) var(--ease-stamp);
 }
 
 .panel-row + .panel-row,
@@ -340,11 +339,7 @@
   isolation: isolate;
   overflow: hidden;
   cursor: pointer;
-  transition:
-    border-color 420ms var(--ease-out-expo),
-    transform 480ms var(--ease-out-expo),
-    box-shadow 480ms var(--ease-out-expo),
-    background-color 380ms var(--ease-out-expo);
+  transition: opacity var(--duration-fast) var(--ease-stamp), transform var(--duration-fast) var(--ease-stamp);
 }
 
 .stat-card-link::before {
@@ -399,10 +394,7 @@
 
 .stat-card-value {
   transform-origin: left center;
-  transition:
-    transform 520ms var(--ease-out-expo),
-    text-shadow 520ms var(--ease-out-expo),
-    color 380ms var(--ease-out-expo);
+  transition: opacity var(--duration-fast) var(--ease-stamp), transform var(--duration-fast) var(--ease-stamp);
 }
 
 .stat-card-link:hover .stat-card-value,
@@ -559,7 +551,15 @@
 }
 
 .tooltip-enter {
-  animation: tooltip-in 120ms var(--ease-out-expo) forwards;
+  animation: tooltip-in var(--duration-instant) var(--ease-stamp) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tooltip-enter {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* Shared Tooltip primitive — max-width only applies on inline-block/block (not bare inline). */
@@ -702,16 +702,11 @@
   cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
-  transition:
-    color 160ms var(--ease-out-expo),
-    background-color 160ms var(--ease-out-expo),
-    border-color 160ms var(--ease-out-expo),
-    box-shadow 160ms var(--ease-out-expo),
-    transform 100ms var(--ease-out-expo);
+  transition: opacity var(--duration-fast) var(--ease-stamp), transform var(--duration-fast) var(--ease-stamp);
 }
 
 .sidebar-micro-seg__label {
-  transition: color 160ms var(--ease-out-expo), font-weight 160ms var(--ease-out-expo);
+  transition: opacity var(--duration-fast) var(--ease-stamp), transform var(--duration-fast) var(--ease-stamp);
 }
 
 .sidebar-micro-seg:hover:not(.sidebar-micro-seg--active):not([aria-checked='true']):not([aria-pressed='true']) {
@@ -1128,10 +1123,10 @@
  * MetricStrip's stagger and ~10 other components) produced NO rule and the
  * animation silently never ran. `@utility` keeps the bare class working and
  * makes every variant (motion-safe, hover, dark, …) resolve. */
-@utility animate-mushi-fade-in   { animation: mushi-fade-in 160ms var(--ease-out-expo) both; }
-@utility animate-mushi-modal-in  { animation: mushi-modal-in 220ms var(--ease-out-expo) both; }
-@utility animate-mushi-toast-in  { animation: mushi-toast-in 180ms var(--ease-out-expo) both; }
-@utility animate-mushi-toast-out { animation: mushi-toast-out 140ms var(--ease-out-expo) both; }
+@utility animate-mushi-fade-in   { animation: mushi-fade-in var(--duration-fast) var(--ease-stamp) both; }
+@utility animate-mushi-modal-in  { animation: mushi-modal-in var(--duration-base) var(--ease-stamp) both; }
+@utility animate-mushi-toast-in  { animation: mushi-toast-in var(--duration-fast) var(--ease-stamp) both; }
+@utility animate-mushi-toast-out { animation: mushi-toast-out var(--duration-instant) var(--ease-stamp) both; }
 @utility animate-mushi-toast-progress { animation: mushi-toast-progress linear forwards; }
 @utility animate-mushi-success-pulse  { animation: mushi-success-pulse 600ms var(--ease-out-expo) both; }
 @utility animate-mushi-confetti-fall  { animation: mushi-confetti-fall 1400ms cubic-bezier(.18,.78,.42,1) both; }
@@ -1170,13 +1165,26 @@
   from { opacity: 0; transform: translateX(24px); }
   to   { opacity: 1; transform: translateX(0); }
 }
-@utility animate-mushi-drawer-in { animation: mushi-drawer-in 220ms var(--ease-out-expo) both; }
+@utility animate-mushi-drawer-in { animation: mushi-drawer-in var(--duration-base) var(--ease-stamp) both; }
 
 @keyframes mushi-drawer-backdrop-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
-@utility animate-mushi-drawer-backdrop-in { animation: mushi-drawer-backdrop-in 160ms var(--ease-out-expo) both; }
+@utility animate-mushi-drawer-backdrop-in { animation: mushi-drawer-backdrop-in var(--duration-fast) var(--ease-stamp) both; }
+
+/* Hanko stamp-ring loader — Kinetics-timed (docs/MOTION.md). Transform only. */
+@keyframes mushi-stamp-spin {
+  to { transform: rotate(360deg); }
+}
+@utility animate-mushi-stamp-spin {
+  animation: mushi-stamp-spin var(--duration-ring) linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-mushi-stamp-spin {
+    animation: none;
+  }
+}
 
 /* Traveling dots along an edge. Each dot gets its own animation-delay so
    the pulse reads as a moving caravan rather than a simultaneous blink.
@@ -1484,7 +1492,7 @@
   z-index: 8;
   width: 1.75rem;
   opacity: 0;
-  transition: opacity var(--duration-fast, 150ms) ease;
+  transition: opacity var(--duration-fast, 200ms) ease;
 }
 .responsive-table::before {
   left: 0;
@@ -1560,7 +1568,7 @@
   }
 }
 .row-kebab-reveal {
-  transition: opacity var(--duration-fast, 150ms) ease;
+  transition: opacity var(--duration-fast, 200ms) ease;
 }
 @media (prefers-reduced-motion: reduce) {
   .row-kebab-reveal {
@@ -1586,7 +1594,7 @@
   }
 }
 .action-reveal {
-  transition: opacity var(--duration-fast, 150ms) ease;
+  transition: opacity var(--duration-fast, 200ms) ease;
 }
 @media (prefers-reduced-motion: reduce) {
   .action-reveal {
@@ -1596,7 +1604,7 @@
 
 @utility text-link {
   color: var(--color-fg-secondary);
-  transition: color var(--duration-fast, 150ms) ease;
+  transition: opacity var(--duration-fast) var(--ease-stamp), transform var(--duration-fast) var(--ease-stamp);
   &:hover {
     color: var(--color-brand);
   }
@@ -1605,7 +1613,7 @@
 @utility text-link-emphasis {
   color: var(--color-brand);
   font-weight: 500;
-  transition: color var(--duration-fast, 150ms) ease;
+  transition: opacity var(--duration-fast) var(--ease-stamp), transform var(--duration-fast) var(--ease-stamp);
   &:hover {
     color: color-mix(in oklch, var(--color-brand) 85%, white);
   }

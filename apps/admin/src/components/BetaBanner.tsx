@@ -142,7 +142,7 @@ export function BetaBanner() {
                 <button
                   type="button"
                   onClick={() => openFeedback('bug')}
-                  className="px-2 py-0.5 font-medium transition-colors hover:text-lime-foreground"
+                  className="px-2 py-0.5 font-medium transition-opacity hover:text-lime-foreground"
                 >
                   Report a bug
                 </button>
@@ -154,14 +154,14 @@ export function BetaBanner() {
                 <button
                   type="button"
                   onClick={() => openFeedback('feature')}
-                  className="px-2 py-0.5 font-medium transition-colors hover:text-lime-foreground"
+                  className="px-2 py-0.5 font-medium transition-opacity hover:text-lime-foreground"
                 >
                   Feature request
                 </button>
                 <span aria-hidden="true" className="hidden select-none text-lime-foreground/40 sm:inline">|</span>
                 <Link
                   to="/feedback"
-                  className="px-2 py-0.5 font-medium transition-colors hover:text-lime-foreground"
+                  className="px-2 py-0.5 font-medium transition-opacity hover:text-lime-foreground"
                 >
                   My submissions
                 </Link>
@@ -172,7 +172,7 @@ export function BetaBanner() {
               type="button"
               onClick={handleDismiss}
               aria-label="Dismiss beta banner"
-              className="px-2 py-0.5 font-medium transition-colors hover:text-lime-foreground"
+              className="px-2 py-0.5 font-medium transition-opacity hover:text-lime-foreground"
             >
               Dismiss
             </button>

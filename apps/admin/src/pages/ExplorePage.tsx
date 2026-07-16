@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { type Edge, type Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -91,7 +92,7 @@ import {
   uiLayerTooltip,
 } from '../lib/statTooltips/explore'
 import { exploreLinks } from '../lib/statCardLinks'
-import { CHIP_TONE } from '../lib/chipTone'
+import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 
 type DensityMode = 'files' | 'symbols'
 
@@ -602,7 +603,7 @@ export function ExplorePage() {
 
   if (!projectId) {
     return (
-      <div className="space-y-4">
+      <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-explore">
         <PageHeaderBar title={copy?.title ?? 'Explore'} />
         <PagePosture
           slots={[
@@ -701,7 +702,7 @@ export function ExplorePage() {
                   size="sm"
                   onClick={() => toggleLayerFilter(layer)}
                   className={[
-                    'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs transition-[background-color,border-color,color,box-shadow,transform,opacity]',
+                    'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs transition-[transform,opacity]',
                     active ? 'font-semibold shadow-sm' : 'hover:border-current',
                   ].join(' ')}
                   style={{
@@ -857,8 +858,8 @@ export function ExplorePage() {
                     : bannerSeverity === 'warn'
                       ? CHIP_TONE.warnSubtle
                       : bannerSeverity === 'brand'
-                        ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
-                        : 'bg-surface-overlay text-fg-muted'
+                        ? HEADER_BADGE_TONE.brand
+                        : HEADER_BADGE_TONE.neutral
               }
             >
               {!stats.hasAnyProject

@@ -7,6 +7,7 @@
   "type": "module",
   "exports": {
     "./editorial.css": "./src/editorial.css",
+    "./tokens": "./src/tokens.generated.ts",
     ".": {
       "types": "./src/index.d.ts",
       "default": "./src/index.js"

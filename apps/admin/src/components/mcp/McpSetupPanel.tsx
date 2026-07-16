@@ -111,7 +111,7 @@ export function McpSetupPanel({
             <Badge
               className={
                 hasReadKey
-                  ? CHIP_TONE.okSubtle + ' border border-ok/30'
+                  ? CHIP_TONE.okSubtle
                   : 'bg-surface-overlay text-fg-muted border border-edge-subtle'
               }
               data-testid="mcp-read-status"
@@ -121,7 +121,7 @@ export function McpSetupPanel({
             <Badge
               className={
                 hasWriteKey
-                  ? CHIP_TONE.okSubtle + ' border border-ok/30'
+                  ? CHIP_TONE.okSubtle
                   : 'bg-surface-overlay text-fg-muted border border-edge-subtle'
               }
               data-testid="mcp-write-status"
@@ -374,10 +374,10 @@ export function McpSetupPanel({
           {connectionTestResult && (
             <div
               data-testid="mcp-connection-result"
-              className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-xs ${
+              className={`flex items-start gap-2.5 rounded-lg px-3 py-2.5 text-xs ${
                 connectionTestResult.ok
-                  ? 'border-ok/30 bg-ok-muted/50 text-ok-foreground border border-ok/25'
-                  : 'border-danger/30 bg-danger-muted/50 text-danger-foreground border border-danger/25-foreground'
+                  ? CHIP_TONE.okSubtle
+                  : CHIP_TONE.dangerSubtle
               }`}
             >
               <span className="shrink-0 text-sm leading-none mt-0.5" aria-hidden>

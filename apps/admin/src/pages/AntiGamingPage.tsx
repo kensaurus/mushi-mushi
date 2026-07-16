@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { apiFetch } from '../lib/supabase'
 import { useRealtime } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
@@ -373,7 +374,7 @@ export function AntiGamingPage() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-anti-gaming">
       <PageHeaderBar
         title="Anti-Gaming"
 

@@ -6,6 +6,10 @@
 import { useMemo } from 'react'
 import { Streamdown } from 'streamdown'
 import { LongFormText } from './fields'
+import {
+  STREAMDOWN_LINK_SAFETY,
+  streamdownUrlTransform,
+} from '../../lib/streamdownSafety'
 
 export type ProseBlockMode = 'plain' | 'markdown' | 'excerpt' | 'auto'
 
@@ -76,7 +80,13 @@ export function ProseBlock({
   if (resolved === 'markdown') {
     return (
       <div className={`${maxWidth} min-w-0 ${className}`}>
-        <Streamdown className="prose-mushi">{value}</Streamdown>
+        <Streamdown
+          className="prose-mushi"
+          linkSafety={STREAMDOWN_LINK_SAFETY}
+          urlTransform={streamdownUrlTransform}
+        >
+          {value}
+        </Streamdown>
       </div>
     )
   }

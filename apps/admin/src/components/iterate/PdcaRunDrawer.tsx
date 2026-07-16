@@ -124,7 +124,7 @@ export function PdcaRunDrawer({ run, open, onClose, onAbort, onTrigger, onRefres
                   key={iter.id}
                   type="button"
                   onClick={() => setActiveIter(iter)}
-                  className={`flex w-full items-start gap-3 rounded-md border p-3 text-left transition-colors hover:bg-surface-raised/40 ${
+                  className={`flex w-full items-start gap-3 rounded-md border p-3 text-left transition-opacity hover:bg-surface-raised/40 ${
                     activeIter?.id === iter.id ? 'border-brand/40 bg-brand/5' : 'border-edge-subtle'
                   }`}
                 >

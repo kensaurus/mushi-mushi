@@ -81,10 +81,10 @@ function renderCell(col: string, val: unknown): ReactNode {
   // Severity
   if (colL === 'severity') {
     const map: Record<string, string> = {
-      critical: CHIP_TONE.dangerSubtle + ' border border-danger/30',
+      critical: CHIP_TONE.dangerSubtle,
       high:     CHIP_TONE.warnSubtle,
       medium:   CHIP_TONE.warnSubtle,
-      low:      CHIP_TONE.infoSubtle + ' border border-info/25',
+      low:      CHIP_TONE.infoSubtle,
     }
     const label: Record<string, string> = { critical: 'P0 critical', high: 'P1 high', medium: 'P2 medium', low: 'P3 low' }
     return <CellBadge cls={map[strL] ?? 'bg-surface-raised text-fg-secondary border border-edge-subtle'}>{label[strL] ?? str}</CellBadge>
@@ -94,9 +94,9 @@ function renderCell(col: string, val: unknown): ReactNode {
   if (colL === 'status') {
     const map: Record<string, string> = {
       new:        'bg-brand/12 text-brand border border-brand/28',
-      pending:    CHIP_TONE.infoSubtle + ' border border-info/25',
-      submitted:  CHIP_TONE.infoSubtle + ' border border-info/25',
-      queued:     CHIP_TONE.infoSubtle + ' border border-info/25',
+      pending:    CHIP_TONE.infoSubtle,
+      submitted:  CHIP_TONE.infoSubtle,
+      queued:     CHIP_TONE.infoSubtle,
       classified: CHIP_TONE.okSubtle,
       grouped:    CHIP_TONE.okSubtle,
       fixing:     CHIP_TONE.warnSubtle,
@@ -112,8 +112,8 @@ function renderCell(col: string, val: unknown): ReactNode {
     const map: Record<string, string> = {
       bug:       CHIP_TONE.dangerSubtle,
       slow:      CHIP_TONE.warnSubtle,
-      visual:    CHIP_TONE.accentSubtle + ' border border-accent/25',
-      confusing: CHIP_TONE.infoSubtle + ' border border-info/25',
+      visual:    CHIP_TONE.accentSubtle,
+      confusing: CHIP_TONE.infoSubtle,
       other:     'bg-surface-raised text-fg-muted border border-edge-subtle',
     }
     return <CellBadge cls={map[strL] ?? 'bg-surface-raised text-fg-secondary border border-edge-subtle'}>{str}</CellBadge>
@@ -124,7 +124,7 @@ function renderCell(col: string, val: unknown): ReactNode {
     const map: Record<string, string> = {
       passed:  CHIP_TONE.okSubtle,
       failed:  CHIP_TONE.dangerSubtle,
-      pending: CHIP_TONE.infoSubtle + ' border border-info/25',
+      pending: CHIP_TONE.infoSubtle,
     }
     return <CellBadge cls={map[strL] ?? 'bg-surface-raised text-fg-secondary border border-edge-subtle'}>{str}</CellBadge>
   }
@@ -142,7 +142,7 @@ function renderCell(col: string, val: unknown): ReactNode {
   if (colL.endsWith('_url') && typeof val === 'string' && val.startsWith('http')) {
     const short = val.replace(/^https?:\/\//, '').slice(0, 36)
     return (
-      <a href={val} target="_blank" rel="noopener noreferrer" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors" title={val}>
+      <a href={val} target="_blank" rel="noopener noreferrer" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity" title={val}>
         {short}{val.length > 36 ? '…' : ''}
       </a>
     )
@@ -207,7 +207,7 @@ export function QueryResultsTable({ rows }: { rows: unknown[] }) {
           {table.data.slice(0, 50).map((row, i) => (
             <tr
               key={i}
-              className={`border-b border-edge-subtle/50 hover:bg-surface-raised motion-safe:transition-colors ${
+              className={`border-b border-edge-subtle/50 hover:bg-surface-raised motion-safe:transition-opacity ${
                 i % 2 === 1 ? 'bg-surface-root/30' : ''
               }`}
             >

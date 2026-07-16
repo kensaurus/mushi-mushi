@@ -66,7 +66,7 @@ function TopComponentsCard({ topComponents }: { topComponents: Props['topCompone
                 {/* P2 — h-1.5 (6px) so the bar is actually visible, not a hairline */}
                 <div className="h-1.5 overflow-hidden rounded-full bg-surface-overlay">
                   <div
-                    className="h-full rounded-full bg-brand/70 motion-safe:transition-[width,background-color] group-hover:bg-brand"
+                    className="h-full rounded-full bg-brand/70 motion-safe:transition-[width,opacity] group-hover:bg-brand"
                     style={{ width: `${pct}%` }}
                   />
                 </div>
@@ -110,7 +110,7 @@ function IntegrationsCard({ integrations }: { integrations: IntegrationStatus[] 
             <Link
               key={it.kind}
               to="/integrations/config"
-              className="flex items-center justify-between gap-2 py-1.5 first:pt-0 last:pb-0 motion-safe:transition-colors hover:opacity-80"
+              className="flex items-center justify-between gap-2 py-1.5 first:pt-0 last:pb-0 motion-safe:transition-opacity hover:opacity-80"
             >
               <span className="text-xs capitalize text-fg-secondary">{it.kind}</span>
               <div className="flex items-center gap-2">
@@ -146,7 +146,7 @@ function ActivityCard({ activity }: { activity: ActivityItem[] }) {
               key={`${a.kind}-${a.id}-${i}`}
               to={a.kind === 'fix' ? '/fixes' : `/reports/${a.id}`}
               style={stagger(i)}
-              className="group flex items-center gap-2 rounded-sm px-1.5 py-1 motion-safe:animate-mushi-fade-in motion-safe:transition-colors hover:bg-surface-overlay/50"
+              className="group flex items-center gap-2 rounded-sm px-1.5 py-1 motion-safe:animate-mushi-fade-in motion-safe:transition-opacity hover:bg-surface-overlay/50"
             >
               {/* P4 — square for fix (deliberate action), circle for report (event) */}
               {a.kind === 'fix' ? (

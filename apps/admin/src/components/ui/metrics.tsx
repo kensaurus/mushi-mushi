@@ -218,7 +218,7 @@ const RECOMMENDED_ACCENTS = {
 } as const
 
 const CTA_BTN_CLASS =
-  'shrink-0 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+  'shrink-0 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity disabled:opacity-50 disabled:cursor-not-allowed'
 
 function RecommendedActionCtaEl({ cta }: { cta: RecommendedActionCta }) {
   if (cta.to) {
@@ -256,7 +256,7 @@ const INLINE_ACTION_TONES: Record<NonNullable<RecommendedActionInlineAction['ton
 }
 
 function InlineActionEl({ action }: { action: RecommendedActionInlineAction }) {
-  const cls = `inline-flex items-center gap-1 px-2 py-1 text-2xs font-medium rounded-sm motion-safe:transition-colors ${INLINE_ACTION_TONES[action.tone ?? 'ghost']}`
+  const cls = `inline-flex items-center gap-1 px-2 py-1 text-2xs font-medium rounded-sm motion-safe:transition-opacity ${INLINE_ACTION_TONES[action.tone ?? 'ghost']}`
   if (action.to) {
     return <Link to={action.to} className={cls}>{action.label}</Link>
   }

@@ -176,7 +176,7 @@ export function DataTable<T>({
                         }
                       : undefined
                   }
-                  className={`border-b border-edge/30 motion-safe:transition-colors ${
+                  className={`border-b border-edge/30 motion-safe:transition-opacity ${
                     onRowClick
                       ? 'cursor-pointer hover:bg-surface-overlay/50 focus-visible:outline-none focus-visible:bg-surface-overlay/70 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand/50'
                       : ''

@@ -24,7 +24,7 @@ export function PipelineStageChip({
     >
       <Link
         to={info.to}
-        className={`inline-flex max-w-full items-center rounded-sm border px-1.5 py-0.5 font-mono text-2xs leading-snug transition-colors truncate ${info.className} ${maxWidthClass}`}
+        className={`inline-flex max-w-full items-center rounded-sm border px-1.5 py-0.5 font-mono text-2xs leading-snug transition-opacity truncate ${info.className} ${maxWidthClass}`}
         title={info.description}
       >
         {stage}

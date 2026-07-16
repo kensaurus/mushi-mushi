@@ -90,7 +90,7 @@ function FixRowViewInner({
   return (
     <>
       <tr
-        className={`group border-t border-edge-subtle hover:bg-surface-overlay/50 motion-safe:transition-colors cursor-pointer motion-safe:animate-mushi-fade-in ${flash.className}`}
+        className={`group border-t border-edge-subtle hover:bg-surface-overlay/50 motion-safe:transition-opacity cursor-pointer motion-safe:animate-mushi-fade-in ${flash.className}`}
         style={{ ...stagger(index), ...flash.style }}
         onAnimationEnd={flash.onAnimationEnd}
         onClick={onToggle}

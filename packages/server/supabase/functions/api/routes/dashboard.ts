@@ -1,8 +1,8 @@
 import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
-import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
-import { callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds } from '../shared.ts';
+import { jwtAuth, adminOrApiKey, getOrgIdFromContext } from '../../_shared/auth.ts';
+import { callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds, rpcError } from '../shared.ts';
 import { attachReportTitles, bucketFailedFixPreviews } from '../../_shared/failed-fix-preview.ts';
 
 export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -1092,7 +1092,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       p_project_id: projectId,
       p_window_days: windowDays,
     });
-    if (error) return c.json({ ok: false, error: { code: 'RPC_ERROR', message: error.message } }, 500);
+    if (error) return rpcError(c, error);
 
     return c.json({ ok: true, data });
   });
@@ -1104,9 +1104,19 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    // Resolve the active org from context (x-org-id header set by apiFetch).
-    const orgId = c.req.header('x-org-id');
-    if (!orgId) return c.json({ ok: false, error: { code: 'NO_ORG', message: 'x-org-id header required' } }, 400);
+    // Canonical: X-Mushi-Org-Id (apiFetch). Also accept legacy aliases that
+    // shipped briefly on older console builds / mis-documented clients.
+    const orgId =
+      getOrgIdFromContext(c) ??
+      c.req.header('x-organization-id') ??
+      c.req.header('x-org-id') ??
+      null;
+    if (!orgId) {
+      return c.json(
+        { ok: false, error: { code: 'NO_ORG', message: 'X-Mushi-Org-Id header required' } },
+        400,
+      );
+    }
 
     // Verify the caller is a member of this org.
     const { data: membership, error: memErr } = await db
@@ -1120,7 +1130,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     }
 
     const { data, error } = await db.rpc('org_portfolio_summary', { p_org_id: orgId });
-    if (error) return c.json({ ok: false, error: { code: 'RPC_ERROR', message: error.message } }, 500);
+    if (error) return rpcError(c, error);
 
     return c.json({ ok: true, data: data ?? [] });
   });

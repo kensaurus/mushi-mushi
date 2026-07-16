@@ -171,7 +171,7 @@ export function CrawlerSettingsCard({ projectId }: Props) {
           <SettingRow label="Auth">
             {data?.crawler_auth ? (
               <span className="flex items-center gap-2">
-                <Badge className={`${CHIP_TONE.infoSubtle} border border-info/25 font-mono`}>
+                <Badge className={`${CHIP_TONE.infoSubtle} font-mono`}>
                   {data.crawler_auth.type}
                 </Badge>
                 {data.crawler_auth.type === 'cookie' && data.crawler_auth.config.name && (

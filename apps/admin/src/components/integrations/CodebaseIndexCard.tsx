@@ -32,6 +32,8 @@ import {
   Btn,
   Badge,
   Input,
+  Toggle,
+  FilterChip,
   RelativeTime,
   ResultChip,
   CopyButton,
@@ -314,7 +316,7 @@ export function CodebaseIndexCard({ projectId }: Props) {
 
       {/* What gets indexed disclosure */}
       <details className="text-2xs text-fg-muted">
-        <summary className="cursor-pointer select-none hover:text-fg-secondary transition-colors">
+        <summary className="cursor-pointer select-none hover:text-fg-secondary transition-opacity">
           What gets indexed?
         </summary>
         <div className="mt-1.5 pl-2 border-l border-edge-subtle space-y-1">
@@ -405,16 +407,18 @@ export function CodebaseIndexCard({ projectId }: Props) {
               onChange={(e) => setPathGlobs(e.currentTarget.value)}
             />
             <div className="flex flex-wrap gap-1 mt-1">
-              {PATH_GLOB_PRESETS.map(preset => (
-                <button
-                  key={preset}
-                  type="button"
-                  onClick={() => setPathGlobs(p => p ? `${p}, ${preset}` : preset)}
-                  className="rounded-full bg-surface-overlay px-2 py-0.5 text-2xs text-fg-secondary hover:bg-surface-raised transition-colors font-mono"
-                >
-                  {preset}
-                </button>
-              ))}
+              {PATH_GLOB_PRESETS.map(preset => {
+                const globs = pathGlobs.split(',').map(s => s.trim()).filter(Boolean)
+                return (
+                  <FilterChip
+                    key={preset}
+                    label={preset}
+                    active={globs.includes(preset)}
+                    onClick={() => setPathGlobs(p => p ? `${p}, ${preset}` : preset)}
+                    hint={`Add ${preset} to path filter`}
+                  />
+                )
+              })}
             </div>
             <p className="text-2xs text-fg-muted mt-1">
               Comma-separated glob patterns. Leave blank to index all supported extensions.
@@ -508,24 +512,12 @@ function AutofixToggleRow({
           </p>
         )}
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={isOn}
-        aria-label="Toggle autofix dispatcher"
+      <Toggle
+        ariaLabel="Toggle autofix dispatcher"
+        checked={isOn}
+        onChange={onToggle}
         disabled={saving || enabled == null}
-        onClick={() => onToggle(!isOn)}
-        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full motion-safe:transition-colors ${
-          isOn ? 'bg-brand' : 'bg-surface-overlay border border-edge'
-        } disabled:opacity-50 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40`}
-      >
-        <span
-          aria-hidden="true"
-          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-fg-inverted shadow-sm motion-safe:transition-transform ${
-            isOn ? 'translate-x-[18px]' : 'translate-x-0.5'
-          }`}
-        />
-      </button>
+      />
     </div>
   )
 }

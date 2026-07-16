@@ -270,7 +270,7 @@ export function ContentQualityPage() {
                     return (
                       <tr
                         key={item.id}
-                        className="hover:bg-surface-overlay cursor-pointer transition-colors group"
+                        className="hover:bg-surface-overlay cursor-pointer transition-opacity group"
                         onClick={() => navigate(`/content/${item.id}`)}
                       >
                         {/* Asset: icon + type + human key */}

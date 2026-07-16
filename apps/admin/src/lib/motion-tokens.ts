@@ -48,11 +48,11 @@ export const shellWidthSpring: Transition = {
   mass: 0.9,
 }
 
-/** Modal / command palette scrim + panel. */
+/** Modal / command palette scrim + panel — matches MUSHI_DURATION.base + stamp ease. */
 export const overlayTween: Transition = {
   type: 'tween',
   duration: 0.22,
-  ease: [0.16, 1, 0.3, 1],
+  ease: [0.22, 1, 0.36, 1],
 }
 
 /** Per-item delay inside expanded nav sections (cap at 12 in consumers). */

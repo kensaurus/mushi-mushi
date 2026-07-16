@@ -16,6 +16,7 @@ import { UpgradePrompt } from '../billing/UpgradePrompt'
 import { SettingsPanelLayout } from './SettingsPanelLayout'
 import { ContainedBlock } from '../report-detail/ReportSurface'
 import { CHIP_TONE, runStatusChipTone } from '../../lib/chipTone'
+import { token } from '../../lib/validators'
 
 type PoolKeyStatus = 'active' | 'disabled' | 'quota_exhausted' | 'auth_failed'
 
@@ -92,8 +93,9 @@ export function ByokPanel() {
 
   async function addKey(provider: string) {
     const k = newKeyVal.trim()
-    if (k.length < 8) {
-      setAddFeedback('Paste the full provider API key.')
+    const keyErr = token({ minLength: 8, optional: false })(k)
+    if (keyErr) {
+      setAddFeedback(keyErr.message)
       return
     }
     setAdding(true)
@@ -156,7 +158,7 @@ export function ByokPanel() {
     <SettingsPanelLayout
       fullWidth={
         <ContainedBlock tone="muted">
-          <p className="text-2xs leading-relaxed text-fg-muted">
+          <p className="text-xs leading-relaxed text-fg-muted">
             <strong className="text-fg-secondary">Mushi Mushi is BYOK-first.</strong> You bring the keys, you control which models touch your data. Add multiple keys per provider — if one hits quota, the next one is tried automatically. Keys live in Supabase Vault.
           </p>
         </ContainedBlock>
@@ -169,10 +171,10 @@ export function ByokPanel() {
           <div className={`flex items-start gap-3 rounded-md px-3 py-2.5 ${CHIP_TONE.warnSubtle}`}>
             <span className="mt-0.5" aria-hidden>⚠</span>
             <div className="flex-1 min-w-0">
-              <p className="text-2xs font-medium">
+              <p className="text-xs font-medium">
                 {exhaustedProviders.map(p => PROVIDER_META[p.provider]?.name ?? p.provider).join(', ')} {exhaustedProviders.length === 1 ? 'has' : 'have'} exhausted keys.
               </p>
-              <p className="text-2xs text-fg-muted mt-0.5">
+              <p className="text-xs text-fg-muted mt-0.5">
                 Add a backup key below — the pipeline will automatically use it instead. No downtime needed.
               </p>
             </div>
@@ -206,14 +208,14 @@ export function ByokPanel() {
                       <span className="text-2xs text-fg-faint italic">no keys — using platform default</span>
                     )}
                   </div>
-                  <p className="text-2xs text-fg-muted mt-0.5">{meta.help}</p>
+                  <p className="text-xs text-fg-muted mt-0.5">{meta.help}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <a
                     href={meta.consoleUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-2xs text-accent hover:text-accent-hover underline-offset-2 hover:underline"
+                    className="text-xs text-accent hover:text-accent-hover underline-offset-2 hover:underline"
                   >
                     Get key →
                   </a>
@@ -291,7 +293,7 @@ export function ByokPanel() {
                 >
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div className="space-y-1">
-                      <label className="text-2xs text-fg-muted">API key *</label>
+                      <label className="text-xs text-fg-muted">API key *</label>
                       <Input
                         type="password"
                         value={newKeyVal}
@@ -302,7 +304,7 @@ export function ByokPanel() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-2xs text-fg-muted">Label (optional)</label>
+                      <label className="text-xs text-fg-muted">Label (optional)</label>
                       <Input
                         type="text"
                         value={newKeyLabel}

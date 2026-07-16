@@ -60,7 +60,7 @@ export function FixesFailedSummary({ fixes, projectId, onReviewCategory, compact
               key={category}
               type="button"
               onClick={() => onReviewCategory?.(category)}
-              className="inline-flex items-center gap-1 rounded-full border border-danger/25 bg-surface-raised/80 px-2 py-0.5 text-2xs hover:border-danger/40 motion-safe:transition-colors"
+              className="inline-flex items-center gap-1 rounded-full border border-danger/25 bg-surface-raised/80 px-2 py-0.5 text-2xs hover:border-danger/40 motion-safe:transition-opacity"
             >
               <span className="font-mono text-danger">{count}</span>
               <span className="text-fg-secondary">{CATEGORY_LABELS[category] ?? category.replace(/_/g, ' ')}</span>

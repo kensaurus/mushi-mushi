@@ -179,7 +179,7 @@ function NbaCta({
     return (
       <Link
         to={cta.to}
-        className="inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-colors motion-safe:active:scale-[0.97] motion-safe:duration-150"
+        className="inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity motion-safe:active:scale-[0.97] motion-safe:duration-150"
       >
         {cta.label} <span aria-hidden="true">→</span>
       </Link>

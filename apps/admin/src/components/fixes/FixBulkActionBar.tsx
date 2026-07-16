@@ -5,8 +5,8 @@
  *          Action buttons activate only when rows are selected (#2 contextual bar).
  */
 
+import { Btn } from '../ui'
 import { pluralizeWithCount } from '../../lib/format'
-import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   /** Fixes currently shown after status-bucket filter. */
@@ -63,7 +63,7 @@ export function FixBulkActionBar({
       data-testid="fixes-bulk-action-bar"
       className="sticky top-1 z-20 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-md border border-brand/45 bg-surface-raised px-3 py-2 shadow-md ring-1 ring-brand/15 backdrop-blur supports-[backdrop-filter]:bg-surface-raised/95 motion-safe:animate-mushi-fade-in"
     >
-      <label className="inline-flex items-center gap-2 cursor-pointer text-xs text-fg-secondary hover:text-fg motion-safe:transition-colors">
+      <label className="inline-flex items-center gap-2 cursor-pointer text-xs text-fg-secondary hover:text-fg motion-safe:transition-opacity">
         <input
           type="checkbox"
           checked={allVisibleSelected && visibleCount > 0}
@@ -73,7 +73,7 @@ export function FixBulkActionBar({
           onChange={onToggleSelectAll}
           disabled={busy}
           aria-label={`Select all ${visibleCount} fixes${scope}`}
-          className="h-3.5 w-3.5 rounded-sm border-edge bg-surface-raised accent-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface motion-safe:transition-colors disabled:opacity-40"
+          className="h-3.5 w-3.5 rounded-sm border-edge bg-surface-raised accent-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface motion-safe:transition-opacity disabled:opacity-40"
         />
         <span className="whitespace-nowrap">{selectLabel}</span>
       </label>
@@ -82,8 +82,10 @@ export function FixBulkActionBar({
         <>
           <span aria-hidden="true" className="h-4 w-px bg-edge-subtle" />
 
-          <button
+          <Btn
             type="button"
+            variant="success"
+            size="sm"
             onClick={onMergeSelected}
             disabled={busy || mergeableCount === 0}
             title={
@@ -91,13 +93,14 @@ export function FixBulkActionBar({
                 ? 'None of the selected fixes have an open PR that can be merged from the console'
                 : `Squash-merge ${pluralizeWithCount(mergeableCount, 'PR')} and mark the linked ${pluralizeWithCount(mergeableCount, 'report')} Fixed`
             }
-            className={`inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium hover:bg-ok-muted/40 disabled:cursor-not-allowed disabled:opacity-40 motion-safe:transition-colors ${CHIP_TONE.okSubtle}`}
           >
             {busy && progressLabel?.startsWith('Merging') ? progressLabel : `Merge ${mergeableCount}`}
-          </button>
+          </Btn>
 
-          <button
+          <Btn
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={onRetrySelected}
             disabled={busy || failedCount === 0}
             title={
@@ -105,10 +108,9 @@ export function FixBulkActionBar({
                 ? 'None of the selected fixes are in a failed state'
                 : `Re-dispatch the auto-fix agent for ${pluralizeWithCount(failedCount, 'failed fix', 'failed fixes')}`
             }
-            className={`inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium hover:bg-warn-muted/50 disabled:cursor-not-allowed disabled:opacity-40 motion-safe:transition-colors ${CHIP_TONE.warnSubtle}`}
           >
             {busy && progressLabel?.startsWith('Re-dispatch') ? progressLabel : `Retry ${failedCount}`}
-          </button>
+          </Btn>
 
           {skippedMerge > 0 && mergeableCount > 0 && (
             <span className="text-2xs text-fg-muted whitespace-nowrap">
@@ -135,14 +137,16 @@ export function FixBulkActionBar({
 
           <span className="flex-1 min-w-[8px]" />
 
-          <button
+          <Btn
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={onClear}
             disabled={busy}
-            className="rounded-sm px-2 py-1 text-2xs text-fg-muted hover:text-fg disabled:opacity-40 motion-safe:transition-colors"
+            className="text-2xs"
           >
             Clear
-          </button>
+          </Btn>
         </>
       )}
     </div>

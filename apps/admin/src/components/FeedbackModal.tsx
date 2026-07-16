@@ -243,7 +243,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
                   key={t}
                   type="button"
                   onClick={() => switchType(t)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-t-sm -mb-px border-b-2 transition-colors ${
+                  className={`px-3 py-1.5 text-xs font-medium rounded-t-sm -mb-px border-b-2 transition-opacity ${
                     type === t
                       ? 'border-brand text-brand'
                       : 'border-transparent text-fg-muted hover:text-fg'
@@ -314,7 +314,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
               <div className="flex items-center justify-between pt-1 gap-2">
                 <a
                   href={`mailto:${FALLBACK_EMAIL}?subject=${encodeURIComponent('[mushi-mushi] ')}`}
-                  className="text-2xs text-fg-faint hover:text-fg-muted transition-colors"
+                  className="text-2xs text-fg-faint hover:text-fg-muted transition-opacity"
                   target="_blank"
                   rel="noreferrer"
                 >

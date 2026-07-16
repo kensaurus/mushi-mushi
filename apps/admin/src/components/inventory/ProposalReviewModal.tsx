@@ -370,14 +370,14 @@ function TabButton({
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`relative px-3 py-2 text-xs font-medium transition-colors ${
+      className={`relative px-3 py-2 text-xs font-medium transition-opacity ${
         active ? 'text-fg' : 'text-fg-muted hover:text-fg'
       }`}
     >
       {children}
       <span
         aria-hidden
-        className={`absolute left-2 right-2 -bottom-px h-0.5 rounded-full transition-colors ${
+        className={`absolute left-2 right-2 -bottom-px h-0.5 rounded-full transition-opacity ${
           active ? 'bg-brand' : 'bg-transparent'
         }`}
       />
@@ -468,7 +468,7 @@ function StoryCard({
   const personaInitial = (story.persona ?? story.id).trim().charAt(0).toUpperCase()
 
   return (
-    <article className="rounded-lg border border-edge-subtle bg-surface-overlay/40 hover:bg-surface-overlay transition-colors">
+    <article className="rounded-lg border border-edge-subtle bg-surface-overlay/40 hover:bg-surface-overlay transition-opacity">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}

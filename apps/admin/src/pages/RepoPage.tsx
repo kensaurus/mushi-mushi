@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -37,7 +38,7 @@ import { FixGitGraph, type FixTimelineEvent } from '../components/FixGitGraph'
 import { useRealtimeReload } from '../lib/realtime'
 import { IconGit } from '../components/icons'
 import { pluralize, pluralizeWithCount } from '../lib/format'
-import { LINK_ACCENT } from '../lib/chipTone'
+import { CHIP_TONE, LINK_ACCENT } from '../lib/chipTone'
 import { RepoStatusBanner } from '../components/repo/RepoStatusBanner'
 import { RepoSnapshotStrip } from '../components/repo/RepoSnapshotStrip'
 import { RepoProvenanceReadout } from '../components/repo/RepoProvenanceReadout'
@@ -53,7 +54,6 @@ import { EMPTY_REPO_STATS, type RepoStats, type RepoTabId } from '../components/
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { ProjectReposCard } from '../components/repo/ProjectReposCard'
-import { CHIP_TONE } from '../lib/chipTone'
 
 interface RepoBranch {
   id: string
@@ -565,7 +565,7 @@ export function RepoPage() {
   )
 
   return (
-    <div className="space-y-3" data-testid="mushi-page-repo">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-repo">
       <PageHeaderBar
         title={copy?.title ?? 'Repo graph'}
         projectScope={projectName}

@@ -53,7 +53,7 @@ export function TriageAndFixRow({ triageQueue, fixSummary }: Props) {
               <Link
                 key={r.id}
                 to={`/reports/${r.id}`}
-                className="group block rounded-md border border-edge-subtle/70 bg-surface-overlay/25 px-2 py-1.5 motion-safe:transition-colors hover:border-edge hover:bg-surface-overlay/45"
+                className="group block rounded-md border border-edge-subtle/70 bg-surface-overlay/25 px-2 py-1.5 motion-safe:transition-opacity hover:border-edge hover:bg-surface-overlay/45"
               >
                 <div className="flex items-center gap-2">
                   <StatusPill status={r.status} />

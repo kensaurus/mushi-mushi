@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link } from 'react-router-dom'
 import { useSearchParams } from 'react-router-dom'
 import { usePageCopy } from '../lib/copy'
@@ -203,7 +204,7 @@ export function CostPage() {
 
   if (!activeProjectId) {
     return (
-      <div className="space-y-4" data-testid="mushi-page-cost">
+      <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-cost">
         <PageHeaderBar
           title={copy?.title ?? 'LLM Cost'}
 

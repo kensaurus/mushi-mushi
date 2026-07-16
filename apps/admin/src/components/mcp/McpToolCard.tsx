@@ -14,7 +14,7 @@ export function hintBadges(spec: ToolSpec) {
   if (spec.hints.readOnly) {
     chips.push({
       label: 'read-only',
-      tone: CHIP_TONE.okSubtle + ' border border-ok/30',
+      tone: CHIP_TONE.okSubtle,
       title: 'Client can auto-approve. No side effects.',
     })
   } else {
@@ -27,7 +27,7 @@ export function hintBadges(spec: ToolSpec) {
   if (spec.hints.destructive) {
     chips.push({
       label: 'destructive',
-      tone: CHIP_TONE.dangerSubtle + ' border border-danger/30',
+      tone: CHIP_TONE.dangerSubtle,
       title: 'Can remove data from report queues. Confirm every call.',
     })
   }
@@ -44,7 +44,7 @@ export function hintBadges(spec: ToolSpec) {
 export function McpToolCard({ tool }: { tool: ToolSpec }) {
   const stripeTone = tool.scope === 'mcp:write' ? 'bg-warn' : 'bg-info'
   return (
-    <div className="relative rounded-md border border-edge-subtle bg-surface-raised p-3 pl-4 motion-safe:transition-colors hover:border-edge">
+    <div className="relative rounded-md border border-edge-subtle bg-surface-raised p-3 pl-4 motion-safe:transition-opacity hover:border-edge">
       <span className={`absolute left-0 top-2 bottom-2 w-0.5 rounded-sm ${stripeTone}`} aria-hidden="true" />
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="min-w-0">

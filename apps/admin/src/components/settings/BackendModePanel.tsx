@@ -201,7 +201,7 @@ function ModeCard({ active, onClick, title, badge, description }: ModeCardProps)
       type="button"
       onClick={onClick}
       className={[
-        'flex-1 rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface',
+        'flex-1 rounded-md border p-3 text-left transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface',
         active
           ? 'border-brand bg-brand/6'
           : 'border-edge-subtle bg-surface-raised/40 hover:border-edge-strong hover:bg-surface-raised/70',

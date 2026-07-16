@@ -1,3 +1,4 @@
+// mushi-ui: intentional overlay — not Modal/Drawer (reason: fixed-position preflight popover anchored to dispatch button in dense table rows)
 /**
  * FILE: apps/admin/src/components/reports/DispatchFixPreflight.tsx
  * PURPOSE: Replaces the bare "Dispatch fix" button with a confirm
@@ -26,6 +27,7 @@ import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import type { PreflightCheck, PreflightState } from '../../lib/useDispatchPreflight'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { Btn } from '../ui'
 
 interface Props {
   busy: boolean
@@ -279,39 +281,43 @@ export function DispatchFixPreflight({
 
           <div className="mt-3 flex items-center justify-between gap-2">
             {onOpenDetail ? (
-              <button
+              <Btn
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={(e) => {
                   e.stopPropagation()
                   setOpen(false)
                   onOpenDetail()
                 }}
-                className="text-2xs text-fg-muted hover:text-fg underline underline-offset-2"
+                className="underline underline-offset-2 px-0"
               >
                 Read first
-              </button>
+              </Btn>
             ) : (
               <span />
             )}
             <div className="flex items-center gap-1.5">
-              <button
+              <Btn
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={(e) => {
                   e.stopPropagation()
                   setOpen(false)
                 }}
-                className="px-2 py-1 text-2xs text-fg-muted hover:text-fg rounded-sm"
               >
                 Cancel
-              </button>
-              <button
+              </Btn>
+              <Btn
                 type="button"
+                size="sm"
+                variant="primary"
                 disabled={preflightBlocked}
                 onClick={(e) => {
                   e.stopPropagation()
                   handleConfirm()
                 }}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-2xs font-medium rounded-sm bg-brand text-brand-fg hover:bg-brand-hover disabled:opacity-40 disabled:cursor-not-allowed"
                 title={
                   preflightBlocked
                     ? `Fix the ${failingChecks.length} prerequisite${failingChecks.length === 1 ? '' : 's'} above first`
@@ -319,7 +325,7 @@ export function DispatchFixPreflight({
                 }
               >
                 {preflightBlocked ? 'Resolve prerequisites first' : 'Queue fix worker →'}
-              </button>
+              </Btn>
             </div>
           </div>
         </div>,

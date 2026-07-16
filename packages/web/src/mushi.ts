@@ -1,4 +1,5 @@
 import { compressScreenshotDataUrl } from './capture/compress-screenshot';
+import type { WidgetSubmitOutcome } from './widget-helpers';
 import {
   type MushiConfig,
   type MushiReport,
@@ -1055,7 +1056,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     description: string,
     intent?: string,
     userCategory?: string,
-  ): Promise<{ reportId: string | null; queuedOffline?: boolean; screenshotDropped?: boolean } | undefined> {
+  ): Promise<WidgetSubmitOutcome | undefined> {
     const filterResult = preFilter.check(description);
     if (!filterResult.passed) {
       log.info('Report blocked by pre-filter', { reason: filterResult.reason });
@@ -1236,7 +1237,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       emit('report:queued', { reportId: finalReport.id });
       // Propagates back to the widget so the success step renders
       // "Queued offline" rather than implying the report already landed.
-      return { reportId: null, queuedOffline: true };
+      return { reportId: null, queuedOffline: true, failureKind: 'offline' };
     }
 
     let result = await apiClient.submitReport(finalReport);
@@ -1319,7 +1320,40 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         level: 'error',
         message: `Mushi report dropped — payload too large (${finalReport.id})`,
       });
+      pendingScreenshot = null;
+      pendingElement = null;
+      pendingProactiveTrigger = null;
+      return { reportId: null, queuedOffline: false, failureKind: 'permanent', screenshotDropped };
     } else {
+      const code = result.error?.code ?? '';
+      const isRateLimited = code === 'HTTP_429' || code.includes('RATE_LIMIT');
+      const isAuth =
+        code === 'HTTP_401' ||
+        code.includes('UNAUTHORIZED') ||
+        code.includes('INVALID_API_KEY') ||
+        code.includes('MISSING_API_KEY');
+      const isQuota =
+        code === 'HTTP_403' ||
+        code.includes('QUOTA') ||
+        code.includes('FORBIDDEN') ||
+        code === 'feature_not_in_plan';
+      if (isAuth || isQuota) {
+        log.warn('Report rejected — credentials/quota', { reportId: finalReport.id, error: result.error });
+        emit('report:failed', { reportId: finalReport.id, error: result.error });
+        pendingScreenshot = null;
+        pendingElement = null;
+        pendingProactiveTrigger = null;
+        return { reportId: null, queuedOffline: false, failureKind: 'quota' };
+      }
+      if (isRateLimited) {
+        log.warn('Report rate-limited — queued for retry', { reportId: finalReport.id, error: result.error });
+        await offlineQueue.enqueue(finalReport);
+        emit('report:failed', { reportId: finalReport.id, error: result.error });
+        pendingScreenshot = null;
+        pendingElement = null;
+        pendingProactiveTrigger = null;
+        return { reportId: null, queuedOffline: true, failureKind: 'rate_limited' };
+      }
       log.warn('Report failed, queuing for retry', { reportId: finalReport.id, error: result.error });
       await offlineQueue.enqueue(finalReport);
       emit('report:failed', { reportId: finalReport.id, error: result.error });
@@ -1341,7 +1375,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       const serverId = (result.data?.reportId as string | undefined) ?? report.id;
       return { reportId: serverId, queuedOffline: false, screenshotDropped };
     }
-    return { reportId: null, queuedOffline: true };
+    return { reportId: null, queuedOffline: true, failureKind: 'retrying' };
   }
 
   const sdk: MushiSDKInstance = {

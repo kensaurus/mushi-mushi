@@ -119,7 +119,7 @@ function BannerChecklist({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`mb-4 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-2xs motion-safe:transition-colors ${
+        className={`mb-4 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-2xs motion-safe:transition-opacity ${
           allDone || requiredDone
             ? `border-ok/30 ${CHIP_TONE.okSubtle}`
             : `border-warn/30 ${CHIP_TONE.warnSubtle}`
@@ -333,7 +333,7 @@ function ChecklistRow({
 }) {
   const diag = buildSdkDiagnostic(step, adminEndpointHost)
   return (
-    <li className={`flex items-start gap-2.5 rounded-sm px-1.5 py-1 motion-safe:transition-colors ${
+    <li className={`flex items-start gap-2.5 rounded-sm px-1.5 py-1 motion-safe:transition-opacity ${
       current ? 'bg-brand/5 ring-1 ring-brand/30' : 'hover:bg-surface-overlay/40'
     }`}>
       <StepIcon complete={step.complete} required={step.required} current={current} />
@@ -379,7 +379,7 @@ function ChecklistCard({
 }) {
   const diag = buildSdkDiagnostic(step, adminEndpointHost)
   return (
-    <div className={`rounded-md border p-3 motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] ${
+    <div className={`rounded-md border p-3 motion-safe:transition-[transform,opacity] ${
       step.complete
         ? 'border-ok/30 bg-ok-muted/10'
         : current
@@ -417,7 +417,7 @@ function ChecklistCard({
         {!step.complete && (
           <Link
             to={step.cta_to}
-            className="shrink-0 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-colors"
+            className="shrink-0 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity"
           >
             {step.cta_label}
           </Link>

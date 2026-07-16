@@ -17,8 +17,8 @@ import { CHIP_TONE } from '../lib/chipTone'
 const TONE: Record<string, string> = {
   hobby: 'bg-surface-overlay text-fg-muted border-edge-subtle',
   starter: 'bg-brand-subtle text-brand border-brand/30',
-  pro: CHIP_TONE.okSubtle + ' border-ok/30',
-  enterprise: CHIP_TONE.warnSubtle + ' border-warn/30',
+  pro: CHIP_TONE.okSubtle,
+  enterprise: CHIP_TONE.warnSubtle,
 }
 
 const GLYPH: Record<string, string> = {
@@ -90,7 +90,7 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
         title={tooltip}
         aria-label={`Admin account with ${plan.displayName} entitlements. ${usageHint ?? ''} Open billing.`}
         data-tour-id="plan-badge"
-        className={`inline-flex items-center font-medium motion-safe:transition-colors min-w-0 ${
+        className={`inline-flex items-center font-medium motion-safe:transition-opacity min-w-0 ${
           sidebar ? COMPLIMENTARY_TONE : `${COMPLIMENTARY_TONE_HEADER} border hover:brightness-110`
         } ${densityClasses(sidebar)}`}
       >
@@ -127,7 +127,7 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
       title={tooltip}
       aria-label={`Current plan: ${label}. ${usageHint ?? ''} Open billing.`}
       data-tour-id="plan-badge"
-      className={`inline-flex items-center border font-medium motion-safe:transition-colors hover:brightness-110 min-w-0 ${tone} ${densityClasses(sidebar)}`}
+      className={`inline-flex items-center border font-medium motion-safe:transition-opacity hover:brightness-110 min-w-0 ${tone} ${densityClasses(sidebar)}`}
     >
       <span aria-hidden="true" className={`leading-none shrink-0 ${sidebar ? 'scale-90' : ''}`}>{glyph}</span>
       <span className={sidebar ? 'truncate min-w-0' : ''}>{label}</span>

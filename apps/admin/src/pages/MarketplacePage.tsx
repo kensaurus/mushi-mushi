@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useMemo, useState, useEffect } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -58,7 +59,7 @@ import {
   type MarketplaceTabId,
   type ReliabilityStats,
 } from '../components/marketplace/types'
-import { CHIP_TONE } from '../lib/chipTone'
+import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 
 const TABS: Array<{ id: MarketplaceTabId; label: string; description: string }> = [
   {
@@ -442,7 +443,7 @@ export function MarketplacePage() {
 
   if (!activeProjectId) {
     return (
-      <div className="space-y-4">
+      <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-marketplace">
         <PageHeaderBar
           title={copy?.title ?? 'Marketplace'}
 
@@ -533,8 +534,8 @@ export function MarketplacePage() {
                 : bannerSeverity === 'warn'
                   ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
-                    ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
-                    : 'bg-surface-overlay text-fg-muted'
+                    ? HEADER_BADGE_TONE.brand
+                    : HEADER_BADGE_TONE.neutral
           }
         >
           {headerBadge}

@@ -135,7 +135,7 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
               href={node.thumbnail}
               target="_blank"
               rel="noopener noreferrer"
-              className="block h-10 w-14 overflow-hidden rounded-sm border border-edge-subtle hover:border-brand/50 motion-safe:transition-colors"
+              className="block h-10 w-14 overflow-hidden rounded-sm border border-edge-subtle hover:border-brand/50 motion-safe:transition-opacity"
               title="Open screenshot in new tab"
             >
               <img

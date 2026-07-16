@@ -69,7 +69,7 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
       <Tooltip content={tooltipContent} side="right" portal>
         <Link
           to="/settings?panel=byok"
-          className="flex items-center justify-center p-2 rounded-sm hover:bg-surface-raised transition-colors"
+          className="flex items-center justify-center p-2 rounded-sm hover:bg-surface-raised transition-opacity"
           aria-label={label}
         >
           <span className={`inline-block w-2 h-2 rounded-full ${dotClass}`} />
@@ -84,7 +84,7 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
         <button
           ref={badgeRef}
           type="button"
-          className="flex items-center gap-1.5 w-full px-2 py-1 rounded-sm hover:bg-surface-raised transition-colors"
+          className="flex items-center gap-1.5 w-full px-2 py-1 rounded-sm hover:bg-surface-raised transition-opacity"
           aria-label={`${labelLong} — click for privacy details`}
           title={labelLong}
           onClick={() => setPopoverOpen((v) => !v)}
@@ -144,7 +144,7 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
           <div className="flex flex-wrap gap-2 pt-1">
             <Link
               to="/settings?panel=byok"
-              className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors hover:no-underline"
+              className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity hover:no-underline"
               onClick={() => setPopoverOpen(false)}
             >
               {isByok ? 'View BYOK settings →' : 'Configure BYOK →'}

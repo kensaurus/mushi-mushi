@@ -199,7 +199,7 @@ export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages }: Pr
                 : 'Watch a bug travel through Mushi'}
           </Btn>
           {demoState === 'done' && (
-            <Link to="/reports" className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+            <Link to="/reports" className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
               Open Reports →
             </Link>
           )}
@@ -248,7 +248,7 @@ function PipelineNode({ stage, isActive, isDone, isLast }: NodeProps) {
 
   return (
     <li className="relative">
-      <Card elevated interactive className={`h-full motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] motion-safe:duration-300 ${ringClass}`}>
+      <Card elevated interactive className={`h-full motion-safe:transition-[transform,opacity] motion-safe:duration-300 ${ringClass}`}>
         <Link
           to={cta.to}
           className="group block rounded-md p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
@@ -295,12 +295,12 @@ function Connector({ active }: { active: boolean }) {
   return (
     <span aria-hidden="true" className="pointer-events-none">
       <span
-        className={`hidden lg:flex absolute top-1/2 -right-2 -translate-y-1/2 z-10 h-4 w-4 items-center justify-center motion-safe:transition-colors ${active ? 'text-brand' : 'text-fg-faint'}`}
+        className={`hidden lg:flex absolute top-1/2 -right-2 -translate-y-1/2 z-10 h-4 w-4 items-center justify-center motion-safe:transition-opacity ${active ? 'text-brand' : 'text-fg-faint'}`}
       >
         <ArrowSvg direction="right" />
       </span>
       <span
-        className={`lg:hidden flex absolute -bottom-2 left-1/2 -translate-x-1/2 z-10 h-4 w-4 items-center justify-center motion-safe:transition-colors ${active ? 'text-brand' : 'text-fg-faint'}`}
+        className={`lg:hidden flex absolute -bottom-2 left-1/2 -translate-x-1/2 z-10 h-4 w-4 items-center justify-center motion-safe:transition-opacity ${active ? 'text-brand' : 'text-fg-faint'}`}
       >
         <ArrowSvg direction="down" />
       </span>

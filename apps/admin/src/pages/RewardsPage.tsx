@@ -5,6 +5,7 @@
  */
 
 import { useEffect } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { PublishingTab } from '../components/rewards/PublishingTab'
 import { usePageData } from '../lib/usePageData'
@@ -90,7 +91,7 @@ export function RewardsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-rewards">
       <PageHeaderBar
         title="Rewards"
         icon={<IconRewards />}

@@ -15,6 +15,7 @@ import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { Btn, Badge, Card } from '../../components/ui'
 import { TableSkeleton } from '../../components/skeletons/TableSkeleton'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface CatalogItem {
   id: string
@@ -97,7 +98,7 @@ function MilestoneBar({ ytd, threshold, cap, kycCleared }: {
         {overThreshold && !kycCleared && (
           <Link
             to="/tester/settings#kyc"
-            className="shrink-0 rounded-lg border border-warn/30 bg-warn/20 px-3 py-1.5 text-xs font-medium text-warning-foreground motion-safe:transition-colors hover:bg-warn/30"
+            className="shrink-0 rounded-lg border border-warn/30 bg-warn/20 px-3 py-1.5 text-xs font-medium text-warning-foreground motion-safe:transition-opacity hover:bg-warn/30"
           >
             Complete KYC →
           </Link>
@@ -107,7 +108,7 @@ function MilestoneBar({ ytd, threshold, cap, kycCleared }: {
       <div className="relative h-3 rounded-full bg-surface-overlay overflow-visible">
         {/* Filled portion */}
         <div
-          className={`absolute inset-y-0 left-0 rounded-full transition-[background-color,border-color,color,box-shadow,transform,opacity] ${
+          className={`absolute inset-y-0 left-0 rounded-full transition-[transform,opacity] ${
             overThreshold && !kycCleared ? 'bg-warn' : 'bg-accent'
           }`}
           style={{ width: `${ytdPct}%` }}
@@ -142,7 +143,7 @@ function PendingRedemptionCard({ r }: { r: PendingRedemption }) {
           {r.pointsSpent.toLocaleString()} pts · requested {new Date(r.requestedAt).toLocaleDateString()}
         </p>
       </div>
-      <Badge className={`text-2xs ${r.status === 'processing' ? 'bg-info/15 border-info/30 text-info' : 'bg-surface-overlay/40 border-edge/30 text-fg-muted'} border`}>
+      <Badge className={`text-2xs ${r.status === 'processing' ? CHIP_TONE.infoSubtle : 'bg-surface-overlay/40 border border-edge/30 text-fg-muted'}`}>
         {r.status === 'processing' ? 'Processing' : 'Pending'}
       </Badge>
     </div>
@@ -265,7 +266,7 @@ export function TesterWalletPage() {
                 {wallet.catalog.map(item => (
                   <div
                     key={item.id}
-                    className={`flex items-center gap-4 rounded-xl border p-4 motion-safe:transition-[border-color,background-color] ${
+                    className={`flex items-center gap-4 rounded-xl border p-4 motion-safe:transition-[transform,opacity] ${
                       item.isAvailable
                         ? 'border-edge-subtle bg-surface-raised hover:border-brand/30'
                         : 'border-edge-subtle bg-surface-overlay opacity-60'
@@ -276,7 +277,7 @@ export function TesterWalletPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-medium">{item.name}</p>
                         {item.category === 'pro' && (
-                          <Badge className="bg-accent/20 border-accent/30 text-accent text-xs border">1.3× premium</Badge>
+                          <Badge className={`${CHIP_TONE.accentSubtle} text-xs`}>1.3× premium</Badge>
                         )}
                       </div>
                       <p className="text-xs text-fg-muted mt-0.5">{item.description}</p>

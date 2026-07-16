@@ -55,6 +55,9 @@ export function AssistantConfigCard({ projectId }: { projectId: string }) {
       .then((res) => {
         if (res.ok && res.data) setCfg(res.data)
       })
+      .catch(() => {
+        /* network already surfaced via apiFetch → Sentry; keep prior cfg */
+      })
       .finally(() => setLoading(false))
   }, [projectId])
 
@@ -96,6 +99,9 @@ export function AssistantConfigCard({ projectId }: { projectId: string }) {
     setLogsLoading(true)
     void apiFetch<{ messages: AssistantLogRow[] }>(`/v1/admin/projects/${projectId}/assistant/logs?limit=50`)
       .then((res) => { if (res.ok && res.data) setLogs(res.data.messages) })
+      .catch(() => {
+        /* ignore — logs are optional diagnostics */
+      })
       .finally(() => setLogsLoading(false))
   }, [projectId])
 

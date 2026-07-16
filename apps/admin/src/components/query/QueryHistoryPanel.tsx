@@ -19,7 +19,7 @@ export function HistoryItem({
   onDelete: () => void
 }) {
   return (
-    <li className="rounded-sm border border-edge-subtle p-2 hover:bg-surface-overlay/30 motion-safe:transition-colors group focus-within:border-edge">
+    <li className="rounded-sm border border-edge-subtle p-2 hover:bg-surface-overlay/30 motion-safe:transition-opacity group focus-within:border-edge">
       <button
         type="button"
         onClick={onRerun}
@@ -28,7 +28,7 @@ export function HistoryItem({
       >
         <span className="inline-flex items-center gap-1.5 w-full min-w-0">
           {row.mode === 'raw' && (
-            <span className={`inline-flex shrink-0 px-1 py-0.5 rounded-micro text-2xs font-mono font-medium ${CHIP_TONE.warnSubtle} border border-warn/20`}>SQL</span>
+            <span className={`inline-flex shrink-0 px-1 py-0.5 rounded-micro text-2xs font-mono font-medium ${CHIP_TONE.warnSubtle}`}>SQL</span>
           )}
           <span className="line-clamp-2">{row.prompt}</span>
         </span>
@@ -77,7 +77,7 @@ export function TeamItem({ row, onRerun }: { row: TeamRow; onRerun: () => void }
   const display = row.author_name ?? row.author_email ?? 'Teammate'
   const initial = (row.author_name ?? row.author_email ?? '?').charAt(0).toUpperCase()
   return (
-    <li className="rounded-sm border border-edge-subtle p-2 hover:bg-surface-overlay/30 motion-safe:transition-colors group">
+    <li className="rounded-sm border border-edge-subtle p-2 hover:bg-surface-overlay/30 motion-safe:transition-opacity group">
       <button
         type="button"
         onClick={onRerun}

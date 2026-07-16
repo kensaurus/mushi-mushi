@@ -173,7 +173,7 @@ function PlanDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () 
                   <Link
                     to={`/reports/${r.id}`}
                     onClick={onClose}
-                    className="ml-auto text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors text-2xs"
+                    className="ml-auto text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity text-2xs"
                   >
                     Open →
                   </Link>
@@ -309,7 +309,7 @@ function DoDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =>
                           href={f.pr_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
+                          className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
                         >
                           Open PR →
                         </a>
@@ -508,7 +508,7 @@ function CheckDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: ()
                   <Link
                     to={`/reports/${e.report_id}`}
                     onClick={onClose}
-                    className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
+                    className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
                   >
                     Open
                   </Link>
@@ -635,7 +635,7 @@ function FooterCta({ label, onClick }: { label: string; onClick: () => void }) {
       <button
         type="button"
         onClick={onClick}
-        className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors font-medium inline-flex items-center gap-1"
+        className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity font-medium inline-flex items-center gap-1"
       >
         {label} <span aria-hidden="true">→</span>
       </button>

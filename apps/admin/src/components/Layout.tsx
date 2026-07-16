@@ -27,7 +27,7 @@ import { buildOperatorNav, CHECK_SUB_GROUPS, type BuiltNavItem, type BuiltNavSec
 import { CHECK_HUB_PATH, QUICK_SUB_GROUPS } from '../lib/navRegistry'
 import { useAdminMode } from '../lib/mode'
 import { useSetupStatus } from '../lib/useSetupStatus'
-import { Tooltip } from './ui'
+import { Tooltip, Btn } from './ui'
 import { RouteProgress } from './RouteProgress'
 import { NextBestAction } from './NextBestAction'
 import { DavChromeCoachmark } from './DavChromeCoachmark'
@@ -892,13 +892,15 @@ export function Layout({ children }: { children: ReactNode }) {
             {onHiddenRoute && (
               <div className="rounded-sm border border-chrome-border bg-chrome px-2 py-1.5 text-2xs text-fg-muted space-y-1 text-balance">
                 <p className="leading-snug">{hiddenRouteCopy}</p>
-                <button
+                <Btn
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setMode(isQuickstart ? 'beginner' : 'advanced')}
-                  className="text-left underline hover:no-underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm"
+                  className="text-left underline hover:no-underline px-0 h-auto font-normal"
                 >
                   Show in {isQuickstart ? 'Beginner' : 'Advanced'} →
-                </button>
+                </Btn>
               </div>
             )}
           </div>
@@ -993,27 +995,32 @@ export function Layout({ children }: { children: ReactNode }) {
         )}
         {compact && (
           <Tooltip content={focusMode ? 'Exit focus mode' : 'Focus mode'} side="right" portal>
-            <button
+            <Btn
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setFocusMode((value) => !value)}
-              className="nav-link justify-center px-2 py-2"
+              className="nav-link justify-center px-2 py-2 h-auto w-full border-0"
               aria-pressed={focusMode}
               aria-label={focusMode ? 'Exit focus mode' : 'Focus mode'}
             >
               <IconEye className="nav-link-icon" />
-            </button>
+            </Btn>
           </Tooltip>
         )}
         {!compact && <SidebarUserCard user={user} signOut={signOut} />}
         {compact && (
           <Tooltip content={`Sign out (${user?.email ?? ''})`} side="right" portal>
-            <button
+            <Btn
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={signOut}
-              className="nav-link justify-center px-2 py-2 text-rose hover:text-rose hover:bg-rose-muted/40"
+              className="nav-link justify-center px-2 py-2 h-auto w-full border-0 text-rose hover:text-rose hover:bg-rose-muted/40"
               aria-label="Sign out"
             >
               <IconSignOut className="nav-link-icon" />
-            </button>
+            </Btn>
           </Tooltip>
         )}
       </div>
@@ -1050,12 +1057,13 @@ export function Layout({ children }: { children: ReactNode }) {
               button and matches every other collapsed-rail control. The
               `[` hotkey mirrors Linear's. */}
           <Tooltip content={sidebarCollapsed ? 'Expand sidebar  ·  [' : 'Collapse to icon rail  ·  ['} side="right" portal>
+            {/* mushi-ui: chrome icon button — Btn variant TBD (collapse row uses nav-link density + chevron label) */}
             <button
               type="button"
               onClick={() => setSidebarCollapsed((value) => !value)}
               aria-pressed={sidebarCollapsed}
               aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              className={`group flex items-center gap-2 border-t border-edge/60 px-3 py-1.5 text-2xs text-fg-faint hover:text-fg-muted hover:bg-surface-overlay/40 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}
+              className={`group flex items-center gap-2 border-t border-edge/60 px-3 py-1.5 text-2xs text-fg-faint hover:text-fg-muted hover:bg-surface-overlay/40 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}
             >
               <IconChevronRight
                 className={`h-3.5 w-3.5 shrink-0 motion-safe:transition-transform ${sidebarCollapsed ? '' : 'rotate-180'}`}
@@ -1080,13 +1088,16 @@ export function Layout({ children }: { children: ReactNode }) {
           />
           <aside className="relative z-50 w-60 h-full bg-surface-root border-r border-edge/60 flex flex-col shadow-raised motion-safe:animate-mushi-drawer-in">
             <div className="absolute top-2.5 right-2.5">
-              <button
+              <Btn
+                type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => setMobileOpen(false)}
                 aria-label="Close navigation menu"
-                className="p-1.5 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay transition-colors"
+                className="p-1.5 h-auto"
               >
                 <IconClose size={14} />
-              </button>
+              </Btn>
             </div>
             {renderSidebarContent(false)}
           </aside>
@@ -1104,28 +1115,33 @@ export function Layout({ children }: { children: ReactNode }) {
         <div className="fixed top-3 right-3 z-50 flex items-center gap-2 rounded-sm border border-edge bg-surface-raised px-2 py-1.5 shadow-raised">
           <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-brand motion-safe:animate-pulse" />
           <span className="text-2xs text-fg-secondary font-medium">Focus mode</span>
-          <button
+          <Btn
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => setFocusMode(false)}
-            className="text-2xs text-fg-muted hover:text-fg motion-safe:transition-colors px-1.5 py-0.5 rounded-sm hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            className="text-2xs px-1.5 py-0.5 h-auto"
             aria-label="Exit focus mode"
             title="Exit focus mode (Esc or Cmd/Ctrl+.)"
           >
             Exit <kbd className="ml-1 px-1 py-0.5 rounded-xs border border-edge-subtle text-fg-faint font-mono">Esc</kbd>
-          </button>
+          </Btn>
         </div>
       )}
 
       <div className="flex-1 flex min-h-0 flex-col overflow-hidden">
         {/* Mobile header */}
         <header className={`md:hidden flex items-center gap-2 px-4 py-2.5 border-b border-edge/60 ${appChromeHeaderClass}`}>
-          <button
+          <Btn
+            type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => setMobileOpen(true)}
             aria-label="Open navigation menu"
-            className="shrink-0 p-1.5 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+            className="shrink-0 p-1.5 h-auto"
           >
             <IconMenu size={18} />
-          </button>
+          </Btn>
           <div className="min-w-0 flex-1">
             <SearchButton />
           </div>
@@ -1145,17 +1161,19 @@ export function Layout({ children }: { children: ReactNode }) {
           <div className="min-w-0 flex-1 flex justify-end xl:justify-start xl:flex-none xl:max-w-xs">
             <SearchButton />
           </div>
-          <div className="ml-auto flex min-w-0 shrink items-center gap-1 xl:gap-1.5 overflow-visible">
+          <div className="ml-auto flex min-w-0 max-w-full shrink items-center justify-end gap-1 xl:gap-1.5 flex-wrap">
             <div
-              className="flex shrink-0 items-center gap-0.5 rounded-md border border-edge/50 bg-surface-raised/35 p-0.5 overflow-visible"
+              className="flex shrink-0 items-center gap-0.5 rounded-md border border-edge/50 bg-surface-raised/35 p-0.5"
               aria-label="Toolbar"
             >
               <Tooltip content={activityUnread > 0 ? `Live activity — ${activityUnread} new` : 'Live activity'} side="bottom">
-                <button
+                <Btn
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setActivityOpen(true)}
                   aria-label={activityUnread > 0 ? `Live activity, ${activityUnread} unread` : 'Live activity'}
-                  className="relative inline-flex items-center justify-center h-8 w-8 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                  className="relative h-8 w-8 p-0 border-0"
                 >
                   <IconBell className="h-3.5 w-3.5" />
                   {activityUnread > 0 && (
@@ -1166,25 +1184,29 @@ export function Layout({ children }: { children: ReactNode }) {
                       {activityUnread > 9 ? '9+' : activityUnread}
                     </span>
                   )}
-                </button>
+                </Btn>
               </Tooltip>
               <Tooltip content="Keyboard shortcuts (press ?)" side="bottom">
-                <button
+                <Btn
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setHotkeysOpen(true)}
                   aria-label="Open keyboard shortcuts"
-                  className="inline-flex items-center justify-center h-8 w-8 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                  className="h-8 w-8 p-0 border-0"
                 >
                   <span aria-hidden className="font-mono text-xs leading-none">?</span>
-                </button>
+                </Btn>
               </Tooltip>
               <AskMushiLauncherButton
                 panelOpen={askPanel.isOpen}
                 onClick={() => askPanel.open()}
               />
             </div>
-            <VersionBadge whatsNew={whatsNew} />
-            <span className="hidden lg:block h-5 w-px shrink-0 bg-edge-subtle" aria-hidden />
+            <div className="min-w-0 shrink">
+              <VersionBadge whatsNew={whatsNew} />
+            </div>
+            <span className="hidden xl:block h-5 w-px shrink-0 bg-edge-subtle" aria-hidden />
             <div className="flex min-w-0 items-center gap-1">
               <OrgSwitcher />
               <ProjectSwitcher />
@@ -1195,7 +1217,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <PageHelpProvider>
           <main id="main-content" className={`flex-1 min-h-0 overflow-y-auto overscroll-y-contain bg-surface ${appChromeMainClass}`}>
             <div
-              className={`${PAGE_SHELL_CLASS[pageShellWidth]} motion-safe:transition-[max-width,padding] motion-safe:duration-base`}
+              className={`${PAGE_SHELL_CLASS[pageShellWidth]} motion-safe:transition-[transform,opacity] motion-safe:duration-base`}
               data-page-width={pageShellWidth}
             >
               {!focusMode && <GlobalStatusStrip />}
@@ -1444,13 +1466,14 @@ function SectionRailHeader({ section, expanded, isActiveStage, staleness, onSele
   const stageTone = section.stage ? STAGE_TONE[section.stage] : 'bg-surface-overlay text-fg-secondary border border-edge-subtle'
   return (
     <Tooltip content={section.hint ?? section.title} side="right" portal>
+      {/* mushi-ui: chrome icon button — Btn variant TBD (PDCA rail glyph + staleness badge layout) */}
       <button
         type="button"
         onClick={onSelect}
         aria-expanded={expanded}
         aria-current={expanded ? 'true' : undefined}
         aria-label={`${section.title}${expanded ? '' : ' — show navigation'}`}
-        className={`relative nav-link justify-center px-2 py-1.5 mb-0.5 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm ${
+        className={`relative nav-link justify-center px-2 py-1.5 mb-0.5 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm ${
           expanded
             ? 'bg-surface-overlay text-fg ring-1 ring-brand/40'
             : 'text-fg-muted hover:text-fg-secondary hover:bg-surface-overlay/60'
@@ -1514,10 +1537,11 @@ function SectionHeader({ section, isExpanded, isActiveStage, staleness, onToggle
   )
 
   return (
+    // mushi-ui: chrome icon button — Btn variant TBD (nav section accordion row)
     <button
       type="button"
       onClick={onToggle}
-      className={`nav-section flex items-center gap-1.5 w-full hover:text-fg-secondary motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm ${
+      className={`nav-section flex items-center gap-1.5 w-full hover:text-fg-secondary motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm ${
         isExpanded
           ? 'nav-section-expanded bg-surface-overlay/60 ring-1 ring-brand/30'
           : isActiveStage

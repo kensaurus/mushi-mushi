@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import { Btn, Input, SelectField } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { HealthSparkline } from './HealthSparkline'
@@ -189,26 +190,32 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
             </span>
           )}
           {slackConfigured && (
-            <button
-              className="inline-flex items-center gap-1.5 rounded-lg border border-edge-subtle px-3 py-1.5 text-xs font-medium hover:bg-surface-hover transition-colors"
+            <Btn
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={handleTest}
-              disabled={testingSlack}
+              loading={testingSlack}
             >
               {testingSlack ? 'Sending…' : 'Send test'}
-            </button>
+            </Btn>
           )}
           {/* Always show the Add/Re-add button so the user can refresh scopes */}
-          <button
-            className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${slackConfigured ? 'border border-edge-subtle hover:bg-surface-hover' : 'bg-accent text-fg-on-accent hover:bg-accent-hover'}`}
+          <Btn
+            type="button"
+            variant={slackConfigured ? 'ghost' : 'accent'}
+            size="sm"
             onClick={handleAddToSlack}
             disabled={!projectId}
             title={slackConfigured ? 'Reinstall Mushi Slack bot to refresh scopes or reconnect' : 'Install Mushi Slack bot'}
+            leadingIcon={(
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" className={slackConfigured ? 'opacity-60' : 'opacity-90'}>
+                <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z"/>
+              </svg>
+            )}
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" className={slackConfigured ? 'opacity-60' : 'opacity-90'}>
-              <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z"/>
-            </svg>
             {slackConfigured ? 'Re-add to Slack' : 'Add to Slack'}
-          </button>
+          </Btn>
         </div>
       </div>
 
@@ -240,22 +247,28 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
                 <p className="leading-snug font-medium">Channel picker unavailable</p>
                 <p className="leading-snug text-fg-secondary">{channelLoadError}</p>
                 <div className="flex items-center gap-3 flex-wrap">
-                  <button
-                    className="inline-flex items-center gap-1 text-xs font-medium underline hover:no-underline text-fg-secondary"
+                  <Btn
+                    type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={loadChannels}
+                    className="underline hover:no-underline"
                   >
                     Retry
-                  </button>
+                  </Btn>
                   {/* Scope errors are fixed by re-auth; auth/token errors too */}
                   {(channelErrorCode === 'missing_scope' ||
                     ['invalid_auth', 'not_authed', 'account_inactive', 'token_revoked'].includes(channelErrorCode ?? '')) && (
-                    <button
-                      className="inline-flex items-center gap-1 text-xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors hover:no-underline"
+                    <Btn
+                      type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={handleAddToSlack}
                       disabled={!projectId}
+                      className="text-accent-foreground hover:text-accent underline underline-offset-2 hover:no-underline"
                     >
                       Re-add to Slack to fix →
-                    </button>
+                    </Btn>
                   )}
                 </div>
                 {/* Manual channel ID entry as fallback */}
@@ -264,44 +277,56 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
                     Or paste the channel ID directly (right-click a channel in Slack → View channel details → bottom of panel):
                   </p>
                   <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="C0ABC123XYZ"
-                      className="flex-1 rounded-lg border border-edge-subtle bg-surface px-3 py-1.5 text-xs font-mono focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:border-brand"
-                      value={manualChannelId}
-                      onChange={(e) => setManualChannelId(e.target.value)}
-                    />
-                    <button
-                      className="rounded-lg border border-edge-subtle px-3 py-1.5 text-xs font-medium hover:bg-surface-hover disabled:opacity-50 transition-colors"
-                      disabled={!manualChannelId.trim() || savingManual}
+                    <div className="flex-1 min-w-0">
+                      <Input
+                        type="text"
+                        placeholder="C0ABC123XYZ"
+                        className="font-mono text-xs"
+                        value={manualChannelId}
+                        onChange={(e) => setManualChannelId(e.target.value)}
+                      />
+                    </div>
+                    <Btn
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={!manualChannelId.trim()}
+                      loading={savingManual}
                       onClick={handleSaveManualChannelId}
+                      className="shrink-0"
                     >
                       {savingManual ? 'Saving…' : 'Save ID'}
-                    </button>
+                    </Btn>
                   </div>
                 </div>
               </div>
             ) : channels.length > 0 ? (
-              <div className="flex gap-2">
-                <select
-                  className="flex-1 rounded-lg border border-edge-subtle bg-surface px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:border-brand"
-                  value={selectedChannel}
-                  onChange={(e) => setSelectedChannel(e.target.value)}
-                >
-                  <option value="">Pick a channel…</option>
-                  {channels.map((ch) => (
-                    <option key={ch.id} value={ch.id}>
-                      {ch.private ? '🔒 ' : '#'}{ch.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="rounded-lg bg-brand text-brand-fg px-4 py-2 text-sm font-medium hover:bg-brand-hover disabled:opacity-50 motion-safe:transition-colors"
-                  disabled={!selectedChannel || savingChannel}
+              <div className="flex gap-2 items-end">
+                <div className="flex-1 min-w-0">
+                  <SelectField
+                    className="text-sm"
+                    value={selectedChannel}
+                    onChange={(e) => setSelectedChannel(e.target.value)}
+                  >
+                    <option value="">Pick a channel…</option>
+                    {channels.map((ch) => (
+                      <option key={ch.id} value={ch.id}>
+                        {ch.private ? '🔒 ' : '#'}{ch.name}
+                      </option>
+                    ))}
+                  </SelectField>
+                </div>
+                <Btn
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  disabled={!selectedChannel}
+                  loading={savingChannel}
                   onClick={handleSaveChannel}
+                  className="shrink-0"
                 >
                   {savingChannel ? 'Saving…' : 'Save'}
-                </button>
+                </Btn>
               </div>
             ) : (
               <p className={`rounded-sm px-2.5 py-2 text-xs ${CHIP_TONE.warnSubtle}`}>
@@ -314,25 +339,30 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
 
       {/* Legacy webhook fallback */}
       <details className="group">
-        <summary className="cursor-pointer text-xs text-fg-tertiary hover:text-fg-secondary transition-colors list-none flex items-center gap-1">
+        <summary className="cursor-pointer text-xs text-fg-tertiary hover:text-fg-secondary transition-opacity list-none flex items-center gap-1">
           <span className="group-open:rotate-90 transition-transform inline-block">›</span>
           Use incoming webhook URL instead (legacy)
         </summary>
-        <div className="mt-3 flex gap-2">
-          <input
-            type="url"
-            placeholder="https://hooks.slack.com/services/…"
-            className="flex-1 rounded-lg border border-edge-subtle bg-surface px-3 py-2 text-xs font-mono focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:border-brand"
-            value={webhookUrl}
-            onChange={(e) => setWebhookUrl(e.target.value)}
-          />
-          <button
-            className="rounded-lg border border-edge-subtle px-4 py-2 text-xs font-medium hover:bg-surface-hover disabled:opacity-50 transition-colors"
+        <div className="mt-3 flex gap-2 items-end">
+          <div className="flex-1 min-w-0">
+            <Input
+              type="url"
+              placeholder="https://hooks.slack.com/services/…"
+              className="font-mono text-xs"
+              value={webhookUrl}
+              onChange={(e) => setWebhookUrl(e.target.value)}
+            />
+          </div>
+          <Btn
+            type="button"
+            variant="ghost"
+            size="sm"
             disabled={!webhookUrl}
             onClick={handleSaveWebhook}
+            className="shrink-0"
           >
             Save
-          </button>
+          </Btn>
         </div>
         <p className="mt-2 text-xs text-fg-tertiary">
           Webhook URL sends to a fixed channel; it cannot be changed per-project or thread replies. Use "Add to Slack" for the full experience.

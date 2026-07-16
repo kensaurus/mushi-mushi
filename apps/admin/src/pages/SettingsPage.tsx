@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { PageScopeHint, SnapshotSectionHint, SegmentedControl, StatCard, ErrorAlert, Panel, PanelSectionLabel } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -168,7 +169,7 @@ export function SettingsPage() {
 
   if (!activeProjectId) {
     return (
-      <div className="space-y-4">
+      <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-settings">
         <PageHeaderBar title={copy?.title ?? 'Project settings'} />
       <PageScopeHint text={copy?.description ?? "Per-project flags, LLM keys, SDK widget, and developer tools — scoped to the active project."} />
         <SetupNudge

@@ -188,7 +188,7 @@ export function ExploreLayerLane({ nodes, edges, selectedId, highlightIds, onSel
                 {/* Proportional fill bar */}
                 <div className="h-1 rounded-full bg-surface-overlay overflow-hidden">
                   <div
-                    className="h-full rounded-full transition-[background-color,border-color,color,box-shadow,transform,opacity]"
+                    className="h-full rounded-full transition-[transform,opacity]"
                     style={{ width: `${pct}%`, backgroundColor: col.color, opacity: 0.6 }}
                   />
                 </div>
@@ -225,7 +225,7 @@ export function ExploreLayerLane({ nodes, edges, selectedId, highlightIds, onSel
                       }}
                       className={[
                         'text-left px-2.5 py-1.5 rounded-r-md border border-l-0 border-edge-subtle/50 text-2xs',
-                        'transition-[background-color,border-color,color,box-shadow,transform,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1',
+                        'transition-[transform,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1',
                         isSelected
                           ? 'bg-surface-overlay border-edge/60 text-fg font-medium shadow-sm'
                           : isHighlighted

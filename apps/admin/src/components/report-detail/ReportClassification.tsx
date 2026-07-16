@@ -17,6 +17,7 @@ import {
 } from '../../lib/tokens'
 import { IconCamera, IconIntelligence } from '../icons'
 import { ContainedBlock } from './ReportSurface'
+import { EmptySectionMessage } from '../ui/empty-section-message'
 import type { ReportDetail } from './types'
 
 export function ClassificationFields({ report }: { report: ReportDetail }) {
@@ -171,11 +172,5 @@ export function ScreenshotHero({ url, className = '' }: { url: string; className
   )
 }
 
-export function EmptySectionMessage({ text, hint }: { text: string; hint?: string }) {
-  return (
-    <div className="rounded-md border border-dashed border-edge-subtle/70 bg-surface-overlay/20 px-3 py-2.5">
-      <p className="text-xs text-fg-muted leading-relaxed">{text}</p>
-      {hint && <p className="mt-1 text-2xs text-fg-faint leading-relaxed">{hint}</p>}
-    </div>
-  )
-}
+/** @deprecated Import from `components/ui` — re-exported for back-compat. */
+export { EmptySectionMessage } from '../ui/empty-section-message'

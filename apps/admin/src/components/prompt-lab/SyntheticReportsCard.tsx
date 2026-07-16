@@ -98,7 +98,7 @@ export function SyntheticReportsCard() {
                     ? 'bg-ok-muted/50 text-ok-foreground border border-ok/25'
                     : match >= 0.5
                       ? CHIP_TONE.warnSubtle
-                      : CHIP_TONE.dangerSubtle + ' border border-danger/30'
+                      : CHIP_TONE.dangerSubtle
                 return (
                   <tr key={r.id} className="border-t border-edge-subtle align-top">
                     <td className="px-2 py-1.5 text-fg-secondary max-w-[24rem]">

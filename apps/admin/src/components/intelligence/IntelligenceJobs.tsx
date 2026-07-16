@@ -42,7 +42,7 @@ export function ActiveJobCard({ job, onCancel }: ActiveJobProps) {
             Typical runtime 20–60s. The page refreshes automatically while this job is queued or running.
           </p>
           <div className="mt-3 h-1 overflow-hidden rounded-full bg-edge-subtle">
-            <div className="h-full w-1/3 animate-pulse rounded-full bg-brand motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity]" />
+            <div className="h-full w-1/3 animate-pulse rounded-full bg-brand motion-safe:transition-[transform,opacity]" />
           </div>
         </div>
         <Btn variant="danger" size="sm" onClick={onCancel} className="shrink-0">

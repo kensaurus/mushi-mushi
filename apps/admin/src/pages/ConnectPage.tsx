@@ -13,6 +13,7 @@ import {
 } from '../lib/activeProject'
 import { usePageData } from '../lib/usePageData'
 import { Section, Card, Btn, HelpBanner } from '../components/ui'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { usePageCopy } from '../lib/copy'
 import { SdkInstallCard } from '../components/SdkInstallCard'
@@ -224,7 +225,7 @@ export function ConnectPage() {
   })
 
   return (
-    <div className="space-y-6">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-connect">
       {!requiredSetupDone && nextSetupStep && (
         <HelpBanner tone="warn" title="Finish setup first">
           <p className="text-xs text-fg-muted">
@@ -328,8 +329,8 @@ export function ConnectPage() {
         </HelpBanner>
       )}
 
-      <div className="xl:grid xl:grid-cols-2 xl:items-start xl:gap-6">
-        <div className="space-y-6">
+      <div className="space-y-6 xl:grid xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.85fr)] xl:items-start xl:gap-6">
+        <div className="space-y-6 min-w-0">
           <div id="connect-github" className="scroll-mt-chrome">
             <Section
               title="GitHub"
@@ -407,7 +408,7 @@ export function ConnectPage() {
           />
         </div>
 
-        <div className="space-y-6 xl:sticky xl:top-4">
+        <div className="space-y-6 min-w-0 xl:sticky xl:top-4">
           <div id="connect-update" className="scroll-mt-chrome">
             <Section title="Update center">
               <SectionDescription when={showSectionDescriptions}>

@@ -57,7 +57,7 @@ function ExploreNodeChip({
         borderRight: `1px solid ${borderColor}`,
         borderBottom: `1px solid ${borderColor}`,
         background: isSelected ? chrome.selectedBg : nodeBg,
-        transition: 'opacity 0.15s, box-shadow 0.15s',
+        transition: 'opacity 200ms var(--ease-stamp, ease), transform 200ms var(--ease-stamp, ease)',
         boxShadow: isSelected
           ? `0 0 0 2px ${color}50, 0 2px 12px oklch(0 0 0 / 0.40)`
           : `0 1px 3px oklch(0 0 0 / ${theme === 'dark' ? '0.50' : '0.07'})`,
@@ -150,7 +150,7 @@ const HINT_KEY = 'mushi.explore.hintSeen'
 function ZoomControls() {
   const { zoomIn, zoomOut, fitView } = useReactFlow()
   const btn =
-    'flex items-center justify-center w-7 h-7 text-fg-secondary hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors'
+    'flex items-center justify-center w-7 h-7 text-fg-secondary hover:text-fg hover:bg-surface-overlay motion-safe:transition-opacity'
   return (
     <div className="flex flex-col rounded-md border border-edge/70 bg-surface-raised/90 backdrop-blur shadow-raised overflow-hidden">
       <button type="button" onClick={() => zoomIn({ duration: 200 })} className={`${btn} border-b border-edge/50`} aria-label="Zoom in" title="Zoom in">

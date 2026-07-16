@@ -45,7 +45,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={copy}
-      className="text-2xs text-fg-faint hover:text-fg transition-colors px-1.5 py-0.5 rounded border border-transparent hover:border-edge-subtle"
+      className="text-2xs text-fg-faint hover:text-fg transition-opacity px-1.5 py-0.5 rounded border border-transparent hover:border-edge-subtle"
       title="Copy path"
       aria-label="Copy file path"
     >
@@ -244,7 +244,7 @@ export function ExploreSymbolPanel({
               </span>
               <div className="flex-1 h-1 rounded-full bg-surface-overlay overflow-hidden">
                 <div
-                  className="h-full rounded-full transition-[background-color,border-color,color,box-shadow,transform,opacity]"
+                  className="h-full rounded-full transition-[transform,opacity]"
                   style={{ width: `${complexity.pct}%`, backgroundColor: complexity.color }}
                 />
               </div>
@@ -320,7 +320,7 @@ export function ExploreSymbolPanel({
           <button
             type="button"
             onClick={() => onAskAboutFile(file_path, symbol_name)}
-            className="inline-flex items-center gap-1 text-2xs text-brand hover:text-brand/80 border border-brand/30 hover:border-brand/50 rounded-sm px-2 py-1 transition-colors"
+            className="inline-flex items-center gap-1 text-2xs text-brand hover:text-brand/80 border border-brand/30 hover:border-brand/50 rounded-sm px-2 py-1 transition-opacity"
           >
             Ask about this file
           </button>
@@ -329,7 +329,7 @@ export function ExploreSymbolPanel({
           <button
             type="button"
             onClick={onViewInGraph}
-            className="inline-flex items-center gap-1 text-2xs text-fg-secondary hover:text-fg border border-edge-subtle hover:border-edge rounded-sm px-2 py-1 transition-colors"
+            className="inline-flex items-center gap-1 text-2xs text-fg-secondary hover:text-fg border border-edge-subtle hover:border-edge rounded-sm px-2 py-1 transition-opacity"
           >
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
               <circle cx="4" cy="8" r="2" /><circle cx="12" cy="4" r="2" /><circle cx="12" cy="12" r="2" />
@@ -342,7 +342,7 @@ export function ExploreSymbolPanel({
           <button
             type="button"
             onClick={() => onFindSimilar(similarityQuery)}
-            className="inline-flex items-center gap-1 text-2xs text-fg-secondary hover:text-fg border border-edge-subtle hover:border-edge rounded-sm px-2 py-1 transition-colors"
+            className="inline-flex items-center gap-1 text-2xs text-fg-secondary hover:text-fg border border-edge-subtle hover:border-edge rounded-sm px-2 py-1 transition-opacity"
           >
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
               <circle cx="6.5" cy="6.5" r="4" /><path d="M10.5 10.5L14 14" strokeLinecap="round" />
@@ -353,7 +353,7 @@ export function ExploreSymbolPanel({
         {reportLink && (
           <Link
             to={reportLink}
-            className="inline-flex items-center gap-1 text-2xs text-fg-secondary hover:text-fg border border-edge-subtle hover:border-edge rounded-sm px-2 py-1 transition-colors"
+            className="inline-flex items-center gap-1 text-2xs text-fg-secondary hover:text-fg border border-edge-subtle hover:border-edge rounded-sm px-2 py-1 transition-opacity"
           >
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
               <path d="M4 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
@@ -364,7 +364,7 @@ export function ExploreSymbolPanel({
         )}
         <Link
           to="/qa-coverage"
-          className="inline-flex items-center gap-1 text-2xs text-fg-secondary hover:text-fg border border-edge-subtle hover:border-edge rounded-sm px-2 py-1 transition-colors"
+          className="inline-flex items-center gap-1 text-2xs text-fg-secondary hover:text-fg border border-edge-subtle hover:border-edge rounded-sm px-2 py-1 transition-opacity"
         >
           <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
             <path d="M13 2H3a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1z" />

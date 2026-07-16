@@ -21,7 +21,7 @@ export function ChromeBreadcrumb() {
       aria-label="Breadcrumb"
       className="hidden xl:flex items-center gap-1.5 min-w-0 max-w-[14rem] text-2xs text-fg-muted shrink"
     >
-      <Link to="/dashboard" className="hover:text-fg motion-safe:transition-colors truncate">
+      <Link to="/dashboard" className="hover:text-fg motion-safe:transition-opacity truncate">
         Console
       </Link>
       {projectName && (
@@ -29,7 +29,7 @@ export function ChromeBreadcrumb() {
           <span aria-hidden className="text-fg-faint">/</span>
           <Link
             to="/projects"
-            className="hover:text-fg motion-safe:transition-colors truncate max-w-[8rem]"
+            className="hover:text-fg motion-safe:transition-opacity truncate max-w-[8rem]"
             title={projectName}
           >
             {projectName}

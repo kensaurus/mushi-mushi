@@ -144,7 +144,7 @@ function buildGithubCiEnv(projectId: string, apiKey: string, env: ProjectMushiEn
 }
 
 function scopeBadgeTone(scope: string): string {
-  if (scope === 'mcp:write') return CHIP_TONE.dangerSubtle + ' border border-danger/30'
+  if (scope === 'mcp:write') return CHIP_TONE.dangerSubtle
   if (scope === 'mcp:read') return CHIP_TONE.infoSubtle
   return 'bg-surface-overlay text-fg-muted border border-edge-subtle'
 }
@@ -257,7 +257,7 @@ export function RevealedKeyCard({
             onClick={() => setMode(tab.id)}
             title={tab.hint}
             data-testid={`revealed-key-mode-${tab.id}`}
-            className={`text-2xs px-2 py-1 rounded-sm border transition-colors ${
+            className={`text-2xs px-2 py-1 rounded-sm border transition-opacity ${
               mode === tab.id
                 ? 'bg-accent-muted/70 text-accent-foreground border-accent/40'
                 : 'bg-surface-raised text-fg-muted border-edge-subtle hover:text-fg'

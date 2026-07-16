@@ -28,7 +28,7 @@ export function AuditResourceChip({
     >
       <Link
         to={to}
-        className={`inline-flex max-w-[10rem] items-center truncate rounded-sm border px-1.5 py-0.5 font-mono text-2xs transition-colors ${info.className}`}
+        className={`inline-flex max-w-[10rem] items-center truncate rounded-sm border px-1.5 py-0.5 font-mono text-2xs transition-opacity ${info.className}`}
       >
         {label}
       </Link>

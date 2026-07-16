@@ -538,7 +538,7 @@ export function ProjectsListPanel({
               onSdkOpenOverrideChange(project.id, nextOpen)
             }}
           >
-            <summary className="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-2 py-1.5 -mx-2 rounded-sm hover:bg-surface-overlay transition-colors">
+            <summary className="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-2 py-1.5 -mx-2 rounded-sm hover:bg-surface-overlay transition-opacity">
               <div className="flex items-center gap-2 min-w-0">
                 <span aria-hidden="true" className="text-fg-muted text-xs">
                   {'\u{1F41B}'}
@@ -864,7 +864,7 @@ function ProjectContextRail({ project }: { project: Project }) {
             <ContextDivider />
             <Link
               to={`/explore?project=${project.id}`}
-              className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay px-2 py-0.5 text-2xs text-fg-secondary transition-colors hover:border-edge hover:bg-surface-raised hover:text-fg"
+              className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay px-2 py-0.5 text-2xs text-fg-secondary transition-opacity hover:border-edge hover:bg-surface-raised hover:text-fg"
               title="Open codebase atlas"
               onClick={(e) => e.stopPropagation()}
             >
@@ -992,7 +992,7 @@ function ProjectIdCopy({ projectId }: { projectId: string }) {
     <button
       type="button"
       onClick={copy}
-      className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-sm transition-colors group hover:opacity-95"
+      className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-sm transition-opacity group hover:opacity-95"
       title="Copy project ID — paste as MUSHI_PROJECT_ID in .env.local or .cursor/mcp.json"
       data-testid={`project-id-chip-${projectId}`}
       aria-label={`Copy project ID: ${projectId}`}

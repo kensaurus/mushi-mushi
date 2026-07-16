@@ -63,14 +63,14 @@ function captureLabel(trigger: string | null | undefined): { label: string; tone
   if (trigger === 'window-error' || trigger === 'unhandled-rejection') {
     return {
       label: 'auto',
-      tone: CHIP_TONE.infoSubtle + ' border-info/30',
+      tone: CHIP_TONE.infoSubtle,
       tooltip: `Captured automatically when ${trigger === 'window-error' ? 'a JS error was thrown' : 'a promise rejection went unhandled'}. Check whether it actually broke a user flow — these can be benign third-party noise.`,
     }
   }
   if (trigger === 'captureException' || trigger === 'captureMessage' || trigger.startsWith('node-')) {
     return {
       label: 'server',
-      tone: CHIP_TONE.warnSubtle + ' border-warn/30',
+      tone: CHIP_TONE.warnSubtle,
       tooltip:
         'Forwarded from a backend service via @mushi-mushi/node (Express/Hono/Fastify middleware or direct captureException call). The user may never have seen this surface.',
     }

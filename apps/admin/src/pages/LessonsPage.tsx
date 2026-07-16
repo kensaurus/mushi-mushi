@@ -10,6 +10,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -50,7 +51,7 @@ import {
 import { IconIntelligence, IconShield, IconChevronRight } from '../components/icons'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { CHIP_TONE } from '../lib/chipTone'
+import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -106,8 +107,8 @@ function SeverityBadge({ severity }: { severity: string }) {
     severity === 'critical'
       ? CHIP_TONE.dangerSubtle
       : severity === 'warn'
-        ? CHIP_TONE.warnSubtle + ' border border-warn/20'
-        : CHIP_TONE.infoSubtle + ' border border-info/20'
+        ? CHIP_TONE.warnSubtle
+        : CHIP_TONE.infoSubtle
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${className}`}>
       {severity}
@@ -201,7 +202,7 @@ function LessonsTab() {
           {lessons.map((lesson) => (
             <div
               key={lesson.id}
-              className="flex items-start gap-3 p-4 rounded-lg border border-edge hover:bg-surface-overlay/50 cursor-pointer motion-safe:transition-colors"
+              className="flex items-start gap-3 p-4 rounded-lg border border-edge hover:bg-surface-overlay/50 cursor-pointer motion-safe:transition-opacity"
               onClick={() => setSelectedLesson(lesson)}
             >
               <div className="flex-1 min-w-0">
@@ -375,7 +376,7 @@ function ClustersTab() {
         {clusters.map((cluster) => (
           <div
             key={cluster.id}
-            className="p-4 rounded-lg border border-edge hover:bg-surface-overlay/50 motion-safe:transition-colors"
+            className="p-4 rounded-lg border border-edge hover:bg-surface-overlay/50 motion-safe:transition-opacity"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
@@ -635,7 +636,7 @@ export function LessonsPage() {
               : 'info'
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-lessons">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-lessons">
       <PageHeaderBar
         title={copy?.title ?? 'Lessons'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -660,8 +661,8 @@ export function LessonsPage() {
                 : bannerSeverity === 'warn'
                   ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
-                    ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
-                    : 'bg-surface-overlay text-fg-muted'
+                    ? HEADER_BADGE_TONE.brand
+                    : HEADER_BADGE_TONE.neutral
           }
         >
           {!stats.hasAnyProject

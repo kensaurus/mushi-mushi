@@ -56,7 +56,7 @@ export function OperatorTraceBadge({ lines }: { lines: OperatorTraceLine[] }) {
   const tone =
     summary.errorCount > 0
       ? 'bg-err/20 text-err border-err/30'
-      : CHIP_TONE.warnSubtle + ' border-warn/30'
+      : CHIP_TONE.warnSubtle
   return (
     <span
       className={`ml-1 inline-flex shrink-0 items-center rounded px-1 py-px text-3xs font-bold uppercase tracking-wide border ${tone} ${summary.errorCount > 0 ? 'motion-safe:animate-pulse' : ''}`}

@@ -121,7 +121,7 @@ function Cta({
       return (
         <Link
           to={cta.to}
-          className="inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-colors"
+          className="inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity"
         >
           {cta.label} <span aria-hidden="true">→</span>
         </Link>
@@ -130,7 +130,7 @@ function Cta({
     return (
       <Link
         to={cta.to}
-        className="inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors"
+        className="inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-opacity"
       >
         {cta.label}
       </Link>

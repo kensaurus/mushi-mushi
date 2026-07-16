@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -347,7 +348,7 @@ export function QueryPage() {
 
   if (!activeProjectId) {
     return (
-      <div className="space-y-4">
+      <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-query">
         <PageHeaderBar
           title={copy?.title ?? 'Ask Your Data'}
 
@@ -474,36 +475,20 @@ export function QueryPage() {
       <>
       {/* ── Composer ─────────────────────────────────────────────────────── */}
       <Card className="p-4 md:p-5 border-brand/20 bg-gradient-to-b from-brand/[0.04] to-transparent">
-        {/* Mode toggle */}
         <div className="flex items-center justify-between gap-3 mb-3">
-          <div className="inline-flex items-center gap-0.5 rounded-sm border border-edge-subtle bg-surface-raised p-0.5">
-            <Btn
-              variant={queryMode === 'nl' ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => setQueryMode('nl')}
-              aria-pressed={queryMode === 'nl'}
-              className={`px-3 py-1 rounded-micro text-2xs shadow-none hover:-translate-y-0 ${
-                queryMode === 'nl'
-                  ? ''
-                  : 'border-0 bg-transparent hover:bg-surface-overlay/50'
-              }`}
-            >
-              Natural language
-            </Btn>
-            <Btn
-              variant={queryMode === 'raw' ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => { setQueryMode('raw'); setTimeout(() => rawTextareaRef.current?.focus(), 0) }}
-              aria-pressed={queryMode === 'raw'}
-              className={`px-3 py-1 rounded-micro text-2xs shadow-none hover:-translate-y-0 ${
-                queryMode === 'raw'
-                  ? ''
-                  : 'border-0 bg-transparent hover:bg-surface-overlay/50'
-              }`}
-            >
-              Raw SQL
-            </Btn>
-          </div>
+          <SegmentedControl<QueryMode>
+            value={queryMode}
+            onChange={(next) => {
+              setQueryMode(next)
+              if (next === 'raw') setTimeout(() => rawTextareaRef.current?.focus(), 0)
+            }}
+            size="sm"
+            ariaLabel="Query composer mode"
+            options={[
+              { id: 'nl', label: 'Natural language' },
+              { id: 'raw', label: 'Raw SQL' },
+            ]}
+          />
           {queryMode === 'raw' && (
             <Btn
               variant="ghost"
@@ -555,7 +540,7 @@ export function QueryPage() {
                   placeholder="e.g. How many P0/P1 reports landed this week vs last week?"
                   disabled={loading}
                   rows={2}
-                  className="flex-1 min-w-0 bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2.5 text-sm text-fg placeholder:text-fg-faint hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-colors resize-y"
+                  className="flex-1 min-w-0 bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2.5 text-sm text-fg placeholder:text-fg-faint hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-opacity resize-y"
                   aria-label="Question composer"
                 />
                 <Btn
@@ -602,7 +587,7 @@ export function QueryPage() {
                   disabled={loading}
                   rows={6}
                   spellCheck={false}
-                  className="flex-1 min-w-0 bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2.5 text-sm text-fg font-mono placeholder:text-fg-faint hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-colors resize-y"
+                  className="flex-1 min-w-0 bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2.5 text-sm text-fg font-mono placeholder:text-fg-faint hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-opacity resize-y"
                   aria-label="Raw SQL composer"
                 />
                 <Btn
@@ -672,7 +657,7 @@ export function QueryPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 mb-0.5">
                           {run.mode === 'raw' && (
-                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-micro text-2xs font-mono font-medium ${CHIP_TONE.warnSubtle} border border-warn/20`}>SQL</span>
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-micro text-2xs font-mono font-medium ${CHIP_TONE.warnSubtle}`}>SQL</span>
                           )}
                           <p className="text-sm text-fg font-medium break-words line-clamp-3">
                             {run.question}
@@ -753,8 +738,8 @@ export function QueryPage() {
                         {/* SQL block — collapsible, open by default in raw mode */}
                         <div className="rounded-sm border border-edge-subtle/60 overflow-hidden">
                           <details open={run.mode === 'raw'}>
-                            <summary className="flex items-center justify-between gap-2 px-3 py-1.5 bg-surface-raised/50 cursor-pointer select-none hover:bg-surface-overlay/20 motion-safe:transition-colors group">
-                              <span className="text-2xs font-mono text-fg-faint group-hover:text-fg-muted transition-colors">
+                            <summary className="flex items-center justify-between gap-2 px-3 py-1.5 bg-surface-raised/50 cursor-pointer select-none hover:bg-surface-overlay/20 motion-safe:transition-opacity group">
+                              <span className="text-2xs font-mono text-fg-faint group-hover:text-fg-muted transition-opacity">
                                 ▸ SQL
                               </span>
                               <QueryCopyButton value={run.result.sql} label="Copy SQL" />

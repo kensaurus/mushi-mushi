@@ -43,7 +43,7 @@ export function ObservedRouteCard({ route, maxEventCount }: Props) {
     maxEventCount > 0 ? Math.max(0.04, route.eventCount / maxEventCount) : 0
   const widthPct = `${Math.round(ratio * 100)}%`
   return (
-    <article className="group rounded-lg border border-edge-subtle bg-surface-overlay/40 hover:bg-surface-overlay transition-colors">
+    <article className="group rounded-lg border border-edge-subtle bg-surface-overlay/40 hover:bg-surface-overlay transition-opacity">
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}

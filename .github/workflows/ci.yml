@@ -135,11 +135,8 @@ jobs:
 
       - run: pnpm lint
 
-      - name: Check design tokens
-        run: pnpm check:design-tokens
-
-      - name: Check brand token build freshness
-        run: pnpm check:brand-tokens-fresh
+      - name: Check design system gates
+        run: pnpm check:design
 
       - run: pnpm test
 

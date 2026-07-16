@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -48,7 +49,7 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ResponsiveTable } from '../components/ResponsiveTable'
 import { FulfilledTicketsPicker } from '../components/support/FulfilledTicketsPicker'
-import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
+import { CHIP_TONE, runStatusChipTone, HEADER_BADGE_TONE } from '../lib/chipTone'
 
 function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
   if (!payload) return []
@@ -388,7 +389,7 @@ function ReleasesList({
             {releases.map((r) => (
               <tr
                 key={r.id}
-                className="cursor-pointer border-b border-edge-subtle last:border-0 motion-safe:transition-colors hover:bg-surface-raised"
+                className="cursor-pointer border-b border-edge-subtle last:border-0 motion-safe:transition-opacity hover:bg-surface-raised"
                 onClick={() => setSelected(r)}
               >
                 <td className="px-3 py-2.5 font-mono text-xs font-semibold tabular-nums">v{r.version}</td>
@@ -567,7 +568,7 @@ export function ReleasesPage() {
             : 'ok'
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-releases">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-releases">
       <PageHeaderBar
         title={copy?.title ?? 'Releases'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -588,8 +589,8 @@ export function ReleasesPage() {
               : bannerSeverity === 'warn'
                 ? CHIP_TONE.warnSubtle
                 : bannerSeverity === 'brand'
-                  ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
-                  : 'bg-surface-overlay text-fg-muted'
+                  ? HEADER_BADGE_TONE.brand
+                  : HEADER_BADGE_TONE.neutral
           }
         >
           {!stats.hasAnyProject

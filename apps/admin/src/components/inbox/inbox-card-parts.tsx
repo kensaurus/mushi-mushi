@@ -56,7 +56,7 @@ export function ClearChip({ card }: { card: InboxCard }) {
       data-inbox-card={card.id}
       data-inbox-state="clear"
       to={card.pageTo}
-      className="group inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-overlay px-2 py-1 text-2xs font-medium text-fg-muted hover:border-ok/30 hover:bg-ok-muted hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+      className="group inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-overlay px-2 py-1 text-2xs font-medium text-fg-muted hover:border-ok/30 hover:bg-ok-muted hover:text-fg motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
       title={`${card.pageLabel} — all clear. Click to open.`}
     >
       <SignalChip tone="ok">✓</SignalChip>

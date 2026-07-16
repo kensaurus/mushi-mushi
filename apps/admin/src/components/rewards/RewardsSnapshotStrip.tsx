@@ -132,7 +132,7 @@ export function RewardsSnapshotStrip({
       </MetricStrip>
       {!hideLinks ? (
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-2xs text-fg-muted">
-          <Link to="/rewards?tab=contributors" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+          <Link to="/rewards?tab=contributors" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
             Leaderboard →
           </Link>
           <Link to="/rewards?tab=rules" className="hover:text-fg underline-offset-2 hover:underline">

@@ -3,10 +3,9 @@
  * PURPOSE: Converts a raw fix-attempt error string into a human-readable
  *          title, hint, and optional action for the FixErrorPanel component.
  *
- * SYNC NOTE: This must be kept in sync with the server-side copy at
+ * SYNC NOTE: Source of truth for the mapping table. Mirror lives at
  *   packages/server/supabase/functions/_shared/humanize-error.ts
- * The two files share the same mapping table; edge-function imports can't
- * cross into the Vite bundle, so they live as identical siblings.
+ * Enforced by scripts/check-humanize-parity.mjs (part of check:drift).
  */
 
 export interface HumanizedFixError {

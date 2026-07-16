@@ -75,7 +75,7 @@ export function PromptLabGuide({ topPriority, stats }: Props) {
       </div>
       <p className="text-2xs text-fg-faint">
         Eval scores come from{' '}
-        <Link to="/judge" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+        <Link to="/judge" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
           Judge
         </Link>
         . Never promote a candidate without a judge score ≥ 80%.

@@ -29,7 +29,7 @@ export const TESTER_PANEL =
   'rounded-md border border-edge-subtle bg-surface-raised'
 
 export const TESTER_PANEL_INTERACTIVE =
-  `${TESTER_PANEL} motion-safe:transition-[border-color,box-shadow,transform] hover:border-brand/30 hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60`
+  `${TESTER_PANEL} motion-safe:transition-[transform,opacity] hover:border-brand/30 hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60`
 
 export interface TesterPageIntroProps {
   title: string
@@ -119,12 +119,12 @@ export function TesterPipelineRow({
 }) {
   const badgeClass =
     badgeTone === 'warn'
-      ? CHIP_TONE.warnSubtle + ' border-warn/30'
+      ? CHIP_TONE.warnSubtle
       : badgeTone === 'ok'
-        ? CHIP_TONE.okSubtle + ' border-ok/30'
+        ? CHIP_TONE.okSubtle
         : badgeTone === 'neutral'
           ? 'bg-surface-overlay text-fg-muted border-edge'
-          : CHIP_TONE.infoSubtle + ' border-info/30'
+          : CHIP_TONE.infoSubtle
 
   return (
     <Link
@@ -204,7 +204,7 @@ export function TesterProgressTrack({
   return (
     <div className="relative h-2 overflow-hidden rounded-full bg-surface-overlay">
       <div
-        className={`h-full rounded-full motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] ${barClassName}`}
+        className={`h-full rounded-full motion-safe:transition-[transform,opacity] ${barClassName}`}
         style={{ width: `${pct}%` }}
       />
       {markerPct != null && (
@@ -246,7 +246,7 @@ export function TesterMilestoneRing({
           strokeWidth="6"
           strokeDasharray={`${dash} ${circ - dash}`}
           strokeLinecap="round"
-          className="motion-safe:transition-[stroke-dasharray] motion-safe:duration-500"
+          className="motion-safe:transition-[transform,opacity] motion-safe:duration-500"
         />
       </svg>
       <p className="-mt-1 text-center text-xs leading-tight text-fg-muted">{label}</p>
@@ -284,7 +284,7 @@ export function TesterPrimaryCta({ to, children }: { to: string; children: React
   return (
     <Link
       to={to}
-      className="inline-flex items-center justify-center gap-1.5 rounded-sm bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg shadow-card motion-safe:transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+      className="inline-flex items-center justify-center gap-1.5 rounded-sm bg-brand px-3 py-1.5 text-xs font-semibold text-brand-fg shadow-card motion-safe:transition-opacity hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
     >
       {children}
     </Link>

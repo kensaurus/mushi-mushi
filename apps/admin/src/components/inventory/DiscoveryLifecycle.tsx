@@ -104,7 +104,7 @@ function LifecycleTile({ step, index }: { step: LifecycleStep; index: number }) 
     <article
       role="listitem"
       aria-current={step.state === 'active' ? 'step' : undefined}
-      className={`relative flex flex-col gap-1 px-3 py-3 rounded-lg ${style.ring} ${style.bg} transition-colors`}
+      className={`relative flex flex-col gap-1 px-3 py-3 rounded-lg ${style.ring} ${style.bg} transition-opacity`}
     >
       <div className="flex items-center gap-2">
         <div

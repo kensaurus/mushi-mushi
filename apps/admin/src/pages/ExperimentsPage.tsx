@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -43,7 +44,7 @@ import {
 } from '../components/experiments/ExperimentsStatsTypes'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
+import { CHIP_TONE, runStatusChipTone, HEADER_BADGE_TONE } from '../lib/chipTone'
 
 interface ExperimentVariant {
   id: string
@@ -252,7 +253,7 @@ export function ExperimentsPage() {
             : 'info'
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-experiments">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-experiments">
       <PageHeaderBar
         title={copy?.title ?? 'Experiments'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -275,8 +276,8 @@ export function ExperimentsPage() {
               : bannerSeverity === 'warn'
                 ? CHIP_TONE.warnSubtle
                 : bannerSeverity === 'brand'
-                  ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
-                  : 'bg-surface-overlay text-fg-muted'
+                  ? HEADER_BADGE_TONE.brand
+                  : HEADER_BADGE_TONE.neutral
           }
         >
           {!stats.hasAnyProject
@@ -445,7 +446,7 @@ function ExperimentsTab({ experiments, loading, error, onOpen, onLaunch, onStop,
         </thead>
         <tbody>
           {experiments.map((e) => (
-            <tr key={e.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-colors">
+            <tr key={e.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-opacity">
               <td className="px-3 py-2">
                 <div className="font-medium text-fg-primary">{e.name}</div>
                 {e.hypothesis && <div className="text-xs text-fg-muted truncate max-w-[200px]">{e.hypothesis}</div>}
@@ -493,7 +494,13 @@ function NewExperimentForm({ projectId, onCreated }: { projectId: string; onCrea
     try {
       const expRes = await apiFetch<{ id: string }>('/v1/admin/experiments', {
         method: 'POST',
-        body: JSON.stringify({ ...form, project_id: projectId }),
+        body: JSON.stringify({
+          project_id: projectId,
+          name: form.name,
+          description: form.description || null,
+          hypothesis: form.hypothesis || null,
+          bandit_enabled: form.bandit_enabled,
+        }),
       })
       if (!expRes.ok) throw new Error(expRes.error?.message ?? 'Create failed')
       const expId = (expRes.data as { id: string }).id

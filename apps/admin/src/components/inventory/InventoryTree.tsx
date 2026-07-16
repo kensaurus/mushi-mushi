@@ -36,9 +36,9 @@ function frameworkChip(framework: string | undefined): string {
     case 'playwright':
       return CHIP_TONE.okSubtle
     case 'vitest':
-      return CHIP_TONE.warnSubtle + ' border border-warn/25'
+      return CHIP_TONE.warnSubtle
     case 'cypress':
-      return CHIP_TONE.infoSubtle + ' border border-info/25'
+      return CHIP_TONE.infoSubtle
     case 'jest':
       return CHIP_TONE.dangerSubtle
     default:

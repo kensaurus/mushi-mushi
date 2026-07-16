@@ -234,7 +234,8 @@ export function SdkInstallCard({
         </div>
       )}
 
-      <div className={`grid gap-4 ${isServerFramework(framework) ? '' : 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'}`}>
+      <div className="@container/sdk">
+      <div className={`grid gap-4 ${isServerFramework(framework) ? '' : '@2xl/sdk:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'}`}>
         {/* ─── LEFT COLUMN: live preview + configurator ─── */}
         {/* Hidden for server frameworks — the widget only runs in browsers. */}
         {isServerFramework(framework) ? (
@@ -285,7 +286,7 @@ export function SdkInstallCard({
               type="button"
               onClick={saveConfig}
               disabled={!isDirty || savingConfig || loadingConfig}
-              className={`px-2.5 py-1 rounded-sm text-2xs font-medium transition-colors ${
+              className={`px-2.5 py-1 rounded-sm text-2xs font-medium transition-opacity ${
                 isDirty && !savingConfig && !loadingConfig
                   ? 'bg-brand text-brand-fg hover:bg-brand-hover'
                   : 'bg-surface-raised text-fg-faint cursor-not-allowed'
@@ -305,6 +306,7 @@ export function SdkInstallCard({
           code={code}
           install={install}
         />
+      </div>
       </div>
     </Card>
   )

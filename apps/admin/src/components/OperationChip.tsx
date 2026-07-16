@@ -32,7 +32,7 @@ export function OperationChip({
     >
       <Link
         to={to}
-        className={`inline-flex max-w-full items-center rounded-sm border px-1.5 py-0.5 font-mono text-2xs leading-snug transition-colors ${tone} ${maxWidthClass} ${className}`}
+        className={`inline-flex max-w-full items-center rounded-sm border px-1.5 py-0.5 font-mono text-2xs leading-snug transition-opacity ${tone} ${maxWidthClass} ${className}`}
         title={info.description}
       >
         <span className="truncate">{operation}</span>

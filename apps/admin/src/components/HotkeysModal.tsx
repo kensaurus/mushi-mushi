@@ -200,7 +200,7 @@ export function HotkeysModal({ open, onClose }: Props) {
             <button
               type="button"
               onClick={() => setSearch('')}
-              className="mt-2 text-2xs text-accent-foreground hover:text-accent motion-safe:transition-colors"
+              className="mt-2 text-2xs text-accent-foreground hover:text-accent motion-safe:transition-opacity"
             >
               Clear search
             </button>
@@ -277,7 +277,7 @@ function Group({
 
 function ShortcutRow({ item, highlight }: { item: Shortcut; highlight?: string }) {
   return (
-    <div className="flex items-start justify-between gap-3 px-2.5 py-1.5 motion-safe:transition-colors hover:bg-surface-overlay/40 rounded-sm">
+    <div className="flex items-start justify-between gap-3 px-2.5 py-1.5 motion-safe:transition-opacity hover:bg-surface-overlay/40 rounded-sm">
       <div className="min-w-0 flex-1">
         <div className="text-fg">
           <HighlightedText text={item.desc} match={highlight} />

@@ -105,7 +105,7 @@ export function ResearchSessionTable({
                 onModeFilterChange('all')
                 onAgeFilterChange('all')
               }}
-              className="text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
+              className="text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
             >
               Clear filters
             </button>
@@ -129,7 +129,7 @@ export function ResearchSessionTable({
                 return (
                   <tr
                     key={s.id}
-                    className={`border-b border-edge/60 transition-colors hover:bg-surface-raised/40 ${
+                    className={`border-b border-edge/60 transition-opacity hover:bg-surface-raised/40 ${
                       isActive ? 'bg-brand/5' : ''
                     }`}
                   >

@@ -23,7 +23,7 @@ export function ModelChip({
     >
       <Link
         to="/health"
-        className={`inline-block truncate rounded-sm border border-edge-subtle bg-surface-overlay/70 px-1.5 py-0.5 font-mono text-2xs leading-snug text-fg-secondary hover:border-brand/30 hover:text-brand transition-colors ${maxWidthClass}`}
+        className={`inline-block truncate rounded-sm border border-edge-subtle bg-surface-overlay/70 px-1.5 py-0.5 font-mono text-2xs leading-snug text-fg-secondary hover:border-brand/30 hover:text-brand transition-opacity ${maxWidthClass}`}
       >
         {model}
       </Link>

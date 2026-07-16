@@ -55,7 +55,7 @@ export function ProjectSetupProgress({ project }: ProjectSetupProgressProps) {
               <span
                 key={step.id}
                 title={`${short}${step.complete ? ' ✓' : isNext ? ' — next' : ''}`}
-                className={`min-w-0 flex-1 rounded-hairline motion-safe:transition-colors ${
+                className={`min-w-0 flex-1 rounded-hairline motion-safe:transition-opacity ${
                   step.complete
                     ? 'bg-ok'
                     : isNext

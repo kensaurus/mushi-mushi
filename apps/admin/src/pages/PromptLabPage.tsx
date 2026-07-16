@@ -11,6 +11,7 @@
  */
 
 import { useMemo, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import {
   Btn,
   ErrorAlert,
@@ -238,7 +239,7 @@ export function PromptLabPage() {
     : undefined
 
   return (
-    <div className="space-y-5">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-prompt-lab">
       <PageHeaderBar
         title="Prompt Lab"
 

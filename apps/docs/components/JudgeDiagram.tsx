@@ -24,7 +24,7 @@ export function JudgeScoreBreakdown() {
               <span style={{ fontSize: 11.5, fontWeight: 700, color: s.color }}>{Math.round(s.weight * 100)}%</span>
             </div>
             <div style={{ height: 8, borderRadius: 4, background: VIZ.track, overflow: 'hidden' }}>
-              <div style={{ width: `${s.weight * 100}%`, height: '100%', borderRadius: 4, background: s.color, transition: 'width 0.6s ease' }} />
+              <div style={{ width: `${s.weight * 100}%`, height: '100%', borderRadius: 4, background: s.color, transition: 'width 0.42s cubic-bezier(0.22, 1, 0.36, 1)' /* meter exception — docs/MOTION.md */ }} />
             </div>
           </div>
         ))}
