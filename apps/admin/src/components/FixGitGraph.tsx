@@ -367,7 +367,7 @@ export function FixGitGraph({
       </svg>
 
       <ul className="space-y-0 text-xs">
-        <li className="mb-1 flex h-auto min-h-[1.25rem] flex-wrap items-center gap-1.5 rounded-sm border border-edge-subtle/50 bg-surface-overlay/35 px-2 py-1 text-3xs uppercase tracking-wider text-fg-faint">
+        <li className="mb-1 flex h-auto min-h-5 flex-wrap items-center gap-1.5 rounded-sm border border-edge-subtle/50 bg-surface-overlay/35 px-2 py-1 text-3xs uppercase tracking-wider text-fg-faint">
           <span className="font-mono normal-case text-fg-secondary">{baseBranch}</span>
           <span className="text-fg-faint">→</span>
           {branchUrl && branchName ? (

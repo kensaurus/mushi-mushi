@@ -620,7 +620,7 @@ function SummaryStripe({
       </span>
       <span className="text-fg-muted">{stage.countLabel}</span>
       {stage.bottleneck && (
-        <span className="ml-auto text-warn truncate max-w-[10rem]" title={stage.bottleneck}>
+        <span className="ml-auto text-warn truncate max-w-40" title={stage.bottleneck}>
           {stage.bottleneck}
         </span>
       )}

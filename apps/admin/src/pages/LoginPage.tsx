@@ -330,7 +330,7 @@ export function LoginPage() {
             {!cloud && (
               <div className="flex items-center justify-between pb-2 border-b border-edge-subtle">
                 <Tooltip content={`Supabase: ${supabaseHost}`} side="bottom">
-                  <span className="text-2xs text-fg-faint truncate max-w-[200px] cursor-default">
+                  <span className="text-2xs text-fg-faint truncate max-w-48 cursor-default">
                     {supabaseHost}
                   </span>
                 </Tooltip>

@@ -1137,7 +1137,7 @@ export function JudgePage() {
                       <td className="py-1.5 px-3 text-fg-faint text-2xs">
                         <RelativeTime value={e.created_at} />
                       </td>
-                      <td className="py-1.5 px-3 truncate max-w-[12rem]">
+                      <td className="py-1.5 px-3 truncate max-w-48">
                         <SignalChip tone="neutral" className="font-mono">
                           {e.judge_model ?? '—'}
                         </SignalChip>

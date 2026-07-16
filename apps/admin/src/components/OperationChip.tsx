@@ -23,7 +23,7 @@ export function OperationChip({
     <Tooltip
       nowrap={false}
       content={
-        <div className="max-w-[16rem] space-y-1 text-left">
+        <div className="max-w-64 space-y-1 text-left">
           <p className="text-xs font-medium text-fg">{info.label}</p>
           <p className="text-2xs text-fg-muted leading-snug">{info.description}</p>
           <p className="text-2xs text-brand">Open {info.label} →</p>

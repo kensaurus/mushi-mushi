@@ -166,7 +166,7 @@ export function RecentJobsList({ jobs, projectName, loading }: RecentJobsProps) 
                     ? '…'
                     : '—'}
               </td>
-              <td className="max-w-[14rem] truncate px-3 py-2 text-2xs text-danger" title={j.error ?? undefined}>
+              <td className="max-w-56 truncate px-3 py-2 text-2xs text-danger" title={j.error ?? undefined}>
                 {j.error ?? '—'}
               </td>
             </tr>

@@ -214,7 +214,7 @@ export function QueryResultsTable({ rows }: { rows: unknown[] }) {
               {table.columns.map((c) => (
                 <td
                   key={c}
-                  className={`py-2 px-3 align-middle max-w-[18rem] ${
+                  className={`py-2 px-3 align-middle max-w-72 ${
                     numericCols.has(c) ? 'text-right' : ''
                   }`}
                 >

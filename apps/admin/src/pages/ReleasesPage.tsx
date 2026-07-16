@@ -393,7 +393,7 @@ function ReleasesList({
                 onClick={() => setSelected(r)}
               >
                 <td className="px-3 py-2.5 font-mono text-xs font-semibold tabular-nums">v{r.version}</td>
-                <td className="max-w-[12rem] truncate px-3 py-2.5 text-fg-secondary">{r.title}</td>
+                <td className="max-w-48 truncate px-3 py-2.5 text-fg-secondary">{r.title}</td>
                 <td className="px-3 py-2.5">{statusBadge(r.status)}</td>
                 <td className="hidden px-3 py-2.5 sm:table-cell">
                   <SignalChip tone={r.fixed_report_ids.length > 0 ? 'brand' : 'neutral'}>

@@ -253,7 +253,7 @@ function LoopStageCard({ stage, step, isLast }: { stage: LoopStage; step: number
           <h3 className="text-xs font-semibold text-fg truncate mt-1">{outcome.headline}</h3>
         </div>
       </div>
-      <ContainedBlock tone="muted" className="min-h-[3rem]">
+      <ContainedBlock tone="muted" className="min-h-12">
         <p className="text-2xs text-fg-secondary leading-snug">{stage.status ?? outcome.outcome}</p>
       </ContainedBlock>
       <div className="mt-2.5">

@@ -275,7 +275,7 @@ function PipelineNode({ stage, isActive, isDone, isLast }: NodeProps) {
             </div>
           </div>
 
-          <p className="mt-2 text-2xs text-fg-secondary leading-snug line-clamp-3 min-h-[3rem]">
+          <p className="mt-2 text-2xs text-fg-secondary leading-snug line-clamp-3 min-h-12">
             {outcome.outcome}
           </p>
 

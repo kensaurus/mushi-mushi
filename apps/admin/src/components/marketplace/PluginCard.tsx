@@ -85,7 +85,7 @@ export function PluginCard({ plugin: p, installed: inst, stats, busy, onInstall,
           </span>
           {inst.webhook_url && (
             <code
-              className="ml-auto truncate max-w-[12rem] text-fg-faint"
+              className="ml-auto truncate max-w-48 text-fg-faint"
               title={inst.webhook_url}
             >
               {inst.webhook_url.replace(/^https?:\/\//, '')}

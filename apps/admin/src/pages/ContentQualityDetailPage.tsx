@@ -12,10 +12,8 @@ import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { langfuseTraceUrl } from '../lib/env'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import {
-  Btn,
-  ErrorAlert,
-} from '../components/ui'
+import { Btn,
+  ErrorAlert,, Card } from '../components/ui'
 import { DetailSkeleton } from '../components/skeletons/DetailSkeleton'
 import {
   ContainedBlock,
@@ -443,7 +441,7 @@ export function ContentQualityDetailPage() {
             <span className="hidden group-open:inline">▼</span>
             Technical identifiers
           </summary>
-          <div className="mt-2 rounded-md border border-edge bg-surface-overlay px-3 py-2 space-y-1.5">
+          <Card  className="mt-2 px-3 py-2 space-y-1.5">
             <div className="flex gap-2 items-center">
               <InlineProof>type</InlineProof>
               <span className="text-xs font-mono">{issue.content_type}</span>
@@ -466,7 +464,7 @@ export function ContentQualityDetailPage() {
                 )}
               </div>
             )}
-          </div>
+          </Card>
         </details>
       </div>
     </div>

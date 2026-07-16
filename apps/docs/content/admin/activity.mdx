@@ -1,0 +1,64 @@
+---
+title: Activity
+---
+
+import { Callout } from 'nextra/components'
+
+# Activity
+
+**Route:** `/activity`
+
+> **Scenario:** You want to know whether end users are actually opening sessions
+> in this project, which routes they hit, and how many of them are identified
+> versus anonymous — over the last 30 days.
+
+<AdminDocHero page="activity" />
+
+Activity is the per-project engagement dashboard. It reads SDK session telemetry
+(session start / heartbeat / end, page views, identity) and pairs it with report
+counts for the same window.
+
+---
+
+## What you see
+
+| Section | Meaning |
+|---------|---------|
+| **Sessions** | Total + completed sessions in the window |
+| **Devices / users** | Unique devices and identified users |
+| **Averages** | Avg page views per session and avg session minutes |
+| **DAU trend** | Daily active users sparkline for the window |
+| **User split** | Identified vs anonymous traffic |
+| **Reports this period** | Total / open / critical / high |
+| **Top pages** | Routes ranked by page views |
+
+Default window is **30 days** (`?window=30`).
+
+---
+
+## Data source
+
+```
+GET /v1/admin/activity?window=30
+```
+
+Requires a console JWT and the active project (`x-project-id` via `apiFetch`).
+Backed by the `project_activity_summary` RPC.
+
+If numbers are zero after a real install, confirm the SDK has `trackSessions`
+enabled (default on) and that ingest is healthy under [SDK health](/admin/sdk-health).
+
+---
+
+## Related
+
+- [Overview](/admin/overview) — org portfolio of all projects
+- [Rewards](/admin/rewards) — points and tiers that depend on identified users
+- [Reports](/admin/reports) — triage the tickets counted in “Reports this period”
+- Session tracking shipped in `@mushi-mushi/web` / `@mushi-mushi/core` **1.25.0**
+  (see root `CHANGELOG.md`)
+
+<Callout type="info">
+  Anonymous traffic still produces sessions and page views. Rewards and
+  cross-app “My Reports” need `identify()` so users land in the identified split.
+</Callout>

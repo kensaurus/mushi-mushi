@@ -1,4 +1,5 @@
 import { Badge } from '../ui'
+import { Card } from '../../components/ui'
 import { ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { type ToolSpec, type McpScope } from '../../lib/mcpCatalog'
@@ -44,7 +45,7 @@ export function hintBadges(spec: ToolSpec) {
 export function McpToolCard({ tool }: { tool: ToolSpec }) {
   const stripeTone = tool.scope === 'mcp:write' ? 'bg-warn' : 'bg-info'
   return (
-    <div className="relative rounded-md border border-edge-subtle bg-surface-raised p-3 pl-4 motion-safe:transition-opacity hover:border-edge">
+    <Card  className="relative p-3 pl-4 motion-safe:transition-opacity hover:">
       <span className={`absolute left-0 top-2 bottom-2 w-0.5 rounded-sm ${stripeTone}`} aria-hidden="true" />
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="min-w-0">
@@ -70,6 +71,6 @@ export function McpToolCard({ tool }: { tool: ToolSpec }) {
           </Badge>
         ))}
       </div>
-    </div>
+    </Card>
   )
 }

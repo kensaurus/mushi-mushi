@@ -171,7 +171,7 @@ export function ExploreLayerLane({ nodes, edges, selectedId, highlightIds, onSel
         {columns.map((col) => {
           const pct = Math.round((col.nodes.length / maxColSize) * 100)
           return (
-            <div key={col.layer} className="flex flex-col gap-2.5 min-w-[10rem] max-w-[13rem]" style={{ zIndex: 1 }}>
+            <div key={col.layer} className="flex flex-col gap-2.5 min-w-40 max-w-[13rem]" style={{ zIndex: 1 }}>
               {/* Column header */}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">

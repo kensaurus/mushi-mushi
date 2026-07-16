@@ -28,7 +28,7 @@ export function PdcaLegendPanel({
   const focusMeta = focusStage ? PDCA_STAGES[focusStage] : null
   const runningMeta = runningStage ? PDCA_STAGES[runningStage] : null
   return (
-    <div className="rounded-md border border-edge bg-surface-overlay/95 shadow-card backdrop-blur-sm px-2.5 py-2 text-2xs max-w-[16rem]">
+    <div className="rounded-md border border-edge bg-surface-overlay/95 shadow-card backdrop-blur-sm px-2.5 py-2 text-2xs max-w-64">
       {focusMeta ? (
         <div className="flex items-center gap-1.5">
           <span

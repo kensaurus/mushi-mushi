@@ -306,7 +306,7 @@ export function OverviewTab() {
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 justify-between">
-                      <span className="text-fg-muted truncate max-w-[150px]">
+                      <span className="text-fg-muted truncate max-w-36">
                         {ev.end_users?.display_name ?? ev.end_users?.external_user_id ?? 'anonymous'}
                       </span>
                       <div className="flex items-center gap-2 shrink-0">
@@ -937,7 +937,7 @@ export function ActivityEventRow({
                 <Badge className="bg-surface-overlay text-fg-faint text-2xs">rejected</Badge>
               )}
               {rejected && event.rejected_reason && (
-                <span className="text-fg-faint text-2xs truncate max-w-[150px]">{event.rejected_reason}</span>
+                <span className="text-fg-faint text-2xs truncate max-w-36">{event.rejected_reason}</span>
               )}
             </div>
             <div className="flex items-center gap-1.5 shrink-0">

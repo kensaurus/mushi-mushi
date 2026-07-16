@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback } from 'react'
+import { Card } from '../components/ui'
 import { Btn } from './ui'
 import {
   isCloudMode,
@@ -149,7 +150,7 @@ export function ConnectionStatus({ compact, className = '' }: ConnectionStatusPr
 
       <div className="space-y-2">
         {checks.map((check) => (
-          <div key={check.id} className="flex items-start gap-2.5 bg-surface-raised/50 border border-edge-subtle rounded-sm px-3 py-2">
+          <Card key={check.id}  className="flex items-start gap-2.5 px-3 py-2">
             <span className="mt-0.5 text-sm leading-none">{statusIcon(check.status)}</span>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
@@ -163,7 +164,7 @@ export function ConnectionStatus({ compact, className = '' }: ConnectionStatusPr
                 <p className="text-2xs text-danger mt-1 wrap-break-word">{check.detail}</p>
               )}
             </div>
-          </div>
+          </Card>
         ))}
       </div>
 

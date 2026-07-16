@@ -165,7 +165,7 @@ export function GraphStoryboard({
         }}
       >
         {columns.map((col) => (
-          <div key={col.type} className="flex flex-col gap-3 min-w-[10rem] max-w-[14rem]">
+          <div key={col.type} className="flex flex-col gap-3 min-w-40 max-w-56">
             <div className="space-y-0.5">
               <div className="text-2xs uppercase tracking-wider text-fg-faint flex items-center gap-1.5">
                 <span

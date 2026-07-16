@@ -449,7 +449,7 @@ function ExperimentsTab({ experiments, loading, error, onOpen, onLaunch, onStop,
             <tr key={e.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-opacity">
               <td className="px-3 py-2">
                 <div className="font-medium text-fg-primary">{e.name}</div>
-                {e.hypothesis && <div className="text-xs text-fg-muted truncate max-w-[200px]">{e.hypothesis}</div>}
+                {e.hypothesis && <div className="text-xs text-fg-muted truncate max-w-48">{e.hypothesis}</div>}
               </td>
               <td className="px-3 py-2">{statusBadge(e.status)}</td>
               <td className="px-3 py-2 tabular-nums text-xs">{e.experiment_variants?.length ?? 0}</td>

@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { Card } from '../../components/ui'
 import {
   ReactFlow,
   Background,
@@ -198,7 +199,7 @@ export function GraphCanvas({
         </Panel>
         {!hintDismissed && (
           <Panel position="top-center">
-            <div className="flex items-center gap-2 rounded-md border border-edge bg-surface-raised/95 backdrop-blur px-3 py-1.5 text-2xs text-fg-secondary shadow-raised">
+            <Card  className="flex items-center gap-2 backdrop-blur px-3 py-1.5 text-2xs text-fg-secondary">
               <span aria-hidden="true">🖱️</span>
               <span>Drag to pan · scroll to zoom · click a node for blast radius</span>
               <button
@@ -209,7 +210,7 @@ export function GraphCanvas({
               >
                 ✕
               </button>
-            </div>
+            </Card>
           </Panel>
         )}
         <Panel position="bottom-left">
@@ -237,7 +238,7 @@ export function GraphCanvas({
         )}
         {filteredCount === 0 && (
           <Panel position="top-center">
-            <div className="rounded-md border border-edge bg-surface-raised/95 backdrop-blur px-3 py-2 text-2xs text-fg-secondary shadow-raised max-w-sm text-center">
+            <Card  className="backdrop-blur px-3 py-2 text-2xs text-fg-secondary max-w-sm text-center">
               <div className="font-medium text-fg mb-0.5">No nodes match these filters</div>
               <div className="text-fg-muted">
                 Try the{' '}
@@ -250,7 +251,7 @@ export function GraphCanvas({
                 </button>{' '}
                 view, enable more node/edge types, or uncheck "Hide isolated nodes".
               </div>
-            </div>
+            </Card>
           </Panel>
         )}
       </ReactFlow>

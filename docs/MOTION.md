@@ -55,6 +55,15 @@ The web widget reads them from `@mushi-mushi/core` inside Shadow DOM CSS.
 - **Web widget** — `packages/web/src/styles.ts` (Shadow DOM)
 - **Admin** — `theme-tokens.css`, `components.css`, `lib/motion-tokens.ts`
 - **Docs landing** — native scroll + Motion `whileInView` / CSS only
+  (`apps/docs/components/landing/*`, wired from `apps/docs/content/index.mdx`).
+  `ProofPinSection` is a **name only** — it uses `LandingStagger` (in-view
+  stagger), not ScrollTrigger / Lenis pins. See
+  [`docs/docs-site/LANDING-SYSTEMS.md`](./docs-site/LANDING-SYSTEMS.md).
+
+## Related
+
+- Cross-surface tokens: [`docs/DESIGN-SYSTEM.md`](./DESIGN-SYSTEM.md)
+- Landing IA / anti-slop notes: [`apps/docs/plan-antislop.md`](../apps/docs/plan-antislop.md)
 
 ## Verification checklist
 

@@ -284,7 +284,7 @@ export function ContentQualityPage() {
                                   <span className="text-sm leading-none" title={lang ?? ''}>{langFlag}</span>
                                 )}
                               </div>
-                              <div className="text-2xs text-fg-muted truncate max-w-[200px] mt-0.5" title={item.content_key}>
+                              <div className="text-2xs text-fg-muted truncate max-w-48 mt-0.5" title={item.content_key}>
                                 {label}
                               </div>
                             </div>

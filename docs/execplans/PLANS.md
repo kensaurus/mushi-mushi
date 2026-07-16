@@ -227,11 +227,11 @@ Add Helm chart region awareness and operator documentation for multi-region depl
 Ship unit tests, CLI extract, CLI README updates, and framework adapter hooks from the CHANGELOG `pending` section.
 
 ### Deliverables
-- [x] `packages/web/src/lifecycle-hooks.test.ts` — `beforeSendFeedback` (drop, modify, throw, timeout) and `onCrashedLastRun` (initial, clean, dirty) contracts unit-tested.
+- [ ] `packages/web/src/lifecycle-hooks.test.ts` — **Not shipped as a dedicated file.** Hooks `beforeSendFeedback` / `onCrashedLastRun` exist in `packages/web/src/mushi.ts` and are listed in presets (`packages/core/src/presets.test.ts`); drop/modify/throw/timeout contract tests were never added.
 - [x] `packages/web/src/rewards.test.ts` — `initRewards`, `updateRewardsUser`, `enqueue`, `flush`, `teardown` unit-tested.
-- [x] `packages/cli/src/project-create.ts` — `mushi project create` logic extracted from `index.ts` into reusable module (mirrors doctor.ts / nudge.ts pattern).
-- [x] `packages/cli/src/project-create.test.ts` — Unit tests covering .env.local write, .cursor/mcp.json merge, `saveConfig` call, and default endpoint.
-- [x] `packages/cli/README.md` — `mushi project create` and `mushi nudge` commands documented.
+- [x] `packages/cli/src/project-bootstrap.ts` — `mushi project create` logic (shipped as `project-bootstrap.ts`, not `project-create.ts`; wired from `packages/cli/src/commands/project.ts`).
+- [ ] `packages/cli/src/project-create.test.ts` — **Not shipped.** No dedicated unit tests for `.env.local` / MCP merge / `saveConfig` at this path.
+- [x] `packages/cli/README.md` — `mushi project create` and `mushi nudge` commands documented (synced Jul 2026 docs pass).
 - [x] `packages/react/src/hooks.ts` — `usePulseTrigger`, `useBeforeSendFeedback`, `useOnCrashedLastRun` added.
 - [x] `packages/vue/src/index.ts` — `usePulseTrigger`, `useOnCrashedLastRun` composables added.
 - [x] `packages/svelte/src/index.ts` — `usePulseTrigger`, `useOnCrashedLastRun` added.
@@ -494,19 +494,21 @@ The enterprise feature flags (`sso`, `audit_log`, `teams`) already exist in `pri
 
 Added a `ContainedBlock` upsell in `BillingPage.tsx` overview tab — shown when `setup.getStep('sentry_connected')?.done` is false. Deeplinks to `/integrations`. No backend changes required.
 
-### Phase 3d — Annual billing (shipped Jun 2026)
+### Phase 3d — Annual billing (backend prices shipped Jun 2026; console toggle not shipped)
 
-`scripts/stripe-bootstrap.mjs` now provisions:
+`scripts/stripe-bootstrap.mjs` provisions annual Stripe prices:
+
 - `mushi:indie:annual:v1` — $150/yr (≈$12.50/mo, 2 months free)
 - `mushi:pro:annual:v1` — $490/yr (≈$40.83/mo, 2 months free)
 
 Both `STRIPE_PRICE_INDIE_ANNUAL` and `STRIPE_PRICE_PRO_ANNUAL` are output in the env block.
+The billing API accepts `billing_interval: 'monthly' | 'annual'` on checkout start.
 
-**To activate annual billing in Checkout Sessions:**
-1. Run `node scripts/stripe-bootstrap.mjs` to provision the prices.
-2. Add `STRIPE_PRICE_INDIE_ANNUAL` and `STRIPE_PRICE_PRO_ANNUAL` to Supabase secrets.
-3. In the billing route's `startCheckout` function, accept `billing_period: 'annual' | 'monthly'` and switch the price ID accordingly.
-4. Update `PlanComparisonTable` with a monthly/annual toggle (similar to Sentry's pricing page toggle).
+**Still open for console UX:**
+1. Run `node scripts/stripe-bootstrap.mjs` to provision the prices (if not already).
+2. Ensure `STRIPE_PRICE_INDIE_ANNUAL` and `STRIPE_PRICE_PRO_ANNUAL` are in Supabase secrets.
+3. `PlanComparisonTable` still hardcodes monthly copy — no monthly/annual toggle in the admin UI yet.
+4. Do not document annual self-serve checkout as user-reachable until the toggle ships.
 
 ### Acceptance criteria
 

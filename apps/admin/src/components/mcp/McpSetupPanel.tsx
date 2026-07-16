@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { Card } from '../../components/ui'
 import { useRef } from 'react'
 import { Badge, Btn, Card, CopyButton, SegmentedControl } from '../ui'
 import { IconIntegrations, IconArrowRight } from '../icons'
@@ -438,7 +439,7 @@ export function McpSetupPanel({
           </pre>
         </div>
 
-        <div className="rounded-md border border-edge-subtle bg-surface-raised p-3 space-y-2" data-testid="mcp-json-helper">
+        <Card  className="p-3 space-y-2" data-testid="mcp-json-helper">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div>
               <h3 className="text-sm font-semibold text-fg">mcp.json syntax helper</h3>
@@ -471,7 +472,7 @@ export function McpSetupPanel({
               ))}
             </ul>
           </ContainedBlock>
-        </div>
+        </Card>
       </Card>
 
       {projects && projects.length > 0 && (

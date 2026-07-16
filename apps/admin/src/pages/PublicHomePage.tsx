@@ -296,7 +296,7 @@ function SignedInChrome({ user, consoleHref }: { user: User; consoleHref: string
         {/* Hide the email at narrow widths so the sticky pill doesn't
             wrap. The avatar + the "Open console" CTA still convey the
             signed-in state on mobile. */}
-        <span className="hidden max-w-[12rem] truncate font-mono text-2xs uppercase tracking-[0.16em] text-editorial-ink md:inline">
+        <span className="hidden max-w-48 truncate font-mono text-2xs uppercase tracking-[0.16em] text-editorial-ink md:inline">
           {user.email ?? displayName}
         </span>
       </Link>
@@ -689,7 +689,7 @@ function SignedInBanner({ user, consoleHref }: { user: User; consoleHref: string
           />
           <span className="text-editorial-ink">Signed in</span>
           <span aria-hidden className="opacity-40">·</span>
-          <span className="max-w-[18rem] truncate text-editorial-ink sm:max-w-none">
+          <span className="max-w-72 truncate text-editorial-ink sm:max-w-none">
             {displayName}
           </span>
         </p>

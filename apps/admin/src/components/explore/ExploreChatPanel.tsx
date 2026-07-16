@@ -571,7 +571,7 @@ function MessageTelemetryStrip({ turn }: { turn: ChatTurn }) {
 
   return (
     <div className="border-t border-edge-subtle/70 px-3 py-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs font-mono tabular-nums text-fg-faint bg-surface-overlay">
-      {turn.model ? <CodeChip maxWidthClass="max-w-[14rem]">{turn.model}</CodeChip> : null}
+      {turn.model ? <CodeChip maxWidthClass="max-w-56">{turn.model}</CodeChip> : null}
       {meta.length > 0 ? <span>{meta.join(' · ')}</span> : null}
       <Link
         to="/settings#byok"

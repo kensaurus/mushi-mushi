@@ -31,6 +31,20 @@ describe('prefer-card-primitive', () => {
         filename: 'apps/admin/src/components/ui/layout.tsx',
         code: `export function Card() { return <div className="rounded border bg-surface-raised" /> }`,
       },
+      {
+        // Chip / pill — not a Card
+        filename: 'apps/admin/src/pages/OddPage.tsx',
+        code: `export function OddPage() {
+          return <span className="text-3xs bg-surface-overlay border border-edge-subtle px-1.5 py-0.5 rounded-full">disabled</span>
+        }`,
+      },
+      {
+        // Form field chrome — not a Card
+        filename: 'apps/admin/src/pages/OddPage.tsx',
+        code: `export function OddPage() {
+          return <input className="w-full bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs" />
+        }`,
+      },
     ],
     invalid: [
       {

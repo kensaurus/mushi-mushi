@@ -70,7 +70,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
             to={`/reports?reporter=${encodeURIComponent(report.reporter_token_hash)}`}
           >
             {report.reporter_identity?.display_name ?? report.reporter_display_name ? (
-              <span className="max-w-[12rem] truncate">
+              <span className="max-w-48 truncate">
                 {report.reporter_identity?.display_name ?? report.reporter_display_name}
               </span>
             ) : (
@@ -97,7 +97,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
               title={`Activity for page: ${pageRoute}`}
               to={`/activity?route=${encodeURIComponent(pageRoute)}`}
             >
-              <span className="font-mono max-w-[14rem] truncate">{pageRoute}</span>
+              <span className="font-mono max-w-56 truncate">{pageRoute}</span>
             </MetaChip>
           )}
           {report.area_tag && (

@@ -118,7 +118,7 @@ export function ProjectSwitcher() {
   if (setup.data.projects.length === 0) {
     return (
       <HeaderContextChipLink to="/projects?tab=create" title="No projects in this team yet">
-        <span className="truncate max-w-[12rem]">No projects yet</span>
+        <span className="truncate max-w-48">No projects yet</span>
         <span aria-hidden className="text-fg-faint">→</span>
       </HeaderContextChipLink>
     )

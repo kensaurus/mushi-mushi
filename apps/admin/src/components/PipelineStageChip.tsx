@@ -4,7 +4,7 @@ import { Tooltip } from './ui'
 
 export function PipelineStageChip({
   stage,
-  maxWidthClass = 'max-w-[9rem]',
+  maxWidthClass = 'max-w-36',
 }: {
   stage: string
   maxWidthClass?: string
@@ -15,7 +15,7 @@ export function PipelineStageChip({
     <Tooltip
       nowrap={false}
       content={
-        <div className="max-w-[14rem] space-y-1 text-left">
+        <div className="max-w-56 space-y-1 text-left">
           <p className="text-xs font-medium text-fg">{info.label}</p>
           <p className="text-2xs text-fg-muted leading-snug">{info.description}</p>
           <p className="text-2xs text-brand">Open {info.label} →</p>

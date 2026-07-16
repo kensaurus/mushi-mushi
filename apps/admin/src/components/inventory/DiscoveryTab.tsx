@@ -974,7 +974,7 @@ function LiveCrawlCard({
                 </Btn>
               )}
               {run.status === 'failed' && (
-                <span className="text-danger truncate max-w-[160px]">{run.error_message?.slice(0, 60)}</span>
+                <span className="text-danger truncate max-w-40">{run.error_message?.slice(0, 60)}</span>
               )}
             </div>
           ))}

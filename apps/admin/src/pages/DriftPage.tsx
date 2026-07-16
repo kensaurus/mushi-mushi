@@ -776,12 +776,12 @@ function FindingDetailDrawer({
           </div>
         )}
 
-        <div className="rounded-md border border-edge-subtle bg-surface-overlay/50 px-4 py-3 space-y-1 text-xs text-fg-muted">
+        <Card  className="px-4 py-3 space-y-1 text-xs text-fg-muted">
           <div className="flex gap-2"><span className="w-28">Type</span><span className="font-mono">{finding.finding_type}</span></div>
           <div className="flex gap-2"><span className="w-28">Path</span><span className="font-mono">{finding.path ?? '—'}</span></div>
           <div className="flex gap-2"><span className="w-28">Surface</span><span>{finding.surface}</span></div>
           <div className="flex gap-2"><span className="w-28">Found</span><RelativeTime value={finding.created_at} /></div>
-        </div>
+        </Card>
 
         <div className="flex gap-2 pt-2">
           {finding.severity === 'critical' && (

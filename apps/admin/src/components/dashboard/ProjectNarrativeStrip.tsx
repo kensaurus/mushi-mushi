@@ -99,7 +99,7 @@ function NarrativeStage({ stage, isCurrent, connector }: NarrativeStageProps) {
           <span className="block text-xs font-semibold text-fg leading-tight truncate">{stage.headline}</span>
         </div>
       </header>
-      <ContainedBlock tone="muted" className="mt-2 min-h-[3rem]">
+      <ContainedBlock tone="muted" className="mt-2 min-h-12">
         <p className="text-2xs text-fg-secondary leading-snug">{stage.body}</p>
       </ContainedBlock>
       {stage.cta && (

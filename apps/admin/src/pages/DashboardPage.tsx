@@ -19,7 +19,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 import { useMilestoneCelebration } from '../lib/useMilestoneCelebration'
 import { Confetti } from '../components/Confetti'
-import { Btn, ErrorAlert, FreshnessPill, RefreshIconButton } from '../components/ui'
+import { Btn, ErrorAlert, FreshnessPill, RefreshIconButton, Card } from '../components/ui'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -339,14 +339,14 @@ export function DashboardPage() {
       )}
 
       {setupIncomplete && !showFullDashboard && (
-        <div className="flex items-center justify-between rounded-md border border-edge-subtle bg-surface-raised px-3 py-2.5">
+        <Card  className="flex items-center justify-between px-3 py-2.5">
           <p className="text-xs text-fg-muted">
             Finish setup above to unlock the full dashboard. You can peek now if you like.
           </p>
           <Btn size="sm" variant="ghost" onClick={() => setShowFullDashboard(true)}>
             Show full dashboard
           </Btn>
-        </div>
+        </Card>
       )}
       </div>
 

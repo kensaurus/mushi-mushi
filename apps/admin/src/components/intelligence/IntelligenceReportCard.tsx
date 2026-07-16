@@ -4,6 +4,7 @@
  */
 
 import { Card, Btn, Badge, Pct, RelativeTime } from '../ui'
+import { Card } from '../../components/ui'
 import type { IntelligenceReport } from './types'
 
 interface Props {
@@ -72,9 +73,9 @@ export function IntelligenceReportCard({ report, onDownload }: Props) {
         <summary className="cursor-pointer text-2xs text-fg-muted hover:text-fg-secondary">
           Read AI summary
         </summary>
-        <div className="mt-2 whitespace-pre-wrap rounded-md border border-edge-subtle bg-surface-raised/50 p-3 text-xs leading-relaxed text-fg-secondary">
+        <Card  className="mt-2 whitespace-pre-wrap p-3 text-xs leading-relaxed text-fg-secondary">
           {report.summary_md || 'No summary text was captured for this report.'}
-        </div>
+        </Card>
       </details>
     </Card>
   )

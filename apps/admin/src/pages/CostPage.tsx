@@ -423,7 +423,7 @@ export function CostPage() {
                       .sort(([, a], [, b]) => b - a)
                       .map(([model, cost]) => (
                         <tr key={model} className="border-b border-edge-subtle last:border-0">
-                          <td className="max-w-[160px] truncate py-1.5">
+                          <td className="max-w-40 truncate py-1.5">
                             <ModelChip model={model} />
                           </td>
                           <td className="py-1.5 text-right">

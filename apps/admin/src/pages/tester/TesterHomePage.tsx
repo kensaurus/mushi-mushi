@@ -245,7 +245,7 @@ export function TesterHomePage() {
               </div>
             )}
 
-            <div className="min-w-[12rem] flex-1 space-y-2">
+            <div className="min-w-48 flex-1 space-y-2">
               <p className="text-xs font-medium text-fg-muted">YTD gift cards</p>
               <TesterProgressTrack
                 value={ytd}

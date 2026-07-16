@@ -150,7 +150,7 @@ export function QuickstartMegaCta({ embedded = false }: { embedded?: boolean }) 
             </span>
           )}
           {'component' in cta && cta.component && (
-            <span className="text-3xs text-fg-faint font-mono truncate max-w-[18rem]" title={cta.component}>
+            <span className="text-3xs text-fg-faint font-mono truncate max-w-72" title={cta.component}>
               {cta.component}
             </span>
           )}

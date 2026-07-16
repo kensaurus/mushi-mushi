@@ -30,6 +30,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Card } from '../components/ui'
 import { ConnectionStatus } from './ConnectionStatus'
 import { Card } from './ui'
 import { apiFetch, invalidateApiCache } from '../lib/supabase'
@@ -239,7 +240,7 @@ export function SdkInstallCard({
         {/* ─── LEFT COLUMN: live preview + configurator ─── */}
         {/* Hidden for server frameworks — the widget only runs in browsers. */}
         {isServerFramework(framework) ? (
-          <div className="rounded-md border border-edge-subtle bg-surface-raised/50 px-4 py-3 text-2xs text-fg-secondary leading-relaxed">
+          <Card  className="px-4 py-3 text-2xs text-fg-secondary leading-relaxed">
             <p className="font-medium text-fg mb-1">Server-side capture</p>
             <p>
               <code className="px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">@mushi-mushi/node</code>{' '}
@@ -252,7 +253,7 @@ export function SdkInstallCard({
               <code className="px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">MUSHI_API_KEY</code> to your
               deployment env. Copy the snippet on the right into your instrumentation file.
             </p>
-          </div>
+          </Card>
         ) : (
         <div className="space-y-3">
           <div>

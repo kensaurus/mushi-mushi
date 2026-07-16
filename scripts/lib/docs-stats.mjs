@@ -296,9 +296,57 @@ function scanAgentsHardcodedCounts(root) {
   ]
 }
 
+/** Every `<!-- mushi-readme-stats-footer -->` block must match live migration count. */
+function scanPackageReadmeFooters(root, stats) {
+  const findings = []
+  const packagesDir = path.join(root, "packages")
+  if (!existsSync(packagesDir)) return findings
+  const footerRe =
+    /Monorepo scale \([^)]+\): (\d+) edge functions · (\d+) SQL migrations · (\d+) outbound plugins · (\d+) inbound adapters · (\d+) pipeline agents/g
+  for (const ent of readdirSync(packagesDir, { withFileTypes: true })) {
+    if (!ent.isDirectory()) continue
+    const readme = path.join(packagesDir, ent.name, "README.md")
+    if (!existsSync(readme)) continue
+    const source = readFileSync(readme, "utf8")
+    if (!source.includes("mushi-readme-stats-footer")) continue
+    footerRe.lastIndex = 0
+    let match
+    let saw = false
+    while ((match = footerRe.exec(source)) !== null) {
+      saw = true
+      const [, edge, mig, plugins, adapters, agents] = match
+      const line = source.slice(0, match.index).split(/\r?\n/).length
+      const rel = path.join("packages", ent.name, "README.md")
+      const pairs = [
+        [Number(edge), stats.server.edgeFunctions, "edge functions"],
+        [Number(mig), stats.server.sqlMigrations, "SQL migrations"],
+        [Number(plugins), stats.integrations.outboundPlugins, "outbound plugins"],
+        [Number(adapters), stats.integrations.inboundAdapters, "inbound adapters"],
+        [Number(agents), stats.server.pipelineAgents, "pipeline agents"],
+      ]
+      for (const [got, expected, label] of pairs) {
+        if (got !== expected) {
+          findings.push(
+            `${rel}:${line} footer ${label}: doc claims ${got}, expected ${expected}`
+          )
+        }
+      }
+    }
+    if (!saw) {
+      findings.push(
+        `packages/${ent.name}/README.md: has mushi-readme-stats-footer marker but no parseable scale line`
+      )
+    }
+  }
+  return findings
+}
+
 export function scanReadmeClaims(root, stats) {
   const checks = buildReadmeClaimChecks(stats)
-  const findings = [...scanAgentsHardcodedCounts(root)]
+  const findings = [
+    ...scanAgentsHardcodedCounts(root),
+    ...scanPackageReadmeFooters(root, stats),
+  ]
   for (const check of checks) {
     const filePath = path.join(root, check.file)
     if (!existsSync(filePath)) continue

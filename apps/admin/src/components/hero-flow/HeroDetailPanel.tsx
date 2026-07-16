@@ -18,6 +18,7 @@
  */
 
 import {
+import { Card } from '../../components/ui'
   useEffect,
   useId,
   useRef,
@@ -110,7 +111,7 @@ function Section({ heading, children, tone = 'info' }: {
     : 'text-fg-muted'
   return (
     <div className={`pl-2.5 border-l-2 ${railClass}`}>
-      <p className={`mb-1 text-3xs font-semibold uppercase tracking-[0.08em] ${headingClass}`}>
+      <p className={`mb-1 text-3xs font-semibold uppercase tracking-widest ${headingClass}`}>
         {heading}
       </p>
       <div className="text-2xs text-fg-secondary leading-relaxed">{children}</div>
@@ -440,7 +441,7 @@ export function HeroDetailPanel({
 
         {evidence?.kind === 'last-event' && (
           <Section heading="Last event">
-            <div className="flex items-start gap-3 rounded-md border border-edge-subtle bg-surface-raised/60 px-3 py-2 mt-1">
+            <Card  className="flex items-start gap-3 px-3 py-2 mt-1">
               <div className={`mt-0.5 h-2 w-2 rounded-full flex-shrink-0 ${
                 evidence.status === 'ok' ? 'bg-ok'
                 : evidence.status === 'error' ? 'bg-err'
@@ -579,7 +580,7 @@ export function HeroDetailPanel({
           </p>
         )}
 
-      </div>
+      </Card>
     </section>
   )
 }

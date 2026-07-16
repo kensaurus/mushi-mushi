@@ -1,4 +1,5 @@
 import { Btn, Card, RecommendedAction, RelativeTime } from '../ui'
+import { Card } from '../../components/ui'
 import { McpEndpointReadout } from './McpEndpointReadout'
 import {
   ActionPill,
@@ -32,11 +33,11 @@ export function McpOverviewPanel({
   return (
     <div className="space-y-4">
       <McpEndpointReadout stats={stats} fetchedAt={lastFetchedAt} validating={isValidating} />
-      <div className="rounded-md border border-edge-subtle bg-surface-raised px-4 py-3">
+      <Card  className="px-4 py-3">
         <p className="text-xs font-semibold text-fg mb-2">What you can do with MCP connected</p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {MCP_USE_CASES.slice(0, 4).map((uc) => (
-            <div key={uc.title} className="rounded-md border border-edge-subtle bg-surface-raised px-3 py-2">
+            <Card key={uc.title}  className="px-3 py-2">
               <p className="text-2xs font-semibold text-fg">{uc.title}</p>
               <p className="mt-0.5 text-2xs italic text-fg-secondary line-clamp-2">
                 &ldquo;{uc.ask}&rdquo;
@@ -45,7 +46,7 @@ export function McpOverviewPanel({
                 {uc.calls.slice(0, 2).join(', ')}
                 {uc.calls.length > 2 ? ` +${uc.calls.length - 2} more` : ''}
               </p>
-            </div>
+            </Card>
           ))}
         </div>
         <Btn
@@ -57,7 +58,7 @@ export function McpOverviewPanel({
         >
           See all {MCP_USE_CASES.length} examples →
         </Btn>
-      </div>
+      </Card>
 
       {stats.topPriority === 'healthy' && (
         <RecommendedAction

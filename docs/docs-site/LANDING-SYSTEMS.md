@@ -25,6 +25,12 @@
 4. Prefer `apps/docs/components/landing` for docs-only cinematic sections.
 5. If a layout block is needed on both, extract into `packages/marketing-ui` first.
 
+## Related
+
+- Motion constitution: [`docs/MOTION.md`](../MOTION.md)
+- Design system SSOT: [`docs/DESIGN-SYSTEM.md`](../DESIGN-SYSTEM.md)
+- Landing anti-slop history: [`apps/docs/plan-antislop.md`](../../apps/docs/plan-antislop.md)
+
 ## `/connect` shell
 
 Docs `/connect` (`apps/docs/app/connect`) intentionally renders **outside** the default Nextra article chrome so the Connect studio can use full viewport + marketing-ui CSS. Keep that unless product asks for sidebar parity.

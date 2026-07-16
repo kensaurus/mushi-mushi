@@ -853,7 +853,7 @@ function SeverityBarColumn({
       >
         {day.total === 0 ? (
           <span
-            className="mx-auto mb-0.5 block w-[60%] rounded-full bg-edge-subtle/70"
+            className="mx-auto mb-0.5 block w-3/5 rounded-full bg-edge-subtle/70"
             style={{ height: '4px' }}
             aria-hidden="true"
           />

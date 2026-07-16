@@ -5,9 +5,10 @@
  * references — e.g. `w-[240px]`, `text-[13px]`, `bg-[#fff]` — in admin source.
  * Token-backed values like `w-[var(--chrome-row-height)]` are allowed.
  *
- * Allowlist: `// mushi-mushi-allowlist: <reason>` on the preceding line.
+ * Allowlist: `// mushi-mushi-allowlist: <reason>` on the preceding line,
+ * or paths matching `pathAllowlist` (marketing / auth / ui primitives).
  *
- * Start at `warn`; ratchet to `error` once the Start-here cluster is clean.
+ * Start at `warn`; ratchet to `error` once operator surfaces are clean.
  */
 
 import type { Rule } from 'eslint'
@@ -20,6 +21,25 @@ interface JSXAttr { type: 'JSXAttribute'; name: JSXAttrName; value: Node | JSXEx
 /** Match Tailwind arbitrary values that are NOT var(--…) references. */
 const ARBITRARY_RE =
   /(?:^|[\s])(?:(?:sm|md|lg|xl|2xl|max-[a-z0-9]+|hover|focus|active|focus-visible|dark|motion-safe|motion-reduce):)*(?:w|h|min-w|min-h|max-w|max-h|text|bg|gap|p|px|py|pt|pb|pl|pr|m|mx|my|mt|mb|ml|mr|top|left|right|bottom|rounded|grid-cols|basis|inset|translate-x|translate-y|leading|tracking)-\[(?!var\(--)[^\]]+\]/g
+
+const DEFAULT_PATH_ALLOWLIST = [
+  '/components/ui/',
+  'PublicHomePage.tsx',
+  'PublicIntegrationsPage.tsx',
+  'LoginPage.tsx',
+  'CliAuthPage.tsx',
+  'McpAuthPage.tsx',
+  'AcceptInvitePage.tsx',
+  'ResetPasswordPage.tsx',
+  'SetupGatePage.tsx',
+  'EditorialErrorState.tsx',
+  '/tester/',
+]
+
+function pathMatches(filename: string, allowlist: string[]): boolean {
+  const norm = filename.replace(/\\/g, '/')
+  return allowlist.some((entry) => norm.includes(entry))
+}
 
 function extractStrings(node: Node): string[] {
   if (node.type === 'Literal' && typeof (node as Literal).value === 'string') {
@@ -48,7 +68,6 @@ function extractStrings(node: Node): string[] {
 function findHits(classes: string): string[] {
   const hits: string[] = []
   const re = new RegExp(ARBITRARY_RE.source, 'g')
-  // Pad so leading tokens still match `(?:^|[\s])`
   const padded = ` ${classes} `
   let m: RegExpExecArray | null
   while ((m = re.exec(padded)) !== null) {
@@ -68,28 +87,33 @@ const rule: Rule.RuleModule = {
       arbitraryValue:
         'Avoid arbitrary Tailwind value "{{cls}}" — use a design token or `-[var(--token)]`. Add `// mushi-mushi-allowlist: <reason>` if intentional.',
     },
-    schema: [],
+    schema: [
+      {
+        type: 'object',
+        properties: {
+          pathAllowlist: { type: 'array', items: { type: 'string' } },
+        },
+        additionalProperties: false,
+      },
+    ],
   },
 
   create(context) {
+    const options = (context.options[0] ?? {}) as { pathAllowlist?: string[] }
+    const pathAllowlist = options.pathAllowlist ?? DEFAULT_PATH_ALLOWLIST
     const filename = context.filename ?? ''
     if (!filename.replace(/\\/g, '/').includes('apps/admin/src')) return {}
+    if (pathMatches(filename, pathAllowlist)) return {}
 
     function isAllowlisted(node: Node): boolean {
       const sc = context.sourceCode
-      const comments = [
-        ...sc.getCommentsBefore(node as never),
-        ...sc.getCommentsInside((node as { parent?: Node }).parent as never ?? node as never),
-      ]
-      // Also walk up one level (JSXAttribute / JSXOpeningElement) — allowlist
-      // comments usually sit above the opening tag, not the string literal.
       let cur: Node | undefined = node
       for (let i = 0; i < 3 && cur; i++) {
         const before = sc.getCommentsBefore(cur as never)
         if (before.some((c) => /mushi-mushi-allowlist:/i.test(c.value))) return true
         cur = (cur as { parent?: Node }).parent
       }
-      return comments.some((c) => /mushi-mushi-allowlist:/i.test(c.value))
+      return false
     }
 
     function check(node: Node) {

@@ -77,7 +77,15 @@ Rules live in `packages/eslint-plugin-mushi-mushi`.
 
 `recommended` currently includes: dead-handler, mock-leak, raw-palette, text-3xs floor,
 hand-rolled dialog/tablist, missing posture, legacy shadcn, accent-for-selection,
-raw-hex-in-widget, card-elevated allowlist, raw-semantic-on-muted, raw-css-var-text.
+raw-hex-in-widget, card-elevated allowlist, raw-semantic-on-muted, raw-css-var-text,
+redundant-border-on-chip-tone, legacy-page-header-in-pages, page-root-padding,
+arbitrary-length-value. Admin-only / warn-graduating: `prefer-card-primitive`.
+
+## Related
+
+- Motion rules: [`docs/MOTION.md`](./MOTION.md) (`pnpm check:motion`)
+- Docs vs marketing-ui landing split: [`docs/docs-site/LANDING-SYSTEMS.md`](./docs-site/LANDING-SYSTEMS.md)
+- Admin UX burndown: [`docs/admin/UX-UNIFICATION-BURNDOWN.md`](./admin/UX-UNIFICATION-BURNDOWN.md)
 
 ## Adopting a new surface
 

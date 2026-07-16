@@ -73,7 +73,7 @@ export function CostStatusBanner({ stats, onTab, plainBanner = false }: Props) {
           <>
             {stats.calls24h} calls in 24h
             {stats.topOperation ? (
-              <> · top driver: <OperationChip operation={stats.topOperation} maxWidthClass="max-w-[8rem]" /></>
+              <> · top driver: <OperationChip operation={stats.topOperation} maxWidthClass="max-w-32" /></>
             ) : null}
             {plainBanner ? ' — check the raw log.' : ' — check Raw log for runaway crons.'}
           </>

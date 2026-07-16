@@ -43,7 +43,7 @@ export function PipelineActivityLog({ activity, max = 5, onFocusStage }: Pipelin
   }
   return (
     <div
-      className="rounded-md border border-edge/70 bg-surface-overlay/90 shadow-card backdrop-blur-sm px-2.5 py-1.5 text-2xs max-w-[28rem]"
+      className="rounded-md border border-edge/70 bg-surface-overlay/90 shadow-card backdrop-blur-sm px-2.5 py-1.5 text-2xs max-w-md"
       role="log"
       aria-live="polite"
       aria-label="Recent pipeline activity"

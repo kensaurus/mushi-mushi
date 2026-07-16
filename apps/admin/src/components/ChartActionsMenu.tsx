@@ -117,7 +117,7 @@ export function ChartActionsMenu(props: ChartActionsMenuProps) {
         <div
           role="menu"
           aria-label={`${label} actions menu`}
-          className="absolute right-0 z-20 mt-1 min-w-[10rem] rounded-sm border border-edge bg-surface-root shadow-raised py-1"
+          className="absolute right-0 z-20 mt-1 min-w-40 rounded-sm border border-edge bg-surface-root shadow-raised py-1"
         >
           {onExportCsv && (
             <button

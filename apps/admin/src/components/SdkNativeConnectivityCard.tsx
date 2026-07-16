@@ -21,6 +21,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { Card } from '../components/ui'
 import { Link } from 'react-router-dom'
 import { Card, Btn, Tooltip, CopyButton } from './ui'
 import { IconAlertTriangle, IconCheck, IconGit, IconKey, IconRefresh } from './icons'
@@ -181,7 +182,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
 
         {/* Diagnosis detail — missing vars only; playbook holds fix steps */}
         {!loading && diag && status !== 'healthy' && diag.missingVars && diag.missingVars.length > 0 && (
-          <div className="rounded-sm border border-edge-subtle/60 bg-surface-overlay/40 p-3 text-xs space-y-1.5">
+          <Card  className="p-3 text-xs space-y-1.5">
             <p className="text-fg-muted">Missing from GitHub Actions:</p>
             <ul className="space-y-0.5">
               {diag.missingVars.map((v) => (
@@ -192,7 +193,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
                 </li>
               ))}
             </ul>
-          </div>
+          </Card>
         )}
 
         {!loading && diag && meta.playbookSteps.length > 0 && status !== 'healthy' && (
@@ -274,7 +275,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
 
         {/* Freshly minted key — show once */}
         {minted && (
-          <div className="rounded-sm border border-edge-subtle/60 bg-surface-overlay/40 px-3 py-2 space-y-1.5">
+          <Card  className="px-3 py-2 space-y-1.5">
             <p className="text-xs font-medium text-fg-secondary flex items-center gap-1.5">
               <IconKey className="h-3.5 w-3.5 text-warn" aria-hidden />
               New API key minted — copy it now
@@ -300,7 +301,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
               This is the only time the full key is shown. It has already been written to
               GitHub Actions if the sync succeeded. Store it securely.
             </p>
-          </div>
+          </Card>
         )}
 
         {/* Fallback commands */}
@@ -317,7 +318,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
             </button>
 
             {showFallback && fallback && (
-              <div className="space-y-2 rounded-sm border border-edge-subtle/60 bg-surface-overlay/30 p-3">
+              <Card  className="space-y-2 p-3">
                 <p className="text-xs font-medium text-fg-secondary">
                   Run these commands in your terminal (requires{' '}
                   <a
@@ -357,7 +358,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
                   After setting secrets, trigger a new native build (CI push) to bake them in.
                   OTA updates cannot retrofit secrets into an already-installed store binary.
                 </p>
-              </div>
+              </Card>
             )}
 
             {showFallback && !fallback && diag?.repoUrl && (
@@ -483,7 +484,7 @@ function FallbackCommandsFromDiag({
   })
 
   return (
-    <div className="space-y-2 rounded-sm border border-edge-subtle/60 bg-surface-overlay/30 p-3">
+    <Card  className="space-y-2 p-3">
       <p className="text-xs font-medium text-fg-secondary">Manual setup commands (no API key pre-filled):</p>
       <div className="space-y-1.5">
         {commands.map((cmd) => (
@@ -499,6 +500,6 @@ function FallbackCommandsFromDiag({
         Click "Sync CI secrets" above to have Mushi mint a key and write it automatically.
         That's the recommended flow — these are the manual fallback commands.
       </p>
-    </div>
+    </Card>
   )
 }

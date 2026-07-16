@@ -103,7 +103,7 @@ export function PromptStageTable({
                 const score = p.avg_judge_score
                 return (
                   <tr key={p.id} className="border-t border-edge-subtle">
-                    <td className="px-2 py-1.5 font-mono text-fg-secondary truncate max-w-[10rem]">
+                    <td className="px-2 py-1.5 font-mono text-fg-secondary truncate max-w-40">
                       {p.version}
                     </td>
                     <td className="px-2 py-1.5">

@@ -160,14 +160,14 @@ export function ReportSourceBadge({ row }: Props) {
         </span>
       </Tooltip>
       <Tooltip content={reporter.tooltip}>
-        <span className="inline-flex items-center text-2xs font-mono px-1.5 py-0.5 rounded-sm bg-surface-overlay border border-edge-subtle text-fg-muted cursor-help max-w-[12rem] truncate">
+        <span className="inline-flex items-center text-2xs font-mono px-1.5 py-0.5 rounded-sm bg-surface-overlay border border-edge-subtle text-fg-muted cursor-help max-w-48 truncate">
           {reporter.label}
         </span>
       </Tooltip>
       {where && (
         <Tooltip content={row.environment?.url ?? where}>
           <span className="cursor-help">
-            <ReportCodeText title={row.environment?.url ?? where} className="max-w-[18rem]">
+            <ReportCodeText title={row.environment?.url ?? where} className="max-w-72">
               {where}
             </ReportCodeText>
           </span>

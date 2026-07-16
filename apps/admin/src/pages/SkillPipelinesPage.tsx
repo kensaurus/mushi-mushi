@@ -847,7 +847,7 @@ function PipelinesTab({
         {runs.length === 0 ? (
           <div className="py-10 text-center flex flex-col items-center gap-4 max-w-md mx-auto">
             <p className="text-sm font-medium text-fg">No pipeline runs yet</p>
-            <div className="text-xs text-fg-muted text-left w-full rounded-md border border-edge-subtle bg-surface-overlay px-4 py-3 space-y-2">
+            <Card  className="text-xs text-fg-muted text-left w-full px-4 py-3 space-y-2">
               <p className="font-semibold text-fg text-2xs uppercase tracking-wide">How to start your first run</p>
               <ol className="list-decimal pl-4 space-y-1 text-fg-secondary">
                 <li>Open a report and copy its ID from the URL</li>
@@ -855,7 +855,7 @@ function PipelinesTab({
                 <li>Paste the report ID in the "Apply to a report" field, click <strong>Start pipeline</strong></li>
                 <li>Copy the context packet into your Cursor agent — the skill walks you through each step</li>
               </ol>
-            </div>
+            </Card>
             <div className="flex gap-2">
               <Btn type="button" variant="primary" size="sm" onClick={onGoToCatalog}>
                 Browse Catalog →

@@ -192,7 +192,7 @@ function VersionPill({
               : 'border-edge/70 bg-surface-overlay text-fg-secondary'
   return (
     <span
-      className={`inline-flex min-w-[2.75rem] items-center justify-center rounded-full border px-1.5 py-0.5 font-mono text-2xs font-medium tabular-nums leading-none shrink-0 ${toneClass}`}
+      className={`inline-flex min-w-11 items-center justify-center rounded-full border px-1.5 py-0.5 font-mono text-2xs font-medium tabular-nums leading-none shrink-0 ${toneClass}`}
     >
       {version}
     </span>
@@ -410,10 +410,10 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
                 <VersionPill version={`v${__APP_VERSION__}`} tone="admin" />
               </p>
               <div className="mt-1.5 space-y-0.5">
-                <p className="text-2xs text-fg-muted leading-snug max-w-[16rem]">
+                <p className="text-2xs text-fg-muted leading-snug max-w-64">
                   <span className="text-info font-medium">SDK</span> = <code className="font-mono text-fg-secondary">@mushi-mushi/web</code> on npm (what you embed).
                 </p>
-                <p className="text-2xs text-fg-muted leading-snug max-w-[16rem]">
+                <p className="text-2xs text-fg-muted leading-snug max-w-64">
                   <span className="text-accent font-medium">Admin</span> = this dashboard SPA (operator console).
                 </p>
               </div>
@@ -543,7 +543,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
                       target="_blank"
                       rel="noreferrer noopener"
                       title={link.hint}
-                      className="group flex items-center justify-between gap-1.5 border-b border-edge-subtle/50 px-2 py-1.5 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 min-h-[2rem]"
+                      className="group flex items-center justify-between gap-1.5 border-b border-edge-subtle/50 px-2 py-1.5 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 min-h-8"
                     >
                       <span className="flex items-center gap-1.5 min-w-0">
                         <ThemeIconChip icon={LinkIcon} theme={theme} size={12} />

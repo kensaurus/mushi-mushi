@@ -67,7 +67,7 @@ export function ReportsTriageGuide({ topPriority, stats }: Props) {
                 <td className="py-2 pr-3 align-top font-semibold text-fg whitespace-nowrap">
                   {sev.label}
                 </td>
-                <td className="py-2 pr-3 align-top text-fg-muted max-w-[12rem]">{sev.plain}</td>
+                <td className="py-2 pr-3 align-top text-fg-muted max-w-48">{sev.plain}</td>
                 <td className="py-2 align-top text-fg-secondary">{sev.triageHint}</td>
               </tr>
             ))}

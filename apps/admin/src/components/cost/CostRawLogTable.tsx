@@ -127,7 +127,7 @@ export function CostRawLogTable({ projectId }: { projectId: string }) {
         accessorKey: 'operation',
         enableSorting: true,
         cell: ({ row }) => (
-          <OperationChip operation={row.original.operation} maxWidthClass="max-w-[10rem]" />
+          <OperationChip operation={row.original.operation} maxWidthClass="max-w-40" />
         ),
       },
       {
@@ -136,7 +136,7 @@ export function CostRawLogTable({ projectId }: { projectId: string }) {
         accessorKey: 'model',
         enableSorting: true,
         cell: ({ row }) => (
-          <ModelChip model={row.original.model} maxWidthClass="max-w-[10rem]" />
+          <ModelChip model={row.original.model} maxWidthClass="max-w-40" />
         ),
       },
       {
@@ -215,7 +215,7 @@ export function CostRawLogTable({ projectId }: { projectId: string }) {
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-2 sm:justify-end">
-          <div className="min-w-[12rem] flex-1 sm:flex-none sm:w-56">
+          <div className="min-w-48 flex-1 sm:flex-none sm:w-56">
             <Input
               label="Search"
               placeholder="Operation, model, id…"

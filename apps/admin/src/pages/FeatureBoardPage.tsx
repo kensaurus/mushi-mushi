@@ -529,7 +529,7 @@ export function FeatureBoardPage() {
       {projectId && (
         <Card className="space-y-3 p-3">
           <div className="flex flex-wrap items-end gap-2">
-            <label className="min-w-[12rem] flex-1">
+            <label className="min-w-48 flex-1">
               <span className="sr-only">Search requests</span>
               <input
                 type="search"

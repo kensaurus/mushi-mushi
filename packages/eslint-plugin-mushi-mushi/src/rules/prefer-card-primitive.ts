@@ -1,9 +1,14 @@
 /**
  * Rule: `mushi-mushi/prefer-card-primitive`
  *
- * Warns when JSX className strings hand-roll card chrome
+ * Warns when JSX **container** elements hand-roll card chrome
  * (`rounded` + `border` + `bg-surface-raised|overlay`) outside the
  * canonical Card / Panel primitives in components/ui.
+ *
+ * Intentionally does NOT flag:
+ *   - chips / pills (`rounded-full`, tiny `rounded-sm` badges)
+ *   - form controls (`input` / `textarea` / `button` / `span` / `a`)
+ *   - inputs that use surface chrome for field styling
  *
  * Allowlist: `// mushi-mushi-allowlist: <reason>` on the preceding line,
  * or paths matching allowlist globs.
@@ -14,10 +19,20 @@ import type { Node, Literal, TemplateLiteral } from 'estree'
 
 interface JSXAttrName { type: 'JSXIdentifier'; name: string }
 interface JSXExprContainer { type: 'JSXExpressionContainer'; expression: Node }
-interface JSXAttr { type: 'JSXAttribute'; name: JSXAttrName; value: Node | JSXExprContainer | null }
+interface JSXAttr {
+  type: 'JSXAttribute'
+  name: JSXAttrName
+  value: Node | JSXExprContainer | null
+  parent?: { type?: string; name?: { name?: string } | string }
+}
 
 const HAND_ROLLED =
   /(?:^|[\s])(?:rounded(?:-\S+)?)\b[\s\S]{0,80}\bborder(?:-\S+)?\b[\s\S]{0,80}\bbg-surface-(?:raised|overlay)\b|(?:^|[\s])bg-surface-(?:raised|overlay)\b[\s\S]{0,100}\bborder(?:-\S+)?\b[\s\S]{0,60}\brounded(?:-\S+)?\b/
+
+/** Card-like padding — without this, treat as chip / inset / field chrome. */
+const CARD_PADDING = /\b(?:p|px|py)-(?:3|4|5|6|8)\b/
+
+const CONTAINER_TAGS = new Set(['div', 'section', 'article', 'aside', 'li', 'main'])
 
 const DEFAULT_ALLOWLIST = [
   '/components/ui/',
@@ -28,7 +43,13 @@ const DEFAULT_ALLOWLIST = [
   'PageHero.tsx',
   '/tester/',
   'PublicHomePage.tsx',
+  'PublicIntegrationsPage.tsx',
   'LoginPage.tsx',
+  'CliAuthPage.tsx',
+  'McpAuthPage.tsx',
+  'AcceptInvitePage.tsx',
+  'ResetPasswordPage.tsx',
+  'SetupGatePage.tsx',
 ]
 
 function pathMatches(filename: string, allowlist: string[]): boolean {
@@ -60,12 +81,26 @@ function extractStrings(node: Node): string[] {
   return []
 }
 
+/** Chip / field / tooltip chrome — not a Card candidate. */
+function isNonCardChrome(cls: string): boolean {
+  if (/\brounded-full\b/.test(cls)) return true
+  if (/\bplaceholder:/.test(cls)) return true
+  if (/\bresize-/.test(cls)) return true
+  // Tiny badge / meta chip (rounded-sm + compact padding, no card padding)
+  if (/\brounded-sm\b/.test(cls) && !CARD_PADDING.test(cls)) return true
+  // Absolute tooltips / popovers often share surface chrome but aren't Cards
+  if (/\babsolute\b/.test(cls) && /\b(?:z-\d+|pointer-events-none)\b/.test(cls)) return true
+  // Hand-rolled "card" needs card-scale padding to be worth migrating
+  if (!CARD_PADDING.test(cls) && !/\bp-\d+\b/.test(cls)) return true
+  return false
+}
+
 const rule: Rule.RuleModule = {
   meta: {
     type: 'suggestion',
     docs: {
       description:
-        'Prefer <Card> / <Panel> over hand-rolled rounded+border+bg-surface-* chrome.',
+        'Prefer <Card> / <Panel> over hand-rolled rounded+border+bg-surface-* card chrome.',
     },
     messages: {
       preferCard:
@@ -89,16 +124,18 @@ const rule: Rule.RuleModule = {
     if (!filename.replace(/\\/g, '/').includes('apps/admin/src')) return {}
     if (pathMatches(filename, allowlist)) return {}
 
-    function check(node: Node) {
+    function check(node: Node, tagName: string | undefined) {
+      if (tagName && !CONTAINER_TAGS.has(tagName)) return
+
       const sc = context.sourceCode
       const comments = sc.getCommentsBefore(node as never)
       if (comments.some((c) => /mushi-mushi-allowlist:/i.test(c.value))) return
 
       for (const str of extractStrings(node)) {
-        if (HAND_ROLLED.test(str)) {
-          context.report({ node, messageId: 'preferCard' })
-          return
-        }
+        if (!HAND_ROLLED.test(str)) continue
+        if (isNonCardChrome(str)) continue
+        context.report({ node, messageId: 'preferCard' })
+        return
       }
     }
 
@@ -106,11 +143,16 @@ const rule: Rule.RuleModule = {
       JSXAttribute(node: Node) {
         const attr = node as unknown as JSXAttr
         if (attr.name?.name !== 'className' || !attr.value) return
+        const parent = attr.parent
+        const tagName =
+          typeof parent?.name === 'string'
+            ? parent.name
+            : (parent?.name as { name?: string } | undefined)?.name
         const val = attr.value
         if ((val as Node).type === 'Literal') {
-          check(val as Node)
+          check(val as Node, tagName)
         } else if ((val as JSXExprContainer).type === 'JSXExpressionContainer') {
-          check((val as JSXExprContainer).expression)
+          check((val as JSXExprContainer).expression, tagName)
         }
       },
     }

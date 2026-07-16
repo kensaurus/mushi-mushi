@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { Card } from '../components/ui'
 import { apiFetch } from '../lib/supabase'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { Skeleton } from './ui'
@@ -128,7 +129,7 @@ export function FixProgressStream({ reportId, dispatchState }: Props) {
   const tokenStr = totalTokens(latest)
 
   return (
-    <div className="rounded-md border border-edge-subtle bg-surface-raised/40 px-3 py-2.5 mb-3">
+    <Card  className="px-3 py-2.5 mb-3">
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <div className="flex items-center gap-2">
           <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-2xs font-medium ${STAGE_TONE[stage] ?? STAGE_TONE.idle}`}>
@@ -229,6 +230,6 @@ export function FixProgressStream({ reportId, dispatchState }: Props) {
           <p className="font-mono text-2xs text-danger">{latest.error}</p>
         </ContainedBlock>
       )}
-    </div>
+    </Card>
   )
 }

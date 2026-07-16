@@ -1058,7 +1058,7 @@ export function CompliancePage() {
                               <div className="flex flex-col gap-0.5">
                                 <span>{d.subject_email}</span>
                                 {d.subject_id && (
-                                  <code className="text-3xs opacity-60 font-mono truncate max-w-[14rem]">
+                                  <code className="text-3xs opacity-60 font-mono truncate max-w-56">
                                     {d.subject_id}
                                   </code>
                                 )}
@@ -1106,7 +1106,7 @@ export function CompliancePage() {
                                   </Btn>
                                 </div>
                               ) : d.rejection_reason ? (
-                                <span className="text-2xs opacity-70 italic line-clamp-2 max-w-[18rem]">
+                                <span className="text-2xs opacity-70 italic line-clamp-2 max-w-72">
                                   {d.rejection_reason}
                                 </span>
                               ) : d.evidence_url ? (

@@ -239,7 +239,7 @@ export function AcceptInvitePage() {
 
         <div className="mt-3 flex items-start gap-2 flex-wrap">
           <Badge className={ROLE_TONE[preview.invitation.role]}>{preview.invitation.role}</Badge>
-          <ContainedBlock tone="muted" className="flex-1 min-w-[12rem]">
+          <ContainedBlock tone="muted" className="flex-1 min-w-48">
             <p className="text-xs text-fg-muted">{ROLE_DESCRIPTION[preview.invitation.role]}</p>
           </ContainedBlock>
         </div>

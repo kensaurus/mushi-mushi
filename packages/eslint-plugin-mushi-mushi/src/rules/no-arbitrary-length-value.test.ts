@@ -39,6 +39,11 @@ describe('no-arbitrary-length-value', () => {
           )
         }`,
       },
+      {
+        // Marketing / public pages are path-allowlisted
+        filename: 'apps/admin/src/pages/PublicHomePage.tsx',
+        code: `export function X() { return <div className="text-[1.0625rem] max-w-[42rem]" /> }`,
+      },
     ],
     invalid: [
       {

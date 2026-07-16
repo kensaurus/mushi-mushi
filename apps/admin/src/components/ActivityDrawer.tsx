@@ -567,7 +567,7 @@ function EventRow({
         )}
         {event.branch && (
           <span title={`Branch ${event.branch}`}>
-            <SignalChip tone="neutral" className="font-mono truncate max-w-[10rem]">
+            <SignalChip tone="neutral" className="font-mono truncate max-w-40">
               {event.branch}
             </SignalChip>
           </span>

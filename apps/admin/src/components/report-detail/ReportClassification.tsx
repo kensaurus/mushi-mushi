@@ -63,7 +63,7 @@ export function ClassificationFields({ report }: { report: ReportDetail }) {
                 </Badge>
                 {conf != null && (
                   <div
-                    className="h-1 w-full max-w-[8rem] overflow-hidden rounded-full bg-surface-overlay/80"
+                    className="h-1 w-full max-w-32 overflow-hidden rounded-full bg-surface-overlay/80"
                     role="progressbar"
                     aria-valuenow={Math.round(conf * 100)}
                     aria-valuemin={0}

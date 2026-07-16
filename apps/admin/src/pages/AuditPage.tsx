@@ -357,7 +357,7 @@ export function AuditPage() {
         enableSorting: true,
         accessorFn: (e) => e.actor_email ?? e.actor_id ?? 'system',
         cell: ({ row }) => (
-          <span className="truncate text-xs text-fg-muted block max-w-[14rem]">
+          <span className="truncate text-xs text-fg-muted block max-w-56">
             {row.original.actor_email ?? row.original.actor_id ?? 'system'}
           </span>
         ),

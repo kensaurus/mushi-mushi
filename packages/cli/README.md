@@ -39,6 +39,8 @@ Full walkthrough: [CLI ↔ console loop](https://github.com/kensaurus/mushi-mush
 | `mushi connect` | Non-interactive: config + env + Cursor MCP + optional `--wait` heartbeat |
 | `mushi login` | Save credentials to `~/.config/mushi/config.json` |
 | `mushi setup` | Wire Cursor/Claude MCP only (reads saved config — run `login` first) |
+| `mushi nudge` | Phase-tuned `Mushi.init()` snippet (`alpha` / `beta` / `ga`) |
+| `mushi doctor` | Local + optional server preflight checks |
 
 ## One-command setup
 
@@ -257,6 +259,26 @@ mushi doctor --host-app       # also verify host-app wiring (env vars, Cursor MC
 (via `mushi connect`), then re-runs every check so the printed result and exit
 code reflect the post-fix state rather than the stale pre-fix failures.
 
+### `mushi nudge`
+
+Generate a ready-to-paste `Mushi.init()` snippet tuned for your release phase
+(proactive triggers, cooldowns, feature-request card, beta-mode UI).
+
+```bash
+mushi nudge --phase beta              # default phase
+mushi nudge --phase alpha --explain   # + human-readable summary of the preset
+mushi nudge --phase ga --max 2 --cooldown 24 --dwell 5 --welcome 10
+```
+
+| Flag | Meaning |
+|------|---------|
+| `--phase <alpha\|beta\|ga>` | Release phase preset (default `beta`) |
+| `--explain` | Print a human-readable summary of what the preset does |
+| `--max <n>` | Override `maxProactivePerSession` (≥ 1) |
+| `--cooldown <hours>` | Override `dismissCooldownHours` (≥ 0) |
+| `--dwell <minutes>` | Override page-dwell threshold (`0` disables) |
+| `--welcome <seconds>` | Override first-session welcome delay (`0` disables) |
+
 Local checks performed:
 
 | Check | What it verifies |
@@ -416,3 +438,6 @@ The CLI is also importable for tooling (used by `create-mushi-mushi`):
 ## License
 
 MIT
+
+<!-- mushi-readme-stats-footer -->
+<sub>Monorepo scale (July 2026): 51 edge functions · 323 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

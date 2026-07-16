@@ -239,7 +239,7 @@ Live App URL
 
 | Group | Commands |
 | --- | --- |
-| **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi doctor`, `mushi completion` |
+| **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi doctor`, `mushi completion`, `mushi nudge` |
 | **Project & deploy** | `mushi project`, `mushi config`, `mushi console`, `mushi deploy check`, `mushi index`, `mushi sourcemaps upload` |
 | **Reports** | `mushi reports list/show/search/triage/…`, `mushi feedback board` |
 | **Fixes** | `mushi fix`, `mushi fixes tail/refresh-ci/merge`, `mushi console watch` |
@@ -756,7 +756,7 @@ Reporter opens widget (capture.screenshot on-report/auto)
 | SdkInstallCard | `apps/admin/src/components/SdkInstallCard.tsx` | Checkbox + optional custom text for screenshot privacy caption |
 | ConfigHelp | `sdk-install.screenshot_sensitive_hint` in `configDocs.ts` | Operator docs + link to deep-dive |
 
-**Introduced in:** `@mushi-mushi/core` / `@mushi-mushi/web` **1.19.0** (current: **1.23.0** — see root `CHANGELOG.md`).
+**Introduced in:** `@mushi-mushi/core` / `@mushi-mushi/web` **1.19.0** (current: **1.25.0** — see root `CHANGELOG.md`).
 `@mushi-mushi/react-native` **0.19.0** (current: **0.20.1**). Full doc:
 [`docs/SDK_SCREENSHOT_PREVIEW.md`](docs/SDK_SCREENSHOT_PREVIEW.md).
 

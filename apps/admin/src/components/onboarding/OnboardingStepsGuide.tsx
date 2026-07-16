@@ -77,7 +77,7 @@ export function OnboardingStepsGuide({ stats }: Props) {
               aria-valuemax={stats.requiredTotal}
               aria-valuenow={stats.requiredComplete}
               aria-label={`${stats.requiredComplete} of ${stats.requiredTotal} required setup steps complete`}
-              className="h-1 flex-1 max-w-[8rem] overflow-hidden rounded-full bg-surface-overlay"
+              className="h-1 flex-1 max-w-32 overflow-hidden rounded-full bg-surface-overlay"
             >
               <div
                 className="h-full rounded-full bg-ok motion-safe:transition-[width] motion-safe:duration-500"

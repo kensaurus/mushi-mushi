@@ -272,7 +272,7 @@ function NodeBody({
       )}
 
       {isLive && (
-        <p className="mt-1.5 text-3xs text-fg-secondary leading-snug line-clamp-2 min-h-[2rem]">
+        <p className="mt-1.5 text-3xs text-fg-secondary leading-snug line-clamp-2 min-h-8">
           {node.bottleneck ?? (
             <span className="text-fg-faint">Clean &mdash; nothing waiting here.</span>
           )}

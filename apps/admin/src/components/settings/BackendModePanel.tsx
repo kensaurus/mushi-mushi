@@ -14,6 +14,7 @@
  */
 
 import { useState } from 'react'
+import { Card } from '../../components/ui'
 import { Section, Btn, Input, Callout } from '../ui'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { SettingsCard } from './SettingsPanelLayout'
@@ -118,7 +119,7 @@ export function BackendModePanel() {
 
         {/* Self-hosted credentials form */}
         {draftMode === 'self-hosted' && (
-          <div className="space-y-3 rounded-md border border-edge-subtle bg-surface-raised/40 p-3">
+          <Card  className="space-y-3 p-3">
             <p className="text-xs text-fg-muted">
               Point to your own Supabase project. These values replace{' '}
               <code className="font-mono text-2xs">VITE_SUPABASE_URL</code> /{' '}
@@ -142,7 +143,7 @@ export function BackendModePanel() {
               The anon key is public by design — it grants only RLS-gated access.
               The service-role key stays server-side in your edge function secrets.
             </p>
-          </div>
+          </Card>
         )}
 
         {/* Cloud note */}

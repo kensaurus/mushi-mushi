@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Card } from '../../components/ui'
 import { Link } from 'react-router-dom'
 import {
   Handle,
@@ -339,7 +340,7 @@ function InnerCanvas({
 
       {!hintDismissed && (
         <Panel position="top-center">
-          <div className="flex items-center gap-2 rounded-md border border-edge bg-surface-raised/95 backdrop-blur px-3 py-1.5 text-2xs text-fg-secondary shadow-raised">
+          <Card  className="flex items-center gap-2 backdrop-blur px-3 py-1.5 text-2xs text-fg-secondary">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0 text-fg-faint" aria-hidden="true">
               <path d="M3 5l5-3 5 3v6l-5 3-5-3V5z" />
             </svg>
@@ -354,12 +355,12 @@ function InnerCanvas({
                 <path d="M2 2l6 6M8 2l-6 6" strokeLinecap="round" />
               </svg>
             </button>
-          </div>
+          </Card>
         </Panel>
       )}
       {nodeCount === 0 && (
         <Panel position="top-center">
-          <div className="rounded-md border border-edge bg-surface-raised/95 backdrop-blur px-3 py-2 text-2xs text-fg-secondary shadow-raised max-w-sm text-center">
+          <Card  className="backdrop-blur px-3 py-2 text-2xs text-fg-secondary max-w-sm text-center">
             <div className="font-medium text-fg mb-0.5">No files indexed yet</div>
             <div className="text-fg-muted">
               Enable codebase indexing in{' '}
@@ -368,7 +369,7 @@ function InnerCanvas({
               </Link>{' '}
               to see your files here.
             </div>
-          </div>
+          </Card>
         </Panel>
       )}
     </ReactFlow>

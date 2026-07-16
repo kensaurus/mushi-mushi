@@ -183,7 +183,7 @@ function FolderTabButton({
         aria-current={isActive ? 'true' : undefined}
         onClick={() => onSelect(project.id, project.name)}
         className={[
-          'inline-flex shrink-0 max-w-[14rem] items-center gap-2 rounded-md border px-2.5 py-2 text-left',
+          'inline-flex shrink-0 max-w-56 items-center gap-2 rounded-md border px-2.5 py-2 text-left',
           'motion-safe:transition-[transform,opacity]',
           isActive
             ? 'border-brand/50 bg-surface-raised ring-1 ring-brand/25 shadow-sm'

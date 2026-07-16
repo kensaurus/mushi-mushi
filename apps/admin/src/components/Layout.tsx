@@ -1514,7 +1514,7 @@ function SectionHeader({ section, isExpanded, isActiveStage, staleness, onToggle
       <span className="truncate flex-1 text-left">{section.title}</span>
       {staleness && (
         <span
-          className={`inline-flex items-center justify-center min-w-[1rem] px-1 h-3.5 rounded-sm text-3xs font-mono font-bold leading-none shrink-0 ${STALENESS_TONE[staleness.tone]}`}
+          className={`inline-flex items-center justify-center min-w-4 px-1 h-3.5 rounded-sm text-3xs font-mono font-bold leading-none shrink-0 ${STALENESS_TONE[staleness.tone]}`}
           aria-label={staleness.label}
           title={staleness.label}
         >

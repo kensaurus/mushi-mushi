@@ -18,7 +18,7 @@ export function AuditResourceChip({
     <Tooltip
       nowrap={false}
       content={
-        <div className="max-w-[14rem] space-y-1 text-left">
+        <div className="max-w-56 space-y-1 text-left">
           <p className="text-xs font-medium text-fg">{info.label}</p>
           <ContainedBlock tone="muted" className="px-2 py-1">
             <p className="text-2xs text-fg-muted leading-snug">{info.description}</p>
@@ -28,7 +28,7 @@ export function AuditResourceChip({
     >
       <Link
         to={to}
-        className={`inline-flex max-w-[10rem] items-center truncate rounded-sm border px-1.5 py-0.5 font-mono text-2xs transition-opacity ${info.className}`}
+        className={`inline-flex max-w-40 items-center truncate rounded-sm border px-1.5 py-0.5 font-mono text-2xs transition-opacity ${info.className}`}
       >
         {label}
       </Link>

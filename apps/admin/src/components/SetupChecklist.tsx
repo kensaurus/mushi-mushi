@@ -12,6 +12,7 @@
  */
 
 import { useState } from 'react'
+import { Card } from '../components/ui'
 import { Link } from 'react-router-dom'
 import type { SetupProject, SetupStep } from '../lib/useSetupStatus'
 import { CHIP_TONE } from '../lib/chipTone'
@@ -196,7 +197,7 @@ function BannerChecklist({
 function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndpointHost }: InternalProps) {
   return (
     <div className="space-y-3">
-      <div className="rounded-md border border-edge-subtle bg-surface-raised/30 px-3 py-2.5">
+      <Card  className="px-3 py-2.5">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-fg">
             {requiredDone ? 'You\u2019re set up' : 'Setup progress'}
@@ -228,7 +229,7 @@ function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndp
           </li>
         ))}
       </ol>
-    </div>
+    </Card>
   )
 }
 

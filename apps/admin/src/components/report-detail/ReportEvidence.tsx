@@ -307,7 +307,7 @@ export function ConsoleLogs({ logs }: { logs: ReportDetail['console_logs'] }) {
               </time>
             ) : null}
             <span
-              className={`mt-0.5 inline-flex min-w-[2.75rem] shrink-0 items-center justify-center rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${badge}`}
+              className={`mt-0.5 inline-flex min-w-11 shrink-0 items-center justify-center rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${badge}`}
             >
               {level}
             </span>

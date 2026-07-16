@@ -39,7 +39,7 @@ export function DetailSkeleton({ label = 'Loading detail' }: DetailSkeletonProps
             <Skeleton className="h-3 w-full" />
             <Skeleton className="h-3 w-[92%]" />
             <Skeleton className="h-3 w-[78%]" />
-            <Skeleton className="h-3 w-[60%]" />
+            <Skeleton className="h-3 w-3/5" />
           </Card>
           <Card className="p-3 space-y-2">
             <Skeleton className="h-3 w-40" />

@@ -626,11 +626,11 @@ function StoryDrawer({
             </div>
 
             {isQueued && recentRuns.length === 0 && (
-              <div className="rounded-sm border border-brand/30 bg-surface-raised px-3 py-2.5 text-2xs text-fg-secondary leading-relaxed">
+              <Card  className="px-3 py-2.5 text-2xs text-fg-secondary leading-relaxed">
                 Run is <strong className="text-brand">queued</strong> in{' '}
                 <code className="text-3xs font-mono bg-surface-overlay px-1 rounded">qa_story_runs</code>.
                 The runner picks it up within seconds. Polling…
-              </div>
+              </Card>
             )}
 
             {recentRuns.length === 0 && !isQueued && (

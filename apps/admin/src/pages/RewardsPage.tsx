@@ -22,7 +22,7 @@ import { RewardsTabNav } from '../components/rewards/RewardsTabNav'
 import { EMPTY_REWARDS_STATS, type RewardsStats, type RewardsTabId } from '../components/rewards/types'
 import { rewardsTabMeta, resolveRewardsTabParam } from '../components/rewards/rewardsTabs'
 import { useRewardsUx, resolveQuickRewardsTab } from '../lib/rewardsModeUx'
-import { Badge } from '../components/ui'
+import { Badge, Card } from '../components/ui'
 import { runStatusChipTone } from '../lib/chipTone'
 import { IconRewards } from '../components/icons'
 import {
@@ -147,11 +147,11 @@ export function RewardsPage() {
       />
 
       {showHobbyInline && (
-        <div className="rounded-xl border border-warn/40 bg-surface-raised p-3 text-xs text-warn">
+        <Card  className="p-3 text-xs text-warn">
           <strong>Rewards program requires Starter or higher.</strong>{' '}
           <a href="/billing" className="underline">Upgrade your plan</a> to configure rules, tiers, and webhooks.
           You can preview the program below.
-        </div>
+        </Card>
       )}
 
       <RewardsTabNav active={active} onChange={setActive} hideTabs={ux.hideTabs} />
