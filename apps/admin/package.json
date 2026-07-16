@@ -45,18 +45,18 @@
     "@mushi-mushi/eslint-config": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
     "@sentry/vite-plugin": "^5.3.0",
-    "@tailwindcss/vite": "^4.3.1",
-    "@types/node": "^22.20.0",
+    "@tailwindcss/vite": "^4.3.2",
+    "@types/node": "^22.20.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "eslint": "^10.6.0",
     "eslint-plugin-mushi-mushi": "workspace:*",
     "jsdom": "^29.1.1",
-    "tailwindcss": "^4.3.1",
+    "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
-    "vite": "^8.1.0",
-    "vitest": "^4.1.9"
+    "vite": "^8.1.4",
+    "vitest": "^4.1.10"
   },
   "author": "Kenji Sakuramoto",
   "repository": {
