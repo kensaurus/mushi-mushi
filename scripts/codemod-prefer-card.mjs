@@ -42,7 +42,11 @@ function ensureCardImport(text) {
     const uiImport = text.match(/import\s*\{([^}]*)\}\s*from\s*['"][^'"]*components\/ui['"]/)
     if (uiImport && /\bCard\b/.test(uiImport[1])) return text
     if (uiImport) {
-      return text.replace(uiImport[0], uiImport[0].replace('{', '{ Card,'))
+      // Use the known index of the opening brace in the import statement
+      // (replace only the first '{' of the destructure, not any nested ones)
+      const braceIdx = uiImport[0].indexOf('{')
+      const patched = uiImport[0].slice(0, braceIdx + 1) + ' Card,' + uiImport[0].slice(braceIdx + 1)
+      return text.replace(uiImport[0], patched)
     }
   }
   const firstImport = text.match(/^import .+$/m)

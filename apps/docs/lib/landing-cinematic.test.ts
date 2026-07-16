@@ -38,13 +38,13 @@ describe('landing cinematic copy SSOT', () => {
   it('keeps a clear closing question and solo CTA to incident-loop', () => {
     expect(LANDING_OPERATOR.question.length).toBeGreaterThan(0)
     expect(LANDING_OPERATOR.soloHref).toBe('/quickstart/incident-loop')
-    expect(LANDING_OPERATOR.teamHref).toMatch(/github\.com\/kensaurus\/mushi-mushi/)
+    expect(LANDING_OPERATOR.teamHref).toContain('github.com/kensaurus/mushi-mushi')
   })
 
   it('ships hero CTAs for wizard, repo, and connect', () => {
     const hrefs = LANDING_HERO_CTAS.map((c) => c.href)
     expect(hrefs).toContain('/quickstart/incident-loop')
-    expect(hrefs.some((h) => /github\.com\/kensaurus\/mushi-mushi/.test(h))).toBe(true)
+    expect(hrefs.some((h) => h.includes('github.com/kensaurus/mushi-mushi'))).toBe(true)
     expect(hrefs).toContain('/connect')
   })
 
