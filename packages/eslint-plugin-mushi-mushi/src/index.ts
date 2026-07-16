@@ -89,8 +89,8 @@ const recommendedRules: Linter.RulesRecord = {
   // Admin scaffold anti-drift — start warn; ratchet after Start-here cluster is clean.
   [`${PLUGIN_NAME}/no-legacy-page-header-in-pages`]: 'error',
   [`${PLUGIN_NAME}/no-page-root-padding`]: 'error',
-  [`${PLUGIN_NAME}/no-arbitrary-length-value`]: 'warn',
-  [`${PLUGIN_NAME}/prefer-card-primitive`]: 'warn',
+  [`${PLUGIN_NAME}/no-arbitrary-length-value`]: 'error',
+  [`${PLUGIN_NAME}/prefer-card-primitive`]: 'error',
 }
 
 /**

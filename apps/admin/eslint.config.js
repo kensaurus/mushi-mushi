@@ -20,8 +20,8 @@ export default [
       // Scaffold anti-drift (Start-here cluster first; warn → error after clean).
       'mushi-mushi/no-legacy-page-header-in-pages': 'error',
       'mushi-mushi/no-page-root-padding': 'error',
-      'mushi-mushi/no-arbitrary-length-value': 'warn',
-      'mushi-mushi/prefer-card-primitive': 'warn',
+      'mushi-mushi/no-arbitrary-length-value': 'error',
+      'mushi-mushi/prefer-card-primitive': 'error',
       'mushi-mushi/no-card-elevated-outside-allowlist': [
         'warn',
         {
