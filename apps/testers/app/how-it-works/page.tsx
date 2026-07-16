@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   title: 'How Mushi Bounties Works',
   description:
     'Learn how to earn mushi-points by finding real bugs, and how to redeem them for Mushi Pro credit or gift cards.',
+  alternates: { canonical: 'https://kensaur.us/mushi-mushi/testers/how-it-works/' },
 }
 
 const SECTIONS = [

@@ -2,6 +2,7 @@
 
 import { generateStaticParamsFor, importPage } from 'nextra/pages'
 import { useMDXComponents as getMDXComponents } from '../../mdx-components'
+import { DOCS_SITE, PRODUCT_ROOT } from '../../lib/structured-data'
 
 export const generateStaticParams = generateStaticParamsFor('mdxPath')
 
@@ -42,11 +43,20 @@ export async function generateMetadata(props: { params: Promise<{ mdxPath?: stri
       robots: { index: true, follow: true },
       alternates: {
         ...(metadata as { alternates?: Record<string, unknown> })?.alternates,
-        canonical: 'https://kensaur.us/mushi-mushi/',
+        canonical: PRODUCT_ROOT,
       },
     }
   }
-  return metadata
+  // Every other docs page canonicalises to its own /docs URL. Frontmatter may
+  // override by shipping its own `alternates.canonical` (spread wins below).
+  const existingAlternates = (metadata as { alternates?: Record<string, unknown> })?.alternates
+  return {
+    ...metadata,
+    alternates: {
+      canonical: `${DOCS_SITE}/${params.mdxPath.join('/')}`,
+      ...existingAlternates,
+    },
+  }
 }
 
 const Wrapper = getMDXComponents().wrapper

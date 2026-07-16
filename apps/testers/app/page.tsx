@@ -8,7 +8,8 @@ import { TestersPageShell } from './components/TestersPageShell'
 export const metadata: Metadata = {
   title: 'Mushi Bounties — crowd-testing marketplace',
   description:
-    'Browse apps published to the Mushi Bounties marketplace. Find a bug, earn mushi-points.',
+    'Get paid to find bugs — browse apps on the Mushi Bounties crowd-testing marketplace and earn mushi-points redeemable for Mushi Pro credit or gift cards.',
+  alternates: { canonical: 'https://kensaur.us/mushi-mushi/testers/' },
 }
 
 interface PublicApp {
