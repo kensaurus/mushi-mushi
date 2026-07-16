@@ -146,7 +146,7 @@ export class MushiWidget {
    *  Drives a different success copy so the user knows the report
    *  hasn't actually reached the console yet. */
   private lastSubmitQueuedOffline = false;
-  private lastSubmitFailureKind: import('./widget-helpers').WidgetSubmitOutcome['failureKind'];
+  private lastSubmitFailureKind: WidgetSubmitOutcome['failureKind'];
   private lastSubmitScreenshotDropped = false;
   /** Whether the user has clicked ✕ on the header banner this session. */
   private bannerDismissed = false;
@@ -839,12 +839,24 @@ export class MushiWidget {
     this.onColorSchemeChange = () => {
       if (this.host.isConnected) this.render();
     };
-    this.colorSchemeMq.addEventListener('change', this.onColorSchemeChange);
+    // Embeddable SDK: some host environments (older browsers, non-standard
+    // matchMedia polyfills) return a MediaQueryList without the modern
+    // EventTarget API. Never let live-theme wiring throw on mount — fall back
+    // to the deprecated addListener, and skip silently if neither exists.
+    if (typeof this.colorSchemeMq.addEventListener === 'function') {
+      this.colorSchemeMq.addEventListener('change', this.onColorSchemeChange);
+    } else if (typeof this.colorSchemeMq.addListener === 'function') {
+      this.colorSchemeMq.addListener(this.onColorSchemeChange);
+    }
   }
 
   private unbindColorSchemeListener(): void {
     if (this.colorSchemeMq && this.onColorSchemeChange) {
-      this.colorSchemeMq.removeEventListener('change', this.onColorSchemeChange);
+      if (typeof this.colorSchemeMq.removeEventListener === 'function') {
+        this.colorSchemeMq.removeEventListener('change', this.onColorSchemeChange);
+      } else if (typeof this.colorSchemeMq.removeListener === 'function') {
+        this.colorSchemeMq.removeListener(this.onColorSchemeChange);
+      }
     }
     this.colorSchemeMq = null;
     this.onColorSchemeChange = null;

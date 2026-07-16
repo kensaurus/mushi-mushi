@@ -47,7 +47,7 @@ import {
   STEP_NUMBER,
   TOTAL_STEPS,
 } from './widget-helpers';
-import type { AssistantTurn, WidgetCallbacks, WidgetRewardsState, WidgetStep } from './widget-helpers';
+import type { AssistantTurn, WidgetCallbacks, WidgetRewardsState, WidgetStep, WidgetSubmitOutcome } from './widget-helpers';
 
 export interface WidgetRenderCtx {
   config: Required<MushiWidgetConfig>;
@@ -100,7 +100,7 @@ export interface WidgetRenderCtx {
   leaderboardLoading: boolean;
   leaderboardEntries: Array<{ display_name: string; tier_name: string | null; total_points: number; points_30d: number }> | null;
   lastSubmitQueuedOffline: boolean;
-  lastSubmitFailureKind: import('./widget-helpers').WidgetSubmitOutcome['failureKind'];
+  lastSubmitFailureKind: WidgetSubmitOutcome['failureKind'];
   lastSubmitScreenshotDropped: boolean;
   featureBoard: Array<Record<string, unknown>>;
   crossAppReports: MushiCrossAppReport[] | null;

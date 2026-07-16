@@ -609,7 +609,17 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         createdAt: new Date().toISOString(),
       }
       const client = apiClientRef.current
-      if (!client) return
+      if (!client) {
+        // No API client means the provider never finished initializing
+        // (missing/invalid config). The report can't be sent and won't
+        // succeed on retry — return a defined failure so callers awaiting
+        // submitReport() get a typed result instead of `undefined`.
+        console.error(
+          '[Mushi] submitReport called before the SDK finished initializing. ' +
+          'Ensure <MushiProvider> is mounted with a valid projectId and apiKey.',
+        )
+        return { ok: false, failureKind: 'permanent' as const }
+      }
 
       const result = await client.submitReport(report)
       if (!result.ok) {
