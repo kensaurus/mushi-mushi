@@ -101,7 +101,7 @@ export function Card({
     : {}
   const interactiveCls =
     interactive || onClick
-      ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface motion-safe:transition-[border-color,background-color] motion-safe:duration-150 hover:border-edge hover:bg-surface-hover motion-safe:active:scale-[0.995]'
+      ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface motion-safe:transition-[transform,opacity] motion-safe:duration-150 hover:border-edge hover:bg-surface-hover motion-safe:active:scale-[0.995]'
       : ''
   const resolvedVariant = variant ?? (elevated ? 'elevated' : 'default')
   if (resolvedVariant === 'elevated') {

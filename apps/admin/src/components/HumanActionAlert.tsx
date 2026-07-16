@@ -55,7 +55,7 @@ export function HumanActionAlert({
         </div>
         <Link
           to={actionHref}
-          className={`inline-flex shrink-0 items-center justify-center rounded-sm border px-3 py-1.5 text-xs font-medium motion-safe:transition-[background-color,border-color,transform] ${
+          className={`inline-flex shrink-0 items-center justify-center rounded-sm border px-3 py-1.5 text-xs font-medium motion-safe:transition-[transform,opacity] ${
             primaryCta
               ? 'border-brand/40 bg-brand text-brand-fg hover:bg-brand/90'
               : 'border-edge bg-surface-raised text-fg hover:bg-surface-overlay'
@@ -73,7 +73,7 @@ export function HumanActionAlert({
               <div className="min-w-0 flex-1">
                 <Link
                   to={item.href}
-                  className="font-medium text-fg hover:text-accent-foreground underline underline-offset-2 motion-safe:transition-colors"
+                  className="font-medium text-fg hover:text-accent-foreground underline underline-offset-2 motion-safe:transition-opacity"
                 >
                   {item.title}
                 </Link>

@@ -26,7 +26,7 @@ export function SuggestIntegrationButton({ context, onSuggest }: Props) {
       <button
         type="button"
         onClick={onSuggest}
-        className="ml-3 shrink-0 inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+        className="ml-3 shrink-0 inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-raised transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
         aria-label="Suggest an integration"
       >
         <IconNote size={12} />

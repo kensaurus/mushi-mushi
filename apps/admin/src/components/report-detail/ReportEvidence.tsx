@@ -25,8 +25,8 @@ import { CHIP_TONE } from '../../lib/chipTone'
 
 function statusBadge(status: number): string {
   if (status >= 500) return CHIP_TONE.dangerSubtle
-  if (status >= 400) return CHIP_TONE.warnSubtle + ' border border-warn/25'
-  if (status >= 300) return CHIP_TONE.infoSubtle + ' border border-info/25'
+  if (status >= 400) return CHIP_TONE.warnSubtle
+  if (status >= 300) return CHIP_TONE.infoSubtle
   if (status >= 200) return CHIP_TONE.okSubtle
   return 'bg-surface-overlay text-fg-muted border border-edge-subtle'
 }
@@ -223,29 +223,31 @@ export function PerformanceMetrics({ metrics }: { metrics: Record<string, number
     )
   }
   return (
-    <DefinitionChips
-      className="mb-0 sm:grid-cols-2 lg:grid-cols-3"
-      items={entries.map(([key, val]) => {
-        const upper = key.toUpperCase()
-        const tooltip = PERF_TOOLTIPS[upper]
-        const tone = typeof val === 'number' ? perfVitalTone(upper, val) : 'neutral'
-        const display =
-          typeof val === 'number'
-            ? upper === 'CLS'
-              ? val.toFixed(3)
-              : `${val.toFixed(0)} ms`
-            : String(val)
-        return {
-          label: upper,
-          hint: tooltip,
-          value: (
-            <span className={`font-mono tabular-nums font-semibold ${PERF_TONE_CLASS[tone]}`}>
-              {display}
-            </span>
-          ),
-        }
-      })}
-    />
+    <div className="@container/vitals">
+      <DefinitionChips
+        className="mb-0 grid-cols-1 @sm/vitals:grid-cols-2 @xl/vitals:grid-cols-3"
+        items={entries.map(([key, val]) => {
+          const upper = key.toUpperCase()
+          const tooltip = PERF_TOOLTIPS[upper]
+          const tone = typeof val === 'number' ? perfVitalTone(upper, val) : 'neutral'
+          const display =
+            typeof val === 'number'
+              ? upper === 'CLS'
+                ? val.toFixed(3)
+                : `${val.toFixed(0)} ms`
+              : String(val)
+          return {
+            label: upper,
+            hint: tooltip,
+            value: (
+              <span className={`font-mono tabular-nums font-semibold ${PERF_TONE_CLASS[tone]}`}>
+                {display}
+              </span>
+            ),
+          }
+        })}
+      />
+    </div>
   )
 }
 
@@ -300,12 +302,13 @@ export function ConsoleLogs({ logs }: { logs: ReportDetail['console_logs'] }) {
             className={`flex items-start gap-2 border-b border-b-edge-subtle/25 border-l-2 px-2 py-1 last:border-b-0 ${rowTone}`}
           >
             {time ? (
+              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
               <time className="w-[4.5rem] shrink-0 pt-0.5 font-mono text-3xs tabular-nums text-fg-faint">
                 {time}
               </time>
             ) : null}
             <span
-              className={`mt-0.5 inline-flex min-w-[2.75rem] shrink-0 items-center justify-center rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${badge}`}
+              className={`mt-0.5 inline-flex min-w-11 shrink-0 items-center justify-center rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${badge}`}
             >
               {level}
             </span>

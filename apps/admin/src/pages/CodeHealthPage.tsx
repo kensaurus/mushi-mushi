@@ -119,7 +119,7 @@ function Scorecard({ data }: { data: CodeHealthResponse }) {
     overall === 'fail'
       ? CHIP_TONE.dangerSubtle
       : overall === 'warn'
-        ? 'border-warn/40 bg-warn-muted/50 text-warning-foreground border border-warn/25ing-foreground'
+        ? CHIP_TONE.warnSubtle
         : CHIP_TONE.okSubtle
   const overallLabel =
     overall === 'fail' ? 'Issues found' : overall === 'warn' ? 'Warnings' : 'All clear'
@@ -320,6 +320,7 @@ function GodFileList({ findings }: { findings: GodFileFinding[] }) {
       {sorted.map((f) => (
         <div
           key={f.id}
+          // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
           className="rounded-md border border-edge-subtle bg-surface-overlay px-3 py-2.5"
         >
           <div className="flex flex-wrap items-start gap-2">

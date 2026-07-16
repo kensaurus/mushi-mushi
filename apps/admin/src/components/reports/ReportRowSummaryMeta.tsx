@@ -51,7 +51,7 @@ export function ReportTagChips({ row, className = '' }: { row: ReportRow; classN
           <Link
             to={`/activity?route=${encodeURIComponent(pagePath)}`}
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex shrink-0 items-center gap-0.5 rounded-sm border border-edge-subtle bg-surface-overlay px-1 py-0.5 text-2xs font-mono text-fg-muted hover:text-brand hover:border-brand/40 transition-colors max-w-[10rem] truncate"
+            className="inline-flex shrink-0 items-center gap-0.5 rounded-sm border border-edge-subtle bg-surface-overlay px-1 py-0.5 text-2xs font-mono text-fg-muted hover:text-brand hover:border-brand/40 transition-opacity max-w-40 truncate"
           >
             📄 {pagePath}
           </Link>
@@ -64,7 +64,7 @@ export function ReportTagChips({ row, className = '' }: { row: ReportRow; classN
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex shrink-0 items-center gap-0.5 rounded-sm border border-edge-subtle bg-surface-overlay px-1 py-0.5 text-2xs text-fg-muted hover:text-brand hover:border-brand/40 transition-colors"
+            className="inline-flex shrink-0 items-center gap-0.5 rounded-sm border border-edge-subtle bg-surface-overlay px-1 py-0.5 text-2xs text-fg-muted hover:text-brand hover:border-brand/40 transition-opacity"
           >
             📷 screenshot
           </a>
@@ -82,7 +82,7 @@ export function ReportTagChips({ row, className = '' }: { row: ReportRow; classN
           <Link
             to={`/reports?area=${encodeURIComponent(area)}`}
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex shrink-0 items-center rounded-sm border border-brand/25 bg-brand-muted/30 px-1 py-0.5 text-2xs font-medium text-brand-foreground hover:bg-brand-muted/50 transition-colors"
+            className="inline-flex shrink-0 items-center rounded-sm border border-brand/25 bg-brand-muted/30 px-1 py-0.5 text-2xs font-medium text-brand-foreground hover:bg-brand-muted/50 transition-opacity"
           >
             {area}
           </Link>
@@ -148,7 +148,7 @@ export function ReportRowMeta({ row }: Props) {
       </span>
       <MetaChip tooltip={who.tooltip}>
         {who.verified && <span className="text-ok" aria-hidden="true">✓ </span>}
-        <span className="max-w-[9rem] truncate">{who.label}</span>
+        <span className="max-w-36 truncate">{who.label}</span>
       </MetaChip>
       {path && (
         <>
@@ -156,7 +156,7 @@ export function ReportRowMeta({ row }: Props) {
             ·
           </span>
           <Tooltip portal content={[fullTitle, sdkDetail].filter(Boolean).join(' · ') || path}>
-            <span className="min-w-0 max-w-[14rem] cursor-help">
+            <span className="min-w-0 max-w-56 cursor-help">
               <ReportCodeText title={fullTitle ?? path} className="max-w-full">
                 {path}
               </ReportCodeText>

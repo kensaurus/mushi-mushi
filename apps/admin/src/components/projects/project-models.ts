@@ -126,7 +126,7 @@ export const LINK_CHIP_CLASS =
   'inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-sm gap-1.5 ' +
   'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface ' +
-  'motion-safe:transition-colors motion-safe:duration-150'
+  'motion-safe:transition-opacity motion-safe:duration-150'
 
 export function relativeTime(iso: string | null): string {
   if (!iso) return 'never'

@@ -74,10 +74,11 @@ export function TabbedSubNav({ ariaLabel, tabs, trailing }: TabbedSubNavProps) {
                 data-tabbed-sub-nav-tab={tab.to}
                 data-active={isActive || undefined}
                 className={[
-                  'inline-flex items-center gap-2 px-3 py-2 -mb-px text-xs font-medium motion-safe:transition-colors',
+                  'inline-flex items-center gap-2 px-3 py-2 -mb-px text-xs font-medium',
+                  'motion-safe:transition-[transform,opacity] motion-safe:duration-[var(--duration-fast,200ms)]',
                   'border-b-2 rounded-t-sm',
                   isActive
-                    ? 'border-brand text-fg'
+                    ? 'border-brand text-fg shadow-brand-glow-sm'
                     : 'border-transparent text-fg-muted hover:text-fg hover:bg-surface-overlay/50',
                 ].join(' ')}
               >

@@ -79,7 +79,7 @@ export function SavedViewsRow({ scope, currentQuery, onApply, isActive }: Props)
           <button
             type="button"
             onClick={handleSave}
-            className="inline-flex items-center gap-1 rounded-full border border-edge/60 px-2.5 py-1 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay/60 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+            className="inline-flex items-center gap-1 rounded-full border border-edge/60 px-2.5 py-1 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay/60 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
             title="Save the current filters as a named view. Persists in your browser."
           >
             <span aria-hidden className="text-sm leading-none">+</span>
@@ -120,7 +120,7 @@ export function SavedViewsRow({ scope, currentQuery, onApply, isActive }: Props)
         <button
           type="button"
           onClick={handleSave}
-          className="ml-1 inline-flex items-center gap-1 rounded-full border border-edge/60 px-2 py-1 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay/60 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+          className="ml-1 inline-flex items-center gap-1 rounded-full border border-edge/60 px-2 py-1 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay/60 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
           title="Save current filters as a new view"
         >
           <span aria-hidden className="text-sm leading-none">+</span>

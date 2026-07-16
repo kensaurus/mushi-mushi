@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useActiveOrgId } from '../components/OrgSwitcher'
 import { apiFetch } from '../lib/supabase'
@@ -653,7 +654,7 @@ export function OrganizationSettingsPage() {
 
   if (!activeOrgId) {
     return (
-      <div className="space-y-4">
+      <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-organization-settings">
         <PageHeaderBar
           title={copy?.title ?? 'Team members'}
 
@@ -792,6 +793,7 @@ export function OrganizationSettingsPage() {
               e.preventDefault()
               void submitRenameOrg()
             }}
+            // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
             className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end"
           >
             <Input
@@ -864,6 +866,7 @@ export function OrganizationSettingsPage() {
           headline="Teams require Pro"
           taglineOverride="Invite teammates, set their role per project, and share every project in this org."
         >
+          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
           <div className="grid gap-3 md:grid-cols-[1fr_12rem_auto]">
             <Input
               label="Email"
@@ -985,6 +988,7 @@ export function OrganizationSettingsPage() {
               return (
                 <li
                   key={invite.id}
+                  // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
                   className="rounded border border-edge-subtle bg-surface-overlay/30 px-3 py-2 text-xs"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">

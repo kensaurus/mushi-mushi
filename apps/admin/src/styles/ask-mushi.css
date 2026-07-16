@@ -628,10 +628,7 @@ html[data-theme='dark'] [data-surface='ask-mushi'] .ask-mushi-resume-btn__cost {
   font-weight: 500;
   line-height: 1.25;
   cursor: pointer;
-  transition:
-    border-color var(--duration-fast, 150ms),
-    background-color var(--duration-fast, 150ms),
-    color var(--duration-fast, 150ms);
+  transition: opacity var(--duration-fast) var(--ease-stamp), transform var(--duration-fast) var(--ease-stamp);
 }
 [data-surface='ask-mushi'] .ask-mushi-quick-action-btn:hover {
   border-color: var(--am-accent-cyan);

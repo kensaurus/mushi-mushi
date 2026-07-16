@@ -141,7 +141,7 @@ function StageTile({ stage, isFocus, connector }: TileProps) {
             </div>
           )}
 
-          <ContainedBlock tone={stage.bottleneck ? 'warn' : 'muted'} className="mt-2 min-h-[2.25rem]">
+          <ContainedBlock tone={stage.bottleneck ? 'warn' : 'muted'} className="mt-2 min-h-9">
             <p className="text-2xs text-fg-secondary leading-snug line-clamp-2">
               {stage.bottleneck ?? <span className="text-fg-faint">Clean — nothing waiting in this stage.</span>}
             </p>

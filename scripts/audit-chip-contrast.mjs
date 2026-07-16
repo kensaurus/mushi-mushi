@@ -7,7 +7,7 @@
  *  2. bg-{sem}/N opacity tints + raw text-{sem} (e.g. bg-ok/15 text-ok)
  *
  * Line-scoped scan of quoted / static template class strings.
- * Skips CHIP_TONE / chipTone lines, tester portal, and canonical brandSubtle.
+ * Skips CHIP_TONE / chipTone lines and canonical brandSubtle.
  *
  * Usage: node scripts/audit-chip-contrast.mjs [--strict]
  */
@@ -62,8 +62,6 @@ function walk(dir) {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name)
     if (statSync(p).isDirectory()) {
-      // Tester portal is an intentional satellite design language — skip.
-      if (name === 'tester') continue
       out.push(...walk(p))
     } else if (/\.(tsx|ts)$/.test(name)) out.push(p)
   }

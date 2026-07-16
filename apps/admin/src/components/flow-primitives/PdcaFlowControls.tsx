@@ -87,7 +87,7 @@ function ControlBtn({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:transition-colors"
+      className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:transition-opacity"
     >
       {children}
     </button>

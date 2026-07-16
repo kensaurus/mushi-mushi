@@ -17,6 +17,11 @@ export default [
       'mushi-mushi/no-raw-css-var-text': 'error',
       'mushi-mushi/no-legacy-shadcn-tokens': 'error',
       'mushi-mushi/no-accent-for-selection': 'warn',
+      // Scaffold anti-drift (Start-here cluster first; warn → error after clean).
+      'mushi-mushi/no-legacy-page-header-in-pages': 'error',
+      'mushi-mushi/no-page-root-padding': 'error',
+      'mushi-mushi/no-arbitrary-length-value': 'error',
+      'mushi-mushi/prefer-card-primitive': 'error',
       'mushi-mushi/no-card-elevated-outside-allowlist': [
         'warn',
         {

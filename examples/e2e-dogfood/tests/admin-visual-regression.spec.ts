@@ -13,9 +13,15 @@ const TEST_USER_EMAIL = process.env.TEST_USER_EMAIL ?? ''
 const TEST_USER_PASSWORD = process.env.TEST_USER_PASSWORD ?? ''
 
 const ROUTES = [
+  // Start-here cluster (UI unification reference)
+  '/overview',
+  '/activity',
   '/dashboard',
-  '/reports',
   '/connect',
+  '/feedback',
+  '/feature-board',
+  // High-traffic follow-ons
+  '/reports',
   '/onboarding',
   '/explore',
   '/settings',

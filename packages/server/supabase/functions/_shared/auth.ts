@@ -3,10 +3,28 @@ import { getServiceClient } from './db.ts'
 import { upsertProjectSdkObservationAsync } from './sdk-observation.ts'
 import { mergeLogContext, type LogContext } from './log-context.ts'
 import { emitFunnelEvent } from './setup-funnel.ts'
+import type { ApiErrorCode } from './error-codes.ts'
 
 export interface ProjectContext {
   projectId: string
   projectName: string
+}
+
+/** Canonical auth failure envelope — always includes `ok: false`. */
+function authError(
+  c: Context,
+  code: ApiErrorCode,
+  message: string,
+  status: 401 | 403 = 401,
+): Response {
+  const requestId = c.get('requestId') as string | undefined
+  return c.json(
+    {
+      ok: false,
+      error: { code, message, ...(requestId ? { requestId } : {}) },
+    },
+    status,
+  )
 }
 
 /**
@@ -96,7 +114,10 @@ export function requireServiceRoleAuth(req: Request): Response | null {
 
   if (!internalSecret && !serviceRoleKey) {
     return new Response(
-      JSON.stringify({ error: { code: 'SERVER_MISCONFIGURED', message: 'No internal auth configured' } }),
+      JSON.stringify({
+        ok: false,
+        error: { code: 'SERVER_MISCONFIGURED', message: 'No internal auth configured' },
+      }),
       { status: 401, headers: { 'Content-Type': 'application/json' } },
     )
   }
@@ -105,7 +126,10 @@ export function requireServiceRoleAuth(req: Request): Response | null {
   const token = header.startsWith('Bearer ') ? header.slice(7) : header
   if (!token) {
     return new Response(
-      JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'Requires valid internal caller token' } }),
+      JSON.stringify({
+        ok: false,
+        error: { code: 'UNAUTHORIZED', message: 'Requires valid internal caller token' },
+      }),
       { status: 401, headers: { 'Content-Type': 'application/json' } },
     )
   }
@@ -116,7 +140,10 @@ export function requireServiceRoleAuth(req: Request): Response | null {
 
   if (!matches) {
     return new Response(
-      JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'Requires valid internal caller token' } }),
+      JSON.stringify({
+        ok: false,
+        error: { code: 'UNAUTHORIZED', message: 'Requires valid internal caller token' },
+      }),
       { status: 401, headers: { 'Content-Type': 'application/json' } },
     )
   }
@@ -335,34 +362,27 @@ async function authenticateApiKey(
 ): Promise<Response | null> {
   const keyRow = await lookupActiveApiKey(apiKey)
   if (!keyRow) {
-    return c.json({ error: { code: 'INVALID_API_KEY', message: 'Invalid or revoked API key' } }, 401)
+    return authError(c, 'INVALID_API_KEY', 'Invalid or revoked API key')
   }
 
   const scopes = keyRow.scopes ?? []
   const grants = scopes.includes(requiredScope) ||
     (requiredScope === 'mcp:read' && scopes.includes('mcp:write'))
   if (!grants) {
-    return c.json(
-      {
-        error: {
-          code: 'INSUFFICIENT_SCOPE',
-          message: `API key is missing required scope "${requiredScope}". Mint a new key with the correct scope or upgrade this one in the admin console.`,
-        },
-      },
+    return authError(
+      c,
+      'INSUFFICIENT_SCOPE',
+      `API key is missing required scope "${requiredScope}". Mint a new key with the correct scope or upgrade this one in the admin console.`,
       403,
     )
   }
 
   const ownerId = keyRow.owner_user_id
   if (!ownerId) {
-    return c.json(
-      {
-        error: {
-          code: 'KEY_NOT_MIGRATED',
-          message: 'API key is missing owner metadata. Rotate the key to regenerate it.',
-        },
-      },
-      401,
+    return authError(
+      c,
+      'KEY_NOT_MIGRATED',
+      'API key is missing owner metadata. Rotate the key to regenerate it.',
     )
   }
 
@@ -401,7 +421,7 @@ export async function apiKeyAuth(c: Context, next: Next) {
   const apiKey = c.req.header('X-Mushi-Api-Key')
 
   if (!apiKey) {
-    return c.json({ error: { code: 'MISSING_API_KEY', message: 'X-Mushi-Api-Key header required' } }, 401)
+    return authError(c, 'MISSING_API_KEY', 'X-Mushi-Api-Key header required')
   }
 
   const db = getServiceClient()
@@ -419,14 +439,16 @@ export async function apiKeyAuth(c: Context, next: Next) {
     'id' | 'key_prefix' | 'project_id' | 'is_org_scoped' | 'is_active' | 'scopes' | 'projects'
   > | null
   if (error || !keyRow) {
-    return c.json({ error: { code: 'INVALID_API_KEY', message: 'Invalid or revoked API key' } }, 401)
+    return authError(c, 'INVALID_API_KEY', 'Invalid or revoked API key')
   }
 
   // Org-scoped keys are for MCP/admin use only; they cannot ingest SDK events
   // without an explicit project scope. This keeps the SDK ingest path predictable.
   if (keyRow.is_org_scoped) {
-    return c.json(
-      { error: { code: 'ORG_KEY_NOT_ALLOWED', message: 'Org-scoped keys cannot be used for SDK ingest. Use a project-scoped key.' } },
+    return authError(
+      c,
+      'ORG_KEY_NOT_ALLOWED',
+      'Org-scoped keys cannot be used for SDK ingest. Use a project-scoped key.',
       403,
     )
   }
@@ -472,7 +494,7 @@ export async function apiKeyAuth(c: Context, next: Next) {
 export async function jwtAuth(c: Context, next: Next) {
   const authHeader = c.req.header('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
-    return c.json({ error: { code: 'MISSING_AUTH', message: 'Authorization Bearer token required' } }, 401)
+    return authError(c, 'MISSING_AUTH', 'Authorization Bearer token required')
   }
 
   const db = getServiceClient()
@@ -489,11 +511,11 @@ export async function jwtAuth(c: Context, next: Next) {
   try {
     const { data, error } = await db.auth.getUser(token)
     if (error || !data?.user) {
-      return c.json({ error: { code: 'INVALID_TOKEN', message: 'Invalid or expired auth token' } }, 401)
+      return authError(c, 'INVALID_TOKEN', 'Invalid or expired auth token')
     }
     user = data.user
   } catch {
-    return c.json({ error: { code: 'INVALID_TOKEN', message: 'Invalid or expired auth token' } }, 401)
+    return authError(c, 'INVALID_TOKEN', 'Invalid or expired auth token')
   }
 
   c.set('userId', user.id)

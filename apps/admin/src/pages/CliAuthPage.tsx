@@ -32,8 +32,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { CliAuthReadout } from '../components/cli-auth/CliAuthReadout'
-import { Btn } from '../components/ui'
-import { CHIP_TONE } from '../lib/chipTone'
+import { Btn, ErrorAlert } from '../components/ui'
 
 type ApproveState = 'idle' | 'approving' | 'waiting' | 'connected' | 'denied' | 'error'
 
@@ -206,7 +205,7 @@ export function CliAuthPage() {
           </p>
         </div>
         {waitingSlow && (
-          <div className="max-w-md rounded-xl border border-warning/40 bg-warning/10 px-5 py-4 text-left">
+          <div className="max-w-md rounded-xl border border-warn/40 bg-warn-muted/50 px-5 py-4 text-left">
             <p className="text-sm font-semibold text-fg">Terminal not continuing?</p>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-fg-muted">
               <li>
@@ -305,8 +304,8 @@ export function CliAuthPage() {
         </div>
 
         {/* Anti-paste warning */}
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3">
-          <span className="mt-0.5 text-warning" aria-hidden="true">⚠</span>
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-warn/40 bg-warn-muted/50 px-4 py-3">
+          <span className="mt-0.5 text-warning-foreground" aria-hidden="true">⚠</span>
           <p className="text-sm text-fg-muted">
             <strong className="text-fg">Do not paste or type this code into your terminal.</strong>{' '}
             It belongs here in the browser. The terminal waits automatically.
@@ -335,8 +334,8 @@ export function CliAuthPage() {
 
         {/* Error */}
         {approveState === 'error' && errorMessage && (
-          <div className={`mb-4 rounded-lg px-4 py-3 text-sm ${CHIP_TONE.dangerSubtle}`}>
-            {errorMessage}
+          <div className="mb-4">
+            <ErrorAlert title="Couldn't approve CLI connection" message={errorMessage} />
           </div>
         )}
 

@@ -59,6 +59,7 @@ Console URL resolution: `MUSHI_CONSOLE_URL` → saved config → localhost `:646
 | `mushi migrate` | Suggest migration guides based on `package.json` |
 | `mushi project create` | Create project, mint key, write config |
 | `mushi doctor` | Local + optional server preflight checks |
+| `mushi nudge` | Print a phase-tuned `Mushi.init()` snippet (`alpha` / `beta` / `ga`) |
 | `mushi reset <projectId> --confirm` | Archive project and wipe test data (irreversible) |
 | `mushi completion <bash\|zsh\|fish>` | Print a tab-completion script generated from the live command tree |
 
@@ -71,6 +72,26 @@ mushi doctor --ingest         # + SDK heartbeat / first-report ingest steps
 mushi doctor --qa-stories     # + QA story setup warnings (needs --server credentials)
 mushi doctor --json           # machine-readable; exits 1 if any check fails
 ```
+
+### `mushi nudge`
+
+Generate a ready-to-paste `Mushi.init()` snippet tuned for your release phase
+(proactive triggers, cooldowns, feature-request card, beta-mode UI).
+
+```bash
+mushi nudge --phase beta              # default phase
+mushi nudge --phase alpha --explain   # + human-readable summary of the preset
+mushi nudge --phase ga --max 2 --cooldown 24 --dwell 5 --welcome 10
+```
+
+| Flag | Meaning |
+|------|---------|
+| `--phase <alpha\|beta\|ga>` | Release phase preset (default `beta`) |
+| `--explain` | Print a human-readable summary of what the preset does |
+| `--max <n>` | Override `maxProactivePerSession` (≥ 1) |
+| `--cooldown <hours>` | Override `dismissCooldownHours` (≥ 0) |
+| `--dwell <minutes>` | Override page-dwell threshold (`0` disables) |
+| `--welcome <seconds>` | Override first-session welcome delay (`0` disables) |
 
 ---
 

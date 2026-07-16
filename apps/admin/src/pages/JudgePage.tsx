@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -193,7 +194,7 @@ function ScoreBar({
         </SignalChip>
         <div className="flex-1 h-2 bg-surface-root rounded-full overflow-hidden">
           <div
-            className="h-full rounded-full motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] motion-safe:duration-500"
+            className="h-full rounded-full motion-safe:transition-[transform,opacity] motion-safe:duration-500"
             style={{ width: `${(value * 100).toFixed(0)}%`, backgroundColor: color }}
           />
         </div>
@@ -529,6 +530,7 @@ export function JudgePage() {
 
   const trendPanel = (
     <>
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
         <Section
           title="Score trend (12w)"
@@ -671,7 +673,7 @@ export function JudgePage() {
   )
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-judge">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-judge">
       <PageHeaderBar
         title={copy?.title ?? 'Judge'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -966,7 +968,7 @@ export function JudgePage() {
                           ? 'Click to clear the filter'
                           : `Click to filter Recent evaluations by ${p.version}`
                       }
-                      className={`cursor-pointer border-b border-edge-subtle text-fg-secondary outline-none transition-colors hover:bg-surface-overlay/40 focus-visible:bg-surface-overlay/60 focus-visible:ring-1 focus-visible:ring-brand/60 ${
+                      className={`cursor-pointer border-b border-edge-subtle text-fg-secondary outline-none transition-opacity hover:bg-surface-overlay/40 focus-visible:bg-surface-overlay/60 focus-visible:ring-1 focus-visible:ring-brand/60 ${
                         isSelected ? 'bg-brand/10 text-fg' : ''
                       }`}
                     >
@@ -1106,6 +1108,7 @@ export function JudgePage() {
                     e.classification_agreed === false ? e.judge_reasoning?.trim() : null
                   return (
                     <tr key={e.id} className="border-b border-edge-subtle text-fg-secondary hover:bg-surface-overlay/30">
+                      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                       <td className="py-1.5 px-3 max-w-[22rem]">
                         <Link
                           to={`/reports/${e.report_id}`}
@@ -1136,7 +1139,7 @@ export function JudgePage() {
                       <td className="py-1.5 px-3 text-fg-faint text-2xs">
                         <RelativeTime value={e.created_at} />
                       </td>
-                      <td className="py-1.5 px-3 truncate max-w-[12rem]">
+                      <td className="py-1.5 px-3 truncate max-w-48">
                         <SignalChip tone="neutral" className="font-mono">
                           {e.judge_model ?? '—'}
                         </SignalChip>

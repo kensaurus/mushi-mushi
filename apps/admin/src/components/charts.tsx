@@ -632,7 +632,7 @@ export function BarSparkline({
             />
             {isIdle && showIdleBaseline ? (
               <div
-                className={`h-1 rounded-full bg-fg-faint/30 motion-safe:transition-colors group-hover:bg-fg-faint/50 ${
+                className={`h-1 rounded-full bg-fg-faint/30 motion-safe:transition-opacity group-hover:bg-fg-faint/50 ${
                   sparseBars ? 'w-[6px]' : 'w-full max-w-[6px]'
                 } ${
                   isToday ? 'ring-1 ring-edge-subtle ring-offset-1 ring-offset-transparent' : ''
@@ -640,7 +640,7 @@ export function BarSparkline({
               />
             ) : (
               <div
-                className={`${sparseBars ? '' : 'w-full'} min-w-[3px] ${accent} rounded-t-sm motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] ${
+                className={`${sparseBars ? '' : 'w-full'} min-w-[3px] ${accent} rounded-t-sm motion-safe:transition-[transform,opacity] ${
                   isPeak || isHovered
                     ? 'opacity-100 shadow-sm shadow-brand/40'
                     : 'opacity-80 group-hover:opacity-100'
@@ -839,7 +839,7 @@ function SeverityBarColumn({
           // segments visible within the bar boundary.
           'absolute inset-x-0 bottom-0 flex flex-col justify-end overflow-hidden rounded-sm',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60',
-          'motion-safe:transition-[filter,background-color] duration-150',
+          'motion-safe:transition-[transform,opacity] duration-150',
           /* Zero-day: keep full-height for hover target but NO visual fill —
              only the 6px baseline stub signals "day with 0 reports", avoiding
              the tall grey box that makes bars appear clustered to the right. */
@@ -853,7 +853,7 @@ function SeverityBarColumn({
       >
         {day.total === 0 ? (
           <span
-            className="mx-auto mb-0.5 block w-[60%] rounded-full bg-edge-subtle/70"
+            className="mx-auto mb-0.5 block w-3/5 rounded-full bg-edge-subtle/70"
             style={{ height: '4px' }}
             aria-hidden="true"
           />

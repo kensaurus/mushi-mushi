@@ -89,6 +89,7 @@ export function PdcaRunDrawer({ run, open, onClose, onAbort, onTrigger, onRefres
                     key={i}
                     type="button"
                     onClick={() => setActiveIter(iterations[i])}
+                    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                     className={`min-w-[6px] flex-1 rounded-t-sm transition-opacity ${scoreBarClass(h)} ${
                       activeIter?.iteration_n === i + 1
                         ? 'opacity-100 ring-2 ring-brand'
@@ -124,7 +125,7 @@ export function PdcaRunDrawer({ run, open, onClose, onAbort, onTrigger, onRefres
                   key={iter.id}
                   type="button"
                   onClick={() => setActiveIter(iter)}
-                  className={`flex w-full items-start gap-3 rounded-md border p-3 text-left transition-colors hover:bg-surface-raised/40 ${
+                  className={`flex w-full items-start gap-3 rounded-md border p-3 text-left transition-opacity hover:bg-surface-raised/40 ${
                     activeIter?.id === iter.id ? 'border-brand/40 bg-brand/5' : 'border-edge-subtle'
                   }`}
                 >

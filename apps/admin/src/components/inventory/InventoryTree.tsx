@@ -36,9 +36,9 @@ function frameworkChip(framework: string | undefined): string {
     case 'playwright':
       return CHIP_TONE.okSubtle
     case 'vitest':
-      return CHIP_TONE.warnSubtle + ' border border-warn/25'
+      return CHIP_TONE.warnSubtle
     case 'cypress':
-      return CHIP_TONE.infoSubtle + ' border border-info/25'
+      return CHIP_TONE.infoSubtle
     case 'jest':
       return CHIP_TONE.dangerSubtle
     default:
@@ -60,7 +60,7 @@ export function InventoryTree({ rows, onRowClick }: Props) {
       col.accessor('actionLabel', {
         header: 'Action',
         cell: (c) => (
-          <span className="text-xs leading-tight max-w-[24rem] block truncate" title={c.getValue() as string}>
+          <span className="text-xs leading-tight max-w-96 block truncate" title={c.getValue() as string}>
             {c.getValue()}
           </span>
         ),
@@ -76,7 +76,7 @@ export function InventoryTree({ rows, onRowClick }: Props) {
           const list = c.row.original.backendList ?? []
           if (!list.length) return <span className="text-2xs text-fg-faint">—</span>
           return (
-            <div className="flex flex-wrap gap-1 max-w-[16rem]">
+            <div className="flex flex-wrap gap-1 max-w-64">
               {list.slice(0, 3).map((b, i) => (
                 <Badge
                   key={i}
@@ -109,7 +109,7 @@ export function InventoryTree({ rows, onRowClick }: Props) {
             )
           }
           return (
-            <div className="flex flex-wrap gap-1 max-w-[18rem]">
+            <div className="flex flex-wrap gap-1 max-w-72">
               {list.slice(0, 2).map((t, i) => (
                 <Badge
                   key={i}

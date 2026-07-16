@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { Card } from '../../components/ui'
 import { IconLink } from '../icons'
 import type { ReportDetail } from './types'
 
@@ -19,7 +20,7 @@ export function RegressionChain({ report, className = '' }: RegressionChainProps
   if (!parentId && childIds.length === 0 && regressionCount === 0) return null
 
   return (
-    <div className={`rounded-md border border-edge-subtle bg-surface-raised/40 p-3 ${className}`}>
+    <Card className={`p-3 ${className}`}>
       <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-fg-secondary mb-2">
         <IconLink /> Regression chain
       </h3>
@@ -59,6 +60,6 @@ export function RegressionChain({ report, className = '' }: RegressionChainProps
           </li>
         )}
       </ul>
-    </div>
+    </Card>
   )
 }

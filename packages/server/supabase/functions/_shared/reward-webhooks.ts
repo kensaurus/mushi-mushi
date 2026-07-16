@@ -116,7 +116,11 @@ async function deliverOne(
 ): Promise<void> {
   const body = JSON.stringify({ ...payload, webhookId: webhook.id })
   const secret = await loadWebhookSecret(db, webhook.id)
-  const signature = secret ? `sha256=${await sha256Hmac(secret, body)}` : 'unsigned'
+  if (!secret) {
+    wlog.warn('delivery_skipped_no_secret', { webhookId: webhook.id, url: webhook.url })
+    return
+  }
+  const signature = `sha256=${await sha256Hmac(secret, body)}`
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)

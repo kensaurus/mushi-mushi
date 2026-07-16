@@ -51,7 +51,7 @@ function StagedChangesBannerInner({
       <button
         type="button"
         onClick={onApply}
-        className="text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-sm"
+        className="text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-sm"
       >
         Apply
       </button>

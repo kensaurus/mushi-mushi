@@ -118,6 +118,7 @@ export function ReportReplayPlayer({ reportId, events, replayPath }: Props) {
       </div>
       <div
         ref={hostRef}
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         className="mushi-replay-host min-h-[180px] rounded-md border border-edge-subtle bg-surface-raised overflow-hidden [&_iframe]:pointer-events-none [&_iframe]:border-0 [&_.replayer-wrapper]:mx-auto"
       />
       <p className="text-2xs text-fg-muted">

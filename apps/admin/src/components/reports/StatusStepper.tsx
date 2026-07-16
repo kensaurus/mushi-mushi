@@ -104,7 +104,7 @@ export function StatusStepper({
           <Tooltip key={step} portal content={tooltip}>
             <span
               aria-label={tooltipBase}
-              className={`${barHeight} flex-1 rounded-hairline motion-safe:transition-colors ${tint} ${activeRing}`}
+              className={`${barHeight} flex-1 rounded-hairline motion-safe:transition-opacity ${tint} ${activeRing}`}
             />
           </Tooltip>
         )

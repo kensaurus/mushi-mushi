@@ -12,7 +12,7 @@ import { getLocale, type MushiLocale } from './i18n';
 import { getWidgetStyles } from './styles';
 import { MUSHI_SDK_VERSION } from './version';
 import { readPageFaviconHref, MUSHI_TIER_COLORS } from '@mushi-mushi/core';
-import { CATEGORY_ICONS, FEATURE_REQUEST_INTENT, bindFaviconFallbacks, isSubmitShortcut } from './widget-helpers';
+import { CATEGORY_ICONS, FEATURE_REQUEST_INTENT, bindFaviconFallbacks, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession } from './widget-helpers';
 import type {
   AssistantTurn,
   WidgetCallbacks,
@@ -27,9 +27,22 @@ export type { WidgetCallbacks, WidgetRewardsState, WidgetSubmitOutcome } from '.
 import { renderBrandFooter, renderOutdatedBanner, renderStep } from './widget-render';
 import type { WidgetRenderCtx } from './widget-render';
 
+/** Heuristic: hedging / capability-limit answers should offer a report escape. */
+function looksUnsureAssistantAnswer(text: string): boolean {
+  const lower = text.toLowerCase();
+  return (
+    /i('m| am) not sure|i don't know|not sure|cannot help|can't help|unable to|don't have enough|outside (my|of) (scope|knowledge)|file a (bug )?report|報告/.test(
+      lower
+    ) || /わかりません|分かりません|不明|報告して/.test(text)
+  );
+}
+
 export class MushiWidget {
   private host: HTMLElement;
   private shadow: ShadowRoot;
+  /** Re-inject styles when OS light/dark flips while theme=auto|inherit. */
+  private colorSchemeMq: MediaQueryList | null = null;
+  private onColorSchemeChange: (() => void) | null = null;
   private config: Required<MushiWidgetConfig>;
   private callbacks: WidgetCallbacks;
   private locale: MushiLocale;
@@ -133,6 +146,7 @@ export class MushiWidget {
    *  Drives a different success copy so the user knows the report
    *  hasn't actually reached the console yet. */
   private lastSubmitQueuedOffline = false;
+  private lastSubmitFailureKind: WidgetSubmitOutcome['failureKind'];
   private lastSubmitScreenshotDropped = false;
   /** Whether the user has clicked ✕ on the header banner this session. */
   private bannerDismissed = false;
@@ -219,6 +233,13 @@ export class MushiWidget {
     // navigator.language automatically.
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
 
+    // Same-tab Ask transcript resume (sessionStorage only — no login gate).
+    const saved = loadAssistantSession();
+    if (saved?.turns.length) {
+      this.assistantTurns = saved.turns;
+      this.assistantThreadId = saved.threadId;
+    }
+
     this.host = document.createElement('div');
     this.host.id = 'mushi-mushi-widget';
     this.shadow = this.host.attachShadow({ mode: 'open' });
@@ -230,6 +251,7 @@ export class MushiWidget {
     document.body.appendChild(this.host);
     this.syncAttachedLaunchers();
     this.syncSmartHide();
+    this.bindColorSchemeListener();
     this.render();
     this.mountedAt = Date.now();
   }
@@ -350,6 +372,7 @@ export class MushiWidget {
     this.removeSelectorHint();
     this.lastReportId = null;
     this.lastSubmitQueuedOffline = false;
+    this.lastSubmitFailureKind = undefined;
     this.lastSubmitScreenshotDropped = false;
     this.viaFeatureRequest = false;
     // A fresh session starts with a clean slate — drafts only need to
@@ -424,6 +447,7 @@ export class MushiWidget {
     this.assistantSending = true;
     this.assistantError = null;
     this.assistantTurns.push({ role: 'user', text });
+    this.persistAssistantSession();
     this.render();
     try {
       const reply = await this.callbacks.onAssistantAsk(text, this.assistantThreadId);
@@ -434,10 +458,18 @@ export class MushiWidget {
             role: 'assistant',
             text: reply.question ?? 'Could you tell me a bit more?',
             ...(reply.options && reply.options.length ? { options: reply.options } : {}),
+            offerReport: true,
           });
         } else {
-          this.assistantTurns.push({ role: 'assistant', text: reply.text ?? '…' });
+          const answerText = reply.text ?? '…';
+          const unsure = looksUnsureAssistantAnswer(answerText);
+          this.assistantTurns.push({
+            role: 'assistant',
+            text: answerText,
+            ...(unsure ? { offerReport: true } : {}),
+          });
         }
+        this.persistAssistantSession();
       } else {
         this.assistantError = this.locale.assistant.errors.noResponse;
       }
@@ -451,6 +483,36 @@ export class MushiWidget {
         if (log) log.scrollTop = log.scrollHeight;
       }, 0);
     }
+  }
+
+  /** Persist Ask turns for same-tab reload survival (UX only). */
+  private persistAssistantSession(): void {
+    saveAssistantSession({
+      turns: this.assistantTurns,
+      threadId: this.assistantThreadId,
+    });
+  }
+
+  /** Clear Ask transcript (e.g. host reset). Keeps Ask login-free. */
+  clearAssistantTranscript(): void {
+    this.assistantTurns = [];
+    this.assistantThreadId = null;
+    this.assistantError = null;
+    clearAssistantSession();
+    if (this.step === 'assistant') this.render();
+  }
+
+  /** Escape hatch from Ask → report category picker (no login required). */
+  private openReportFromAssistant(): void {
+    this.selectedCategory = null;
+    this.selectedIntent = null;
+    this.viaFeatureRequest = false;
+    this.step = 'category';
+    if (!this.isOpen) {
+      this.isOpen = true;
+      this.callbacks.onOpen();
+    }
+    this.render();
   }
 
   /**
@@ -755,6 +817,7 @@ export class MushiWidget {
       clearTimeout(this.smartHideTimer);
       this.smartHideTimer = null;
     }
+    this.unbindColorSchemeListener();
     this.smartHideCleanup?.();
     this.smartHideCleanup = null;
     this.teardownViewportHandlers();
@@ -764,6 +827,39 @@ export class MushiWidget {
     this.removeNudge();
     this.removeBodyNudge();
     this.host.remove();
+  }
+
+  /** Live-restyle when OS prefers-color-scheme changes (theme auto/inherit only). */
+  private bindColorSchemeListener(): void {
+    this.unbindColorSchemeListener();
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const theme = this.config.theme;
+    if (theme !== 'auto' && theme !== 'inherit') return;
+    this.colorSchemeMq = window.matchMedia('(prefers-color-scheme: dark)');
+    this.onColorSchemeChange = () => {
+      if (this.host.isConnected) this.render();
+    };
+    // Embeddable SDK: some host environments (older browsers, non-standard
+    // matchMedia polyfills) return a MediaQueryList without the modern
+    // EventTarget API. Never let live-theme wiring throw on mount — fall back
+    // to the deprecated addListener, and skip silently if neither exists.
+    if (typeof this.colorSchemeMq.addEventListener === 'function') {
+      this.colorSchemeMq.addEventListener('change', this.onColorSchemeChange);
+    } else if (typeof this.colorSchemeMq.addListener === 'function') {
+      this.colorSchemeMq.addListener(this.onColorSchemeChange);
+    }
+  }
+
+  private unbindColorSchemeListener(): void {
+    if (this.colorSchemeMq && this.onColorSchemeChange) {
+      if (typeof this.colorSchemeMq.removeEventListener === 'function') {
+        this.colorSchemeMq.removeEventListener('change', this.onColorSchemeChange);
+      } else if (typeof this.colorSchemeMq.removeListener === 'function') {
+        this.colorSchemeMq.removeListener(this.onColorSchemeChange);
+      }
+    }
+    this.colorSchemeMq = null;
+    this.onColorSchemeChange = null;
   }
 
   /* ── Host chrome contract ────────────────────────────────────────────────
@@ -1734,6 +1830,7 @@ export class MushiWidget {
       leaderboardLoading: this.leaderboardLoading,
       leaderboardEntries: this.leaderboardEntries,
       lastSubmitQueuedOffline: this.lastSubmitQueuedOffline,
+      lastSubmitFailureKind: this.lastSubmitFailureKind,
       lastSubmitScreenshotDropped: this.lastSubmitScreenshotDropped,
       featureBoard: this.featureBoard,
       crossAppReports: this.crossAppReports,
@@ -1813,6 +1910,11 @@ export class MushiWidget {
       btn.addEventListener('click', () => {
         const value = (btn as HTMLElement).dataset.value;
         if (value) void this.sendAssistantMessage(value);
+      });
+    });
+    panel.querySelectorAll('[data-action="assistant-report"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.openReportFromAssistant();
       });
     });
     {
@@ -2066,6 +2168,7 @@ export class MushiWidget {
       this.submittedAt = new Date();
       this.lastReportId = null;
       this.lastSubmitQueuedOffline = false;
+    this.lastSubmitFailureKind = undefined;
       this.lastSubmitScreenshotDropped = false;
       this.render();
 
@@ -2127,6 +2230,7 @@ export class MushiWidget {
           if (outcome) {
             this.lastReportId = outcome.reportId ?? null;
             this.lastSubmitQueuedOffline = Boolean(outcome.queuedOffline);
+            this.lastSubmitFailureKind = outcome.failureKind;
             this.lastSubmitScreenshotDropped = Boolean(outcome.screenshotDropped);
             this.render();
           }

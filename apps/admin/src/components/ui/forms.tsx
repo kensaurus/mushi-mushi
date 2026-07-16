@@ -15,7 +15,7 @@ interface FilterSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 
 /** Compact filter-bar select chrome — matches FilterSelect. */
 export const FILTER_SELECT_CLASS =
-  'bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 motion-safe:transition-colors motion-safe:duration-150'
+  'bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 motion-safe:transition-opacity motion-safe:duration-150'
 
 export function FilterSelect({ label, options, id, className = '', ...rest }: FilterSelectProps) {
   const selectId = id ?? `filter-${label.toLowerCase().replace(/\s+/g, '-')}`
@@ -91,9 +91,9 @@ export function SegmentedControl<T extends string>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(opt.id)}
-            className={`${SEGMENT_SIZE[size]} rounded-sm motion-safe:transition-[background-color,color,box-shadow,transform] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:active:scale-[0.97] ${
+            className={`${SEGMENT_SIZE[size]} rounded-sm motion-safe:transition-[transform,opacity] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:active:scale-[0.97] ${
               active
-                ? 'bg-brand text-brand-fg shadow-card'
+                ? 'bg-brand text-brand-fg shadow-brand-raised'
                 : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50 hover:-translate-y-px'
             }`}
           >
@@ -133,6 +133,8 @@ interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /**
    * Visual intent.
    *  - `primary`: default brand action.
+   *  - `accent`:  accent-hued filled CTA (integration connect, post comment) —
+   *               a deliberately different hue from the brand primary.
    *  - `ghost`:   neutral secondary actions (Refresh, Back, View details).
    *  - `cancel`:  dismiss / cancel / close — red affordance (not destructive-primary).
    *  - `danger`:  destructive / irreversible (Delete, Reject, Revoke,
@@ -143,7 +145,7 @@ interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
    *               token so tone is consistent with PageHero severity
    *               and SidebarHealthDot.
    */
-  variant?: 'primary' | 'ghost' | 'cancel' | 'danger' | 'success'
+  variant?: 'primary' | 'accent' | 'ghost' | 'cancel' | 'danger' | 'success'
   size?: 'sm' | 'md'
   children: ReactNode
   /** When true, swaps the leading area for a spinner and disables the
@@ -158,24 +160,32 @@ const BTN_BASE =
   'inline-flex items-center justify-center font-medium rounded-sm ' +
   'disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface ' +
-  'motion-safe:transition-[background-color,border-color,color,box-shadow,transform] motion-safe:duration-150 motion-safe:active:scale-[0.97]'
+  'motion-safe:transition-[transform,opacity] motion-safe:duration-150 motion-safe:active:scale-[0.97]'
 
 const BTN_SIZES = {
   sm: 'px-2 py-1 text-xs gap-1.5',
   md: 'px-3 py-1.5 text-sm gap-2',
 } as const
 
+// Expressive control set (2026-07 expressive pass): the primary action is a
+// brand gradient with a hover glow ring; secondary variants keep their tonal
+// identity but gain a matching glow on hover. All effects route through
+// --gradient-*/--shadow-*-glow tokens (theme-tokens.css), which are derived
+// from the semantic brand/danger/ok oklch tokens — so white-label overrides
+// and light/dark theme swaps cascade through automatically.
 const BTN_VARIANTS = {
   primary:
-    'bg-brand text-brand-fg shadow-card hover:bg-brand-hover hover:shadow-raised hover:-translate-y-px',
+    'bg-[var(--gradient-brand)] text-brand-fg shadow-card hover:shadow-brand-glow hover:-translate-y-px',
+  accent:
+    'bg-[var(--gradient-accent)] text-fg-on-accent shadow-card hover:shadow-accent-glow hover:-translate-y-px',
   ghost:
-    'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg hover:border-edge hover:-translate-y-px',
+    'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg hover:border-brand/40 hover:shadow-brand-glow-sm hover:-translate-y-px',
   cancel:
     `${CHIP_TONE.danger} border-danger/40 hover:bg-danger-muted hover:border-danger/50 hover:-translate-y-px`,
   danger:
-    `${CHIP_TONE.dangerSubtle} hover:bg-danger-muted/80 hover:border-danger/40 hover:-translate-y-px`,
+    `${CHIP_TONE.dangerSubtle} hover:bg-danger-muted/80 hover:border-danger/40 hover:shadow-glow-danger hover:-translate-y-px`,
   success:
-    `${CHIP_TONE.okSubtle} hover:bg-ok-muted/80 hover:border-ok/40 hover:-translate-y-px`,
+    `${CHIP_TONE.okSubtle} hover:bg-ok-muted/80 hover:border-ok/40 hover:shadow-glow-ok hover:-translate-y-px`,
 }
 
 export function Btn({
@@ -206,7 +216,7 @@ function BtnSpinner({ size }: { size: 'sm' | 'md' | 'icon' }) {
   const dim = size === 'md' ? 'h-3.5 w-3.5' : 'h-3 w-3'
   return (
     <svg
-      className={`motion-safe:animate-spin ${dim}`}
+      className={`motion-safe:animate-mushi-stamp-spin ${dim}`}
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
@@ -243,7 +253,7 @@ export function RefreshIconButton({
       aria-label={label}
       aria-busy={loading || undefined}
       title={label}
-      className={`inline-flex items-center justify-center h-8 w-8 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+      className={`inline-flex items-center justify-center h-8 w-8 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
     >
       {loading ? (
         <BtnSpinner size="icon" />
@@ -274,7 +284,7 @@ export function RefreshIconButton({
 
 /** Shared focus ring for ad-hoc inputs that bypass `<Input />`. */
 export const FIELD_FOCUS =
-  'focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40'
+  'focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:shadow-brand-glow-sm'
 
 const FIELD_BASE =
   'w-full bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-sm text-fg ' +
@@ -282,7 +292,7 @@ const FIELD_BASE =
   `${FIELD_FOCUS} ` +
   'aria-[invalid=true]:border-danger aria-[invalid=true]:ring-danger/40 ' +
   'disabled:opacity-50 disabled:cursor-not-allowed ' +
-  'motion-safe:transition-colors motion-safe:duration-150'
+  'motion-safe:transition-[transform,opacity] motion-safe:duration-150'
 
 const FIELD_LABEL = 'text-xs text-fg-muted mb-1 block font-medium'
 const FIELD_ERROR = 'mt-1 text-2xs text-danger'
@@ -384,7 +394,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
             onMouseDown={(e) => e.preventDefault()}
             aria-label={reveal ? 'Hide password' : 'Show password'}
             aria-pressed={reveal}
-            className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-fg-faint hover:text-fg-muted focus-visible:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 rounded-sm motion-safe:transition-colors"
+            className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-fg-faint hover:text-fg-muted focus-visible:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 rounded-sm motion-safe:transition-opacity"
           >
             {reveal ? (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -460,9 +470,9 @@ export function Checkbox({ label, checked, onChange, disabled, tooltip, helpId }
         checked={checked}
         onChange={(e) => onChange?.(e.target.checked)}
         disabled={disabled}
-        className="h-3.5 w-3.5 rounded-sm border-edge bg-surface-raised accent-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface motion-safe:transition-colors"
+        className="h-3.5 w-3.5 rounded-sm border-edge bg-surface-raised accent-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface motion-safe:transition-opacity"
       />
-      <span className="inline-flex items-center gap-1 text-xs text-fg-secondary group-hover:text-fg select-none motion-safe:transition-colors">
+      <span className="inline-flex items-center gap-1 text-xs text-fg-secondary group-hover:text-fg select-none motion-safe:transition-opacity">
         {label}
         <LabelHelp helpId={helpId} tooltip={tooltip} />
       </span>
@@ -495,10 +505,10 @@ export function Toggle({ label, ariaLabel, checked, onChange, disabled, tooltip,
         aria-label={ariaLabel}
         onClick={() => onChange?.(!checked)}
         disabled={disabled}
-        className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border motion-safe:transition-colors motion-safe:duration-150 motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${checked ? 'bg-brand border-brand/60' : 'bg-surface-raised border-edge hover:border-edge'}`}
+        className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border motion-safe:transition-[transform,opacity] motion-safe:duration-[var(--duration-fast)] motion-safe:ease-[var(--ease-stamp)] motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${checked ? 'bg-brand border-brand/60 shadow-brand-glow-sm' : 'bg-surface-raised border-edge hover:border-edge'}`}
       >
         <span
-          className={`pointer-events-none inline-flex items-center justify-center h-4 w-4 rounded-full bg-fg shadow-card motion-safe:transition-transform motion-safe:duration-150 ${checked ? 'translate-x-4' : 'translate-x-0'}`}
+          className={`pointer-events-none inline-flex items-center justify-center h-4 w-4 rounded-full bg-fg shadow-card motion-safe:transition-transform motion-safe:duration-[var(--duration-fast)] motion-safe:ease-[var(--ease-stamp)] ${checked ? 'translate-x-4' : 'translate-x-0.5'}`}
           aria-hidden="true"
         />
       </button>

@@ -2,7 +2,7 @@
  * Visitor-facing copy for the docs landing page.
  * SSOT for section prose — hero/category strings re-export from @mushi-mushi/brand.
  */
-import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
+import { MUSHI_CANONICAL_URLS, MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { ADMIN_DEMO_BASE } from '../data/admin-screenshots'
 
 export { MUSHI_TAGLINE_V2 }
@@ -12,7 +12,29 @@ export const LANDING_HERO = {
   eyebrow: MUSHI_TAGLINE_V2.category,
   lead:
     'Plain-English explanation of what broke, plus a fix you can paste into Cursor or Claude Code — so a bug costs five minutes, not your whole afternoon.',
+  proofLine: 'Works standalone. Sentry optional. Open source.',
 } as const
+
+export const LANDING_HERO_CTAS = [
+  {
+    label: 'Run the wizard',
+    href: '/quickstart/incident-loop',
+    kind: 'primary' as const,
+    external: false,
+  },
+  {
+    label: 'Browse the repo',
+    href: MUSHI_CANONICAL_URLS.repo,
+    kind: 'secondary' as const,
+    external: true,
+  },
+  {
+    label: 'Connect your editor',
+    href: '/connect',
+    kind: 'ghost' as const,
+    external: false,
+  },
+] as const
 
 export const LANDING_SIXTY_SECOND = {
   intro:
@@ -24,7 +46,7 @@ export const LANDING_SIXTY_SECOND = {
 } as const
 
 export const LANDING_MEDIA_INTRO =
-  'Admin console tour, SDK dogfood on glot.it, and theme-aware stills — click any frame to open the live surface.'
+  'Admin console, the SDK on a real app (glot.it), and light/dark screenshots — click a frame to open the live surface.'
 
 export const LANDING_WHAT_THIS_IS = {
   who: 'Built for solo founders who ship with AI and lose afternoons debugging code they did not fully write.',
@@ -174,22 +196,22 @@ export const LANDING_PILLARS: readonly LandingPillar[] = [
   {
     step: 'Step 1',
     name: 'User reports',
-    role: 'Someone shakes or taps instead of emailing support. Mushi saves what they saw and what they were doing.',
+    role: 'On glot.it, a learner shakes the phone instead of emailing support. Mushi keeps the screen and what they were doing.',
   },
   {
     step: 'Step 2',
     name: 'Plain read',
-    role: 'Severity and cause in English your team already uses — not a raw stack trace.',
+    role: 'Severity and cause in English you already use — not a raw stack trace.',
   },
   {
     step: 'Step 3',
     name: 'One row',
-    role: 'Twenty reports about the same broken button collapse to one issue.',
+    role: 'Twenty reports about the same broken checkout button collapse to one issue.',
   },
   {
     step: 'Step 4',
     name: 'Draft PR',
-    role: 'Optional: an agent opens a PR. You merge, edit, or ignore it like any other.',
+    role: 'Optional: an agent opens a PR on your repo. You merge, edit, or ignore it.',
   },
 ] as const
 
@@ -197,28 +219,57 @@ export const LANDING_ARCHITECTURE_LINK =
   'See **[Concepts → Architecture](/concepts/architecture)** for the wire-level sequence diagram and component-by-component spec.'
 
 export const LANDING_OPERATOR = {
-  question: 'Running this for a team?',
+  question: 'Ready to try it?',
+  soloCta: 'Know why. Fix fast. →',
+  soloHref: '/quickstart/incident-loop',
+  teamLead:
+    'Need SSO, audit trails, or adapters for a team? Setup notes live in the operators docs on GitHub.',
+  teamCta: 'Operators docs →',
+  teamHref: `${MUSHI_CANONICAL_URLS.repo}/tree/master/docs/operators`,
 } as const
 
 export const LANDING_MEDIA_CAPTIONS = {
   adminTour: {
     alt: 'Animated guided tour through the Mushi admin console — reports, fixes, and integrations',
-    captionStrong: 'Admin console',
-    captionRest: '· reports → fix timeline in the console',
+    captionStrong: 'Console triage',
+    captionRest: '· for operators who need the queue, not another IDE tab',
   },
   glotit: {
     alt: 'glot.it dogfood — user taps the Mushi feedback widget, submits a bug report',
-    captionStrong: 'SDK on glot.it',
-    captionRest: '· shake / tap to report from a real Thai-learning app',
+    captionStrong: 'Real users',
+    captionRest: '· shake / tap report on glot.it, a Thai-learning app we run in prod',
   },
   dashboard: {
     alt: 'Mushi admin dashboard — PDCA cockpit',
     captionStrong: 'Dashboard',
-    captionRest: '· theme-aware still · swaps with your system theme',
+    captionRest: '· light and dark stills of the same cockpit',
   },
   reportDetail: {
     alt: 'Report detail — screenshot, classification, and fix timeline',
-    captionStrong: 'Report detail',
+    captionStrong: 'One report',
     captionRest: '· screenshot + plain read + fix timeline',
   },
 } as const
+
+export const LANDING_TRUST_LINKS = [
+  {
+    label: 'License',
+    text: 'SDKs MIT · server AGPL',
+    href: `${MUSHI_CANONICAL_URLS.repo}/blob/master/LICENSE`,
+  },
+  {
+    label: 'Self-host',
+    text: 'One-command stack',
+    href: '/self-hosting',
+  },
+  {
+    label: 'Source',
+    text: 'kensaurus/mushi-mushi',
+    href: MUSHI_CANONICAL_URLS.repo,
+  },
+  {
+    label: 'Dogfood',
+    text: 'Runs on glot.it',
+    href: 'https://kensaur.us/glot-it',
+  },
+] as const

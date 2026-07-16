@@ -28,7 +28,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
-import { Btn } from '../components/ui'
+import { Btn, ErrorAlert } from '../components/ui'
 import { CHIP_TONE } from '../lib/chipTone'
 
 type TxnInfo = {
@@ -208,7 +208,9 @@ export function McpAuthPage() {
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
         <XCircleIcon />
         <h1 className="text-xl font-semibold text-fg">Can't complete this connection</h1>
-        <p className={`max-w-md rounded-lg px-4 py-3 text-sm ${CHIP_TONE.dangerSubtle}`}>{errorMessage}</p>
+        <div className="w-full max-w-md text-left">
+          <ErrorAlert title="Connection failed" message={errorMessage ?? 'Something went wrong.'} />
+        </div>
       </div>
     )
   }
@@ -281,7 +283,9 @@ export function McpAuthPage() {
 
         {/* Error */}
         {errorMessage && (
-          <div className={`mb-4 rounded-lg px-4 py-3 text-sm ${CHIP_TONE.dangerSubtle}`}>{errorMessage}</div>
+          <div className="mb-4">
+            <ErrorAlert title="Couldn't approve connection" message={errorMessage} />
+          </div>
         )}
 
         {/* Actions */}

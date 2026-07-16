@@ -23,7 +23,7 @@ import {
   Platform,
   type LayoutChangeEvent,
 } from 'react-native'
-import { MUSHI_BANNER_NEON, MUSHI_COPY, MUSHI_GEOMETRY } from '@mushi-mushi/core'
+import { MUSHI_BANNER_NEON, MUSHI_COPY, MUSHI_GEOMETRY, MUSHI_SPACING, MUSHI_TYPE, MUSHI_Z } from '@mushi-mushi/core'
 
 export interface MushiBannerProps {
   onPress: () => void
@@ -91,7 +91,7 @@ const s = StyleSheet.create({
     backgroundColor: MUSHI_BANNER_NEON.bg,
     borderTopWidth: 1,
     borderTopColor: MUSHI_BANNER_NEON.border,
-    zIndex: 99998,
+    zIndex: MUSHI_Z.banner,
     elevation: 8,
     paddingBottom: Platform.OS === 'ios' ? 0 : 0,
   },
@@ -99,12 +99,13 @@ const s = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    gap: MUSHI_SPACING.snug,
+    paddingHorizontal: MUSHI_SPACING.comfy,
+    paddingVertical: MUSHI_SPACING.snug,
+    minHeight: 44,
   },
   eyebrow: {
-    fontSize: 10,
+    fontSize: MUSHI_TYPE.sizeLabel,
     fontWeight: '700',
     letterSpacing: 1.2,
     color: MUSHI_BANNER_NEON.fg,

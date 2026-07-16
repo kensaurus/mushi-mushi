@@ -24,7 +24,7 @@ export function ClaudeAgentBadge({ workflowRunUrl, isRunning = false }: Props) {
       title={`Claude Code Agent — ${label}`}
       className="inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-2xs font-mono
                  bg-surface-root text-warn border border-warn/40
-                 hover:border-warn/80 hover:text-brand transition-colors"
+                 hover:border-warn/80 hover:text-brand transition-opacity"
     >
       {isRunning ? (
         /* Pulsing dot while the agent is live */

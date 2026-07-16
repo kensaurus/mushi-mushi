@@ -8,7 +8,9 @@
 export type ApiResult<T> = {
   ok: boolean
   data?: T
-  error?: { code: string; message: string }
+  error?: { code: string; message: string; requestId?: string }
+  /** Correlation id from the X-Request-Id response header when present. */
+  requestId?: string
 }
 
 export function coerceApiResult<T>(raw: unknown): ApiResult<T> {
@@ -29,12 +31,20 @@ export function coerceApiResult<T>(raw: unknown): ApiResult<T> {
     const dataField = obj.data !== undefined ? { data: obj.data as T } : {}
     if (err && typeof err === 'object') {
       const e = err as Record<string, unknown>
+      const requestId =
+        typeof e.requestId === 'string'
+          ? e.requestId
+          : typeof e.request_id === 'string'
+            ? e.request_id
+            : undefined
       return {
         ok: false,
         ...dataField,
+        ...(requestId ? { requestId } : {}),
         error: {
           code: String(e.code ?? 'ERROR'),
           message: String(e.message ?? e.code ?? 'Request failed'),
+          ...(requestId ? { requestId } : {}),
         },
       }
     }

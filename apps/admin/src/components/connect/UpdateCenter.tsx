@@ -85,7 +85,7 @@ export function UpdateCenter({ project, preflight, hideVersionBadge = false }: U
           {githubCheck?.fixHref && (
             <Link
               to={githubCheck.fixHref}
-              className="mt-1 inline-flex text-xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors focus-visible:ring-2 focus-visible:ring-focus"
+              className="mt-1 inline-flex text-xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity focus-visible:ring-2 focus-visible:ring-focus"
             >
               Fix GitHub connection
             </Link>

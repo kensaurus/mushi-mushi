@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
+import { Card } from '../../components/ui'
 import { Btn, Tooltip } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { isGithubHostname } from '../../lib/githubUrl'
@@ -233,7 +234,7 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
   }, [coords, githubAppInstalled, vercelProjectSlug])
 
   return (
-    <div className="rounded-md border border-edge-subtle bg-surface-raised/40 p-3">
+    <Card  className="p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-medium text-fg">Deployment readiness</h3>
@@ -245,7 +246,7 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
         </div>
         {coords && (
           <Tooltip content={`Linked to ${coords.owner}/${coords.repo}`}>
-            <span className="text-2xs font-mono text-fg-faint truncate max-w-[14rem]">
+            <span className="text-2xs font-mono text-fg-faint truncate max-w-56">
               {coords.owner}/{coords.repo}
             </span>
           </Tooltip>
@@ -257,7 +258,7 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
           <ReadinessItem key={item.key} item={item} />
         ))}
       </ul>
-    </div>
+    </Card>
   )
 }
 

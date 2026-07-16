@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ConfirmDialog } from '../ConfirmDialog'
-import { Section, RelativeTime, InfoHint, Tooltip } from '../ui'
+import { Section, RelativeTime, InfoHint, Tooltip, Btn } from '../ui'
 import { IconChat } from '../icons'
 import { useReportComments, type FeedbackSignal } from '../../lib/reportComments'
 import { useToast } from '../../lib/toast'
@@ -139,7 +139,7 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
           <button
             type="button"
             onClick={() => setVisibleToReporter(true)}
-            className={`inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-md border border-accent/35 ${CHIP_TONE.accentSubtle} hover:bg-accent/10 motion-safe:transition-colors`}
+            className={`inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-md border border-accent/35 ${CHIP_TONE.accentSubtle} hover:bg-accent/10 motion-safe:transition-opacity`}
           >
             Message reporter
           </button>
@@ -164,19 +164,9 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
             Reply to reporter
             <InfoHint content="If checked, the reporter will receive a notification with this message in the SDK widget." />
           </label>
-          <button
-            type="submit"
-            disabled={submitting || !body.trim()}
-            className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-md bg-accent text-fg-on-accent disabled:opacity-50 hover:bg-accent-hover motion-safe:transition-colors"
-          >
-            {submitting && (
-              <span
-                className="inline-block w-3 h-3 rounded-full border border-current/30 border-t-current motion-safe:animate-spin"
-                aria-hidden="true"
-              />
-            )}
-            <span>Post</span>
-          </button>
+          <Btn type="submit" variant="accent" size="sm" loading={submitting} disabled={!body.trim()}>
+            Post
+          </Btn>
         </div>
       </form>
 

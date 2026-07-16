@@ -39,6 +39,7 @@ export function ProjectNarrativeStrip({ projectName, sdkInstalled, hasReports, h
   return (
     <section
       aria-label="Project PDCA narrative"
+      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
       className="relative overflow-hidden rounded-lg border border-edge-subtle bg-surface-raised/40 p-4"
     >
       <span aria-hidden="true" className="absolute -top-10 -left-10 h-32 w-32 rounded-full bg-brand/20 blur-3xl opacity-40" />
@@ -99,7 +100,7 @@ function NarrativeStage({ stage, isCurrent, connector }: NarrativeStageProps) {
           <span className="block text-xs font-semibold text-fg leading-tight truncate">{stage.headline}</span>
         </div>
       </header>
-      <ContainedBlock tone="muted" className="mt-2 min-h-[3rem]">
+      <ContainedBlock tone="muted" className="mt-2 min-h-12">
         <p className="text-2xs text-fg-secondary leading-snug">{stage.body}</p>
       </ContainedBlock>
       {stage.cta && (

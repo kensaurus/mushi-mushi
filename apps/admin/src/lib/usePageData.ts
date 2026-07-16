@@ -35,7 +35,20 @@ export interface PageDataState<T> {
    *  after an explicit reset). Subsequent background refetches leave
    *  `loading` as false so consumers keep rendering their data view. */
   loading: boolean
+  /**
+   * Human-readable error string for legacy call sites
+   * (`message (CODE)` when a stable code is present). Prefer
+   * `errorCode` + `errorMessage` + `<PageLoadError>` for new UI.
+   */
   error: string | null
+  /** Stable API error code when the envelope provided one. */
+  errorCode: string | null
+  /** Raw message without the `(CODE)` suffix. */
+  errorMessage: string | null
+  /** Correlation id from X-Request-Id / error envelope (for support quotes). */
+  requestId: string | null
+  /** Path that failed — shown in ErrorAlert captions for provenance. */
+  errorEndpoint: string | null
   /** True whenever a fetch is in flight, including background refetches
    *  triggered by `reload()` after the first successful load. Useful for
    *  subtle "refreshing…" indicators (e.g. a 2 px progress bar) that
@@ -83,6 +96,10 @@ export function usePageData<T>(
   const [loading, setLoading] = useState<boolean>(autoLoad && path != null)
   const [isValidating, setIsValidating] = useState<boolean>(autoLoad && path != null)
   const [error, setError] = useState<string | null>(null)
+  const [errorCode, setErrorCode] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [requestId, setRequestId] = useState<string | null>(null)
+  const [errorEndpoint, setErrorEndpoint] = useState<string | null>(null)
   const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null)
 
   // We keep the abort flag in a ref so that a second StrictMode invocation
@@ -139,6 +156,10 @@ export function usePageData<T>(
     if (!hasLoadedOnce.current) setLoading(true)
     setIsValidating(true)
     setError(null)
+    setErrorCode(null)
+    setErrorMessage(null)
+    setRequestId(null)
+    setErrorEndpoint(null)
     void (async () => {
       try {
         // `tick > 0` means the user hit "Retry" or "Refresh" — bypass the
@@ -156,13 +177,23 @@ export function usePageData<T>(
           setLastFetchedAt(new Date().toISOString())
           hasLoadedOnce.current = true
         } else {
-          const code = res.error?.code
+          const code = res.error?.code ?? null
           const message = res.error?.message ?? 'Request failed'
+          const rid = res.error?.requestId ?? res.requestId ?? null
+          setErrorCode(code)
+          setErrorMessage(message)
+          setRequestId(rid)
+          setErrorEndpoint(path)
           setError(code && code !== 'ERROR' ? `${message} (${code})` : message)
         }
       } catch (err) {
         if (aborted.current) return
-        setError(err instanceof Error ? err.message : 'Request failed')
+        const message = err instanceof Error ? err.message : 'Request failed'
+        setErrorCode('NETWORK_ERROR')
+        setErrorMessage(message)
+        setRequestId(null)
+        setErrorEndpoint(path)
+        setError(message)
       } finally {
         if (!aborted.current) {
           setLoading(false)
@@ -177,5 +208,16 @@ export function usePageData<T>(
     // depend on it instead of `deps` itself to avoid array-identity churn.
   }, [path, autoLoad, tick, depKey, schema, scope, activeProjectSignal, activeOrgSignal])
 
-  return { data, loading, error, isValidating, lastFetchedAt, reload }
+  return {
+    data,
+    loading,
+    error,
+    errorCode,
+    errorMessage,
+    requestId,
+    errorEndpoint,
+    isValidating,
+    lastFetchedAt,
+    reload,
+  }
 }

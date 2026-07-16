@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Card } from '../../components/ui'
 import { RevealedKeyCard } from '../RevealedKeyCard'
 import { Btn, Tooltip, CopyButton } from '../ui'
 import { CodeInline } from '../CodePanel'
@@ -148,7 +149,7 @@ export function SdkInstallKeyPanel({
   return (
     <>
       {!apiKey && activeKeys.length > 0 && (
-        <div className="rounded-md border border-edge-subtle bg-surface-raised/60 px-3 py-2.5 space-y-2">
+        <Card  className="px-3 py-2.5 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-2xs font-medium text-fg-secondary">
               Active API key{activeKeys.length > 1 ? 's' : ''}
@@ -184,7 +185,7 @@ export function SdkInstallKeyPanel({
                       </Tooltip>
                       {k.label && (
                         <span
-                          className="shrink-0 text-3xs text-fg-muted truncate max-w-[10rem]"
+                          className="shrink-0 text-3xs text-fg-muted truncate max-w-40"
                           title={k.label}
                         >
                           {k.label}
@@ -220,18 +221,18 @@ export function SdkInstallKeyPanel({
             Full secret shown once at mint or rotate. “Never used” keys were minted but no app has
             authenticated with them yet.
           </p>
-        </div>
+        </Card>
       )}
 
       {!apiKey && activeKeys.length === 0 && (
-        <div className="rounded-md border border-edge-subtle bg-surface-raised/60 px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+        <Card  className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
           <span className="text-2xs text-fg-secondary">
             No API key yet — mint one and it drops straight into the snippet below.
           </span>
           <Btn size="sm" variant="primary" disabled={minting} onClick={() => void mintSdkKey()}>
             {minting ? 'Minting…' : 'Mint SDK key'}
           </Btn>
-        </div>
+        </Card>
       )}
 
       {rotatedKey && (

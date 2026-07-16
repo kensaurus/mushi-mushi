@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Card } from '../../components/ui'
 import { SelectField, Btn } from '../ui'
 import { STATUS_LABELS, SEVERITY_LABELS } from '../../lib/tokens'
 import { IconArrowRight, IconExternalLink } from '../icons'
@@ -111,7 +112,7 @@ export function ReportTriageBar({
   }
 
   return (
-    <div className="mb-3 flex flex-wrap items-end gap-3 rounded-md border border-edge-subtle bg-surface-raised/50 p-3">
+    <Card  className="mb-3 flex flex-wrap items-end gap-3 p-3">
       <SelectField
         label="Status"
         value={report.status}
@@ -133,6 +134,7 @@ export function ReportTriageBar({
         {SEV_OPTS.map((s) => <option key={s} value={s}>{SEVERITY_LABELS[s] ?? s}</option>)}
       </SelectField>
 
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       <div className="flex items-center gap-1.5 text-2xs h-[26px]" aria-live="polite">
         {saving && <span className="text-brand">Saving…</span>}
         {!saving && showSaved && <span className="text-ok">✓ Saved</span>}
@@ -177,6 +179,6 @@ export function ReportTriageBar({
           )}
         </div>
       </div>
-    </div>
+    </Card>
   )
 }

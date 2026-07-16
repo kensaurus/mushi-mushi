@@ -38,6 +38,7 @@ import { EmptySectionMessage } from '../components/report-detail/ReportClassific
 import { EMPTY_FEEDBACK_STATS, type FeedbackStats, type FeedbackTabId } from '../components/feedback/types'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import {
   Badge,
   Btn,
@@ -47,7 +48,7 @@ import {
   RelativeTime,
   SegmentedControl,
 } from '../components/ui'
-import { CHIP_TONE } from '../lib/chipTone'
+import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 
 type ListFilter = 'all' | 'bug' | 'feature'
 
@@ -225,7 +226,7 @@ export function FeedbackPage() {
   if (statsError) return <ErrorAlert message={`Failed to load feedback stats: ${statsError}`} onRetry={reloadAll} />
 
   return (
-    <div className="space-y-4">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-feedback">
       <PageHeaderBar
         title={copy?.title ?? 'Support'}
         projectScope={stats.projectName ?? undefined}
@@ -253,7 +254,7 @@ export function FeedbackPage() {
             bannerSeverity === 'ok'
               ? CHIP_TONE.okSubtle
               : bannerSeverity === 'brand'
-                ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
+                ? HEADER_BADGE_TONE.brand
                 : bannerSeverity === 'warn'
                   ? CHIP_TONE.warnSubtle
                   : CHIP_TONE.infoSubtle

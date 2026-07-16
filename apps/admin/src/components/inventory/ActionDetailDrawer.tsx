@@ -137,7 +137,7 @@ export function ActionDetailDrawer({
                   key={`r-${i}`}
                   className="flex items-center gap-2 rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-1"
                 >
-                  <Badge className={`${CHIP_TONE.infoSubtle} border border-info/25 font-mono`}>
+                  <Badge className={`${CHIP_TONE.infoSubtle} font-mono`}>
                     READ
                   </Badge>
                   <code className="text-2xs font-mono text-fg-secondary">

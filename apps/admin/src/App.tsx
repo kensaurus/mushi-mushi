@@ -237,7 +237,7 @@ function TesterRoute({ children }: { children: ReactNode }) {
           </p>
           <a
             href="https://kensaur.us/mushi-mushi/pricing"
-            className="inline-block rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-colors"
+            className="inline-block rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity"
           >
             Upgrade to Mushi Cloud →
           </a>

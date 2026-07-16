@@ -11,6 +11,7 @@
  */
 
 import { useMemo } from 'react'
+import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { Btn, Kbd } from '../ui'
 import { ResponsiveTable, TableDensityToggle } from '../ResponsiveTable'
 import { ReportRowView } from './ReportRowView'
@@ -92,6 +93,11 @@ export function ReportsTable({
   onDispatchFix,
   preflight,
 }: Props) {
+  const [tbodyParent] = useAutoAnimate({
+    duration: 220,
+    easing: 'ease-out',
+  })
+
   // Build the display list: when group-collapse is on, sibling rows that
   // share a report_group_id collapse behind their canonical (newest) row.
   // Singletons are unaffected. We preserve the BE-supplied sort by walking
@@ -228,7 +234,7 @@ export function ReportsTable({
               />
             </tr>
           </thead>
-          <tbody>
+          <tbody ref={tbodyParent}>
             {displayRows.map((d, i) => (
               <ReportRowView
                 key={d.row.id}

@@ -113,7 +113,7 @@ function ReportRowViewInner({
   const isLoud = row.severity === 'critical' || blastRadius >= 3
 
   const baseRowCls =
-    'group border-t border-edge-subtle hover:bg-surface-overlay/60 motion-safe:transition-colors cursor-pointer relative motion-safe:animate-mushi-fade-in'
+    'group border-t border-edge-subtle hover:bg-surface-overlay/60 motion-safe:transition-opacity cursor-pointer relative motion-safe:animate-mushi-fade-in'
   const cursorCls = isCursor ? 'bg-surface-overlay/40 outline outline-1 outline-brand/40' : ''
   const variantBgCls = isVariant ? 'bg-surface-overlay/30' : ''
   const selectedCls = isSelected ? 'bg-brand/5' : isLoud ? 'bg-danger/5' : variantBgCls

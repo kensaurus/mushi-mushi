@@ -1,4 +1,5 @@
 import { Btn } from '../ui'
+import { Card } from '../../components/ui'
 
 export interface GateFinding {
   id: string
@@ -12,7 +13,7 @@ export interface GateFinding {
 
 export function GateFindingCard({ f, onOpenFile }: { f: GateFinding; onOpenFile?: (path: string, line?: number | null) => void }) {
   return (
-    <div className="rounded-md border border-edge-subtle bg-surface-raised/40 p-3 text-2xs space-y-1">
+    <Card  className="p-3 text-2xs space-y-1">
       <div className="flex items-center justify-between gap-2">
         <span className={`font-mono uppercase ${f.severity === 'error' ? 'text-danger' : 'text-warn'}`}>
           {f.gate ?? 'gate'} · {f.severity ?? 'info'}
@@ -36,6 +37,6 @@ export function GateFindingCard({ f, onOpenFile }: { f: GateFinding; onOpenFile?
           {f.line != null ? `:${f.line}` : ''}
         </p>
       )}
-    </div>
+    </Card>
   )
 }

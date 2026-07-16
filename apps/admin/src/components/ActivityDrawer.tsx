@@ -349,7 +349,7 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
           type="button"
           onClick={() => void load()}
           disabled={loading}
-          className="text-2xs text-fg-muted hover:text-fg motion-safe:transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:underline"
+          className="text-2xs text-fg-muted hover:text-fg motion-safe:transition-opacity disabled:opacity-50 focus-visible:outline-none focus-visible:underline"
           title="Reload activity feed"
         >
           Reload
@@ -409,7 +409,7 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
                     onClick={() => setFilter(f.id)}
                     aria-pressed={active}
                     title={f.hint}
-                    className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-2xs font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+                    className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-2xs font-medium motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
                       active
                         ? 'bg-brand/12 text-brand border border-brand/28'
                         : 'border-edge-subtle bg-surface-raised/40 text-fg-muted hover:text-fg hover:bg-surface-overlay'
@@ -567,7 +567,7 @@ function EventRow({
         )}
         {event.branch && (
           <span title={`Branch ${event.branch}`}>
-            <SignalChip tone="neutral" className="font-mono truncate max-w-[10rem]">
+            <SignalChip tone="neutral" className="font-mono truncate max-w-40">
               {event.branch}
             </SignalChip>
           </span>
@@ -593,7 +593,7 @@ function EventRow({
           type="button"
           onClick={onToggle}
           aria-expanded={expanded}
-          className="ml-auto text-2xs text-fg-faint hover:text-fg-muted motion-safe:transition-colors focus-visible:outline-none focus-visible:underline"
+          className="ml-auto text-2xs text-fg-faint hover:text-fg-muted motion-safe:transition-opacity focus-visible:outline-none focus-visible:underline"
         >
           {expanded ? 'Less ▴' : 'More ▾'}
         </button>

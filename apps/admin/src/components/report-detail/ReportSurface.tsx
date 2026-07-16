@@ -136,7 +136,7 @@ export interface ActionPillProps {
 }
 
 export function ActionPill({ children, tone = 'neutral', className = '', onClick, to, href }: ActionPillProps) {
-  const base = `inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-2xs font-medium transition-colors cursor-pointer ${PILL_TONE[tone]} ${className}`
+  const base = `inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-2xs font-medium transition-opacity cursor-pointer ${PILL_TONE[tone]} ${className}`
   if (to) {
     return <Link to={to} className={base}>{children}</Link>
   }
@@ -189,7 +189,7 @@ export function MetaChip({ children, label, title, to, className = '' }: MetaChi
   )
   const base = `flex flex-col gap-0.5 rounded border border-edge bg-surface-overlay px-2 py-1 text-xs ${className}`
   if (to) {
-    return <Link to={to} title={title} className={`${base} hover:bg-surface-raised transition-colors`}>{inner}</Link>
+    return <Link to={to} title={title} className={`${base} hover:bg-surface-raised transition-opacity`}>{inner}</Link>
   }
   return <div title={title} className={base}>{inner}</div>
 }
@@ -218,7 +218,7 @@ export function ConfidenceMeter({ confidence, className = '' }: ConfidenceMeterP
         {Array.from({ length: CONFIDENCE_SEGMENT_COUNT }, (_, i) => (
           <span
             key={i}
-            className={`flex-1 rounded-hairline motion-safe:transition-colors ${
+            className={`flex-1 rounded-hairline motion-safe:transition-opacity ${
               confidenceSegmentFilled(pct, i) ? barTone : 'bg-edge-subtle/80'
             }`}
           />

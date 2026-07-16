@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useMemo, useState, useEffect } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -43,10 +44,9 @@ import {
   type ResearchTabId,
 } from '../components/research/ResearchStatsTypes'
 import { ResearchSnippetCard } from '../components/research/ResearchSnippetCard'
-import { LINK_ACCENT } from '../lib/chipTone'
 import { ResearchSessionTable } from '../components/research/ResearchSessionTable'
 import type { SearchResponse, SessionRow } from '../components/research/types'
-import { CHIP_TONE } from '../lib/chipTone'
+import { CHIP_TONE, HEADER_BADGE_TONE, LINK_ACCENT } from '../lib/chipTone'
 
 type SessionMode = 'all' | 'search' | 'scrape'
 type SessionAge = 'all' | '24h' | '7d'
@@ -288,7 +288,7 @@ export function ResearchPage() {
               : 'info'
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-research">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-research">
       <PageHeaderBar
         title={copy?.title ?? 'Research'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -313,8 +313,8 @@ export function ResearchPage() {
                 : bannerSeverity === 'warn'
                   ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
-                    ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
-                    : 'bg-surface-overlay text-fg-muted'
+                    ? HEADER_BADGE_TONE.brand
+                    : HEADER_BADGE_TONE.neutral
           }
         >
           {!stats.hasAnyProject

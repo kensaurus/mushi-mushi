@@ -47,7 +47,7 @@ export function QuickViewsRow({
           key={v.key}
           type="button"
           onClick={() => onApplyView(v.key)}
-          className="px-2 py-0.5 rounded-sm text-2xs border border-edge-subtle bg-surface-raised/50 text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
+          className="px-2 py-0.5 rounded-sm text-2xs border border-edge-subtle bg-surface-raised/50 text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity"
         >
           {v.label}
         </button>
@@ -118,7 +118,7 @@ export function GraphFilterChips({
               type="button"
               onClick={() => onToggleNodeType(nt)}
               aria-pressed={active}
-              className={`px-2 py-0.5 rounded-sm text-2xs border motion-safe:transition-colors ${
+              className={`px-2 py-0.5 rounded-sm text-2xs border motion-safe:transition-opacity ${
                 active
                   ? 'border-edge bg-surface-raised text-fg'
                   : 'border-edge-subtle bg-transparent text-fg-faint hover:text-fg-muted'
@@ -143,7 +143,7 @@ export function GraphFilterChips({
               type="button"
               onClick={() => onToggleEdgeType(et)}
               aria-pressed={active}
-              className={`px-2 py-0.5 rounded-sm text-2xs border font-mono motion-safe:transition-colors ${
+              className={`px-2 py-0.5 rounded-sm text-2xs border font-mono motion-safe:transition-opacity ${
                 active
                   ? 'border-edge bg-surface-raised text-fg-secondary'
                   : 'border-edge-subtle bg-transparent text-fg-faint hover:text-fg-muted'

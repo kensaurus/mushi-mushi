@@ -59,8 +59,10 @@ export const MUSHI_COLORS_LIGHT: MushiColorPalette = {
   accent: '#E03C2C',
   accentWash: 'rgba(224,60,44,0.08)',
   accentInk: '#7A1F15',
-  ok: '#16A34A',
-  danger: '#DC2626',
+  /** Aligned with brand.tokens.json `jade` (was Tailwind green-600 — drifted). */
+  ok: '#2D7A55',
+  /** Aligned with brand.tokens.json `viz-danger` (was Tailwind red-600 — drifted). */
+  danger: '#B83232',
 };
 
 /** Dark-mode palette. */
@@ -76,8 +78,10 @@ export const MUSHI_COLORS_DARK: MushiColorPalette = {
   accent: '#FF5A47',
   accentWash: 'rgba(255,90,71,0.12)',
   accentInk: '#FFE5E0',
-  ok: '#4ADE80',
-  danger: '#F87171',
+  /** Aligned with brand.tokens.json `dark-jade`. */
+  ok: '#3A9E6E',
+  /** Aligned with brand.tokens.json `dark-viz-danger`. */
+  danger: '#E05555',
 };
 
 /** Reward tier accent colours — editorial palette, not Tailwind defaults. */
@@ -101,6 +105,15 @@ export const MUSHI_ON_ACCENT = '#FAF7F0';
 
 /** Pure white for assistant bubbles on accent backgrounds. */
 export const MUSHI_INVERSE = '#ffffff';
+
+/** Disabled control fill (inactive category chips, muted buttons). */
+export const MUSHI_CONTROL_DISABLED = {
+  light: '#d1d1d6',
+  dark: '#3a3a3c',
+} as const;
+
+/** Drop-shadow ink for RN shadowColor (sumi black). */
+export const MUSHI_SHADOW_INK = '#000000';
 
 /** Submit-button depth shadow (accent ink, mode-specific). */
 export const MUSHI_ACCENT_SHADOW = {
@@ -201,6 +214,52 @@ export const MUSHI_MOTION = {
 } as const;
 
 /**
+ * Full duration vocabulary (ms). MUSHI_MOTION retains its two values for
+ * back-compat; this set adds the missing steps for micro-interactions and
+ * expressive animations without changing the RN / Capacitor snapshot.
+ */
+export const MUSHI_DURATION = {
+  /** Fastest — tooltip show, chip hover tint */
+  instant: 120,
+  /** Default micro-interaction — most hover / focus transitions */
+  fast: 200,
+  /** Button bloom, option-row wipe */
+  base: 220,
+  /** Panel enter / exit */
+  panel: 300,
+  /** Deliberate — success stamp press, page-level transitions */
+  slow: 420,
+  /** Stamp ring draw, long ambient animations */
+  ring: 700,
+} as const;
+
+/** Border widths (px) — editorial weight scale. */
+export const MUSHI_BORDER = {
+  hairline: 1,
+  regular: 1.5,
+  strong: 2,
+  /** Hanko stamp border (FAB inset accent stripe, stamp ring) */
+  stamp: 3,
+} as const;
+
+/** Opacity scale — disabled, muted, scrim, overlay states. */
+export const MUSHI_OPACITY = {
+  disabled: 0.4,
+  muted: 0.6,
+  scrim: 0.72,
+  overlay: 0.88,
+} as const;
+
+/** Letter-spacing scale — mono captions to wide stamp labels. */
+export const MUSHI_LETTER_SPACING = {
+  tight: '-0.01em',
+  normal: '0',
+  label: '0.02em',
+  stamp: '0.08em',
+  wide: '0.16em',
+} as const;
+
+/**
  * Launcher geometry — the numbers that previously diverged between platforms
  * (banner height, FAB size, default gutter, panel width). Centralising them
  * is what fixes the "different on every app" + safe-area bleed problems.
@@ -269,6 +328,8 @@ export interface MushiTokenSnapshot {
   type: typeof MUSHI_TYPE;
   z: typeof MUSHI_Z;
   motion: typeof MUSHI_MOTION;
+  /** Full duration vocabulary — complements `motion` for micro / stamp steps. */
+  duration: typeof MUSHI_DURATION;
   geometry: typeof MUSHI_GEOMETRY;
   copy: typeof MUSHI_COPY;
 }
@@ -283,6 +344,7 @@ export function mushiTokens(mode: MushiThemeMode): MushiTokenSnapshot {
     type: MUSHI_TYPE,
     z: MUSHI_Z,
     motion: MUSHI_MOTION,
+    duration: MUSHI_DURATION,
     geometry: MUSHI_GEOMETRY,
     copy: MUSHI_COPY,
   };

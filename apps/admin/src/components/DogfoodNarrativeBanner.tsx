@@ -71,7 +71,7 @@ export function DogfoodNarrativeBanner() {
       <p className="flex-1 min-w-0 text-xs text-fg-secondary leading-snug">{sentence}</p>
       <Link
         to={`/reports?component=${encodeURIComponent(top.component)}&status=new&sort=severity&dir=desc`}
-        className="shrink-0 inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium bg-brand text-brand-fg hover:bg-brand-hover motion-safe:transition-colors motion-safe:active:scale-[0.97] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+        className="shrink-0 inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium bg-brand text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity motion-safe:active:scale-[0.97] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
       >
         Open the worst <span aria-hidden="true">→</span>
       </Link>

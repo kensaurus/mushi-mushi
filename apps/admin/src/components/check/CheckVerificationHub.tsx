@@ -83,7 +83,7 @@ export function CheckVerificationHub() {
           <li key={entry.id}>
             <Link
               to={entry.path}
-              className="block rounded-lg border border-edge bg-surface-raised p-4 motion-safe:transition-colors hover:border-brand/40 hover:bg-surface-overlay focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              className="block rounded-lg border border-edge bg-surface-raised p-4 motion-safe:transition-opacity hover:border-brand/40 hover:bg-surface-overlay focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             >
               <span className="text-sm font-semibold text-fg">{entry.label}</span>
               <span className="mt-1 block text-2xs leading-relaxed text-fg-muted">

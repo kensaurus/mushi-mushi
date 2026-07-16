@@ -14,10 +14,20 @@
 
 import type { Rule } from 'eslint'
 
-const GUARDED = [
+const GUARDED_SUFFIXES = [
   'packages/web/src/styles.ts',
   'packages/web/src/build-widget-theme.ts',
-]
+] as const
+
+/** Web widget CSS template + RN widget components under packages/react-native/src. */
+function isGuardedWidgetStylePath(filename: string): boolean {
+  const normalized = filename.replace(/\\/g, '/')
+  if (GUARDED_SUFFIXES.some((g) => normalized.endsWith(g))) return true
+  if (normalized.includes('packages/react-native/src/') && /\.tsx$/.test(normalized)) {
+    return true
+  }
+  return false
+}
 
 const HEX_RE = /#[0-9a-fA-F]{3,8}\b/g
 
@@ -52,12 +62,12 @@ const rule: Rule.RuleModule = {
     schema: [],
     messages: {
       rawHex:
-        'Raw hex "{{token}}" in widget styles. Resolve colours via mushiPalette() in packages/core/src/design-tokens.ts and wire through packages/web/src/build-widget-theme.ts.',
+        'Raw hex "{{token}}" in widget styles. Resolve colours via mushiPalette() / MUSHI_* in packages/core/src/design-tokens.ts — web via build-widget-theme.ts, RN via @mushi-mushi/core imports.',
     },
   },
   create(context) {
     const filename = context.filename.replace(/\\/g, '/')
-    const guarded = GUARDED.some((g) => filename.endsWith(g))
+    const guarded = isGuardedWidgetStylePath(filename)
     if (!guarded) return {}
 
     const source = stripBlockComments(context.sourceCode.getText())

@@ -61,7 +61,7 @@ export function DailySpendChart({ series, barTitles, fmtSpend }: Props) {
                 <span
                   key={series.days[i]}
                   title={`${xLabels[i]}: ${active ? fmtSpend(v) : 'no spend'}`}
-                  className={`h-2 flex-1 max-w-[14px] rounded-sm motion-safe:transition-colors ${
+                  className={`h-2 flex-1 max-w-[14px] rounded-sm motion-safe:transition-opacity ${
                     active
                       ? 'bg-brand/90'
                       : 'bg-fg-faint/15'

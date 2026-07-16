@@ -16,6 +16,10 @@ ESLint rules that catch the dominant agentic-coding failure modes: empty handler
 | `mushi-mushi/no-hand-rolled-dialog` | Raw `<div role="dialog" className="fixed inset-0">` overlays — use shared `<Modal>` / `<Drawer>`. |
 | `mushi-mushi/no-hand-rolled-tablist` | Raw `role="tablist"` in admin `*Page.tsx` files — use `<SegmentedControl scrollable>`. |
 | `mushi-mushi/no-missing-page-posture` | Operator `*Page.tsx` files without `<PagePosture>` (admin eslint override). |
+| `mushi-mushi/no-legacy-page-header-in-pages` | Legacy `<PageHeader>` in page files — use `<PageHeaderBar>`. |
+| `mushi-mushi/no-page-root-padding` | Page roots missing `PAGE_CONTENT_STACK` or adding root `p-*` / `max-w-*` (shell already pads). |
+| `mushi-mushi/no-arbitrary-length-value` | Non-`var(--…)` Tailwind arbitraries (`w-[240px]`, `text-[13px]`) — prefer tokens. |
+| `mushi-mushi/prefer-card-primitive` | Hand-rolled `rounded border bg-surface-*` — prefer `<Card>` / `<Panel>`. |
 
 ## Install
 
@@ -60,4 +64,4 @@ MIT.
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (June 2026): 51 edge functions · 298 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 51 edge functions · 323 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

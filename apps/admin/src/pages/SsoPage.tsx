@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { apiFetch } from '../lib/supabase';
 import { usePageData } from '../lib/usePageData';
 import { usePublishPageHeroStats } from '../lib/heroSnapshots';
@@ -164,7 +165,7 @@ export function SsoPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-sso">
       <PageHeaderBar
         title="SSO Configuration"
 

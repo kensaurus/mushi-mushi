@@ -1,3 +1,4 @@
+// mushi-ui: intentional overlay — not Modal/Drawer (reason: coach-mark tour with spotlight cutout and anchor-positioned tooltip)
 /**
  * FILE: apps/admin/src/components/FirstRunTour.tsx
  * PURPOSE: First-run interactive coach-marks tour. Auto-launches once when:

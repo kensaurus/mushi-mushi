@@ -41,6 +41,17 @@ The optional `X-Mushi-User-Token` (a signed end-user identity JWT) is verified
 **for audit/abuse triage only** — no user-specific data is fetched, so a forged
 or absent token cannot widen the blast radius.
 
+### Login-free by design
+
+Ask does **not** soft-gate on login. Identity JWT never unlocks more answers in
+v1. Session resume for the Ask tab uses **`sessionStorage` only** (same-tab
+reload keeps the transcript + `threadId` for UX). Clearing the tab/session
+drops it. That is intentional — do not wire Ask history to end-user accounts
+without a separate product decision.
+
+Recovery when Ask cannot help: clarify turns and unsure answers surface a
+primary **File a report** CTA that opens the normal report flow (no auth).
+
 ---
 
 ## Architecture

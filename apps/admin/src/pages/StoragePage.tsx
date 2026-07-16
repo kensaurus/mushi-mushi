@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -33,8 +34,7 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
-import { CHIP_TONE } from '../lib/chipTone'
-import { runStatusChipTone } from '../lib/chipTone'
+import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
 type Provider = 'supabase' | 's3' | 'r2' | 'gcs' | 'minio'
 
@@ -329,13 +329,13 @@ export function StoragePage() {
         Per-project usage
       </div>
       <ContainedBlock tone="muted" className="mb-2">
-        <p className="text-2xs leading-relaxed text-fg-muted">
+        <p className="text-xs leading-relaxed text-fg-muted">
           Counts uploaded screenshots and the most recent write timestamp. Helpful to spot a project burning through
           storage or to confirm a quiet project before changing its provider.
         </p>
       </ContainedBlock>
       {usageRows.length === 0 ? (
-        <p className="text-2xs text-fg-muted">No screenshot uploads recorded yet.</p>
+        <p className="text-xs text-fg-muted">No screenshot uploads recorded yet.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
@@ -614,7 +614,7 @@ export function StoragePage() {
 
   if (!activeProjectId) {
     return (
-      <div className="space-y-4">
+      <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-storage">
         <PageHeaderBar
           title={copy?.title ?? 'Storage'}
 

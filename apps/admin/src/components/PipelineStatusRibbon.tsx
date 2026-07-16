@@ -116,10 +116,10 @@ const TONE_CLASS: Record<Tone, { dot: string; ring: string; label: string }> = {
 }
 
 const STAGE_TONE: Record<RibbonTile['stage'], string> = {
-  P: CHIP_TONE.infoSubtle + ' border border-info/35',
+  P: CHIP_TONE.infoSubtle,
   D: 'bg-brand-subtle text-brand border border-brand/35',
-  C: CHIP_TONE.warnSubtle + ' border border-warn/35',
-  A: CHIP_TONE.okSubtle + ' border border-ok/35',
+  C: CHIP_TONE.warnSubtle,
+  A: CHIP_TONE.okSubtle,
 }
 
 const STAGE_BORDER: Record<RibbonTile['stage'], string> = {
@@ -166,6 +166,7 @@ function PulseArrow({
   return (
     <Tooltip content={fullLabel} side="top" portal>
       <div
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         className="relative z-[1] hidden md:flex flex-col items-center justify-center shrink-0 w-16 lg:w-[4.5rem] xl:w-20 px-0.5 self-center overflow-visible pt-3"
         aria-label={fullLabel}
         role="img"
@@ -367,7 +368,7 @@ export function PipelineStatusRibbon({ embedded = false }: { embedded?: boolean 
           // Reads as a single chip rather than a card so collapsed mode
           // costs ~28px instead of the expanded ~64px. Tone-tints to the
           // worst stage so a danger condition still grabs the eye.
-          className={`group flex items-center gap-2 w-full rounded-sm bg-surface-overlay px-2.5 py-1.5 text-left motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
+          className={`group flex items-center gap-2 w-full rounded-sm bg-surface-overlay px-2.5 py-1.5 text-left motion-safe:transition-opacity hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
           title="Pipeline pulse — click to expand"
         >
           <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${worstTone.dot}`} />
@@ -392,7 +393,7 @@ export function PipelineStatusRibbon({ embedded = false }: { embedded?: boolean 
           <span className={`text-2xs font-mono font-semibold truncate ${worstTone.label}`}>
             {worst.label}: {worst.summary}
           </span>
-          <span aria-hidden className="ml-auto shrink-0 text-2xs text-fg-muted group-hover:text-fg motion-safe:transition-colors">
+          <span aria-hidden className="ml-auto shrink-0 text-2xs text-fg-muted group-hover:text-fg motion-safe:transition-opacity">
             Expand ▾
           </span>
         </button>
@@ -431,7 +432,7 @@ export function PipelineStatusRibbon({ embedded = false }: { embedded?: boolean 
           onClick={() => setCollapsed(true)}
           aria-expanded="true"
           aria-controls="pipeline-status-ribbon-tiles"
-          className="text-2xs text-fg-muted hover:text-fg motion-safe:transition-colors px-1.5 py-0.5 rounded-sm hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          className="text-2xs text-fg-muted hover:text-fg motion-safe:transition-opacity px-1.5 py-0.5 rounded-sm hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           title="Collapse pipeline ribbon — leaves a single-line summary"
         >
           Collapse <span aria-hidden>▴</span>
@@ -450,7 +451,7 @@ export function PipelineStatusRibbon({ embedded = false }: { embedded?: boolean 
             <Fragment key={tile.stage}>
               <Link
                 to={tile.to}
-                className={`group relative z-0 flex w-full items-center gap-2.5 rounded-md border border-edge-subtle border-l-[4px] bg-surface-raised px-2.5 py-2.5 motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] motion-safe:duration-150 hover:bg-surface-overlay hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand min-w-0 md:flex-1 ${STAGE_BORDER[tile.stage]} ${
+                className={`group relative z-0 flex w-full items-center gap-2.5 rounded-md border border-edge-subtle border-l-[4px] bg-surface-raised px-2.5 py-2.5 motion-safe:transition-[transform,opacity] motion-safe:duration-150 hover:bg-surface-overlay hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand min-w-0 md:flex-1 ${STAGE_BORDER[tile.stage]} ${
                   focusRibbonStage === tile.stage
                     ? 'ring-2 ring-brand/40 shadow-sm'
                     : ''

@@ -170,7 +170,7 @@ function CanvasInner() {
                 }}
                 aria-label={`Jump to stage ${stage.index + 1}: ${stage.title}`}
                 aria-current={isActive ? 'step' : undefined}
-                className={`group inline-flex items-center gap-1.5 rounded-full px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] transition-colors ${
+                className={`group inline-flex items-center gap-1.5 rounded-full px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] transition-[transform,opacity] ${
                   lit
                     ? 'bg-[var(--mushi-vermillion)] text-white shadow-[inset_0_-1.5px_0_rgba(0,0,0,0.18)]'
                     : 'text-[var(--mushi-ink-muted)] hover:bg-[color-mix(in_oklch,var(--mushi-ink)_8%,transparent)] hover:text-[var(--mushi-ink)]'

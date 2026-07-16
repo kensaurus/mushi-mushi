@@ -75,11 +75,11 @@ function actionLabel(action: string) {
 }
 
 const ACTION_COLOR: Record<string, string> = {
-  bug_critical: 'text-danger bg-danger/10 border-danger/30',
-  bug_high:     'text-warn bg-warn/10 border-warn/30',
-  bug_medium:   CHIP_TONE.warnSubtle + ' border-warn/20',
-  bug_low:      'text-fg-muted bg-surface-overlay/40 border-edge/30',
-  enhancement:  'text-info bg-info/10 border-info/30',
+  bug_critical: CHIP_TONE.dangerSubtle,
+  bug_high:     CHIP_TONE.warnSubtle,
+  bug_medium:   CHIP_TONE.warnSubtle,
+  bug_low:      'text-fg-muted bg-surface-overlay/40 border border-edge/30',
+  enhancement:  CHIP_TONE.infoSubtle,
 }
 
 function ActivityDot({ lastAcceptedAt }: { lastAcceptedAt: string | null }) {
@@ -105,15 +105,15 @@ function ActivityDot({ lastAcceptedAt }: { lastAcceptedAt: string | null }) {
 
 function FitPill({ app }: { app: TesterApp }) {
   if (app.reputationMin === 0 && (!app.targetCountries || app.targetCountries.length === 0)) {
-    return <Badge className="bg-ok/10 border-ok/30 text-ok text-2xs border">Open to all</Badge>
+    return <Badge className={`${CHIP_TONE.okSubtle} text-2xs`}>Open to all</Badge>
   }
   if (app.meetsReputationGate) {
-    return <Badge className="bg-ok/10 border-ok/30 text-ok text-2xs border">✓ You qualify</Badge>
+    return <Badge className={`${CHIP_TONE.okSubtle} text-2xs`}>✓ You qualify</Badge>
   }
   const needed = app.reputationMin - app.myReputationScore
   return (
     <Badge
-      className="bg-warn/10 border-warn/30 text-warn text-2xs border"
+      className={`${CHIP_TONE.warnSubtle} text-2xs`}
       title={`You need ${app.reputationMin} rep; you have ${app.myReputationScore}. Earn ${needed} more by getting reports accepted.`}
     >
       🔒 Needs {app.reputationMin} rep (you: {app.myReputationScore})
@@ -136,7 +136,7 @@ function AppCard({ app, onJoin, onLeave, acting }: {
   return (
     <div
       id={`tester-app-${app.slug}`}
-      className="rounded-xl border border-edge-subtle bg-surface-raised overflow-hidden hover:border-accent/30 transition-colors scroll-mt-4"
+      className="rounded-xl border border-edge-subtle bg-surface-raised overflow-hidden hover:border-accent/30 transition-opacity scroll-mt-4"
     >
       {/* Header row */}
       <div className="flex items-start gap-4 p-4">
@@ -149,7 +149,7 @@ function AppCard({ app, onJoin, onLeave, acting }: {
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-semibold">{app.name}</p>
             {app.joined && (
-              <Badge className="bg-accent/20 border-accent/30 text-accent text-2xs border">✓ Joined</Badge>
+              <Badge className={`${CHIP_TONE.accentSubtle} text-2xs`}>✓ Joined</Badge>
             )}
             <FitPill app={app} />
           </div>
@@ -166,7 +166,7 @@ function AppCard({ app, onJoin, onLeave, acting }: {
             <>
               <Link
                 to={`/tester/submissions?appId=${encodeURIComponent(app.id)}&new=1`}
-                className="inline-flex items-center justify-center rounded-sm border border-brand/40 bg-brand-subtle px-2.5 py-1 text-2xs font-semibold text-brand motion-safe:transition-colors hover:bg-brand/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                className="inline-flex items-center justify-center rounded-sm border border-brand/40 bg-brand-subtle px-2.5 py-1 text-2xs font-semibold text-brand motion-safe:transition-opacity hover:bg-brand/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
               >
                 Report bug
               </Link>
@@ -282,24 +282,24 @@ function AppCard({ app, onJoin, onLeave, acting }: {
       {/* Footer links */}
       <div className="border-t border-edge-subtle px-4 py-2.5 flex flex-wrap gap-3">
         {app.webUrl && (
-          <a href={app.webUrl} target="_blank" rel="noreferrer" className="text-xs text-fg-muted hover:text-fg transition-colors">
+          <a href={app.webUrl} target="_blank" rel="noreferrer" className="text-xs text-fg-muted hover:text-fg transition-opacity">
             Open web ↗
           </a>
         )}
         {app.appStoreUrl && (
-          <a href={app.appStoreUrl} target="_blank" rel="noreferrer" className="text-xs text-fg-muted hover:text-fg transition-colors">
+          <a href={app.appStoreUrl} target="_blank" rel="noreferrer" className="text-xs text-fg-muted hover:text-fg transition-opacity">
             App Store ↗
           </a>
         )}
         {app.playStoreUrl && (
-          <a href={app.playStoreUrl} target="_blank" rel="noreferrer" className="text-xs text-fg-muted hover:text-fg transition-colors">
+          <a href={app.playStoreUrl} target="_blank" rel="noreferrer" className="text-xs text-fg-muted hover:text-fg transition-opacity">
             Play Store ↗
           </a>
         )}
         <a
           href={`/mushi-mushi/testers/apps/${app.slug}/`}
           target="_blank" rel="noreferrer"
-          className="text-xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
+          className="text-xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
         >
           Public listing ↗
         </a>
@@ -449,7 +449,7 @@ export function TesterAppsPage() {
               </Btn>
             )}
             <div className="mt-4">
-              <Link to="/tester/learn" className="text-xs text-fg-faint hover:text-fg-secondary motion-safe:transition-colors">
+              <Link to="/tester/learn" className="text-xs text-fg-faint hover:text-fg-secondary motion-safe:transition-opacity">
                 New to Bounties? Read the guide →
               </Link>
             </div>

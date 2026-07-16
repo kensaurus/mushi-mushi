@@ -1,3 +1,4 @@
+// mushi-ui: intentional overlay — not Modal/Drawer (reason: xyflow canvas-positioned edge popover; no scrim or focus trap)
 /**
  * FILE: apps/admin/src/components/pdca-flow/EdgeInspector.tsx
  * PURPOSE: Tiny popover rendered inside the PDCA canvas whenever the user
@@ -157,7 +158,7 @@ export function EdgeInspector({ edge, stages, onClose }: EdgeInspectorProps) {
       <Link
         to={copy.href}
         onClick={onClose}
-        className="mt-2 inline-flex items-center gap-1 text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-sm"
+        className="mt-2 inline-flex items-center gap-1 text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-sm"
       >
         Open {targetMeta.label.toLowerCase()} queue
         <span aria-hidden="true">→</span>

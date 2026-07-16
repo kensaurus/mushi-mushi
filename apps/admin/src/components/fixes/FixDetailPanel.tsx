@@ -134,7 +134,7 @@ export function FixDetailPanel({
             CI synced <RelativeTime value={fix.check_run_updated_at} />
           </span>
         )}
-        <Link to={`/reports/${fix.report_id}`} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+        <Link to={`/reports/${fix.report_id}`} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
           Source report →
         </Link>
         {fix.failure_category && (
@@ -191,7 +191,7 @@ export function FixDetailPanel({
                 className="rounded border border-warn/40 bg-warn-muted/20 px-2 py-1"
               >
                 <div className="flex items-baseline gap-2">
-                  <span className="font-mono text-warn">{w.code}</span>
+                  <span className="font-mono text-warning-foreground">{w.code}</span>
                   <span>{w.message}</span>
                 </div>
                 {w.hint && <p className="text-fg-muted mt-0.5">Hint: {w.hint}</p>}

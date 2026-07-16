@@ -5,6 +5,7 @@
  */
 
 import { useSearchParams } from 'react-router-dom'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Section,
   Badge,
@@ -46,7 +47,7 @@ import {
   resolveMcpTab,
   validateMcpJsonSyntax,
 } from '../lib/mcpPageHelpers'
-import { CHIP_TONE } from '../lib/chipTone'
+import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 
 export function McpPage() {
   const activeProjectId = useActiveProjectId()
@@ -281,7 +282,7 @@ export function McpPage() {
 
   if (!activeProjectId) {
     return (
-      <div className="space-y-4" data-testid="mushi-page-mcp">
+      <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-mcp">
         <PageHeaderBar
           title={copy?.title ?? 'MCP'}
 
@@ -373,8 +374,8 @@ export function McpPage() {
                   : bannerSeverity === 'warn'
                     ? CHIP_TONE.warnSubtle
                     : bannerSeverity === 'brand'
-                      ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
-                      : 'bg-surface-overlay text-fg-muted'
+                      ? HEADER_BADGE_TONE.brand
+                      : HEADER_BADGE_TONE.neutral
               }
             >
               {headerBadge}

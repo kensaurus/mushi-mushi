@@ -145,21 +145,21 @@ export function PublicHomePage() {
         <div className="mx-auto max-w-6xl space-y-12 px-6 pb-10 pt-4">
           {/* Top nav — small, sticky, mirrors the cloud landing's silhouette
               but routes to the admin's auth surface (no signup form here). */}
-          <header className="sticky top-3 z-30 flex items-center justify-between rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_88%,white)] px-4 py-2 shadow-[0_18px_40px_-32px_rgba(14,13,11,0.5)] backdrop-blur sm:px-5">
+          <header className="sticky top-3 z-30 flex items-center justify-between rounded-full border border-editorial-rule bg-editorial-paper-raised px-4 py-2 shadow-[0_18px_40px_-32px_rgba(14,13,11,0.5)] backdrop-blur sm:px-5">
             <Link
               to="/"
-              className="flex items-center gap-2 font-serif text-base font-semibold text-[var(--mushi-ink)]"
+              className="flex items-center gap-2 font-serif text-base font-semibold text-editorial-ink"
               aria-label="Mushi Mushi home"
             >
               <span
                 aria-hidden
-                className="grid h-7 w-7 place-items-center rounded-sm bg-[var(--mushi-vermillion)] font-mono text-xs text-white shadow-[inset_0_-2px_0_rgba(0,0,0,0.25)]"
+                className="grid h-7 w-7 place-items-center rounded-sm bg-editorial-vermillion font-mono text-xs text-white shadow-[inset_0_-2px_0_rgba(0,0,0,0.25)]"
               >
                 虫
               </span>
               <span>Mushi Mushi</span>
             </Link>
-            <nav className="flex items-center gap-1 text-sm sm:gap-2">
+            <nav className="flex flex-wrap items-center gap-1 text-sm sm:gap-2">
               {/* "Loop" header link removed — it duplicated the Hero's
                   "Watch the loop" secondary CTA (which scrolls to the same
                   #loop anchor) and added a third semantic destination next
@@ -174,7 +174,7 @@ export function PublicHomePage() {
                 href={`${DOCS_BASE}/`}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
+                className="rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-editorial-ink-muted transition hover:bg-editorial-vermillion-wash hover:text-editorial-vermillion focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
               >
                 Docs
               </a>
@@ -283,26 +283,26 @@ function SignedInChrome({ user, consoleHref }: { user: User; consoleHref: string
     <>
       <Link
         to="/dashboard"
-        className="group inline-flex items-center gap-2 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] py-1 pl-1 pr-3 transition hover:border-[color-mix(in_oklch,var(--mushi-ink)_30%,var(--mushi-rule))] hover:bg-[color-mix(in_oklch,var(--mushi-paper)_82%,white)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mushi-vermillion)]/55"
+        className="group inline-flex items-center gap-2 rounded-full border border-editorial-rule bg-editorial-paper-card py-1 pl-1 pr-3 transition hover:border-editorial-ink-rule hover:bg-editorial-paper-sink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-editorial-vermillion/55"
         title={`Signed in as ${displayName}`}
         aria-label={`Signed in as ${displayName} — open console`}
       >
         <span
           aria-hidden
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--mushi-vermillion)] font-mono text-2xs font-semibold text-white shadow-[inset_0_-2px_0_rgba(0,0,0,0.22)]"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-editorial-vermillion font-mono text-2xs font-semibold text-white shadow-[inset_0_-2px_0_rgba(0,0,0,0.22)]"
         >
           {initial}
         </span>
         {/* Hide the email at narrow widths so the sticky pill doesn't
             wrap. The avatar + the "Open console" CTA still convey the
             signed-in state on mobile. */}
-        <span className="hidden max-w-[12rem] truncate font-mono text-2xs uppercase tracking-[0.16em] text-[var(--mushi-ink)] md:inline">
+        <span className="hidden max-w-48 truncate font-mono text-2xs uppercase tracking-[0.16em] text-editorial-ink md:inline">
           {user.email ?? displayName}
         </span>
       </Link>
       <Link
         to={consoleHref}
-        className="ml-1 rounded-full bg-[var(--mushi-ink)] px-3 py-1.5 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"
+        className="ml-1 rounded-full bg-editorial-ink px-3 py-1.5 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-editorial-ink-emphasis"
       >
         Open console
       </Link>
@@ -313,7 +313,7 @@ function SignedInChrome({ user, consoleHref }: { user: User; consoleHref: string
         onClick={handleSignOut}
         disabled={signingOut}
         loading={signingOut}
-        className="rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)] !border-transparent shadow-none"
+        className="rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-editorial-ink-muted hover:bg-editorial-vermillion-wash hover:text-editorial-vermillion !border-transparent shadow-none"
       >
         Sign out
       </Btn>
@@ -332,7 +332,7 @@ function SignedOutChrome({ consoleHref }: { consoleHref: string }) {
     <>
       <Link
         to="/login"
-        className="rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
+        className="rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-editorial-ink-muted transition hover:bg-editorial-vermillion-wash hover:text-editorial-vermillion"
       >
         Sign in
       </Link>
@@ -345,7 +345,7 @@ function SignedOutChrome({ consoleHref }: { consoleHref: string }) {
           render it cleanly. */}
       <Link
         to={consoleHref}
-        className="ml-1 rounded-full bg-[var(--mushi-ink)] px-3 py-1.5 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"
+        className="ml-1 rounded-full bg-editorial-ink px-3 py-1.5 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-editorial-ink-emphasis"
       >
         Get started
       </Link>
@@ -400,24 +400,24 @@ function DogfoodProofSection() {
   return (
     <section
       aria-labelledby="dogfood-heading"
-      className="rounded-[1.5rem] border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_94%,white)] px-5 py-8 sm:px-8 sm:py-10"
+      className="rounded-[1.5rem] border border-editorial-rule bg-editorial-paper-panel px-5 py-8 sm:px-8 sm:py-10"
     >
-      <p className="font-mono text-2xs uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
-        <span className="text-[var(--mushi-ink)]">Dogfood</span>
+      <p className="font-mono text-2xs uppercase tracking-[0.32em] text-editorial-ink-muted">
+        <span className="text-editorial-ink">Dogfood</span>
         <span className="mx-2 opacity-40">/</span>
         Mushi runs on Mushi
       </p>
       <h2
         id="dogfood-heading"
-        className="mt-2 max-w-2xl font-serif text-2xl leading-snug tracking-[-0.02em] text-[var(--mushi-ink)] sm:text-3xl"
+        className="mt-2 max-w-2xl font-serif text-2xl leading-snug tracking-[-0.02em] text-editorial-ink sm:text-3xl"
       >
         Real bugs, translated and fixed — in our own apps.
       </h2>
-      <p className="mt-3 max-w-2xl text-[1.0625rem] leading-relaxed text-[var(--mushi-ink-muted)]">
+      <p className="mt-3 max-w-2xl text-[1.0625rem] leading-relaxed text-editorial-ink-muted">
         These aren&rsquo;t mockups. Each row is a real report from a sibling app,
         the plain-English diagnosis Mushi produced, and the public PR the
         paste-ready fix prompt opened. One incident-loop run went from{' '}
-        <em className="not-italic font-medium text-[var(--mushi-vermillion)]">
+        <em className="not-italic font-medium text-editorial-vermillion">
           report to draft PR in ~18 seconds
         </em>
         .
@@ -427,25 +427,25 @@ function DogfoodProofSection() {
         {DOGFOOD_CASES.map((c) => (
           <div
             key={c.prHref}
-            className="flex flex-col rounded-xl border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_88%,white)] p-4"
+            className="flex flex-col rounded-xl border border-editorial-rule bg-editorial-paper-raised p-4"
           >
-            <p className="text-xs leading-relaxed text-[var(--mushi-ink-muted)]">
-              <span className="font-medium text-[var(--mushi-ink)]">User: </span>
+            <p className="text-xs leading-relaxed text-editorial-ink-muted">
+              <span className="font-medium text-editorial-ink">User: </span>
               {c.user}
             </p>
-            <p className="mt-2 flex-1 text-xs leading-relaxed text-[var(--mushi-ink-muted)]">
-              <span className="font-medium text-[var(--mushi-vermillion)]">Mushi: </span>
+            <p className="mt-2 flex-1 text-xs leading-relaxed text-editorial-ink-muted">
+              <span className="font-medium text-editorial-vermillion">Mushi: </span>
               {c.diagnosis}
             </p>
             <div className="mt-3 flex items-center justify-between gap-2">
-              <span className="font-mono text-2xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)]">
+              <span className="font-mono text-2xs uppercase tracking-[0.18em] text-editorial-ink-muted">
                 {c.meta}
               </span>
               <a
                 href={c.prHref}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 rounded-full border border-[var(--mushi-rule)] px-2.5 py-1 font-mono text-2xs text-[var(--mushi-ink)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
+                className="inline-flex items-center gap-1 rounded-full border border-editorial-rule px-2.5 py-1 font-mono text-2xs text-editorial-ink transition hover:bg-editorial-vermillion-wash hover:text-editorial-vermillion"
               >
                 {c.prLabel}
                 <span aria-hidden>↗</span>
@@ -475,11 +475,11 @@ function SynthesisLayerSection() {
   return (
     <section
       aria-labelledby="synthesis-heading"
-      className="rounded-[1.5rem] border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_94%,white)] px-5 py-8 sm:px-8 sm:py-10"
+      className="rounded-[1.5rem] border border-editorial-rule bg-editorial-paper-panel px-5 py-8 sm:px-8 sm:py-10"
     >
       {/* Eyebrow */}
-      <p className="font-mono text-2xs uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
-        <span className="text-[var(--mushi-ink)]">Integrator</span>
+      <p className="font-mono text-2xs uppercase tracking-[0.32em] text-editorial-ink-muted">
+        <span className="text-editorial-ink">Integrator</span>
         <span className="mx-2 opacity-40">/</span>
         not a replacement
       </p>
@@ -487,13 +487,13 @@ function SynthesisLayerSection() {
       {/* Headline */}
       <h2
         id="synthesis-heading"
-        className="mt-2 max-w-2xl font-serif text-2xl leading-snug tracking-[-0.02em] text-[var(--mushi-ink)] sm:text-3xl"
+        className="mt-2 max-w-2xl font-serif text-2xl leading-snug tracking-[-0.02em] text-editorial-ink sm:text-3xl"
       >
         The layer that connects what you already run.
       </h2>
-      <p className="mt-3 max-w-2xl text-[1.0625rem] leading-relaxed text-[var(--mushi-ink-muted)]">
+      <p className="mt-3 max-w-2xl text-[1.0625rem] leading-relaxed text-editorial-ink-muted">
         Every team has Sentry for thrown errors, Datadog for infra, Firebase for events.
-        Nobody has a tool for what users <em className="not-italic text-[var(--mushi-vermillion)] font-medium">feel</em> — the dead
+        Nobody has a tool for what users <em className="not-italic text-editorial-vermillion font-medium">feel</em> — the dead
         button, the slow screen, the layout that only breaks on one device. Mushi adds that
         signal and wires it to everything you already rely on.
       </p>
@@ -514,13 +514,13 @@ function SynthesisLayerSection() {
         className="my-8 h-px"
         style={{
           background:
-            'linear-gradient(90deg, var(--mushi-vermillion) 0, var(--mushi-vermillion) 3rem, var(--mushi-rule) 3rem)',
+            'linear-gradient(90deg, var(--color-editorial-vermillion) 0, var(--color-editorial-vermillion) 3rem, var(--color-editorial-rule) 3rem)',
         }}
       />
 
       {/* Integration tiles */}
-      <p className="font-mono text-2xs uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
-        <span className="text-[var(--mushi-ink)]">Ecosystem</span>
+      <p className="font-mono text-2xs uppercase tracking-[0.32em] text-editorial-ink-muted">
+        <span className="text-editorial-ink">Ecosystem</span>
         <span className="mx-2 opacity-40">/</span>
         plug in, don&rsquo;t rip out
       </p>
@@ -578,24 +578,24 @@ function SignalCard({ title, tools, mushi, highlight = false }: Signal) {
     <div
       className={`rounded-xl border p-4 ${
         highlight
-          ? 'border-[var(--mushi-vermillion)]/40 bg-[var(--mushi-vermillion-wash)]'
-          : 'border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_88%,white)]'
+          ? 'border-editorial-vermillion/40 bg-editorial-vermillion-wash'
+          : 'border-editorial-rule bg-editorial-paper-raised'
       }`}
     >
       <p
         className={`font-mono text-2xs uppercase tracking-[0.2em] leading-none ${
-          highlight ? 'text-[var(--mushi-vermillion)]' : 'text-[var(--mushi-ink-muted)]'
+          highlight ? 'text-editorial-vermillion' : 'text-editorial-ink-muted'
         }`}
       >
         {highlight ? '★ ' : ''}
         {title}
       </p>
-      <p className="mt-2 text-xs text-[var(--mushi-ink-muted)] leading-relaxed">
-        <span className="font-medium text-[var(--mushi-ink)]">Today: </span>
+      <p className="mt-2 text-xs text-editorial-ink-muted leading-relaxed">
+        <span className="font-medium text-editorial-ink">Today: </span>
         {tools}
       </p>
-      <p className="mt-1.5 text-xs text-[var(--mushi-ink-muted)] leading-relaxed">
-        <span className="font-medium text-[var(--mushi-vermillion)]">+ Mushi: </span>
+      <p className="mt-1.5 text-xs text-editorial-ink-muted leading-relaxed">
+        <span className="font-medium text-editorial-vermillion">+ Mushi: </span>
         {mushi}
       </p>
     </div>
@@ -635,18 +635,18 @@ function IntegrationGroup({
   tools: IntegrationTool[]
 }) {
   const arrowColor =
-    direction === 'inbound' ? 'text-[color-mix(in_oklch,var(--mushi-vermillion)_60%,var(--mushi-ink-muted))]' : 'text-[var(--mushi-ink-muted)]'
+    direction === 'inbound' ? 'text-editorial-vermillion-muted' : 'text-editorial-ink-muted'
   return (
     <div>
-      <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-[var(--mushi-ink)]">
+      <p className="font-mono text-2xs font-semibold uppercase tracking-[0.2em] text-editorial-ink">
         {label}
       </p>
-      <p className="mt-1 text-xs text-[var(--mushi-ink-muted)] leading-relaxed max-w-sm">{hint}</p>
+      <p className="mt-1 text-xs text-editorial-ink-muted leading-relaxed max-w-sm">{hint}</p>
       <ul className="mt-3 flex flex-wrap gap-1.5">
         {tools.map((t) => (
           <li key={t.name}>
             <span
-              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-2.5 py-1 font-mono text-2xs text-[var(--mushi-ink-muted)]"
+              className="inline-flex items-center gap-1.5 rounded-full border border-editorial-rule bg-editorial-paper-card px-2.5 py-1 font-mono text-2xs text-editorial-ink-muted"
               title={`via ${t.pkg}`}
             >
               <span className={`text-2xs ${arrowColor}`} aria-hidden>
@@ -679,23 +679,23 @@ function SignedInBanner({ user, consoleHref }: { user: User; consoleHref: string
     <div
       role="status"
       aria-live="polite"
-      className="border-b border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_82%,var(--mushi-vermillion-wash))]"
+      className="border-b border-editorial-rule bg-editorial-paper-flush"
     >
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-6 py-2">
-        <p className="flex items-center gap-2 font-mono text-2xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)]">
+        <p className="flex items-center gap-2 font-mono text-2xs uppercase tracking-[0.18em] text-editorial-ink-muted">
           <span
             aria-hidden
-            className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--mushi-vermillion)]"
+            className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-editorial-vermillion"
           />
-          <span className="text-[var(--mushi-ink)]">Signed in</span>
+          <span className="text-editorial-ink">Signed in</span>
           <span aria-hidden className="opacity-40">·</span>
-          <span className="max-w-[18rem] truncate text-[var(--mushi-ink)] sm:max-w-none">
+          <span className="max-w-72 truncate text-editorial-ink sm:max-w-none">
             {displayName}
           </span>
         </p>
         <Link
           to={consoleHref}
-          className="inline-flex items-center gap-1.5 rounded-full bg-[var(--mushi-ink)] px-3 py-1 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"
+          className="inline-flex items-center gap-1.5 rounded-full bg-editorial-ink px-3 py-1 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-editorial-ink-emphasis"
         >
           Open console
           <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>

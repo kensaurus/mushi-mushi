@@ -174,13 +174,13 @@ export function QueryPromptLibrary({
         {cat.prompts.map((p) => (
           <li
             key={p.prompt}
-            className="group flex items-start gap-1 rounded-sm border border-transparent hover:border-edge-subtle hover:bg-surface-overlay/30 motion-safe:transition-colors"
+            className="group flex items-start gap-1 rounded-sm border border-transparent hover:border-edge-subtle hover:bg-surface-overlay/30 motion-safe:transition-opacity"
           >
             <button
               type="button"
               onClick={() => onInsert(p.prompt)}
               title={p.why}
-              className="flex-1 min-w-0 text-left px-2 py-1.5 text-2xs text-fg-secondary hover:text-fg motion-safe:transition-colors"
+              className="flex-1 min-w-0 text-left px-2 py-1.5 text-2xs text-fg-secondary hover:text-fg motion-safe:transition-opacity"
             >
               <span className="block">{p.prompt}</span>
               <span className="hidden group-hover:block group-focus-within:block text-2xs text-fg-faint mt-0.5 italic">

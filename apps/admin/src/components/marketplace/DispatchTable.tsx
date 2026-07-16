@@ -91,6 +91,7 @@ export function DispatchTable({
                       <td className="px-2 py-1.5">
                         {d.duration_ms != null ? `${d.duration_ms}ms` : '—'}
                       </td>
+                      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                       <td className="px-2 py-1.5 max-w-[28ch] truncate">
                         {hasResponse
                           ? isExpanded

@@ -18,7 +18,7 @@ export function QueryCopyButton({ value, label = 'Copy' }: { value: string; labe
           })
           .catch(() => toast.error('Could not copy'))
       }}
-      className="inline-flex items-center gap-1 text-2xs text-fg-faint hover:text-fg motion-safe:transition-colors px-1.5 py-0.5 rounded-sm hover:bg-surface-overlay/50"
+      className="inline-flex items-center gap-1 text-2xs text-fg-faint hover:text-fg motion-safe:transition-opacity px-1.5 py-0.5 rounded-sm hover:bg-surface-overlay/50"
       aria-label={label}
     >
       {copied ? <IconCheck size={12} /> : <IconCopy size={12} />}

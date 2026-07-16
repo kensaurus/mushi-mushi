@@ -37,7 +37,7 @@ export function StageHoverToolbar({ actions, className = '' }: StageHoverToolbar
         'opacity-0 pointer-events-none translate-y-0.5',
         'group-hover/pdca:opacity-100 group-hover/pdca:pointer-events-auto group-hover/pdca:translate-y-0',
         'group-focus-within/pdca:opacity-100 group-focus-within/pdca:pointer-events-auto group-focus-within/pdca:translate-y-0',
-        'motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] motion-safe:duration-150',
+        'motion-safe:transition-[transform,opacity] motion-safe:duration-150',
         className,
       ].join(' ')}
       role="toolbar"
@@ -47,7 +47,7 @@ export function StageHoverToolbar({ actions, className = '' }: StageHoverToolbar
         <button
           key={a.key}
           type="button"
-          className="nodrag inline-flex h-6 w-6 items-center justify-center rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 disabled:opacity-40 disabled:cursor-not-allowed motion-safe:transition-colors"
+          className="nodrag inline-flex h-6 w-6 items-center justify-center rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 disabled:opacity-40 disabled:cursor-not-allowed motion-safe:transition-opacity"
           onClick={(e) => {
             e.stopPropagation()
             a.onClick()
