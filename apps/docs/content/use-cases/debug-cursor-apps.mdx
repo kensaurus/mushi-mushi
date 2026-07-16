@@ -1,0 +1,51 @@
+---
+title: Debug apps built with Cursor
+description: How to debug an app Cursor wrote for you — user bug reports become plain-English diagnoses and fix prompts your Cursor agent applies over MCP.
+---
+
+# How to debug an app Cursor wrote for you
+
+You shipped an app with Cursor. A user says "the save button doesn't work."
+Now what? You didn't hand-write the code, so the usual debugging loop —
+reproduce, read the stack, remember why that module exists — starts from
+zero every time.
+
+Mushi Mushi closes that gap. Users report bugs from inside your app (a widget
+click or a shake on mobile), and Mushi turns each report into a plain-English
+read on what broke and why, with a fix prompt scoped to the right files. Your
+Cursor agent picks it up over MCP and applies the fix without you leaving the
+editor.
+
+## The loop, end to end
+
+1. **Install the SDK** — `npx mushi-mushi` detects your framework and wires
+   everything up.
+2. **Connect Cursor** — `npx mushi-mushi setup --ide cursor` registers the
+   Mushi MCP server, so Cursor can list open reports, pull fix context, and
+   dispatch fixes.
+3. **A user hits a bug** — the report lands with a screenshot, the user's own
+   words, and Mushi's diagnosis of the cause.
+4. **Ask Cursor "what's broken in prod?"** — it reads the queue, proposes the
+   fix, and you merge. Repeat reports about the same bug collapse into one
+   row, and each fix becomes a lesson Cursor sees on future PRs
+   (`.mushi/lessons.json`).
+
+## Why not just paste the bug into chat?
+
+You can — but a user's "it's broken" message has no repro, no console output,
+and no file pointers. Mushi's report carries the screenshot, session context,
+and a diagnosis grounded in your actual repo, so the agent starts from the
+answer instead of the question.
+
+## Set it up
+
+```bash
+npx mushi-mushi
+npx mushi-mushi setup --ide cursor
+```
+
+Free tier: 50 diagnoses a month, no card. Open source, self-hostable.
+
+**Next:** [Cursor integration guide](/integrations/cursor) ·
+[MCP server quickstart](/quickstart/mcp) ·
+[Incident loop walkthrough](/quickstart/incident-loop)

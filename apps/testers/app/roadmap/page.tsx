@@ -11,6 +11,7 @@ import { TestersPageShell } from '../components/TestersPageShell'
 export const metadata: Metadata = {
   title: 'Public roadmap — Mushi',
   description: 'Vote on what ships next for apps using Mushi Mushi.',
+  alternates: { canonical: 'https://kensaur.us/mushi-mushi/testers/roadmap/' },
 }
 
 export default function RoadmapPage() {
