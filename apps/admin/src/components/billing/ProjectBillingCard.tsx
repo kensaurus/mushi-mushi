@@ -8,6 +8,7 @@ import {
   Btn,
   Badge,
   RelativeTime,
+  SegmentedControl,
 } from '../ui'
 import { ContainedBlock, InlineProof, SignalChip } from '../report-detail/ReportSurface'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
@@ -235,23 +236,16 @@ function PlanPicker({ plans, currentPlanId, busy, onPick }: PlanPickerProps) {
         <SignalChip tone="neutral" className="uppercase tracking-wider">
           {currentPlanId === 'hobby' || currentPlanId === 'free_cloud' ? 'Pick a plan' : 'Switch to'}
         </SignalChip>
-        {/* Billing interval toggle */}
-        <div className="flex items-center gap-1 rounded-md border border-edge-subtle bg-surface p-0.5 text-2xs">
-          <button
-            type="button"
-            onClick={() => setBillingInterval('monthly')}
-            className={`px-2 py-0.5 rounded transition-colors ${billingInterval === 'monthly' ? 'bg-brand text-brand-fg' : 'text-fg-muted hover:text-fg'}`}
-          >
-            Monthly
-          </button>
-          <button
-            type="button"
-            onClick={() => setBillingInterval('annual')}
-            className={`px-2 py-0.5 rounded transition-colors ${billingInterval === 'annual' ? 'bg-brand text-brand-fg' : 'text-fg-muted hover:text-fg'}`}
-          >
-            Annual <span className="text-ok font-medium">−{annualDiscountPct}%</span>
-          </button>
-        </div>
+        <SegmentedControl
+          value={billingInterval}
+          onChange={setBillingInterval}
+          size="sm"
+          ariaLabel="Billing interval"
+          options={[
+            { id: 'monthly', label: 'Monthly' },
+            { id: 'annual', label: `Annual −${annualDiscountPct}%` },
+          ]}
+        />
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {plans.map((p) => {
@@ -363,7 +357,7 @@ function InvoicesSection({ projectId, hasCustomer, isComplimentary }: InvoicesSe
         <button
           type="button"
           onClick={invoicesQuery.reload}
-          className="rounded-sm bg-danger-muted/50 text-danger-foreground border border-danger/25 px-2 py-0.5 text-2xs hover:bg-danger-muted/40 motion-safe:transition-colors"
+          className="rounded-sm bg-danger-muted/50 text-danger-foreground border border-danger/25 px-2 py-0.5 text-2xs hover:bg-danger-muted/40 motion-safe:transition-opacity"
         >
           Retry
         </button>

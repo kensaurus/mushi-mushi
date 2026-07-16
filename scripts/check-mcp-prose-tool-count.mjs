@@ -41,6 +41,7 @@ const PROSE_FILES = [
   'AGENTS.md',
   'apps/docs/content/sdks/mcp.mdx',
   'apps/docs/content/admin/mcp.mdx',
+  'apps/docs/content/concepts/orchestrator-interop.mdx',
   'packages/mcp/README.md',
   'apps/docs/data/admin-screenshots.ts',
   'docs/SCREENSHOTS.md',
@@ -58,8 +59,9 @@ for (const rel of PROSE_FILES) {
   while ((match = claimRe.exec(source)) !== null) {
     const n = Number(match[1])
     if (!Number.isFinite(n)) continue
-    // Ignore tiny numbers that are clearly not catalog totals (e.g. "3 tools")
-    if (n < 40) continue
+    // Ignore tiny incidental numbers (e.g. "3 tools in this example") but
+    // catch undercounts like the old "~20 tools" catalog claim.
+    if (n < 10) continue
     if (n !== expected) {
       const line = source.slice(0, match.index).split(/\r?\n/).length
       failures.push(`${rel}:${line} claims ${n} tools — catalog has ${expected}`)

@@ -134,7 +134,7 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
                   onSelectChange?.(e.target.checked);
                 }}
                 aria-label={selectAriaLabel}
-                className="h-3.5 w-3.5 shrink-0 rounded-sm border-edge bg-surface-raised accent-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface motion-safe:transition-colors"
+                className="h-3.5 w-3.5 shrink-0 rounded-sm border-edge bg-surface-raised accent-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface motion-safe:transition-opacity"
               />
             )}
             <Badge className={PIPELINE_STATUS[fix.status] ?? 'bg-surface-overlay text-fg-muted'}>
@@ -369,7 +369,7 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
                       className="rounded border border-warn/40 bg-warn-muted/20 px-2 py-1"
                     >
                       <div className="flex items-baseline gap-2">
-                        <span className="font-mono text-warn">{w.code}</span>
+                        <span className="font-mono text-warning-foreground">{w.code}</span>
                         <span>{w.message}</span>
                       </div>
                       {w.hint && <p className="text-fg-muted mt-0.5">Hint: {w.hint}</p>}

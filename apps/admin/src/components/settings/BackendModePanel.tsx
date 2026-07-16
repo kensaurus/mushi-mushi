@@ -14,6 +14,7 @@
  */
 
 import { useState } from 'react'
+import { Card } from '../../components/ui'
 import { Section, Btn, Input, Callout } from '../ui'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { SettingsCard } from './SettingsPanelLayout'
@@ -118,7 +119,7 @@ export function BackendModePanel() {
 
         {/* Self-hosted credentials form */}
         {draftMode === 'self-hosted' && (
-          <div className="space-y-3 rounded-md border border-edge-subtle bg-surface-raised/40 p-3">
+          <Card  className="space-y-3 p-3">
             <p className="text-xs text-fg-muted">
               Point to your own Supabase project. These values replace{' '}
               <code className="font-mono text-2xs">VITE_SUPABASE_URL</code> /{' '}
@@ -142,7 +143,7 @@ export function BackendModePanel() {
               The anon key is public by design — it grants only RLS-gated access.
               The service-role key stays server-side in your edge function secrets.
             </p>
-          </div>
+          </Card>
         )}
 
         {/* Cloud note */}
@@ -201,7 +202,7 @@ function ModeCard({ active, onClick, title, badge, description }: ModeCardProps)
       type="button"
       onClick={onClick}
       className={[
-        'flex-1 rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface',
+        'flex-1 rounded-md border p-3 text-left transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface',
         active
           ? 'border-brand bg-brand/6'
           : 'border-edge-subtle bg-surface-raised/40 hover:border-edge-strong hover:bg-surface-raised/70',

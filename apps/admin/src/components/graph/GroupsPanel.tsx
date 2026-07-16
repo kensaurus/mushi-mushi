@@ -107,7 +107,7 @@ export function GroupsPanel() {
                 const firstReport = g.reports?.[0]
                 return (
                   <tr key={g.id} className="border-t border-edge-subtle align-top">
-                    <td className="px-2 py-1.5 max-w-[24rem]">
+                    <td className="px-2 py-1.5 max-w-96">
                       <div className="text-fg-secondary line-clamp-2">
                         {g.representative_summary ?? '(no summary)'}
                       </div>

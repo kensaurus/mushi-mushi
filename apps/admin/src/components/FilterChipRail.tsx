@@ -1,8 +1,10 @@
 /**
  * FILE: apps/admin/src/components/FilterChipRail.tsx
- * PURPOSE: Horizontal filter chip row with sliding active indicator (Framer layoutId).
+ * PURPOSE: Horizontal filter chip row with sliding active indicator (Framer layoutId)
+ *          + Auto-Animate for chip add/remove/reorder.
  */
 
+import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { LayoutGroup, motion } from 'framer-motion'
 import {
   createContext,
@@ -26,15 +28,23 @@ export function FilterChipRail({
   children: ReactNode
   'aria-label'?: string
 }) {
+  const [animateParent] = useAutoAnimate({
+    duration: 220,
+    easing: 'ease-out',
+  })
+
   return (
     <LayoutGroup id={trackId}>
-      <div
-        className={`inline-flex flex-wrap items-center gap-1 ${className}`}
-        role="group"
-        aria-label={ariaLabel}
-      >
-        <FilterRailContext.Provider value={trackId}>{children}</FilterRailContext.Provider>
-      </div>
+      <FilterRailContext.Provider value={trackId}>
+        <div
+          ref={animateParent}
+          className={`inline-flex flex-wrap items-center gap-1 ${className}`}
+          role="group"
+          aria-label={ariaLabel}
+        >
+          {children}
+        </div>
+      </FilterRailContext.Provider>
     </LayoutGroup>
   )
 }

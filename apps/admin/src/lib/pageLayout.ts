@@ -25,7 +25,7 @@ export function pageLayoutWidthForPath(pathname: string): PageLayoutWidth {
 export const PAGE_SHELL_CLASS: Record<PageLayoutWidth, string> = {
   standard: 'w-full max-w-[min(100%,92rem)] mx-auto px-4 sm:px-5 py-4',
   fluid:
-    'w-full max-w-none mx-auto px-3 sm:px-4 lg:px-5 xl:px-6 py-3 sm:py-4 motion-safe:transition-[padding] motion-safe:duration-base',
+    'w-full max-w-none mx-auto px-3 sm:px-4 lg:px-5 xl:px-6 py-3 sm:py-4 motion-safe:transition-[transform,opacity] motion-safe:duration-base',
 }
 
 /** Full-width page body stack — matches shell padding, no extra horizontal inset. */

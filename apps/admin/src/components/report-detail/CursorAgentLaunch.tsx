@@ -23,6 +23,7 @@
  */
 
 import { useState } from 'react'
+import { Card } from '../../components/ui'
 import { Btn } from '../ui'
 import { IconExternalLink } from '../icons'
 import { useToast } from '../../lib/toast'
@@ -110,7 +111,7 @@ export function CursorAgentLaunch({ report, cursorWorkspace }: CursorAgentLaunch
   }
 
   return (
-    <div className="rounded-md border border-edge-subtle bg-surface-raised/40 p-3 mb-3">
+    <Card  className="p-3 mb-3">
       <div className="mb-2">
         <div className="text-sm font-semibold text-fg">Hand to a Cursor agent</div>
         <ContainedBlock tone="muted" className="mt-1.5">
@@ -148,6 +149,6 @@ export function CursorAgentLaunch({ report, cursorWorkspace }: CursorAgentLaunch
           {prompt}
         </pre>
       </details>
-    </div>
+    </Card>
   )
 }

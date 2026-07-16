@@ -96,7 +96,7 @@ const TONE_DESC_CLS: Record<ToastTone, string> = {
 }
 
 const TOAST_ACTION_CLASS =
-  'mt-1.5 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-2xs font-medium text-brand-fg hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-1 focus-visible:ring-offset-surface-raised motion-safe:transition-colors'
+  'mt-1.5 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-2xs font-medium text-brand-fg hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-1 focus-visible:ring-offset-surface-raised motion-safe:transition-opacity'
 
 let counter = 0
 
@@ -217,6 +217,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       {toasts.length > 0 ? (
       <div
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         className="pointer-events-none fixed bottom-4 right-4 z-[60] flex flex-col gap-2 w-[min(22rem,calc(100vw-2rem))]"
         role="region"
         aria-label="Notifications"
@@ -262,7 +263,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <button
               type="button"
               onClick={() => dismiss(t.id)}
-              className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-sm text-danger-foreground hover:bg-danger-muted/50 text-xs leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface-raised motion-safe:transition-colors"
+              className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-sm text-danger-foreground hover:bg-danger-muted/50 text-xs leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface-raised motion-safe:transition-opacity"
               aria-label="Dismiss notification"
             >
               <span aria-hidden="true">✕</span>

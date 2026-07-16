@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Streamdown } from 'streamdown'
 import {
+  STREAMDOWN_LINK_SAFETY,
+  streamdownUrlTransform,
+} from '../../lib/streamdownSafety'
+import {
   Btn,
   Card,
   ChatComposer,
@@ -394,7 +398,7 @@ export function ExploreChatPanel({
                   type="button"
                   disabled={loading}
                   onClick={() => void sendMessage(q)}
-                  className="text-left text-2xs px-2.5 py-1.5 rounded-md border border-edge-subtle bg-surface-overlay hover:border-brand/40 hover:bg-brand/5 transition-colors disabled:opacity-50"
+                  className="text-left text-2xs px-2.5 py-1.5 rounded-md border border-edge-subtle bg-surface-overlay hover:border-brand/40 hover:bg-brand/5 transition-opacity disabled:opacity-50"
                 >
                   {q}
                 </button>
@@ -505,7 +509,7 @@ function ChatTurnCard({
               key={`${label}-${ci}`}
               type="button"
               onClick={() => onCitationClick?.(c)}
-              className="text-2xs font-mono px-1.5 py-0.5 rounded border border-edge-subtle bg-surface-raised hover:border-brand/50 hover:text-brand transition-colors"
+              className="text-2xs font-mono px-1.5 py-0.5 rounded border border-edge-subtle bg-surface-raised hover:border-brand/50 hover:text-brand transition-opacity"
               title={c.symbol_name ?? c.file_path}
             >
               {label}
@@ -536,6 +540,8 @@ function ChatTurnCard({
           className="prose-mushi prose-mushi-chat"
           parseIncompleteMarkdown={Boolean(turn.streaming)}
           shikiTheme={theme === 'light' ? ['github-light', 'github-light'] : ['github-dark', 'github-dark']}
+          linkSafety={STREAMDOWN_LINK_SAFETY}
+          urlTransform={streamdownUrlTransform}
         >
           {turn.content || (turn.streaming ? '…' : '')}
         </Streamdown>
@@ -565,7 +571,7 @@ function MessageTelemetryStrip({ turn }: { turn: ChatTurn }) {
 
   return (
     <div className="border-t border-edge-subtle/70 px-3 py-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs font-mono tabular-nums text-fg-faint bg-surface-overlay">
-      {turn.model ? <CodeChip maxWidthClass="max-w-[14rem]">{turn.model}</CodeChip> : null}
+      {turn.model ? <CodeChip maxWidthClass="max-w-56">{turn.model}</CodeChip> : null}
       {meta.length > 0 ? <span>{meta.join(' · ')}</span> : null}
       <Link
         to="/settings#byok"

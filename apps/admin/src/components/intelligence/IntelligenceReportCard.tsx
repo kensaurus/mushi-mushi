@@ -35,6 +35,7 @@ export function IntelligenceReportCard({ report, onDownload }: Props) {
         </Btn>
       </div>
 
+      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
       <div className="mb-3 grid grid-cols-2 gap-2 rounded-md border border-edge-subtle bg-surface-raised/25 p-2 sm:grid-cols-4">
         <Stat label="Reports" value={report.stats?.reports?.total?.toLocaleString() ?? '—'} />
         <Stat label="Fix attempts" value={report.stats?.fixes?.total?.toLocaleString() ?? '—'} />
@@ -72,9 +73,9 @@ export function IntelligenceReportCard({ report, onDownload }: Props) {
         <summary className="cursor-pointer text-2xs text-fg-muted hover:text-fg-secondary">
           Read AI summary
         </summary>
-        <div className="mt-2 whitespace-pre-wrap rounded-md border border-edge-subtle bg-surface-raised/50 p-3 text-xs leading-relaxed text-fg-secondary">
+        <Card  className="mt-2 whitespace-pre-wrap p-3 text-xs leading-relaxed text-fg-secondary">
           {report.summary_md || 'No summary text was captured for this report.'}
-        </div>
+        </Card>
       </details>
     </Card>
   )

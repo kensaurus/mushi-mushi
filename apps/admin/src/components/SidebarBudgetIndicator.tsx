@@ -26,7 +26,7 @@ export function SidebarBudgetIndicator({
       >
         <span className="relative h-1.5 w-8 overflow-hidden rounded-full bg-warn-muted">
           <span
-            className="absolute inset-y-0 left-0 rounded-full bg-warn motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity]"
+            className="absolute inset-y-0 left-0 rounded-full bg-warn motion-safe:transition-[transform,opacity]"
             style={{ width: `${Math.max(pct, 12)}%` }}
           />
         </span>

@@ -10,9 +10,16 @@
 
 import { Link } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
-import { PageHeader, StatGrid } from '../components/ui'
+import { usePageCopy } from '../lib/copy'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
+import { Btn, Card, FreshnessPill, Section, StatCard, StatGrid } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { PageLoadError } from '../components/PageLoadError'
 import { LineSparkline } from '../components/charts'
-import { CHIP_TONE } from '../lib/chipTone'
+import { IconHealth } from '../components/icons'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,30 +58,101 @@ interface ActivityData {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export function ActivityPage() {
-  const { data, loading, error, reload } = usePageData<ActivityData>('/v1/admin/activity?window=30')
+  const copy = usePageCopy('/activity')
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
+  const projectName = setup.activeProject?.project_name ?? null
+
+  const {
+    data,
+    loading,
+    error,
+    errorCode,
+    requestId,
+    errorEndpoint,
+    isValidating,
+    lastFetchedAt,
+    reload,
+  } = usePageData<ActivityData>('/v1/admin/activity?window=30')
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      <PageHeader
-        title="Activity"
-        description="End-user sessions and engagement for this project over the last 30 days."
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-activity">
+      <PageHeaderBar
+        title={copy?.title ?? 'Activity'}
+        description={
+          copy?.description ??
+          'End-user sessions and engagement for this project over the last 30 days.'
+        }
+        projectScope={projectName ?? undefined}
+        icon={<IconHealth />}
+        helpTitle={copy?.help?.title ?? 'About Activity'}
+        helpWhatIsIt={
+          copy?.help?.whatIsIt ??
+          'Per-project activity from SDK telemetry — sessions, page views, identified vs. anonymous users, and top routes over the last 30 days.'
+        }
+        helpUseCases={
+          copy?.help?.useCases ?? [
+            'See whether users are completing sessions or bouncing early',
+            'Compare identified vs. anonymous traffic before tuning rewards',
+            'Spot which routes drive the most page views',
+          ]
+        }
+        helpHowToUse={
+          copy?.help?.howToUse ??
+          'Sessions appear once the Mushi SDK is installed and users visit instrumented pages. Use Connect if the empty state persists.'
+        }
       >
-        <button
-          onClick={reload}
-          className="rounded border border-edge bg-surface-overlay px-3 py-1.5 text-xs text-fg-muted hover:bg-surface-raised transition-colors"
-        >
+        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
+        <Btn size="sm" variant="ghost" onClick={reload} loading={isValidating}>
           Refresh
-        </button>
-      </PageHeader>
+        </Btn>
+      </PageHeaderBar>
+
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: Boolean(data),
+            children: data ? (
+              <StatGrid>
+                <StatCard
+                  label="Sessions"
+                  value={fmt(data.sessions)}
+                  detail={`${fmt(data.completed_sessions)} completed`}
+                />
+                <StatCard
+                  label="Unique devices"
+                  value={fmt(data.unique_devices)}
+                  detail={`${fmt(data.identified_users)} identified`}
+                />
+                <StatCard
+                  label="Avg page views"
+                  value={String(data.avg_page_views ?? 0)}
+                  detail="per session"
+                />
+                <StatCard
+                  label="Avg session"
+                  value={data.avg_session_minutes ? `${data.avg_session_minutes}m` : '—'}
+                  detail="minutes"
+                />
+              </StatGrid>
+            ) : null,
+          },
+        ]}
+      />
 
       {loading && !data && (
         <div className="flex items-center justify-center py-16 text-fg-faint text-sm">Loading activity…</div>
       )}
       {error && (
-        <div className={`rounded px-4 py-3 text-sm ${CHIP_TONE.dangerSubtle}`}>
-          Failed to load activity data.{' '}
-          <button onClick={reload} className="underline">Retry</button>
-        </div>
+        <PageLoadError
+          error={error}
+          code={errorCode}
+          resource="activity"
+          endpoint={errorEndpoint}
+          requestId={requestId}
+          onRetry={reload}
+        />
       )}
       {data && <ActivityDashboard data={data} />}
     </div>
@@ -96,37 +174,21 @@ function ActivityDashboard({ data }: { data: ActivityData }) {
       : 0
 
   return (
-    <div className="space-y-6">
-      {/* KPI Strip */}
-      <StatGrid>
-        <MetricTile label="Sessions" value={fmt(data.sessions)} hint={`${fmt(data.completed_sessions)} completed`} />
-        <MetricTile label="Unique devices" value={fmt(data.unique_devices)} hint={`${fmt(data.identified_users)} identified`} />
-        <MetricTile label="Avg page views" value={String(data.avg_page_views ?? 0)} hint="per session" />
-        <MetricTile
-          label="Avg session"
-          value={data.avg_session_minutes ? `${data.avg_session_minutes}m` : '—'}
-          hint="minutes"
-        />
-      </StatGrid>
-
+    <div className="space-y-4">
       {/* DAU Sparkline */}
       {dauValues.length > 0 && (
-        <section className="rounded border border-edge bg-surface-overlay p-4">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-fg-faint">
-            Daily Active Users — last {data.window_days}d
-          </h2>
+        <Section title={`Daily Active Users — last ${data.window_days}d`}>
           <LineSparkline values={dauValues} height={64} />
           <div className="mt-2 flex gap-4 text-xs text-fg-muted">
             <span>Peak: {Math.max(...dauValues)}</span>
             <span>Avg: {Math.round(dauValues.reduce((a, b) => a + b, 0) / dauValues.length)}</span>
           </div>
-        </section>
+        </Section>
       )}
 
       {/* User split + Reports at-a-glance */}
       <div className="grid gap-4 sm:grid-cols-2">
-        <section className="rounded border border-edge bg-surface-overlay p-4">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-fg-faint">User identity split</h2>
+        <Section title="User identity split">
           <div className="flex items-center gap-3">
             <div className="h-2 flex-1 overflow-hidden rounded-full bg-edge">
               <div
@@ -146,10 +208,9 @@ function ActivityDashboard({ data }: { data: ActivityData }) {
               Anonymous: {fmt(data.user_split.anonymous)}
             </span>
           </div>
-        </section>
+        </Section>
 
-        <section className="rounded border border-edge bg-surface-overlay p-4">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-fg-faint">Reports this period</h2>
+        <Section title="Reports this period">
           <div className="flex gap-4">
             <CountPill label="Open" value={data.reports.open} />
             <CountPill label="Critical" value={data.reports.critical} tone="danger" />
@@ -158,13 +219,12 @@ function ActivityDashboard({ data }: { data: ActivityData }) {
           <Link to="/reports" className="mt-3 block text-xs text-brand hover:underline">
             View all reports →
           </Link>
-        </section>
+        </Section>
       </div>
 
       {/* Top routes */}
       {data.top_routes.length > 0 && (
-        <section className="rounded border border-edge bg-surface-overlay p-4">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-fg-faint">Top pages by views</h2>
+        <Section title="Top pages by views">
           <ol className="space-y-1.5">
             {data.top_routes.map((r, i) => {
               const maxViews = data.top_routes[0].views
@@ -183,11 +243,11 @@ function ActivityDashboard({ data }: { data: ActivityData }) {
               )
             })}
           </ol>
-        </section>
+        </Section>
       )}
 
       {data.sessions === 0 && (
-        <div className="rounded border border-edge bg-surface-overlay px-4 py-8 text-center text-sm text-fg-faint">
+        <Card className="px-4 py-8 text-center text-sm text-fg-faint">
           <p className="font-medium text-fg-muted">No sessions recorded yet</p>
           <p className="mt-1 text-xs">
             Once users visit pages with the Mushi SDK installed, sessions will appear here.{' '}
@@ -195,23 +255,13 @@ function ActivityDashboard({ data }: { data: ActivityData }) {
               Check your SDK setup →
             </Link>
           </p>
-        </div>
+        </Card>
       )}
     </div>
   )
 }
 
 // ─── Small components ─────────────────────────────────────────────────────────
-
-function MetricTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="flex flex-col gap-0.5 rounded border border-edge bg-surface-overlay px-4 py-3">
-      <span className="text-2xs font-medium uppercase tracking-wide text-fg-faint">{label}</span>
-      <span className="text-2xl font-semibold tabular-nums leading-none text-fg">{value}</span>
-      {hint && <span className="text-xs text-fg-faint">{hint}</span>}
-    </div>
-  )
-}
 
 function CountPill({ label, value, tone }: { label: string; value: number; tone?: 'danger' | 'warn' }) {
   const toneClass = tone === 'danger' ? 'text-danger' : tone === 'warn' ? 'text-warn' : 'text-fg'

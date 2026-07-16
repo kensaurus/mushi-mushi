@@ -22,6 +22,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
@@ -176,7 +177,7 @@ function StoryCard({
 
   return (
     <Card
-      className={`group relative flex flex-col gap-3 p-4 cursor-pointer transition-[background-color,border-color,color,box-shadow,transform,opacity] hover:shadow-md ${highlighted ? 'ring-2 ring-brand' : ''}`}
+      className={`group relative flex flex-col gap-3 p-4 cursor-pointer transition-[transform,opacity] hover:shadow-md ${highlighted ? 'ring-2 ring-brand' : ''}`}
       onClick={() => onSelect(coverage.story_id)}
     >
       {/* Header row */}
@@ -240,7 +241,7 @@ function StoryCard({
         </div>
         <div className="h-1 w-full rounded-full bg-surface-overlay overflow-hidden">
           <div
-            className={`h-full rounded-full transition-[background-color,border-color,color,box-shadow,transform,opacity] ${barTone}`}
+            className={`h-full rounded-full transition-[transform,opacity] ${barTone}`}
             style={{ width: passRate !== null ? `${Math.max(2, Math.min(100, passRate))}%` : '0%' }}
           />
         </div>
@@ -348,12 +349,10 @@ function RunDetail({
 
       {/* Error message */}
       {run.error_message && (
-        <div className="rounded-sm border border-danger/40 bg-surface-raised px-3 py-2">
-          <div className="text-3xs font-semibold text-danger uppercase tracking-wider mb-1">Error</div>
-          <pre className="text-2xs font-mono text-danger whitespace-pre-wrap break-all leading-relaxed max-h-32 overflow-y-auto">
-            {run.error_message}
-          </pre>
-        </div>
+        <ErrorAlert
+          title="Run failed"
+          message={run.error_message}
+        />
       )}
 
       {/* Assertion failures */}
@@ -437,7 +436,7 @@ function RunDetail({
                       href={ev.signed_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
+                      className="inline-flex items-center gap-1 text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
                     >
                       <IconExternalLink className="h-3 w-3" />
                       Download {ev.kind}
@@ -472,7 +471,7 @@ function RunDetail({
           href={run.provider_session_url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors font-medium"
+          className="inline-flex items-center gap-1.5 text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity font-medium"
         >
           <IconExternalLink className="h-3 w-3" />
           Open session replay in {PROVIDER_LABEL[run.provider ?? ''] ?? run.provider}
@@ -603,7 +602,7 @@ function StoryDrawer({
 
           {story?.script && (
             <details className="rounded-sm border border-edge-subtle">
-              <summary className="px-3 py-2 text-2xs font-medium text-fg cursor-pointer select-none hover:bg-surface-raised transition-colors">
+              <summary className="px-3 py-2 text-2xs font-medium text-fg cursor-pointer select-none hover:bg-surface-raised transition-opacity">
                 Script ({story.script_lang})
               </summary>
               <pre className="px-3 pb-3 pt-1 text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap max-h-48">
@@ -627,11 +626,11 @@ function StoryDrawer({
             </div>
 
             {isQueued && recentRuns.length === 0 && (
-              <div className="rounded-sm border border-brand/30 bg-surface-raised px-3 py-2.5 text-2xs text-fg-secondary leading-relaxed">
+              <Card  className="px-3 py-2.5 text-2xs text-fg-secondary leading-relaxed">
                 Run is <strong className="text-brand">queued</strong> in{' '}
                 <code className="text-3xs font-mono bg-surface-overlay px-1 rounded">qa_story_runs</code>.
                 The runner picks it up within seconds. Polling…
-              </div>
+              </Card>
             )}
 
             {recentRuns.length === 0 && !isQueued && (
@@ -646,7 +645,7 @@ function StoryDrawer({
                 return (
                   <div
                     key={run.id}
-                    className={`rounded-md border overflow-hidden transition-colors ${STATUS_BG[run.status] ?? 'bg-surface-raised border-edge-subtle'}`}
+                    className={`rounded-md border overflow-hidden transition-opacity ${STATUS_BG[run.status] ?? 'bg-surface-raised border-edge-subtle'}`}
                   >
                     {/* Run summary row — click to expand */}
                     <Btn
@@ -813,7 +812,7 @@ export function QaCoveragePage() {
   }, [projectId, reload, reloadPending, toastSuccess, toastError])
 
   return (
-    <div className="space-y-5">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-qa-coverage">
       {activationEnabled && qaStep && !qaStep.complete ? (
         <Card className="p-3 border-dashed border-brand/30 bg-surface-raised">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -902,7 +901,7 @@ export function QaCoveragePage() {
         {!entLoading && !inventoryEnabled ? (
           <p className="text-2xs text-fg-muted py-1">
             TDD review from user stories requires{' '}
-            <Link to="/billing" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+            <Link to="/billing" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
               Bidirectional inventory
             </Link>
             {planName ? ` (not included on ${planName})` : '.'}
@@ -922,7 +921,7 @@ export function QaCoveragePage() {
                   )}
                 </div>
                 {story.generated_pr_url && (
-                  <a href={story.generated_pr_url} target="_blank" rel="noreferrer" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors flex items-center gap-1">
+                  <a href={story.generated_pr_url} target="_blank" rel="noreferrer" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity flex items-center gap-1">
                     <IconExternalLink className="h-3 w-3" />
                     PR
                   </a>

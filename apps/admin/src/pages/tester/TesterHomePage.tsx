@@ -245,7 +245,7 @@ export function TesterHomePage() {
               </div>
             )}
 
-            <div className="min-w-[12rem] flex-1 space-y-2">
+            <div className="min-w-48 flex-1 space-y-2">
               <p className="text-xs font-medium text-fg-muted">YTD gift cards</p>
               <TesterProgressTrack
                 value={ytd}
@@ -277,7 +277,7 @@ export function TesterHomePage() {
           <TesterSection
             title="Recommended for you"
             action={
-              <Link to="/tester/apps" className="text-xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+              <Link to="/tester/apps" className="text-xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
                 See all apps →
               </Link>
             }
@@ -321,7 +321,7 @@ export function TesterHomePage() {
         <TesterSection
           title="Learn how Bounties works"
           action={
-            <Link to="/tester/learn" className="text-xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+            <Link to="/tester/learn" className="text-xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
               Full guide →
             </Link>
           }

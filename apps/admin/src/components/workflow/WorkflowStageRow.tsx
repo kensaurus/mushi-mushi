@@ -112,7 +112,7 @@ export function WorkflowStageRow({
       {actionLine && (
         <p className="mt-1 text-2xs text-fg-muted leading-snug">
           {actionHref ? (
-            <Link to={actionHref} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+            <Link to={actionHref} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
               {actionLine}
             </Link>
           ) : (

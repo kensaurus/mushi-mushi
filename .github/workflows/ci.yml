@@ -127,7 +127,29 @@ jobs:
         # warnings via the separate dependency-review job on PRs but do
         # not block the merge. `--audit-level=high` matches pnpm's own
         # recommended CI threshold.
-        run: pnpm audit --audit-level=high
+        #
+        # 2026-07-14: npm retired the legacy `/-/npm/v1/security/audits`
+        # (+ `/quick`) endpoints that pnpm's audit client still calls;
+        # they now return HTTP 410 with ERR_PNPM_AUDIT_BAD_RESPONSE, so
+        # the command errors registry-side rather than on a real
+        # advisory. Tolerate *that specific outage only* — a genuine
+        # High/Critical finding still fails the job — until pnpm ships
+        # the bulk-advisory endpoint. dependency-review + CodeQL keep
+        # supply-chain coverage in the meantime.
+        run: |
+          set +e
+          output="$(pnpm audit --audit-level=high 2>&1)"
+          code=$?
+          echo "$output"
+          if [ "$code" -eq 0 ]; then
+            exit 0
+          fi
+          if echo "$output" | grep -qE 'ERR_PNPM_AUDIT_BAD_RESPONSE|This endpoint is being retired'; then
+            echo "::warning::pnpm audit endpoint retired by npm (HTTP 410); skipping supply-chain gate. dependency-review + CodeQL still enforce."
+            exit 0
+          fi
+          echo "::error::pnpm audit reported High/Critical advisories."
+          exit "$code"
 
       - run: pnpm build
 
@@ -135,11 +157,8 @@ jobs:
 
       - run: pnpm lint
 
-      - name: Check design tokens
-        run: pnpm check:design-tokens
-
-      - name: Check brand token build freshness
-        run: pnpm check:brand-tokens-fresh
+      - name: Check design system gates
+        run: pnpm check:design
 
       - run: pnpm test
 

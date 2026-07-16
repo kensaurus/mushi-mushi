@@ -57,7 +57,7 @@ export function StageHealthRing({
         strokeDasharray={circumference}
         strokeDashoffset={offset}
         transform={`rotate(-90 ${c} ${c})`}
-        style={{ transition: 'stroke-dashoffset 350ms var(--ease-out-expo)' }}
+        style={{ transition: 'stroke-dashoffset 300ms var(--ease-stamp, var(--ease-out-expo))' }} /* SVG meter exception — docs/MOTION.md */
       />
       {glyph && (
         <text

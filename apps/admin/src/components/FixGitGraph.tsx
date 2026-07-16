@@ -246,6 +246,7 @@ export function FixGitGraph({
   const mergeY = completedIdx >= 0 ? completedIdx * ROW_H + 12 : null
 
   return (
+    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
     <div className={`grid grid-cols-[7.5rem_1fr] gap-3 rounded-sm border border-edge-subtle/55 bg-surface-overlay/20 p-2 ${className}`}>
       <svg
         viewBox={`0 0 80 ${totalH}`}
@@ -367,7 +368,7 @@ export function FixGitGraph({
       </svg>
 
       <ul className="space-y-0 text-xs">
-        <li className="mb-1 flex h-auto min-h-[1.25rem] flex-wrap items-center gap-1.5 rounded-sm border border-edge-subtle/50 bg-surface-overlay/35 px-2 py-1 text-3xs uppercase tracking-wider text-fg-faint">
+        <li className="mb-1 flex h-auto min-h-5 flex-wrap items-center gap-1.5 rounded-sm border border-edge-subtle/50 bg-surface-overlay/35 px-2 py-1 text-3xs uppercase tracking-wider text-fg-faint">
           <span className="font-mono normal-case text-fg-secondary">{baseBranch}</span>
           <span className="text-fg-faint">→</span>
           {branchUrl && branchName ? (
@@ -400,7 +401,7 @@ export function FixGitGraph({
             <li
               key={i}
               className={[
-                'flex items-start gap-2 rounded-sm border border-transparent px-1.5 py-0.5 -mx-0.5 motion-safe:transition-colors',
+                'flex items-start gap-2 rounded-sm border border-transparent px-1.5 py-0.5 -mx-0.5 motion-safe:transition-opacity',
                 selected ? 'border-brand/30 bg-brand/10 ring-1 ring-brand/25' : 'hover:bg-surface-overlay/30',
               ].join(' ')}
               style={{ minHeight: `${ROW_H}px` }}

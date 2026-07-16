@@ -306,7 +306,7 @@ export function PlatformIntegrationCard({
                 target="_blank"
                 rel="noreferrer noopener"
                 aria-label={`Open ${def.label} in a new tab`}
-                className="inline-flex items-center justify-center w-7 h-7 rounded-sm text-fg-faint hover:text-fg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                className="inline-flex items-center justify-center w-7 h-7 rounded-sm text-fg-faint hover:text-fg-muted transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
               >
                 <IconExternalLink size={13} />
               </a>
@@ -357,21 +357,21 @@ export function PlatformIntegrationCard({
                   </Btn>
                 </Tooltip>
                 {overflowOpen && (
+                  // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                   <div className="absolute right-0 top-full mt-1 z-20 min-w-[220px] rounded-md border border-edge bg-surface shadow-lg py-1">
-                    <button
-                      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-fg hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    <Btn
+                      variant="ghost"
+                      size="sm"
+                      className="flex w-full items-center justify-start gap-2 rounded-none px-3 py-2.5 text-left text-xs font-normal text-fg hover:bg-surface-hover"
                       onClick={() => {
                         setOverflowOpen(false)
                         onApplyToAll()
                       }}
                       disabled={applyingToAll}
+                      loading={applyingToAll}
                     >
-                      {applyingToAll ? (
-                        <span className="text-fg-muted">Applying to all projects…</span>
-                      ) : (
-                        <span>Copy credentials to all projects in org</span>
-                      )}
-                    </button>
+                      {applyingToAll ? 'Applying to all projects…' : 'Copy credentials to all projects in org'}
+                    </Btn>
                   </div>
                 )}
               </div>

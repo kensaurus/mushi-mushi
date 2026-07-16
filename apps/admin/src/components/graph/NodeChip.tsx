@@ -30,7 +30,7 @@ export function NodeChip({ node, selected }: Props) {
   const shape = nodeShape(node.node_type)
   return (
     <div
-      className={`px-2.5 py-1 text-2xs leading-tight font-medium text-fg bg-surface-raised ${shape} ${ring} max-w-[200px]`}
+      className={`px-2.5 py-1 text-2xs leading-tight font-medium text-fg bg-surface-raised ${shape} ${ring} max-w-48`}
       title={`${NODE_TYPE_LABELS[node.node_type] ?? node.node_type}: ${node.label}`}
     >
       <Handle type="target" position={Position.Top} className="!bg-transparent !border-0 !w-2 !h-2" />

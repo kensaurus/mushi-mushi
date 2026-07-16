@@ -8,6 +8,7 @@ import { Btn, Input, SelectField, Textarea } from '../ui'
 import { Modal } from '../Modal'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { cronExpression, url } from '../../lib/validators'
 
 const SCHEDULE_PRESETS = [
   { label: 'Every hour', value: '0 * * * *' },
@@ -50,6 +51,20 @@ export function CreateStoryModal({ projectId, onClose, onCreated }: CreateStoryM
     if (!targetUrl.trim() && provider !== 'local') {
       toastError('Target URL is required so the runner knows which page to test.')
       return
+    }
+    if (targetUrl.trim()) {
+      const urlErr = url({ optional: false })(targetUrl.trim())
+      if (urlErr) {
+        toastError(urlErr.message)
+        return
+      }
+    }
+    if (schedulePreset === 'custom') {
+      const cronErr = cronExpression({ optional: false })(customCron.trim())
+      if (cronErr) {
+        toastError(cronErr.message)
+        return
+      }
     }
     setSaving(true)
     const res = await apiFetch(`/v1/admin/projects/${projectId}/qa-stories`, {
@@ -111,6 +126,7 @@ export function CreateStoryModal({ projectId, onClose, onCreated }: CreateStoryM
             name="qa-story-target-url"
             autoComplete="off"
             className="font-mono"
+            validate={provider !== 'local' ? url({ optional: false }) : url({ optional: true })}
           />
           <p className="mt-1 text-2xs text-fg-faint">The URL the runner will navigate to before verifying your prompt.</p>
         </div>
@@ -161,6 +177,7 @@ export function CreateStoryModal({ projectId, onClose, onCreated }: CreateStoryM
               autoComplete="off"
               spellCheck={false}
               className="mt-2 font-mono"
+              validate={cronExpression({ optional: false })}
             />
           )}
         </div>

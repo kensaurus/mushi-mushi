@@ -284,7 +284,7 @@ export function SkillPipelinesPage() {
             Skill pipelines attach cursor-kenji workflows to bug reports. Select a project in the header, then sync skill sources or start a handoff run.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Link to="/onboarding" className="text-xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">Open setup cockpit</Link>
+            <Link to="/onboarding" className="text-xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">Open setup cockpit</Link>
             <Link to="/skills?tab=sources" className="text-xs text-fg-muted underline">Manage skill sources</Link>
           </div>
         </Card>
@@ -406,7 +406,7 @@ function SkillDetailPanel({
       <div className="border-t border-edge-subtle pt-3 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <p className="text-2xs font-semibold text-fg">Apply to a report</p>
-          <Link to="/reports" className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">Browse reports →</Link>
+          <Link to="/reports" className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">Browse reports →</Link>
         </div>
         <div className="space-y-1">
           <label className="text-2xs text-fg-muted" htmlFor={embedded ? 'skill-report-id-drawer' : 'skill-report-id'}>
@@ -439,13 +439,13 @@ function SkillDetailPanel({
         {mode === 'cloud' && cloudReadiness && !cloudReadiness.cloudReady ? (
           <HelpBanner tone="neutral" className="rounded-lg">
             Cloud mode needs a Cursor API key and GitHub repo URL.{' '}
-            <Link to="/integrations/config#cursor_cloud" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+            <Link to="/integrations/config#cursor_cloud" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
               Open Integrations → Cursor Cloud
             </Link>
             {!cloudReadiness.githubRepoConfigured ? (
               <>
                 {' '}and{' '}
-                <Link to="/integrations/config#github" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+                <Link to="/integrations/config#github" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
                   GitHub repo
                 </Link>
               </>
@@ -468,7 +468,7 @@ function SkillDetailPanel({
         {!reportId ? (
           <p className="text-2xs text-fg-faint">
             Tip: paste a report ID above so the skill gets your exact bug context. Find IDs in{' '}
-            <Link to="/reports" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">Reports</Link>.
+            <Link to="/reports" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">Reports</Link>.
           </p>
         ) : null}
       </div>
@@ -640,10 +640,11 @@ function CatalogTab({
           return (
             <section
               key={cat}
+              // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
               className={`rounded-lg border border-edge-subtle bg-surface-raised p-3 shadow-card border-l-[3px] ${meta.accentClass}`}
             >
               <SkillCategoryHeader meta={meta} count={catSkills.length} />
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${selected ? 'xl:grid-cols-2' : 'lg:grid-cols-3'}`}>
                 {catSkills.map((skill) => (
                   <Btn
                     key={skill.slug}
@@ -652,7 +653,7 @@ function CatalogTab({
                     size="sm"
                     onClick={() => selectSkill(skill)}
                     className={[
-                      '!justify-start !items-start !text-left !p-3 !rounded-lg !w-full !h-auto transition-colors',
+                      '!justify-start !items-start !text-left !p-3 !rounded-lg !w-full !h-auto transition-opacity',
                       selected?.slug === skill.slug
                         ? '!border-brand !bg-surface-raised ring-1 ring-brand/30'
                         : '!border-edge-subtle !bg-surface-raised hover:!border-brand/40 hover:!bg-surface-overlay',
@@ -847,7 +848,7 @@ function PipelinesTab({
         {runs.length === 0 ? (
           <div className="py-10 text-center flex flex-col items-center gap-4 max-w-md mx-auto">
             <p className="text-sm font-medium text-fg">No pipeline runs yet</p>
-            <div className="text-xs text-fg-muted text-left w-full rounded-md border border-edge-subtle bg-surface-overlay px-4 py-3 space-y-2">
+            <Card  className="text-xs text-fg-muted text-left w-full px-4 py-3 space-y-2">
               <p className="font-semibold text-fg text-2xs uppercase tracking-wide">How to start your first run</p>
               <ol className="list-decimal pl-4 space-y-1 text-fg-secondary">
                 <li>Open a report and copy its ID from the URL</li>
@@ -855,7 +856,7 @@ function PipelinesTab({
                 <li>Paste the report ID in the "Apply to a report" field, click <strong>Start pipeline</strong></li>
                 <li>Copy the context packet into your Cursor agent — the skill walks you through each step</li>
               </ol>
-            </div>
+            </Card>
             <div className="flex gap-2">
               <Btn type="button" variant="primary" size="sm" onClick={onGoToCatalog}>
                 Browse Catalog →
@@ -870,7 +871,7 @@ function PipelinesTab({
             <div
               key={run.id}
               className={[
-                'p-3 rounded-lg border transition-colors flex items-start gap-3',
+                'p-3 rounded-lg border transition-opacity flex items-start gap-3',
                 selectedRun?.id === run.id
                   ? 'border-brand bg-surface-raised ring-1 ring-brand/30'
                   : 'border-edge-subtle bg-surface-raised hover:bg-surface-overlay',
@@ -1067,7 +1068,9 @@ function RunDetail({
         </div>
       </div>
 
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       {/* React Flow pipeline canvas */}
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       <div className="min-h-[220px]" style={{ height: embedded ? 220 : 240 }}>
         <ReactFlow
           nodes={nodes}
@@ -1103,14 +1106,14 @@ function RunDetail({
                 href={`https://cursor.com/agents/${step.agent_ref}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors text-2xs"
+                className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity text-2xs"
                 title={`Cursor agent ${step.agent_ref}`}
               >
                 Agent
               </a>
             ) : null}
             {step.pr_url ? (
-              <a href={step.pr_url} target="_blank" rel="noopener noreferrer" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors text-2xs">PR</a>
+              <a href={step.pr_url} target="_blank" rel="noopener noreferrer" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity text-2xs">PR</a>
             ) : null}
           </div>
         ))}
@@ -1137,7 +1140,9 @@ function RunDetail({
     return <div className="flex flex-col overflow-hidden rounded-xl border border-edge">{panelBody}</div>
   }
 
+  // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
   return (
+    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
     <SurfacePanel className="w-full lg:w-[560px] flex-shrink-0 rounded-xl flex flex-col overflow-hidden p-0">
       {panelBody}
     </SurfacePanel>

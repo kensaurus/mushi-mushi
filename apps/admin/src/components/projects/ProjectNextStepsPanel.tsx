@@ -29,6 +29,7 @@ export function ProjectNextStepsPanel({ projects }: { projects: Project[] }) {
   return (
     <section
       aria-label="What each project needs next"
+      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
       className="rounded-lg border border-edge bg-surface-raised/40 p-4 space-y-3"
     >
       <div>
@@ -73,7 +74,7 @@ export function ProjectNextStepsPanel({ projects }: { projects: Project[] }) {
                       <span className="text-3xs text-fg-muted">{step.why}</span>
                       <Link
                         to={step.to}
-                        className="text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors whitespace-nowrap"
+                        className="text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity whitespace-nowrap"
                       >
                         {step.ctaLabel} →
                       </Link>

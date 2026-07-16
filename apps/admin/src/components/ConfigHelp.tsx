@@ -1,3 +1,4 @@
+// mushi-ui: intentional overlay — not Modal/Drawer (reason: non-modal anchored popover with viewport flip + scroll; user keeps editing the form)
 /**
  * FILE: apps/admin/src/components/ConfigHelp.tsx
  * PURPOSE: Click-to-open help popover for individual configuration controls.
@@ -307,7 +308,7 @@ export function ConfigHelp({ helpId, ariaLabel }: ConfigHelpProps) {
         >
           <header className="flex items-start justify-between gap-2 border-b border-edge-subtle px-3.5 py-2.5 shrink-0">
             <div className="min-w-0 flex-1">
-              <p className="text-2xs font-medium uppercase tracking-[0.08em] text-brand/80 leading-none mb-1">
+              <p className="text-2xs font-medium uppercase tracking-widest text-brand/80 leading-none mb-1">
                 Configuration
               </p>
               <h3 id={titleId} className="text-sm font-semibold text-fg leading-snug">
@@ -403,7 +404,7 @@ function Section({
         : 'text-fg-muted'
   return (
     <div className={`pl-2.5 border-l-2 ${railClass}`}>
-      <p className={`mb-0.5 text-2xs font-semibold uppercase tracking-[0.08em] ${headingClass}`}>
+      <p className={`mb-0.5 text-2xs font-semibold uppercase tracking-widest ${headingClass}`}>
         {heading}
       </p>
       <div className="text-fg-secondary">{children}</div>

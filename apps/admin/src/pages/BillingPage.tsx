@@ -18,6 +18,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -247,7 +248,7 @@ export function BillingPage() {
   }
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-billing">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-billing">
       <PageHeaderBar
         title={copy?.title ?? 'Billing'}
         projectScope={stats.projectName ?? activeProject?.project_name}

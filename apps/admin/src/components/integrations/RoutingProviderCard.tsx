@@ -182,7 +182,7 @@ export function RoutingProviderCard({
                 target="_blank"
                 rel="noreferrer noopener"
                 aria-label={`Open ${provider.label} in a new tab`}
-                className="inline-flex items-center justify-center w-7 h-7 rounded-sm text-fg-faint hover:text-fg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                className="inline-flex items-center justify-center w-7 h-7 rounded-sm text-fg-faint hover:text-fg-muted transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
               >
                 <IconExternalLink size={13} />
               </a>

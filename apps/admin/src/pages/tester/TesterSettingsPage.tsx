@@ -11,6 +11,7 @@ import { Modal } from '../../components/Modal'
 import { ContainedBlock } from '../../components/report-detail/ReportSurface'
 import { KycForm } from '../../components/tester/KycForm'
 import { TesterPageIntro } from '../../components/tester/tester-ui'
+import { SELECTED_TONE, SELECTED_TONE_IDLE } from '../../lib/chipTone'
 
 const EXPERTISE_OPTIONS = [
   'web', 'ios', 'android', 'accessibility', 'security',
@@ -49,7 +50,14 @@ export function TesterSettingsPage() {
         method: 'PUT',
         scope: 'none',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          handle: form.handle ?? null,
+          bio: form.bio ?? null,
+          expertiseTags: form.expertiseTags ?? [],
+          country: form.country ?? null,
+          privacyPublicHandle: form.privacyPublicHandle ?? false,
+          privacyPublicLeaderboard: form.privacyPublicLeaderboard ?? false,
+        }),
       })
       if (res.ok) {
         toast.success('Profile saved.')
@@ -190,8 +198,8 @@ export function TesterSettingsPage() {
                       onClick={() => toggleTag(tag)}
                       className={`rounded-full px-3 py-1 text-2xs font-medium ${
                         selected
-                          ? 'border-brand/60 bg-brand/10 text-brand'
-                          : 'border-edge text-fg-muted hover:border-edge-strong'
+                          ? SELECTED_TONE
+                          : SELECTED_TONE_IDLE
                       }`}
                     >
                       {tag}

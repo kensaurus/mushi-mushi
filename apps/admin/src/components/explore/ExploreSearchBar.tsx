@@ -220,7 +220,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
                 type="button"
                 onClick={() => setActiveLayer(null)}
                 className={[
-                  'text-2xs px-2 py-0.5 rounded-sm border transition-colors',
+                  'text-2xs px-2 py-0.5 rounded-sm border transition-opacity',
                   activeLayer === null
                     ? 'border-edge bg-surface-overlay text-fg font-medium'
                     : 'border-edge-subtle bg-surface-raised text-fg-secondary hover:text-fg hover:border-edge',
@@ -236,7 +236,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
                     type="button"
                     onClick={() => setActiveLayer(l)}
                     className={[
-                      'text-2xs px-2 py-0.5 rounded-sm border transition-colors flex items-center gap-1',
+                      'text-2xs px-2 py-0.5 rounded-sm border transition-opacity flex items-center gap-1',
                       activeLayer === l
                         ? 'border-current font-medium'
                         : 'border-edge-subtle bg-surface-raised hover:border-current',
@@ -265,7 +265,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
                 key={hit.id}
                 type="button"
                 onClick={() => onSelectHit(hit)}
-                className="w-full text-left rounded-md border border-edge-subtle bg-surface-raised hover:bg-surface-overlay hover:border-edge transition-colors p-3 space-y-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+                className="w-full text-left rounded-md border border-edge-subtle bg-surface-raised hover:bg-surface-overlay hover:border-edge transition-opacity p-3 space-y-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
                 style={{ borderLeft: `3px solid ${LAYER_COLORS[hit.layer as ExploreLayer] ?? LAYER_COLORS.other}` }}
               >
                 <div className="flex items-start gap-2">
@@ -325,7 +325,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
                   key={ex}
                   type="button"
                   onClick={() => setQuery(ex)}
-                  className="text-2xs px-2 py-1 rounded-md border border-edge-subtle bg-surface-overlay text-fg-secondary hover:text-fg hover:border-edge hover:bg-surface-overlay transition-colors"
+                  className="text-2xs px-2 py-1 rounded-md border border-edge-subtle bg-surface-overlay text-fg-secondary hover:text-fg hover:border-edge hover:bg-surface-overlay transition-opacity"
                 >
                   {ex}
                 </button>

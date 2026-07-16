@@ -3,7 +3,7 @@ import { Tooltip } from '../ui'
 
 export function ModelChip({
   model,
-  maxWidthClass = 'max-w-[10rem]',
+  maxWidthClass = 'max-w-40',
 }: {
   model: string
   maxWidthClass?: string
@@ -12,7 +12,7 @@ export function ModelChip({
     <Tooltip
       nowrap={false}
       content={
-        <div className="max-w-[14rem] space-y-1 text-left">
+        <div className="max-w-56 space-y-1 text-left">
           <p className="text-xs font-medium text-fg">{model}</p>
           <p className="text-2xs text-fg-muted">
             Provider model used for this call. Compare usage on Health and Cost.
@@ -23,7 +23,7 @@ export function ModelChip({
     >
       <Link
         to="/health"
-        className={`inline-block truncate rounded-sm border border-edge-subtle bg-surface-overlay/70 px-1.5 py-0.5 font-mono text-2xs leading-snug text-fg-secondary hover:border-brand/30 hover:text-brand transition-colors ${maxWidthClass}`}
+        className={`inline-block truncate rounded-sm border border-edge-subtle bg-surface-overlay/70 px-1.5 py-0.5 font-mono text-2xs leading-snug text-fg-secondary hover:border-brand/30 hover:text-brand transition-opacity ${maxWidthClass}`}
       >
         {model}
       </Link>

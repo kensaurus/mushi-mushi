@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -30,6 +31,7 @@ import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import { OnboardingSkeleton } from '../components/skeletons/OnboardingSkeleton'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 import { SetupChecklist } from '../components/SetupChecklist'
+import { CHIP_TONE, SELECTED_TONE } from '../lib/chipTone'
 import { ProjectNarrativeStrip } from '../components/dashboard/ProjectNarrativeStrip'
 import { PdcaFlow } from '../components/pdca-flow/PdcaFlow'
 import { SdkInstallCard } from '../components/SdkInstallCard'
@@ -64,7 +66,6 @@ import { isCliSetupMode, shouldFocusCreateForm, shouldShowOnboardingCreateForm }
 import { clearStoredInstanceConfig } from '../lib/env'
 import { IconChat, IconBolt } from '../components/icons'
 import { askMushiPanel } from '../lib/useAskMushiPanel'
-import { CHIP_TONE } from '../lib/chipTone'
 
 interface ApiKey {
   key: string
@@ -429,7 +430,7 @@ export function OnboardingPage() {
   if (statsError) return <ErrorAlert message={`Failed to load setup stats: ${statsError}`} onRetry={reloadAll} />
 
   return (
-    <div className="space-y-4">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-onboarding">
       <PageHeaderBar
         title={copy?.title ?? 'Setup'}
         icon={<IconBolt />}
@@ -567,7 +568,7 @@ export function OnboardingPage() {
                     isDone
                       ? 'text-ok bg-transparent hover:bg-transparent'
                       : isActive
-                        ? 'bg-brand/12 text-brand border border-brand/28 ring-1 ring-inset ring-brand/20'
+                        ? `${SELECTED_TONE} ring-1 ring-inset ring-brand/20`
                         : 'text-fg-muted hover:text-fg bg-transparent'
                   }`}
                   aria-current={isActive ? 'step' : undefined}
@@ -586,14 +587,14 @@ export function OnboardingPage() {
               <span className="text-fg-faint text-xs" aria-hidden="true">›</span>
               <Link
                 to="/connect"
-                className="flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
+                className="flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
               >
                 Continue to Connect hub →
               </Link>
               <span className="text-fg-faint text-xs" aria-hidden="true">·</span>
               <Link
                 to="/setup-copilot"
-                className="flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-medium text-fg-muted hover:text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
+                className="flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-medium text-fg-muted hover:text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
               >
                 Setup copilot
               </Link>
@@ -604,7 +605,7 @@ export function OnboardingPage() {
 
       {/* CLI-waiting callout when wizard was opened from the terminal */}
       {setupCliMode && !stats.setupDone && (
-        <div className="flex items-start gap-3 rounded-lg border border-brand/40 bg-surface-raised px-4 py-3">
+        <Card  className="flex items-start gap-3 px-4 py-3">
           <span className="mt-0.5 text-brand text-sm" aria-hidden="true">⏳</span>
           <div>
             <p className="text-sm font-medium text-fg">Your terminal is waiting</p>
@@ -613,7 +614,7 @@ export function OnboardingPage() {
               continues automatically once you approve.
             </p>
           </div>
-        </div>
+        </Card>
       )}
 
       {!ux.hideOverviewTab || tabOptions.length > 1 ? (
@@ -638,8 +639,10 @@ export function OnboardingPage() {
         />
       )}
       {!ux.hideOverviewChrome ? (
-      <div className="overflow-hidden rounded-xl border border-edge bg-surface-raised p-5">
+      <Card  className="overflow-hidden p-5">
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         <p className="font-mono text-2xs uppercase tracking-[0.24em] text-brand">Mushi / setup</p>
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         <h2 className="mt-2 font-serif text-3xl leading-none tracking-[-0.04em] text-fg">
           User-felt bugs, ready for your first project.
         </h2>
@@ -648,7 +651,7 @@ export function OnboardingPage() {
           against live backend state. This mirrors the cloud landing promise:
           install the SDK once, then let every report enter the repair loop.
         </p>
-      </div>
+      </Card>
       ) : null}
 
       {!stats.hasAnyProject ? (
@@ -797,6 +800,7 @@ export function OnboardingPage() {
         )}
         <section
           aria-label="Meet Ask Mushi"
+          // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
           className="flex flex-col gap-3 rounded-md border border-brand/40 bg-surface-raised px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="flex min-w-0 items-start gap-3">
@@ -1078,9 +1082,9 @@ export function OnboardingPage() {
             ].map(({ stage, desc, done }) => (
               <div
                 key={stage}
-                className={`px-2 py-1.5 rounded-sm text-center text-2xs space-y-0.5 ${done ? 'bg-ok/10 border border-ok/20' : 'bg-surface-raised border border-edge-subtle'}`}
+                className={`px-2 py-1.5 rounded-sm text-center text-2xs space-y-0.5 ${done ? 'bg-ok-muted/50 border border-ok/25' : 'bg-surface-raised border border-edge-subtle'}`}
               >
-                <div className={`font-semibold ${done ? 'text-ok' : 'text-fg-muted'}`}>{stage}</div>
+                <div className={`font-semibold ${done ? 'text-ok-foreground' : 'text-fg-muted'}`}>{stage}</div>
                 <div className="text-fg-faint">{desc}</div>
               </div>
             ))}
@@ -1236,7 +1240,7 @@ function TimeToFirstDiagnosisCard({ hasApiKey }: { hasApiKey: boolean }) {
 function KeyReveal({ apiKey, copied, onCopy }: { apiKey: ApiKey; copied: boolean; onCopy: () => void }) {
   return (
     <div className="space-y-3">
-      <div className="bg-surface-raised border border-ok/30 rounded-sm px-3 py-2">
+      <Card  className="px-3 py-2">
         <div className="flex items-center justify-between mb-1">
           <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Your API Key</span>
           <CopyButton
@@ -1247,9 +1251,9 @@ function KeyReveal({ apiKey, copied, onCopy }: { apiKey: ApiKey; copied: boolean
           />
         </div>
         <code className="text-sm font-mono text-ok wrap-anywhere select-all">{apiKey.key}</code>
-      </div>
+      </Card>
       <HelpBanner tone="warn" className="rounded-sm">
-        <p className="text-2xs text-warn">
+        <p className="text-2xs text-warning-foreground">
           Save this key securely. It will not be shown again after you leave this page.
         </p>
       </HelpBanner>

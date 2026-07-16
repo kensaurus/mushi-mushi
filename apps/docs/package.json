@@ -19,12 +19,16 @@
     "@mushi-mushi/brand": "workspace:*",
     "@mushi-mushi/marketing-ui": "workspace:*",
     "@mushi-mushi/mcp": "workspace:*",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
     "@theguild/remark-mermaid": "^0.3.0",
+    "motion": "^12.42.2",
     "next": "^16.2.9",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
@@ -32,6 +36,7 @@
     "@types/node": "^22.20.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.185.0",
     "eslint": "^10.6.0",
     "eslint-plugin-mushi-mushi": "workspace:*",
     "pagefind": "^1.5.2",

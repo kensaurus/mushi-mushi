@@ -118,6 +118,7 @@ export function tagLangfuseTrace(traceId: string): void {
  * server-side, etc.) is still reported as a normal Sentry exception.
  */
 export function sentryHonoErrorHandler(err: Error, c: Context): Response {
+  const requestId = c.get('requestId') as string | undefined
   const isRangeStatusZero =
     err instanceof RangeError && /status.*\(0\)|status.+not equal to 101/i.test(err.message)
 
@@ -137,6 +138,7 @@ export function sentryHonoErrorHandler(err: Error, c: Context): Response {
         msg: 'client disconnected before response could be written',
         path: c.req.path,
         method: c.req.method,
+        ...(requestId ? { requestId } : {}),
         client_abort: true,
         range_error_status_0: true,
         cause:
@@ -148,9 +150,13 @@ export function sentryHonoErrorHandler(err: Error, c: Context): Response {
     )
     return c.json(
       {
-        error: 'client_closed_request',
-        detail:
-          'The client disconnected before the response could be written. This is informational; the connection is already closed.',
+        ok: false,
+        error: {
+          code: 'CLIENT_CLOSED_REQUEST',
+          message:
+            'The client disconnected before the response could be written. This is informational; the connection is already closed.',
+          ...(requestId ? { requestId } : {}),
+        },
       },
       // 499 (Nginx) communicates "client closed connection". Hono accepts any
       // numeric status code; only 1xx/0 are forbidden by `new Response()`.
@@ -160,16 +166,31 @@ export function sentryHonoErrorHandler(err: Error, c: Context): Response {
   }
 
   reportError(err, {
-    tags: { path: c.req.path, method: c.req.method },
+    tags: {
+      path: c.req.path,
+      method: c.req.method,
+      ...(requestId ? { request_id: requestId } : {}),
+    },
     extra: {
       cause:
         err.cause !== undefined
           ? String((err.cause as { message?: string }).message ?? err.cause).slice(0, 500)
           : null,
       message: err.message,
+      ...(requestId ? { requestId } : {}),
     },
   })
-  return c.json({ error: 'internal' }, 500)
+  return c.json(
+    {
+      ok: false,
+      error: {
+        code: 'INTERNAL',
+        message: 'Something went wrong on our side. The failure was logged for investigation.',
+        ...(requestId ? { requestId } : {}),
+      },
+    },
+    500,
+  )
 }
 
 /**

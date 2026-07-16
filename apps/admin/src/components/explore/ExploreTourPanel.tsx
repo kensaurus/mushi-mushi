@@ -89,7 +89,7 @@ export function ExploreTourPanel({ projectId, activeStopOrder, onSelectStop, onS
                 type="button"
                 onClick={() => onSelectStop(stop)}
                 className={[
-                  'w-full text-left rounded-md border px-3 py-2.5 transition-colors',
+                  'w-full text-left rounded-md border px-3 py-2.5 transition-opacity',
                   active
                     ? 'border-brand/50 bg-brand/10 shadow-sm'
                     : 'border-edge-subtle bg-surface-overlay/30 hover:border-brand/30 hover:bg-surface-overlay/60',

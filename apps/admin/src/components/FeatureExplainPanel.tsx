@@ -56,7 +56,7 @@ export function FeatureExplainPanel({
   return (
     <details open={defaultOpen} className={`group rounded-md overflow-hidden ${shellClass}`}>
       <summary
-        className={`cursor-pointer select-none list-none px-3 py-2 text-xs font-medium text-fg transition-colors ${GUIDE_PANEL_SUMMARY_HOVER} [&::-webkit-details-marker]:hidden`}
+        className={`cursor-pointer select-none list-none px-3 py-2 text-xs font-medium text-fg transition-opacity ${GUIDE_PANEL_SUMMARY_HOVER} [&::-webkit-details-marker]:hidden`}
       >
         <span className="inline-flex items-center gap-2 min-w-0">
           <span

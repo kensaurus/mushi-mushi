@@ -86,9 +86,9 @@ function PdcaStepNodeInner({ data }: NodeProps) {
     <div
       className={[
         'group/pdca relative w-[220px] rounded-md border border-edge bg-surface-raised text-xs shadow-md pointer-events-auto',
-        // Hover: lift with scale + deeper shadow. transition-[transform…] avoids
+        // Hover: lift with scale + deeper shadow. transition-[transform,opacity] avoids
         // layout shifts from border changes. Will-change hints the GPU.
-        'motion-safe:transition-[transform,box-shadow] duration-150 ease-out',
+        'motion-safe:transition-[transform,opacity] duration-150 ease-out',
         interactive ? 'hover:scale-[1.016] hover:shadow-xl hover:border-edge cursor-pointer' : '',
         node.isFocus
           ? `ring-2 ring-offset-1 ring-offset-surface ${meta.ring} ${meta.tintBg} mushi-focus-blink`
@@ -272,7 +272,7 @@ function NodeBody({
       )}
 
       {isLive && (
-        <p className="mt-1.5 text-3xs text-fg-secondary leading-snug line-clamp-2 min-h-[2rem]">
+        <p className="mt-1.5 text-3xs text-fg-secondary leading-snug line-clamp-2 min-h-8">
           {node.bottleneck ?? (
             <span className="text-fg-faint">Clean &mdash; nothing waiting here.</span>
           )}

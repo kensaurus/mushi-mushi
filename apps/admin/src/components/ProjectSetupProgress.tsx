@@ -46,7 +46,7 @@ export function ProjectSetupProgress({ project }: ProjectSetupProgressProps) {
           {project.report_count} {project.report_count === 1 ? 'report' : 'reports'}
         </span>
 
-        <div className="flex h-1 min-w-[2.75rem] flex-1 gap-px">
+        <div className="flex h-1 min-w-11 flex-1 gap-px">
           {required.map((step) => {
             const isNext = step.id === next?.id
             const short =
@@ -55,7 +55,7 @@ export function ProjectSetupProgress({ project }: ProjectSetupProgressProps) {
               <span
                 key={step.id}
                 title={`${short}${step.complete ? ' ✓' : isNext ? ' — next' : ''}`}
-                className={`min-w-0 flex-1 rounded-hairline motion-safe:transition-colors ${
+                className={`min-w-0 flex-1 rounded-hairline motion-safe:transition-opacity ${
                   step.complete
                     ? 'bg-ok'
                     : isNext

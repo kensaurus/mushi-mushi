@@ -44,7 +44,16 @@ export function NewRunForm({ projectId, projectName, onCreated }: Props) {
     try {
       const res = await apiFetch('/v1/admin/pdca', {
         method: 'POST',
-        body: JSON.stringify({ ...form, project_id: projectId }),
+        body: JSON.stringify({
+          project_id: projectId,
+          target_url: form.target_url,
+          goal: form.goal,
+          iterations_target: form.iterations_target,
+          primary_model: form.primary_model,
+          judge_model: form.judge_model,
+          persona: form.persona,
+          target_score: form.target_score,
+        }),
       })
       if (!res.ok) throw new Error(res.error?.message ?? 'Failed to queue run')
       toast.success('Run queued — switch to Runs and click Trigger to start immediately.')

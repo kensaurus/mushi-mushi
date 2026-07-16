@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Generates packages/brand/src/editorial.css from tokens/brand.tokens.json (DTCG).
- * Primitive values come from JSON; semantic aliases + dark block are appended.
+ * Generates packages/brand/src/editorial.css + tokens.generated.ts from
+ * tokens/brand.tokens.json (DTCG). Primitive values come from JSON;
+ * semantic aliases + dark block are appended.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -13,16 +14,16 @@ const ROOT = join(__dirname, '..')
 const TOKENS = join(ROOT, 'tokens', 'brand.tokens.json')
 const OUT = join(ROOT, 'src', 'editorial.css')
 
-/** Walk DTCG token tree → flat map of css var name → value. */
-function flattenDtcg(obj, path = [], out = new Map()) {
+/** Walk DTCG token tree → flat map of css var name → raw $value + $type. */
+function collectDtcg(obj, path = [], out = new Map()) {
   if (obj && typeof obj === 'object' && '$value' in obj) {
     const key = cssVarName(path)
-    out.set(key, formatValue(obj.$value, obj.$type))
+    out.set(key, { value: obj.$value, type: obj.$type, path: path.join('.') })
     return out
   }
   for (const [k, v] of Object.entries(obj ?? {})) {
     if (k.startsWith('$')) continue
-    flattenDtcg(v, [...path, k], out)
+    collectDtcg(v, [...path, k], out)
   }
   return out
 }
@@ -31,8 +32,14 @@ function cssVarName(path) {
   const [group, ...rest] = path
   if (group === 'color') return `--mushi-${rest.join('-')}`
   if (group === 'font') return `--mushi-font-${rest[0]}`
+  if (group === 'fontSize') return `--mushi-text-${rest.join('-')}`
   if (group === 'motion') return `--mushi-${rest.join('-')}`
   if (group === 'geometry') return `--mushi-${rest.join('-')}`
+  if (group === 'spacing') return `--mushi-space-${rest.join('-')}`
+  if (group === 'radius') return `--mushi-radius-${rest.join('-')}`
+  if (group === 'elevation') return `--mushi-elevation-${rest.join('-')}`
+  if (group === 'zIndex') return `--mushi-z-${rest.join('-')}`
+  if (group === 'semantic') return `--mushi-semantic-${rest.join('-')}`
   return `--mushi-${path.join('-')}`
 }
 
@@ -51,11 +58,39 @@ function formatValue(value, type) {
       })
       .join(', ')
   }
+  if (type === 'number') return String(value)
   return String(value)
 }
 
+/** Resolve `{color.jade}` style aliases against the collected map. */
+function resolveAliases(collected) {
+  const byPath = new Map()
+  for (const [cssName, meta] of collected) {
+    byPath.set(meta.path, cssName)
+  }
+
+  const resolved = new Map()
+  for (const [cssName, meta] of collected) {
+    let value = meta.value
+    if (typeof value === 'string' && value.startsWith('{') && value.endsWith('}')) {
+      const refPath = value.slice(1, -1)
+      const targetCss = byPath.get(refPath)
+      if (targetCss) {
+        value = `var(${targetCss})`
+      } else {
+        console.warn(`[warn] Unresolved alias ${value} for ${cssName}`)
+      }
+    } else {
+      value = formatValue(value, meta.type)
+    }
+    resolved.set(cssName, value)
+  }
+  return resolved
+}
+
 const tokens = JSON.parse(readFileSync(TOKENS, 'utf8'))
-const flat = flattenDtcg(tokens)
+const collected = collectDtcg(tokens)
+const flat = resolveAliases(collected)
 
 const primitiveLines = [...flat.entries()]
   .filter(([name]) => !name.includes('dark-') || name.startsWith('--mushi-dark-'))
@@ -68,7 +103,7 @@ const header = `/* -------------------------------------------------------------
    Light is the default everywhere. Dark mode is **opt-in** rather than
    driven by \`prefers-color-scheme\`, because:
 
-   * The cloud marketing surface (apps/cloud) is editorial-light by design.
+   * Public marketing (apps/admin PublicHomePage + apps/docs) is editorial-light by design.
    * The admin app drives its own theme (\`html[data-theme="..."]\`) via JS.
    * The web SDK widget computes light/dark in JS via \`matchMedia\`.
 
@@ -125,6 +160,14 @@ const darkBlock = `
   --mushi-viz-stroke: color-mix(in oklch, var(--mushi-ink) 28%, transparent);
   --mushi-viz-node-bg: var(--mushi-paper);
   --mushi-viz-selected-fg: #ffffff;
+  --mushi-semantic-ok: var(--mushi-dark-jade);
+  --mushi-semantic-ok-wash: var(--mushi-dark-jade-wash);
+  --mushi-semantic-danger: var(--mushi-dark-viz-danger);
+  --mushi-semantic-danger-wash: var(--mushi-dark-viz-wash-danger);
+  --mushi-semantic-warn: var(--mushi-dark-viz-warn);
+  --mushi-semantic-warn-wash: var(--mushi-dark-viz-wash-warn);
+  --mushi-semantic-info: var(--mushi-dark-viz-info);
+  --mushi-semantic-info-wash: var(--mushi-dark-viz-wash-info);
 }
 `
 
@@ -143,6 +186,19 @@ const tsLines = [
   '} as const',
   '',
   'export type BrandPrimitiveTokenName = keyof typeof BRAND_PRIMITIVE_TOKENS',
+  '',
+  '/** Widget-facing palette snapshot (light). Keep in sync via scripts/check-token-parity.mjs */',
+  'export const BRAND_WIDGET_PALETTE_LIGHT = {',
+  `  paper: ${JSON.stringify(flat.get('--mushi-paper'))},`,
+  `  ink: ${JSON.stringify(flat.get('--mushi-ink'))},`,
+  `  inkMuted: ${JSON.stringify(flat.get('--mushi-ink-muted'))},`,
+  `  inkFaint: ${JSON.stringify(flat.get('--mushi-ink-faint'))},`,
+  `  accent: ${JSON.stringify(flat.get('--mushi-vermillion'))},`,
+  `  accentWash: ${JSON.stringify(flat.get('--mushi-vermillion-wash'))},`,
+  `  accentInk: ${JSON.stringify(flat.get('--mushi-vermillion-ink'))},`,
+  `  ok: ${JSON.stringify(flat.get('--mushi-jade'))},`,
+  `  danger: ${JSON.stringify(flat.get('--mushi-viz-danger'))},`,
+  '} as const',
   '',
 ]
 writeFileSync(tsOut, tsLines.join('\n'), 'utf8')

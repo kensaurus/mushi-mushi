@@ -95,7 +95,7 @@ export function StageDrawer({ stage, sample, onClose }: StageDrawerProps) {
               ref={closeRef}
               type="button"
               onClick={onClose}
-              className="shrink-0 rounded-sm border border-[var(--mushi-rule)] bg-white/40 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:border-[var(--mushi-ink)] hover:bg-white/70 hover:text-[var(--mushi-ink)]"
+              className="shrink-0 rounded-sm border border-[var(--mushi-rule)] bg-white/40 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition-[transform,opacity] hover:border-[var(--mushi-ink)] hover:bg-white/70 hover:text-[var(--mushi-ink)]"
             >
               Close <span aria-hidden="true" className="ml-0.5 opacity-60">✕</span>
             </button>
@@ -148,7 +148,7 @@ export function StageDrawer({ stage, sample, onClose }: StageDrawerProps) {
                 href={urls.docs(stage.href)}
                 target="_blank"
                 rel="noreferrer"
-                className="group inline-flex w-fit items-center gap-2 rounded-sm bg-[var(--mushi-ink)] px-4 py-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--mushi-paper)] transition hover:-translate-y-0.5 hover:bg-[color-mix(in_oklch,var(--mushi-ink)_88%,var(--mushi-vermillion))]"
+                className="group inline-flex w-fit items-center gap-2 rounded-sm bg-[var(--mushi-ink)] px-4 py-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--mushi-paper)] transition-[transform,opacity] hover:-translate-y-0.5 hover:bg-[color-mix(in_oklch,var(--mushi-ink)_88%,var(--mushi-vermillion))]"
               >
                 Learn the details
                 <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none">→</span>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { reportDetailPath, reportPermalink } from '../lib/reportUrl'
 import { usePageData } from '../lib/usePageData'
@@ -668,7 +669,7 @@ export function ReportsPage() {
   )
 
   return (
-    <div>
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-reports">
       <PageHeaderBar
         title={copy?.title ?? 'Reports'}
         icon={<IconReports />}

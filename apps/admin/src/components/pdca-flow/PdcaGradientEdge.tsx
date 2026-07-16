@@ -120,7 +120,7 @@ function PdcaGradientEdgeInner({
         fill="none"
         style={{
           opacity: isEmphasised ? 0.45 : 0.3,
-          transition: 'opacity 180ms ease, stroke-width 180ms ease',
+          transition: 'opacity 200ms var(--ease-stamp, ease)',
         }}
       />
 
@@ -135,7 +135,7 @@ function PdcaGradientEdgeInner({
           opacity: isEmphasised ? (isFailing ? 0.6 : 0.48) : 0.32,
           filter: `blur(${isHovered ? '4px' : '3px'})`,
           animation: isActive ? `${keyframeName} ${ANIMATION_DURATION} linear infinite` : 'none',
-          transition: 'opacity 180ms ease, filter 180ms ease',
+          transition: 'opacity 200ms var(--ease-stamp, ease)',
         }}
       />
 
@@ -149,7 +149,7 @@ function PdcaGradientEdgeInner({
         style={{
           opacity: 1,
           animation: isActive ? `${keyframeName} ${ANIMATION_DURATION} linear infinite` : 'none',
-          transition: 'stroke-width 180ms ease',
+          transition: 'opacity 200ms var(--ease-stamp, ease)',
         }}
         markerEnd={markerEnd}
       />

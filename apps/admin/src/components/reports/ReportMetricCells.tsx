@@ -50,7 +50,7 @@ export function TableConfidenceCell({ confidence, layout = 'default' }: Confiden
       {Array.from({ length: confidenceSegmentCount }, (_, i) => (
         <span
           key={i}
-          className={`flex-1 rounded-hairline motion-safe:transition-colors ${
+          className={`flex-1 rounded-hairline motion-safe:transition-opacity ${
             confidenceSegmentFilled(pct, i) ? barTone : confidenceEmptySegmentTone()
           }`}
         />
@@ -125,7 +125,7 @@ export function TableSeverityCell({ severity }: SeverityCellProps) {
               <span
                 key={level}
                 className={[
-                  'flex-1 rounded-hairline motion-safe:transition-colors',
+                  'flex-1 rounded-hairline motion-safe:transition-opacity',
                   active ? tone : 'bg-fg-faint/15',
                   active ? 'ring-1 ring-inset ring-fg/15' : 'opacity-40',
                 ].join(' ')}

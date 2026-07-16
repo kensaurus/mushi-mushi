@@ -53,6 +53,7 @@ export function ReportsTriageGuide({ topPriority, stats }: Props) {
         })}
       </div>
       <div className="overflow-x-auto">
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         <table className="w-full min-w-[28rem] text-left text-2xs">
           <thead>
             <tr className="border-b border-edge-subtle text-fg-faint uppercase tracking-wider">
@@ -67,7 +68,7 @@ export function ReportsTriageGuide({ topPriority, stats }: Props) {
                 <td className="py-2 pr-3 align-top font-semibold text-fg whitespace-nowrap">
                   {sev.label}
                 </td>
-                <td className="py-2 pr-3 align-top text-fg-muted max-w-[12rem]">{sev.plain}</td>
+                <td className="py-2 pr-3 align-top text-fg-muted max-w-48">{sev.plain}</td>
                 <td className="py-2 align-top text-fg-secondary">{sev.triageHint}</td>
               </tr>
             ))}
@@ -76,7 +77,7 @@ export function ReportsTriageGuide({ topPriority, stats }: Props) {
       </div>
       <p className="text-2xs text-fg-faint">
         After triage, dispatch fixes from a report row or bulk-select several. Track PR progress on{' '}
-        <Link to="/fixes" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+        <Link to="/fixes" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
           Fixes
         </Link>
         .

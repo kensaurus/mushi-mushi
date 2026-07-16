@@ -59,7 +59,7 @@ export function SettingsTabIntro({ tab, flags }: Props) {
         {tab === 'byok' && (
           <>
             See also{' '}
-            <Link to="/billing" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+            <Link to="/billing" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
               Billing
             </Link>{' '}
             for plan limits.

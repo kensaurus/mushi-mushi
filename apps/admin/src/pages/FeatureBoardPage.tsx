@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useToast } from '../lib/toast'
@@ -17,6 +18,7 @@ import { apiFetch } from '../lib/supabase'
 import { ContainedBlock, InlineProof } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
+import { Modal } from '../components/Modal'
 import { FeatureBoardReadout } from '../components/feature-board/FeatureBoardReadout'
 import { FeatureBoardSnapshotStrip } from '../components/feature-board/FeatureBoardSnapshotStrip'
 import { type FeatureBoardClientStats } from '../components/feature-board/FeatureBoardStatsTypes'
@@ -30,8 +32,9 @@ import {
   Loading,
   RelativeTime,
   SegmentedControl,
+  Input,
 } from '../components/ui'
-import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
+import { CHIP_TONE, SELECTED_TONE, SELECTED_TONE_IDLE, runStatusChipTone } from '../lib/chipTone'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -94,7 +97,7 @@ const SORT_OPTIONS: { id: SortKey; label: string }[] = [
 const FIELD_BASE =
   'w-full bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-sm text-fg ' +
   'placeholder:text-fg-faint hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 ' +
-  'motion-safe:transition-colors motion-safe:duration-150'
+  'motion-safe:transition-opacity motion-safe:duration-150'
 
 // ── Comment thread ────────────────────────────────────────────────────────────
 
@@ -143,7 +146,7 @@ function CommentThread({
     <div className="mt-3 border-t border-edge-subtle pt-3 space-y-2">
       {comments.map((c) => (
         <div key={c.id} className="flex gap-2 text-sm">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium bg-brand/12 text-brand border border-brand/28">
+          <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium ${SELECTED_TONE}`}>
             {c.author_email.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
@@ -158,6 +161,7 @@ function CommentThread({
 
       <div className="flex gap-2 pt-1">
         <textarea
+          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
           className={`${FIELD_BASE} min-h-[60px] resize-none`}
           placeholder="Add a comment…"
           value={body}
@@ -190,15 +194,16 @@ function FeatureRow({
   projectId,
   onVote,
   onShip,
+  shipPending,
 }: {
   ticket: FeatureTicket
   projectId: string
   onVote: (id: string) => Promise<void>
-  onShip: (id: string) => Promise<void>
+  onShip: (id: string) => void
+  shipPending: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
   const [voting, setVoting] = useState(false)
-  const [shipping, setShipping] = useState(false)
 
   const handleVote = async () => {
     if (voting) return
@@ -207,16 +212,6 @@ function FeatureRow({
       await onVote(ticket.id)
     } finally {
       setVoting(false)
-    }
-  }
-
-  const handleShip = async () => {
-    if (shipping) return
-    setShipping(true)
-    try {
-      await onShip(ticket.id)
-    } finally {
-      setShipping(false)
     }
   }
 
@@ -235,8 +230,8 @@ function FeatureRow({
         className={[
           'flex h-14 w-11 shrink-0 flex-col items-center justify-center gap-0 px-0 py-0',
           ticket.my_vote
-            ? 'border-brand/50 bg-brand/12 text-brand border border-brand/28'
-            : 'border-edge-subtle bg-surface-raised/60 text-fg-muted hover:border-brand/40 hover:text-brand',
+            ? SELECTED_TONE
+            : SELECTED_TONE_IDLE,
         ].join(' ')}
       >
         <svg
@@ -300,7 +295,7 @@ function FeatureRow({
 
         {ticket.shipped_note && (
           <ContainedBlock tone="ok" className="mt-2 text-2xs">
-            <span className="font-medium text-ok">Shipped note:</span>{' '}
+            <span className="font-medium text-ok-foreground">Shipped note:</span>{' '}
             <span className="text-fg-secondary">{ticket.shipped_note}</span>
           </ContainedBlock>
         )}
@@ -311,8 +306,14 @@ function FeatureRow({
             {ticket.comment_count > 0 ? ` (${ticket.comment_count})` : ''}
           </Btn>
           {ticket.status !== 'resolved' && ticket.status !== 'closed' && (
-            <Btn size="sm" variant="ghost" onClick={handleShip} disabled={shipping} className="text-ok">
-              {shipping ? 'Marking…' : 'Mark shipped'}
+            <Btn
+              size="sm"
+              variant="ghost"
+              onClick={() => onShip(ticket.id)}
+              disabled={shipPending}
+              className="text-ok"
+            >
+              {shipPending ? 'Marking…' : 'Mark shipped'}
             </Btn>
           )}
         </div>
@@ -331,6 +332,9 @@ export function FeatureBoardPage() {
   const [sort, setSort] = useState<SortKey>('votes')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [shipModalId, setShipModalId] = useState<string | null>(null)
+  const [shipNote, setShipNote] = useState('')
+  const [shipBusy, setShipBusy] = useState(false)
 
   const {
     data,
@@ -421,28 +425,39 @@ export function FeatureBoardPage() {
     [projectId, reload, toast],
   )
 
-  const handleShip = useCallback(
-    async (id: string) => {
-      if (!projectId) return
-      const releaseNote = prompt('Shipped note (shown to requester, optional):')
-      if (releaseNote === null) return
-      try {
-        const res = await apiFetch(`/v1/admin/feature-board/${id}/ship?project_id=${projectId}`, {
-          method: 'POST',
-          body: JSON.stringify({ note: releaseNote || null }),
-        })
-        if (!res.ok) {
-          toast.error(res.error?.message ?? 'Could not mark shipped')
-          return
-        }
-        toast.success('Marked shipped')
-        reload()
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Could not mark shipped')
+  const requestShip = useCallback((id: string) => {
+    setShipNote('')
+    setShipModalId(id)
+  }, [])
+
+  const cancelShip = useCallback(() => {
+    if (shipBusy) return
+    setShipModalId(null)
+    setShipNote('')
+  }, [shipBusy])
+
+  const confirmShip = useCallback(async () => {
+    if (!shipModalId || !projectId) return
+    setShipBusy(true)
+    try {
+      const res = await apiFetch(`/v1/admin/feature-board/${shipModalId}/ship?project_id=${projectId}`, {
+        method: 'POST',
+        body: JSON.stringify({ note: shipNote.trim() || null }),
+      })
+      if (!res.ok) {
+        toast.error(res.error?.message ?? 'Could not mark shipped')
+        return
       }
-    },
-    [projectId, reload, toast],
-  )
+      toast.success('Marked shipped')
+      setShipModalId(null)
+      setShipNote('')
+      reload()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not mark shipped')
+    } finally {
+      setShipBusy(false)
+    }
+  }, [shipModalId, shipNote, projectId, reload, toast])
 
   usePublishPageContext({
     route: '/feature-board',
@@ -457,7 +472,7 @@ export function FeatureBoardPage() {
   })
 
   return (
-    <div className="space-y-4">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-feature-board">
       <PageHeaderBar
         title="Feature board"
         withPageHero={false}
@@ -515,7 +530,7 @@ export function FeatureBoardPage() {
       {projectId && (
         <Card className="space-y-3 p-3">
           <div className="flex flex-wrap items-end gap-2">
-            <label className="min-w-[12rem] flex-1">
+            <label className="min-w-48 flex-1">
               <span className="sr-only">Search requests</span>
               <input
                 type="search"
@@ -544,7 +559,7 @@ export function FeatureBoardPage() {
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value as SortKey)}
-                className="bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 motion-safe:transition-colors motion-safe:duration-150"
+                className="bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 motion-safe:transition-opacity motion-safe:duration-150"
               >
                 {SORT_OPTIONS.map((opt) => (
                   <option key={opt.id} value={opt.id}>
@@ -596,7 +611,8 @@ export function FeatureBoardPage() {
                   ticket={ticket}
                   projectId={projectId}
                   onVote={handleVote}
-                  onShip={handleShip}
+                  onShip={requestShip}
+                  shipPending={shipBusy && shipModalId === ticket.id}
                 />
               ))}
             </ul>
@@ -610,6 +626,36 @@ export function FeatureBoardPage() {
           )}
         </Card>
       )}
+
+      <Modal
+        open={shipModalId !== null}
+        onClose={cancelShip}
+        title="Mark shipped"
+        dismissible={!shipBusy}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Btn variant="ghost" size="sm" onClick={cancelShip} disabled={shipBusy}>
+              Cancel
+            </Btn>
+            <Btn
+              variant="success"
+              size="sm"
+              onClick={() => void confirmShip()}
+              loading={shipBusy}
+              data-primary
+            >
+              Mark shipped
+            </Btn>
+          </div>
+        }
+      >
+        <Input
+          label="Shipped note (shown to requester, optional)"
+          value={shipNote}
+          onChange={(e) => setShipNote(e.target.value)}
+          placeholder="e.g. Shipped in v1.24"
+        />
+      </Modal>
     </div>
   )
 }

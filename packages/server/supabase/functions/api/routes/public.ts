@@ -406,11 +406,11 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     } catch (err) {
       if (err instanceof RateLimitError) {
         await auditRow.resolve('rejected_rate_limit', 429, Date.now() - t0, err.message);
-        return c.json({ ok: false, error: err.message }, 429);
+        return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: err.message } }, 429);
       }
       if (err instanceof ReplayAttackError) {
         await auditRow.resolve('rejected_replay', 409, Date.now() - t0, err.message);
-        return c.json({ ok: false, error: 'Duplicate delivery' }, 409);
+        return c.json({ ok: false, error: { code: 'DUPLICATE', message: 'Duplicate delivery' } }, 409);
       }
       throw err;
     }
@@ -420,7 +420,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       payload = JSON.parse(body);
     } catch {
       await auditRow.resolve('error', 400, Date.now() - t0, 'Invalid JSON body');
-      return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+      return c.json({ ok: false, error: { code: 'BAD_JSON', message: 'Invalid JSON body' } }, 400);
     }
 
     const projectId = (payload?.data as Record<string, unknown>)?.project
@@ -429,7 +429,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
 
     if (!projectId) {
       await auditRow.resolve('error', 400, Date.now() - t0, 'Cannot determine project');
-      return c.json({ ok: false, error: 'Cannot determine project' }, 400);
+      return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'Cannot determine project' } }, 400);
     }
 
     const db = getServiceClient();
@@ -447,14 +447,14 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       // request was signed but the secret didn't match).
       await auditRow.resolve('error', 403, Date.now() - t0, 'Sentry webhook secret not configured');
       return c.json(
-        { ok: false, error: 'Sentry webhook secret not configured for this project' },
+        { ok: false, error: { code: 'NO_SECRET', message: 'Sentry webhook secret not configured for this project' } },
         403,
       );
     }
 
     if (!signature) {
       await auditRow.resolve('rejected_signature', 401, Date.now() - t0, 'Missing signature');
-      return c.json({ ok: false, error: 'Missing signature' }, 401);
+      return c.json({ ok: false, error: { code: 'MISSING_SIGNATURE', message: 'Missing signature' } }, 401);
     }
 
     const encoder = new TextEncoder();
@@ -478,7 +478,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     }
     if (diff !== 0) {
       await auditRow.resolve('rejected_signature', 401, Date.now() - t0, 'HMAC mismatch');
-      return c.json({ ok: false, error: 'Invalid signature' }, 401);
+      return c.json({ ok: false, error: { code: 'INVALID_SIGNATURE', message: 'Invalid signature' } }, 401);
     }
 
     const action = payload?.action;
@@ -687,11 +687,11 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     } catch (err) {
       if (err instanceof RateLimitError) {
         await auditRow.resolve('rejected_rate_limit', 429, Date.now() - t0, err.message);
-        return c.json({ ok: false, error: err.message }, 429);
+        return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: err.message } }, 429);
       }
       if (err instanceof ReplayAttackError) {
         await auditRow.resolve('rejected_replay', 409, Date.now() - t0, err.message);
-        return c.json({ ok: false, error: 'Duplicate delivery' }, 409);
+        return c.json({ ok: false, error: { code: 'DUPLICATE', message: 'Duplicate delivery' } }, 409);
       }
       throw err;
     }
@@ -706,7 +706,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       payload = JSON.parse(body);
     } catch {
       await auditRow.resolve('error', 400, Date.now() - t0, 'Invalid JSON body');
-      return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+      return c.json({ ok: false, error: { code: 'BAD_JSON', message: 'Invalid JSON body' } }, 400);
     }
 
     const repo = payload.repository as { full_name?: string } | undefined;

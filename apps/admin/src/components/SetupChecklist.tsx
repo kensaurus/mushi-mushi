@@ -15,7 +15,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { SetupProject, SetupStep } from '../lib/useSetupStatus'
 import { CHIP_TONE } from '../lib/chipTone'
-import { RefreshIconButton } from './ui'
+import { Card, RefreshIconButton } from './ui'
 
 interface SetupChecklistProps {
   project: SetupProject
@@ -119,7 +119,7 @@ function BannerChecklist({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`mb-4 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-2xs motion-safe:transition-colors ${
+        className={`mb-4 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-2xs motion-safe:transition-opacity ${
           allDone || requiredDone
             ? `border-ok/30 ${CHIP_TONE.okSubtle}`
             : `border-warn/30 ${CHIP_TONE.warnSubtle}`
@@ -196,7 +196,7 @@ function BannerChecklist({
 function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndpointHost }: InternalProps) {
   return (
     <div className="space-y-3">
-      <div className="rounded-md border border-edge-subtle bg-surface-raised/30 px-3 py-2.5">
+      <Card  className="px-3 py-2.5">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-fg">
             {requiredDone ? 'You\u2019re set up' : 'Setup progress'}
@@ -215,7 +215,7 @@ function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndp
             aria-valuemax={100}
           />
         </div>
-      </div>
+      </Card>
 
       <ol className="space-y-2">
         {project.steps.map(step => (
@@ -333,7 +333,7 @@ function ChecklistRow({
 }) {
   const diag = buildSdkDiagnostic(step, adminEndpointHost)
   return (
-    <li className={`flex items-start gap-2.5 rounded-sm px-1.5 py-1 motion-safe:transition-colors ${
+    <li className={`flex items-start gap-2.5 rounded-sm px-1.5 py-1 motion-safe:transition-opacity ${
       current ? 'bg-brand/5 ring-1 ring-brand/30' : 'hover:bg-surface-overlay/40'
     }`}>
       <StepIcon complete={step.complete} required={step.required} current={current} />
@@ -379,7 +379,7 @@ function ChecklistCard({
 }) {
   const diag = buildSdkDiagnostic(step, adminEndpointHost)
   return (
-    <div className={`rounded-md border p-3 motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] ${
+    <div className={`rounded-md border p-3 motion-safe:transition-[transform,opacity] ${
       step.complete
         ? 'border-ok/30 bg-ok-muted/10'
         : current
@@ -417,7 +417,7 @@ function ChecklistCard({
         {!step.complete && (
           <Link
             to={step.cta_to}
-            className="shrink-0 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-colors"
+            className="shrink-0 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity"
           >
             {step.cta_label}
           </Link>

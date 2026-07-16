@@ -53,8 +53,9 @@ export function PdcaRunTable({ runs, projectName, onOpen, onAbort, onTrigger }: 
           {runs.map((run) => (
             <tr
               key={run.id}
-              className="border-b border-edge/60 transition-colors last:border-0 hover:bg-surface-raised/40"
+              className="border-b border-edge/60 transition-opacity last:border-0 hover:bg-surface-raised/40"
             >
+              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
               <td className="max-w-[24ch] truncate px-3 py-2 font-mono text-2xs" title={run.target_url}>
                 {run.target_url}
               </td>

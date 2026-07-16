@@ -93,7 +93,7 @@ function FilterChipRemovable({ filter }: { filter: ActiveFilter }) {
         onClick={filter.onClear}
         aria-label={`Remove ${filter.label} filter`}
         title={`Remove ${filter.label} filter`}
-        className="ml-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-fg-faint hover:text-fg hover:bg-surface-overlay/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 motion-safe:transition-colors"
+        className="ml-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-fg-faint hover:text-fg hover:bg-surface-overlay/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 motion-safe:transition-opacity"
       >
         <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <line x1="4" y1="4" x2="12" y2="12" strokeLinecap="round" />

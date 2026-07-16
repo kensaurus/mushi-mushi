@@ -1,4 +1,5 @@
 import { ConfigHelp } from '../ConfigHelp'
+import { SELECTED_TONE, SELECTED_TONE_IDLE } from '../../lib/chipTone'
 import {
   isMobileFramework,
   type BannerPosition,
@@ -89,7 +90,7 @@ export function SdkInstallConfigurator({
               aria-checked={config.position === pos}
               aria-label={POSITION_LABEL[pos]}
               onClick={() => update('position', pos)}
-              className={`h-6 rounded-sm transition-colors ${
+              className={`h-6 rounded-sm transition-opacity ${
                 config.position === pos
                   ? 'bg-brand'
                   : 'bg-surface-overlay hover:bg-edge-subtle'
@@ -122,10 +123,10 @@ export function SdkInstallConfigurator({
                 type="button"
                 onClick={() => update('trigger', value)}
                 title={hint}
-                className={`w-full rounded-sm border px-2 py-1.5 text-left text-2xs transition-colors flex items-center gap-2 ${
+                className={`w-full rounded-sm border px-2 py-1.5 text-left text-2xs transition-opacity flex items-center gap-2 ${
                   config.trigger === value
-                    ? 'border-brand bg-brand/12 text-brand border border-brand/28'
-                    : 'border-edge-subtle bg-surface-raised text-fg-muted hover:text-fg'
+                    ? SELECTED_TONE
+                    : SELECTED_TONE_IDLE
                 }`}
               >
                 <span className={`inline-flex items-center justify-center w-3 h-3 rounded-full border shrink-0 ${config.trigger === value ? 'border-brand bg-brand' : 'border-fg-faint'}`}>
@@ -148,10 +149,10 @@ export function SdkInstallConfigurator({
                       key={v}
                       type="button"
                       onClick={() => onChange({ ...config, bannerVariant: v })}
-                      className={`px-2 py-0.5 rounded-sm border text-2xs capitalize transition-colors ${
+                      className={`px-2 py-0.5 rounded-sm border text-2xs capitalize transition-opacity ${
                         config.bannerVariant === v
-                          ? 'border-brand bg-brand/12 text-brand border border-brand/28'
-                          : 'border-edge-subtle text-fg-muted hover:text-fg'
+                          ? SELECTED_TONE
+                          : SELECTED_TONE_IDLE
                       }`}
                     >
                       {v}
@@ -168,10 +169,10 @@ export function SdkInstallConfigurator({
                       key={p}
                       type="button"
                       onClick={() => onChange({ ...config, bannerPosition: p })}
-                      className={`px-2 py-0.5 rounded-sm border text-2xs capitalize transition-colors ${
+                      className={`px-2 py-0.5 rounded-sm border text-2xs capitalize transition-opacity ${
                         config.bannerPosition === p
-                          ? 'border-brand bg-brand/12 text-brand border border-brand/28'
-                          : 'border-edge-subtle text-fg-muted hover:text-fg'
+                          ? SELECTED_TONE
+                          : SELECTED_TONE_IDLE
                       }`}
                     >
                       {p}
@@ -258,7 +259,7 @@ export function SdkInstallConfigurator({
                 role="radio"
                 aria-checked={config.theme === t}
                 onClick={() => update('theme', t)}
-                className={`px-2 py-1 rounded-sm capitalize transition-colors ${
+                className={`px-2 py-1 rounded-sm capitalize transition-opacity ${
                   config.theme === t
                     ? 'bg-brand text-brand-fg'
                     : 'bg-surface-raised text-fg-muted border border-edge-subtle hover:text-fg'

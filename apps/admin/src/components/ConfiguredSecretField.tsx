@@ -67,7 +67,7 @@ export function ConfiguredSecretField({
 
       {showConfigured && (
         <div
-          className="flex items-center justify-between gap-2 rounded-sm border border-ok/30 bg-ok/5 px-2.5 py-2 min-h-[2.25rem]"
+          className="flex items-center justify-between gap-2 rounded-sm border border-ok/30 bg-ok/5 px-2.5 py-2 min-h-9"
           aria-label={`${label} configured`}
         >
           <code className="text-xs font-mono text-fg-secondary tracking-wide truncate select-all">

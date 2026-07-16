@@ -118,7 +118,7 @@ export function ProjectSwitcher() {
   if (setup.data.projects.length === 0) {
     return (
       <HeaderContextChipLink to="/projects?tab=create" title="No projects in this team yet">
-        <span className="truncate max-w-[12rem]">No projects yet</span>
+        <span className="truncate max-w-48">No projects yet</span>
         <span aria-hidden className="text-fg-faint">→</span>
       </HeaderContextChipLink>
     )
@@ -174,9 +174,10 @@ export function ProjectSwitcher() {
         aria-haspopup="listbox"
         aria-expanded={open}
       />
-      <ActiveProjectStatusChip snapshot={snapshot} className="hidden sm:inline-flex" />
+      <ActiveProjectStatusChip snapshot={snapshot} className="hidden xl:inline-flex" />
       {open && (
         <div
+          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
           className={`${headerDropdownPanelClass} w-80 max-w-[calc(100vw-2rem)]`}
         >
           <ul role="listbox" className="max-h-80 overflow-y-auto divide-y divide-edge-subtle/60">
@@ -189,7 +190,7 @@ export function ProjectSwitcher() {
                     role="option"
                     aria-selected={isActive}
                     onClick={() => pick(p.project_id)}
-                    className={`flex w-full flex-col gap-1 px-2.5 py-2 text-left text-xs hover:bg-surface-overlay motion-safe:transition-colors ${
+                    className={`flex w-full flex-col gap-1 px-2.5 py-2 text-left text-xs hover:bg-surface-overlay motion-safe:transition-opacity ${
                       isActive ? 'bg-surface-overlay/60 text-fg' : 'text-fg-secondary'
                     }`}
                   >
@@ -239,7 +240,7 @@ export function ProjectSwitcher() {
             <Link
               to="/projects"
               onClick={() => setOpen(false)}
-              className="flex w-full items-center justify-between gap-1.5 border-b border-edge-subtle px-2.5 py-1.5 text-left text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:bg-surface-overlay"
+              className="flex w-full items-center justify-between gap-1.5 border-b border-edge-subtle px-2.5 py-1.5 text-left text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity focus-visible:outline-none focus-visible:bg-surface-overlay"
             >
               <span>View project page</span>
               <span aria-hidden className="text-fg-faint">→</span>
@@ -272,7 +273,7 @@ export function ProjectSwitcher() {
                 <button
                   type="submit"
                   disabled={!newName.trim() || submitting}
-                  className="rounded-sm bg-brand px-2 py-1 text-2xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-colors"
+                  className="rounded-sm bg-brand px-2 py-1 text-2xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-opacity"
                 >
                   {submitting ? '…' : 'Create'}
                 </button>
@@ -281,7 +282,7 @@ export function ProjectSwitcher() {
               <button
                 type="button"
                 onClick={() => setCreating(true)}
-                className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-xs text-brand hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:bg-surface-overlay"
+                className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-xs text-brand hover:bg-surface-overlay motion-safe:transition-opacity focus-visible:outline-none focus-visible:bg-surface-overlay"
               >
                 <span aria-hidden className="text-sm leading-none">+</span>
                 <span>New project</span>

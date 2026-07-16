@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch, apiFetchRaw } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -60,7 +61,7 @@ import type {
   IntelligenceReport,
   ModernizationFinding,
 } from '../components/intelligence/types'
-import { CHIP_TONE } from '../lib/chipTone'
+import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 
 const TABS: Array<{ id: IntelligenceTabId; label: string; description: string }> = [
   {
@@ -375,7 +376,7 @@ export function IntelligencePage() {
   const latestForOverview = reports[0] ?? null
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-intelligence">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-intelligence">
       <PageHeaderBar
         title={copy?.title ?? 'Bug Intelligence'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -400,8 +401,8 @@ export function IntelligencePage() {
                     : bannerSeverity === 'warn'
                       ? CHIP_TONE.warnSubtle
                       : bannerSeverity === 'brand'
-                        ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
-                        : 'bg-surface-overlay text-fg-muted'
+                        ? HEADER_BADGE_TONE.brand
+                        : HEADER_BADGE_TONE.neutral
               }
             >
               {!stats.hasAnyProject

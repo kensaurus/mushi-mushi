@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -560,7 +561,7 @@ export function ProjectsPage() {
             : 'SETUP'
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-projects">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-projects">
       <PageHeaderBar
         title={copy?.title ?? 'Projects'}
         icon={<IconProjects />}

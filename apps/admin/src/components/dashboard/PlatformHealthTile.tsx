@@ -87,7 +87,7 @@ export function PlatformHealthTile({ projectId }: { projectId: string }) {
               <Link
                 key={`${row.platform}-${row.sdk_package}`}
                 to={`/reports?platform=${row.platform}`}
-                className="group flex items-center gap-2 rounded-sm px-2 py-1.5 motion-safe:transition-colors hover:bg-surface-overlay"
+                className="group flex items-center gap-2 rounded-sm px-2 py-1.5 motion-safe:transition-opacity hover:bg-surface-overlay"
               >
                 <span
                   className={`inline-flex w-14 shrink-0 items-center justify-center rounded-sm px-1.5 py-0.5 text-center text-3xs font-semibold uppercase tracking-wider ${PLATFORM_BADGE[row.platform] ?? CHIP_TONE.neutral}`}

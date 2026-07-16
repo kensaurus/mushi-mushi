@@ -37,7 +37,7 @@ export function CopyViewLinkButton() {
         type="button"
         onClick={copy}
         aria-label={copied ? 'View link copied' : 'Copy link to this filtered view'}
-        className={`inline-flex h-7 w-7 items-center justify-center rounded-md border border-edge-subtle bg-surface-raised/60 shadow-card motion-safe:transition-colors hover:border-brand/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+        className={`inline-flex h-7 w-7 items-center justify-center rounded-md border border-edge-subtle bg-surface-raised/60 shadow-card motion-safe:transition-opacity hover:border-brand/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
           copied ? 'text-ok hover:text-ok' : 'text-fg-muted hover:text-fg'
         }`}
       >

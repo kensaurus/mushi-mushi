@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
@@ -663,7 +664,7 @@ export function FixesPage() {
   if (error) return <ErrorAlert message="Failed to load fix attempts." onRetry={loadFixes} />
 
   return (
-    <div className="space-y-3" data-testid="mushi-page-fixes">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-fixes">
       <PageHeaderBar
         title={copy?.title ?? 'Fix drafts & PRs'}
         projectScope={projectName}

@@ -41,12 +41,21 @@ import { sentryHonoErrorHandler } from '../../supabase/functions/_shared/sentry.
 
 interface MinimalContext {
   req: { path: string; method: string }
+  // Hono context accessor — the handler reads `c.get('requestId')` to attach
+  // the correlation id to its structured warning. Mirror it so the mock
+  // exercises the real code path instead of throwing "c.get is not a function".
+  get: (key: string) => unknown
   json: (body: unknown, status?: number) => Response
 }
 
-function fakeContext(path = '/v1/admin/reports', method = 'GET'): MinimalContext {
+function fakeContext(
+  path = '/v1/admin/reports',
+  method = 'GET',
+  vars: Record<string, unknown> = {},
+): MinimalContext {
   return {
     req: { path, method },
+    get: (key: string) => vars[key],
     json(body: unknown, status?: number) {
       return new Response(JSON.stringify(body), {
         status: status ?? 200,
@@ -81,9 +90,10 @@ describe('sentryHonoErrorHandler — status-0 RangeError contract (Sentry MUSHI-
     )
     const res = sentryHonoErrorHandler(err, fakeContext() as never)
     expect(res.status).toBe(499)
-    const body = (await res.json()) as { error: string; detail: string }
-    expect(body.error).toBe('client_closed_request')
-    expect(body.detail).toMatch(/client disconnected/i)
+    const body = (await res.json()) as { ok: boolean; error: { code: string; message: string } }
+    expect(body.ok).toBe(false)
+    expect(body.error.code).toBe('CLIENT_CLOSED_REQUEST')
+    expect(body.error.message).toMatch(/client disconnected/i)
   })
 
   it('returns 499 for the alternate "status (0)" message Deno emits in some builds', async () => {
@@ -115,16 +125,18 @@ describe('sentryHonoErrorHandler — status-0 RangeError contract (Sentry MUSHI-
     const err = new TypeError("Cannot read properties of undefined (reading 'foo')")
     const res = sentryHonoErrorHandler(err, fakeContext() as never)
     expect(res.status).toBe(500)
-    const body = (await res.json()) as { error: string }
-    expect(body.error).toBe('internal')
+    const body = (await res.json()) as { ok: boolean; error: { code: string } }
+    expect(body.ok).toBe(false)
+    expect(body.error.code).toBe('INTERNAL')
   })
 
   it('still returns 500 internal for non-status-0 RangeErrors', async () => {
     const err = new RangeError('Maximum call stack size exceeded')
     const res = sentryHonoErrorHandler(err, fakeContext() as never)
     expect(res.status).toBe(500)
-    const body = (await res.json()) as { error: string }
-    expect(body.error).toBe('internal')
+    const body = (await res.json()) as { ok: boolean; error: { code: string } }
+    expect(body.ok).toBe(false)
+    expect(body.error.code).toBe('INTERNAL')
   })
 
   it('still returns 500 internal for plain Errors thrown by route handlers', async () => {

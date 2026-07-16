@@ -41,6 +41,15 @@ const experimentPatchSchema = z
   })
   .strict()
 
+const experimentCreateSchema = z.object({
+  project_id: z.string().uuid(),
+  name: z.string().trim().min(1).max(200),
+  description: z.string().max(5000).nullable().optional(),
+  hypothesis: z.string().max(5000).nullable().optional(),
+  traffic_split: z.number().min(0).max(100).optional(),
+  bandit_enabled: z.boolean().optional(),
+})
+
 const variantPatchSchema = z
   .object({
     name: z.string().min(1).max(200).optional(),
@@ -237,9 +246,27 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
   })
 
   admin.post('/', async (c) => {
-    const body = await c.req.json()
-    const { project_id, name, description, hypothesis, traffic_split, bandit_enabled } = body
-    if (!project_id || !name) return c.json({ ok: false, error: { code: 'ERROR', message: 'project_id and name required' } }, 400)
+    let raw: unknown
+    try {
+      raw = await c.req.json()
+    } catch {
+      return c.json({ ok: false, error: { code: 'BAD_JSON', message: 'Invalid JSON body' } }, 400)
+    }
+    const parsed = experimentCreateSchema.safeParse(raw)
+    if (!parsed.success) {
+      const first = parsed.error.issues[0]
+      return c.json({
+        ok: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: first ? `${first.path.join('.')}: ${first.message}` : 'Invalid experiment payload',
+          fieldErrors: Object.fromEntries(
+            parsed.error.issues.map((i) => [i.path.join('.') || '_', i.message]),
+          ),
+        },
+      }, 400)
+    }
+    const { project_id, name, description, hypothesis, traffic_split, bandit_enabled } = parsed.data
     const { data, error } = await db().from('experiments').insert({ project_id, name, description, hypothesis, traffic_split, bandit_enabled }).select().single()
     if (error) return dbError(c, error)
     return c.json({ ok: true, data }, 201)

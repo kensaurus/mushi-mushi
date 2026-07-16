@@ -172,6 +172,7 @@ export function BreadcrumbPeek({
           ref={popoverRef}
           role="tooltip"
           style={popoverStyle}
+          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
           className="w-[min(30rem,calc(100vw-1.25rem))] max-h-[min(28rem,calc(100vh-1.25rem))] overflow-y-auto rounded-md border border-edge bg-surface-raised p-3 text-2xs text-fg shadow-xl tooltip-enter pointer-events-auto cursor-default"
           // Keep the popover open while the cursor moves into it so
           // the user can read longer messages without a flicker race.

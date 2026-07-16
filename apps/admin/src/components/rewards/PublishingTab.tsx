@@ -413,7 +413,7 @@ export function PublishingTab() {
               href={marketplaceUrl}
               target="_blank"
               rel="noreferrer"
-              className="text-xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors mt-1 inline-block"
+              className="text-xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity mt-1 inline-block"
             >
               {marketplaceUrl} ↗
             </a>
@@ -422,7 +422,7 @@ export function PublishingTab() {
         <div className="flex gap-2 shrink-0">
           <Link
             to="/rewards/tester-review"
-            className="inline-flex items-center rounded-md border border-edge-subtle px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-fg hover:border-fg-muted transition-colors"
+            className="inline-flex items-center rounded-md border border-edge-subtle px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-fg hover:border-fg-muted transition-opacity"
           >
             Review submissions
           </Link>
@@ -458,7 +458,7 @@ export function PublishingTab() {
       {!pendingCountHint && !sLoading && (
         <p className="text-xs text-fg-muted">
           Publish your listing, set bounties, then{' '}
-          <Link to="/rewards/tester-review" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+          <Link to="/rewards/tester-review" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
             review submissions
           </Link>{' '}
           as testers join.
@@ -490,6 +490,7 @@ export function PublishingTab() {
             <div>
               <label className="block text-xs font-medium text-fg-muted mb-1">Description</label>
               <textarea
+                // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                 className="w-full rounded-md border border-edge-subtle bg-surface px-3 py-2 text-sm text-fg
                            placeholder:text-fg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/60
                            min-h-[100px] resize-y"
@@ -507,7 +508,7 @@ export function PublishingTab() {
                     key={p}
                     type="button"
                     onClick={() => togglePlatform(p)}
-                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-opacity ${
                       platforms.includes(p)
                         ? 'border-brand bg-brand/12 text-brand border border-brand/28'
                         : 'border-edge-subtle bg-transparent text-fg-muted hover:border-fg-muted'

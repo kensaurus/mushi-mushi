@@ -45,7 +45,7 @@ export function SkillsPipelineGuide({ topPriority, stats }: Props) {
         <p className="text-2xs font-semibold text-fg">Example: fix a bug with workflow-fix-and-ship</p>
         <ol className="list-decimal pl-4 space-y-0.5 text-2xs text-fg-secondary">
           <li>Open a report → copy its ID from the URL (e.g. <code className="font-mono bg-surface-overlay px-0.5 rounded">abc123de</code>)</li>
-          <li>Go to <Link to="/skills?tab=catalog&skill=workflow-fix-and-ship" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">Catalog → workflow-fix-and-ship</Link></li>
+          <li>Go to <Link to="/skills?tab=catalog&skill=workflow-fix-and-ship" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">Catalog → workflow-fix-and-ship</Link></li>
           <li>Paste the report ID in "Report ID", choose Handoff mode, click <strong>Start pipeline</strong></li>
           <li>Copy the generated context packet into your local Cursor agent — it knows exactly what to fix</li>
         </ol>
@@ -81,7 +81,7 @@ export function SkillsPipelineGuide({ topPriority, stats }: Props) {
       </ul>
       <p className="text-2xs text-fg-faint">
         You can also attach a skill directly from a{' '}
-        <Link to="/reports" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+        <Link to="/reports" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
           report
         </Link>{' '}
         — open any report, scroll to "Attach skill", pick a workflow and hit Start.

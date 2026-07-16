@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -94,7 +95,7 @@ function OverallScorecard({ result }: { result: AuditResult }) {
     overall === 'fail'
       ? CHIP_TONE.dangerSubtle
       : overall === 'warn'
-        ? 'border-warn/40 bg-warn-muted/50 text-warning-foreground border border-warn/25ing-foreground'
+        ? CHIP_TONE.warnSubtle
         : CHIP_TONE.okSubtle
   const overallLabel =
     overall === 'fail' ? 'Issues found' : overall === 'warn' ? 'Warnings' : 'All clear'
@@ -149,6 +150,7 @@ function FindingsList({ findings }: { findings: AuditFinding[] }) {
       {findings.map((f, i) => (
         <div
           key={i}
+          // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
           className="flex items-start gap-2.5 rounded-md border border-edge-subtle bg-surface-raised px-3 py-2.5"
         >
           <SeverityBadge severity={f.severity} />
@@ -262,7 +264,7 @@ export function FullStackAuditPage() {
   }, [projectId])
 
   return (
-    <div className="space-y-5 pb-16">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-full-stack-audit">
       <PageHeaderBar
         title="Full-Stack Audit"
 

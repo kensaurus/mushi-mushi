@@ -96,7 +96,7 @@ export function TesterGuideAccordion({
       className={`group scroll-mt-16 ${TESTER_PANEL} overflow-hidden`}
       open={defaultOpen}
     >
-      <summary className="flex cursor-pointer list-none items-start gap-3 p-4 motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-inset [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-start gap-3 p-4 motion-safe:transition-opacity hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-inset [&::-webkit-details-marker]:hidden">
         <span className="text-xl leading-none" aria-hidden>{icon}</span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-fg">{title}</p>
@@ -128,7 +128,7 @@ export function TesterGuideBullets({ items }: { items: string[] }) {
 
 export function TesterGuideLink({ to, children }: { to: string; children: ReactNode }) {
   return (
-    <Link to={to} className="inline-flex items-center gap-1 text-xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+    <Link to={to} className="inline-flex items-center gap-1 text-xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
       {children}
       <span aria-hidden>→</span>
     </Link>

@@ -538,7 +538,7 @@ export function ProjectsListPanel({
               onSdkOpenOverrideChange(project.id, nextOpen)
             }}
           >
-            <summary className="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-2 py-1.5 -mx-2 rounded-sm hover:bg-surface-overlay transition-colors">
+            <summary className="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-2 py-1.5 -mx-2 rounded-sm hover:bg-surface-overlay transition-opacity">
               <div className="flex items-center gap-2 min-w-0">
                 <span aria-hidden="true" className="text-fg-muted text-xs">
                   {'\u{1F41B}'}
@@ -685,6 +685,7 @@ function ProjectMetricsRail({ project }: { project: Project }) {
           />
         )}
       </div>
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       <div className="grid grid-cols-1 gap-2 border-t border-edge-subtle bg-surface-overlay px-3 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-3">
         <span
           className="inline-flex shrink-0 items-center gap-1.5 text-2xs font-medium text-fg-muted"
@@ -864,7 +865,7 @@ function ProjectContextRail({ project }: { project: Project }) {
             <ContextDivider />
             <Link
               to={`/explore?project=${project.id}`}
-              className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay px-2 py-0.5 text-2xs text-fg-secondary transition-colors hover:border-edge hover:bg-surface-raised hover:text-fg"
+              className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay px-2 py-0.5 text-2xs text-fg-secondary transition-opacity hover:border-edge hover:bg-surface-raised hover:text-fg"
               title="Open codebase atlas"
               onClick={(e) => e.stopPropagation()}
             >
@@ -961,6 +962,7 @@ function ContextDetailRow({
   children: ReactNode
 }) {
   return (
+    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
     <div className="grid grid-cols-1 gap-2 border-t border-edge-subtle px-3 py-2.5 first:border-t-0 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:items-center sm:gap-4">
       <div className="inline-flex min-w-0 items-center gap-2 text-2xs font-semibold text-fg-muted">
         <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-surface-overlay text-fg-muted">
@@ -992,7 +994,7 @@ function ProjectIdCopy({ projectId }: { projectId: string }) {
     <button
       type="button"
       onClick={copy}
-      className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-sm transition-colors group hover:opacity-95"
+      className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-sm transition-opacity group hover:opacity-95"
       title="Copy project ID — paste as MUSHI_PROJECT_ID in .env.local or .cursor/mcp.json"
       data-testid={`project-id-chip-${projectId}`}
       aria-label={`Copy project ID: ${projectId}`}

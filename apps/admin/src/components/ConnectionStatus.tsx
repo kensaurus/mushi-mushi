@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback } from 'react'
-import { Btn } from './ui'
+import { Btn, Card } from './ui'
 import {
   isCloudMode,
   RESOLVED_SUPABASE_URL as SUPABASE_URL,
@@ -128,7 +128,7 @@ export function ConnectionStatus({ compact, className = '' }: ConnectionStatusPr
           type="button"
           onClick={runChecks}
           disabled={running}
-          className="text-2xs text-accent-foreground hover:text-accent disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors motion-safe:active:scale-[0.97]"
+          className="text-2xs text-accent-foreground hover:text-accent disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-opacity motion-safe:active:scale-[0.97]"
         >
           {running ? 'Checking…' : anyPending ? 'Run check' : 'Re-check'}
         </button>
@@ -149,7 +149,7 @@ export function ConnectionStatus({ compact, className = '' }: ConnectionStatusPr
 
       <div className="space-y-2">
         {checks.map((check) => (
-          <div key={check.id} className="flex items-start gap-2.5 bg-surface-raised/50 border border-edge-subtle rounded-sm px-3 py-2">
+          <Card key={check.id}  className="flex items-start gap-2.5 px-3 py-2">
             <span className="mt-0.5 text-sm leading-none">{statusIcon(check.status)}</span>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
@@ -163,7 +163,7 @@ export function ConnectionStatus({ compact, className = '' }: ConnectionStatusPr
                 <p className="text-2xs text-danger mt-1 wrap-break-word">{check.detail}</p>
               )}
             </div>
-          </div>
+          </Card>
         ))}
       </div>
 

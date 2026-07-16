@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useRealtime } from '../lib/realtime'
@@ -489,7 +490,7 @@ function HealthPageContent() {
   })()
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-health">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-health">
       <PageHeaderBar
         title={copy?.title ?? 'System Health'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -923,18 +924,18 @@ function HealthPageContent() {
                   return (
                     <div
                       key={i}
-                      className="flex items-center gap-2 px-2 py-1 rounded-sm hover:bg-surface-overlay/40"
+                      className="flex min-w-0 flex-wrap items-center gap-2 px-2 py-1 rounded-sm hover:bg-surface-overlay/40"
                     >
-                      <span className="text-fg-faint w-32 truncate">{new Date(r.created_at).toLocaleTimeString()}</span>
-                      <span className="text-fg-secondary w-32 truncate">{r.function_name}</span>
-                      <span className="text-fg w-48 truncate">{r.used_model}</span>
+                      <span className="text-fg-faint w-32 min-w-0 truncate">{new Date(r.created_at).toLocaleTimeString()}</span>
+                      <span className="text-fg-secondary w-32 min-w-0 truncate">{r.function_name}</span>
+                      <span className="text-fg w-48 min-w-0 truncate">{r.used_model}</span>
                       {r.fallback_used && <Badge tone="warnSubtle">fallback</Badge>}
                       {r.status !== 'success' && <Badge tone="dangerSubtle">{r.status}</Badge>}
                       {r.key_source && r.key_source !== 'env' && <Badge tone="infoSubtle">{r.key_source}</Badge>}
                       <span className="text-fg-muted ml-auto">{r.latency_ms ?? '?'}ms</span>
                       <span className="text-fg-faint w-24 text-right">{(r.input_tokens ?? 0) + (r.output_tokens ?? 0)} tok</span>
                       {r.report_id && (
-                        <Link to={`/reports/${r.report_id}`} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors shrink-0" title="Open report">
+                        <Link to={`/reports/${r.report_id}`} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity shrink-0" title="Open report">
                           report
                         </Link>
                       )}
@@ -943,7 +944,7 @@ function HealthPageContent() {
                           href={traceUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors shrink-0"
+                          className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity shrink-0"
                           title="Open Langfuse trace"
                         >
                           trace ↗

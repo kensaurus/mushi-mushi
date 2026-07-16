@@ -51,7 +51,7 @@ export function PersonaTrack() {
         <li key={card.id}>
           <Link
             href={card.docsPath ? urls.docs(card.docsPath) : card.slug}
-            className="group flex h-full flex-col gap-3 rounded-2xl border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] p-5 transition hover:border-[color-mix(in_oklch,var(--mushi-ink)_45%,var(--mushi-rule))] hover:shadow-[0_8px_32px_-16px_rgba(14,13,11,0.18)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
+            className="group flex h-full flex-col gap-3 rounded-2xl border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] p-5 transition-[transform,opacity] hover:border-[color-mix(in_oklch,var(--mushi-ink)_45%,var(--mushi-rule))] hover:shadow-[0_8px_32px_-16px_rgba(14,13,11,0.18)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
           >
             <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-[var(--mushi-vermillion)]">
               {card.eyebrow}
@@ -62,7 +62,7 @@ export function PersonaTrack() {
             <p className="text-sm leading-6 text-[var(--mushi-ink-muted)]">
               {card.loopSlice}
             </p>
-            <p className="mt-auto font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink)] opacity-60 transition group-hover:opacity-100">
+            <p className="mt-auto font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink)] opacity-60 transition-[transform,opacity] group-hover:opacity-100">
               {card.cta}
             </p>
           </Link>

@@ -150,7 +150,7 @@ export function ReportPreviewDrawer({ previewId, onClose }: Props) {
                   <RelativeTime value={report.created_at} />
                 </MetaChip>
                 <MetaChip label="Report ID" title={report.id}>
-                  <CodeValue value={report.id} inline tone="id" className="max-w-[14rem]" />
+                  <CodeValue value={report.id} inline tone="id" className="max-w-56" />
                 </MetaChip>
                 {report.component && (
                   <MetaChip label="Component">

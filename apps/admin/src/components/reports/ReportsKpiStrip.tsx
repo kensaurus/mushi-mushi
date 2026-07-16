@@ -123,7 +123,7 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
         <button
           type="button"
           onClick={reload}
-          className="shrink-0 rounded-sm px-2 py-1 text-2xs font-medium hover:bg-danger-muted/40 bg-danger-muted/50 text-danger-foreground border border-danger/25 motion-safe:transition-colors"
+          className="shrink-0 rounded-sm px-2 py-1 text-2xs font-medium hover:bg-danger-muted/40 bg-danger-muted/50 text-danger-foreground border border-danger/25 motion-safe:transition-opacity"
         >
           Retry
         </button>
@@ -152,7 +152,7 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
                 ? `Clear ${tile.label} filter`
                 : `Filter to ${tile.label} severity reports`
             }
-            className={`relative block w-full min-w-0 overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] ${
+            className={`relative block w-full min-w-0 overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:transition-[transform,opacity] ${
               isActive ? 'ring-2 ring-brand/60' : ''
             }`}
           >

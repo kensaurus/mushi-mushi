@@ -24,7 +24,8 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
   const glow = severityGlowClass(report.severity)
   return (
     <div
-      className={`mb-3 rounded-md border border-edge-subtle bg-surface-raised p-3 ${glow} ${glow ? 'motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity]' : ''}`}
+      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
+      className={`mb-3 rounded-md border border-edge-subtle bg-surface-raised p-3 ${glow} ${glow ? 'motion-safe:transition-[transform,opacity]' : ''}`}
     >
       <Breadcrumbs
         items={[
@@ -70,7 +71,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
             to={`/reports?reporter=${encodeURIComponent(report.reporter_token_hash)}`}
           >
             {report.reporter_identity?.display_name ?? report.reporter_display_name ? (
-              <span className="max-w-[12rem] truncate">
+              <span className="max-w-48 truncate">
                 {report.reporter_identity?.display_name ?? report.reporter_display_name}
               </span>
             ) : (
@@ -97,7 +98,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
               title={`Activity for page: ${pageRoute}`}
               to={`/activity?route=${encodeURIComponent(pageRoute)}`}
             >
-              <span className="font-mono max-w-[14rem] truncate">{pageRoute}</span>
+              <span className="font-mono max-w-56 truncate">{pageRoute}</span>
             </MetaChip>
           )}
           {report.area_tag && (
@@ -113,7 +114,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
               href={report.screenshot_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex flex-col gap-0.5 rounded border border-edge bg-surface-overlay px-2 py-1 text-xs hover:bg-surface-raised transition-colors"
+              className="flex flex-col gap-0.5 rounded border border-edge bg-surface-overlay px-2 py-1 text-xs hover:bg-surface-raised transition-opacity"
             >
               <span className="text-2xs font-medium uppercase tracking-wide text-fg-faint">Screenshot</span>
               <span className="text-fg-muted">view →</span>

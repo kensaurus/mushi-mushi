@@ -363,7 +363,11 @@ const ADMIN_ALLOWED_HEADERS = [
   'Authorization',
   'X-Mushi-Project-Id',
   'X-Mushi-Org-Id',
+  'X-Request-Id',
 ];
+
+/** Browser-visible response headers for admin apiFetch correlation. */
+const ADMIN_EXPOSE_HEADERS = ['X-Request-Id'];
 
 app.use(
   '/v1/admin/migrations/*',
@@ -381,6 +385,7 @@ app.use(
     // ADMIN_ALLOWED_HEADERS constant so a future header addition lands in
     // one place rather than drifting per-entry.
     allowHeaders: ADMIN_ALLOWED_HEADERS,
+    exposeHeaders: ADMIN_EXPOSE_HEADERS,
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   }),
@@ -391,6 +396,7 @@ app.use(
   cors({
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
     allowHeaders: ADMIN_ALLOWED_HEADERS,
+    exposeHeaders: ADMIN_EXPOSE_HEADERS,
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   }),
@@ -405,6 +411,7 @@ app.use(
   cors({
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
     allowHeaders: ADMIN_ALLOWED_HEADERS,
+    exposeHeaders: ADMIN_EXPOSE_HEADERS,
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   }),
@@ -418,6 +425,7 @@ app.use(
     // allowlist or the browser drops the preflight.
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
     allowHeaders: ADMIN_ALLOWED_HEADERS,
+    exposeHeaders: ADMIN_EXPOSE_HEADERS,
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   }),
@@ -427,6 +435,7 @@ app.use(
   cors({
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
     allowHeaders: ADMIN_ALLOWED_HEADERS,
+    exposeHeaders: ADMIN_EXPOSE_HEADERS,
     // GET is for /v1/invitations/preview which resolves a token into the
     // org/inviter/role panel rendered before the user clicks Accept. The
     // route is unauthenticated (the token IS the bearer), but we still
@@ -449,6 +458,7 @@ app.use(
   cors({
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
     allowHeaders: ADMIN_ALLOWED_HEADERS,
+    exposeHeaders: ADMIN_EXPOSE_HEADERS,
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     credentials: true,
   }),
@@ -465,6 +475,7 @@ app.use(
   cors({
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
     allowHeaders: ADMIN_ALLOWED_HEADERS,
+    exposeHeaders: ADMIN_EXPOSE_HEADERS,
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     credentials: true,
   }),

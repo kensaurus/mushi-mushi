@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useMemo, useState, useEffect } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
@@ -52,7 +53,7 @@ import {
   type NotificationTabId,
   type ReporterNotification,
 } from '../components/notifications/types'
-import { CHIP_TONE } from '../lib/chipTone'
+import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 
 const TABS: Array<{ id: NotificationTabId; label: string; description: string }> = [
   {
@@ -212,7 +213,7 @@ export function NotificationsPage() {
 
   if (!activeProjectId) {
     return (
-      <div className="space-y-4">
+      <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-notifications">
         <PageHeaderBar
           title={copy?.title ?? 'Notifications'}
 
@@ -303,8 +304,8 @@ export function NotificationsPage() {
                   : bannerSeverity === 'warn'
                     ? CHIP_TONE.warnSubtle
                     : bannerSeverity === 'brand'
-                      ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
-                      : 'bg-surface-overlay text-fg-muted'
+                      ? HEADER_BADGE_TONE.brand
+                      : HEADER_BADGE_TONE.neutral
               }
             >
               {headerBadge}
@@ -587,7 +588,7 @@ export function NotificationsPage() {
                   <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
                   <span>
                     Operator routing (Slack, PagerDuty) lives on{' '}
-                    <Link to="/integrations/config" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+                    <Link to="/integrations/config" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
                       Integrations
                     </Link>{' '}
                     — separate from reporter widget messages
@@ -609,7 +610,7 @@ export function NotificationsPage() {
                 <h3 className="text-sm font-semibold text-fg">Messages by type</h3>
                 <div className="flex flex-wrap gap-2">
                   {Object.entries(stats.byType).map(([t, count]) => (
-                    <Badge key={t} className={TYPE_BADGE[t] ?? 'bg-surface-overlay text-fg-muted'}>
+                    <Badge key={t} className={TYPE_BADGE[t] ?? HEADER_BADGE_TONE.neutral}>
                       {t}: {count}
                     </Badge>
                   ))}

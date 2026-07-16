@@ -3,6 +3,8 @@ export default {
 
   // Getting started
   dashboard: 'Dashboard',
+  overview: 'Overview (portfolio)',
+  activity: 'Activity',
   onboarding: 'Onboarding',
   projects: 'Projects',
   inbox: 'Action inbox',

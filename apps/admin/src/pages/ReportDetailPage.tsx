@@ -595,6 +595,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
             <ClassificationFields report={report} />
           ) : report.processing_error ? (
             <Callout tone="danger" label="Classification failed">
+              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
               <p className="text-[0.8125rem] font-mono text-fg-secondary leading-relaxed wrap-break-word">
                 {report.processing_error}
               </p>
@@ -686,8 +687,8 @@ function describeTriageUpdate(updates: Record<string, string>): string | null {
 
 /** Platform chip colour map — mirrors the same sentiment used by InboxPage. */
 const PLATFORM_BADGE: Record<string, string> = {
-  ios:     CHIP_TONE.infoSubtle + ' border-info/20',
-  android: CHIP_TONE.okSubtle + ' border-ok/20',
+  ios:     CHIP_TONE.infoSubtle,
+  android: CHIP_TONE.okSubtle,
   web:     'bg-brand/12 text-brand border border-brand/28',
   macos:   'bg-surface-overlay text-fg-secondary border-edge-subtle',
   windows: 'bg-surface-overlay text-fg-secondary border-edge-subtle',

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   MUSHI_COLORS_LIGHT,
+  MUSHI_DURATION,
   MUSHI_GEOMETRY,
+  MUSHI_MOTION,
+  mushiTokens,
   resolveWidgetAccent,
   safeWidgetHex,
   mushiPalette,
@@ -45,5 +48,25 @@ describe('MUSHI_GEOMETRY', () => {
 describe('mushiPalette', () => {
   it('returns light paper token used by web styles', () => {
     expect(mushiPalette('light').paper).toBe('#F8F4ED');
+  });
+});
+
+describe('MUSHI_DURATION / mushiTokens', () => {
+  it('exposes the full duration vocabulary', () => {
+    expect(MUSHI_DURATION).toEqual({
+      instant: 120,
+      fast: 200,
+      base: 220,
+      panel: 300,
+      slow: 420,
+      ring: 700,
+    });
+    expect(MUSHI_MOTION.easeStamp).toBe('cubic-bezier(0.22, 1, 0.36, 1)');
+  });
+
+  it('includes duration on the token snapshot', () => {
+    const snap = mushiTokens('light');
+    expect(snap.duration).toBe(MUSHI_DURATION);
+    expect(snap.motion).toBe(MUSHI_MOTION);
   });
 });

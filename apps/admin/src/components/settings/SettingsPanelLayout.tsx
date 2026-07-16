@@ -33,6 +33,7 @@ export function SettingsCard({
 }) {
   return (
     <div
+      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
       className={`rounded-md border border-edge-subtle bg-surface-raised/40 p-3 space-y-2.5 ${className}`}
     >
       {children}

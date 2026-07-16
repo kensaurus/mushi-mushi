@@ -81,6 +81,7 @@ export function DiscoveryLifecycle({ steps }: Props) {
       // The horizontal 4-up stepper needs ~640 px to feel comfortable.
       // Below `lg`, stack vertically (each step on its own row) so the
       // labels and CTAs don't truncate. The connector hides on stack.
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] gap-2 lg:gap-0 items-stretch"
     >
       {steps.map((step, idx) => (
@@ -104,7 +105,7 @@ function LifecycleTile({ step, index }: { step: LifecycleStep; index: number }) 
     <article
       role="listitem"
       aria-current={step.state === 'active' ? 'step' : undefined}
-      className={`relative flex flex-col gap-1 px-3 py-3 rounded-lg ${style.ring} ${style.bg} transition-colors`}
+      className={`relative flex flex-col gap-1 px-3 py-3 rounded-lg ${style.ring} ${style.bg} transition-opacity`}
     >
       <div className="flex items-center gap-2">
         <div

@@ -22,6 +22,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Streamdown } from 'streamdown'
+import {
+  STREAMDOWN_LINK_SAFETY,
+  streamdownUrlTransform,
+} from '../lib/streamdownSafety'
 import { apiFetch } from '../lib/supabase'
 import { Drawer } from './Drawer'
 import { Btn, Loading, Tooltip } from './ui'
@@ -512,23 +516,27 @@ export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadI
       }
       headerAction={
         <div className="flex items-center gap-2">
-          <button
+          <Btn
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => setHistoryOpen((v) => !v)}
-            className="text-2xs text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:underline"
+            className="text-2xs px-0 h-auto border-0 underline-offset-2 hover:underline"
             aria-expanded={historyOpen}
             aria-haspopup="menu"
           >
             History ▾
-          </button>
+          </Btn>
           {messages.length > 0 && (
-            <button
+            <Btn
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={startNewThread}
-              className="text-2xs text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:underline"
+              className="text-2xs px-0 h-auto border-0 underline-offset-2 hover:underline"
             >
               New
-            </button>
+            </Btn>
           )}
         </div>
       }
@@ -542,6 +550,7 @@ export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadI
               <span className="ask-mushi-quick-actions__label">Page actions</span>
               <div className="ask-mushi-quick-actions__row">
                 {activeCtx.actions.map((a) => (
+                  // mushi-ui: chrome icon button — Btn variant TBD (terminal quick-action chip row)
                   <button
                     key={a.id}
                     type="button"
@@ -778,6 +787,7 @@ function EmptyPrompt({ route, ctx, onSuggest, onSend, onResumeThread, resuming }
         <p className="ask-mushi-section-label">Try a command</p>
         <div className="flex flex-wrap gap-1.5">
           {QUICK_SLASH_CHIPS.map((c) => (
+            // mushi-ui: chrome icon button — Btn variant TBD (terminal slash-command chip)
             <button
               key={c.command}
               type="button"
@@ -799,6 +809,7 @@ function EmptyPrompt({ route, ctx, onSuggest, onSend, onResumeThread, resuming }
         <p className="ask-mushi-section-label">Ask about this page</p>
         <div className="space-y-1.5">
           {suggestions.map((s) => (
+            // mushi-ui: chrome icon button — Btn variant TBD (full-width suggest row)
             <button
               key={s}
               type="button"
@@ -816,6 +827,7 @@ function EmptyPrompt({ route, ctx, onSuggest, onSend, onResumeThread, resuming }
           <p className="ask-mushi-section-label">Page actions</p>
           <div className="ask-mushi-quick-actions__row">
             {actions.map((a) => (
+              // mushi-ui: chrome icon button — Btn variant TBD (terminal page-action chip)
               <button
                 key={a.id}
                 type="button"
@@ -847,11 +859,12 @@ function EmptyPrompt({ route, ctx, onSuggest, onSend, onResumeThread, resuming }
           <ul className="space-y-1.5">
             {recent.map((t) => (
               <li key={t.threadId}>
+                {/* mushi-ui: chrome icon button — Btn variant TBD (resume thread list row) */}
                 <button
                   type="button"
                   disabled={resuming}
                   onClick={() => onResumeThread(t.threadId)}
-                  className="ask-mushi-resume-btn w-full text-left rounded-sm px-2.5 py-2 motion-safe:transition-colors disabled:opacity-50"
+                  className="ask-mushi-resume-btn w-full text-left rounded-sm px-2.5 py-2 motion-safe:transition-opacity disabled:opacity-50"
                   title={`Reopen ${t.title || '(empty thread)'}`}
                 >
                   <div className="ask-mushi-resume-btn__title truncate">
@@ -906,6 +919,7 @@ function MessageRow({ message, shikiTheme, onCopy, onClarifyPick, disabled }: Me
   return (
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} gap-1`}>
       <div
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         className={`ask-mushi-msg ask-mushi-msg--${isUser ? 'user' : 'assistant'} max-w-[88%] rounded-sm px-2.5 py-2 leading-relaxed`}
       >
         {isUser ? (
@@ -915,6 +929,8 @@ function MessageRow({ message, shikiTheme, onCopy, onClarifyPick, disabled }: Me
             className="prose-mushi prose-mushi-chat"
             parseIncompleteMarkdown={Boolean(message.streaming)}
             shikiTheme={shikiTheme}
+            linkSafety={STREAMDOWN_LINK_SAFETY}
+            urlTransform={streamdownUrlTransform}
           >
             {assistantBody || (message.streaming ? '…' : '')}
           </Streamdown>
@@ -981,18 +997,20 @@ function MessageMetaStrip({ message }: { message: AskMushiMessage }) {
 function MessageActions({ message, onCopy }: { message: AskMushiMessage; onCopy: () => void }) {
   return (
     <div className="ask-mushi-msg-actions flex items-center gap-1.5">
-      <button
+      <Btn
         type="button"
+        variant="ghost"
+        size="sm"
         onClick={onCopy}
-        className="text-2xs motion-safe:transition-colors focus-visible:outline-none focus-visible:underline"
+        className="text-2xs px-0 h-auto border-0 underline-offset-2 hover:underline"
       >
         Copy
-      </button>
+      </Btn>
       {message.citations?.map((c) => (
         <a
           key={`${c.kind}:${c.id}`}
           href={c.kind === 'report' ? `/reports/${c.id}` : c.kind === 'fix' ? `/fixes` : '#'}
-          className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
+          className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
         >
           Open {c.kind} ↗
         </a>
@@ -1039,13 +1057,15 @@ function HistoryPopover({
         <span className="ask-mushi-section-label">
           Recent on {route}
         </span>
-        <button
+        <Btn
           type="button"
+          variant="ghost"
+          size="sm"
           onClick={onClose}
-          className="text-2xs text-fg-muted hover:text-fg"
+          className="text-2xs px-0 h-auto border-0"
         >
           Close
-        </button>
+        </Btn>
       </div>
       {loading ? (
         <EmptySectionMessage text="Loading…" />
@@ -1053,10 +1073,11 @@ function HistoryPopover({
         <ul className="space-y-0.5">
           {threads.map((t) => (
             <li key={t.threadId}>
+              {/* mushi-ui: chrome icon button — Btn variant TBD (history thread list row) */}
               <button
                 type="button"
                 onClick={() => onPick(t.threadId)}
-                className={`ask-mushi-history-item w-full text-left rounded-sm px-2 py-1.5 motion-safe:transition-colors ${
+                className={`ask-mushi-history-item w-full text-left rounded-sm px-2 py-1.5 motion-safe:transition-opacity ${
                   t.threadId === currentThreadId ? 'ask-mushi-history-item--active' : ''
                 }`}
               >

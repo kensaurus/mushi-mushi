@@ -116,7 +116,7 @@ function RowStatus({
         href={prUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-2xs font-medium hover:bg-ok-muted/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${CHIP_TONE.okSubtle}`}
+        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-2xs font-medium hover:bg-ok-muted/40 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${CHIP_TONE.okSubtle}`}
       >
         <IconCheck className="h-3.5 w-3.5" aria-hidden /> {label}
         <IconExternalLink className="h-3.5 w-3.5 opacity-60" aria-hidden />

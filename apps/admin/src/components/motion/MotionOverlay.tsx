@@ -1,3 +1,4 @@
+// mushi-ui: intentional overlay — not Modal/Drawer (reason: low-level Framer Motion backdrop shell consumed by Modal and CommandPalette)
 /**
  * FILE: apps/admin/src/components/motion/MotionOverlay.tsx
  * PURPOSE: AnimatePresence overlay shell for modals and command palette.

@@ -52,6 +52,10 @@
   --color-mushi-positive: var(--mushi-viz-positive);
   --color-mushi-warn: var(--mushi-viz-warn);
   --color-mushi-danger: var(--mushi-viz-danger);
+  /* Shared type ramp from brand.tokens.json (prefer over clamp()/text-[Npx]). */
+  --text-mushi-label: var(--mushi-text-label, 0.75rem);
+  --text-mushi-body: var(--mushi-text-body, 0.875rem);
+  --text-mushi-title: var(--mushi-text-title, 1rem);
 }
 
 @source "../components/**/*.{ts,tsx}";
@@ -1044,6 +1048,540 @@ main :not(pre) > code {
   .docs-media-showcase__static {
     display: grid;
     gap: 1.25rem;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Landing cinematic uplift — native scroll + Motion reveals / R3F hero ambient
+ * Scoped to landing components; docs pages stay untouched.
+ * ------------------------------------------------------------------------- */
+.landing-cinematic-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding-block: 2.5rem 3rem;
+  min-height: min(72vh, 40rem);
+  display: flex;
+  align-items: center;
+}
+
+.landing-cinematic-hero__content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 1.15rem;
+  max-width: 34rem;
+}
+
+@media (min-width: 1024px) {
+  .landing-cinematic-hero__content {
+    max-width: 40rem;
+  }
+}
+
+.landing-ink-canvas,
+.landing-ink-poster {
+  position: absolute;
+  inset: -12% -10% auto;
+  height: 128%;
+  width: 120%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.92;
+}
+
+/* Depth vignette — keeps the text side legible while the ink atmosphere
+   pools on the open right edge instead of reading as blank paper. */
+.landing-cinematic-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    120% 90% at 12% 45%,
+    var(--mushi-paper) 32%,
+    transparent 78%
+  );
+}
+
+.landing-ink-poster {
+  background:
+    radial-gradient(ellipse 45% 40% at 18% 42%, color-mix(in oklch, var(--mushi-ink) 8%, transparent), transparent 70%),
+    radial-gradient(ellipse 30% 28% at 72% 38%, color-mix(in oklch, var(--mushi-vermillion) 10%, transparent), transparent 72%),
+    radial-gradient(ellipse 38% 32% at 55% 78%, color-mix(in oklch, var(--mushi-ink-muted) 6%, transparent), transparent 70%);
+}
+
+.landing-hero-line {
+  overflow: hidden;
+  display: block;
+}
+
+.landing-hanko {
+  transform-origin: center;
+}
+
+.landing-section-title {
+  font-family: var(--mushi-font-display);
+  font-size: clamp(1.5rem, 2.8vw, 2rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--mushi-ink);
+  margin: 0 0 0.75rem !important;
+  font-weight: 600;
+}
+
+.dark .landing-section-title {
+  color: var(--mushi-dark-ink);
+}
+
+.landing-section-lead {
+  max-width: 62ch;
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: var(--mushi-ink-muted);
+  margin: 0 0 1.5rem;
+}
+
+.dark .landing-section-lead {
+  color: var(--mushi-dark-ink-muted);
+}
+
+.landing-proof {
+  margin: 2.5rem 0;
+  padding: 0.25rem 0 1.25rem;
+}
+
+/* Landing home — paper page bg so the reading column doesn't float on
+   Nextra's near-white html. Native scroll (docs/MOTION.md — no Lenis). */
+body:has(.landing-cinematic-hero) {
+  background-color: var(--mushi-paper);
+}
+
+html:has(.landing-cinematic-hero) {
+  overflow-x: clip;
+}
+
+.landing-hero-proof {
+  margin: 0.35rem 0 0;
+  font-size: 0.95rem;
+  color: var(--mushi-ink-muted);
+}
+
+.dark .landing-hero-proof {
+  color: var(--mushi-dark-ink-muted);
+}
+
+.landing-hero-ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 0.85rem;
+  margin-top: 1.35rem;
+  align-items: center;
+}
+
+.landing-hero-cta {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 0.4rem;
+  padding: 0.55rem 1rem;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.landing-hero-cta--primary {
+  background: var(--mushi-vermillion);
+  color: #fff;
+  border: 1px solid var(--mushi-vermillion);
+}
+
+.landing-hero-cta--primary:hover {
+  filter: brightness(1.05);
+}
+
+.landing-hero-cta--secondary {
+  background: transparent;
+  color: var(--mushi-ink);
+  border: 1px solid var(--mushi-rule);
+}
+
+.dark .landing-hero-cta--secondary {
+  color: var(--mushi-dark-ink);
+}
+
+.landing-hero-cta--secondary:hover {
+  border-color: var(--mushi-vermillion);
+  color: var(--mushi-vermillion);
+}
+
+.landing-hero-cta--ghost {
+  background: transparent;
+  color: var(--mushi-ink-muted);
+  border: 1px solid transparent;
+  padding-inline: 0.35rem;
+  font-weight: 500;
+}
+
+.landing-hero-cta--ghost:hover {
+  color: var(--mushi-vermillion);
+}
+
+.landing-trust {
+  margin: 2rem 0 0.5rem;
+}
+
+.landing-trust__headline {
+  margin: 0 0 0.75rem;
+  font-family: var(--mushi-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mushi-ink-muted);
+}
+
+.dark .landing-trust__headline {
+  color: var(--mushi-dark-ink-muted);
+}
+
+/* One cohesive credential bar with hairline dividers — not four floating
+   cards. Reads as an editorial run, the Supabase/Langfuse trust pattern. */
+.landing-trust__list {
+  display: flex;
+  flex-wrap: wrap;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.6rem;
+  overflow: hidden;
+  background: color-mix(in oklch, var(--mushi-paper) 88%, white);
+}
+
+.dark .landing-trust__list {
+  background: color-mix(in oklch, var(--mushi-dark-paper) 84%, black);
+}
+
+.landing-trust__list > li {
+  flex: 1 1 12rem;
+  border-top: 3px solid transparent;
+  border-left: 1px solid var(--mushi-rule);
+  transition: border-top-color 160ms ease, background 160ms ease;
+}
+
+.landing-trust__list > li:first-child {
+  border-left: none;
+}
+
+.landing-trust__list > li:hover {
+  border-top-color: var(--mushi-vermillion);
+  background: color-mix(in oklch, var(--mushi-vermillion) 5%, transparent);
+}
+
+.landing-trust__chip {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.85rem 1rem 0.95rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.landing-trust__label {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mushi-vermillion);
+}
+
+.landing-trust__text {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--mushi-ink);
+}
+
+.dark .landing-trust__text {
+  color: var(--mushi-dark-ink);
+}
+
+.landing-use-cases {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: 1fr;
+  list-style: none;
+  margin: 1rem 0 2rem;
+  padding: 0;
+}
+
+@media (min-width: 768px) {
+  .landing-use-cases {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.landing-use-cases__item {
+  margin: 0;
+}
+
+.landing-use-cases__link {
+  position: relative;
+  display: grid;
+  gap: 0.45rem;
+  height: 100%;
+  padding: 1.15rem 1.15rem 1.3rem;
+  border: 1px solid var(--mushi-rule);
+  border-left: 3px solid var(--mushi-vermillion);
+  background: color-mix(in oklch, var(--mushi-paper) 90%, white);
+  text-decoration: none;
+  color: inherit;
+  border-radius: 0 0.5rem 0.5rem 0;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.dark .landing-use-cases__link {
+  background: color-mix(in oklch, var(--mushi-dark-paper) 86%, black);
+}
+
+.landing-use-cases__link::after {
+  content: '→';
+  position: absolute;
+  right: 1.1rem;
+  bottom: 1rem;
+  color: var(--mushi-vermillion);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.landing-use-cases__link:hover {
+  transform: translateY(-2px);
+  border-color: var(--mushi-vermillion);
+  box-shadow: 0 10px 28px -18px color-mix(in oklch, var(--mushi-ink) 60%, transparent);
+}
+
+.landing-use-cases__link:hover::after {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.landing-use-cases__title {
+  margin: 0;
+  font-family: var(--mushi-font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--mushi-ink);
+  line-height: 1.25;
+}
+
+.dark .landing-use-cases__title {
+  color: var(--mushi-dark-ink);
+}
+
+.landing-use-cases__desc {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--mushi-ink-muted);
+}
+
+.dark .landing-use-cases__desc {
+  color: var(--mushi-dark-ink-muted);
+}
+
+.landing-proof-terminal {
+  position: relative;
+  font-family: var(--mushi-font-mono);
+  font-size: 0.9rem;
+  line-height: 1.7;
+  background: var(--mushi-code-surface);
+  color: var(--mushi-code-surface-fg);
+  border: 1px solid var(--mushi-code-surface-border);
+  border-radius: 0.6rem;
+  padding: 2.1rem 1.5rem 1.4rem;
+  display: grid;
+  gap: 0.65rem;
+  overflow: auto;
+  max-width: 44rem;
+  box-shadow:
+    0 1px 0 0 color-mix(in oklch, white 8%, transparent) inset,
+    0 24px 50px -28px color-mix(in oklch, var(--mushi-ink) 85%, transparent);
+}
+
+/* macOS-style traffic-light dots — reads instantly as "a real terminal". */
+.landing-proof-terminal::before {
+  content: '';
+  position: absolute;
+  top: 0.85rem;
+  left: 1.5rem;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: #ff5f56;
+  box-shadow:
+    1rem 0 0 #ffbd2e,
+    2rem 0 0 #27c93f;
+  opacity: 0.9;
+}
+
+.landing-proof-line {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.landing-proof-prompt {
+  color: var(--mushi-vermillion);
+  flex-shrink: 0;
+  width: 1ch;
+}
+
+.landing-proof-line code {
+  font: inherit;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border: none;
+}
+
+.landing-proof-pricing {
+  margin: 1.25rem 0 0;
+  font-size: 0.95rem;
+  color: var(--mushi-ink-muted);
+}
+
+.landing-diagnosis {
+  margin: 3rem 0 2rem;
+  padding: 0.25rem 0 1rem;
+}
+
+.landing-diagnosis-progress {
+  height: 2px;
+  width: 100%;
+  margin: 0 0 1.75rem;
+  background: var(--mushi-vermillion);
+  transform: scaleX(1);
+  transform-origin: left center;
+  border-radius: 999px;
+}
+
+.landing-diagnosis-track {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+  .landing-diagnosis-track {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.25rem;
+  }
+}
+
+.landing-diagnosis-card {
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.5rem;
+  padding: 1.15rem 1.2rem 1.25rem;
+  background: color-mix(in oklch, var(--mushi-paper) 92%, white);
+  display: grid;
+  gap: 0.45rem;
+}
+
+.dark .landing-diagnosis-card {
+  background: color-mix(in oklch, var(--mushi-dark-paper) 88%, black);
+}
+
+.landing-diagnosis-step {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--mushi-vermillion);
+}
+
+.landing-diagnosis-name {
+  font-family: var(--mushi-font-display);
+  font-size: 1.2rem;
+  margin: 0;
+  color: var(--mushi-ink);
+  line-height: 1.2;
+}
+
+.dark .landing-diagnosis-name {
+  color: var(--mushi-dark-ink);
+}
+
+.landing-diagnosis-role {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--mushi-ink-muted);
+}
+
+.dark .landing-diagnosis-role {
+  color: var(--mushi-dark-ink-muted);
+}
+
+.landing-closing {
+  margin: 4rem 0 2rem;
+  padding: 2rem 0 1rem;
+  display: grid;
+  gap: 1.25rem;
+  justify-items: start;
+  border-top: 1px solid var(--mushi-rule);
+}
+
+.landing-closing-stamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  border: 2px solid var(--mushi-vermillion);
+  color: var(--mushi-vermillion);
+  font-family: var(--mushi-font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  transform-origin: center;
+}
+
+.landing-closing-cta {
+  margin: 1rem 0 0;
+}
+
+.landing-closing-team {
+  margin-top: 1.25rem !important;
+  max-width: 52ch;
+}
+
+.landing-closing-link {
+  font-family: var(--mushi-font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--mushi-vermillion);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in oklch, var(--mushi-vermillion) 40%, transparent);
+}
+
+.landing-closing-link:hover {
+  border-bottom-color: var(--mushi-vermillion);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-ink-canvas {
+    display: none !important;
+  }
+
+  .landing-diagnosis-progress {
+    transform: scaleX(1) !important;
+  }
+
+  .landing-proof-line,
+  .landing-diagnosis-card,
+  .landing-hero-word {
+    opacity: 1 !important;
+    transform: none !important;
   }
 }
 

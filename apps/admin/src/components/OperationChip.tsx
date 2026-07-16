@@ -23,7 +23,7 @@ export function OperationChip({
     <Tooltip
       nowrap={false}
       content={
-        <div className="max-w-[16rem] space-y-1 text-left">
+        <div className="max-w-64 space-y-1 text-left">
           <p className="text-xs font-medium text-fg">{info.label}</p>
           <p className="text-2xs text-fg-muted leading-snug">{info.description}</p>
           <p className="text-2xs text-brand">Open {info.label} →</p>
@@ -32,7 +32,7 @@ export function OperationChip({
     >
       <Link
         to={to}
-        className={`inline-flex max-w-full items-center rounded-sm border px-1.5 py-0.5 font-mono text-2xs leading-snug transition-colors ${tone} ${maxWidthClass} ${className}`}
+        className={`inline-flex max-w-full items-center rounded-sm border px-1.5 py-0.5 font-mono text-2xs leading-snug transition-opacity ${tone} ${maxWidthClass} ${className}`}
         title={info.description}
       >
         <span className="truncate">{operation}</span>

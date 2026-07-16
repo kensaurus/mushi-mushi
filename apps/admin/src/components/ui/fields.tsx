@@ -352,7 +352,7 @@ export function MetricHelpTrigger({
       <button
         type="button"
         aria-label={ariaLabel}
-        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-info/80 hover:bg-info/10 hover:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/35 cursor-help motion-safe:transition-[color,background-color]"
+        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-info/80 hover:bg-info/10 hover:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/35 cursor-help motion-safe:transition-[transform,opacity]"
       >
         <IconInfo size={13} aria-hidden className="shrink-0" />
       </button>
@@ -442,7 +442,7 @@ export function CopyButton(props: CopyButtonProps) {
           copied
             ? 'text-ok hover:text-ok'
             : 'text-fg-faint hover:text-fg-muted hover:bg-surface-overlay'
-        } focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 motion-safe:transition-colors ${className}`}
+        } focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 motion-safe:transition-opacity ${className}`}
       >
         <svg
           width={dims.glyph}

@@ -530,7 +530,8 @@ function ProposalsList({
         {proposals.map((p) => (
           <li
             key={p.id}
-            className="flex items-center gap-3 px-3 py-2 rounded-md border border-edge-subtle bg-surface-overlay/40 hover:bg-surface-overlay transition-colors"
+            // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
+            className="flex items-center gap-3 px-3 py-2 rounded-md border border-edge-subtle bg-surface-overlay/40 hover:bg-surface-overlay transition-opacity"
           >
             <ProposalStatusPill status={p.status} />
             <div className="grow min-w-0">
@@ -565,10 +566,10 @@ function ProposalsList({
 function ProposalStatusPill({ status }: { status: 'draft' | 'accepted' | 'discarded' }) {
   const styles =
     status === 'accepted'
-      ? CHIP_TONE.okSubtle + ' border-ok/30'
+      ? CHIP_TONE.okSubtle
       : status === 'discarded'
         ? 'bg-surface-overlay text-fg-muted border-edge-subtle'
-        : CHIP_TONE.warnSubtle + ' border-warn/30'
+        : CHIP_TONE.warnSubtle
   return (
     <Badge className={`${styles} border uppercase tracking-wider text-2xs`}>
       {status}
@@ -608,7 +609,9 @@ function ObservedRoutesSection({
             and someone navigates your app, this fills up automatically.
           </p>
         </div>
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       ) : (
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         <div className="space-y-2 max-h-[36rem] overflow-auto pr-1">
           {routes.map((r) => (
             <ObservedRouteCard key={r.route} route={r} maxEventCount={maxEventCount} />
@@ -865,7 +868,7 @@ function LiveCrawlCard({
           {quota.maxPages > 0 && (
             <div className="w-full h-1 rounded-full bg-surface-raised overflow-hidden">
               <div
-                className={`h-full rounded-full transition-[background-color,border-color,color,box-shadow,transform,opacity] ${quota.pagesToday >= quota.maxPages ? 'bg-danger' : 'bg-brand'}`}
+                className={`h-full rounded-full transition-[transform,opacity] ${quota.pagesToday >= quota.maxPages ? 'bg-danger' : 'bg-brand'}`}
                 style={{ width: `${Math.min(100, (quota.pagesToday / quota.maxPages) * 100)}%` }}
               />
             </div>
@@ -974,7 +977,7 @@ function LiveCrawlCard({
                 </Btn>
               )}
               {run.status === 'failed' && (
-                <span className="text-danger truncate max-w-[160px]">{run.error_message?.slice(0, 60)}</span>
+                <span className="text-danger truncate max-w-40">{run.error_message?.slice(0, 60)}</span>
               )}
             </div>
           ))}

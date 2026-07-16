@@ -58,6 +58,7 @@ export function BeforeAfterCard({ report, className = '' }: Props) {
   return (
     <section
       aria-label="Before and after this fix"
+      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
       className={`mb-3 rounded-lg border border-edge-subtle bg-surface-raised/30 p-3 motion-safe:animate-mushi-fade-in ${className}`}
     >
       <header className="mb-2 flex items-baseline justify-between">
@@ -81,7 +82,7 @@ export function BeforeAfterCard({ report, className = '' }: Props) {
               href={report.screenshot_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="mb-2 block max-h-36 overflow-hidden rounded-sm border border-edge-subtle hover:border-brand/50 motion-safe:transition-colors"
+              className="mb-2 block max-h-36 overflow-hidden rounded-sm border border-edge-subtle hover:border-brand/50 motion-safe:transition-opacity"
               title="Open capture-time screenshot"
             >
               <img

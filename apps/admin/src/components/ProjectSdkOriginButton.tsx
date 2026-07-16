@@ -122,7 +122,7 @@ export function ProjectSdkOriginButton() {
       <button
         type="button"
         onClick={() => void handleClick()}
-        className="inline-flex max-w-[9rem] items-center gap-1 rounded-sm border border-edge-subtle bg-surface-raised/50 px-2 py-1 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+        className="inline-flex max-w-36 items-center gap-1 rounded-sm border border-edge-subtle bg-surface-raised/50 px-2 py-1 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
         aria-label={`SDK origin: ${isLocal ? 'local development' : label}${copied ? ' (copied)' : ''}`}
       >
         <span

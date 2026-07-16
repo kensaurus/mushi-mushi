@@ -36,10 +36,10 @@ interface FilterChipProps {
 const CHIP_ACTIVE: Record<FilterChipTone, string> = {
   default: 'bg-surface-overlay text-fg border-fg-faint/40',
   brand:   CHIP_TONE.brandSubtle,
-  ok:      CHIP_TONE.okSubtle + ' border-ok/40',
-  warn:    CHIP_TONE.warnSubtle + ' border-warn/40',
-  danger:  CHIP_TONE.dangerSubtle + ' border-danger/40',
-  info:    CHIP_TONE.infoSubtle + ' border-info/40',
+  ok:      CHIP_TONE.okSubtle,
+  warn:    CHIP_TONE.warnSubtle,
+  danger:  CHIP_TONE.dangerSubtle,
+  info:    CHIP_TONE.infoSubtle,
 }
 
 const CHIP_IDLE: Record<FilterChipTone, string> = {
@@ -88,7 +88,7 @@ export function FilterChip({
       onClick={onClick}
       {...ariaProps}
       title={hint}
-      className={`inline-flex min-w-0 items-center gap-1.5 border font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${sizeClasses} ${classes}`}
+      className={`inline-flex min-w-0 items-center gap-1.5 border font-medium motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${sizeClasses} ${classes}`}
     >
       {icon && <span aria-hidden className="inline-flex items-center">{icon}</span>}
       <span>{label}</span>
@@ -143,7 +143,7 @@ export function DisclosurePanel({
         type="button"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between gap-3 rounded-md px-4 py-3 text-sm font-medium text-fg hover:bg-surface-hover motion-safe:transition-colors focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
+        className="flex w-full items-center justify-between gap-3 rounded-md px-4 py-3 text-sm font-medium text-fg hover:bg-surface-hover motion-safe:transition-opacity focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
       >
         <span className="flex min-w-0 items-center gap-2">
           {title}
@@ -207,7 +207,7 @@ export function Breadcrumbs({ items }: { items: BreadcrumbItem[] }) {
                 <Link
                   to={item.to}
                   title={item.hint}
-                  className="truncate max-w-[16rem] hover:text-fg-secondary motion-safe:transition-colors focus-visible:outline-none focus-visible:underline"
+                  className="truncate max-w-[16rem] hover:text-fg-secondary motion-safe:transition-opacity focus-visible:outline-none focus-visible:underline"
                 >
                   {item.label}
                 </Link>
@@ -762,6 +762,10 @@ interface ErrorAlertProps {
    * buried in DevTools network panel.
    */
   code?: string
+  /** Failing endpoint path, e.g. `/v1/admin/portfolio`. */
+  endpoint?: string
+  /** Correlation id linking this UI error to backend logs / Sentry / Langfuse. */
+  requestId?: string
   onRetry?: () => void
   /**
    * Inline recovery affordances rendered next to "Retry". Each entry
@@ -782,10 +786,18 @@ export function ErrorAlert({
   title,
   message = 'Something went wrong. Please try again.',
   code,
+  endpoint,
+  requestId,
   onRetry,
   actions,
   children,
 }: ErrorAlertProps) {
+  const captionParts = [
+    code ? `code: ${code}` : null,
+    endpoint ? `endpoint: ${endpoint}` : null,
+    requestId ? `request: ${requestId}` : null,
+  ].filter(Boolean)
+
   return (
     <div role="alert" aria-live="polite">
     <Card
@@ -801,9 +813,9 @@ export function ErrorAlert({
         <div className="min-w-0 flex-1 space-y-1">
           {title && <h4 className="text-sm font-semibold text-danger">{title}</h4>}
           <p className="text-sm text-danger leading-relaxed">{message}</p>
-          {code && (
-            <p className="font-mono text-3xs uppercase tracking-wider text-danger/70">
-              code: {code}
+          {captionParts.length > 0 && (
+            <p className="font-mono text-3xs uppercase tracking-wider text-danger/70 break-all">
+              {captionParts.join(' · ')}
             </p>
           )}
           {children}

@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { apiFetch } from '../lib/supabase'
 import { useRealtime } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
@@ -373,7 +374,7 @@ export function AntiGamingPage() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-anti-gaming">
       <PageHeaderBar
         title="Anti-Gaming"
 
@@ -576,7 +577,7 @@ export function AntiGamingPage() {
                       <span className="font-mono text-xs text-fg truncate">{group.label}</span>
                       <Badge className="bg-surface-overlay text-fg-muted text-3xs">{group.count}</Badge>
                       {group.sublabel && (
-                        <SignalChip tone="neutral" className="truncate max-w-[12rem]">
+                        <SignalChip tone="neutral" className="truncate max-w-48">
                           {group.sublabel}
                         </SignalChip>
                       )}
@@ -977,7 +978,7 @@ function WithheldRedemptionRow({
   const handle = redemption.mushi_testers?.public_handle ?? redemption.tester_id.slice(0, 8)
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-edge-subtle bg-surface-raised px-3 py-2">
+    <Card  className="flex items-center justify-between gap-3 px-3 py-2">
       <div className="flex-1 min-w-0 space-y-0.5">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium truncate">@{handle}</span>
@@ -999,6 +1000,6 @@ function WithheldRedemptionRow({
           {acting === 'deny' ? '…' : 'Deny'}
         </Btn>
       </div>
-    </div>
+    </Card>
   )
 }

@@ -50,6 +50,7 @@ import {
   overviewPendingLiabilityDetail,
 } from '../../../lib/statTooltips/rewards'
 import { CHIP_TONE } from '../../../lib/chipTone'
+import { httpsUrl, numberInRange, token } from '../../../lib/validators'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -228,7 +229,7 @@ export function OverviewTab() {
                   <div className="flex-1 min-w-0">
                     <div className="h-1.5 rounded-full bg-surface-overlay overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-[background-color,border-color,color,box-shadow,transform,opacity] ${TIER_BAR[slug.toLowerCase()] ?? 'bg-fg-faint'}`}
+                        className={`h-full rounded-full transition-[transform,opacity] ${TIER_BAR[slug.toLowerCase()] ?? 'bg-fg-faint'}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -305,7 +306,7 @@ export function OverviewTab() {
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 justify-between">
-                      <span className="text-fg-muted truncate max-w-[150px]">
+                      <span className="text-fg-muted truncate max-w-36">
                         {ev.end_users?.display_name ?? ev.end_users?.external_user_id ?? 'anonymous'}
                       </span>
                       <div className="flex items-center gap-2 shrink-0">
@@ -313,6 +314,7 @@ export function OverviewTab() {
                           <span className="font-mono font-semibold text-ok tabular-nums">+{ev.points_awarded}</span>
                         )}
                         {rejected && ev.rejected_reason && (
+                          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                           <span className="text-fg-faint text-2xs truncate max-w-[100px]">{ev.rejected_reason}</span>
                         )}
                         <span className="text-fg-faint text-2xs">
@@ -776,7 +778,7 @@ export function ContributorDrawer({
       headerAction={
         <button
           onClick={() => setShowActions((v) => !v)}
-          className={`text-2xs font-medium px-2 py-0.5 rounded transition-colors ${showActions ? 'bg-brand text-brand-fg' : 'text-fg-muted hover:text-fg hover:bg-surface-overlay'}`}
+          className={`text-2xs font-medium px-2 py-0.5 rounded transition-opacity ${showActions ? 'bg-brand text-brand-fg' : 'text-fg-muted hover:text-fg hover:bg-surface-overlay'}`}
         >
           Admin actions
         </button>
@@ -882,6 +884,7 @@ export function ContributorDrawer({
             {detail.activity.length === 0 ? (
               <EmptyState title="No activity recorded" description="Activity events appear here as the user interacts with the SDK." />
             ) : (
+              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
               <div className="divide-y divide-edge-subtle text-xs max-h-[420px] overflow-y-auto">
                 {detail.activity.map((ev, i) => {
                   const tone = ACTION_TONE[ev.action] ?? 'bg-surface-overlay text-fg-secondary'
@@ -936,7 +939,7 @@ export function ActivityEventRow({
                 <Badge className="bg-surface-overlay text-fg-faint text-2xs">rejected</Badge>
               )}
               {rejected && event.rejected_reason && (
-                <span className="text-fg-faint text-2xs truncate max-w-[150px]">{event.rejected_reason}</span>
+                <span className="text-fg-faint text-2xs truncate max-w-36">{event.rejected_reason}</span>
               )}
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
@@ -946,7 +949,7 @@ export function ActivityEventRow({
               {hasMeta && (
                 <button
                   onClick={() => setExpanded((v) => !v)}
-                  className="text-fg-faint hover:text-fg transition-colors"
+                  className="text-fg-faint hover:text-fg transition-opacity"
                   aria-label="Toggle metadata"
                 >
                   {expanded
@@ -1061,10 +1064,11 @@ export function ContributorsTab() {
     return (
       <tr
         key={c.end_user_id}
-        className={`cursor-pointer transition-colors ${hasFlag ? 'bg-danger/5 hover:bg-danger/8' : 'hover:bg-surface-overlay/50'}`}
+        className={`cursor-pointer transition-opacity ${hasFlag ? 'bg-danger/5 hover:bg-danger/8' : 'hover:bg-surface-overlay/50'}`}
         onClick={() => openDrawer(c)}
       >
         <td className="py-2.5 pr-3 text-fg-faint tabular-nums w-8">{rank}</td>
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         <td className="py-2.5 pr-4 max-w-0 w-[35%]">
           <div className="flex items-center gap-1.5 min-w-0">
             <div className="min-w-0">
@@ -1234,7 +1238,7 @@ export function ContributorsTab() {
                       <button
                         key={p}
                         onClick={() => setPage(p)}
-                        className={`px-2 py-0.5 rounded text-2xs font-medium transition-colors ${p === page ? 'bg-brand text-brand-fg' : 'text-fg-muted hover:text-fg hover:bg-surface-overlay'}`}
+                        className={`px-2 py-0.5 rounded text-2xs font-medium transition-opacity ${p === page ? 'bg-brand text-brand-fg' : 'text-fg-muted hover:text-fg hover:bg-surface-overlay'}`}
                       >
                         {p + 1}
                       </button>
@@ -1603,16 +1607,25 @@ export function SettingsTab({ canEdit }: { canEdit: boolean }) {
   const [testing, setTesting] = useState(false)
 
   const createWebhook = useCallback(async () => {
-    if (!webhookUrl || !webhookSecret) return
+    const urlErr = httpsUrl({ optional: false })(webhookUrl.trim())
+    if (urlErr) { toast.error(urlErr.message); return }
+    if (webhookSecret.trim()) {
+      const secretErr = token({ minLength: 16, optional: false })(webhookSecret.trim())
+      if (secretErr) { toast.error(secretErr.message); return }
+    }
     setSaving(true)
     const res = await apiFetch('/v1/admin/rewards/webhooks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: webhookUrl, secret: webhookSecret, events: ['reward.tier_changed'] }),
+      body: JSON.stringify({
+        url: webhookUrl.trim(),
+        ...(webhookSecret.trim() ? { secret: webhookSecret.trim() } : {}),
+        events: ['reward.tier_changed'],
+      }),
     })
     setSaving(false)
     if (res.ok) { toast.success('Webhook created'); setShowNewWebhook(false); setWebhookUrl(''); setWebhookSecret(''); reload() }
-    else toast.error('Failed to create webhook')
+    else toast.error(res.error?.message ?? 'Failed to create webhook')
   }, [webhookUrl, webhookSecret, reload, toast])
 
   const deleteWebhook = useCallback(async (id: string) => {
@@ -1655,6 +1668,7 @@ export function SettingsTab({ canEdit }: { canEdit: boolean }) {
               placeholder="https://yourapp.com/api/mushi/reward-webhook"
               value={webhookUrl}
               onChange={(ev) => setWebhookUrl(ev.target.value)}
+              validate={httpsUrl({ optional: false })}
             />
             <Input
               label="Signing secret (≥ 16 chars, optional)"
@@ -1662,6 +1676,7 @@ export function SettingsTab({ canEdit }: { canEdit: boolean }) {
               placeholder="Leave blank to auto-generate — shown once after save"
               value={webhookSecret}
               onChange={(ev) => setWebhookSecret(ev.target.value)}
+              validate={token({ minLength: 16, optional: true })}
             />
             <p className="text-2xs text-fg-faint">
               Leave blank to auto-generate a secret. It is shown once after saving — copy it immediately.
@@ -1738,18 +1753,32 @@ export function QuestsTab({ canEdit }: { canEdit: boolean }) {
 
   const saveQuest = useCallback(async () => {
     if (!form.name || form.steps.some((s) => !s.action || !s.label)) { toast.error('Name and all step actions/labels are required'); return }
+    const pointsErr = numberInRange({ min: 0, max: 100_000, optional: false })(String(form.completion_points))
+    if (pointsErr) { toast.error(pointsErr.message); return }
+    const expiresRaw = form.expires_after_days === '' ? null : Number(form.expires_after_days)
+    if (expiresRaw != null) {
+      const expErr = numberInRange({ min: 1, max: 3650, optional: false })(String(expiresRaw))
+      if (expErr) { toast.error(expErr.message); return }
+    }
     setSaving(true)
     const res = await apiFetch('/v1/admin/rewards/quests', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, expires_after_days: form.expires_after_days === '' ? null : Number(form.expires_after_days) }),
+      body: JSON.stringify({
+        name: form.name,
+        description: form.description || null,
+        completion_points: form.completion_points,
+        expires_after_days: expiresRaw,
+        repeatable: form.repeatable,
+        steps: form.steps.map((s) => ({ action: s.action, label: s.label })),
+      }),
     })
     setSaving(false)
     if (res.ok) {
       toast.success('Quest saved'); setShowForm(false)
       setForm({ name: '', description: '', completion_points: 50, expires_after_days: '', repeatable: false, steps: [{ action: '', label: '' }] })
       reload()
-    } else toast.error('Failed to save quest')
+    } else toast.error(res.error?.message ?? 'Failed to save quest')
   }, [form, reload, toast])
 
   const deleteQuest = useCallback(async (id: string) => {

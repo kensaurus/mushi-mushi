@@ -101,7 +101,7 @@ the top; the rule is to push it back down. Nothing gets deleted — it gets
 |---|---|---|
 | **A. The Wedge** (lead with this) | Capture a bug → AI diagnoses it in plain English → ready-to-apply fix → editor-native (MCP) → optional draft PR. Standalone, no Sentry. | README hero, landing hero, npm first paragraph, the GIF, the 60-second quickstart |
 | **B. The Depth** (earns trust, shown second) | Multi-framework SDKs, dedup via knowledge graph, "where it stops" honesty table, self-host, BYOK, Sentry enrichment. | README mid-body, landing second screen, `docs/` |
-| **C. The Platform** (operators only, never leads) | 11 adapters, 12 plugins, A2A/AG-UI, inventory QA-gates, synthetic monitor, SSO/audit/retention/region, Helm multi-region. | `docs/operators/`, a single "Enterprise / Platform" link. **Removed from the README's first 60% of scroll.** |
+| **C. The Platform** (operators only, never leads) | 11 adapters, 13 plugins, A2A/AG-UI, inventory QA-gates, synthetic monitor, SSO/audit/retention/region, Helm multi-region. | `docs/operators/`, a single "Enterprise / Platform" link. **Removed from the README's first 60% of scroll.** |
 
 ### The naming of the wedge feature
 

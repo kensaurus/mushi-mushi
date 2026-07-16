@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
+import { CHIP_TONE } from '../../lib/chipTone'
 import { Btn, Card, Badge } from '../ui'
 import { ExploreUnderstandEmpty } from './ExploreUnderstandEmpty'
 import type { CodebaseUnderstandError, DomainExtractionSource, DomainView } from './exploreUnderstandTypes'
@@ -69,7 +70,7 @@ export function ExploreDomainsPanel({ projectId, onFileClick }: Props) {
         </p>
         <div className="flex items-center gap-2 shrink-0">
           {source === 'fallback' && (
-            <Badge className="bg-warn-muted/50 text-warning-foreground border border-warn/25ing-foreground">
+            <Badge className={CHIP_TONE.warnSubtle}>
               Layer fallback
             </Badge>
           )}
@@ -89,7 +90,7 @@ export function ExploreDomainsPanel({ projectId, onFileClick }: Props) {
             type="button"
             onClick={() => setExpandedDomain(d.id)}
             className={[
-              'shrink-0 px-3 py-2 rounded-md border text-left min-w-[140px] max-w-[220px] transition-colors',
+              'shrink-0 px-3 py-2 rounded-md border text-left min-w-[140px] max-w-[220px] transition-opacity',
               expandedDomain === d.id
                 ? 'border-brand/50 bg-brand/10'
                 : 'border-edge-subtle bg-surface-overlay/40 hover:border-brand/30',

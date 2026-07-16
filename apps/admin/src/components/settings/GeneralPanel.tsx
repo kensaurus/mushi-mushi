@@ -6,6 +6,7 @@
  */
 
 import { useState } from 'react'
+import { Card } from '../../components/ui'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
@@ -128,7 +129,7 @@ export function GeneralPanel() {
             buttons. Fix progress replies appear in the same thread when you use the bot (recommended).
           </SettingEffectCallout>
           {/* Bot channel config (preferred — supports threading) */}
-          <div className="rounded-md border border-edge-subtle bg-surface-raised/50 p-3 space-y-3">
+          <Card  className="p-3 space-y-3">
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="text-xs font-semibold text-fg">Bot notifications</p>
@@ -141,7 +142,7 @@ export function GeneralPanel() {
                   type="button"
                   onClick={() => void testSlack()}
                   disabled={testingSlack}
-                  className={`shrink-0 px-2.5 py-1 rounded-sm text-2xs font-medium border transition-colors ${
+                  className={`shrink-0 px-2.5 py-1 rounded-sm text-2xs font-medium border transition-opacity ${
                     slackTestResult === 'ok'
                       ? `border-ok ${CHIP_TONE.okSubtle}`
                       : slackTestResult === 'err'
@@ -172,7 +173,7 @@ export function GeneralPanel() {
                 kind="text"
               />
             </div>
-          </div>
+          </Card>
           {/* Legacy webhook fallback */}
           <details className="rounded-md border border-edge-subtle">
             <summary className="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-3 py-2 text-xs text-fg-muted hover:text-fg hover:bg-surface-overlay rounded-md">

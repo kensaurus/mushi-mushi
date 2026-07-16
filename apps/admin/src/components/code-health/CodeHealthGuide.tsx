@@ -50,7 +50,7 @@ export function CodeHealthGuide({ topPriority, stats }: Props) {
       </div>
       <p className="text-2xs text-fg-faint">
         Pair with{' '}
-        <Link to="/fullstack-audit" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+        <Link to="/fullstack-audit" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
           Full-Stack Audit
         </Link>{' '}
         for backend schema and RLS checks.
