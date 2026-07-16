@@ -59,7 +59,7 @@ describe('landing cinematic copy SSOT', () => {
   })
 
   it('links trust chips to real destinations', () => {
-    expect(LANDING_TRUST_LINKS.some((t) => t.href.includes('github.com'))).toBe(true)
+    expect(LANDING_TRUST_LINKS.some((t) => t.href.startsWith('https://github.com'))).toBe(true)
     expect(LANDING_TRUST_LINKS.some((t) => t.href === '/self-hosting')).toBe(true)
   })
 })
