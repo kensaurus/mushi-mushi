@@ -28,6 +28,7 @@ export function OfflineBanner() {
   if (online) return null
 
   return (
+    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
     <Card  className="fixed left-1/2 top-3 z-[70] w-[min(34rem,calc(100vw-1.5rem))] -translate-x-1/2 px-4 py-3 text-sm text-fg backdrop-blur motion-safe:animate-mushi-toast-in">
       <div className="flex items-start gap-3">
         <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-warn shadow-[0_0_18px_var(--color-warn)]" aria-hidden="true" />

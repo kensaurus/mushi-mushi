@@ -150,6 +150,7 @@ function FindingsList({ findings }: { findings: AuditFinding[] }) {
       {findings.map((f, i) => (
         <div
           key={i}
+          // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
           className="flex items-start gap-2.5 rounded-md border border-edge-subtle bg-surface-raised px-3 py-2.5"
         >
           <SeverityBadge severity={f.severity} />

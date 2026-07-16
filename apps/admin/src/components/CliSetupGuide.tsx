@@ -52,6 +52,7 @@ export function CliSetupGuide({ projectId, sdkInstalled = false, className = '' 
 
   return (
     <section
+      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
       className={`rounded-md border border-edge-subtle bg-surface-raised/40 p-4 ${className}`}
       aria-label="CLI setup steps"
       data-testid="cli-setup-guide"

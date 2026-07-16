@@ -50,6 +50,14 @@ const DEFAULT_ALLOWLIST = [
   'AcceptInvitePage.tsx',
   'ResetPasswordPage.tsx',
   'SetupGatePage.tsx',
+  // Canvas / flow / graph surfaces — custom chrome, not Card tiles
+  '/components/graph/',
+  '/components/explore/',
+  '/components/hero-flow/',
+  '/components/pdca-flow/',
+  '/components/skill-pipeline/',
+  'FixProgressStream.tsx',
+  'StageDrawerContent.tsx',
 ]
 
 function pathMatches(filename: string, allowlist: string[]): boolean {
@@ -86,12 +94,12 @@ function isNonCardChrome(cls: string): boolean {
   if (/\brounded-full\b/.test(cls)) return true
   if (/\bplaceholder:/.test(cls)) return true
   if (/\bresize-/.test(cls)) return true
-  // Tiny badge / meta chip (rounded-sm + compact padding, no card padding)
+  // Tiny badge / meta chip
   if (/\brounded-sm\b/.test(cls) && !CARD_PADDING.test(cls)) return true
-  // Absolute tooltips / popovers often share surface chrome but aren't Cards
+  // Absolute tooltips / popovers
   if (/\babsolute\b/.test(cls) && /\b(?:z-\d+|pointer-events-none)\b/.test(cls)) return true
-  // Hand-rolled "card" needs card-scale padding to be worth migrating
-  if (!CARD_PADDING.test(cls) && !/\bp-\d+\b/.test(cls)) return true
+  // Must have card-scale padding (p-3+) — toolbars with p-0.5 / p-1 / p-2 are not Cards
+  if (!CARD_PADDING.test(cls)) return true
   return false
 }
 
@@ -128,8 +136,14 @@ const rule: Rule.RuleModule = {
       if (tagName && !CONTAINER_TAGS.has(tagName)) return
 
       const sc = context.sourceCode
-      const comments = sc.getCommentsBefore(node as never)
-      if (comments.some((c) => /mushi-mushi-allowlist:/i.test(c.value))) return
+      // Allowlist comments usually sit above the opening tag / attribute, not
+      // the string literal — walk parents like no-arbitrary-length-value.
+      let cur: Node | undefined = node
+      for (let i = 0; i < 4 && cur; i++) {
+        const before = sc.getCommentsBefore(cur as never)
+        if (before.some((c) => /mushi-mushi-allowlist:/i.test(c.value))) return
+        cur = (cur as { parent?: Node }).parent
+      }
 
       for (const str of extractStrings(node)) {
         if (!HAND_ROLLED.test(str)) continue

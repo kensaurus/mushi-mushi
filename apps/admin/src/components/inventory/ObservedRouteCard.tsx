@@ -92,6 +92,7 @@ export function ObservedRouteCard({ route, maxEventCount }: Props) {
         {/* Title + chip count summary */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-fg-muted">
           {route.pageTitle && (
+            // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
             <span className="truncate max-w-[40ch]">
               <span className="text-fg-faint">title </span>
               <span className="text-fg">{route.pageTitle}</span>

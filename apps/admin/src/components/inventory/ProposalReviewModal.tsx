@@ -645,6 +645,7 @@ function YamlEditorTab({
         <span className="tabular-nums">{yaml.split('\n').length} lines</span>
       </div>
       <textarea
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         className="block w-full min-h-[24rem] max-h-[60vh] p-3 font-mono text-2xs bg-surface-raised text-fg outline-none resize-y focus:ring-0"
         value={yaml}
         onChange={(e) => onChange(e.target.value)}

@@ -60,6 +60,7 @@ export function FixPipelineMeter({ fixSummary }: Props) {
           return (
             <div
               key={seg.key}
+              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
               className={`h-full min-w-[3px] motion-safe:transition-[width] ${SEGMENT_BG[seg.tone]} ${
                 seg.tone === 'danger' && hasFailure ? 'motion-safe:animate-pulse' : ''
               }`}

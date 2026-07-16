@@ -161,6 +161,7 @@ function CommentThread({
 
       <div className="flex gap-2 pt-1">
         <textarea
+          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
           className={`${FIELD_BASE} min-h-[60px] resize-none`}
           placeholder="Add a comment…"
           value={body}

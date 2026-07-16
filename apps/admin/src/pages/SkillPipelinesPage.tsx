@@ -640,6 +640,7 @@ function CatalogTab({
           return (
             <section
               key={cat}
+              // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
               className={`rounded-lg border border-edge-subtle bg-surface-raised p-3 shadow-card border-l-[3px] ${meta.accentClass}`}
             >
               <SkillCategoryHeader meta={meta} count={catSkills.length} />
@@ -1067,6 +1068,7 @@ function RunDetail({
         </div>
       </div>
 
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       {/* React Flow pipeline canvas */}
       <div className="min-h-[220px]" style={{ height: embedded ? 220 : 240 }}>
         <ReactFlow
@@ -1137,6 +1139,7 @@ function RunDetail({
     return <div className="flex flex-col overflow-hidden rounded-xl border border-edge">{panelBody}</div>
   }
 
+  // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
   return (
     <SurfacePanel className="w-full lg:w-[560px] flex-shrink-0 rounded-xl flex flex-col overflow-hidden p-0">
       {panelBody}

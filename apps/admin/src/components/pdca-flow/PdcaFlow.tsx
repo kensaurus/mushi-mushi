@@ -188,6 +188,7 @@ export function PdcaFlow(props: PdcaFlowProps) {
           titleAccent={
             <span
               aria-hidden="true"
+              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
               className={`inline-flex items-center justify-center w-6 h-6 rounded-sm font-bold text-[0.7rem] leading-none shrink-0 ${openStageMeta.badgeBg} ${openStageMeta.badgeFg}`}
             >
               {openStageMeta.letter}
@@ -417,6 +418,7 @@ function PdcaFlowCanvas({
         )}
 
         {showActivityLog && variant === 'live' && activity && (
+          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
           <Panel position="bottom-left" className="!m-2 max-w-[17rem]">
             <PipelineActivityLog activity={activity} onFocusStage={focusStageNode} />
           </Panel>

@@ -919,6 +919,7 @@ function MessageRow({ message, shikiTheme, onCopy, onClarifyPick, disabled }: Me
   return (
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} gap-1`}>
       <div
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         className={`ask-mushi-msg ask-mushi-msg--${isUser ? 'user' : 'assistant'} max-w-[88%] rounded-sm px-2.5 py-2 leading-relaxed`}
       >
         {isUser ? (

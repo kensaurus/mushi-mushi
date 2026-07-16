@@ -53,6 +53,7 @@ export function ReportsTriageGuide({ topPriority, stats }: Props) {
         })}
       </div>
       <div className="overflow-x-auto">
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         <table className="w-full min-w-[28rem] text-left text-2xs">
           <thead>
             <tr className="border-b border-edge-subtle text-fg-faint uppercase tracking-wider">

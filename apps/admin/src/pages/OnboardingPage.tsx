@@ -640,7 +640,9 @@ export function OnboardingPage() {
       )}
       {!ux.hideOverviewChrome ? (
       <Card  className="overflow-hidden p-5">
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         <p className="font-mono text-2xs uppercase tracking-[0.24em] text-brand">Mushi / setup</p>
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         <h2 className="mt-2 font-serif text-3xl leading-none tracking-[-0.04em] text-fg">
           User-felt bugs, ready for your first project.
         </h2>
@@ -798,6 +800,7 @@ export function OnboardingPage() {
         )}
         <section
           aria-label="Meet Ask Mushi"
+          // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
           className="flex flex-col gap-3 rounded-md border border-brand/40 bg-surface-raised px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="flex min-w-0 items-start gap-3">

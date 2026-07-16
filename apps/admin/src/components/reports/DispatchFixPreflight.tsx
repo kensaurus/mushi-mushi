@@ -185,6 +185,7 @@ export function DispatchFixPreflight({
           aria-label="Dispatch agentic fix"
           onClick={(e) => e.stopPropagation()}
           style={popoverStyle}
+          // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
           className="w-[min(26rem,calc(100vw-1.25rem))] max-h-[min(32rem,calc(100vh-1.25rem))] overflow-y-auto rounded-md border border-edge-subtle bg-surface-raised shadow-xl p-3 text-left"
         >
           <div className="flex items-center justify-between gap-2 mb-1">

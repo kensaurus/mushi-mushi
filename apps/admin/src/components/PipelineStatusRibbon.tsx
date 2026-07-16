@@ -166,6 +166,7 @@ function PulseArrow({
   return (
     <Tooltip content={fullLabel} side="top" portal>
       <div
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         className="relative z-[1] hidden md:flex flex-col items-center justify-center shrink-0 w-16 lg:w-[4.5rem] xl:w-20 px-0.5 self-center overflow-visible pt-3"
         aria-label={fullLabel}
         role="img"

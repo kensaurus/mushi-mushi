@@ -314,6 +314,7 @@ export function OverviewTab() {
                           <span className="font-mono font-semibold text-ok tabular-nums">+{ev.points_awarded}</span>
                         )}
                         {rejected && ev.rejected_reason && (
+                          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                           <span className="text-fg-faint text-2xs truncate max-w-[100px]">{ev.rejected_reason}</span>
                         )}
                         <span className="text-fg-faint text-2xs">
@@ -883,6 +884,7 @@ export function ContributorDrawer({
             {detail.activity.length === 0 ? (
               <EmptyState title="No activity recorded" description="Activity events appear here as the user interacts with the SDK." />
             ) : (
+              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
               <div className="divide-y divide-edge-subtle text-xs max-h-[420px] overflow-y-auto">
                 {detail.activity.map((ev, i) => {
                   const tone = ACTION_TONE[ev.action] ?? 'bg-surface-overlay text-fg-secondary'
@@ -1066,6 +1068,7 @@ export function ContributorsTab() {
         onClick={() => openDrawer(c)}
       >
         <td className="py-2.5 pr-3 text-fg-faint tabular-nums w-8">{rank}</td>
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         <td className="py-2.5 pr-4 max-w-0 w-[35%]">
           <div className="flex items-center gap-1.5 min-w-0">
             <div className="min-w-0">

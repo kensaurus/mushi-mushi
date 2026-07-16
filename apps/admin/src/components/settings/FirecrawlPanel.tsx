@@ -218,6 +218,7 @@ export function FirecrawlPanel() {
                   </span>
                 </ContainedBlock>
                 <textarea
+                  // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                   className="w-full text-2xs font-mono px-2 py-1.5 rounded-sm bg-surface-raised border border-edge focus:border-accent outline-none min-h-[64px]"
                   value={domains}
                   onChange={(e) => setDomainsDraft(e.target.value)}

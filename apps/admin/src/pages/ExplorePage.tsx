@@ -1147,6 +1147,7 @@ export function ExplorePage() {
       {activeTab === 'knowledge' && <ExploreKnowledgePanel projectId={projectId} />}
 
       {activeTab === 'search' && (
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         <div className={selectedNode ? 'grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)] 2xl:grid-cols-[minmax(0,1fr)_24rem] items-start' : 'min-w-0'}>
           {stats.withEmbeddings === 0 && !loading && (
             <ContainedBlock tone="warn" className="mb-2">

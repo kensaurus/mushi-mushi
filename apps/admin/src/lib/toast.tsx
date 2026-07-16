@@ -217,6 +217,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       {toasts.length > 0 ? (
       <div
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         className="pointer-events-none fixed bottom-4 right-4 z-[60] flex flex-col gap-2 w-[min(22rem,calc(100vw-2rem))]"
         role="region"
         aria-label="Notifications"

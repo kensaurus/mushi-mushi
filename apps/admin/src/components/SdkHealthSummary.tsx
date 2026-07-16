@@ -855,6 +855,7 @@ export function SdkHealthSummary({
       {open && (
         <div
           id={`sdk-health-playbook-${projectId}`}
+          // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
           className="mx-3 mb-3 space-y-2 rounded-sm border border-edge-subtle/60 bg-surface-overlay/40 p-3"
         >
           <p className="font-medium text-fg-secondary text-xs">{playbook.title}</p>

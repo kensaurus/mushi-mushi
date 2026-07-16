@@ -124,6 +124,7 @@ export function BetaBanner() {
         aria-label="Beta announcement"
         className={`shrink-0 z-[100] border-b ${betaBannerTone()}`}
       >
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         <div className="mx-auto flex w-full max-w-[100rem] flex-col gap-1 px-3 py-1.5 text-xs sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1 sm:px-4">
           <span className="flex min-w-0 items-start gap-2 sm:flex-1 sm:items-center">
             <span className="inline-flex shrink-0 items-center rounded border border-lime/40 bg-lime/15 px-1.5 py-px font-mono text-2xs font-medium text-lime-foreground">

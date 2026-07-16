@@ -177,6 +177,7 @@ export function ProjectSwitcher() {
       <ActiveProjectStatusChip snapshot={snapshot} className="hidden xl:inline-flex" />
       {open && (
         <div
+          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
           className={`${headerDropdownPanelClass} w-80 max-w-[calc(100vw-2rem)]`}
         >
           <ul role="listbox" className="max-h-80 overflow-y-auto divide-y divide-edge-subtle/60">

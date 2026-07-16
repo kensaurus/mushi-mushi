@@ -530,6 +530,7 @@ export function JudgePage() {
 
   const trendPanel = (
     <>
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
         <Section
           title="Score trend (12w)"
@@ -1107,6 +1108,7 @@ export function JudgePage() {
                     e.classification_agreed === false ? e.judge_reasoning?.trim() : null
                   return (
                     <tr key={e.id} className="border-b border-edge-subtle text-fg-secondary hover:bg-surface-overlay/30">
+                      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                       <td className="py-1.5 px-3 max-w-[22rem]">
                         <Link
                           to={`/reports/${e.report_id}`}

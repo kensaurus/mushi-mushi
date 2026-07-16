@@ -327,6 +327,7 @@ export function PromptLabPage() {
         // count chip switches to a brand tint when active so the
         // "what stage am I in?" answer is double-encoded (background
         // + chip), satisfying NN/g #1 (Visibility) at a squint.
+        // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
         <div className="flex flex-wrap items-center gap-1 rounded-md border border-edge-subtle bg-surface-raised p-1">
           <ConfigHelp helpId="prompt-lab.stage" />
           {orderedStages.map((stage) => {
@@ -499,6 +500,7 @@ function PromptLabWorkflow({ candidates, active }: PromptLabWorkflowProps) {
   }
   return (
     <div
+      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
       className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 rounded-md border border-edge-subtle bg-surface-raised p-3"
       aria-label="Prompt lab workflow"
     >

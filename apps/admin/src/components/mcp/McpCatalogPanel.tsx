@@ -95,6 +95,7 @@ export function McpCatalogPanel({
           {RESOURCE_CATALOG.map((r) => (
             <div
               key={r.name}
+              // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
               className="rounded-md border border-edge-subtle bg-surface-raised p-3 motion-safe:transition-opacity hover:border-edge"
             >
               <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
@@ -116,6 +117,7 @@ export function McpCatalogPanel({
           {PROMPT_CATALOG.map((p) => (
             <div
               key={p.name}
+              // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
               className="rounded-md border border-edge-subtle bg-surface-raised p-3 motion-safe:transition-opacity hover:border-edge"
             >
               <div className="text-sm font-semibold text-fg">{p.title}</div>

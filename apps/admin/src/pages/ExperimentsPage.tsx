@@ -542,6 +542,7 @@ function NewExperimentForm({ projectId, onCreated }: { projectId: string; onCrea
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-fg-primary">Variants</h3>
         {variants.map((v, i) => (
+          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
           <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
             <label className="block space-y-1">
               {i === 0 && <span className="text-xs text-fg-muted">Name</span>}

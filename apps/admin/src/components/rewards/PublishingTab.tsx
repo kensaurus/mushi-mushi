@@ -490,6 +490,7 @@ export function PublishingTab() {
             <div>
               <label className="block text-xs font-medium text-fg-muted mb-1">Description</label>
               <textarea
+                // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                 className="w-full rounded-md border border-edge-subtle bg-surface px-3 py-2 text-sm text-fg
                            placeholder:text-fg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/60
                            min-h-[100px] resize-y"

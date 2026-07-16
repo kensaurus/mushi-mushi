@@ -89,6 +89,7 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
       {!isLast && (
         <span
           aria-hidden="true"
+          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
           className={`absolute left-[10px] top-3.5 bottom-0 w-px ${
             isDone ? 'bg-ok/40' : 'bg-edge-subtle'
           }`}

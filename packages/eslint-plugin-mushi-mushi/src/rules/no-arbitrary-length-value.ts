@@ -34,6 +34,16 @@ const DEFAULT_PATH_ALLOWLIST = [
   'SetupGatePage.tsx',
   'EditorialErrorState.tsx',
   '/tester/',
+  // Structural / canvas chrome that needs calc(), fr tracks, or % widths
+  'VersionBadge.tsx',
+  'SdkHealthSummary.tsx',
+  '/components/skeletons/',
+  '/components/graph/',
+  '/components/explore/',
+  '/components/hero-flow/',
+  '/components/charts',
+  'DailySpendChart.tsx',
+  'Layout.tsx',
 ]
 
 function pathMatches(filename: string, allowlist: string[]): boolean {

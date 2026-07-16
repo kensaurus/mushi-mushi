@@ -180,6 +180,7 @@ function StepNode({ data }: NodeProps<Node<StepNodeData>>) {
       tabIndex={0}
       aria-pressed={isSelected}
       aria-label={`${data.label}, ${postureLabel(data.posture)}${isSelected ? ', selected' : ''}`}
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       className={`relative flex flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 py-1.5 text-center ${ring} ${bg} h-[78px] cursor-pointer transition-[transform,opacity] select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised ${
         isSelected ? 'ring-2 ring-brand shadow-sm scale-[1.02]' : 'hover:brightness-[1.03]'
       }`}

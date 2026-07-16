@@ -61,6 +61,7 @@ export function FixBulkActionBar({
       role="region"
       aria-label="Bulk actions for fix attempts"
       data-testid="fixes-bulk-action-bar"
+      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
       className="sticky top-1 z-20 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-md border border-brand/45 bg-surface-raised px-3 py-2 shadow-md ring-1 ring-brand/15 backdrop-blur supports-[backdrop-filter]:bg-surface-raised/95 motion-safe:animate-mushi-fade-in"
     >
       <label className="inline-flex items-center gap-2 cursor-pointer text-xs text-fg-secondary hover:text-fg motion-safe:transition-opacity">
@@ -134,6 +135,7 @@ export function FixBulkActionBar({
               Console merge unavailable — use Retry or review on GitHub
             </span>
           )}
+// mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
 
           <span className="flex-1 min-w-[8px]" />
 

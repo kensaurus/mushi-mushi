@@ -530,6 +530,7 @@ function ProposalsList({
         {proposals.map((p) => (
           <li
             key={p.id}
+            // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
             className="flex items-center gap-3 px-3 py-2 rounded-md border border-edge-subtle bg-surface-overlay/40 hover:bg-surface-overlay transition-opacity"
           >
             <ProposalStatusPill status={p.status} />
@@ -608,6 +609,7 @@ function ObservedRoutesSection({
             and someone navigates your app, this fills up automatically.
           </p>
         </div>
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       ) : (
         <div className="space-y-2 max-h-[36rem] overflow-auto pr-1">
           {routes.map((r) => (

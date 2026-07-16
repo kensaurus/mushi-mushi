@@ -58,6 +58,7 @@ export function BeforeAfterCard({ report, className = '' }: Props) {
   return (
     <section
       aria-label="Before and after this fix"
+      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
       className={`mb-3 rounded-lg border border-edge-subtle bg-surface-raised/30 p-3 motion-safe:animate-mushi-fade-in ${className}`}
     >
       <header className="mb-2 flex items-baseline justify-between">

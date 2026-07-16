@@ -134,6 +134,7 @@ export function ReportTriageBar({
         {SEV_OPTS.map((s) => <option key={s} value={s}>{SEVERITY_LABELS[s] ?? s}</option>)}
       </SelectField>
 
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       <div className="flex items-center gap-1.5 text-2xs h-[26px]" aria-live="polite">
         {saving && <span className="text-brand">Saving…</span>}
         {!saving && showSaved && <span className="text-ok">✓ Saved</span>}

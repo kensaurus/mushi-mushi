@@ -1163,6 +1163,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
           <div className="ml-auto flex min-w-0 max-w-full shrink items-center justify-end gap-1 xl:gap-1.5 flex-wrap">
             <div
+              // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
               className="flex shrink-0 items-center gap-0.5 rounded-md border border-edge/50 bg-surface-raised/35 p-0.5"
               aria-label="Toolbar"
             >

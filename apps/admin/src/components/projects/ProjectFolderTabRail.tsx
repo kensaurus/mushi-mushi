@@ -264,6 +264,7 @@ export function ProjectFolderTabRail({ projects, activeId, onSelect }: ProjectFo
         ))}
       </nav>
 
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       <div className="hidden shrink-0 lg:sticky lg:top-3 lg:z-10 lg:block lg:max-h-[calc(100dvh-5.5rem)] lg:w-56 lg:self-start lg:overflow-y-auto lg:overscroll-y-contain">
         <nav
           aria-label="Projects"

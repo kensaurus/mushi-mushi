@@ -56,6 +56,7 @@ export function PromptDiffModal({ prompt, parent, onClose }: PromptDiffModalProp
       {!parent ? (
         <p className="text-2xs text-fg-faint">Parent prompt not found (it may have been deleted).</p>
       ) : (
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         <pre className="mushi-code-block mushi-code-body flex-1 overflow-auto border border-code-surface-border rounded-sm p-2 text-2xs font-mono leading-snug max-h-[min(50dvh,28rem)]">
           {lines.map((l, idx) => (
             <div

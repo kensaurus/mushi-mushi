@@ -24,6 +24,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
   const glow = severityGlowClass(report.severity)
   return (
     <div
+      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
       className={`mb-3 rounded-md border border-edge-subtle bg-surface-raised p-3 ${glow} ${glow ? 'motion-safe:transition-[transform,opacity]' : ''}`}
     >
       <Breadcrumbs

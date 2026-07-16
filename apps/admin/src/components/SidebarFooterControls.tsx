@@ -152,6 +152,7 @@ export function SidebarFooterControls({
 
       <div
         className={
+          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
           showFocus
             ? 'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_var(--sidebar-micro-solo-w)] items-stretch gap-1'
             : 'w-full min-w-0'

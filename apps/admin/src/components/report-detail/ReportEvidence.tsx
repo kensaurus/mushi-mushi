@@ -302,6 +302,7 @@ export function ConsoleLogs({ logs }: { logs: ReportDetail['console_logs'] }) {
             className={`flex items-start gap-2 border-b border-b-edge-subtle/25 border-l-2 px-2 py-1 last:border-b-0 ${rowTone}`}
           >
             {time ? (
+              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
               <time className="w-[4.5rem] shrink-0 pt-0.5 font-mono text-3xs tabular-nums text-fg-faint">
                 {time}
               </time>

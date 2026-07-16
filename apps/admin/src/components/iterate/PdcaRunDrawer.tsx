@@ -89,6 +89,7 @@ export function PdcaRunDrawer({ run, open, onClose, onAbort, onTrigger, onRefres
                     key={i}
                     type="button"
                     onClick={() => setActiveIter(iterations[i])}
+                    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                     className={`min-w-[6px] flex-1 rounded-t-sm transition-opacity ${scoreBarClass(h)} ${
                       activeIter?.iteration_n === i + 1
                         ? 'opacity-100 ring-2 ring-brand'

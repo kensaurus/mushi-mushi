@@ -197,6 +197,7 @@ function FirstLoopPanel({ stages, project }: PanelProps) {
   const completedCount = stages.filter(s => s.state === 'done').length
   const allDone = completedCount === stages.length
   return (
+    // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
     <section aria-label="Your first PDCA loop" className="rounded-lg border border-edge-subtle bg-surface-raised/30 p-4">
       <div className="flex items-baseline justify-between mb-3 gap-2 flex-wrap">
         <div>
@@ -321,6 +322,7 @@ function GettingStartedSkeleton() {
         <Skeleton className="h-3 w-72" />
       </div>
       <Skeleton className="h-12 w-full mb-4" />
+      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
       <section className="rounded-lg border border-edge-subtle bg-surface-raised/30 p-4">
         <div className="mb-3">
           <Skeleton className="h-3.5 w-40 mb-1" />

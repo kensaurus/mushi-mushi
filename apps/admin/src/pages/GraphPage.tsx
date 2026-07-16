@@ -548,6 +548,7 @@ export function GraphPage() {
           />
 
           {useStoryboard ? (
+            // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
             <div className="grid gap-3 md:grid-cols-[1fr_18rem]">
               <div className="space-y-2 min-w-0">
                 <StoryboardNarrative
@@ -574,6 +575,7 @@ export function GraphPage() {
               />
             </div>
           ) : view === 'table' ? (
+            // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
             <div className="grid gap-3 md:grid-cols-[1fr_18rem]">
               <div className="min-w-0">
                 <GraphTableView

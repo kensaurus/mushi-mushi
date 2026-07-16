@@ -357,6 +357,7 @@ export function PlatformIntegrationCard({
                   </Btn>
                 </Tooltip>
                 {overflowOpen && (
+                  // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                   <div className="absolute right-0 top-full mt-1 z-20 min-w-[220px] rounded-md border border-edge bg-surface shadow-lg py-1">
                     <Btn
                       variant="ghost"

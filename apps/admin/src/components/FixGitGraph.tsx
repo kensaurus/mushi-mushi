@@ -246,6 +246,7 @@ export function FixGitGraph({
   const mergeY = completedIdx >= 0 ? completedIdx * ROW_H + 12 : null
 
   return (
+    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
     <div className={`grid grid-cols-[7.5rem_1fr] gap-3 rounded-sm border border-edge-subtle/55 bg-surface-overlay/20 p-2 ${className}`}>
       <svg
         viewBox={`0 0 80 ${totalH}`}

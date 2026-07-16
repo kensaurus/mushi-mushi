@@ -329,6 +329,7 @@ export function ConnectPage() {
         </HelpBanner>
       )}
 
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       <div className="space-y-6 xl:grid xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.85fr)] xl:items-start xl:gap-6">
         <div className="space-y-6 min-w-0">
           <div id="connect-github" className="scroll-mt-chrome">

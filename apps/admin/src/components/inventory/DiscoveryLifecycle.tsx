@@ -81,6 +81,7 @@ export function DiscoveryLifecycle({ steps }: Props) {
       // The horizontal 4-up stepper needs ~640 px to feel comfortable.
       // Below `lg`, stack vertically (each step on its own row) so the
       // labels and CTAs don't truncate. The connector hides on stack.
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] gap-2 lg:gap-0 items-stretch"
     >
       {steps.map((step, idx) => (

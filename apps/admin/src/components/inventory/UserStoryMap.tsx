@@ -219,6 +219,7 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
                     transition={{ ...enterTransition, delay: si * 0.04 + ai * 0.02 }}
                     whileHover={{ y: -1 }}
                     onClick={() => onSelectAction?.(a)}
+                    // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
                     className="text-left rounded-md border border-edge-subtle bg-surface-raised/60 p-3 hover:bg-surface-overlay/70 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
                   >
                     <div className="flex items-center justify-between gap-2 mb-1">

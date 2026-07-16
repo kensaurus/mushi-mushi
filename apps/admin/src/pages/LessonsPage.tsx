@@ -202,6 +202,7 @@ function LessonsTab() {
           {lessons.map((lesson) => (
             <div
               key={lesson.id}
+              // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
               className="flex items-start gap-3 p-4 rounded-lg border border-edge hover:bg-surface-overlay/50 cursor-pointer motion-safe:transition-opacity"
               onClick={() => setSelectedLesson(lesson)}
             >
@@ -376,6 +377,7 @@ function ClustersTab() {
         {clusters.map((cluster) => (
           <div
             key={cluster.id}
+            // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
             className="p-4 rounded-lg border border-edge hover:bg-surface-overlay/50 motion-safe:transition-opacity"
           >
             <div className="flex items-start justify-between gap-3">
@@ -505,6 +507,7 @@ function QuerySimTab() {
             {result.lessons.map((lesson, i) => (
               <div
                 key={lesson.id}
+                // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
                 className="p-3 rounded-lg border border-edge bg-surface-overlay/50"
               >
                 <div className="flex items-center gap-2 mb-1">

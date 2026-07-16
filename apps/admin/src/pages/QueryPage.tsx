@@ -457,6 +457,7 @@ export function QueryPage() {
           </ContainedBlock>
           <div className="divide-y divide-edge-subtle/30 rounded-sm border border-edge-subtle overflow-hidden">
             {SCHEMA_REFERENCE.map((t) => (
+              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
               <div key={t.table} className="px-3 py-2 grid grid-cols-[7rem_1fr] gap-2 items-start bg-surface-raised border-b border-edge-subtle/30 last:border-b-0">
                 <code className="text-2xs font-mono text-brand shrink-0">{t.table}</code>
                 <span className="text-2xs text-fg-faint font-mono leading-relaxed">
@@ -511,6 +512,7 @@ export function QueryPage() {
             </div>
             <div className="divide-y divide-edge-subtle/30 max-h-48 overflow-y-auto">
               {SCHEMA_REFERENCE.map((t) => (
+                // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                 <div key={t.table} className="px-3 py-1.5 grid grid-cols-[7rem_1fr] gap-2 items-start">
                   <code className="text-2xs font-mono text-brand shrink-0">{t.table}</code>
                   <span className="text-2xs text-fg-faint font-mono leading-relaxed">
@@ -831,6 +833,7 @@ export function QueryPage() {
                       hint="Ask a question — the prompt + row count land here."
                     />
                   ) : (
+                    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                     <ul className="space-y-1.5 max-h-[28rem] overflow-y-auto -mr-1 pr-1" data-dav-anchor="query:verify">
                       {recent.map((h) => (
                         <HistoryItem key={h.id} row={h} onRerun={() => handleSubmit(h.prompt, h.mode ?? 'nl')} onToggleSave={() => toggleSaved(h)} onDelete={() => setPendingDeleteHistory(h)} />
@@ -858,6 +861,7 @@ export function QueryPage() {
                       hint="When a teammate pins a query in their console it shows up here."
                     />
                   ) : (
+                    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
                     <ul className="space-y-1.5 max-h-[28rem] overflow-y-auto -mr-1 pr-1">
                       {team.map((row) => (
                         <TeamItem key={row.id} row={row} onRerun={() => handleSubmit(row.prompt, row.mode ?? 'nl')} />
