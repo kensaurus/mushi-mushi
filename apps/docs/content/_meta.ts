@@ -43,6 +43,9 @@ export default {
   integrations: 'Integrations',
   plugins: 'Plugin marketplace',
 
+  '-- Compare': { type: 'separator', title: 'Compare & use cases' },
+  'use-cases': 'Use cases',
+
   '-- Reference': { type: 'separator', title: 'Reference' },
   changelog: { title: 'Changelog', theme: { toc: false } },
   roadmap: 'Roadmap',

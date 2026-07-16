@@ -29,6 +29,8 @@ import {
   ScrollReveal,
   ClosingCta,
   ComparisonScrub,
+  LandingJsonLd,
+  LandingFaq,
 } from './components/landing'
 
 export const useMDXComponents = (components?: Record<string, unknown>) => ({
@@ -66,5 +68,7 @@ export const useMDXComponents = (components?: Record<string, unknown>) => ({
   ScrollReveal,
   ClosingCta,
   ComparisonScrub,
+  LandingJsonLd,
+  LandingFaq,
   ...(components ?? {}),
 })
