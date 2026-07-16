@@ -12,8 +12,7 @@ import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { langfuseTraceUrl } from '../lib/env'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import { Btn,
-  ErrorAlert,, Card } from '../components/ui'
+import { Btn, ErrorAlert, Card } from '../components/ui'
 import { DetailSkeleton } from '../components/skeletons/DetailSkeleton'
 import {
   ContainedBlock,

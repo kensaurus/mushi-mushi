@@ -21,7 +21,6 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Card } from '../components/ui'
 import { Link } from 'react-router-dom'
 import { Card, Btn, Tooltip, CopyButton } from './ui'
 import { IconAlertTriangle, IconCheck, IconGit, IconKey, IconRefresh } from './icons'

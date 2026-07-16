@@ -1,5 +1,4 @@
 import { Btn, Card, RecommendedAction, RelativeTime } from '../ui'
-import { Card } from '../../components/ui'
 import { McpEndpointReadout } from './McpEndpointReadout'
 import {
   ActionPill,

@@ -30,7 +30,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Card } from '../components/ui'
 import { ConnectionStatus } from './ConnectionStatus'
 import { Card } from './ui'
 import { apiFetch, invalidateApiCache } from '../lib/supabase'

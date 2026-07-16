@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { Card } from '../components/ui'
+import { Card } from './ui'
 import { invalidateApiCache } from '../lib/supabase'
 import { useOnlineStatus } from '../lib/onlineStatus'
 import { useToast } from '../lib/toast'

@@ -4,7 +4,6 @@
  */
 
 import { Card, Btn, Badge, Pct, RelativeTime } from '../ui'
-import { Card } from '../../components/ui'
 import type { IntelligenceReport } from './types'
 
 interface Props {

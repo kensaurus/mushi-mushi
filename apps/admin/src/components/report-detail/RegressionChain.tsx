@@ -20,7 +20,7 @@ export function RegressionChain({ report, className = '' }: RegressionChainProps
   if (!parentId && childIds.length === 0 && regressionCount === 0) return null
 
   return (
-    <Card  className="p-3 ${className}">
+    <Card className={`p-3 ${className}`}>
       <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-fg-secondary mb-2">
         <IconLink /> Regression chain
       </h3>

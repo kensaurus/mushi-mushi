@@ -5,7 +5,11 @@
  * Adds Card import when missing. Does NOT rewrite closing tags beyond
  * tracking depth for simple single-level replacements.
  *
- * Usage: node scripts/codemod-prefer-card-apply.mjs [--dry-run] [--limit=N]
+ * DANGER: Earlier runs corrupted template literals / mismatched JSX closings /
+ * duplicate Card imports. Do NOT re-run against a clean tree unless you have
+ * a fresh prefer-card-hits.txt and pass --force. Prefer manual Card edits.
+ *
+ * Usage: node scripts/codemod-prefer-card-apply.mjs --force [--dry-run] [--limit=N]
  */
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -14,8 +18,16 @@ import { fileURLToPath } from 'node:url'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const HIT_FILE = path.join(ROOT, 'apps/admin/.playwright-mcp/prefer-card-hits.txt')
 const dry = process.argv.includes('--dry-run')
+const force = process.argv.includes('--force')
 const limitArg = process.argv.find((a) => a.startsWith('--limit='))
 const limit = limitArg ? Number(limitArg.split('=')[1]) : Infinity
+
+if (!force && !dry) {
+  console.error(
+    'Refusing to run: pass --force (or --dry-run). This codemod previously broke JSX/imports.',
+  )
+  process.exit(1)
+}
 
 const HAND_ROLLED =
   /(?:^|[\s])(?:rounded(?:-\S+)?)\b[\s\S]{0,80}\bborder(?:-\S+)?\b[\s\S]{0,80}\bbg-surface-(?:raised|overlay)\b|(?:^|[\s])bg-surface-(?:raised|overlay)\b[\s\S]{0,100}\bborder(?:-\S+)?\b[\s\S]{0,60}\brounded(?:-\S+)?\b/

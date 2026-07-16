@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import { Card } from '../../components/ui'
 import { useRef } from 'react'
 import { Badge, Btn, Card, CopyButton, SegmentedControl } from '../ui'
 import { IconIntegrations, IconArrowRight } from '../icons'

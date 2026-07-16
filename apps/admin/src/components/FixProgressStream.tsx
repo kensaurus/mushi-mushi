@@ -8,10 +8,9 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Card } from '../components/ui'
 import { apiFetch } from '../lib/supabase'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
-import { Skeleton } from './ui'
+import { Card, Skeleton } from './ui'
 import { ActionPill, ActionPillRow, ContainedBlock } from './report-detail/ReportSurface'
 import type { DispatchState } from '../lib/dispatchFix'
 import { CHIP_TONE } from '../lib/chipTone'

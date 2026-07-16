@@ -18,7 +18,6 @@
  */
 
 import {
-import { Card } from '../../components/ui'
   useEffect,
   useId,
   useRef,
@@ -26,7 +25,7 @@ import { Card } from '../../components/ui'
 } from 'react'
 import { Link } from 'react-router-dom'
 
-import { Btn, DetailRows, type DetailRowItem } from '../ui'
+import { Btn, Card, DetailRows, type DetailRowItem } from '../ui'
 import { getConfigDoc } from '../../lib/configDocs'
 import { getDavManifest, type DavEvidence } from '../../lib/davManifest'
 import type { PageHeroDecide, PageHeroVerify } from '../PageHero'
@@ -453,7 +452,7 @@ export function HeroDetailPanel({
                 <p className="text-2xs text-fg-muted font-mono">{evidence.by}</p>
                 <p className="text-2xs text-fg-faint">{new Date(evidence.at).toLocaleString()}</p>
               </div>
-            </div>
+            </Card>
           </Section>
         )}
 
@@ -580,7 +579,7 @@ export function HeroDetailPanel({
           </p>
         )}
 
-      </Card>
+      </div>
     </section>
   )
 }

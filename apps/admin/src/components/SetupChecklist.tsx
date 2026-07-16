@@ -12,11 +12,10 @@
  */
 
 import { useState } from 'react'
-import { Card } from '../components/ui'
 import { Link } from 'react-router-dom'
 import type { SetupProject, SetupStep } from '../lib/useSetupStatus'
 import { CHIP_TONE } from '../lib/chipTone'
-import { RefreshIconButton } from './ui'
+import { Card, RefreshIconButton } from './ui'
 
 interface SetupChecklistProps {
   project: SetupProject
@@ -216,7 +215,7 @@ function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndp
             aria-valuemax={100}
           />
         </div>
-      </div>
+      </Card>
 
       <ol className="space-y-2">
         {project.steps.map(step => (
@@ -229,7 +228,7 @@ function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndp
           </li>
         ))}
       </ol>
-    </Card>
+    </div>
   )
 }
 

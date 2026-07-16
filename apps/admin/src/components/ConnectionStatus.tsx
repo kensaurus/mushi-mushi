@@ -6,8 +6,7 @@
  */
 
 import { useState, useCallback } from 'react'
-import { Card } from '../components/ui'
-import { Btn } from './ui'
+import { Btn, Card } from './ui'
 import {
   isCloudMode,
   RESOLVED_SUPABASE_URL as SUPABASE_URL,
