@@ -1,3 +1,4 @@
+// mushi-ui: intentional overlay — not Modal/Drawer (reason: UpgradeLockOverlay is an in-place dimming gate over existing form chrome, not a centered dialog)
 /**
  * FILE: apps/admin/src/components/billing/UpgradeNudge.tsx
  * PURPOSE: Lighter-weight cousins of `<UpgradePrompt>` for surfaces
@@ -214,7 +215,7 @@ interface PillProps {
 }
 
 const PILL_BASE =
-  'inline-flex items-center rounded-sm px-1 py-px text-3xs font-semibold tracking-wider uppercase border-0 bg-transparent text-brand/80 hover:text-brand motion-safe:transition-colors'
+  'inline-flex items-center rounded-sm px-1 py-px text-3xs font-semibold tracking-wider uppercase border-0 bg-transparent text-brand/80 hover:text-brand motion-safe:transition-opacity'
 
 export function UpgradePill({ flag, alwaysShow, className = '', as = 'auto' }: PillProps) {
   const ent = useEntitlements()

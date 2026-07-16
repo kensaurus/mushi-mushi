@@ -85,16 +85,16 @@ function PageRelatedLinks({ links }: { links: PageFlowLink[] }) {
           <li key={link.to}>
             <Link
               to={link.to}
-              className="group/link flex min-w-0 w-full items-start gap-2.5 rounded-md border border-edge-subtle bg-surface-overlay/60 px-3 py-2.5 motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] motion-safe:duration-150 hover:border-brand/45 hover:bg-brand-muted/25 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 motion-safe:active:translate-y-0 motion-safe:active:scale-[0.99]"
+              className="group/link flex min-w-0 w-full items-start gap-2.5 rounded-md border border-edge-subtle bg-surface-overlay/60 px-3 py-2.5 motion-safe:transition-[transform,opacity] motion-safe:duration-150 hover:border-brand/45 hover:bg-brand-muted/25 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 motion-safe:active:translate-y-0 motion-safe:active:scale-[0.99]"
             >
               <span
-                className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand/12 text-brand motion-safe:transition-colors group-hover/link:bg-brand/20"
+                className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand/12 text-brand motion-safe:transition-opacity group-hover/link:bg-brand/20"
                 aria-hidden="true"
               >
                 {Icon ? <Icon className="h-4 w-4" /> : null}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-xs font-medium text-fg-secondary motion-safe:transition-colors group-hover/link:text-fg">
+                <span className="block text-xs font-medium text-fg-secondary motion-safe:transition-opacity group-hover/link:text-fg">
                   {link.label}
                 </span>
                 {blurb ? (
@@ -102,7 +102,7 @@ function PageRelatedLinks({ links }: { links: PageFlowLink[] }) {
                 ) : null}
               </span>
               <svg
-                className="mt-1 h-4 w-4 shrink-0 text-fg-faint motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] motion-safe:duration-150 group-hover/link:translate-x-0.5 group-hover/link:text-brand"
+                className="mt-1 h-4 w-4 shrink-0 text-fg-faint motion-safe:transition-[transform,opacity] motion-safe:duration-150 group-hover/link:translate-x-0.5 group-hover/link:text-brand"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -189,9 +189,9 @@ export function PageHelp({
     <details
       open={open}
       onToggle={handleToggle}
-      className={`group mb-4 w-full min-w-0 rounded-lg border motion-safe:transition-colors motion-safe:duration-150 ${PAGE_HELP_BANNER_SHELL}`}
+      className={`group mb-4 w-full min-w-0 rounded-lg border motion-safe:transition-opacity motion-safe:duration-150 ${PAGE_HELP_BANNER_SHELL}`}
     >
-      <summary className={`flex w-full cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-xs text-fg-muted motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] motion-safe:duration-150 motion-safe:active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ok/40 ${PAGE_HELP_BANNER_SUMMARY_HOVER} [&::-webkit-details-marker]:hidden`}>
+      <summary className={`flex w-full cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-xs text-fg-muted motion-safe:transition-[transform,opacity] motion-safe:duration-150 motion-safe:active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ok/40 ${PAGE_HELP_BANNER_SUMMARY_HOVER} [&::-webkit-details-marker]:hidden`}>
         <svg
           className="h-3 w-3 shrink-0 text-fg-faint motion-safe:transition-transform group-open:rotate-90"
           viewBox="0 0 24 24"
@@ -262,7 +262,7 @@ export function PageHelp({
           </label>
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 rounded-sm text-2xs font-medium text-accent-foreground hover:text-accent motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+            className="inline-flex items-center gap-1.5 rounded-sm text-2xs font-medium text-accent-foreground hover:text-accent motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
             onClick={() => commandPalette.open()}
           >
             Jump to any page

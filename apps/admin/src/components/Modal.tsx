@@ -161,6 +161,7 @@ export function Modal({
             onClick={(e) => e.stopPropagation()}
             className={[
               'w-full flex flex-col rounded-md border border-edge bg-surface-raised shadow-raised',
+              'ring-1 ring-brand/15',
               'max-h-[min(90dvh,48rem)] outline-none',
               SIZE_CLASS[size],
               className,
@@ -182,7 +183,7 @@ export function Modal({
             {!hideCloseButton && (
               <button
                 type="button"
-                className="text-fg-muted hover:text-fg text-lg leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-sm w-6 h-6 flex items-center justify-center motion-safe:transition-colors motion-safe:duration-[var(--duration-fast,150ms)]"
+                className="text-fg-muted hover:text-fg text-lg leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-sm w-6 h-6 flex items-center justify-center motion-safe:transition-opacity motion-safe:duration-[var(--duration-fast,200ms)]"
                 onClick={onClose}
                 aria-label="Close"
                 disabled={!dismissible}

@@ -1,6 +1,6 @@
 # Report ingest data contract (SDK → server)
 
-**Last verified:** 2026-06-18 (RN report-pipeline parity uplift, `@mushi-mushi/react-native` 0.17.x).
+**Last verified:** 2026-07-16 (`@mushi-mushi/react-native` **0.20.1**, `@mushi-mushi/web` / `@mushi-mushi/core` **1.25.0**). Nested `metadata.user` remains the canonical reporter identity shape; flat legacy fields still accepted by `resolveReporterIdentity()`.
 
 This document describes the wire format from mobile/web SDKs through
 `POST /v1/reports` → `ingestReport()` in `packages/server/supabase/functions/api/helpers.ts`.

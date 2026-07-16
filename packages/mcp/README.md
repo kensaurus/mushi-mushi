@@ -389,7 +389,8 @@ Spawns `dist/index.js` with a dummy unreachable endpoint and confirms it adverti
 ```bash
 pnpm --filter @mushi-mushi/mcp build
 pnpm --filter @mushi-mushi/mcp test:smoke
-# OK; 13 tools, 3 resources, 3 prompts
+# OK; prints live tool/resource/prompt counts from the catalog
+# (see packages/mcp/src/catalog.ts — currently 68 tools / 8 resources / 4 prompts)
 ```
 
 ### Layer 3; Full localhost E2E (real binary + real backend behaviour)
@@ -483,4 +484,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (June 2026): 51 edge functions · 298 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 51 edge functions · 323 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

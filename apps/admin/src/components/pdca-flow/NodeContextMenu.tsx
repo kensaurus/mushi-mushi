@@ -90,7 +90,7 @@ export function NodeContextMenu({ x, y, node, onClose, onInspect, onFocusLog }: 
       ref={ref}
       role="menu"
       aria-label={`${meta.label} actions`}
-      className="pointer-events-auto absolute z-30 min-w-[10rem] rounded-md border border-edge/70 bg-surface-overlay/95 p-0.5 shadow-card backdrop-blur-sm motion-safe:animate-mushi-fade-in"
+      className="pointer-events-auto absolute z-30 min-w-40 rounded-md border border-edge/70 bg-surface-overlay/95 p-0.5 shadow-card backdrop-blur-sm motion-safe:animate-mushi-fade-in"
       style={{ left: x, top: y }}
     >
       {items.map((item) => (

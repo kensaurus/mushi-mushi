@@ -75,7 +75,7 @@ export function FixesPipelineGuide({ topPriority, stats }: Props) {
       </div>
       <p className="text-2xs text-fg-faint">
         Failed runs? Open the row for the error head, then retry or use{' '}
-        <Link to="/mcp" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+        <Link to="/mcp" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
           MCP fix context
         </Link>{' '}
         in Cursor.

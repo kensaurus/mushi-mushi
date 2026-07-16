@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import {
   type Edge,
@@ -35,6 +36,8 @@ import { GraphStatusBanner } from '../components/graph/GraphStatusBanner'
 import { OntologyPanel } from '../components/graph/OntologyPanel'
 import { GroupsPanel } from '../components/graph/GroupsPanel'
 import { GraphCanvas } from '../components/graph/GraphCanvas'
+import { readVizToken } from '../lib/vizTokens'
+import { useTheme } from '../lib/useTheme'
 import {
   GraphFilterChips,
   QuickViewsRow,
@@ -124,6 +127,7 @@ const STORYBOARD_THRESHOLD = 12
 
 export function GraphPage() {
   const toast = useToast()
+  const { resolved: themeResolved } = useTheme()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
@@ -328,22 +332,27 @@ export function GraphPage() {
         style: {
           stroke:
             e.edge_type === 'reports_against'
-              ? 'oklch(0.72 0.18 290)'
+              ? readVizToken('viz-flow-brand')
               : e.edge_type === 'errors_on'
-                ? 'oklch(0.62 0.22 25)'
+                ? readVizToken('viz-flow-danger')
                 : e.edge_type === 'regression_of'
-                  ? 'oklch(0.65 0.22 25)'
+                  ? readVizToken('viz-score-danger')
                   : e.edge_type === 'fix_verified'
-                    ? 'oklch(0.72 0.19 155)'
-                    : 'oklch(0.50 0 0)',
+                    ? readVizToken('viz-score-ok')
+                    : readVizToken('viz-graph-muted'),
           strokeWidth: Math.max(1, Math.min(3, e.weight)),
           opacity: dimmed ? 0.18 : 0.7,
         },
-        labelStyle: { fontSize: 11, fill: 'oklch(0.65 0 0)' },
-        labelBgStyle: { fill: 'oklch(0.18 0 0)' },
+        labelStyle: {
+          fontSize: 11,
+          fill: readVizToken(themeResolved === 'dark' ? 'viz-node-subtext' : 'viz-node-text-light'),
+        },
+        labelBgStyle: {
+          fill: readVizToken(themeResolved === 'dark' ? 'viz-node-bg-dark' : 'viz-node-bg-light'),
+        },
       } satisfies Edge
     })
-  }, [filteredEdges, blastRadiusIds, blastRadius.length])
+  }, [filteredEdges, blastRadiusIds, blastRadius.length, themeResolved])
 
   const fetchBlastRadius = useCallback(
     async (node: GraphNode) => {
@@ -539,6 +548,7 @@ export function GraphPage() {
           />
 
           {useStoryboard ? (
+            // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
             <div className="grid gap-3 md:grid-cols-[1fr_18rem]">
               <div className="space-y-2 min-w-0">
                 <StoryboardNarrative
@@ -565,6 +575,7 @@ export function GraphPage() {
               />
             </div>
           ) : view === 'table' ? (
+            // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
             <div className="grid gap-3 md:grid-cols-[1fr_18rem]">
               <div className="min-w-0">
                 <GraphTableView
@@ -616,7 +627,7 @@ export function GraphPage() {
   )
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-graph">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-graph">
       <PageHeaderBar
         title={copy?.title ?? 'Knowledge Graph'}
         projectScope={stats.projectName ?? projectName ?? undefined}

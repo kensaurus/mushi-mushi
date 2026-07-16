@@ -6,10 +6,11 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Loading } from '../ui'
+import { Btn, Loading } from '../ui'
+import { Drawer } from '../Drawer'
 import { useAuth } from '../../lib/auth'
 import { useTesterStatus, reputationTier } from '../../lib/useTesterStatus'
-import { appChromeHeaderClass, appChromeMainClass, mobileNavBelowAppChromeClass } from '../../lib/appChrome'
+import { appChromeHeaderClass, appChromeMainClass } from '../../lib/appChrome'
 import { PAGE_SHELL_CLASS } from '../../lib/pageLayout'
 import { useDocumentTitle } from '../../lib/useDocumentTitle'
 import { SidebarBrandToggles } from '../SidebarBrandToggles'
@@ -18,7 +19,6 @@ import { SidebarUserCard } from '../SidebarUserCard'
 import { RouteProgress } from '../RouteProgress'
 import { TesterWelcomeEnroll } from './TesterWelcomeEnroll'
 import {
-  IconClose,
   IconDashboard,
   IconGlobe,
   IconMarketplace,
@@ -55,7 +55,7 @@ function TesterMainContent() {
         <p className="text-xs text-fg-muted text-pretty">{error}</p>
         <button
           type="button"
-          className="text-sm font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
+          className="text-sm font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
           onClick={() => reload()}
         >
           Retry
@@ -230,39 +230,28 @@ export function TesterLayout() {
         {renderSidebarContent(false, user, signOut)}
       </aside>
 
-      {mobileOpen && (
-        <div className={mobileNavBelowAppChromeClass}>
-          <div
-            className="absolute inset-0 bg-overlay backdrop-blur-sm"
-            onClick={() => setMobileOpen(false)}
-            aria-hidden="true"
-          />
-          <aside className="relative z-50 flex h-full w-60 flex-col border-r border-edge/60 bg-surface-root shadow-raised">
-            <div className="absolute right-2.5 top-2.5">
-              <button
-                type="button"
-                onClick={() => setMobileOpen(false)}
-                aria-label="Close navigation menu"
-                className="rounded-sm p-1.5 text-fg-muted motion-safe:transition-colors hover:bg-surface-overlay hover:text-fg"
-              >
-                <IconClose size={14} />
-              </button>
-            </div>
-            {renderSidebarContent(false, user, signOut)}
-          </aside>
-        </div>
-      )}
+      <Drawer
+        open={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        title="Tester navigation"
+        ariaLabel="Tester navigation"
+        width="sm"
+      >
+        {renderSidebarContent(false, user, signOut)}
+      </Drawer>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <header className={`flex items-center gap-2 border-b border-edge/60 px-4 py-2.5 md:hidden ${appChromeHeaderClass}`}>
-          <button
+          <Btn
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => setMobileOpen(true)}
             aria-label="Open navigation menu"
-            className="shrink-0 rounded-sm p-1.5 text-fg-muted motion-safe:transition-colors hover:bg-surface-overlay hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+            className="h-8 w-8 shrink-0 p-0"
           >
             <IconMenu size={18} />
-          </button>
+          </Btn>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-fg">{pageTitle}</p>
           </div>

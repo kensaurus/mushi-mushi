@@ -8,7 +8,7 @@ import { CHIP_TONE } from '../../lib/chipTone'
 import type { BadgeTone } from './layout'
 
 const TRIGGER_BASE =
-  'inline-flex max-w-full items-center gap-1 rounded-sm border border-edge-subtle bg-surface-raised/60 px-1.5 py-1 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 xl:gap-1.5 xl:px-2'
+  'inline-flex max-w-full items-center gap-1 rounded-sm border border-edge-subtle bg-surface-raised/60 px-1.5 py-1 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 xl:gap-1.5 xl:px-2'
 
 export interface HeaderContextChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Uppercase kicker label, e.g. "Team" or "Project". */

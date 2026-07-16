@@ -40,13 +40,13 @@ export function QaCoverageTile({ projectId }: { projectId: string }) {
       title={
         <Link
           to="/qa-coverage"
-          className="motion-safe:transition-colors hover:text-fg"
+          className="motion-safe:transition-opacity hover:text-fg"
         >
           QA Coverage
         </Link>
       }
       action={
-        <Link to="/qa-coverage" className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+        <Link to="/qa-coverage" className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
           View all →
         </Link>
       }
@@ -65,7 +65,7 @@ export function QaCoverageTile({ projectId }: { projectId: string }) {
       {!loading && !error && !data?.total && (
         <div className="space-y-1 text-2xs text-fg-faint">
           <p>No QA stories yet.</p>
-          <Link to="/qa-coverage" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+          <Link to="/qa-coverage" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
             Create your first user story test →
           </Link>
         </div>
@@ -94,7 +94,7 @@ export function QaCoverageTile({ projectId }: { projectId: string }) {
                 <Link
                   key={f.story_id}
                   to={`/qa-coverage?highlight=${f.story_id}`}
-                  className="group -mx-1 flex items-center gap-2 rounded-sm px-1 py-0.5 motion-safe:transition-colors hover:bg-surface-overlay"
+                  className="group -mx-1 flex items-center gap-2 rounded-sm px-1 py-0.5 motion-safe:transition-opacity hover:bg-surface-overlay"
                 >
                   <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
                   <span className="min-w-0 flex-1 truncate text-2xs text-fg-secondary group-hover:text-fg">

@@ -150,7 +150,7 @@ export function RunDetail({ run, projectId, storyId, isDirectFetch }: RunDetailP
                       href={ev.signed_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
+                      className="inline-flex items-center gap-1 text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
                     >
                       <IconExternalLink className="h-3 w-3" />
                       Download {ev.kind}
@@ -182,7 +182,7 @@ export function RunDetail({ run, projectId, storyId, isDirectFetch }: RunDetailP
             href={run.provider_session_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors font-medium"
+            className="inline-flex items-center gap-1.5 text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity font-medium"
           >
             Open session replay in {PROVIDER_LABEL[run.provider ?? ''] ?? run.provider}
           </a>

@@ -242,7 +242,7 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
         type="button"
         onClick={toggle}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 rounded-t-md px-3 py-2.5 text-left hover:bg-surface-overlay/40 motion-safe:transition-colors"
+        className="flex w-full items-center justify-between gap-2 rounded-t-md px-3 py-2.5 text-left hover:bg-surface-overlay/40 motion-safe:transition-opacity"
       >
         <span className="flex min-w-0 flex-wrap items-center gap-2">
           <IconGit />

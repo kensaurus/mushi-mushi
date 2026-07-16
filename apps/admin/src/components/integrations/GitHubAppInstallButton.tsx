@@ -65,7 +65,7 @@ export function GitHubPatDisclosure({ children }: { children: React.ReactNode })
   }
   return (
     <details className="text-2xs text-fg-muted mt-2">
-      <summary className="cursor-pointer select-none hover:text-fg-secondary transition-colors">
+      <summary className="cursor-pointer select-none hover:text-fg-secondary transition-opacity">
         Use a PAT instead (legacy / self-hosted)
       </summary>
       <div className="mt-2 pl-2 border-l border-edge-subtle">

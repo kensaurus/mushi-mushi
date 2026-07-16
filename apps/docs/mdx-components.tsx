@@ -22,6 +22,14 @@ import { SdkEnvMatrix } from './components/SdkEnvMatrix'
 import { EvolutionDiagram } from './components/EvolutionDiagram'
 import { LoopComparison } from './components/LoopComparison'
 import { PricingEstimator } from './components/PricingEstimator'
+import {
+  CinematicEditorialHero,
+  ProofPinSection,
+  DiagnosisScrollStage,
+  ScrollReveal,
+  ClosingCta,
+  ComparisonScrub,
+} from './components/landing'
 
 export const useMDXComponents = (components?: Record<string, unknown>) => ({
   ...getDocsComponents(),
@@ -52,5 +60,11 @@ export const useMDXComponents = (components?: Record<string, unknown>) => ({
   EvolutionDiagram,
   LoopComparison,
   PricingEstimator,
+  CinematicEditorialHero,
+  ProofPinSection,
+  DiagnosisScrollStage,
+  ScrollReveal,
+  ClosingCta,
+  ComparisonScrub,
   ...(components ?? {}),
 })

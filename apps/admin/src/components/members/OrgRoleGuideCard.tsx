@@ -22,6 +22,7 @@ export function OrgRoleGuideCard() {
       variant="inset"
     >
       <div className="overflow-x-auto">
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         <table className="w-full min-w-[32rem] text-left text-2xs">
           <thead>
             <tr className="border-b border-edge-subtle text-fg-faint uppercase tracking-wider">
@@ -42,7 +43,7 @@ export function OrgRoleGuideCard() {
                       {role.label}
                     </span>
                   </td>
-                  <td className="py-2 pr-3 align-top text-fg-muted max-w-[9rem]">{role.tagline}</td>
+                  <td className="py-2 pr-3 align-top text-fg-muted max-w-36">{role.tagline}</td>
                   <td className="py-2 pr-3 align-top text-fg-secondary">
                     <ul className="list-disc pl-3 space-y-0.5">
                       {role.canDo.map((item) => (

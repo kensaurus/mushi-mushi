@@ -25,6 +25,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import { Btn, Input } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { discordWebhookUrl } from '../../lib/validators'
@@ -205,33 +206,37 @@ export function DiscordIntegrationCard({
           )}
 
           {connected && (
-            <button
+            <Btn
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => void handleTest()}
-              disabled={testing || !projectId}
-              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-edge-subtle px-3 py-1.5 text-xs font-medium transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
+              disabled={!projectId}
+              loading={testing}
             >
               {testing ? 'Sending…' : 'Send test'}
-            </button>
+            </Btn>
           )}
         </div>
       </div>
 
       {/* Connected state — show clear control */}
       {connected && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-ok/30 bg-ok/8 px-3 py-2">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-ok/30 bg-ok-muted/50 px-3 py-2">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="shrink-0 text-ok text-sm" aria-hidden>✓</span>
-            <p className="text-xs font-medium text-ok">Discord webhook active</p>
+            <span className="shrink-0 text-ok-foreground text-sm" aria-hidden>✓</span>
+            <p className="text-xs font-medium text-ok-foreground">Discord webhook active</p>
           </div>
-          <button
+          <Btn
             type="button"
+            variant="danger"
+            size="sm"
             onClick={() => void handleClear()}
-            disabled={clearing}
-            className="shrink-0 rounded px-2 py-1 text-xs text-fg-muted hover:text-danger hover:bg-danger/8 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            loading={clearing}
+            className="shrink-0"
           >
             {clearing ? 'Removing…' : 'Remove'}
-          </button>
+          </Btn>
         </div>
       )}
 
@@ -240,35 +245,30 @@ export function DiscordIntegrationCard({
         <label htmlFor="discord-webhook-url" className="block text-xs font-medium text-fg-secondary">
           {connected ? 'Replace webhook URL' : 'Incoming webhook URL'}
         </label>
-        <div className="flex gap-2">
-          <input
-            id="discord-webhook-url"
-            type="url"
-            placeholder="https://discord.com/api/webhooks/…"
-            value={webhookUrl}
-            onChange={(e) => handleUrlChange(e.target.value)}
-            className={`
-              flex-1 min-w-0 rounded-lg border bg-surface px-3 py-2 font-mono text-xs
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus
-              ${urlError ? 'border-danger/60' : 'border-edge-subtle'}
-            `}
-            aria-describedby={urlError ? 'discord-url-error discord-url-hint' : 'discord-url-hint'}
-            aria-invalid={Boolean(urlError)}
-          />
-          <button
+        <div className="flex gap-2 items-start">
+          <div className="flex-1 min-w-0">
+            <Input
+              id="discord-webhook-url"
+              type="url"
+              placeholder="https://discord.com/api/webhooks/…"
+              value={webhookUrl}
+              onChange={(e) => handleUrlChange(e.target.value)}
+              error={urlError ?? undefined}
+              className="font-mono text-xs"
+              aria-describedby="discord-url-hint"
+            />
+          </div>
+          <Btn
             type="button"
+            variant="accent"
             onClick={() => void handleSave()}
-            disabled={!webhookUrl.trim() || Boolean(urlError) || saving || !projectId}
-            className="shrink-0 rounded-lg bg-accent px-4 py-2 text-xs font-semibold text-fg-on-accent hover:bg-accent-hover transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
+            disabled={!webhookUrl.trim() || Boolean(urlError) || !projectId}
+            loading={saving}
+            className="shrink-0"
           >
             {saving ? 'Saving…' : connected ? 'Update' : 'Save'}
-          </button>
+          </Btn>
         </div>
-        {urlError && (
-          <p id="discord-url-error" role="alert" className="text-xs text-danger">
-            {urlError}
-          </p>
-        )}
         <p id="discord-url-hint" className="text-2xs text-fg-muted">
           In Discord: <strong>Server Settings → Integrations → Webhooks → New Webhook → Copy Webhook URL</strong>.
         </p>

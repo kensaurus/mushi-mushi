@@ -1,4 +1,5 @@
 import { Badge, SegmentedControl } from '../ui'
+import { Card } from '../../components/ui'
 import { McpToolCard, scopeBadgeTone } from './McpToolCard'
 import {
   ContainedBlock,
@@ -47,7 +48,7 @@ export function McpCatalogPanel({
               const groupTools = TOOL_CATALOG.filter((t) => group.tools.includes(t.name))
               if (groupTools.length === 0) return null
               return (
-                <div key={group.label} className="rounded-md border border-edge-subtle bg-surface-raised p-3">
+                <Card key={group.label}  className="p-3">
                   <p className="text-xs font-semibold text-fg mb-0.5">{group.label}</p>
                   <p className="text-2xs text-fg-muted mb-2">{group.description}</p>
                   <div className="flex flex-wrap gap-1">
@@ -61,7 +62,7 @@ export function McpCatalogPanel({
                       </span>
                     ))}
                   </div>
-                </div>
+                </Card>
               )
             })}
           </div>
@@ -94,7 +95,8 @@ export function McpCatalogPanel({
           {RESOURCE_CATALOG.map((r) => (
             <div
               key={r.name}
-              className="rounded-md border border-edge-subtle bg-surface-raised p-3 motion-safe:transition-colors hover:border-edge"
+              // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
+              className="rounded-md border border-edge-subtle bg-surface-raised p-3 motion-safe:transition-opacity hover:border-edge"
             >
               <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
                 <SignalChip tone="neutral" className="font-mono text-xs wrap-anywhere max-w-full">
@@ -115,7 +117,8 @@ export function McpCatalogPanel({
           {PROMPT_CATALOG.map((p) => (
             <div
               key={p.name}
-              className="rounded-md border border-edge-subtle bg-surface-raised p-3 motion-safe:transition-colors hover:border-edge"
+              // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
+              className="rounded-md border border-edge-subtle bg-surface-raised p-3 motion-safe:transition-opacity hover:border-edge"
             >
               <div className="text-sm font-semibold text-fg">{p.title}</div>
               <SignalChip tone="neutral" className="font-mono text-2xs mt-0.5 mb-1">

@@ -153,7 +153,7 @@ export function OrgSwitcher() {
             <button
               type="submit"
               disabled={!newName.trim() || submitting}
-              className="rounded-sm bg-brand px-2 py-0.5 text-2xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-colors"
+              className="rounded-sm bg-brand px-2 py-0.5 text-2xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-opacity"
             >
               {submitting ? '…' : 'Create'}
             </button>
@@ -229,7 +229,7 @@ export function OrgSwitcher() {
                   role="option"
                   aria-selected={org.id === active.id}
                   onClick={() => pick(org.id)}
-                  className={`flex w-full items-start justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-surface-overlay motion-safe:transition-colors ${
+                  className={`flex w-full items-start justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-surface-overlay motion-safe:transition-opacity ${
                     org.id === active.id ? 'bg-surface-overlay/60 text-fg' : 'text-fg-secondary'
                   }`}
                 >
@@ -252,7 +252,7 @@ export function OrgSwitcher() {
             <Link
               to="/organization/members"
               onClick={() => setOpen(false)}
-              className="flex w-full items-center justify-between gap-1.5 border-b border-edge-subtle px-2.5 py-1.5 text-left text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:bg-surface-overlay"
+              className="flex w-full items-center justify-between gap-1.5 border-b border-edge-subtle px-2.5 py-1.5 text-left text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity focus-visible:outline-none focus-visible:bg-surface-overlay"
             >
               <span>View team page</span>
               <span aria-hidden className="text-fg-faint">→</span>
@@ -285,7 +285,7 @@ export function OrgSwitcher() {
                 <button
                   type="submit"
                   disabled={!newName.trim() || submitting}
-                  className="rounded-sm bg-brand px-2 py-1 text-2xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-colors"
+                  className="rounded-sm bg-brand px-2 py-1 text-2xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-opacity"
                 >
                   {submitting ? '…' : 'Create'}
                 </button>
@@ -294,7 +294,7 @@ export function OrgSwitcher() {
               <button
                 type="button"
                 onClick={() => setCreating(true)}
-                className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-xs text-brand hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:bg-surface-overlay"
+                className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-xs text-brand hover:bg-surface-overlay motion-safe:transition-opacity focus-visible:outline-none focus-visible:bg-surface-overlay"
               >
                 <span aria-hidden className="text-sm leading-none">+</span>
                 <span>New team</span>

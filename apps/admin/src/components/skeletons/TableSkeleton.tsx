@@ -64,7 +64,7 @@ export function TableSkeleton({
         <div className="border-b border-edge-subtle px-3 py-2 flex gap-3">
           {Array.from({ length: columns }).map((_, i) => (
             <div key={i} className={COL_FLEX(i, columns)}>
-              <Skeleton className="h-3 w-[60%]" />
+              <Skeleton className="h-3 w-3/5" />
             </div>
           ))}
         </div>
@@ -79,7 +79,7 @@ export function TableSkeleton({
                       c === 0
                         ? 'h-4 w-[85%]'
                         : c === columns - 1
-                          ? 'h-3 w-[60%]'
+                          ? 'h-3 w-3/5'
                           : 'h-3 w-[70%]'
                     }
                   />

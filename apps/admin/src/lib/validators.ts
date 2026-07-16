@@ -263,6 +263,28 @@ export function token({
   })
 }
 
+/**
+ * 5-field cron expression validator (min hour dom month dow).
+ * Accepts star, star/n, ranges a-b, lists a,b, and single numbers.
+ * Does not attempt full cron semantics — just rejects obvious garbage
+ * before it reaches the scheduler.
+ */
+export function cronExpression(opts?: ValidatorOptions): Validator {
+  return withOptional(opts, (value) => {
+    const parts = value.trim().split(/\s+/)
+    if (parts.length !== 5) {
+      return { message: 'Cron needs 5 fields: minute hour day-of-month month day-of-week' }
+    }
+    const fieldOk = /^(\*(\/\d+)?|\d+(-\d+)?(,\d+(-\d+)?)*)(\/\d+)?$/
+    for (const part of parts) {
+      if (!fieldOk.test(part)) {
+        return { message: `Invalid cron field "${part}" — use *, */n, numbers, ranges, or lists` }
+      }
+    }
+    return null
+  })
+}
+
 /* ── Numbers ──────────────────────────────────────────────────────────── */
 
 interface NumberRangeOptions extends ValidatorOptions {
@@ -424,6 +446,7 @@ const NAMED_VALIDATORS: Record<string, Validator> = {
   jiraProjectKey: jiraProjectKey(),
   githubRepoUrl: githubRepoUrl(),
   pagerdutyRoutingKey: pagerdutyRoutingKey(),
+  cronExpression: cronExpression(),
 }
 
 export function resolveValidator(name?: string): Validator | undefined {

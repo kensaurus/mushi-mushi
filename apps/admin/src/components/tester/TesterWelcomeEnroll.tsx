@@ -68,7 +68,7 @@ export function TesterWelcomeEnroll() {
           />
           <span>
             I agree to the{' '}
-            <a href="/mushi-mushi/testers/terms" target="_blank" rel="noreferrer" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+            <a href="/mushi-mushi/testers/terms" target="_blank" rel="noreferrer" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
               Mushi Bounties tester terms
             </a>
           </span>
@@ -99,7 +99,7 @@ export function TesterWelcomeEnroll() {
           href={MARKETPLACE_URL}
           target="_blank"
           rel="noreferrer"
-          className="font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors"
+          className="font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
         >
           Browse marketplace ↗
         </a>

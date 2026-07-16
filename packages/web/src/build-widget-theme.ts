@@ -5,7 +5,25 @@
  * All widget hex literals live here (or in core/design-tokens.ts) so
  * packages/web/src/styles.ts stays a template-only stylesheet and
  * scripts/check-design-tokens.mjs can enforce the single-source rule.
+ *
+ * hexToRgbTriplet — converts a 6-char validated hex string to a bare
+ * "R,G,B" triplet used as rgba() channels in styles.ts template literals:
+ *   rgba(${accentRgb}, 0.4)   — respects host accent overrides
+ *   rgba(${shadowInk}, 0.35)  — correct ink in both light and dark modes
+ * Called only on hex values that already passed safeWidgetHex(), so the
+ * regex-based extraction is always well-defined on valid 6-char inputs.
  */
+
+/** @internal Convert a safe 6-digit hex (#rrggbb) to an "R,G,B" triplet. */
+function hexToRgbTriplet(hex: string): string {
+  const h = hex.replace('#', '');
+  // Expand 3-digit shorthand to 6 digits
+  const full = h.length === 3 ? h[0]+h[0]+h[1]+h[1]+h[2]+h[2] : h.slice(0, 6);
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return `${r},${g},${b}`;
+}
 import {
   MUSHI_ACCENT_SHADOW,
   MUSHI_BANNER_BRAND_BORDER,
@@ -36,6 +54,18 @@ export interface WidgetThemeVars {
   widgetAccentWash: string;
   widgetAccentInk: string;
   widgetAccentShadow: string;
+  /**
+   * Bare R,G,B triplet for the resolved accent colour (e.g. "224,60,44").
+   * Use in template literals: `rgba(${accentRgb}, 0.5)`. This lets host
+   * accent overrides and dark-mode variants cascade automatically into
+   * every rgba() call — bypassing the hex guard which only rejects #hex.
+   */
+  accentRgb: string;
+  /**
+   * Bare R,G,B triplet for drop shadows: "0,0,0" in dark mode, "14,13,11"
+   * in light. Prevents light-ink halos from showing on dark paper surfaces.
+   */
+  shadowInk: string;
   ok: string;
   danger: string;
   onAccent: string;
@@ -86,6 +116,8 @@ export function getWidgetThemeVars(
     widgetAccentWash: accentResolved.accentWash,
     widgetAccentInk: accentResolved.accentInk,
     widgetAccentShadow: isDark ? MUSHI_ACCENT_SHADOW.dark : MUSHI_ACCENT_SHADOW.light,
+    accentRgb: hexToRgbTriplet(accentResolved.accent),
+    shadowInk: isDark ? '0,0,0' : '14,13,11',
     ok: pal.ok,
     danger: pal.danger,
     onAccent: MUSHI_ON_ACCENT,

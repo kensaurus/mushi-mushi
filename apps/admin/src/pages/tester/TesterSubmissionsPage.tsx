@@ -127,7 +127,7 @@ export function TesterSubmissionsPage() {
         description="Track submissions and file new bug reports for apps you've joined."
         meta={
           pendingCount > 0 ? (
-            <Badge className={`border border-warn/30 ${CHIP_TONE.warnSubtle}`}>
+            <Badge className={CHIP_TONE.warnSubtle}>
               {pendingCount} pending review
             </Badge>
           ) : undefined
@@ -285,7 +285,7 @@ export function TesterSubmissionsPage() {
       {!loading && joinedApps.length === 0 && (
         <p className="text-xs text-fg-muted">
           Need another app?{' '}
-          <Link to="/tester/apps" className="font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+          <Link to="/tester/apps" className="font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
             Browse the catalog →
           </Link>
         </p>

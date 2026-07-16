@@ -150,7 +150,7 @@ export function QuickstartMegaCta({ embedded = false }: { embedded?: boolean }) 
             </span>
           )}
           {'component' in cta && cta.component && (
-            <span className="text-3xs text-fg-faint font-mono truncate max-w-[18rem]" title={cta.component}>
+            <span className="text-3xs text-fg-faint font-mono truncate max-w-72" title={cta.component}>
               {cta.component}
             </span>
           )}
@@ -162,7 +162,7 @@ export function QuickstartMegaCta({ embedded = false }: { embedded?: boolean }) 
       </div>
       <Link
         to={cta.to}
-        className={`shrink-0 inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-medium motion-safe:transition-colors motion-safe:active:scale-[0.97] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-1 focus-visible:ring-offset-surface ${buttonTone}`}
+        className={`shrink-0 inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-medium motion-safe:transition-opacity motion-safe:active:scale-[0.97] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-1 focus-visible:ring-offset-surface ${buttonTone}`}
       >
         {cta.button} <span aria-hidden="true">→</span>
       </Link>

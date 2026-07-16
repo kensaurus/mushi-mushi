@@ -98,7 +98,7 @@ export function ChatThreadItem({
 }: ChatThreadItemProps) {
   return (
     <div
-      className={`group/thread relative overflow-hidden rounded-sm border transition-[border-color,background-color,box-shadow] motion-safe:duration-150 ${
+      className={`group/thread relative overflow-hidden rounded-sm border transition-[transform,opacity] motion-safe:duration-150 ${
         active
           ? 'border-brand/30 bg-surface-overlay shadow-sm ring-1 ring-inset ring-brand/15'
           : 'border-transparent bg-transparent hover:border-edge-subtle hover:bg-surface-overlay'

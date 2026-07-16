@@ -55,7 +55,7 @@ export function CursorArtifactsGallery({ artifacts }: Props) {
                 target="_blank"
                 rel="noopener noreferrer"
                 title="Open screenshot in new tab"
-                className="block rounded overflow-hidden border border-edge bg-surface-overlay hover:border-accent/60 transition-colors"
+                className="block rounded overflow-hidden border border-edge bg-surface-overlay hover:border-accent/60 transition-opacity"
               >
                 <img
                   src={a.url}
@@ -67,6 +67,7 @@ export function CursorArtifactsGallery({ artifacts }: Props) {
             ) : (
               <div
                 key={`ss-${i}`}
+                // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
                 className="flex items-center justify-center rounded border border-edge bg-surface-overlay text-2xs text-fg-faint p-2"
                 title={a.path}
               >

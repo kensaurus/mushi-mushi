@@ -230,7 +230,7 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
                     <td className="px-2 py-1.5 font-mono text-fg-muted">
                       {job.id.slice(0, 8)}…
                       {job.rejected_reason && (
-                        <div className="text-2xs text-warn mt-0.5 whitespace-normal max-w-[14rem]">
+                        <div className="text-2xs text-warn mt-0.5 whitespace-normal max-w-56">
                           {job.rejected_reason}
                         </div>
                       )}

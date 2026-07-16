@@ -1,3 +1,4 @@
+// mushi-ui: intentional overlay — not Modal/Drawer (reason: inline confirm popover anchored to merge trigger; preserves triage table context)
 /**
  * Confirm popover for merging a Mushi draft PR from the console.
  * Mirrors DispatchFixPreflight — user stays in control, nothing auto-merges.
@@ -199,14 +200,15 @@ export function MergeFixPreflight({
           )}
 
           <div className="mt-3 flex items-center justify-end gap-2">
-            <button
+            <Btn
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setOpen(false)}
               disabled={merging}
-              className="px-2 py-1 text-2xs text-fg-muted hover:text-fg"
             >
               Cancel
-            </button>
+            </Btn>
             <Btn
               type="button"
               size="sm"

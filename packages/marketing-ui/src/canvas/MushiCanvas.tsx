@@ -45,7 +45,7 @@ function StaticStageStrip() {
           // matches what the interactive viewport does (single accent zone).
           <li
             key={stage.id}
-            className="rounded-lg border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] p-3 shadow-[inset_0_-2px_0_var(--mushi-rule)] transition hover:-translate-y-0.5 hover:border-[color-mix(in_oklch,var(--mushi-ink)_22%,var(--mushi-rule))]"
+            className="rounded-lg border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] p-3 shadow-[inset_0_-2px_0_var(--mushi-rule)] transition-[transform,opacity] hover:-translate-y-0.5 hover:border-[color-mix(in_oklch,var(--mushi-ink)_22%,var(--mushi-rule))]"
           >
             <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)]">
               <span className="text-[var(--mushi-vermillion)]">{String(stage.index + 1).padStart(2, '0')}</span>

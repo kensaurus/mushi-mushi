@@ -146,7 +146,7 @@ export function OnboardingActivationLanes({
           </ContainedBlock>
         </div>
         {topPriority ? (
-          <Link to={topPriority.to} className="shrink-0 text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+          <Link to={topPriority.to} className="shrink-0 text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
             {topPriority.label} →
           </Link>
         ) : null}
@@ -156,7 +156,7 @@ export function OnboardingActivationLanes({
           <Link
             key={lane.id}
             to={lane.to}
-            className="block rounded-lg border border-edge-subtle bg-surface-raised/40 p-3 transition-colors hover:border-brand/30 hover:bg-surface-hover/30 focus-visible:outline focus-visible:ring-2 focus-visible:ring-focus"
+            className="block rounded-lg border border-edge-subtle bg-surface-raised/40 p-3 transition-opacity hover:border-brand/30 hover:bg-surface-hover/30 focus-visible:outline focus-visible:ring-2 focus-visible:ring-focus"
           >
             <div className="flex items-center justify-between gap-2">
               <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-fg">

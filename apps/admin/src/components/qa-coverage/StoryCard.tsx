@@ -36,7 +36,7 @@ export function StoryCard({
 
   return (
     <Card
-      className={`group relative flex flex-col gap-3 p-4 cursor-pointer transition-[background-color,border-color,color,box-shadow,transform,opacity] hover:shadow-md ${highlighted ? 'ring-2 ring-brand' : ''}`}
+      className={`group relative flex flex-col gap-3 p-4 cursor-pointer transition-[transform,opacity] hover:shadow-md ${highlighted ? 'ring-2 ring-brand' : ''}`}
       onClick={() => onSelect(coverage.story_id)}
     >
       <div className="flex items-start justify-between gap-2">
@@ -112,7 +112,7 @@ export function StoryCard({
         </div>
         <div className="h-1 w-full rounded-full bg-surface-overlay overflow-hidden">
           <div
-            className={`h-full rounded-full transition-[background-color,border-color,color,box-shadow,transform,opacity] ${barTone}`}
+            className={`h-full rounded-full transition-[transform,opacity] ${barTone}`}
             style={{ width: passRate !== null ? `${Math.max(2, Math.min(100, passRate))}%` : '0%' }}
           />
         </div>

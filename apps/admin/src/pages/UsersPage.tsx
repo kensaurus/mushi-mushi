@@ -18,6 +18,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useEntitlements } from '../lib/useEntitlements'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -186,7 +187,7 @@ export function UsersPage() {
   const users = usersData?.users ?? []
 
   return (
-    <div className="space-y-6">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-users">
       <PageHeaderBar
         title="Users"
 
@@ -284,7 +285,7 @@ export function UsersPage() {
                   return (
                     <tr
                       key={u.user_id}
-                      className="group border-b border-edge/40 hover:bg-surface-raised cursor-pointer transition-colors"
+                      className="group border-b border-edge/40 hover:bg-surface-raised cursor-pointer transition-opacity"
                       onClick={() => setSelectedUserId(u.user_id)}
                       aria-label={`View details for ${u.email ?? u.user_id}`}
                     >

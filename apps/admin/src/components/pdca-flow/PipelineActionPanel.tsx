@@ -85,7 +85,7 @@ function ActionBtn({ label, onClick, busy, children }: ActionBtnProps) {
       title={label}
       onClick={onClick}
       disabled={busy}
-      className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 disabled:opacity-40 disabled:cursor-not-allowed motion-safe:transition-colors"
+      className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 disabled:opacity-40 disabled:cursor-not-allowed motion-safe:transition-opacity"
     >
       {busy ? (
         <svg className="motion-safe:animate-spin" width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">

@@ -297,7 +297,7 @@ export function SidebarUserCard({ user, signOut }: SidebarUserCardProps) {
           <button
             type="button"
             onClick={() => setConfirmOpen(true)}
-            className="shrink-0 inline-flex items-center justify-center h-6 w-6 rounded-sm text-rose hover:text-rose hover:bg-rose-muted/60 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose/50"
+            className="shrink-0 inline-flex items-center justify-center h-6 w-6 rounded-sm text-rose hover:text-rose hover:bg-rose-muted/60 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose/50"
             aria-label="Sign out"
             title="Sign out"
           >

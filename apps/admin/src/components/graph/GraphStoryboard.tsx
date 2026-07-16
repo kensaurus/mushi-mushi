@@ -165,7 +165,7 @@ export function GraphStoryboard({
         }}
       >
         {columns.map((col) => (
-          <div key={col.type} className="flex flex-col gap-3 min-w-[10rem] max-w-[14rem]">
+          <div key={col.type} className="flex flex-col gap-3 min-w-40 max-w-56">
             <div className="space-y-0.5">
               <div className="text-2xs uppercase tracking-wider text-fg-faint flex items-center gap-1.5">
                 <span
@@ -204,7 +204,7 @@ export function GraphStoryboard({
                     className={`
                       group/node relative z-10 text-left px-2.5 py-2 rounded-md
                       border bg-surface-raised
-                      hover:bg-surface-overlay motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity]
+                      hover:bg-surface-overlay motion-safe:transition-[transform,opacity]
                       ${isSelected ? 'shadow-raised border-2' : 'border-edge'}
                       ${dimmed ? 'opacity-40' : 'opacity-100'}
                     `}

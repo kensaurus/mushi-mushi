@@ -47,7 +47,7 @@ import {
   STEP_NUMBER,
   TOTAL_STEPS,
 } from './widget-helpers';
-import type { AssistantTurn, WidgetCallbacks, WidgetRewardsState, WidgetStep } from './widget-helpers';
+import type { AssistantTurn, WidgetCallbacks, WidgetRewardsState, WidgetStep, WidgetSubmitOutcome } from './widget-helpers';
 
 export interface WidgetRenderCtx {
   config: Required<MushiWidgetConfig>;
@@ -100,6 +100,7 @@ export interface WidgetRenderCtx {
   leaderboardLoading: boolean;
   leaderboardEntries: Array<{ display_name: string; tier_name: string | null; total_points: number; points_30d: number }> | null;
   lastSubmitQueuedOffline: boolean;
+  lastSubmitFailureKind: WidgetSubmitOutcome['failureKind'];
   lastSubmitScreenshotDropped: boolean;
   featureBoard: Array<Record<string, unknown>>;
   crossAppReports: MushiCrossAppReport[] | null;
@@ -164,7 +165,12 @@ export function renderAssistantStep(ctx: WidgetRenderCtx): string {
                 .map((o) => `<button type="button" class="mushi-assistant-chip" data-action="assistant-suggest" data-value="${escapeHtml(o)}">${escapeHtml(o)}</button>`)
                 .join('')}</div>`
             : '';
-          return `<div class="mushi-assistant-msg ${cls}">${escapeHtml(turn.text)}</div>${opts}`;
+          const reportCta = turn.offerReport
+            ? `<div class="mushi-assistant-recovery">
+                 <button type="button" class="mushi-assistant-report-cta" data-action="assistant-report">${escapeHtml(t.assistant.fileReportCta)}</button>
+               </div>`
+            : '';
+          return `<div class="mushi-assistant-msg ${cls}">${escapeHtml(turn.text)}</div>${opts}${reportCta}`;
         })
         .join('');
 
@@ -172,8 +178,16 @@ export function renderAssistantStep(ctx: WidgetRenderCtx): string {
     ? `<div class="mushi-assistant-msg mushi-assistant-msg-bot mushi-assistant-thinking" role="status" aria-live="polite">${escapeHtml(t.assistant.thinking)}</div>`
     : '';
   const error = ctx.assistantError
-    ? `<div class="mushi-assistant-error" role="alert">${escapeHtml(ctx.assistantError)}</div>`
+    ? `<div class="mushi-assistant-error" role="alert">${escapeHtml(ctx.assistantError)}
+         <button type="button" class="mushi-assistant-report-cta" data-action="assistant-report">${escapeHtml(t.assistant.fileReportCta)}</button>
+       </div>`
     : '';
+  const stillStuck =
+    !empty && !ctx.assistantSending && !ctx.assistantError
+      ? `<div class="mushi-assistant-recovery mushi-assistant-recovery-footer">
+           <button type="button" class="mushi-assistant-report-link" data-action="assistant-report">${escapeHtml(t.assistant.stillStuckCta)}</button>
+         </div>`
+      : '';
 
   return `
     ${renderHeader(ctx, { title: label, showBack: true })}
@@ -182,6 +196,7 @@ export function renderAssistantStep(ctx: WidgetRenderCtx): string {
         ${transcript}
         ${thinking}
         ${error}
+        ${stillStuck}
       </div>
       <form class="mushi-assistant-form" data-action="assistant-send">
         <textarea
@@ -856,6 +871,7 @@ export function renderDetailsStep(ctx: WidgetRenderCtx): string {
             class="mushi-textarea"
             placeholder="${escapeHtml(t.step3.descriptionPlaceholder)}"
             rows="4"
+            maxlength="4000"
             aria-label="${escapeHtml(t.step3.heading)}"
             autofocus
           ></textarea>
@@ -961,12 +977,25 @@ export function renderSuccessStep(ctx: WidgetRenderCtx): string {
    */
 export function renderSuccessReceipt(ctx: WidgetRenderCtx): string {
     const s = ctx.locale.flows.success;
-    if (ctx.lastSubmitQueuedOffline) {
+    const failureKind = ctx.lastSubmitFailureKind;
+    if (failureKind === 'rate_limited' || failureKind === 'quota' || failureKind === 'permanent' || failureKind === 'retrying' || ctx.lastSubmitQueuedOffline) {
+      const label =
+        failureKind === 'rate_limited' ? s.rateLimited
+        : failureKind === 'quota' ? s.quotaBlocked
+        : failureKind === 'permanent' ? s.permanentFailed
+        : failureKind === 'retrying' ? s.retrying
+        : s.queuedOffline;
+      const hint =
+        failureKind === 'rate_limited' ? s.rateLimitedHint
+        : failureKind === 'quota' ? s.quotaBlockedHint
+        : failureKind === 'permanent' ? s.permanentFailedHint
+        : failureKind === 'retrying' ? s.retryingHint
+        : s.queuedHint;
       return `
         <div class="mushi-success-receipt" role="status">
           <div class="mushi-success-receipt-row mushi-success-receipt-warn">
-            <span class="mushi-success-receipt-label">${escapeHtml(s.queuedOffline)}</span>
-            <span class="mushi-success-receipt-hint">${escapeHtml(s.queuedHint)}</span>
+            <span class="mushi-success-receipt-label">${escapeHtml(label)}</span>
+            <span class="mushi-success-receipt-hint">${escapeHtml(hint)}</span>
           </div>
         </div>
       `;
@@ -1076,7 +1105,7 @@ export function renderRewardsNudge(ctx: WidgetRenderCtx): string {
         </div>
         ${nextTier ? `
           <div class="mushi-tier-bar-track" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Progress to ${escapeHtml(nextTier.displayName)}">
-            <div class="mushi-tier-bar-fill" style="width:${pct}%"></div>
+            <div class="mushi-tier-bar-fill" style="--mushi-tier-pct:${pct / 100}"></div>
           </div>
           <div class="mushi-rewards-next-label">${nextLabel}</div>
         ` : ''}
@@ -1106,7 +1135,7 @@ export function renderSuccessRewards(ctx: WidgetRenderCtx): string {
         <div class="mushi-success-pts-award">+${pointsForReport} pts</div>
         ${nextTier ? `
           <div class="mushi-tier-bar-track success-bar" role="progressbar" aria-valuenow="${pctAfter}" aria-valuemin="0" aria-valuemax="100" aria-label="Progress to ${escapeHtml(nextTier.displayName)}">
-            <div class="mushi-tier-bar-fill" style="width:${pctAfter}%"></div>
+            <div class="mushi-tier-bar-fill" style="--mushi-tier-pct:${pctAfter / 100}"></div>
           </div>
           <div class="mushi-rewards-next-label">${nextLabel}</div>
         ` : ''}

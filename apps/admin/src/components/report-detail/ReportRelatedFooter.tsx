@@ -65,7 +65,7 @@ export function ReportRelatedFooter({ report, dispatchState }: { report: ReportD
 }
 
 function RelatedLinkCard({ to, label, description, external }: RelatedLink) {
-  const className = 'group block rounded-md border border-edge-subtle bg-surface-raised/40 px-3 py-2 hover:bg-surface-overlay hover:border-edge motion-safe:transition-colors'
+  const className = 'group block rounded-md border border-edge-subtle bg-surface-raised/40 px-3 py-2 hover:bg-surface-overlay hover:border-edge motion-safe:transition-opacity'
   const inner = (
     <>
       <p className="text-xs font-medium text-fg-secondary group-hover:text-fg inline-flex items-center gap-1.5">

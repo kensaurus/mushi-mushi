@@ -43,6 +43,75 @@ export interface AssistantTurn {
   text: string;
   /** For clarify replies — present on assistant turns only. */
   options?: string[];
+  /**
+   * When true, render a primary "File a report" recovery CTA under this
+   * turn (clarify / unsure paths). Login is never required for Ask.
+   */
+  offerReport?: boolean;
+}
+
+/** sessionStorage key for same-tab Ask transcript resume (UX only — not auth). */
+export const ASSISTANT_SESSION_STORAGE_KEY = 'mushi-assistant-session-v1';
+
+export type AssistantSessionSnapshot = {
+  turns: AssistantTurn[];
+  threadId: string | null;
+};
+
+export function loadAssistantSession(): AssistantSessionSnapshot | null {
+  try {
+    if (typeof sessionStorage === 'undefined') return null;
+    const raw = sessionStorage.getItem(ASSISTANT_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const record = parsed as Record<string, unknown>;
+    const turns = Array.isArray(record.turns) ? record.turns : null;
+    if (!turns) return null;
+    const normalized: AssistantTurn[] = [];
+    for (const item of turns) {
+      if (!item || typeof item !== 'object') continue;
+      const t = item as Record<string, unknown>;
+      if (t.role !== 'user' && t.role !== 'assistant') continue;
+      if (typeof t.text !== 'string') continue;
+      const turn: AssistantTurn = { role: t.role, text: t.text };
+      if (Array.isArray(t.options)) {
+        const options = t.options.filter((o): o is string => typeof o === 'string');
+        if (options.length) turn.options = options;
+      }
+      if (t.offerReport === true) turn.offerReport = true;
+      normalized.push(turn);
+    }
+    const threadId =
+      typeof record.threadId === 'string' && record.threadId.length > 0
+        ? record.threadId
+        : null;
+    return { turns: normalized, threadId };
+  } catch {
+    return null;
+  }
+}
+
+export function saveAssistantSession(snapshot: AssistantSessionSnapshot): void {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    if (!snapshot.turns.length && !snapshot.threadId) {
+      sessionStorage.removeItem(ASSISTANT_SESSION_STORAGE_KEY);
+      return;
+    }
+    sessionStorage.setItem(ASSISTANT_SESSION_STORAGE_KEY, JSON.stringify(snapshot));
+  } catch {
+    // private browsing / quota — Ask still works in-memory
+  }
+}
+
+export function clearAssistantSession(): void {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    sessionStorage.removeItem(ASSISTANT_SESSION_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 export type WidgetStep =
@@ -233,6 +302,16 @@ export interface WidgetSubmitOutcome {
    *  optimistic copy ("queued offline, we'll send it when you're back")
    *  versus the confirmed copy ("received — track at #abc12345"). */
   queuedOffline?: boolean;
+  /**
+   * Distinguishes why a submit did not confirm immediately. Lets the
+   * receipt tell the truth instead of always saying "queued offline":
+   *   - offline: navigator says offline, will flush on reconnect
+   *   - retrying: transient network/5xx — queued for automatic retry
+   *   - rate_limited: 429 — user should wait before sending more
+   *   - quota: 403 entitlement/quota — will not succeed on retry
+   *   - permanent: validation / payload too large — dropped, not queued
+   */
+  failureKind?: 'offline' | 'retrying' | 'rate_limited' | 'quota' | 'permanent';
   /** The report went through but its screenshot had to be shed (couldn't
    *  compress under the wire budget, or the server said PAYLOAD_TOO_LARGE).
    *  The success receipt says so instead of implying the image landed. */

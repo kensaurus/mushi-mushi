@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useEntitlements } from '../lib/useEntitlements'
 import { usePageData } from '../lib/usePageData'
@@ -369,7 +370,7 @@ export function InventoryPage() {
 
   if (!entLoading && !has('inventory_v2')) {
     return (
-      <div className="space-y-4">
+      <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-inventory">
         <PageHeaderBar title="User stories & inventory" projectScope={null} />
         <UpgradePrompt flag="inventory_v2" currentPlan={planName} />
       </div>
@@ -563,6 +564,7 @@ export function InventoryPage() {
               )
             })}
           </div>
+          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
           <div className="space-y-2 max-h-[28rem] overflow-auto">
             {findings.slice(0, 80).map((f) => (
               <GateFindingCard
@@ -615,6 +617,7 @@ export function InventoryPage() {
                 Ingest selected file
               </Btn>
             </div>
+            // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
             <pre className="mushi-code-block mushi-code-body text-2xs p-3 rounded-md overflow-auto max-h-[32rem] font-mono">
               {yamlDraft ?? snapshot?.raw_yaml ?? '—'}
             </pre>

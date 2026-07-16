@@ -13,6 +13,10 @@ import {
   ownedProjectIds as _ownedProjectIds,
 } from '../_shared/project-access.ts';
 import { isUuid } from './ids.ts';
+import {
+  type ApiErrorCode,
+  SAFE_DB_MESSAGE,
+} from '../_shared/error-codes.ts';
 
 /**
  * capture a Supabase / Postgres error to Sentry AND return the
@@ -47,10 +51,7 @@ export function dbError(
       pg_hint: err?.hint ?? null,
     },
   });
-  return c.json(
-    { ok: false, error: { code: 'DB_ERROR', message: err?.message ?? 'Unknown DB error' } },
-    500,
-  );
+  return jsonError(c, 'DB_ERROR', SAFE_DB_MESSAGE, 500);
 }
 
 /** Canonical success envelope for admin routes. */
@@ -65,12 +66,49 @@ export function jsonOk(
 /** Canonical error envelope for admin routes. */
 export function jsonError(
   c: Context,
-  code: string,
+  code: ApiErrorCode | (string & {}),
   message: string,
   status: ContentfulStatusCode = 400,
   extra?: Record<string, unknown>,
 ): Response {
-  return c.json({ ok: false, error: { code, message, ...extra } }, status);
+  const requestId = c.get('requestId') as string | undefined;
+  return c.json(
+    {
+      ok: false,
+      error: {
+        code,
+        message,
+        ...(requestId ? { requestId } : {}),
+        ...extra,
+      },
+    },
+    status,
+  );
+}
+
+/** Safe 500 for RPC / Postgres failures — detail stays in Sentry only. */
+export function rpcError(
+  c: Context,
+  err:
+    | { message?: string; code?: string; details?: string | null; hint?: string | null }
+    | null
+    | undefined,
+): Response {
+  const captured = err instanceof Error ? err : new Error(err?.message ?? 'Unknown RPC error');
+  reportError(captured, {
+    tags: {
+      path: c.req.path,
+      method: c.req.method,
+      db_code: err?.code ?? 'unknown',
+      error_type: 'rpc',
+    },
+    extra: {
+      pg_code: err?.code ?? null,
+      pg_details: err?.details ?? null,
+      pg_hint: err?.hint ?? null,
+    },
+  });
+  return jsonError(c, 'RPC_ERROR', SAFE_DB_MESSAGE, 500);
 }
 
 export function jsonValidationError(c: Context, message: string): Response {

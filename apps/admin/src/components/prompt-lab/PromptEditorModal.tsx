@@ -38,6 +38,7 @@ export function PromptEditorModal({ prompt, onChange, onClose, onSave, saving }:
         </p>
       </ContainedBlock>
       <textarea
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         className="w-full min-h-72 h-[min(60dvh,28rem)] bg-surface-overlay border border-edge-subtle rounded-sm p-2 text-2xs font-mono text-fg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
         value={prompt.prompt_template}
         onChange={(e) => onChange({ ...prompt, prompt_template: e.currentTarget.value })}

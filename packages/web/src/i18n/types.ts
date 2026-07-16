@@ -63,6 +63,10 @@ export interface MushiLocale {
     sendAriaLabel: string;
     hubDescription: string;
     thinking: string;
+    /** Primary recovery CTA when Ask cannot resolve (clarify / error). */
+    fileReportCta: string;
+    /** Softer footer escape when the thread already has turns. */
+    stillStuckCta: string;
     errors: {
       noResponse: string;
       generic: string;
@@ -141,6 +145,14 @@ export interface MushiLocale {
       delivering: string;
       queuedOffline: string;
       queuedHint: string;
+      rateLimited: string;
+      rateLimitedHint: string;
+      quotaBlocked: string;
+      quotaBlockedHint: string;
+      permanentFailed: string;
+      permanentFailedHint: string;
+      retrying: string;
+      retryingHint: string;
       trackOnMushi: string;
       slaDefault: string;
       screenshotDropped: string;

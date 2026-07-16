@@ -20,12 +20,34 @@ export const CHIP_TONE = {
   neutral: 'bg-surface-overlay text-fg-secondary border border-edge-subtle',
 } as const
 
+/**
+ * Soft selected / pressed chip on a plain surface (trigger pickers, filter
+ * toggles). Prefer this over hand-rolled `bg-brand/12 text-brand border
+ * border-brand/28` — `text-brand-foreground` clears WCAG AA on the muted
+ * brand wash, and the recipe already owns its single border.
+ */
+export const SELECTED_TONE =
+  'bg-brand-subtle text-brand-foreground border border-brand/40'
+
+/** Idle companion for SELECTED_TONE on the same control set. */
+export const SELECTED_TONE_IDLE =
+  'border-edge-subtle bg-surface-raised text-fg-muted hover:text-fg'
+
+/**
+ * Header PageHeaderBar severity Badge fallbacks (brand / neutral) so pages
+ * stop inlining non-tokenized class strings in severity ternaries.
+ */
+export const HEADER_BADGE_TONE = {
+  brand: 'border border-edge-subtle bg-surface-raised text-fg-secondary',
+  neutral: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
+} as const
+
 /** Links on plain (non-tinted) surfaces — accent hue, AA on surface bg. */
 export const LINK_ACCENT =
-  'text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors'
+  'text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity'
 
 export const LINK_BRAND =
-  'text-brand hover:text-brand-hover underline underline-offset-2 motion-safe:transition-colors'
+  'text-brand hover:text-brand-hover underline underline-offset-2 motion-safe:transition-opacity'
 
 /** Inline meta chip tones for RecommendedAction / dashboards. */
 export const META_CHIP_TONE = {
@@ -90,4 +112,31 @@ const RUN_STATUS_SEVERITY: Record<string, StatusSeverity> = {
 export function runStatusChipTone(status: string | null | undefined): string {
   if (!status) return CHIP_TONE.neutral
   return statusChipTone(RUN_STATUS_SEVERITY[status] ?? 'neutral')
+}
+
+/**
+ * Surface severity tokens for hero / insight cards (ring + muted bg + fg + dot).
+ * Consolidates ad-hoc SEVERITY_STYLE / insightTone maps — prefer this helper.
+ */
+export type SurfaceSeverity = 'ok' | 'info' | 'warn' | 'crit' | 'danger' | 'neutral'
+
+export const SEVERITY_SURFACE: Record<
+  SurfaceSeverity,
+  { ring: string; bg: string; text: string; dot: string }
+> = {
+  ok: { ring: 'border-ok/40', bg: 'bg-ok-muted', text: 'text-ok-foreground', dot: 'bg-ok' },
+  info: { ring: 'border-info/40', bg: 'bg-info-muted', text: 'text-info-foreground', dot: 'bg-info' },
+  warn: { ring: 'border-warn/40', bg: 'bg-warn-muted', text: 'text-warning-foreground', dot: 'bg-warn' },
+  crit: { ring: 'border-err/40', bg: 'bg-danger-muted', text: 'text-danger-foreground', dot: 'bg-err' },
+  danger: { ring: 'border-err/40', bg: 'bg-danger-muted', text: 'text-danger-foreground', dot: 'bg-err' },
+  neutral: {
+    ring: 'border-edge',
+    bg: 'bg-surface-raised',
+    text: 'text-fg',
+    dot: 'bg-fg-muted',
+  },
+}
+
+export function severitySurfaceTone(severity: SurfaceSeverity) {
+  return SEVERITY_SURFACE[severity] ?? SEVERITY_SURFACE.neutral
 }

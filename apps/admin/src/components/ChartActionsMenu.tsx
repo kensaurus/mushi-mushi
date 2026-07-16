@@ -104,7 +104,7 @@ export function ChartActionsMenu(props: ChartActionsMenuProps) {
         aria-label={`${label} actions`}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="inline-flex items-center justify-center h-5 w-5 rounded-sm text-fg-faint hover:text-fg-secondary hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+        className="inline-flex items-center justify-center h-5 w-5 rounded-sm text-fg-faint hover:text-fg-secondary hover:bg-surface-overlay motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
       >
         <svg aria-hidden viewBox="0 0 20 20" className="h-3.5 w-3.5">
           <circle cx="4" cy="10" r="1.2" fill="currentColor" />
@@ -117,14 +117,14 @@ export function ChartActionsMenu(props: ChartActionsMenuProps) {
         <div
           role="menu"
           aria-label={`${label} actions menu`}
-          className="absolute right-0 z-20 mt-1 min-w-[10rem] rounded-sm border border-edge bg-surface-root shadow-raised py-1"
+          className="absolute right-0 z-20 mt-1 min-w-40 rounded-sm border border-edge bg-surface-root shadow-raised py-1"
         >
           {onExportCsv && (
             <button
               type="button"
               role="menuitem"
               onClick={handleExport}
-              className="w-full text-left px-2.5 py-1 text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
+              className="w-full text-left px-2.5 py-1 text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity"
             >
               Export CSV
             </button>
@@ -134,7 +134,7 @@ export function ChartActionsMenu(props: ChartActionsMenuProps) {
               type="button"
               role="menuitem"
               onClick={handleCopySavedFilter}
-              className="w-full text-left px-2.5 py-1 text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
+              className="w-full text-left px-2.5 py-1 text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity"
             >
               Copy saved filter link
             </button>
@@ -144,7 +144,7 @@ export function ChartActionsMenu(props: ChartActionsMenuProps) {
               role="menuitem"
               to={openFilterTo}
               onClick={() => setOpen(false)}
-              className="block px-2.5 py-1 text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
+              className="block px-2.5 py-1 text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity"
             >
               {openFilterLabel ?? 'Open filtered queue'}
             </Link>
@@ -158,7 +158,7 @@ export function ChartActionsMenu(props: ChartActionsMenuProps) {
                 item.onClick()
                 setOpen(false)
               }}
-              className="w-full text-left px-2.5 py-1 text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
+              className="w-full text-left px-2.5 py-1 text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity"
             >
               {item.label}
             </button>

@@ -38,6 +38,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "eslint": "^10.6.0",
+    "eslint-plugin-mushi-mushi": "workspace:*",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "typescript": "^6.0.3"

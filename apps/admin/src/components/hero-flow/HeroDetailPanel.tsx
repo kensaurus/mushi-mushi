@@ -25,7 +25,7 @@ import {
 } from 'react'
 import { Link } from 'react-router-dom'
 
-import { Btn, DetailRows, type DetailRowItem } from '../ui'
+import { Btn, Card, DetailRows, type DetailRowItem } from '../ui'
 import { getConfigDoc } from '../../lib/configDocs'
 import { getDavManifest, type DavEvidence } from '../../lib/davManifest'
 import type { PageHeroDecide, PageHeroVerify } from '../PageHero'
@@ -67,10 +67,10 @@ const TILE_COLORS = {
 // ─── Tone chip ─────────────────────────────────────────────────────────────
 
 const TONE_CLASS: Record<string, string> = {
-  ok:      CHIP_TONE.okSubtle + ' border border-ok/30',
+  ok:      CHIP_TONE.okSubtle,
   warn:    CHIP_TONE.warnSubtle,
   crit:    'bg-err/15 text-err border border-err/30',
-  info:    CHIP_TONE.infoSubtle + ' border border-info/30',
+  info:    CHIP_TONE.infoSubtle,
   neutral: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
 }
 
@@ -110,7 +110,7 @@ function Section({ heading, children, tone = 'info' }: {
     : 'text-fg-muted'
   return (
     <div className={`pl-2.5 border-l-2 ${railClass}`}>
-      <p className={`mb-1 text-3xs font-semibold uppercase tracking-[0.08em] ${headingClass}`}>
+      <p className={`mb-1 text-3xs font-semibold uppercase tracking-widest ${headingClass}`}>
         {heading}
       </p>
       <div className="text-2xs text-fg-secondary leading-relaxed">{children}</div>
@@ -384,7 +384,7 @@ export function HeroDetailPanel({
             <button
               type="button"
               onClick={handleSpotlight}
-              className="inline-flex items-center gap-1 text-2xs text-accent-foreground hover:text-accent motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm px-1.5 py-0.5 hover:bg-brand/10"
+              className="inline-flex items-center gap-1 text-2xs text-accent-foreground hover:text-accent motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm px-1.5 py-0.5 hover:bg-brand/10"
               data-dav-action="spotlight"
               title="Scroll to and highlight the related section on this page"
             >
@@ -396,7 +396,7 @@ export function HeroDetailPanel({
             type="button"
             onClick={onClose}
             aria-label={`Collapse ${tileLabel} detail`}
-            className="inline-flex h-5 w-5 items-center justify-center rounded-sm text-fg-faint hover:text-fg-muted hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 motion-safe:transition-colors"
+            className="inline-flex h-5 w-5 items-center justify-center rounded-sm text-fg-faint hover:text-fg-muted hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 motion-safe:transition-opacity"
           >
             <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
               <path d="M2 2l8 8M10 2l-8 8" strokeLinecap="round" />
@@ -440,7 +440,7 @@ export function HeroDetailPanel({
 
         {evidence?.kind === 'last-event' && (
           <Section heading="Last event">
-            <div className="flex items-start gap-3 rounded-md border border-edge-subtle bg-surface-raised/60 px-3 py-2 mt-1">
+            <Card  className="flex items-start gap-3 px-3 py-2 mt-1">
               <div className={`mt-0.5 h-2 w-2 rounded-full flex-shrink-0 ${
                 evidence.status === 'ok' ? 'bg-ok'
                 : evidence.status === 'error' ? 'bg-err'
@@ -452,7 +452,7 @@ export function HeroDetailPanel({
                 <p className="text-2xs text-fg-muted font-mono">{evidence.by}</p>
                 <p className="text-2xs text-fg-faint">{new Date(evidence.at).toLocaleString()}</p>
               </div>
-            </div>
+            </Card>
           </Section>
         )}
 
@@ -516,7 +516,7 @@ export function HeroDetailPanel({
               {verify.to && (
                 <Link
                   to={verify.to}
-                  className="inline-flex items-center gap-1 rounded-sm bg-brand/90 px-2.5 py-1 text-2xs font-semibold text-brand-fg hover:bg-brand motion-safe:transition-colors shadow-sm"
+                  className="inline-flex items-center gap-1 rounded-sm bg-brand/90 px-2.5 py-1 text-2xs font-semibold text-brand-fg hover:bg-brand motion-safe:transition-opacity shadow-sm"
                   data-dav-action="follow-cta"
                 >
                   Open evidence <span aria-hidden>→</span>
@@ -525,7 +525,7 @@ export function HeroDetailPanel({
               {verify.secondaryTo && verify.secondaryLabel && (
                 <Link
                   to={verify.secondaryTo}
-                  className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay/60 px-2 py-0.5 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors"
+                  className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay/60 px-2 py-0.5 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-opacity"
                   data-dav-action="follow-cta"
                 >
                   {verify.secondaryLabel}
@@ -572,7 +572,7 @@ export function HeroDetailPanel({
               href="https://github.com/kensa-dev/mushi-mushi#enriching-dav-tiles"
               target="_blank"
               rel="noreferrer"
-              className="underline underline-offset-2 hover:text-fg-muted motion-safe:transition-colors"
+              className="underline underline-offset-2 hover:text-fg-muted motion-safe:transition-opacity"
             >
               see how to wire evidence →
             </a>

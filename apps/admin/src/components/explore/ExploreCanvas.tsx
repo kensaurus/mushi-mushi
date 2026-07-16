@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Card } from '../../components/ui'
 import { Link } from 'react-router-dom'
 import {
   Handle,
@@ -57,7 +58,7 @@ function ExploreNodeChip({
         borderRight: `1px solid ${borderColor}`,
         borderBottom: `1px solid ${borderColor}`,
         background: isSelected ? chrome.selectedBg : nodeBg,
-        transition: 'opacity 0.15s, box-shadow 0.15s',
+        transition: 'opacity 200ms var(--ease-stamp, ease), transform 200ms var(--ease-stamp, ease)',
         boxShadow: isSelected
           ? `0 0 0 2px ${color}50, 0 2px 12px oklch(0 0 0 / 0.40)`
           : `0 1px 3px oklch(0 0 0 / ${theme === 'dark' ? '0.50' : '0.07'})`,
@@ -150,7 +151,7 @@ const HINT_KEY = 'mushi.explore.hintSeen'
 function ZoomControls() {
   const { zoomIn, zoomOut, fitView } = useReactFlow()
   const btn =
-    'flex items-center justify-center w-7 h-7 text-fg-secondary hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors'
+    'flex items-center justify-center w-7 h-7 text-fg-secondary hover:text-fg hover:bg-surface-overlay motion-safe:transition-opacity'
   return (
     <div className="flex flex-col rounded-md border border-edge/70 bg-surface-raised/90 backdrop-blur shadow-raised overflow-hidden">
       <button type="button" onClick={() => zoomIn({ duration: 200 })} className={`${btn} border-b border-edge/50`} aria-label="Zoom in" title="Zoom in">
@@ -339,7 +340,7 @@ function InnerCanvas({
 
       {!hintDismissed && (
         <Panel position="top-center">
-          <div className="flex items-center gap-2 rounded-md border border-edge bg-surface-raised/95 backdrop-blur px-3 py-1.5 text-2xs text-fg-secondary shadow-raised">
+          <Card  className="flex items-center gap-2 backdrop-blur px-3 py-1.5 text-2xs text-fg-secondary">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0 text-fg-faint" aria-hidden="true">
               <path d="M3 5l5-3 5 3v6l-5 3-5-3V5z" />
             </svg>
@@ -354,12 +355,12 @@ function InnerCanvas({
                 <path d="M2 2l6 6M8 2l-6 6" strokeLinecap="round" />
               </svg>
             </button>
-          </div>
+          </Card>
         </Panel>
       )}
       {nodeCount === 0 && (
         <Panel position="top-center">
-          <div className="rounded-md border border-edge bg-surface-raised/95 backdrop-blur px-3 py-2 text-2xs text-fg-secondary shadow-raised max-w-sm text-center">
+          <Card  className="backdrop-blur px-3 py-2 text-2xs text-fg-secondary max-w-sm text-center">
             <div className="font-medium text-fg mb-0.5">No files indexed yet</div>
             <div className="text-fg-muted">
               Enable codebase indexing in{' '}
@@ -368,7 +369,7 @@ function InnerCanvas({
               </Link>{' '}
               to see your files here.
             </div>
-          </div>
+          </Card>
         </Panel>
       )}
     </ReactFlow>

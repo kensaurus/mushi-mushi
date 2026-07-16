@@ -44,6 +44,7 @@ export function HeroIntro({ stages, focusStage, projectName, lastReportAt }: Pro
         aria-hidden="true"
         className={`absolute -top-12 -right-12 h-40 w-40 rounded-full blur-3xl opacity-30 ${HALO[focus.id]}`}
       />
+      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       <div className="relative grid gap-3 p-3 md:grid-cols-[1fr_auto] md:items-center">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-2xs font-medium text-fg-muted uppercase tracking-wider">

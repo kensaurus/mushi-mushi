@@ -109,7 +109,7 @@ export function EvolutionHistoryWidget({ projectId }: Props) {
     >
       <Link
         to="/judge"
-        className="flex items-center gap-2 px-2 py-1 rounded-sm hover:bg-surface-raised transition-colors"
+        className="flex items-center gap-2 px-2 py-1 rounded-sm hover:bg-surface-raised transition-opacity"
         aria-label={`Evolution loop: avg judge score ${avgScore?.toFixed(1) ?? '—'} / 10`}
       >
         <Spark weeks={data.weeks} />

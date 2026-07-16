@@ -86,6 +86,7 @@ export function ActiveProjectStatusChip({ snapshot, className = '' }: ActiveProj
               snapshot.id,
               snapshot.pdca_bottleneck_label,
             )}
+            // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
             className={`inline-flex h-5 max-w-[6.5rem] cursor-pointer items-center truncate rounded-sm px-1 text-2xs font-semibold leading-none hover:opacity-90 ${PDCA_BOTTLENECK_TONE[bottleneck]}`}
           >
             {bottleneckChipLabel(bottleneckCtx)}

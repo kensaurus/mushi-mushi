@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { apiFetch } from '../lib/supabase'
 import {
   Btn,
@@ -204,7 +205,7 @@ export function DLQPage() {
   const failedCount = summary?.byStatus?.failed ?? 0
 
   return (
-    <div className="space-y-5">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-dlq">
       <PageHeaderBar
         title="Processing Queue"
 

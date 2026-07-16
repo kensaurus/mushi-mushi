@@ -112,7 +112,7 @@ export function GettingStartedEmpty({ embedded = false }: { embedded?: boolean }
         <span>
           {project.report_count} {pluralize(project.report_count, 'report')} · {project.fix_count} {pluralize(project.fix_count, 'fix', 'fixes')} dispatched
         </span>
-        <Link to="/projects" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">Switch project →</Link>
+        <Link to="/projects" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">Switch project →</Link>
       </InlineProof>
     </div>
   )
@@ -197,6 +197,7 @@ function FirstLoopPanel({ stages, project }: PanelProps) {
   const completedCount = stages.filter(s => s.state === 'done').length
   const allDone = completedCount === stages.length
   return (
+    // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
     <section aria-label="Your first PDCA loop" className="rounded-lg border border-edge-subtle bg-surface-raised/30 p-4">
       <div className="flex items-baseline justify-between mb-3 gap-2 flex-wrap">
         <div>
@@ -253,7 +254,7 @@ function LoopStageCard({ stage, step, isLast }: { stage: LoopStage; step: number
           <h3 className="text-xs font-semibold text-fg truncate mt-1">{outcome.headline}</h3>
         </div>
       </div>
-      <ContainedBlock tone="muted" className="min-h-[3rem]">
+      <ContainedBlock tone="muted" className="min-h-12">
         <p className="text-2xs text-fg-secondary leading-snug">{stage.status ?? outcome.outcome}</p>
       </ContainedBlock>
       <div className="mt-2.5">
@@ -270,7 +271,7 @@ function ctaClass(primary: boolean | undefined, locked: boolean): string {
   const base = primary ? CTA_BASE_PRIMARY : CTA_BASE_GHOST
   if (locked) return `${base} cursor-not-allowed`
   return primary
-    ? `${base} hover:bg-brand-hover motion-safe:transition-colors`
+    ? `${base} hover:bg-brand-hover motion-safe:transition-opacity`
     : `${base} hover:underline`
 }
 
@@ -321,6 +322,7 @@ function GettingStartedSkeleton() {
         <Skeleton className="h-3 w-72" />
       </div>
       <Skeleton className="h-12 w-full mb-4" />
+      {/* mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile) */}
       <section className="rounded-lg border border-edge-subtle bg-surface-raised/30 p-4">
         <div className="mb-3">
           <Skeleton className="h-3.5 w-40 mb-1" />

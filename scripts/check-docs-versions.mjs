@@ -154,6 +154,47 @@ for (const file of files) {
   }
 }
 
+// Root canon claims that live outside apps/docs/content (allowlist gap).
+{
+  const agentsPath = path.join(ROOT, "AGENTS.md")
+  if (existsSync(agentsPath)) {
+    const agents = readFileSync(agentsPath, "utf8")
+    const coreVer = npmVersions["@mushi-mushi/core"]
+    const webVer = npmVersions["@mushi-mushi/web"]
+    const m = agents.match(
+      /@mushi-mushi\/core`\s*\/\s*`@mushi-mushi\/web`\s*\*\*[0-9.]+\*\*\s*\(current:\s*\*\*([0-9]+\.[0-9]+\.[0-9]+)\*\*/
+    )
+    if (m && coreVer && webVer) {
+      const claimed = m[1]
+      // Accept either core or web version if they diverge mid-release; both
+      // should match claimed when CHANGELOG lists a joint bump.
+      if (
+        majorMinor(claimed) !== majorMinor(coreVer) &&
+        majorMinor(claimed) !== majorMinor(webVer)
+      ) {
+        findings.push(
+          `AGENTS.md: current SDK claim ${claimed} matches neither core@${coreVer} nor web@${webVer}`
+        )
+      }
+    }
+  }
+
+  const visionPath = path.join(ROOT, "VISION.md")
+  if (existsSync(visionPath)) {
+    const vision = readFileSync(visionPath, "utf8")
+    const pluginPkgs = Object.keys(npmVersions).filter(
+      (n) => n.startsWith("@mushi-mushi/plugin-") && n !== "@mushi-mushi/plugin-sdk"
+    )
+    const expectedPlugins = pluginPkgs.length
+    const vm = vision.match(/(\d+)\s+plugins/)
+    if (vm && expectedPlugins > 0 && Number(vm[1]) !== expectedPlugins) {
+      findings.push(
+        `VISION.md: claims ${vm[1]} plugins but workspace has ${expectedPlugins} outbound plugins`
+      )
+    }
+  }
+}
+
 // Surface any source-of-truth we failed to read, so a moved/renamed manifest
 // silently disabling a matcher shows up instead of passing green.
 const missing = []

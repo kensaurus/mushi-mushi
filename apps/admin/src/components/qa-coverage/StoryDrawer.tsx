@@ -134,7 +134,7 @@ export function StoryDrawer({
 
         {story?.script && (
           <details className="rounded-sm border border-edge-subtle">
-            <summary className="px-3 py-2 text-2xs font-medium text-fg cursor-pointer select-none hover:bg-surface-raised transition-colors">
+            <summary className="px-3 py-2 text-2xs font-medium text-fg cursor-pointer select-none hover:bg-surface-raised transition-opacity">
               Script ({story.script_lang})
             </summary>
             <pre className="px-3 pb-3 pt-1 text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap max-h-48">
@@ -174,11 +174,11 @@ export function StoryDrawer({
               return (
                 <div
                   key={run.id}
-                  className={`rounded-md border overflow-hidden transition-colors ${STATUS_BG[run.status] ?? 'bg-surface-raised border-edge-subtle'}`}
+                  className={`rounded-md border overflow-hidden transition-opacity ${STATUS_BG[run.status] ?? 'bg-surface-raised border-edge-subtle'}`}
                 >
                   <button
                     type="button"
-                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-surface-overlay transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-surface-overlay transition-opacity"
                     onClick={() => setExpandedRunId(isExpanded ? null : run.id)}
                     aria-expanded={isExpanded}
                   >

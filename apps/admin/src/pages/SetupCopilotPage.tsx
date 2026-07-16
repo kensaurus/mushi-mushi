@@ -3,6 +3,7 @@
  */
 
 import { useMemo } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -98,7 +99,7 @@ export function SetupCopilotPage() {
   })
 
   return (
-    <div className="space-y-6 pb-10">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-setup-copilot">
       <PageHeaderBar
         title="Setup Copilot"
 
@@ -120,15 +121,15 @@ export function SetupCopilotPage() {
         aria-label="Setup funnel"
         className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-muted"
       >
-        <Link to="/onboarding" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+        <Link to="/onboarding" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
           Setup wizard
         </Link>
         <span aria-hidden="true">·</span>
-        <Link to={projectId ? `/connect?project=${projectId}` : '/connect'} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+        <Link to={projectId ? `/connect?project=${projectId}` : '/connect'} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
           Connect hub
         </Link>
         <span aria-hidden="true">·</span>
-        <Link to="/inbox" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+        <Link to="/inbox" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
           Action Inbox
         </Link>
       </nav>

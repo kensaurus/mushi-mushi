@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { apiFetch } from '../lib/supabase'
 import { ErrorAlert, Panel, PanelSectionLabel } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -401,7 +402,7 @@ export function IntegrationsPage() {
   if (error) return <ErrorAlert message={`Failed to load ${merged.failedLabel ?? 'integrations'}: ${error}`} onRetry={merged.retry} />
 
   return (
-    <div className="space-y-4">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-integrations">
       <PageHeaderBar
         title={copy?.title ?? 'Integrations'}
 

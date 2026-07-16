@@ -48,10 +48,12 @@ function TimelineRow({
     <li className="relative py-0.5">
       <span
         aria-hidden
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         className={`absolute -left-[14px] top-[0.45rem] size-1.5 rounded-full ring-2 ring-surface ${dotForEntry(entry, kind)}`}
       />
       <div className="flex items-start gap-1.5 min-w-0">
         <time
+          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
           className="shrink-0 w-[4.5rem] text-3xs font-mono tabular-nums text-fg-faint leading-snug"
           title={formatTimelineTime(entry.ts)}
         >

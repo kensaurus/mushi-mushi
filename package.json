@@ -1,7 +1,7 @@
 {
   "name": "mushi-mushi",
   "private": true,
-  "description": "Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor. Open source. Sentry optional.",
+  "description": "Know why your AI-built app broke \u2014 plain-English diagnosis + ready fix, in your editor. Open source. Sentry optional.",
   "license": "MIT",
   "homepage": "https://kensaur.us/mushi-mushi",
   "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
@@ -49,6 +49,10 @@
     "check:changeset-orphans": "node scripts/check-changeset-orphans.mjs",
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
     "check:design-tokens": "node scripts/check-design-tokens.mjs",
+    "check:token-parity": "node scripts/check-token-parity.mjs",
+    "check:chrome-budget": "node scripts/check-chrome-budget.mjs",
+    "check:design": "pnpm check:design-tokens && pnpm check:brand-tokens-fresh && pnpm check:token-parity && pnpm check:motion && pnpm check:chip-contrast && pnpm check:raw-css-var-classes && pnpm check:hand-rolled-tablist && pnpm check:raw-button-in-pages && pnpm check:console-voice && pnpm check:chrome-budget",
+    "check:motion": "node scripts/check-motion-properties.mjs",
     "check:raw-css-var-classes": "node scripts/audit-raw-css-var-classes.mjs",
     "check:secondary-link-brand": "node scripts/audit-secondary-link-brand.mjs",
     "check:hand-rolled-tablist": "node scripts/audit-hand-rolled-tablist.mjs",
@@ -74,6 +78,9 @@
     "check:migration-catalog": "node scripts/check-migration-catalog-sync.mjs",
     "gen:config-docs": "node scripts/generate-config-reference.mjs",
     "check:config-docs": "node scripts/check-config-docs.mjs",
+    "check:humanize-parity": "node scripts/check-humanize-parity.mjs",
+    "check:error-codes": "node scripts/check-error-codes.mjs",
+    "gen:error-catalog": "node scripts/generate-error-catalog.mjs",
     "check:community-files": "node scripts/sync-community-files.mjs --check",
     "sync:community-files": "node scripts/sync-community-files.mjs",
     "release": "pnpm sync:community-files && pnpm check:narrative && turbo run build && pnpm check:publish && pnpm check:migration-catalog && changeset publish",
@@ -98,6 +105,7 @@
     "check:canonical-urls": "node scripts/check-canonical-urls.mjs",
     "check:landing-voice": "node scripts/check-public-voice.mjs",
     "check:public-voice": "node scripts/check-public-voice.mjs",
+    "check:console-voice": "node scripts/check-console-voice.mjs",
     "check:pkg-meta": "node scripts/normalize-package-metadata.mjs",
     "check:narrative": "pnpm check:tagline && pnpm check:positioning && pnpm check:canonical-urls && pnpm check:public-voice && pnpm check:license && pnpm check:pkg-meta",
     "check:license": "node scripts/check-license-consistency.mjs",
@@ -126,8 +134,10 @@
     "test:cloudfront": "node --test scripts/cloudfront-functions.test.mjs",
     "test:verify-hosted-mcp": "node --test scripts/verify-hosted-mcp-helpers.test.mjs",
     "verify:pipeline": "pnpm --filter @mushi-mushi/server test && cd packages/server/supabase && deno check functions/_shared/rag.ts functions/_shared/observability.ts functions/_shared/env-int.ts functions/api/routes/doctor.ts functions/api/routes/project-codebase.ts functions/webhooks-github-indexer/index.ts",
-    "check:drift": "pnpm check:catalog-sync && pnpm check:mcp-tools-doc && pnpm check:internal-doc-links && pnpm check:onboarding-drift && pnpm check:env-docs && pnpm check:docs-drift && pnpm check:docs-stats && pnpm check:route-manifest && pnpm check:edge-fn-deploy-docs && pnpm check:admin-docs-coverage",
-    "check:mcp-tools-doc": "node scripts/gen-mcp-tools-doc.mjs --check"
+    "check:drift": "pnpm check:catalog-sync && pnpm check:mcp-tools-doc && pnpm check:internal-doc-links && pnpm check:onboarding-drift && pnpm check:env-docs && pnpm check:docs-drift && pnpm check:docs-stats && pnpm check:route-manifest && pnpm check:edge-fn-deploy-docs && pnpm check:admin-docs-coverage && pnpm check:humanize-parity && pnpm check:error-codes",
+    "check:mcp-tools-doc": "node scripts/gen-mcp-tools-doc.mjs --check",
+    "check:page-scaffold": "node scripts/audit-page-scaffold.mjs",
+    "check:page-scaffold:cluster": "node scripts/audit-page-scaffold.mjs --cluster"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

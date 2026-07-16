@@ -11,8 +11,16 @@ export default {
      *   updated on …" footer is noise. Sub-pages keep the default.
      * `toc: false`         — the page is short enough to scan without a
      *   right-rail outline; freeing that column gives the hero room to
-     *   breathe at 1024-1280 widths. */
-    theme: { layout: 'full', breadcrumb: false, timestamp: false, toc: false },
+     *   breathe at 1024-1280 widths.
+     * Sidebar stays ON — the landing no longer uses position:fixed pin
+     * chapters, so the docs rail (Quickstart / Concepts / SDKs …) is the
+     * primary nav and must be present. */
+    theme: {
+      layout: 'full',
+      breadcrumb: false,
+      timestamp: false,
+      toc: false,
+    },
   },
 
   '-- Get started': { type: 'separator', title: 'Get started' },

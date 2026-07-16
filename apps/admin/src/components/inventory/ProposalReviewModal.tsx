@@ -370,14 +370,14 @@ function TabButton({
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`relative px-3 py-2 text-xs font-medium transition-colors ${
+      className={`relative px-3 py-2 text-xs font-medium transition-opacity ${
         active ? 'text-fg' : 'text-fg-muted hover:text-fg'
       }`}
     >
       {children}
       <span
         aria-hidden
-        className={`absolute left-2 right-2 -bottom-px h-0.5 rounded-full transition-colors ${
+        className={`absolute left-2 right-2 -bottom-px h-0.5 rounded-full transition-opacity ${
           active ? 'bg-brand' : 'bg-transparent'
         }`}
       />
@@ -468,7 +468,7 @@ function StoryCard({
   const personaInitial = (story.persona ?? story.id).trim().charAt(0).toUpperCase()
 
   return (
-    <article className="rounded-lg border border-edge-subtle bg-surface-overlay/40 hover:bg-surface-overlay transition-colors">
+    <article className="rounded-lg border border-edge-subtle bg-surface-overlay/40 hover:bg-surface-overlay transition-opacity">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -645,6 +645,7 @@ function YamlEditorTab({
         <span className="tabular-nums">{yaml.split('\n').length} lines</span>
       </div>
       <textarea
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         className="block w-full min-h-[24rem] max-h-[60vh] p-3 font-mono text-2xs bg-surface-raised text-fg outline-none resize-y focus:ring-0"
         value={yaml}
         onChange={(e) => onChange(e.target.value)}

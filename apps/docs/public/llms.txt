@@ -31,6 +31,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 
 - [Mushi Mushi — know why your AI-built app broke, with the fix ready](https://kensaur.us/mushi-mushi/docs)
 - [Admin console](https://kensaur.us/mushi-mushi/docs/admin)
+- [Activity](https://kensaur.us/mushi-mushi/docs/admin/activity)
 - [Anomaly detection](https://kensaur.us/mushi-mushi/docs/admin/anomalies)
 - [Anti-gaming](https://kensaur.us/mushi-mushi/docs/admin/anti-gaming)
 - [Audit log](https://kensaur.us/mushi-mushi/docs/admin/audit)
@@ -65,6 +66,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [MCP OAuth consent](https://kensaur.us/mushi-mushi/docs/admin/mcp-auth)
 - [Notifications](https://kensaur.us/mushi-mushi/docs/admin/notifications)
 - [Onboarding](https://kensaur.us/mushi-mushi/docs/admin/onboarding)
+- [Overview (portfolio)](https://kensaur.us/mushi-mushi/docs/admin/overview)
 - [Projects](https://kensaur.us/mushi-mushi/docs/admin/projects)
 - [Prompt lab](https://kensaur.us/mushi-mushi/docs/admin/prompt-lab)
 - [QA Coverage](https://kensaur.us/mushi-mushi/docs/admin/qa-coverage)
@@ -97,6 +99,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [How Mushi reads a bug report](https://kensaur.us/mushi-mushi/docs/concepts/classification)
 - [Closed-loop evolution — the thesis](https://kensaur.us/mushi-mushi/docs/concepts/closed-loop)
 - [Project ID & API keys](https://kensaur.us/mushi-mushi/docs/concepts/credentials)
+- [API error catalog](https://kensaur.us/mushi-mushi/docs/concepts/error-catalog)
 - [The evolution loop — how Mushi closes the cycle](https://kensaur.us/mushi-mushi/docs/concepts/evolution-loop)
 - [Fix drafts & PRs](https://kensaur.us/mushi-mushi/docs/concepts/fix-orchestrator)
 - [Inventory and gates (v2)](https://kensaur.us/mushi-mushi/docs/concepts/inventory-and-gates)

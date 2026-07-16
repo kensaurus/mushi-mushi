@@ -105,6 +105,18 @@ Status banner replaces duplicate "Needs attention" / priority cards on: Settings
 - [x] Posture slot recipes — `apps/admin/src/design-system/page-posture-recipes.ts` + Vitest catalog
 - [x] Playwright: chrome row count ≤ budget per mode — `examples/e2e-dogfood/tests/admin-chrome-budget.spec.ts`
 
+### P4b — Page scaffold anti-drift (Jul 2026) ✅
+
+Stops the "different dev" feel across operator pages by codifying one root + header contract:
+
+- [x] Canonical template — `apps/admin/src/components/ui/page-scaffold.ts` (`PAGE_CONTENT_STACK` + `PageHeaderBar` + help props + `PagePosture`)
+- [x] Re-runnable audit — `node scripts/audit-page-scaffold.mjs` (`--cluster` / `--write`)
+- [x] Codemod — `node scripts/codemod-page-root-stack.mjs` (`--dry-run` / `--cluster`)
+- [x] ESLint (warn, ratchet later): `no-legacy-page-header-in-pages`, `no-page-root-padding`, `no-arbitrary-length-value`, `prefer-card-primitive`
+- [x] Start-here cluster on scaffold: Overview, Activity, Dashboard, Connect, Support (`/feedback`), Feature board
+- [x] Overview redesign: attention-first sort, Advanced grouping, `Badge`+`chipTone`, stretched-link card (WCAG 2.5.8), `SpringChromeEnter` stagger
+- [x] Visual regression routes extended — `examples/e2e-dogfood/tests/admin-visual-regression.spec.ts`
+
 ### P7 — Shell chrome (Jul 3 2026)
 
 Operator shell (`Layout.tsx` sidebar + sub-header) — distinct from page-level PagePosture burndown above.

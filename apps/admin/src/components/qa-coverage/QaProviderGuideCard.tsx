@@ -54,7 +54,7 @@ export function QaProviderGuideCard({ topPriority, stats }: Props) {
       </div>
       <p className="text-2xs text-fg-faint">
         Add Browserbase or Firecrawl keys under{' '}
-        <Link to="/settings?tab=browserbase" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+        <Link to="/settings?tab=browserbase" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
           Settings
         </Link>
         . TDD-generated tests default to local Playwright until you approve and pick a provider.

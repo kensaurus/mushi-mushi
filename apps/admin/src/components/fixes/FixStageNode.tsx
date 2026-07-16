@@ -17,7 +17,7 @@ import { CHIP_TONE, runStatusChipTone } from '../../lib/chipTone'
 const STATUS_CLS: Record<FixStageNodeData['status'], string> = {
   // Flow idle ≠ lifecycle "pending" (warn) — keep quiet until the stage activates.
   pending: CHIP_TONE.neutral,
-  active: `${CHIP_TONE.brandSubtle} border-brand/60 text-fg mushi-running-glow`,
+  active: `${CHIP_TONE.brandSubtle} text-fg mushi-running-glow`,
   done: runStatusChipTone('done'),
   failed: runStatusChipTone('failed'),
   skipped: runStatusChipTone('skipped'),
@@ -38,7 +38,7 @@ function FixStageNodeInner({ data }: NodeProps) {
   const stageColor = STAGE_HEX[node.pdcaStage]
 
   const content = (
-    <div className={`w-36 rounded-md border px-2 py-1.5 text-3xs shadow-sm motion-safe:transition-colors pointer-events-auto ${cls}`}>
+    <div className={`w-36 rounded-md border px-2 py-1.5 text-3xs shadow-sm motion-safe:transition-opacity pointer-events-auto ${cls}`}>
       <Handle type="target" position={Position.Left} id="in" className="!bg-transparent !border-none !w-1 !h-1" />
       <Handle type="source" position={Position.Right} id="out" className="!bg-transparent !border-none !w-1 !h-1" />
       <div className="flex items-center gap-1.5">

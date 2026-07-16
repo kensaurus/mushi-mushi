@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -46,7 +47,7 @@ import {
   type IterateStats,
   type IterateTabId,
 } from '../components/iterate/IterateStatsTypes'
-import { CHIP_TONE } from '../lib/chipTone'
+import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 
 const TABS: Array<{ id: IterateTabId; label: string; description: string }> = [
   {
@@ -270,7 +271,7 @@ export function IteratePage() {
               : 'IDLE'
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-iterate">
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-iterate">
       <PageHeaderBar
         title={copy?.title ?? 'Iterate'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -304,8 +305,8 @@ export function IteratePage() {
                 : bannerSeverity === 'warn'
                   ? CHIP_TONE.warnSubtle
                   : bannerSeverity === 'brand'
-                    ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
-                    : 'bg-surface-overlay text-fg-muted'
+                    ? HEADER_BADGE_TONE.brand
+                    : HEADER_BADGE_TONE.neutral
           }
         >
           {headerBadge}

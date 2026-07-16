@@ -140,7 +140,7 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
                         e.stopPropagation()
                         onRunGatesForStory(story.id)
                       }}
-                      className="text-2xs px-1.5 py-0.5 rounded border border-edge-subtle text-fg-muted hover:text-fg hover:border-brand/40 hover:bg-surface-overlay transition-colors"
+                      className="text-2xs px-1.5 py-0.5 rounded border border-edge-subtle text-fg-muted hover:text-fg hover:border-brand/40 hover:bg-surface-overlay transition-opacity"
                       title="Run gates for actions in this user story"
                     >
                       Run gates
@@ -153,7 +153,7 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
                         e.stopPropagation()
                         onRunCrawlerForStory(story.id)
                       }}
-                      className="text-2xs px-1.5 py-0.5 rounded border border-edge-subtle text-fg-muted hover:text-fg hover:border-brand/40 hover:bg-surface-overlay transition-colors"
+                      className="text-2xs px-1.5 py-0.5 rounded border border-edge-subtle text-fg-muted hover:text-fg hover:border-brand/40 hover:bg-surface-overlay transition-opacity"
                       title="Run crawler for pages linked to this user story"
                     >
                       Run crawler
@@ -219,7 +219,8 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
                     transition={{ ...enterTransition, delay: si * 0.04 + ai * 0.02 }}
                     whileHover={{ y: -1 }}
                     onClick={() => onSelectAction?.(a)}
-                    className="text-left rounded-md border border-edge-subtle bg-surface-raised/60 p-3 hover:bg-surface-overlay/70 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                    // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
+                    className="text-left rounded-md border border-edge-subtle bg-surface-raised/60 p-3 hover:bg-surface-overlay/70 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
                   >
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <span className="text-xs font-medium text-fg truncate">{a.label}</span>

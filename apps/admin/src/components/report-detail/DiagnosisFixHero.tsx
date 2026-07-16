@@ -20,6 +20,7 @@
  */
 
 import { Badge } from '../ui'
+import { Card } from '../../components/ui'
 import { IconIntelligence } from '../icons'
 import {
   SEVERITY,
@@ -61,7 +62,7 @@ export function DiagnosisFixHero({
   return (
     <>
       {/* Part 1 — Diagnosis: "here's why it broke", in plain English. */}
-      <div className="mb-2 rounded-md border border-edge-subtle bg-surface-raised/40 p-3">
+      <Card  className="mb-2 p-3">
         <div className="mb-1.5 flex items-start justify-between gap-2">
           <div className="flex items-center gap-1.5 text-sm font-semibold text-fg">
             <IconIntelligence className="text-info" />
@@ -117,7 +118,7 @@ export function DiagnosisFixHero({
             </code>
           </p>
         )}
-      </div>
+      </Card>
 
       {/* Part 2 — Fix: the paste-ready prompt (already its own card). */}
       <CursorAgentLaunch report={report} cursorWorkspace={cursorWorkspace} />

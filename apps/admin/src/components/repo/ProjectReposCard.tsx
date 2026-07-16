@@ -36,7 +36,7 @@ const ROLE_BADGE_CLASS: Record<string, string> = {
   frontend: 'bg-brand/12 text-brand border border-brand/28',
   backend:  'bg-ok-muted/50 text-ok-foreground border border-ok/25',
   monorepo: 'bg-info-muted/50 text-info-foreground border border-info/25',
-  mobile:   CHIP_TONE.accentSubtle + ' border-accent/30',
+  mobile:   CHIP_TONE.accentSubtle,
 }
 
 interface Props {

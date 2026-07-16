@@ -60,6 +60,7 @@ export function FixPipelineMeter({ fixSummary }: Props) {
           return (
             <div
               key={seg.key}
+              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
               className={`h-full min-w-[3px] motion-safe:transition-[width] ${SEGMENT_BG[seg.tone]} ${
                 seg.tone === 'danger' && hasFailure ? 'motion-safe:animate-pulse' : ''
               }`}
@@ -90,7 +91,7 @@ export function FixPipelineMeter({ fixSummary }: Props) {
 
       <Link
         to={primaryHref}
-        className={`flex items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-xs font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
+        className={`flex items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-xs font-medium motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
           hasFailure
             ? `border-danger/40 ${CHIP_TONE.dangerSubtle} hover:bg-danger/15`
             : openPrs > 0

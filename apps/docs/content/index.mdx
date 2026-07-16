@@ -5,24 +5,17 @@ description: Your AI shipped it. Mushi tells you why it broke — a plain-Englis
 
 import {
   LANDING_HERO,
-  LANDING_SIXTY_SECOND,
   LANDING_MEDIA_INTRO,
   LANDING_WHAT_THIS_IS,
   LANDING_WHERE_TO_START_INTRO,
   LANDING_QUICKSTART_INTRO,
   LANDING_COMPARISON_ROWS,
-  LANDING_OPERATOR,
 } from '@/lib/landing-copy'
 
-{/* The EditorialHero IS the page H1 — do NOT add a markdown `# Mushi Mushi`
-    above it or we ship two competing page titles (NN/g #4 + screen-reader
-    bug). The `_meta.ts` for the index also opts out of the auto-rendered
-    breadcrumb chip so "Welcome / Mushi Mushi / hero" don't stack.
-    This page is also served in place at kensaur.us/mushi-mushi/ via the
-    CloudFront internal rewrite (scripts/cloudfront-mushi-spa-router.js) —
-    it must stay indexable and carry north-star copy in the prerendered HTML. */}
+{/* Native scroll + component-scoped Motion reveals (docs/MOTION.md).
+    No Lenis / ScrollTrigger — sticky nav, anchors, and nested code scroll stay intact. */}
 
-<EditorialHero
+<CinematicEditorialHero
   eyebrow={LANDING_HERO.eyebrow}
   title={<>Your AI wrote it. Mushi tells you <em>why it broke.</em></>}
   lead={LANDING_HERO.lead}
@@ -30,25 +23,15 @@ import {
 
 <OssTrustStrip />
 
-## 60-second proof
-
-```bash
-npx mushi-mushi
-```
-
-{LANDING_SIXTY_SECOND.intro} {LANDING_SIXTY_SECOND.afterBreak}
-
-```bash
-npx mushi-mushi setup --ide cursor    # then ask Cursor: "what's broken in prod?"
-```
-
-**{LANDING_SIXTY_SECOND.pricing}**
+<ProofPinSection />
 
 ## See it in action
 
 {LANDING_MEDIA_INTRO}
 
-<DocsMediaShowcase />
+<ScrollReveal>
+  <DocsMediaShowcase />
+</ScrollReveal>
 
 ## What this is (and is not)
 
@@ -68,18 +51,16 @@ npx mushi-mushi setup --ide cursor    # then ask Cursor: "what's broken in prod?
 
 ## Where Sentry stops, this picks up.
 
-<ComparisonTable
-  foil="Sentry alone"
-  rows={LANDING_COMPARISON_ROWS}
-/>
-
-## What happens after a user reports something
-
-<Pillars />
+<ComparisonScrub>
+  <ComparisonTable
+    foil="Sentry alone"
+    rows={LANDING_COMPARISON_ROWS}
+  />
+</ComparisonScrub>
 
 See **[Concepts &rarr; Architecture](/concepts/architecture)** for the wire-level
 sequence diagram and component-by-component spec.
 
-## {LANDING_OPERATOR.question}
+<DiagnosisScrollStage />
 
-Deeper setup (SSO, audit, adapters) lives in **[docs/operators](https://github.com/kensaurus/mushi-mushi/tree/master/docs/operators)** on GitHub — the landing page stays on the solo-founder wedge.
+<ClosingCta />

@@ -23,10 +23,30 @@
 
 import type { Hono } from 'npm:hono@4';
 import type { Context, Next } from 'npm:hono@4';
-import type { Variables } from '../types.ts'
+import type { Variables } from '../types.ts';
+import { z } from 'npm:zod@3';
 import { jwtAuth, apiKeyAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
-import { dbError, ownedProjectIds } from '../shared.ts';
+import { dbError, ownedProjectIds, jsonError } from '../shared.ts';
+
+const CRON_FIELD = /^(\*(\/\d+)?|\d+(-\d+)?(,\d+(-\d+)?)*)(\/\d+)?$/;
+
+const qaStoryCreateSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  prompt: z.string().max(20_000).nullable().optional(),
+  script: z.string().max(200_000).nullable().optional(),
+  target_url: z.string().url().nullable().optional(),
+  browser_provider: z.enum(['firecrawl_actions', 'browserbase', 'local']).optional(),
+  schedule_cron: z
+    .string()
+    .max(120)
+    .refine((v) => {
+      const parts = v.trim().split(/\s+/);
+      return parts.length === 5 && parts.every((p) => CRON_FIELD.test(p));
+    }, 'schedule_cron must be a 5-field cron expression')
+    .optional(),
+  byok_provider: z.string().max(64).nullable().optional(),
+});
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function assertUuid(c: Context, value: string, name: string) {
@@ -357,22 +377,34 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
-    const body = await c.req.json<{
-      name: string;
-      prompt?: string;
-      script?: string;
-      browser_provider?: string;
-      schedule_cron?: string;
-      byok_provider?: string;
-    }>();
-
-    if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
+    let raw: unknown;
+    try {
+      raw = await c.req.json();
+    } catch {
+      return jsonError(c, 'BAD_JSON', 'Invalid JSON body', 400);
+    }
+    const parsed = qaStoryCreateSchema.safeParse(raw);
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      return jsonError(
+        c,
+        'VALIDATION_ERROR',
+        first ? `${first.path.join('.')}: ${first.message}` : 'Invalid story payload',
+        400,
+        {
+          fieldErrors: Object.fromEntries(
+            parsed.error.issues.map((i) => [i.path.join('.') || '_', i.message]),
+          ),
+        },
+      );
+    }
+    const body = parsed.data;
 
     const { data, error } = await db
       .from('qa_stories')
       .insert({
         project_id: pid,
-        name: body.name.trim(),
+        name: body.name,
         prompt: body.prompt ?? null,
         script: body.script ?? null,
         script_lang: 'playwright-js',

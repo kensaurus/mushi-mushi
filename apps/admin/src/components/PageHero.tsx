@@ -13,6 +13,7 @@ import { useDavSpotlight } from '../lib/useDavSpotlight'
 import { HeroDetailPanel } from './hero-flow/HeroDetailPanel'
 import { buildOperatorTrace, type OperatorTraceLine } from './hero-flow/operatorTrace'
 import { heroMetricChips } from '../lib/pageHeroSnapshot'
+import { SEVERITY_SURFACE } from '../lib/chipTone'
 
 type Severity = HeroSeverity
 
@@ -94,22 +95,8 @@ interface PageHeroProps {
   onCollapsedChange?: (collapsed: boolean) => void
 }
 
-// Severity tokens used by the *beginner* one-line summary card +
-// collapsed advanced strip. Both surfaces only need the dot, a soft tint,
-// a foreground class for the headline, and a border colour for the
-// outer ring — no edge "flow" colour because they don't render edges.
-// The expanded advanced render delegates colour entirely to HeroFlow,
-// which keeps its own SVG-friendly hex tokens.
-const SEVERITY_STYLE: Record<
-  Severity,
-  { ring: string; bg: string; text: string; dot: string }
-> = {
-  ok:      { ring: 'border-ok/40',      bg: 'bg-ok-muted',      text: 'text-ok-foreground',     dot: 'bg-ok' },
-  info:    { ring: 'border-info/40',    bg: 'bg-info-muted',    text: 'text-info-foreground',   dot: 'bg-info' },
-  warn:    { ring: 'border-warn/40',    bg: 'bg-warn-muted',    text: 'text-warning-foreground', dot: 'bg-warn' },
-  crit:    { ring: 'border-err/40',     bg: 'bg-danger-muted',  text: 'text-danger-foreground', dot: 'bg-err' },
-  neutral: { ring: 'border-edge',       bg: 'bg-surface-raised', text: 'text-fg',    dot: 'bg-fg-muted' },
-}
+// Severity tokens — shared recipe in chipTone.SEVERITY_SURFACE (was local SEVERITY_STYLE).
+const SEVERITY_STYLE = SEVERITY_SURFACE
 
 // Persisted hero collapse state — same pattern Pipeline Pulse uses so
 // the operator's choice ("I'm in heads-down mode, hide the chrome") sticks
@@ -310,7 +297,7 @@ export function PageHero({
           onClick={toggleCollapsed}
           aria-expanded={false}
           aria-controls={`hero-${scope}-tiles`}
-          className={`group flex items-center gap-2.5 w-full rounded-sm bg-surface-overlay px-2.5 py-1.5 text-left motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
+          className={`group flex items-center gap-2.5 w-full rounded-sm bg-surface-overlay px-2.5 py-1.5 text-left motion-safe:transition-opacity hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
           title="Expand page snapshot"
         >
           <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${style.dot}`} />
@@ -327,7 +314,7 @@ export function PageHero({
               <span className="text-2xs text-fg-muted truncate">{act.title}</span>
             </>
           )}
-          <span aria-hidden className="ml-auto text-2xs text-fg-muted shrink-0 group-hover:text-fg motion-safe:transition-colors">
+          <span aria-hidden className="ml-auto text-2xs text-fg-muted shrink-0 group-hover:text-fg motion-safe:transition-opacity">
             Expand ▾
           </span>
         </button>
@@ -364,7 +351,7 @@ export function PageHero({
           onClick={toggleCollapsed}
           aria-expanded={true}
           aria-controls={`hero-${scope}-flow`}
-          className="text-2xs text-fg-muted hover:text-fg motion-safe:transition-colors px-1.5 py-0.5 rounded-sm hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+          className="text-2xs text-fg-muted hover:text-fg motion-safe:transition-opacity px-1.5 py-0.5 rounded-sm hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
           title="Collapse page hero"
         >
           Collapse <span aria-hidden>▴</span>

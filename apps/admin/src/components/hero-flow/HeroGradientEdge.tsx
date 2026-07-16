@@ -124,7 +124,7 @@ function HeroGradientEdgeInner({
         style={{
           opacity,
           animation: animating ? `${animName} 1.4s linear infinite` : undefined,
-          transition: 'opacity 180ms ease, stroke-width 180ms ease',
+          transition: 'opacity 200ms var(--ease-stamp, ease)',
         }}
       />
     </>

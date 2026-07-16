@@ -44,7 +44,7 @@ export function CostStageGuide({ topPriority, topOperation }: Props) {
       </div>
       <p className="text-2xs text-fg-faint">
         Add your own key under{' '}
-        <Link to="/settings?tab=byok" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-colors">
+        <Link to="/settings?tab=byok" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
           Settings → AI keys
         </Link>{' '}
         to bill Anthropic directly instead of platform credits.

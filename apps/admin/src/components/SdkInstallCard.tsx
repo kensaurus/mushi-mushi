@@ -234,11 +234,12 @@ export function SdkInstallCard({
         </div>
       )}
 
-      <div className={`grid gap-4 ${isServerFramework(framework) ? '' : 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'}`}>
+      <div className="@container/sdk">
+      <div className={`grid gap-4 ${isServerFramework(framework) ? '' : '@2xl/sdk:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'}`}>
         {/* ─── LEFT COLUMN: live preview + configurator ─── */}
         {/* Hidden for server frameworks — the widget only runs in browsers. */}
         {isServerFramework(framework) ? (
-          <div className="rounded-md border border-edge-subtle bg-surface-raised/50 px-4 py-3 text-2xs text-fg-secondary leading-relaxed">
+          <Card  className="px-4 py-3 text-2xs text-fg-secondary leading-relaxed">
             <p className="font-medium text-fg mb-1">Server-side capture</p>
             <p>
               <code className="px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">@mushi-mushi/node</code>{' '}
@@ -251,7 +252,7 @@ export function SdkInstallCard({
               <code className="px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">MUSHI_API_KEY</code> to your
               deployment env. Copy the snippet on the right into your instrumentation file.
             </p>
-          </div>
+          </Card>
         ) : (
         <div className="space-y-3">
           <div>
@@ -285,7 +286,7 @@ export function SdkInstallCard({
               type="button"
               onClick={saveConfig}
               disabled={!isDirty || savingConfig || loadingConfig}
-              className={`px-2.5 py-1 rounded-sm text-2xs font-medium transition-colors ${
+              className={`px-2.5 py-1 rounded-sm text-2xs font-medium transition-opacity ${
                 isDirty && !savingConfig && !loadingConfig
                   ? 'bg-brand text-brand-fg hover:bg-brand-hover'
                   : 'bg-surface-raised text-fg-faint cursor-not-allowed'
@@ -305,6 +306,7 @@ export function SdkInstallCard({
           code={code}
           install={install}
         />
+      </div>
       </div>
     </Card>
   )

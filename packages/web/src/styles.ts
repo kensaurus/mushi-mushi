@@ -37,6 +37,7 @@
 
 import { getWidgetThemeVars } from './build-widget-theme';
 import {
+  MUSHI_DURATION,
   MUSHI_GEOMETRY,
   MUSHI_MOTION,
   MUSHI_RADIUS,
@@ -62,6 +63,8 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     widgetAccentWash,
     widgetAccentInk,
     widgetAccentShadow,
+    accentRgb,
+    shadowInk,
     ok,
     danger,
     onAccent,
@@ -83,12 +86,34 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     fabSize,
   } = v;
 
-  const { sizeBody, lineBody } = MUSHI_TYPE;
+  const { sizeBody, sizeLabel, lineBody } = MUSHI_TYPE;
   const { durationFast } = MUSHI_MOTION;
+  // Duration vocabulary from MUSHI_DURATION (docs/MOTION.md). Paint-only
+  // hover cues use opacity/transform; prefers-reduced-motion zeros them.
+  const {
+    instant: durInstant,
+    fast: durFast,
+    base: durBase,
+    panel: durPanel,
+    slow: durSlow,
+    ring: durRing,
+  } = MUSHI_DURATION;
   const { bannerHeight, gutter, panelWidth, panelMaxHeight, panelSheetBreakpoint, edgeTabWidth } = MUSHI_GEOMETRY;
-  const panelLauncherGap = fabSize + 12;
+  const panelLauncherGap = fabSize + MUSHI_SPACING.comfy;
   const { base: zBase } = MUSHI_Z;
   const controlRadius = MUSHI_RADIUS.control;
+  const cardRadius = MUSHI_RADIUS.card;
+  const {
+    tight: spaceTight,
+    snug: spaceSnug,
+    comfy: spaceComfy,
+    roomy: spaceRoomy,
+    lounge: spaceLounge,
+    open: spaceOpen,
+    wide: spaceWide,
+  } = MUSHI_SPACING;
+  /** WCAG 2.5.5 / design-frontend — interactive controls ≥ 44px. */
+  const touchMin = 44;
 
   return `
     :host {
@@ -101,6 +126,23 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       -moz-osx-font-smoothing: grayscale;
       font-feature-settings: 'ss01', 'cv11'; /* nicer system-ui glyphs where supported */
       --mushi-ok: ${ok};
+      /* Spacing + radius scales (MUSHI_SPACING / MUSHI_RADIUS) — prefer these
+         over literal px so web + RN stay aligned with brand.tokens.json. */
+      --mushi-space-tight: ${spaceTight}px;
+      --mushi-space-snug: ${spaceSnug}px;
+      --mushi-space-comfy: ${spaceComfy}px;
+      --mushi-space-roomy: ${spaceRoomy}px;
+      --mushi-space-lounge: ${spaceLounge}px;
+      --mushi-space-open: ${spaceOpen}px;
+      --mushi-space-wide: ${spaceWide}px;
+      --mushi-radius-control: ${controlRadius}px;
+      --mushi-radius-card: ${cardRadius}px;
+      --mushi-touch-min: ${touchMin}px;
+      /* Derived channel vars — accent RGB triplet + shadow-ink triplet.
+         Lets Shadow-DOM CSS compose rgba() values that respect host-accent
+         overrides and dark-mode ink without repeating the hex guard. */
+      --mushi-accent-rgb: ${accentRgb};
+      --mushi-shadow-ink: ${shadowInk};
       /* SDK contract: the host element is always pass-through. Only the
          interactive surfaces (.mushi-trigger, .mushi-banner, .mushi-panel)
          opt back into pointer events so the widget never creates an
@@ -120,6 +162,8 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       position: fixed;
       width: ${fabSize}px;
       height: ${fabSize}px;
+      min-width: var(--mushi-touch-min);
+      min-height: var(--mushi-touch-min);
       border: 1px solid ${ruleStrong};
       border-radius: ${controlRadius}px;
       background: ${paper};
@@ -133,9 +177,9 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       line-height: 1;
       box-shadow:
         0 1px 0 ${rule},
-        0 6px 14px -8px rgba(14,13,11,0.35),
+        0 6px 14px -8px rgba(${shadowInk},0.35),
         inset 0 -3px 0 ${widgetAccent};
-      transition: transform ${durationFast}ms ${easeStamp}, box-shadow ${durationFast}ms ${easeStamp};
+      transition: transform ${durationFast}ms ${easeStamp}, opacity ${durationFast}ms ${easeStamp};
       overflow: visible;
       isolation: isolate;
     }
@@ -155,14 +199,15 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       transform: translateY(-2px) rotate(-1.5deg);
       box-shadow:
         0 1px 0 ${rule},
-        0 14px 24px -10px rgba(14,13,11,0.45),
+        0 14px 24px -10px rgba(${shadowInk},0.45),
+        0 0 20px -6px rgba(${accentRgb},0.22),
         inset 0 -3px 0 ${widgetAccent};
     }
     .mushi-trigger:active {
       transform: translateY(0) rotate(0);
       box-shadow:
         0 1px 0 ${rule},
-        0 2px 4px -2px rgba(14,13,11,0.35),
+        0 2px 4px -2px rgba(${shadowInk},0.35),
         inset 0 -2px 0 ${widgetAccent};
     }
     .mushi-trigger:focus-visible {
@@ -174,9 +219,9 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
        can compose with the hover transform without fighting it. Respects
        prefers-reduced-motion. */
     @keyframes mushi-trigger-pulse {
-      0%   { box-shadow: 0 0 0 0 rgba(212, 67, 50, 0.55), 0 1px 0 ${rule}, 0 10px 24px -14px rgba(14,13,11,0.45); }
-      70%  { box-shadow: 0 0 0 16px rgba(212, 67, 50, 0), 0 1px 0 ${rule}, 0 10px 24px -14px rgba(14,13,11,0.45); }
-      100% { box-shadow: 0 0 0 0 rgba(212, 67, 50, 0), 0 1px 0 ${rule}, 0 10px 24px -14px rgba(14,13,11,0.45); }
+      0%   { box-shadow: 0 0 0 0 rgba(${accentRgb},0.55), 0 1px 0 ${rule}, 0 10px 24px -14px rgba(${shadowInk},0.45); }
+      70%  { box-shadow: 0 0 0 16px rgba(${accentRgb},0), 0 1px 0 ${rule}, 0 10px 24px -14px rgba(${shadowInk},0.45); }
+      100% { box-shadow: 0 0 0 0 rgba(${accentRgb},0), 0 1px 0 ${rule}, 0 10px 24px -14px rgba(${shadowInk},0.45); }
     }
     .mushi-trigger-pulse {
       animation: mushi-trigger-pulse 800ms ${easeStamp} 3;
@@ -203,13 +248,13 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     .mushi-trigger.edge-tab {
       width: ${edgeTabWidth}px;
       height: 88px;
-      border-radius: 4px 0 0 4px;
+      border-radius: ${controlRadius}px 0 0 ${controlRadius}px;
       writing-mode: vertical-rl;
       text-orientation: upright;
       font-size: 16px;
       box-shadow:
         0 1px 0 ${rule},
-        0 10px 24px -14px rgba(14,13,11,0.45),
+        0 10px 24px -14px rgba(${shadowInk},0.45),
         inset -3px 0 0 ${widgetAccent};
     }
     .mushi-trigger.edge-tab.bottom-right,
@@ -219,10 +264,10 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     .mushi-trigger.edge-tab.bottom-left,
     .mushi-trigger.edge-tab.top-left {
       left: var(--mushi-left, 0);
-      border-radius: 0 4px 4px 0;
+      border-radius: 0 ${controlRadius}px ${controlRadius}px 0;
       box-shadow:
         0 1px 0 ${rule},
-        0 10px 24px -14px rgba(14,13,11,0.45),
+        0 10px 24px -14px rgba(${shadowInk},0.45),
         inset 3px 0 0 ${widgetAccent};
     }
     .mushi-trigger.shrunk {
@@ -251,7 +296,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       transition: none !important;
       box-shadow:
         0 1px 0 ${rule},
-        0 20px 40px -12px rgba(14,13,11,0.55),
+        0 20px 40px -12px rgba(${shadowInk},0.55),
         inset 0 -3px 0 ${widgetAccent};
       opacity: 0.92;
     }
@@ -275,13 +320,14 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       border-radius: 6px;
       box-shadow:
         0 1px 0 ${rule},
-        0 24px 56px -20px rgba(14,13,11,0.30),
-        0 8px 16px -8px rgba(14,13,11,0.20);
+        0 24px 56px -20px rgba(${shadowInk},0.30),
+        0 8px 16px -8px rgba(${shadowInk},0.20);
       overflow: hidden;
       display: flex;
       flex-direction: column;
       transform-origin: var(--mushi-origin, bottom right);
-      transition: bottom 120ms ease, top 120ms ease, max-height 120ms ease;
+      /* Keyboard inset — layout exception (IME), not decorative (docs/MOTION.md) */
+      transition: bottom ${durInstant}ms ease, top ${durInstant}ms ease, max-height ${durInstant}ms ease;
     }
     /* Keyboard-safe: on narrow viewports lift above the keyboard */
     .mushi-panel.keyboard-open {
@@ -302,7 +348,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
         bottom: calc(var(--mushi-keyboard-inset, 0px) + 4px) !important;
       }
     }
-    .mushi-panel.open  { animation: mushi-stamp-in 320ms ${easeStamp} both; }
+    .mushi-panel.open  { animation: mushi-stamp-in ${durPanel}ms ${easeStamp} both; }
     .mushi-panel.closed { display: none; }
     .mushi-panel.bottom-right {
       bottom: var(--mushi-panel-bottom, calc(var(--mushi-bottom, ${gutter}px) + ${panelLauncherGap}px));
@@ -428,7 +474,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       font-size: 16px;
       line-height: 1;
       border-radius: 0;
-      transition: color 150ms ${easeStamp};
+      transition: opacity ${durInstant}ms ${easeStamp};
     }
     .mushi-back {
       align-self: flex-start;
@@ -449,7 +495,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      transition: color 150ms ${easeStamp};
+      transition: opacity ${durInstant}ms ${easeStamp};
       white-space: nowrap;
     }
     .mushi-close:hover { color: ${widgetAccent}; }
@@ -483,24 +529,29 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       display: grid;
       grid-template-columns: auto 1fr auto;
       align-items: center;
-      gap: 12px;
+      gap: ${spaceComfy}px;
       width: 100%;
-      padding: 11px 0;
+      min-height: var(--mushi-touch-min);
+      padding: ${spaceComfy}px 0;
       border: none;
       border-bottom: 1px solid ${rule};
       background: transparent;
       cursor: pointer;
       color: inherit;
       text-align: left;
-      transition: padding 220ms ${easeStamp}, color 220ms ${easeStamp};
+      transition: transform ${durBase}ms ${easeStamp}, opacity ${durBase}ms ${easeStamp};
       position: relative;
     }
     .mushi-option-btn:last-child { border-bottom: none; }
-    .mushi-option-btn:hover { padding-left: 6px; color: ${widgetAccent}; }
+    .mushi-option-btn:hover {
+      transform: translateX(6px);
+      color: ${widgetAccent};
+      background: linear-gradient(90deg, rgba(${accentRgb},0.07), transparent 55%);
+    }
     .mushi-option-btn:hover .mushi-option-arrow { opacity: 1; transform: translateX(0); color: ${widgetAccent}; }
     .mushi-option-btn:focus-visible {
       outline: none;
-      padding-left: 6px;
+      transform: translateX(6px);
       box-shadow: inset 2px 0 0 ${widgetAccent};
     }
     .mushi-option-icon {
@@ -528,7 +579,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       color: ${inkFaint};
       opacity: 0;
       transform: translateX(-4px);
-      transition: opacity 220ms ${easeStamp}, transform 220ms ${easeStamp}, color 220ms ${easeStamp};
+      transition: opacity ${durBase}ms ${easeStamp}, transform ${durBase}ms ${easeStamp};
     }
     /* Feature-request and Reports-inbox entries sit above the five
        category cards as discoverable shortcuts. We give them a subtle
@@ -539,7 +590,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     .mushi-reports-entry {
       padding-left: 10px;
       border-left: 2px solid ${inkFaint};
-      transition: padding 220ms ${easeStamp}, color 220ms ${easeStamp}, border-color 220ms ${easeStamp};
+      transition: opacity ${durBase}ms ${easeStamp}, transform ${durBase}ms ${easeStamp};
     }
     .mushi-feature-entry:hover,
     .mushi-reports-entry:hover {
@@ -562,7 +613,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       color: ${ink};
       cursor: pointer;
       text-align: left;
-      transition: background 180ms ${easeStamp}, padding-left 180ms ${easeStamp};
+      transition: opacity ${durFast}ms ${easeStamp}, transform ${durFast}ms ${easeStamp};
     }
     .mushi-report-row:hover,
     .mushi-report-row:focus-visible {
@@ -649,7 +700,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       font-size: 18px;
       line-height: 1;
       color: ${inkFaint};
-      transition: color 180ms ${easeStamp}, transform 180ms ${easeStamp};
+      transition: opacity ${durFast}ms ${easeStamp}, transform ${durFast}ms ${easeStamp};
     }
     .mushi-report-row:hover .mushi-report-chevron,
     .mushi-report-row:focus-visible .mushi-report-chevron {
@@ -739,7 +790,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       font-family: ${fontBody};
       font-size: 11px;
       cursor: pointer;
-      transition: color 150ms ${easeStamp}, border-color 150ms ${easeStamp}, background 150ms ${easeStamp};
+      transition: opacity ${durInstant}ms ${easeStamp}, transform ${durInstant}ms ${easeStamp};
       white-space: nowrap;
     }
     .mushi-example-chip:hover {
@@ -765,7 +816,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       letter-spacing: 0.04em;
       color: ${inkFaint};
       pointer-events: none;
-      transition: color 200ms ${easeStamp};
+      transition: opacity ${durFast}ms ${easeStamp};
     }
 
     .mushi-textarea {
@@ -781,7 +832,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       line-height: 1.5;
       resize: vertical;
       outline: none;
-      transition: border-color 200ms ${easeStamp};
+      transition: opacity ${durFast}ms ${easeStamp}, transform ${durFast}ms ${easeStamp};
     }
     .mushi-textarea::placeholder {
       color: ${inkFaint};
@@ -809,7 +860,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       letter-spacing: 0.04em;
       text-transform: uppercase;
       cursor: pointer;
-      transition: color 180ms ${easeStamp}, border-color 180ms ${easeStamp}, background 180ms ${easeStamp};
+      transition: opacity ${durFast}ms ${easeStamp}, transform ${durFast}ms ${easeStamp};
     }
     .mushi-attach-btn:hover {
       color: ${ink};
@@ -903,7 +954,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       border: 1.5px solid currentColor;
       border-top-color: transparent;
       border-radius: 50%;
-      animation: mushi-spin 0.7s linear infinite;
+      animation: mushi-spin ${durRing}ms linear infinite;
     }
 
     .mushi-footer {
@@ -925,19 +976,20 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       position: relative;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      padding: 10px 18px;
+      gap: ${spaceSnug}px;
+      min-height: var(--mushi-touch-min);
+      padding: ${spaceComfy}px ${spaceLounge}px;
       border: 1px solid ${widgetAccent};
-      border-radius: 3px;
-      background: ${widgetAccent};
+      border-radius: ${controlRadius}px;
+      background: linear-gradient(160deg, ${widgetAccent} 0%, ${widgetAccentShadow} 100%);
       color: ${onAccent};
       font-family: ${fontMono};
-      font-size: 11px;
+      font-size: ${sizeLabel}px;
       letter-spacing: 0.16em;
       text-transform: uppercase;
       cursor: pointer;
       overflow: hidden;
-      transition: transform 180ms ${easeStamp}, box-shadow 180ms ${easeStamp};
+      transition: transform ${durFast}ms ${easeStamp}, opacity ${durFast}ms ${easeStamp};
       box-shadow: 0 2px 0 ${widgetAccentShadow};
     }
     .mushi-submit::after {
@@ -947,12 +999,15 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       background: radial-gradient(circle at center, rgba(255,255,255,0.35) 0%, transparent 60%);
       opacity: 0;
       transform: scale(0.4);
-      transition: opacity 280ms ${easeStamp}, transform 380ms ${easeStamp};
+      transition: opacity ${durPanel}ms ${easeStamp}, transform ${durSlow}ms ${easeStamp};
       pointer-events: none;
     }
     .mushi-submit:hover {
       transform: translateY(-1px);
-      box-shadow: 0 3px 0 ${widgetAccentShadow};
+      box-shadow:
+        0 3px 0 ${widgetAccentShadow},
+        0 0 0 3px rgba(${accentRgb},0.18),
+        0 4px 16px -4px rgba(${accentRgb},0.35);
     }
     .mushi-submit:hover::after { opacity: 1; transform: scale(1.4); }
     .mushi-submit:active { transform: translateY(1px); box-shadow: 0 1px 0 ${widgetAccentShadow}; }
@@ -966,7 +1021,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     }
     .mushi-submit-arrow {
       display: inline-block;
-      transition: transform 220ms ${easeStamp};
+      transition: transform ${durBase}ms ${easeStamp};
     }
     .mushi-submit:hover .mushi-submit-arrow { transform: translateX(3px); }
 
@@ -996,7 +1051,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       display: inline-flex;
       align-items: baseline;
       gap: 4px;
-      transition: color 200ms ${easeStamp};
+      transition: opacity ${durFast}ms ${easeStamp};
     }
     .mushi-step-num.done { color: ${inkMuted}; text-decoration: line-through; text-decoration-color: ${inkFaint}; }
     .mushi-step-num.active {
@@ -1036,6 +1091,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       transform: rotate(-90deg);
       transform-origin: center;
       animation: mushi-stamp-ring 700ms ${easeStamp} 80ms forwards;
+      filter: drop-shadow(0 0 6px rgba(${accentRgb},0.5));
     }
     .mushi-success-stamp-label {
       font-family: ${fontDisplay};
@@ -1104,11 +1160,11 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       font-size: 12px;
       letter-spacing: 0.02em;
       cursor: pointer;
-      transition: background 120ms ease, border-color 120ms ease;
+      transition: opacity ${durInstant}ms ${easeStamp};
     }
     .mushi-success-receipt-id:hover,
     .mushi-success-receipt-id:focus-visible {
-      background: rgba(217, 65, 47, 0.06);
+      background: rgba(${accentRgb},0.06);
       border-color: ${widgetAccent};
       color: ${widgetAccent};
       outline: none;
@@ -1131,7 +1187,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       letter-spacing: 0.10em;
       text-transform: uppercase;
       text-decoration: none;
-      transition: filter 120ms ease;
+      transition: filter ${durInstant}ms ease;
     }
     .mushi-success-receipt-track:hover,
     .mushi-success-receipt-track:focus-visible {
@@ -1249,9 +1305,13 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     }
     .mushi-tier-bar-fill {
       height: 100%;
+      width: 100%;
       background: ${widgetAccent};
       border-radius: 2px;
-      transition: width 600ms ${easeStamp};
+      /* Meter fill — scaleX keeps compositor-friendly motion (docs/MOTION.md). */
+      transform-origin: left center;
+      transform: scaleX(var(--mushi-tier-pct, 0));
+      transition: transform ${durSlow}ms ${easeStamp};
     }
     .mushi-rewards-next-label {
       font-family: ${fontMono};
@@ -1277,7 +1337,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       letter-spacing: 0.06em;
       margin-bottom: 10px;
       opacity: 0;
-      animation: mushi-pts-pop 420ms ${easeStamp} 900ms forwards;
+      animation: mushi-pts-pop ${durSlow}ms ${easeStamp} 900ms forwards;
     }
     .success-bar { margin: 0 0 5px; }
 
@@ -1296,7 +1356,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       margin: 0 16px 2px;
       padding: 9px 12px;
       background: ${widgetAccentWash};
-      border: 1px solid ${isDark ? 'rgba(255,90,71,0.22)' : 'rgba(224,60,44,0.16)'};
+      border: 1px solid rgba(${accentRgb},${isDark ? '0.22' : '0.16'});
       border-radius: 4px;
       display: flex;
       flex-direction: column;
@@ -1375,7 +1435,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       content: '▶';
       font-size: 7px;
       opacity: 0.6;
-      transition: transform 0.15s ease;
+      transition: transform ${durInstant}ms ${easeStamp};
     }
 
     .mushi-changelog[open] .mushi-changelog-summary::before {
@@ -1403,7 +1463,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       margin-top: 14px;
       padding: 10px 14px;
       background: ${widgetAccentWash};
-      border: 1px solid ${isDark ? 'rgba(255,90,71,0.18)' : 'rgba(224,60,44,0.14)'};
+      border: 1px solid rgba(${accentRgb},${isDark ? '0.18' : '0.14'});
       border-radius: 4px;
       display: flex;
       flex-direction: column;
@@ -1446,7 +1506,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       white-space: nowrap;
       overflow: hidden;
       z-index: var(--mushi-banner-z, ${zBanner});
-      animation: mushi-banner-slide-in 0.3s ${easeStamp} both;
+      animation: mushi-banner-slide-in ${durPanel}ms ${easeStamp} both;
     }
 
     .mushi-banner.top    { top: 0; padding-top: env(safe-area-inset-top, 0px); }
@@ -1603,7 +1663,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       letter-spacing: inherit;
       text-decoration: none;
       opacity: 0.88;
-      transition: opacity 0.15s ease;
+      transition: opacity ${durInstant}ms ${easeStamp};
       flex-shrink: 0;
     }
     .mushi-banner-link:hover { opacity: 1; }
@@ -1631,7 +1691,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       cursor: pointer;
       font: inherit;
       letter-spacing: inherit;
-      transition: background 0.15s ease, opacity 0.15s ease;
+      transition: opacity ${durInstant}ms ${easeStamp};
       flex-shrink: 0;
       height: 24px;
       line-height: 1;
@@ -1653,7 +1713,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       flex-shrink: 0;
       color: inherit;
       border-radius: 3px;
-      transition: opacity 0.15s, background 0.15s;
+      transition: opacity ${durInstant}ms ${easeStamp};
     }
     .mushi-banner-dismiss:hover {
       opacity: 1;
@@ -1674,7 +1734,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       border-radius: 3px;
       white-space: nowrap;
       flex-shrink: 0;
-      transition: opacity 0.15s, background 0.15s;
+      transition: opacity ${durInstant}ms ${easeStamp};
       margin-left: 4px;
     }
     .mushi-banner-my-reports:hover {
@@ -1736,7 +1796,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       font-family: ${fontBody};
       font-size: 13px;
       text-align: left;
-      transition: color 180ms ${easeStamp};
+      transition: opacity ${durFast}ms ${easeStamp};
     }
     .mushi-more-toggle:hover { color: ${widgetAccent}; }
     .mushi-more-toggle:hover .mushi-more-toggle-arrow { transform: translateX(3px); }
@@ -1754,7 +1814,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     .mushi-more-toggle-arrow {
       font-size: 14px;
       opacity: 0.5;
-      transition: transform 180ms ${easeStamp};
+      transition: transform ${durFast}ms ${easeStamp};
     }
     /* ── Step slide-in ────────────────────────────────────────────── */
     @keyframes mushi-step-in {
@@ -1769,12 +1829,12 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     }
     /* Expanded secondary categories animate in */
     .mushi-categories-expanded {
-      animation: mushi-step-in 180ms ease both;
+      animation: mushi-step-in ${durFast}ms ${easeStamp} both;
     }
     .mushi-link-btn{background:none;border:none;padding:4px 2px;cursor:pointer;color:${widgetAccent};font-size:12px;font-family:${fontMono};text-decoration:underline;text-underline-offset:2px}
     .mushi-link-btn:hover{opacity:0.8}
     .mushi-link-btn:focus-visible,.mushi-nav-item:focus-visible{outline:2px solid ${widgetAccent};outline-offset:2px;border-radius:2px}
-    .mushi-nav-item{display:block;width:100%;text-align:left;background:${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'};border:1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'};border-radius:8px;padding:10px 14px;margin-bottom:8px;cursor:pointer;font-size:13px;color:${ink};transition:background .15s,border-color .15s}
+    .mushi-nav-item{display:block;width:100%;text-align:left;background:${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'};border:1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'};border-radius:8px;padding:10px 14px;margin-bottom:8px;cursor:pointer;font-size:13px;color:${ink};transition:opacity ${durInstant}ms ${easeStamp}}
     .mushi-nav-item:hover{background:${isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.07)'}}
     .mushi-account-card{display:flex;align-items:center;gap:12px;background:${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'};border-radius:10px;padding:12px 14px;margin-bottom:14px}
     .mushi-account-avatar{width:40px;height:40px;border-radius:50%;background:${widgetAccentWash};color:${widgetAccentInk};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;flex-shrink:0}
@@ -1797,14 +1857,22 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     .mushi-assistant-log{flex:1;min-height:120px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 2px 8px}
     .mushi-assistant-greeting{font:400 14px/1.5 ${fontBody};color:${inkMuted};padding:6px 2px}
     .mushi-assistant-suggestions{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
-    .mushi-assistant-chip{background:${widgetAccentWash};color:${widgetAccentInk};border:1px solid ${ruleStrong};border-radius:999px;padding:5px 12px;font-size:12px;cursor:pointer;font-family:${fontBody};transition:background .15s}
-    .mushi-assistant-chip:hover{background:${isDark ? 'rgba(255,90,71,0.22)' : 'rgba(224,60,44,0.14)'}}
+    .mushi-assistant-chip{background:${widgetAccentWash};color:${widgetAccentInk};border:1px solid ${ruleStrong};border-radius:999px;padding:5px 12px;font-size:12px;cursor:pointer;font-family:${fontBody};transition:opacity ${durInstant}ms ${easeStamp},transform ${durInstant}ms ${easeStamp}}
+    .mushi-assistant-chip:hover{background:rgba(${accentRgb},${isDark ? '0.22' : '0.14'})}
     .mushi-assistant-chip:focus-visible{outline:2px solid ${widgetAccent};outline-offset:2px}
     .mushi-assistant-msg{max-width:85%;padding:8px 12px;border-radius:12px;font:400 14px/1.45 ${fontBody};white-space:pre-wrap;word-break:break-word}
     .mushi-assistant-msg-user{align-self:flex-end;background:${widgetAccent};color:${inverse};border-bottom-right-radius:4px}
     .mushi-assistant-msg-bot{align-self:flex-start;background:${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'};color:${ink};border-bottom-left-radius:4px}
     .mushi-assistant-thinking{opacity:0.6;font-size:18px;letter-spacing:2px}
-    .mushi-assistant-error{align-self:flex-start;color:${danger};font-size:12px;padding:4px 2px}
+    .mushi-assistant-error{align-self:flex-start;color:${danger};font-size:12px;padding:4px 2px;display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+    .mushi-assistant-recovery{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+    .mushi-assistant-recovery-footer{margin-top:4px;padding-top:4px}
+    .mushi-assistant-report-cta{background:${widgetAccent};color:${inverse};border:none;border-radius:999px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:${fontBody};font-weight:600}
+    .mushi-assistant-report-cta:hover{opacity:0.92}
+    .mushi-assistant-report-cta:focus-visible{outline:2px solid ${widgetAccent};outline-offset:2px}
+    .mushi-assistant-report-link{background:transparent;color:${widgetAccentInk};border:none;padding:0;font-size:12px;cursor:pointer;font-family:${fontBody};text-decoration:underline;text-underline-offset:2px}
+    .mushi-assistant-report-link:hover{opacity:0.85}
+    .mushi-assistant-report-link:focus-visible{outline:2px solid ${widgetAccent};outline-offset:2px}
     .mushi-assistant-form{display:flex;align-items:flex-end;gap:8px;border-top:1px solid ${rule};padding-top:8px}
     .mushi-assistant-input{flex:1;resize:none;max-height:120px;border:1px solid ${ruleStrong};border-radius:10px;padding:8px 12px;font:400 14px/1.4 ${fontBody};background:${paper};color:${ink}}
     .mushi-assistant-input:focus-visible{outline:2px solid ${widgetAccent};outline-offset:1px}
