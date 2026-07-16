@@ -45,6 +45,60 @@ export const LANDING_SIXTY_SECOND = {
     '50 diagnoses/month on the free tier — no card. Self-host in under five minutes if you want.',
 } as const
 
+/** "Get started in 60 seconds" strip — one command, three steps. */
+export const LANDING_SIXTY_SECOND_STEPS = {
+  heading: 'Get started in 60 seconds',
+  cmd: 'npx mushi-mushi',
+  steps: [
+    {
+      title: 'Run one command',
+      desc: 'The wizard detects your framework, installs the SDK, and writes your env vars.',
+    },
+    {
+      title: 'Ship, then break something',
+      desc: 'When a user hits a bug, the report lands with a plain-English read on the cause.',
+    },
+    {
+      title: 'Pull the fix into your editor',
+      desc: 'Cursor or Claude Code picks it up over MCP — paste the fix, merge, done.',
+    },
+  ],
+  footnote: '50 diagnoses/month free — no card. Self-host the whole stack if you prefer.',
+} as const
+
+/** Landing FAQ — visible Q&A doubles as FAQPage JSON-LD (answers stay plain text). */
+export interface LandingFaqItem {
+  q: string
+  a: string
+}
+
+export const LANDING_FAQ: readonly LandingFaqItem[] = [
+  {
+    q: 'Is Mushi Mushi a Sentry alternative?',
+    a: 'It can be. Mushi works standalone as an open-source bug reporting and diagnosis tool for AI-built apps, or alongside Sentry — Sentry sees the errors your code throws, Mushi explains what the user experienced and hands you a fix.',
+  },
+  {
+    q: 'Do I need Sentry to use it?',
+    a: 'No. Mushi is standalone by default. If you already run Sentry, an optional bridge links stack traces to Mushi reports.',
+  },
+  {
+    q: 'What does `npx mushi-mushi` do?',
+    a: 'It runs a setup wizard that detects your framework (React, Vue, Svelte, Angular, React Native, Capacitor, Flutter, or Node), installs the matching SDK, writes your env vars, and prints the snippet to paste.',
+  },
+  {
+    q: 'How do I debug an app that Cursor or Claude Code wrote?',
+    a: 'Connect your editor over MCP with `npx mushi-mushi setup --ide cursor`. Bug reports arrive as plain-English diagnoses your agent can read, and the fix prompt is ready to apply without leaving the editor.',
+  },
+  {
+    q: 'Is it open source? Can I self-host?',
+    a: 'Yes — SDKs are MIT-licensed and the server is AGPLv3. You can self-host the whole stack with one command, and the free cloud tier includes 50 diagnoses a month with no card.',
+  },
+  {
+    q: 'Which frameworks are supported?',
+    a: 'Web: React, Vue, Svelte, Angular, and any site via the browser widget. Mobile: React Native, Capacitor, Flutter, iOS, and Android. Server: Node. One wizard installs any of them.',
+  },
+] as const
+
 export const LANDING_MEDIA_INTRO =
   'Admin console, the SDK on a real app (glot.it), and light/dark screenshots — click a frame to open the live surface.'
 

@@ -10,7 +10,18 @@
  * shell (see cloudfront-mushi-spa-router.js), so real slugs published after
  * this build still resolve correctly at runtime.
  */
+import type { Metadata } from 'next'
 import AppDetailClient from './AppDetailClient'
+
+// Every /apps/<slug>/ request is served this same shell by the CloudFront
+// router, so per-slug metadata can never reach crawlers — keep the shell
+// noindex (thin client-fetched content) and let /apps/ carry the SEO weight.
+export const metadata: Metadata = {
+  title: 'App details',
+  description:
+    'App detail page on the Mushi Bounties marketplace — bounty points, platforms, and how to start testing.',
+  robots: { index: false, follow: true },
+}
 
 export const PLACEHOLDER_SLUG = '_shell'
 

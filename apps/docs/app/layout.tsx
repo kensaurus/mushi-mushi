@@ -7,6 +7,13 @@ import Link from 'next/link'
  * (Tailwind base layer before Nextra theme styles). */
 import './globals.css'
 import changelog from '../data/changelog.json'
+import { JsonLd } from '../components/JsonLd'
+import {
+  DOCS_SITE,
+  OG_CARD_URL,
+  ORGANIZATION_JSONLD,
+  WEBSITE_JSONLD,
+} from '../lib/structured-data'
 
 import type { ReactNode } from 'react'
 import type { Metadata } from 'next'
@@ -22,9 +29,23 @@ export const metadata: Metadata = {
   openGraph: {
     siteName: 'Mushi Mushi',
     type: 'website',
-    images: [{ url: '/mushi-mushi/docs/social-preview/og-card.png', width: 1200, height: 630 }],
+    // OG_CARD_URL is fully absolute — a root-relative URL here gets
+    // metadataBase.pathname joined on and double-prefixes /mushi-mushi
+    // (GSC-visible 404 on every docs page's social preview).
+    images: [{ url: OG_CARD_URL, width: 1200, height: 630 }],
   },
   robots: { index: true, follow: true },
+  // Fully-absolute asset URLs: Next joins metadataBase.pathname onto
+  // root-relative metadata URLs, which doubles the /mushi-mushi prefix
+  // (e.g. /mushi-mushi/mushi-mushi/docs/…). Absolute URLs bypass the join.
+  icons: {
+    icon: [
+      { url: `${DOCS_SITE}/favicon.svg`, type: 'image/svg+xml' },
+      { url: `${DOCS_SITE}/icon-192.png`, type: 'image/png', sizes: '192x192' },
+      { url: `${DOCS_SITE}/icon-512.png`, type: 'image/png', sizes: '512x512' },
+    ],
+    apple: `${DOCS_SITE}/apple-touch-icon.png`,
+  },
   twitter: {
     card: 'summary_large_image',
     site: '@mushimushi_dev',
@@ -100,9 +121,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang="en" dir="ltr" suppressHydrationWarning>
       <Head>
-        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       </Head>
       <body>
+        <JsonLd data={ORGANIZATION_JSONLD} />
+        <JsonLd data={WEBSITE_JSONLD} />
         <Layout
           banner={banner}
           navbar={navbar}

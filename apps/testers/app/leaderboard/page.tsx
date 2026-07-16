@@ -8,6 +8,7 @@ import { TestersPageShell } from '../components/TestersPageShell'
 export const metadata: Metadata = {
   title: 'Tester Leaderboard',
   description: 'Top Mushi Bounties testers in the last 30 days.',
+  alternates: { canonical: 'https://kensaur.us/mushi-mushi/testers/leaderboard/' },
 }
 
 interface LeaderEntry {

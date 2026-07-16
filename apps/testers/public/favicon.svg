@@ -1,0 +1,18 @@
+<!--
+  FILE: apps/docs/public/favicon.svg
+  PURPOSE: Browser-tab brand mark for the docs static export. Keep this in
+           sync with apps/admin/public/favicon.svg so admin, marketing, and
+           docs share the same Mushi hanko identity and the docs build does
+           not emit favicon 404s in browser verification.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 100 100">
+  <g transform="rotate(-3 50 50)">
+    <rect x="8" y="8" width="84" height="84" rx="12" fill="#E03C2C"/>
+    <text x="50" y="78"
+          text-anchor="middle"
+          fill="#F8F4ED"
+          font-family="'Hiragino Mincho ProN','Yu Mincho Pr6N','Yu Mincho','Source Han Serif JP','Noto Serif CJK JP','SimSun',serif"
+          font-weight="700"
+          font-size="62">虫</text>
+  </g>
+</svg>
