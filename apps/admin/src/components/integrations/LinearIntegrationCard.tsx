@@ -74,12 +74,30 @@ export function LinearIntegrationCard({
   const [disconnecting, setDisconnecting] = useState(false)
   const [confirmDisconnect, setConfirmDisconnect] = useState(false)
 
+  // OAuth connect
+  const [connecting, setConnecting] = useState(false)
+
   const probeStatus = latestProbe?.status
 
-  const handleOAuthConnect = () => {
+  const handleOAuthConnect = async () => {
     if (!projectId) return
-    // Redirect to the OAuth authorize route — Linear redirects back to /integrations?connected=linear
-    window.location.href = `/api/v1/admin/linear-oauth/authorize?project_id=${encodeURIComponent(projectId)}`
+    // Fetch the Linear authorize URL over an authenticated request (apiFetch
+    // attaches the Bearer token + X-Mushi-Project-Id header), then navigate.
+    // A direct window.location navigation to the jwtAuth-gated route can't send
+    // the Authorization header and would 401 before reaching Linear.
+    setConnecting(true)
+    try {
+      const res = await apiFetch<{ url: string }>('/v1/admin/linear-oauth/authorize')
+      if (res.ok && res.data?.url) {
+        window.location.href = res.data.url
+      } else {
+        toast.error('Could not start Linear connection', res.error?.message)
+        setConnecting(false)
+      }
+    } catch {
+      toast.error('Could not start Linear connection')
+      setConnecting(false)
+    }
   }
 
   const handleSaveApiKey = async () => {
@@ -192,11 +210,12 @@ export function LinearIntegrationCard({
             type="button"
             variant={linearConnected ? 'ghost' : 'accent'}
             size="sm"
-            onClick={handleOAuthConnect}
-            disabled={!projectId}
+            onClick={() => void handleOAuthConnect()}
+            disabled={!projectId || connecting}
+            loading={connecting}
             title={linearConnected ? 'Reconnect to refresh permissions' : 'Connect your Linear workspace via OAuth'}
           >
-            {linearConnected ? 'Reconnect' : 'Connect workspace'}
+            {connecting ? 'Connecting…' : linearConnected ? 'Reconnect' : 'Connect workspace'}
           </Btn>
         </div>
       </div>

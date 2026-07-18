@@ -53,6 +53,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
   const [channelErrorCode, setChannelErrorCode] = useState<string | null>(null)
   const [selectedChannel, setSelectedChannel] = useState('')
   const [testingSlack, setTestingSlack] = useState(false)
+  const [connectingSlack, setConnectingSlack] = useState(false)
   const [savingChannel, setSavingChannel] = useState(false)
   const [manualChannelId, setManualChannelId] = useState('')
   const [savingManual, setSavingManual] = useState(false)
@@ -90,10 +91,25 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
     // state or project changes, not on every render-stable closure identity.
   }, [slackConfigured, projectId])
 
-  const handleAddToSlack = () => {
+  const handleAddToSlack = async () => {
     if (!projectId) return
-    // Navigate to the OAuth install route — Slack redirects back after auth
-    window.location.href = `/api/v1/admin/integrations/slack/install?project_id=${projectId}`
+    // Fetch the Slack authorize URL over an authenticated request (apiFetch
+    // attaches the Bearer token + X-Mushi-Project-Id header), then navigate.
+    // A direct window.location navigation to the jwtAuth-gated route can't send
+    // the Authorization header and would 401 before reaching Slack.
+    setConnectingSlack(true)
+    try {
+      const res = await apiFetch<{ url: string }>('/v1/admin/integrations/slack/install')
+      if (res.ok && res.data?.url) {
+        window.location.href = res.data.url
+      } else {
+        toast.error('Could not start Slack connection', res.error?.message)
+        setConnectingSlack(false)
+      }
+    } catch {
+      toast.error('Could not start Slack connection')
+      setConnectingSlack(false)
+    }
   }
 
   const handleSaveChannel = async () => {
@@ -205,8 +221,8 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
             type="button"
             variant={slackConfigured ? 'ghost' : 'accent'}
             size="sm"
-            onClick={handleAddToSlack}
-            disabled={!projectId}
+            onClick={() => void handleAddToSlack()}
+            disabled={!projectId || connectingSlack}
             title={slackConfigured ? 'Reinstall Mushi Slack bot to refresh scopes or reconnect' : 'Install Mushi Slack bot'}
             leadingIcon={(
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" className={slackConfigured ? 'opacity-60' : 'opacity-90'}>
@@ -263,8 +279,8 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={handleAddToSlack}
-                      disabled={!projectId}
+                      onClick={() => void handleAddToSlack()}
+                      disabled={!projectId || connectingSlack}
                       className="text-accent-foreground hover:text-accent underline underline-offset-2 hover:no-underline"
                     >
                       Re-add to Slack to fix →
