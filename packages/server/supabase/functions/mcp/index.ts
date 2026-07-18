@@ -91,6 +91,8 @@ import {
   isSmitheryRedirectUri,
 } from '../_shared/mcp-oauth-smithery-stub.ts'
 import { readOAuthParams } from '../_shared/mcp-oauth-helpers.ts'
+import { callLinearMcpTool } from '../_shared/linear-mcp-client.ts'
+import { getServiceClient as getLinearServiceClient } from '../_shared/db.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -1047,6 +1049,112 @@ const BASE_TOOLS: Record<string, ToolDef> = {
 
 /** Full catalog — base hand-authored tools + manifest-generated parity tools. */
 let TOOLS: Record<string, ToolDef> = BASE_TOOLS
+
+// ── Linear tools (added when the project has Linear credentials) ──────────────
+//
+// These proxy to Linear's remote MCP server (mcp.linear.app/mcp) using the
+// project's vault-backed OAuth token. Guarded by "linear connected" check in
+// the handler — returns a descriptive error if not connected.
+//
+// NOTE: imported lazily to avoid loading the module on cold starts when Linear
+// is not used. We import at module-level here because Deno edge functions don't
+// have lazy-require; the module is small and tree-shaken when unused.
+
+/** Returns a handler that throws a clear error when Linear is not connected. */
+const linearToolHandler = (
+  toolName: string,
+  buildArgs: (args: Record<string, unknown>) => Record<string, unknown>,
+) => async (args: Record<string, unknown>, ctx: { authHeaders: Record<string, string>; projectIdHint?: string }) => {
+  const projectId = ctx.projectIdHint
+  if (!projectId) throw new Error('projectId is required for Linear tools. Set X-Mushi-Project header.')
+  const db = getLinearServiceClient()
+  const result = await callLinearMcpTool(db, projectId, toolName, buildArgs(args))
+  if (result === null) {
+    throw new Error('Linear is not connected for this project. Go to Integrations → Linear to connect your workspace.')
+  }
+  return result
+}
+
+const LINEAR_TOOLS: Record<string, ToolDef> = {
+  linear_search_issues: {
+    description: 'Search issues in the connected Linear workspace. Use this before creating a new issue to find duplicates.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query (issue title, description, or identifier like ENG-123)' },
+        teamId: { type: 'string', description: 'Optional Linear team ID to scope the search' },
+      },
+      required: ['query'],
+    },
+    scope: 'mcp:read',
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    handler: linearToolHandler('linear_search_issues', (a) => ({ query: a.query, ...(a.teamId ? { teamId: a.teamId } : {}) })),
+  },
+  linear_get_issue: {
+    description: 'Get a single Linear issue by identifier (e.g. "ENG-123"). Returns full issue details including description, state, and comments.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        issueId: { type: 'string', description: 'Linear issue identifier (e.g. "ENG-123") or internal ID' },
+      },
+      required: ['issueId'],
+    },
+    scope: 'mcp:read',
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    handler: linearToolHandler('linear_get_issue', (a) => ({ issueId: a.issueId })),
+  },
+  linear_create_comment: {
+    description: 'Post a comment on a Linear issue. Use to share fix progress, analysis results, or questions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        issueId: { type: 'string', description: 'Linear issue identifier or ID' },
+        body: { type: 'string', description: 'Markdown-formatted comment body' },
+      },
+      required: ['issueId', 'body'],
+    },
+    scope: 'mcp:write',
+    annotations: { readOnlyHint: false, idempotentHint: false },
+    handler: linearToolHandler('linear_create_comment', (a) => ({ issueId: a.issueId, body: a.body })),
+  },
+  linear_update_issue_status: {
+    description: 'Update the status/state of a Linear issue by state name (e.g. "In Progress", "Done", "Cancelled").',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        issueId: { type: 'string', description: 'Linear issue identifier or ID' },
+        stateName: { type: 'string', description: 'Name of the target workflow state (e.g. "In Progress", "Done")' },
+      },
+      required: ['issueId', 'stateName'],
+    },
+    scope: 'mcp:write',
+    annotations: { readOnlyHint: false, idempotentHint: false },
+    handler: linearToolHandler('linear_update_issue_status', (a) => ({ issueId: a.issueId, stateName: a.stateName })),
+  },
+  linear_create_issue: {
+    description: 'Create a new issue in the connected Linear workspace. Use when no duplicate is found via linear_search_issues.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Issue title' },
+        description: { type: 'string', description: 'Issue description in Markdown' },
+        teamId: { type: 'string', description: 'Target team ID (optional, uses project default)' },
+        priority: { type: 'number', description: '0=No priority, 1=Urgent, 2=High, 3=Medium, 4=Low' },
+      },
+      required: ['title'],
+    },
+    scope: 'mcp:write',
+    annotations: { readOnlyHint: false, idempotentHint: false },
+    handler: linearToolHandler('linear_create_issue', (a) => ({
+      title: a.title,
+      ...(a.description ? { description: a.description } : {}),
+      ...(a.teamId ? { teamId: a.teamId } : {}),
+      ...(a.priority !== undefined ? { priority: a.priority } : {}),
+    })),
+  },
+}
+
+TOOLS = { ...TOOLS, ...LINEAR_TOOLS }
 
 // JSON-RPC dispatcher
 // ----------------------------------------------------------------------------

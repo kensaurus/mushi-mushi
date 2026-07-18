@@ -1,6 +1,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
 import { attachTraceparent } from './trace.ts'
+import { linearGql } from './linear.ts'
 
 const intLog = log.child('integrations')
 
@@ -33,15 +34,35 @@ export async function createExternalIssue(
     .eq('project_id', projectId)
     .eq('is_active', true)
 
-  const settled = await Promise.allSettled(
-    (integrations ?? []).map(async (integration) => {
-      const result = await dispatchToProvider(integration.integration_type, integration.config as Record<string, unknown>, report, traceparent)
+  // Determine which routing providers already have a project_integrations row
+  // so we don't create a duplicate when Linear is also in vault-backed settings.
+  const existingRoutingTypes = new Set((integrations ?? []).map((i) => i.integration_type))
+
+  // Check for vault-backed Linear settings — add a synthetic "integration" if
+  // the user connected via OAuth or API key paste in the console (platform settings)
+  // but has no legacy project_integrations row.
+  let vaultLinearEnabled = false
+  if (!existingRoutingTypes.has('linear')) {
+    const { data: ps } = await db
+      .from('project_settings')
+      .select('linear_access_token_ref, linear_api_key_ref')
+      .eq('project_id', projectId)
+      .maybeSingle()
+    vaultLinearEnabled = !!(ps?.linear_access_token_ref || ps?.linear_api_key_ref)
+  }
+
+  const tasks = [
+    ...(integrations ?? []).map(async (integration) => {
+      const result = await dispatchToProvider(integration.integration_type, integration.config as Record<string, unknown>, report, traceparent, db, projectId)
       if (result) {
         await db.from('project_integrations').update({ last_synced_at: new Date().toISOString() }).eq('id', integration.id)
       }
       return result
     }),
-  )
+    ...(vaultLinearEnabled ? [dispatchToProvider('linear', {}, report, traceparent, db, projectId)] : []),
+  ]
+
+  const settled = await Promise.allSettled(tasks)
 
   const results: ExternalIssue[] = []
   for (const r of settled) {
@@ -112,6 +133,8 @@ export async function resolveExternalIssue(
         issue.external_id as string,
         config,
         reportId,
+        db,
+        projectId,
       )
       await db
         .from('report_external_issues')
@@ -138,10 +161,12 @@ async function resolveForProvider(
   externalId: string,
   config: Record<string, unknown>,
   reportId: string,
+  db: SupabaseClient,
+  projectId: string,
 ): Promise<void> {
   switch (system) {
     case 'jira': return resolveJiraIssue(config, externalId)
-    case 'linear': return resolveLinearIssue(config, externalId)
+    case 'linear': return resolveLinearIssue(db, projectId, config, externalId)
     case 'github': return resolveGitHubIssue(config, externalId)
     case 'pagerduty': return resolvePagerDutyAlert(config, externalId)
     case 'sentry': return resolveSentryIssue(config, externalId, reportId)
@@ -163,60 +188,93 @@ async function resolveJiraIssue(config: Record<string, unknown>, externalId: str
   if (!res.ok) throw new Error(`Jira transition failed: ${res.status} ${await res.text()}`)
 }
 
-async function resolveLinearIssue(config: Record<string, unknown>, externalId: string): Promise<void> {
-  const headers = {
-    'Authorization': String(config.apiKey),
-    'Content-Type': 'application/json',
-  }
-  // Resolve UUID + team done-state in one round-trip via issueByIdentifier
-  const lookupRes = await fetch('https://api.linear.app/graphql', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      query: `query IssueByIdentifier($identifier: String!) {
+async function resolveLinearIssue(
+  db: SupabaseClient,
+  projectId: string,
+  /** Legacy routing config from project_integrations.config — used as fallback if no vault creds. */
+  config: Record<string, unknown>,
+  externalId: string,
+): Promise<void> {
+  // Resolve UUID + team done-state in one round-trip via issueByIdentifier.
+  // linearGql() resolves credentials from project_settings (vault-backed OAuth
+  // token or API key); falls back to env LINEAR_API_KEY if neither is set.
+  // Only if linearGql throws due to missing credentials AND a legacy apiKey
+  // exists in the routing config do we fall back to a direct fetch.
+  const doLookupAndResolve = async (
+    gql: <T>(q: string, v?: Record<string, unknown>) => Promise<T>,
+  ) => {
+    type LookupData = {
+      issueByIdentifier: {
+        id: string
+        team: { states: { nodes: Array<{ id: string; name: string; type: string }> } }
+      } | null
+    }
+    const lookupData = await gql<LookupData>(
+      `query IssueByIdentifier($identifier: String!) {
         issueByIdentifier(identifier: $identifier) {
           id
           team { states { nodes { id name type } } }
         }
       }`,
-      variables: { identifier: externalId },
-    }),
-  })
-  // Distinguish "issue genuinely not found" (data.issueByIdentifier === null,
-  // status 200) from "the request never reached Linear's GraphQL layer"
-  // (auth failure, throttle, 5xx). Without this guard, every transport-level
-  // failure surfaces to the operator as the misleading message
-  // "Linear: issue not found for identifier MUSHI-123" and they go hunting
-  // for a non-existent ticket.
-  if (!lookupRes.ok) {
-    const body = await lookupRes.text()
-    throw new Error(
-      `Linear lookup HTTP ${lookupRes.status} for identifier ${externalId}: ${body.slice(0, 200)}`,
+      { identifier: externalId },
     )
-  }
-  const lookupData = await lookupRes.json()
-  const issue = lookupData.data?.issueByIdentifier
-  if (!issue?.id) throw new Error(`Linear: issue not found for identifier ${externalId}`)
+    const issue = lookupData.issueByIdentifier
+    // Distinguish "issue genuinely not found" from transport failures — linearGql
+    // already throws on non-2xx, so a null here means the identifier doesn't exist.
+    if (!issue?.id) throw new Error(`Linear: issue not found for identifier ${externalId}`)
 
-  type LinearState = { id: string; name: string; type: string }
-  const states: LinearState[] = issue.team?.states?.nodes ?? []
-  const doneState = states.find((s) => s.type === 'completed' || s.name.toLowerCase() === 'done')
-  if (!doneState) throw new Error(`Linear: no completed state found for team`)
+    const states = issue.team?.states?.nodes ?? []
+    const doneState = states.find((s) => s.type === 'completed' || s.name.toLowerCase() === 'done')
+    if (!doneState) throw new Error(`Linear: no completed state found for team`)
 
-  const updateRes = await fetch('https://api.linear.app/graphql', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      query: `mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
+    type UpdateData = { issueUpdate: { success: boolean } }
+    const updateData = await gql<UpdateData>(
+      `mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
         issueUpdate(id: $id, input: $input) { success }
       }`,
-      variables: { id: issue.id, input: { stateId: doneState.id } },
-    }),
-  })
-  const updateData = await updateRes.json()
-  if (!updateData.data?.issueUpdate?.success) {
-    throw new Error(`Linear resolve failed: ${JSON.stringify(updateData)}`)
+      { id: issue.id, input: { stateId: doneState.id } },
+    )
+    if (!updateData.issueUpdate?.success) {
+      throw new Error(`Linear: issueUpdate returned success=false for ${externalId}`)
+    }
   }
+
+  // Try vault-backed credentials first (project_settings)
+  try {
+    await doLookupAndResolve((q, v) => linearGql(db, projectId, q, v ?? {}))
+    return
+  } catch (err) {
+    // If there are vault credentials but they fail (e.g. expired token), rethrow.
+    // Only fall back to legacy config.apiKey for the "no vault credentials" case.
+    const msg = String(err)
+    if (!msg.includes('No Linear credentials configured') || !config.apiKey) {
+      throw err
+    }
+  }
+
+  // Legacy fallback: use plaintext apiKey from project_integrations.config
+  log.warn('Linear: falling back to legacy project_integrations.config.apiKey', { projectId })
+  const headers = {
+    Authorization: String(config.apiKey),
+    'Content-Type': 'application/json',
+  }
+  const legacyGql = async <T>(query: string, variables: Record<string, unknown> = {}): Promise<T> => {
+    const res = await fetch('https://api.linear.app/graphql', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query, variables }),
+    })
+    if (!res.ok) {
+      throw new Error(`Linear API HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
+    }
+    const json = await res.json() as { data?: T; errors?: Array<{ message: string }> }
+    if (json.errors?.length) {
+      throw new Error(`Linear GraphQL error: ${json.errors.map((e) => e.message).join('; ')}`)
+    }
+    if (!json.data) throw new Error('Linear GraphQL: no data in response')
+    return json.data
+  }
+  await doLookupAndResolve(legacyGql)
 }
 
 async function resolveGitHubIssue(config: Record<string, unknown>, externalId: string): Promise<void> {
@@ -276,11 +334,13 @@ async function dispatchToProvider(
   type: string,
   config: Record<string, unknown>,
   report: IntegrationReport,
-  traceparent?: string,
+  traceparent: string | undefined,
+  db: SupabaseClient,
+  projectId: string,
 ): Promise<ExternalIssue | null> {
   switch (type) {
     case 'jira': return createJiraIssue(config, report, traceparent)
-    case 'linear': return createLinearIssue(config, report, traceparent)
+    case 'linear': return createLinearIssue(db, projectId, config, report, traceparent)
     case 'github': return createGitHubIssue(config, report, traceparent)
     case 'pagerduty': return triggerPagerDuty(config, report, traceparent)
     default: return null
@@ -308,24 +368,55 @@ async function createJiraIssue(config: Record<string, unknown>, report: Integrat
   return { externalId: data.key, url: `${config.baseUrl}/browse/${data.key}`, provider: 'jira' }
 }
 
-async function createLinearIssue(config: Record<string, unknown>, report: IntegrationReport, traceparent?: string): Promise<ExternalIssue> {
+async function createLinearIssue(
+  db: SupabaseClient,
+  projectId: string,
+  /** Legacy routing config from project_integrations.config — used as fallback. */
+  config: Record<string, unknown>,
+  report: IntegrationReport,
+  traceparent?: string,
+): Promise<ExternalIssue> {
+  // Resolve teamId: prefer project_settings column over legacy config
+  let teamId: string | null = null
+  const { data: ps } = await db
+    .from('project_settings')
+    .select('linear_team_id')
+    .eq('project_id', projectId)
+    .maybeSingle()
+  teamId = ps?.linear_team_id ?? String(config.teamId ?? '')
+
+  const MUTATION = `mutation CreateIssue($input: IssueCreateInput!) {
+    issueCreate(input: $input) { success issue { id identifier url } }
+  }`
+  const variables = {
+    input: {
+      title: `[Mushi] ${report.summary}`,
+      description: report.description.slice(0, 500),
+      teamId,
+      priority: mapSeverityToLinear(report.severity),
+    },
+  }
+
+  // Try vault-backed credentials first
+  try {
+    type CreateData = { issueCreate: { success: boolean; issue: { id: string; identifier: string; url: string } | null } }
+    const data = await linearGql<CreateData>(db, projectId, MUTATION, variables)
+    const issue = data.issueCreate?.issue
+    return { externalId: issue?.identifier ?? '', url: issue?.url ?? '', provider: 'linear' }
+  } catch (err) {
+    const msg = String(err)
+    if (!msg.includes('No Linear credentials configured') || !config.apiKey) throw err
+  }
+
+  // Legacy fallback: use plaintext apiKey from project_integrations.config
+  log.warn('Linear: falling back to legacy project_integrations.config.apiKey for issue creation', { projectId })
   const res = await fetch('https://api.linear.app/graphql', {
     method: 'POST',
     headers: attachTraceparent({
-      'Authorization': String(config.apiKey),
+      Authorization: String(config.apiKey),
       'Content-Type': 'application/json',
     }, traceparent),
-    body: JSON.stringify({
-      query: `mutation CreateIssue($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier url } } }`,
-      variables: {
-        input: {
-          title: `[Mushi] ${report.summary}`,
-          description: report.description.slice(0, 500),
-          teamId: String(config.teamId),
-          priority: mapSeverityToLinear(report.severity),
-        },
-      },
-    }),
+    body: JSON.stringify({ query: MUTATION, variables }),
   })
   const data = await res.json()
   const issue = data.data?.issueCreate?.issue

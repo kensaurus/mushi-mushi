@@ -35,6 +35,7 @@ import { LivePdcaPipeline } from '../components/dashboard/LivePdcaPipeline'
 import { KpiRow } from '../components/dashboard/KpiRow'
 import { ChartsRow } from '../components/dashboard/ChartsRow'
 import { TriageAndFixRow } from '../components/dashboard/TriageAndFixRow'
+import { TeamActivityTile } from '../components/dashboard/TeamActivityTile'
 import { InsightsRow } from '../components/dashboard/InsightsRow'
 import { QaCoverageTile } from '../components/dashboard/QaCoverageTile'
 import { PlatformHealthTile } from '../components/dashboard/PlatformHealthTile'
@@ -395,6 +396,8 @@ export function DashboardPage() {
           />
 
           <TriageAndFixRow triageQueue={data.triageQueue ?? []} fixSummary={fixSummary} />
+
+          <TeamActivityTile projectId={activeProjectId} />
 
           <InsightsRow
             topComponents={data.topComponents ?? []}

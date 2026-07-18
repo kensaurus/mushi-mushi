@@ -21,11 +21,26 @@ import {
 const LINEAR_GRAPHQL = 'https://api.linear.app/graphql'
 
 export interface LinearPluginConfig {
-  linearApiKey: string
+  /**
+   * Linear personal API key (lin_api_…).
+   *
+   * Optional — falls back to the `LINEAR_API_KEY` environment variable when
+   * omitted, so you can rotate the key via env config without redeploying code.
+   *
+   * If your project is connected via OAuth in the Mushi admin console, the
+   * vaulted token is used server-side (by classify-report / fix-worker);
+   * this plugin still needs its own Linear credential for the outbound webhook
+   * handler path (it runs in your infra, not Mushi's).
+   */
+  linearApiKey?: string
   teamId: string
   mushiSecret: string
   /** Mushi REST API key with `reports.comment` scope. */
   mushiApiKey: string
+  /** Your Mushi project ID (used for back-comments and future features). */
+  projectId?: string
+  /** Override the Mushi API base URL (for self-hosted or EU region). */
+  mushiBaseUrl?: string
   /** Optional state-id mapping (Mushi status → Linear workflow state ID). */
   stateMap?: Record<string, string>
   fetchImpl?: typeof fetch
@@ -39,10 +54,22 @@ interface IssueCache {
 export function createLinearPlugin(cfg: LinearPluginConfig, cache: IssueCache = createInMemoryCache()) {
   const f = cfg.fetchImpl ?? fetch
 
+  /** Resolves the Linear API key: config > LINEAR_API_KEY env var. */
+  function getLinearApiKey(): string {
+    const key = cfg.linearApiKey ?? (typeof process !== 'undefined' ? process.env.LINEAR_API_KEY : undefined)
+    if (!key) {
+      throw new Error(
+        'Linear API key not configured. ' +
+        'Pass `linearApiKey` in config or set the LINEAR_API_KEY environment variable.',
+      )
+    }
+    return key
+  }
+
   async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
     const res = await f(LINEAR_GRAPHQL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: cfg.linearApiKey },
+      headers: { 'Content-Type': 'application/json', Authorization: getLinearApiKey() },
       body: JSON.stringify({ query, variables }),
     })
     if (!res.ok) throw new Error(`Linear API ${res.status}: ${await res.text()}`)
