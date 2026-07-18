@@ -65,6 +65,7 @@ const FIELD_ENV_VAR: Partial<Record<PlatformField, string>> = {
   cursor_api_key_ref: 'CURSOR_API_KEY',
   claude_api_key_ref: 'ANTHROPIC_API_KEY',
   slack_bot_token_ref: 'SLACK_BOT_TOKEN',
+  linear_api_key_ref: 'LINEAR_API_KEY',
 }
 
 /** Fields present in organization_integration_settings (mirrors the migration columns). */
@@ -80,6 +81,12 @@ const ORG_FIELDS: PlatformField[] = [
   'cursor_default_model',
   'claude_api_key_ref',
   'slack_bot_token_ref',
+  // Linear — org-level defaults (webhook secret / actor token are project-scoped only)
+  'linear_api_key_ref',
+  'linear_access_token_ref',
+  'linear_refresh_token_ref',
+  'linear_workspace_name',
+  'linear_team_id',
 ]
 
 /** All project_settings fields that belong to platform integrations. */
@@ -95,6 +102,14 @@ const PROJECT_FIELDS: PlatformField[] = [
   'cursor_default_model',
   'claude_api_key_ref',
   'slack_bot_token_ref',
+  // Linear — project-scoped fields (superset of org fields; includes install-specific secrets)
+  'linear_api_key_ref',
+  'linear_access_token_ref',
+  'linear_refresh_token_ref',
+  'linear_workspace_name',
+  'linear_team_id',
+  'linear_webhook_secret_ref',
+  'linear_actor_token_ref',
 ]
 
 // ──────────────────────────────────────────────────────────────────────────

@@ -39,7 +39,9 @@ export type IntegrationKind =
 export const PLATFORM_KINDS: IntegrationKind[] = ['sentry', 'langfuse', 'github', 'anthropic', 'openai']
 /** Fix-agent integrations stored in project_settings (Integrations → Cursor Cloud / Claude Code). */
 export const FIX_AGENT_KINDS: IntegrationKind[] = ['cursor_cloud', 'claude_code_agent']
-export const ROUTING_KINDS: IntegrationKind[] = ['jira', 'linear', 'github_issues', 'pagerduty', 'reward_webhook']
+/** Ticket/project-management integrations with vault-backed credentials in project_settings. */
+export const TICKET_INTEGRATION_KINDS: IntegrationKind[] = ['linear']
+export const ROUTING_KINDS: IntegrationKind[] = ['jira', 'github_issues', 'pagerduty', 'reward_webhook']
 export const ALL_INTEGRATION_KINDS: IntegrationKind[] = [
   ...PLATFORM_KINDS,
   ...FIX_AGENT_KINDS,
@@ -67,6 +69,21 @@ export interface PlatformSettings {
   claude_api_key_ref?: string | null
   /** UUID of vault secret containing the per-project Slack bot token (xoxb-*). */
   slack_bot_token_ref?: string | null
+  // ── Linear (vault-backed, replaces project_integrations.config for 'linear') ──
+  /** Vault ref for a static Linear Personal API key (lin_api_*). */
+  linear_api_key_ref?: string | null
+  /** Vault ref for a Linear OAuth 2.0 access token. Takes precedence over api key. */
+  linear_access_token_ref?: string | null
+  /** Vault ref for the Linear OAuth 2.0 refresh token. */
+  linear_refresh_token_ref?: string | null
+  /** Display name of the connected Linear workspace (non-secret). */
+  linear_workspace_name?: string | null
+  /** Linear team UUID for default issue creation. */
+  linear_team_id?: string | null
+  /** Vault ref for the HMAC secret returned by Linear's webhookCreate (for inbound webhooks). */
+  linear_webhook_secret_ref?: string | null
+  /** Vault ref for the app actor token minted via actor=app OAuth install (agent mode). */
+  linear_actor_token_ref?: string | null
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -272,21 +289,44 @@ export async function probeIntegration(
       }
 
     } else if (kind === 'linear') {
-      const apiKey = String(routingConfig.apiKey ?? '')
-      if (!apiKey) {
-        detail = 'Add Linear API key to enable health checks.'
+      // Resolve credential in priority order:
+      //   1. Platform settings: OAuth access token (vault-backed)
+      //   2. Platform settings: static API key (vault-backed)
+      //   3. Legacy routing config: apiKey (project_integrations.config)
+      //   4. Server env var: LINEAR_API_KEY
+      let linearToken: string | null = null
+      if (settings.linear_access_token_ref) {
+        linearToken = await dereferenceMaybeVault(db, settings.linear_access_token_ref)
+      }
+      if (!linearToken && settings.linear_api_key_ref) {
+        linearToken = await dereferenceMaybeVault(db, settings.linear_api_key_ref)
+      }
+      if (!linearToken && routingConfig.apiKey) {
+        linearToken = String(routingConfig.apiKey)
+      }
+      if (!linearToken) {
+        linearToken = Deno.env.get('LINEAR_API_KEY') ?? null
+      }
+
+      if (!linearToken) {
+        detail = 'Connect a Linear workspace or add an API key to enable health checks.'
       } else {
         const res = await fetch('https://api.linear.app/graphql', {
           method: 'POST',
-          headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: '{ viewer { id } }' }),
+          headers: { Authorization: linearToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: '{ viewer { id name organization { name } } }' }),
           signal: AbortSignal.timeout(8_000),
         })
         httpStatus = res.status
         if (res.ok) {
-          const json = await res.json().catch(() => ({})) as { data?: { viewer?: { id?: string } }; errors?: Array<{ message: string }> }
+          const json = await res.json().catch(() => ({})) as {
+            data?: { viewer?: { id?: string; name?: string; organization?: { name: string } } }
+            errors?: Array<{ message: string }>
+          }
+          const workspaceName = json.data?.viewer?.organization?.name ?? json.data?.viewer?.name
           status = json.data?.viewer?.id ? 'ok' : 'degraded'
-          if (status !== 'ok') detail = json.errors?.[0]?.message ?? 'Unexpected response'
+          if (status === 'ok' && workspaceName) detail = `Connected to workspace "${workspaceName}"`
+          else if (status !== 'ok') detail = json.errors?.[0]?.message ?? 'Unexpected response'
         } else {
           status = res.status === 401 || res.status === 403 ? 'down' : 'degraded'
           detail = `HTTP ${res.status}`
@@ -513,4 +553,85 @@ export async function probeIntegration(
   }
 
   return { status, detail, httpStatus, latencyMs: Date.now() - start }
+}
+
+// ── Linear probe ──────────────────────────────────────────────────────────────
+
+/**
+ * Probe the Linear API using either the OAuth access token or the static API key
+ * stored in project_settings (vault-backed). Returns the connected workspace name
+ * on success so the console card can display it without a separate fetch.
+ */
+export async function probeLinear(
+  settings: PlatformSettings,
+  db: SupabaseClient,
+): Promise<ProbeResult & { workspaceName?: string }> {
+  const start = Date.now()
+  let status: ProbeResult['status'] = 'unknown'
+  let detail = ''
+  let httpStatus = 0
+  let workspaceName: string | undefined
+
+  // Resolve credential: OAuth access token wins over static API key.
+  let token: string | null = null
+  const accessRef = settings.linear_access_token_ref
+  if (accessRef) {
+    token = await dereferenceMaybeVault(db, accessRef)
+  }
+  if (!token) {
+    const keyRef = settings.linear_api_key_ref
+    if (keyRef) {
+      token = await dereferenceMaybeVault(db, keyRef)
+    }
+  }
+  if (!token) {
+    token = Deno.env.get('LINEAR_API_KEY') ?? null
+  }
+
+  if (!token) {
+    status = 'unknown'
+    detail = 'No Linear API key or OAuth token configured. Connect via the Integrations page.'
+    return { status, detail, httpStatus, latencyMs: Date.now() - start }
+  }
+
+  try {
+    const t0 = Date.now()
+    const res = await fetch('https://api.linear.app/graphql', {
+      method: 'POST',
+      headers: {
+        Authorization: token,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: `query { viewer { id name organization { name urlKey } } }`,
+      }),
+    })
+    httpStatus = res.status
+    if (!res.ok) {
+      status = 'down'
+      detail = `Linear API HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`
+      return { status, detail, httpStatus, latencyMs: Date.now() - start }
+    }
+    const data = await res.json() as {
+      data?: { viewer?: { id: string; name: string; organization?: { name: string; urlKey: string } } }
+      errors?: Array<{ message: string }>
+    }
+    if (data.errors?.length) {
+      status = 'down'
+      detail = `Linear GraphQL error: ${data.errors.map((e) => e.message).join('; ')}`
+    } else if (data.data?.viewer) {
+      const org = data.data.viewer.organization
+      workspaceName = org?.name ?? data.data.viewer.name
+      status = 'ok'
+      detail = `Connected to workspace "${workspaceName}" (${Date.now() - t0}ms)`
+    } else {
+      status = 'down'
+      detail = 'Linear returned no viewer data'
+    }
+  } catch (err) {
+    status = 'down'
+    detail = String(err)
+  }
+
+  return { status, detail, httpStatus, latencyMs: Date.now() - start, workspaceName }
 }

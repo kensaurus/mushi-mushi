@@ -21,7 +21,7 @@ import {
 /** Narrow union for *platform* integrations — the SDK-feeding services
  *  (Sentry / Langfuse / GitHub code-repo) that have first-class card slots
  *  on the page. Kept narrow so `Record<Kind, …>` literals stay exhaustive. */
-export type Kind = 'sentry' | 'langfuse' | 'github' | 'cursor_cloud' | 'claude_code_agent'
+export type Kind = 'sentry' | 'langfuse' | 'github' | 'cursor_cloud' | 'claude_code_agent' | 'linear'
 
 /** Wider union accepted by the `/v1/admin/health/integration/:kind` probe
  *  route. Includes the four routing destinations (Jira / Linear /

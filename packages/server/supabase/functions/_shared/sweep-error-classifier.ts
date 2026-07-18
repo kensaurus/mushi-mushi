@@ -57,8 +57,14 @@ export function classifyIndexerError(err: unknown): SweepErrorKind {
   //     large" — the last one fires when a single embedding batch overshoots
   //     the per-minute token cap; see the MUSHI-MUSHI-INDEXER-429 comment in
   //     webhooks-github-indexer/index.ts for the full story.
+  //   - Deno/hyper HTTP/2 transport failures: GitHub occasionally answers
+  //     with GOAWAY / RST_STREAM before any application logic runs, which
+  //     surfaces as "http2 error: stream error received: refused stream" or
+  //     the generic hyper wrapper "client error (SendRequest)" / "error
+  //     sending request". Same retry-next-tick semantics as fetch failed.
+  //     (Sentry MUSHI-MUSHI-SERVER-B regression, 2026-07-16.)
   if (
-    /\b(5\d\d)\b|fetch failed|network|ENOTFOUND|ECONN|timeout|TPM|rate limit|request too large/i.test(
+    /\b(5\d\d)\b|fetch failed|network|ENOTFOUND|ECONN|timeout|TPM|rate limit|request too large|http2 error|refused stream|client error \(SendRequest\)|error sending request/i.test(
       msg,
     )
   ) {

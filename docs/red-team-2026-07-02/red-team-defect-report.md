@@ -264,7 +264,7 @@ This was found during Phase 1 and is restated here with the backend confirmation
 - **146/146** relative internal markdown links across all `.mdx` content resolve to real pages (aside from #3).
 - **41/41** admin "open live demo" routes referenced from `data/admin-screenshots.ts` resolve to the SPA shell (200); the SPA's own auth gate was exercised directly via #12's probe.
 - `/connect` page's "MCP tools" stat (**68**) — computed live from `TOOL_CATALOG.length + TDD_TOOL_CATALOG.length + CODEBASE_TOOL_CATALOG.length`, not hardcoded. The plan's preliminary static-analysis note that this page claimed "71+" did not reproduce against current source; only `roadmap.mdx` (#4) has actually drifted.
-- **51 edge functions**, native iOS/Android/Flutter packages, pricing tiers, and the "comprehension layer / vibe coder / standalone-first" positioning all match `VISION.md` and the underlying code.
+- **54 edge functions**, native iOS/Android/Flutter packages, pricing tiers, and the "comprehension layer / vibe coder / standalone-first" positioning all match `VISION.md` and the underlying code.
 - Signup form: HTML5 native validation correctly blocks an invalid email with a browser tooltip (screenshot on file, `signup-invalid-email-state.png`).
 - Zero console errors observed on landing, connect, pricing, cloud, roadmap, and changelog pages during the headed session.
 

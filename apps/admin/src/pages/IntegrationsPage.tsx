@@ -31,6 +31,7 @@ import { DeploymentReadinessCard } from '../components/integrations/DeploymentRe
 import { SlackIntegrationCard } from '../components/integrations/SlackIntegrationCard'
 import { DiscordIntegrationCard } from '../components/integrations/DiscordIntegrationCard'
 import { TeamsIntegrationCard } from '../components/integrations/TeamsIntegrationCard'
+import { LinearIntegrationCard } from '../components/integrations/LinearIntegrationCard'
 import { NotificationPrefsMatrix } from '../components/integrations/NotificationPrefsMatrix'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
@@ -90,6 +91,24 @@ export function IntegrationsPage() {
     window.history.replaceState(null, '', `${window.location.pathname}${next ? `?${next}` : ''}`)
     // Empty deps: runs once on mount to consume the redirect params.
   }, [])
+  // Linear OAuth callback redirect: ?connected=linear
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const connected = params.get('connected')
+    const linearError = params.get('linear_error')
+    if (connected === 'linear') {
+      toast.success('Linear workspace connected', 'Reports will now create Linear issues and sync status.')
+      params.delete('connected')
+    } else if (linearError) {
+      toast.error('Linear connect failed', linearError)
+      params.delete('linear_error')
+    } else {
+      return
+    }
+    const next = params.toString()
+    window.history.replaceState(null, '', `${window.location.pathname}${next ? `?${next}` : ''}`)
+    // Empty deps: runs once on mount.
+  }, [])
   const setup = useSetupStatus(activeProjectId)
   const copy = usePageCopy('/integrations')
   const platformQuery = usePageData<PlatformResponse>('/v1/admin/integrations/platform')
@@ -144,6 +163,12 @@ export function IntegrationsPage() {
         return src === 'org' || src === 'env'
       })
   }, [platform, sourceByField])
+
+  /** True when Linear OAuth or API key is configured. */
+  const linearConnected = useMemo(() => {
+    const lp = platform?.linear as Record<string, string | null | undefined> | undefined
+    return Boolean(lp?.linear_workspace_name || lp?.linear_access_token_ref || lp?.linear_api_key_ref)
+  }, [platform])
 
   const platformConnected = useCallback(
     (kind: Kind) => {
@@ -208,6 +233,7 @@ export function IntegrationsPage() {
     github: {},
     cursor_cloud: {},
     claude_code_agent: {},
+    linear: {},
   })
   const [saving, setSaving] = useState<Kind | null>(null)
   const [testing, setTesting] = useState<Kind | null>(null)
@@ -613,6 +639,30 @@ export function IntegrationsPage() {
           githubAppInstalled={Boolean(platform?.github?.has_credentials)}
           vercelProjectSlug={vercelSlug}
         />
+        </div>
+      </Panel>
+
+      <PanelSectionLabel>Issue trackers</PanelSectionLabel>
+      <Panel className="mb-6">
+        <p className="px-4 pt-3 pb-2 text-2xs text-fg-secondary border-b border-panel-border leading-snug">
+          Connect Linear to auto-create issues from triaged bug reports, sync status back when issues are resolved, and use Mushi as an AI agent directly within Linear.
+        </p>
+        <div className="p-4">
+          <LinearIntegrationCard
+            projectId={activeProjectId ?? null}
+            linearConnected={linearConnected}
+            workspaceName={
+              (platform?.linear as Record<string, string | null | undefined> | undefined)
+                ?.linear_workspace_name ?? null
+            }
+            teamId={
+              (platform?.linear as Record<string, string | null | undefined> | undefined)
+                ?.linear_team_id ?? null
+            }
+            latestProbe={latestByKind['linear']}
+            sparkline={sparklineByKind['linear'] ?? []}
+            onReload={reloadAll}
+          />
         </div>
       </Panel>
 
