@@ -477,8 +477,12 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
   });
 
   // ── Slack OAuth install flow ──────────────────────────────────────────────
-  // GET /v1/admin/integrations/slack/install?project_id=<uuid>
-  // Redirects the user to Slack's OAuth authorize URL.
+  // GET /v1/admin/integrations/slack/install
+  // Returns Slack's OAuth authorize URL as JSON; the console fetches it (with a
+  // Bearer token via apiFetch) and then navigates the browser to it.
+  // Why JSON, not a 302: this route is jwtAuth-gated, but the "Add to Slack"
+  // button is a full-page navigation that cannot attach an Authorization header
+  // — a top-level GET here would 401 before Slack is ever reached.
   // The `state` encodes the project ID + a random nonce (HMAC-verified on callback).
   app.get('/v1/admin/integrations/slack/install', jwtAuth, async (c) => {
     const clientId = Deno.env.get('SLACK_CLIENT_ID');
@@ -497,7 +501,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const redirectUri = slackRedirectUri();
     const scopes = ['chat:write', 'chat:write.public', 'commands', 'channels:read', 'users:read'].join(',');
     const url = `https://slack.com/oauth/v2/authorize?client_id=${encodeURIComponent(clientId)}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`;
-    return c.redirect(url, 302);
+    return c.json({ ok: true, data: { url } });
   });
 
   // GET /v1/webhooks/slack/oauth-callback  (public — Slack redirects here after install)

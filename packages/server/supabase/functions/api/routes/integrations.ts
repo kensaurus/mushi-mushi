@@ -819,9 +819,15 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
   //
   // GET /v1/admin/linear-oauth/authorize
   //
-  // Initiates the Linear OAuth 2.0 Authorization Code flow. The console
-  // "Connect" button navigates to this endpoint, which 302s to Linear's
-  // authorize URL with a short-lived CSRF state nonce stored in linear_oauth_states.
+  // Initiates the Linear OAuth 2.0 Authorization Code flow. Returns the Linear
+  // authorize URL as JSON; the console fetches it (with a Bearer token via
+  // apiFetch) and then sets window.location.href to it.
+  //
+  // Why JSON, not a 302: this route is jwtAuth-gated, but the console's
+  // "Connect" button is a full-page navigation which cannot attach an
+  // Authorization header — so a top-level GET here would 401 before Linear is
+  // ever reached. Returning the URL over an authenticated fetch and navigating
+  // client-side is the correct SPA + bearer-token OAuth-initiation pattern.
   //
   // Requires jwtAuth + project ownership (same as other admin integration routes).
 
@@ -863,7 +869,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     authUrl.searchParams.set('actor', 'app');
     authUrl.searchParams.set('response_type', 'code');
 
-    return c.redirect(authUrl.toString(), 302);
+    return c.json({ ok: true, data: { url: authUrl.toString() } });
   });
 
   // ── Linear disconnect ──────────────────────────────────────────────────────
