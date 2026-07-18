@@ -2,6 +2,7 @@ import { Footer, Layout, Navbar } from 'nextra-theme-docs'
 import { Banner, Head } from 'nextra/components'
 import { getPageMap } from 'nextra/page-map'
 import Link from 'next/link'
+import { NavbarAuthChrome } from '../components/NavbarAuthChrome'
 /* globals.css imports both `tailwindcss` AND `nextra-theme-docs/style.css`,
  * so we only import the one entry file to keep the cascade ordering stable
  * (Tailwind base layer before Nextra theme styles). */
@@ -107,7 +108,14 @@ const navbar = (
       </span>
     }
     projectLink="https://github.com/kensaurus/mushi-mushi"
-  />
+  >
+    {/* Auth-aware chrome: renders avatar pill + "Console" + "Sign out" when
+        a session is active (populated via the postMessage bridge in
+        migrationProgress.ts), or a "Console" link + "Sign in" button when
+        signed out. Client component — SSR pass renders the anonymous shell
+        so there's never a flash of wrong identity. */}
+    <NavbarAuthChrome />
+  </Navbar>
 )
 
 const footer = (
