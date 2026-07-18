@@ -2,15 +2,15 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-07-14 · **513** routes.
+> Generated: 2026-07-18 · **515** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 82 |
+| `adminOrApiKey` | 85 |
 | `apiKeyAuth` | 44 |
-| `jwtAuth` | 325 |
+| `jwtAuth` | 324 |
 | `jwtOrApiKey` | 3 |
 | `unknown` | 59 |
 
@@ -141,8 +141,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/admin/integrations/:type` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | GET | `/v1/admin/integrations/claude-code-agent/setup` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | GET | `/v1/admin/integrations/health` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/health.ts` |
-| GET | `/v1/admin/integrations/platform` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
-| PUT | `/v1/admin/integrations/platform/:kind` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
+| GET | `/v1/admin/integrations/platform` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/integrations.ts` |
+| PUT | `/v1/admin/integrations/platform/:kind` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | POST | `/v1/admin/integrations/platform/:kind/apply` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | GET | `/v1/admin/integrations/slack/channels` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/integrations/slack/install` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
@@ -192,6 +192,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/lessons/:id/reports` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lessons.ts` |
 | POST | `/v1/admin/lessons/query` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/lessons.ts` |
 | GET | `/v1/admin/lessons/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lessons.ts` |
+| GET | `/v1/admin/linear-oauth/authorize` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
+| DELETE | `/v1/admin/linear-oauth/disconnect` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | GET | `/v1/admin/marketplace/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | GET | `/v1/admin/migrations/progress` | `jwtAuth` | `packages/server/supabase/functions/api/routes/migration-progress.ts` |
 | DELETE | `/v1/admin/migrations/progress/:guide_slug` | `jwtAuth` | `packages/server/supabase/functions/api/routes/migration-progress.ts` |
