@@ -46,6 +46,9 @@ interface PlatformSettingsRow {
   github_installation_token_ref: string | null
   claude_api_key_ref: string | null
   cursor_api_key_ref: string | null
+  // Linear — vault-backed (added in migration 20260718000001_linear_integration)
+  linear_api_key_ref: string | null
+  linear_access_token_ref: string | null
 }
 
 interface RoutingRow {
@@ -88,13 +91,21 @@ function hasCursorCloud(s: PlatformSettingsRow): boolean {
   return !!s.cursor_api_key_ref
 }
 
+/** Returns true when the project has vault-backed Linear platform credentials. */
+function hasLinearPlatform(s: PlatformSettingsRow): boolean {
+  return !!(s.linear_access_token_ref || s.linear_api_key_ref)
+}
+
 // Map project_integrations.integration_type → probe kind.
 // 'github' in routing is stored as 'github' but probed as 'github_issues'
 // to distinguish it from the platform GitHub (code-repo) integration.
+// Note: 'linear' is no longer in the routing map — it now lives in project_settings
+// (platform settings) and is probed via hasLinearPlatform + the 'linear' kind.
+// Legacy project_integrations rows with integration_type='linear' will fall through
+// routingTypeToKind as null and be silently skipped.
 function routingTypeToKind(type: string): IntegrationKind | null {
   const map: Record<string, IntegrationKind> = {
     jira: 'jira',
-    linear: 'linear',
     github: 'github_issues',
     pagerduty: 'pagerduty',
   }
@@ -122,10 +133,10 @@ async function handler(req: Request): Promise<Response> {
       db
         .from('project_settings')
         .select(
-          'project_id, sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, claude_api_key_ref, cursor_api_key_ref',
+          'project_id, sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, claude_api_key_ref, cursor_api_key_ref, linear_api_key_ref, linear_access_token_ref',
         ),
       db.from('projects').select('id, organization_id'),
-      db.from('organization_integration_settings').select('organization_id, sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, claude_api_key_ref, cursor_api_key_ref'),
+      db.from('organization_integration_settings').select('organization_id, sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, claude_api_key_ref, cursor_api_key_ref, linear_api_key_ref, linear_access_token_ref'),
     ])
     if (settingsErr) throw new Error(`project_settings load failed: ${settingsErr.message}`)
     const allSettings = (settingsRows ?? []) as PlatformSettingsRow[]
@@ -152,6 +163,7 @@ async function handler(req: Request): Promise<Response> {
         'langfuse_host', 'langfuse_public_key_ref', 'langfuse_secret_key_ref',
         'github_repo_url', 'github_installation_token_ref',
         'claude_api_key_ref', 'cursor_api_key_ref',
+        'linear_api_key_ref', 'linear_access_token_ref',
       ]
       for (const f of fields) {
         if (merged[f] == null || merged[f] === '') {
@@ -191,6 +203,9 @@ async function handler(req: Request): Promise<Response> {
       }
       if (hasCursorCloud(s)) {
         tasks.push({ projectId: s.project_id, kind: 'cursor_cloud', settings: s, routingConfig: {} })
+      }
+      if (hasLinearPlatform(s)) {
+        tasks.push({ projectId: s.project_id, kind: 'linear', settings: s, routingConfig: {} })
       }
     }
 

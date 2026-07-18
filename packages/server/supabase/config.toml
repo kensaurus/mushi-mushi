@@ -295,3 +295,23 @@ verify_jwt = false
 # sdk_upgrade_jobs. Auth is enforced inside via requireServiceRoleAuth.
 [functions.sdk-release-sync]
 verify_jwt = false
+
+# linear-oauth-callback is the OAuth 2.0 redirect target hit by the user's
+# browser after they authorize the Mushi Linear app — no Supabase JWT is
+# present. CSRF is enforced inside via the state nonce validated against
+# linear_oauth_states.
+[functions.linear-oauth-callback]
+verify_jwt = false
+
+# webhooks-linear receives Linear push events (issue state changes, OAuthApp
+# revoked) from Linear's servers — no Supabase JWT. Auth inside via the
+# Linear-Signature HMAC-SHA256 header verified against the per-install
+# webhook secret stored in vault.
+[functions.webhooks-linear]
+verify_jwt = false
+
+# webhooks-linear-agent receives Linear Agent (AppUserNotification) events
+# from Linear's servers — no Supabase JWT. Auth inside via HMAC signature
+# verification.
+[functions.webhooks-linear-agent]
+verify_jwt = false

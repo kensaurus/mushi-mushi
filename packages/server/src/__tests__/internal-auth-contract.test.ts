@@ -46,6 +46,16 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   'stripe-webhooks': 'Stripe signature verified in handler',
   'webhooks-github-indexer': 'GitHub HMAC verified in handler',
   'slack-interactions': 'Slack signing secret verified in handler',
+  // Linear integration — public endpoints authenticated in-handler.
+  // linear-oauth-callback: OAuth2 redirect target from Linear (user browser,
+  //   no Supabase JWT); CSRF enforced via state nonce in linear_oauth_states.
+  // webhooks-linear: receives Linear push events; HMAC-SHA256 signature
+  //   verified per-project before processing.
+  // webhooks-linear-agent: receives Linear AppUserNotification events;
+  //   HMAC-SHA256 signature verified before any dispatch.
+  'linear-oauth-callback': 'OAuth2 redirect — state nonce CSRF + Linear token exchange',
+  'webhooks-linear': 'Linear HMAC-SHA256 webhook signature verified in handler',
+  'webhooks-linear-agent': 'Linear HMAC-SHA256 agent webhook signature verified in handler',
   // Intelligence report is called by the admin UI via JWT and by internal
   // callers via service role — handler branches on the caller.
   'intelligence-report': 'Dual JWT/service-role handled in handler',
