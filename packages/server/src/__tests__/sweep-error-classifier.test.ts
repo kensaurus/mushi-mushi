@@ -58,6 +58,11 @@ describe('classifyIndexerError — Sentry noise routing for sweep failures', () 
       ['Rate limit exceeded', 'OpenAI / GitHub rate limit'],
       ['ECONNRESET', 'TCP reset'],
       ['operation timeout after 30000ms', 'embedding call timeout'],
+      [
+        'error sending request from [ip]:33110 for https://api.github.com/repos/x/y/contents/z?ref=main ([ip]:443): client error (SendRequest): http2 error: stream error received: refused stream before processing any application logic',
+        'hyper HTTP/2 refused stream (MUSHI-MUSHI-SERVER-B regression)',
+      ],
+      ['http2 error: connection error received: not a result of an error', 'HTTP/2 GOAWAY'],
     ])('classifies %j as transient (%s)', (msg) => {
       expect(classifyIndexerError(new Error(msg))).toBe('transient');
     });

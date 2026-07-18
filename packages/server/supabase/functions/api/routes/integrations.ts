@@ -1,9 +1,9 @@
 import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import type { IntegrationKind } from '../../_shared/integration-probes.ts';
-import { FIX_AGENT_KINDS, PLATFORM_KINDS } from '../../_shared/integration-probes.ts';
+import { FIX_AGENT_KINDS, PLATFORM_KINDS, TICKET_INTEGRATION_KINDS } from '../../_shared/integration-probes.ts';
 import { getServiceClient } from '../../_shared/db.ts';
-import { jwtAuth } from '../../_shared/auth.ts';
+import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
 import { callerProjectIds, resolveOwnedProject, resolveAccessibleOrg } from '../shared.ts';
@@ -311,11 +311,24 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       'cursor_max_iterations',
     ],
     claude_code_agent: ['claude_api_key_ref'],
+    // Linear: vault-backed credentials replacing project_integrations.config for 'linear'
+    linear: [
+      'linear_api_key_ref',
+      'linear_access_token_ref',
+      'linear_workspace_name',
+      'linear_team_id',
+      'linear_webhook_secret_ref',
+      'linear_actor_token_ref',
+    ],
   };
 
-  const PLATFORM_API_KINDS = [...PLATFORM_KINDS, ...FIX_AGENT_KINDS] as IntegrationKind[];
+  const PLATFORM_API_KINDS = [
+  ...PLATFORM_KINDS,
+  ...FIX_AGENT_KINDS,
+  ...TICKET_INTEGRATION_KINDS,
+] as IntegrationKind[];
 
-  app.get('/v1/admin/integrations/platform', jwtAuth, async (c) => {
+  app.get('/v1/admin/integrations/platform', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
@@ -372,9 +385,16 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     github: ['github_installation_token_ref', 'github_webhook_secret', 'github_deploy_key'],
     cursor_cloud: ['cursor_api_key_ref'],
     claude_code_agent: ['claude_api_key_ref'],
+    linear: [
+      'linear_api_key_ref',
+      'linear_access_token_ref',
+      'linear_refresh_token_ref',
+      'linear_webhook_secret_ref',
+      'linear_actor_token_ref',
+    ],
   };
 
-  app.put('/v1/admin/integrations/platform/:kind', jwtAuth, async (c) => {
+  app.put('/v1/admin/integrations/platform/:kind', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
     const userId = c.get('userId') as string;
     const kind = c.req.param('kind')! as IntegrationKind;
     if (!PLATFORM_API_KINDS.includes(kind)) {
@@ -793,6 +813,94 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       results,
     });
     return c.json({ ok: true, data: { synced: results } });
+  });
+
+  // ── Linear OAuth authorize ─────────────────────────────────────────────────
+  //
+  // GET /v1/admin/linear-oauth/authorize
+  //
+  // Initiates the Linear OAuth 2.0 Authorization Code flow. The console
+  // "Connect" button navigates to this endpoint, which 302s to Linear's
+  // authorize URL with a short-lived CSRF state nonce stored in linear_oauth_states.
+  //
+  // Requires jwtAuth + project ownership (same as other admin integration routes).
+
+  app.get('/v1/admin/linear-oauth/authorize', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project selected' } }, 400),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const clientId = Deno.env.get('LINEAR_OAUTH_CLIENT_ID');
+    if (!clientId) {
+      return c.json({
+        ok: false,
+        error: { code: 'MISCONFIGURED', message: 'Linear OAuth not configured. Contact support.' },
+      }, 503);
+    }
+
+    // Mint a one-time CSRF nonce
+    const nonce = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
+    const { error: insertError } = await db
+      .from('linear_oauth_states')
+      .insert({ project_id: project.id, user_id: userId, nonce });
+
+    if (insertError) {
+      log.error('Failed to insert linear_oauth_states', { err: insertError.message });
+      return c.json({ ok: false, error: { code: 'INTERNAL', message: 'Failed to create auth state' } }, 500);
+    }
+
+    const callbackUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/linear-oauth-callback`;
+    const authUrl = new URL('https://linear.app/oauth/authorize');
+    authUrl.searchParams.set('client_id', clientId);
+    authUrl.searchParams.set('redirect_uri', callbackUrl);
+    authUrl.searchParams.set('scope', 'read write app:assignable app:mentionable');
+    authUrl.searchParams.set('state', nonce);
+    authUrl.searchParams.set('actor', 'app');
+    authUrl.searchParams.set('response_type', 'code');
+
+    return c.redirect(authUrl.toString(), 302);
+  });
+
+  // ── Linear disconnect ──────────────────────────────────────────────────────
+  //
+  // DELETE /v1/admin/linear-oauth/disconnect
+  //
+  // Clears all vault-backed Linear credentials for the active project.
+
+  app.delete('/v1/admin/linear-oauth/disconnect', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project selected' } }, 400),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const { error } = await db
+      .from('project_settings')
+      .update({
+        linear_access_token_ref: null,
+        linear_refresh_token_ref: null,
+        linear_api_key_ref: null,
+        linear_workspace_name: null,
+        linear_team_id: null,
+        linear_webhook_secret_ref: null,
+        linear_actor_token_ref: null,
+      })
+      .eq('project_id', project.id);
+
+    if (error) {
+      return c.json({ ok: false, error: { code: 'INTERNAL', message: 'Disconnect failed' } }, 500);
+    }
+
+    await logAudit(db, project.id, userId, 'integration.synced', 'project', project.id, { action: 'disconnected', kind: 'linear' });
+    return c.json({ ok: true, data: { disconnected: 'linear' } });
   });
 
 }

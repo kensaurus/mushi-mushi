@@ -5,6 +5,7 @@ import type { Session, User } from '@supabase/supabase-js'
 import { authRedirectUrl, detectRecoveryFromUrl } from './authRedirect'
 import { notifySignOut, subscribeAuthBroadcast } from './authBroadcast'
 import { signInWithPasskey as signInWithPasskeyApi } from './passkeys'
+import { upsertAccount } from './accountSessions'
 
 // Attach the Supabase user id (UUID — not PII) to every Sentry event so we can
 // answer "which user hit this?" without scanning replays. Email is intentionally
@@ -83,6 +84,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
       syncSentryUser(session)
+      // Keep the multi-account switcher store in sync: a real sign-in (or the
+      // initial restored session) records + activates that account; a silent
+      // token refresh only updates the stored tokens so a background account's
+      // rotating refresh token never goes stale.
+      if (session) {
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          upsertAccount(session, true)
+        } else if (event === 'TOKEN_REFRESHED') {
+          upsertAccount(session, false)
+        }
+      }
       if (event === 'PASSWORD_RECOVERY') {
         setIsPasswordRecovery(true)
       }
@@ -95,14 +107,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       syncSentryUser(session)
+      if (session) upsertAccount(session, true)
       setLoading(false)
     }).catch(() => setLoading(false))
 
     const unsubscribeBroadcast = subscribeAuthBroadcast((event) => {
-      if (event !== 'SIGNED_OUT') return
-      setSession(null)
-      syncSentryUser(null)
-      setIsPasswordRecovery(false)
+      if (event === 'SIGNED_OUT') {
+        setSession(null)
+        syncSentryUser(null)
+        setIsPasswordRecovery(false)
+        return
+      }
+      if (event === 'ACCOUNT_SWITCHED' && typeof window !== 'undefined') {
+        // Another tab switched the active account. Reload so this tab drops any
+        // in-memory data from the previous account and boots into the new one.
+        window.location.reload()
+      }
     })
 
     return () => {

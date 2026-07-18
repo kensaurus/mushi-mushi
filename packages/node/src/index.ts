@@ -10,6 +10,10 @@ export { createOtelSpanProcessor } from './otel'
 export { mushiTraceMiddleware, emitMushiSpan } from './middleware'
 export type { TraceMiddlewareOptions } from './middleware'
 
+// Linear integration — programmatic connect/disconnect for CI and server-side scripts.
+export { connectLinearApiKey, getLinearConnectionStatus, disconnectLinear } from './linear'
+export type { LinearConnectorOptions, LinearConnectionStatus } from './linear'
+
 // Reward webhook receiver (Workstream D3) — turnkey host-side "grant role /
 // grant membership" trigger driven by Mushi reward events.
 export {

@@ -35,7 +35,9 @@ import {
 import {
   gatherMcpTriageContext,
   formatMcpTriageContextForPrompt,
-} from '../_shared/mcp-triage-context.ts';
+} from '../_shared/mcp-triage-context.ts'
+import { linearSearchIssues } from '../_shared/linear-mcp-client.ts'
+import { isLinearConnected } from '../_shared/linear.ts';
 
 const stage2Schema = z.object({
   category: z
@@ -819,7 +821,49 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
             ? childTraceparent((report.metadata as Record<string, unknown>).traceparent as string)
             : undefined;
 
-        void createExternalIssue(
+        // ── Linear dedup: if Linear is connected, search for an existing issue
+        // matching this component + summary before createExternalIssue creates a
+        // new one. If a duplicate is found, link it and skip creation via Linear.
+        void (async () => {
+          try {
+            if (await isLinearConnected(db, projectId)) {
+              const searchQuery = [classification.component, classification.summary]
+                .filter(Boolean)
+                .join(' ')
+              const existing = await linearSearchIssues(db, projectId, searchQuery)
+              if (existing.length > 0) {
+                const match = existing[0]
+                // Only link if not already linked to this report
+                const { data: already } = await db
+                  .from('report_external_issues')
+                  .select('id')
+                  .eq('report_id', reportId)
+                  .eq('system', 'linear')
+                  .eq('external_id', match.identifier)
+                  .maybeSingle()
+                if (!already) {
+                  await db.from('report_external_issues').insert({
+                    report_id: reportId,
+                    project_id: projectId,
+                    system: 'linear',
+                    external_id: match.identifier,
+                    external_url: match.url || null,
+                  })
+                  log.info('Linear dedup: linked existing issue', {
+                    reportId,
+                    linearIssue: match.identifier,
+                    projectId,
+                  })
+                  return // Skip creating a new Linear issue below
+                }
+              }
+            }
+          } catch (dedupErr) {
+            // Dedup is best-effort — log and let createExternalIssue proceed
+            log.warn('Linear dedup search failed', { reportId, err: String(dedupErr) })
+          }
+
+          void createExternalIssue(
           db,
           projectId,
           {
@@ -852,6 +896,7 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
           .catch((e: unknown) =>
             log.error('createExternalIssue failed', { err: String(e), reportId }),
           );
+        })()
       }
 
       // Vision analysis (V5.3 air-gap): image-only call with trusted system prompt;
