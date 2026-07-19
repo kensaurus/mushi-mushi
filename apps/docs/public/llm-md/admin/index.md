@@ -1,0 +1,25 @@
+# index
+
+Source: https://kensaur.us/mushi-mushi/docs/admin
+
+# Admin console
+
+{ADMIN_INDEX_LEDE}
+
+## Day-to-day
+
+- [Reports inbox](/admin/reports)
+- [Fix drafts & PRs](/admin/fixes)
+- [Ask in plain English](/admin/query)
+
+## Deeper surfaces
+
+[Skill playbooks](/admin/skill-pipelines) ·
+[Rewards](/admin/rewards) ·
+[Knowledge graph](/admin/graph) ·
+[Fix quality scores](/admin/judge) ·
+[Weekly insights](/admin/intelligence) ·
+[Fine-tuning](/admin/fine-tuning) ·
+[Live collaboration](/admin/realtime) ·
+[MCP](/admin/mcp) ·
+[Connect](/admin/connect)

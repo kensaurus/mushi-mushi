@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
 import { MUSHI_CLI_VERSION } from '../version.js';
 import { runSourcemapsUpload } from '../sourcemaps.js';
-import { apiCall, die, requireConfig } from '../cli-shared.js';
+import { apiCall, die, outputIsJson, printResult, requireConfig } from '../cli-shared.js';
 import { reportsUrl, resolveConsoleUrlSync } from '../console-url.js';
 
 export function registerDiagnosticsCommands(program: Command): void {
@@ -9,7 +9,7 @@ export function registerDiagnosticsCommands(program: Command): void {
 program
   .command('test')
   .description('Submit a synthetic test report to verify the ingestion pipeline end-to-end')
-  .option('--json', 'Machine-readable JSON output')
+  .option('--json', 'Machine-readable JSON output (alias for -o json)')
   .action(async (opts: { json?: boolean }) => {
     const config = requireConfig()
     const result = await apiCall<{ reportId: string; status: string }>('/v1/reports', config, {
@@ -33,15 +33,15 @@ program
       }),
     })
     if (!result.ok) die(result)
-    if (opts.json) {
-      console.log(JSON.stringify(result.data, null, 2))
-    } else {
-      const d = result.data
-      console.log(`✓ Test report submitted`)
-      console.log(`  ID:     ${d.reportId}`)
-      console.log(`  Status: ${d.status}`)
-      console.log(`  View:   ${reportsUrl(resolveConsoleUrlSync(), d.reportId)}`)
-    }
+    printResult(result.data, {
+      json: opts.json,
+      render(d) {
+        console.log(`✓ Test report submitted`)
+        console.log(`  ID:     ${d.reportId}`)
+        console.log(`  Status: ${d.status}`)
+        console.log(`  View:   ${reportsUrl(resolveConsoleUrlSync(), d.reportId)}`)
+      },
+    })
   })
 
 // ─── index ────────────────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ program
   .description('Walk a local repo and upload code chunks to the Mushi RAG indexer')
   .option('--language <lang>', 'Limit to one language: ts, tsx, js, py, go, rs')
   .option('--dry-run', 'Show what would be uploaded without sending')
-  .option('--json', 'Machine-readable summary: { files, bytes }')
+  .option('--json', 'Machine-readable summary: { files, bytes } (alias for -o json)')
   .addHelpText('after', `
 Uploads source code into the Mushi vector index so the fix-worker can
 retrieve relevant context when generating patches. Only needed for private
@@ -109,8 +109,9 @@ Examples:
       }
     }
 
-    if (opts.json) {
-      console.log(JSON.stringify({ ok: errors === 0, files: count, bytes, errors }))
+    const summary = { ok: errors === 0, files: count, bytes, errors }
+    if (outputIsJson(opts.json)) {
+      console.log(JSON.stringify(summary, null, 2))
     } else {
       const kb = (bytes / 1024).toFixed(1)
       console.log(`\nIndexed ${count} files (${kb} KB) into project ${config.projectId}${errors ? ` — ${errors} failed` : ''}`)

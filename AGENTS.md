@@ -34,7 +34,7 @@ The "is this drift?" test for any feature you build or surface you write: *"Does
 
 ## Agent Inventory
 
-<sub>19 pipeline agents — run <code>pnpm docs-stats</code> for live edge-function, migration, and package counts. Updated Jul 12 2026 (docs drift sync: infra workers completed; migration IDs corrected; reporter incentives + in-SDK assistant + SDK reliability overhaul remain as below).</sub>
+<sub>19 pipeline agents — run <code>pnpm docs-stats</code> for live edge-function, migration, and package counts. Updated Jul 19 2026 (healthz + Linear webhook/oauth infra; CLI table aligned with <code>apps/docs/content/sdks/cli.mdx</code>).</sub>
 
 | Agent | Location | Trigger | Description |
 |-------|----------|---------|-------------|
@@ -93,6 +93,10 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `invitation-reminders` | Pending invite reminder cron |
 | `recompute-tester-reputation` | Tester marketplace reputation recompute |
 | `reward-payout-aggregator` | Aggregates reward payout batches |
+| `healthz` | Unauthenticated liveness + cheap DB probe (`{status, db, version}`); `verify_jwt = false` |
+| `linear-oauth-callback` | Completes Linear OAuth; vaults tokens; registers inbound webhook |
+| `webhooks-linear` | Linear issue push webhooks (HMAC); resolves linked reports on completed/cancelled |
+| `webhooks-linear-agent` | Linear AgentSessionEvent webhooks (acknowledge within 10s; may dispatch fix-worker) |
 
 Also: **`api`** (Hono REST router) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
 
@@ -239,11 +243,11 @@ Live App URL
 
 | Group | Commands |
 | --- | --- |
-| **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi doctor`, `mushi completion`, `mushi nudge` |
-| **Project & deploy** | `mushi project`, `mushi config`, `mushi console`, `mushi deploy check`, `mushi index`, `mushi sourcemaps upload` |
-| **Reports** | `mushi reports list/show/search/triage/…`, `mushi feedback board` |
-| **Fixes** | `mushi fix`, `mushi fixes tail/refresh-ci/merge`, `mushi console watch` |
-| **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve`, `mushi stories map` |
+| **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi doctor`, `mushi ping`, `mushi completion`, `mushi nudge` |
+| **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit` |
+| **Reports & lessons** | `mushi reports list/show/search/triage/…`, `mushi lessons list/show`, `mushi sync-lessons`, `mushi feedback board` |
+| **Fixes** | `mushi fix`, `mushi fixes tail/refresh-ci/merge`, `mushi console watch <reportId>` |
+| **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map` |
 | **Skills / pipeline** | `mushi skills list/show/sync`, `mushi pipeline start/watch/checkin` |
 | **Integrations** | `mushi integrations list/test`, `mushi slack status/test`, `mushi keys list/add` |
 | **Billing** | `mushi usage`, `mushi billing status/cap` |
@@ -316,7 +320,7 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **68 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.generated.mdx`](apps/docs/content/sdks/mcp-tools.generated.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **69 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.generated.mdx`](apps/docs/content/sdks/mcp-tools.generated.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 
@@ -800,7 +804,9 @@ Full precedence: [`docs/SDK_RUNTIME_CONFIG.md`](docs/SDK_RUNTIME_CONFIG.md).
 | Rate limits work for IP-derived actors | `20260702035407_scoped_rate_limits_generalize_actor.sql` |
 | MCP JWT validation for write scope | `functions/mcp/index.ts` |
 | Canonical hosted tool manifest | `_shared/mcp-hosted-tool-manifest.json` |
-| Readiness probe | `GET /health/ready` in `api/routes/discovery.ts` |
+| Liveness probe | `GET /health` in `api/routes/discovery.ts` (always-green process up) |
+| Readiness probe | `GET /health/ready` in `api/routes/discovery.ts` (DB-aware) |
+| Standalone healthz | `GET /functions/v1/healthz` — unauthenticated `{status, db, version}` edge function |
 | LLM transient retry before key rotation | `_shared/llm-failover.ts` |
 
 ---

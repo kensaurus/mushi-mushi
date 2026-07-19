@@ -1,0 +1,28 @@
+# Feature board
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/feature-board
+
+---
+title: Feature board
+---
+
+# Feature board
+
+**Route:** `/feature-board`
+
+> **Scenario:** Users keep asking for the same product capability — you want a
+> public-ish board to upvote requests and mark them shipped.
+
+Community-driven board of **feature**-category support tickets:
+
+- Members upvote and comment
+- Operators mark requests **shipped** when released
+- Snapshot strip shows open / in-progress / shipped counts
+
+Personal support tickets (bugs, billing, how-to) stay on
+[Feedback](/admin/feedback).
+
+## Related pages
+
+- [Feedback](/admin/feedback) — your support ticket hub
+- [Releases](/admin/releases) — credit reporters when features ship

@@ -254,7 +254,7 @@ export function SentryContextPanel({
               </span>
             </div>
           </div>
-          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+          {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
           <ol className="relative ml-1 border-l border-edge-subtle space-y-2 pl-3 max-h-[28rem] overflow-y-auto pr-1">
             {unified.map((c, i) => (
               <li key={i} className="relative">
@@ -263,7 +263,7 @@ export function SentryContextPanel({
                   className={`absolute -left-[14px] top-1.5 size-2 rounded-full ${SOURCE_DOT[c.source]} ring-2 ring-surface`}
                 />
                 <div className="flex flex-wrap items-baseline gap-1.5">
-                  // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+                  {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
                   <span className="text-2xs font-mono text-fg-faint min-w-[3rem]">
                     {formatRelative(c.ts, lastTs)}
                   </span>

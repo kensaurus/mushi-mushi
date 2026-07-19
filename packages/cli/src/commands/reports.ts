@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import { apiCall, die, requireConfig, fmtDate, pad } from '../cli-shared.js';
+import { apiCall, die, requireConfig, fmtDate, pad, outputIsJson } from '../cli-shared.js';
 import type { ReportListData, ReportDetail } from '../cli-types.js';
 
 export function registerReportsCommands(program: Command): void {
@@ -28,7 +28,7 @@ Examples:
     if (opts.search) params.set('search', opts.search)
     const result = await apiCall<ReportListData>(`/v1/sync/reports?${params}`, config)
     if (!result.ok) die(result)
-    if (opts.json) {
+    if (outputIsJson(opts.json)) {
       console.log(JSON.stringify(result.data, null, 2))
       return
     }
@@ -328,7 +328,7 @@ Examples:
     if (opts.status) params.set('status', opts.status)
     const result = await apiCall<ReportListData>(`/v1/sync/reports?${params}`, config)
     if (!result.ok) die(result)
-    if (opts.json) {
+    if (outputIsJson(opts.json)) {
       console.log(JSON.stringify(result.data, null, 2))
       return
     }

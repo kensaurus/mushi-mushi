@@ -83,11 +83,21 @@ export async function writeMcpServerEntry(opts: WriteMcpOptions): Promise<WriteM
 
 /**
  * Build a canonical `mcpServers` block for the Mushi MCP server.
+ *
+ * @param opts.inlineKey - When true, the literal API key is written into the
+ *   env block. When false (default) the placeholder `${MUSHI_API_KEY}` is
+ *   written instead. Most editors (Cursor, Claude Code) support `${VAR}`
+ *   expansion in mcp.json env blocks, so the placeholder is safe for
+ *   project-tracked files. Pass `inlineKey: true` for headless/CI
+ *   environments that do not perform substitution, and ensure the file is
+ *   listed in `.gitignore`.
  */
 export function buildMcpServerBlock(opts: {
   endpoint: string
   projectId: string
   apiKey: string
+  /** Write the literal key into env (default false → uses `${MUSHI_API_KEY}` placeholder). */
+  inlineKey?: boolean
 }): McpServerEntry {
   return {
     command: 'npx',
@@ -95,10 +105,24 @@ export function buildMcpServerBlock(opts: {
     env: {
       MUSHI_API_ENDPOINT: opts.endpoint,
       MUSHI_PROJECT_ID: opts.projectId,
-      MUSHI_API_KEY: opts.apiKey,
+      MUSHI_API_KEY: opts.inlineKey ? opts.apiKey : '${MUSHI_API_KEY}',
       MUSHI_FEATURES: DEFAULT_MUSHI_FEATURES,
     },
   }
+}
+
+/**
+ * Print the export instruction a user needs when `inlineKey` is false.
+ * Call this after writing the mcp.json entry.
+ */
+export function printKeyExportHint(apiKey: string): void {
+  console.log('')
+  console.log('  Your API key was NOT written into the config file (prevents git leaks).')
+  console.log('  Add it to your shell profile or .env.local:')
+  console.log('')
+  console.log(`    export MUSHI_API_KEY="${apiKey}"`)
+  console.log('')
+  console.log('  Then restart your IDE. To write the key inline instead, re-run with --inline-key.')
 }
 
 /**

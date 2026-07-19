@@ -1,0 +1,62 @@
+# Launch Week 1 — five features, five days
+
+Source: https://kensaur.us/mushi-mushi/docs/blog/launch-week-1
+
+---
+title: "Launch Week 1 — five features, five days"
+description: Everything Mushi Mushi shipped in Launch Week 1 — one feature a day, from bug-report capture to editor-ready fixes, with demos and setup commands.
+date: 2026-06-17
+---
+
+# Launch Week 1 — five features, five days
+
+*Jun 17, 2026 · Kenji Sakuramoto*
+
+---
+
+Mushi has been shipping quietly for a year. This week we stop doing that.
+
+Five real features, five days, all announced publicly. The model is Supabase's Launch Week — not a PR stunt, just a concentrated shipping cadence with enough momentum for the GitHub Trending algorithm to notice.
+
+## The five
+
+**Monday — open-source relicense.** The server goes from BSL "source-available" to true OSI open source under **AGPLv3**. [Read the post →](/blog/agplv3-relicense)
+
+**Tuesday — One-click MCP install.** `mushi setup` writes `.cursor/mcp.json` (or `.claude/`, `.continue/`, or Zed's `settings.json`) in one command. No UUID paste.
+
+```bash
+mushi setup               # wires Cursor by default
+mushi setup --ide claude  # wires Claude Code
+mushi setup --ide zed     # wires Zed
+```
+
+**Wednesday — Zero-config SDK init.** `` needs no props if `NEXT_PUBLIC_MUSHI_*` (or `VITE_MUSHI_*`, `EXPO_PUBLIC_MUSHI_*`, etc.) are in your `.env`. The snippet in the wizard now reads exactly what was written to the file.
+
+```tsx
+// Before: 
+// After:    ← reads from env automatically
+```
+
+**Thursday — GitHub OAuth + onboarding.** Signup with one GitHub click. New users land on `/onboarding` instead of an empty dashboard. Self-hosters get `MUSHI_INIT_*` env vars for headless bootstrapping.
+
+**Friday — `mushi login`.** The CLI now opens a browser to `mushimushi.dev/settings/api-keys`, waits for you to paste back your key, and verifies it. No more copying Project UUIDs from the dashboard.
+
+```bash
+mushi login   # opens browser → paste key → verified
+```
+
+## Why now
+
+The install path had two activation-blocking bugs:
+1. The "Add to Cursor" button on `/connect` was 404ing against a non-existent endpoint.
+2. The CLI wizard's printed snippet used hardcoded literal keys instead of `process.env.*` — paste it and it broke.
+
+Both are fixed. Launch Week is the announcement.
+
+## Numbers on Friday
+
+Friday's retro post will include: GitHub stars gained during the week, new signups, reports captured, and one honest "this didn't go as planned" item. No rounding. No "we're thrilled with the response."
+
+---
+
+*Follow along on [Bluesky →](https://bsky.app/profile/mushimushi.dev)*

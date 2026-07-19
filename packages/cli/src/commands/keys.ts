@@ -1,6 +1,6 @@
 import type { Command } from 'commander';
 import { loadConfig } from '../config.js';
-import { apiCall } from '../cli-shared.js';
+import { apiCall, outputIsJson } from '../cli-shared.js';
 
 export function registerKeysCommands(program: Command): void {
 // ─── BYOK key management CLI ──────────────────────────────────────────────────
@@ -10,7 +10,8 @@ const keys = program.command('keys').description('Manage API key pool (BYOK)')
 keys
   .command('list')
   .description('List all API keys in the pool with their status')
-  .action(async () => {
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (opts: { json?: boolean }) => {
     const config = loadConfig()
     if (!config.apiKey || !config.projectId) { console.error('Run `mushi login` first'); process.exit(1) }
 
@@ -19,6 +20,7 @@ keys
       config,
     )
     if (!res.ok) { console.error(`Error: ${res.error.message}`); process.exit(1) }
+    if (outputIsJson(opts.json)) { console.log(JSON.stringify(res.data, null, 2)); return }
     if (res.data.keys.length === 0) { console.log('No keys configured.'); return }
 
     for (const k of res.data.keys) {

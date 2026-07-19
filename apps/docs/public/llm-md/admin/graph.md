@@ -1,0 +1,99 @@
+# Knowledge graph
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/graph
+
+---
+title: Knowledge graph
+---
+
+# Knowledge graph
+
+The Graph page renders your project's bug graph as an interactive, force-directed
+layout. It's the fastest way to see *which components are on fire* and *which bugs
+are clustered together* — without reading individual reports.
+
+---
+
+## Node types
+
+| Node | Size | Colour | Click action |
+| ---- | ---- | ------ | ------------ |
+| **Report** | Severity (critical = largest) | Red gradient | Opens report detail drawer |
+| **Component** | Blast radius (cached, refreshed every 15 min) | Blue | Shows blast-radius panel |
+| **Fix attempt** | Fixed | Green | Opens fix drawer with PR link |
+| **Inventory Action** *(Surface mode)* | — | Amber | Shows Action + `expected_outcome` |
+
+Edges connect nodes that share a Bug-Ontology tag, land on the same component, or
+are linked by the `reports_against` graph edge that `classify-report` writes when
+it matches a report to an inventory Action node.
+
+---
+
+## Blast radius
+
+Click any **component** node to see its blast radius panel:
+
+- **Open reports** — count by severity in the last 30 days.
+- **Affected routes** — pages in `inventory.yaml` that touch this component.
+- **Last fix** — most recent fix attempt, its PR URL, and the synthetic-monitor verdict.
+- **Related components** — components that frequently co-appear in the same report.
+
+Blast radius is cached in `blast_radius_cache` and refreshed every 15 minutes by
+`pg_cron`. You can force a refresh from the panel's context menu.
+
+---
+
+## Surface mode
+
+Toggle **Surface** in the graph header to overlay your `inventory.yaml` nodes on the
+bug graph. This shows:
+
+- **Page** nodes anchored to their routes.
+- **Element** and **Action** nodes attached to the pages they belong to.
+- **Dead corners** — high-traffic pages with no `expected_outcome` assertions — highlighted in amber so you know where to add coverage next.
+
+Surface mode requires at least one accepted `inventory.yaml` proposal. See
+[User stories · Inventory](/admin/inventory) for how to generate one.
+
+---
+
+## Cypher console
+
+If Apache AGE is enabled for your Supabase project, a **Cypher** button appears in
+the graph header. Write any `MATCH / RETURN` against the same underlying graph:
+
+```cypher
+MATCH (c:Component)-[:HAS_REPORT]->(r:Report {severity: 'critical'})
+WHERE r.created_at > now() - interval '7 days'
+RETURN c.name, count(r) AS open_criticals
+ORDER BY open_criticals DESC
+LIMIT 10
+```
+
+Results render as a data table below the graph. All Cypher queries are written to
+the audit log with the executing user and timestamp.
+
+  Apache AGE is an optional Postgres extension. Enable it in
+  **Self-hosting → Supabase setup** or ask Mushi Cloud support to enable it for
+  your managed project.
+
+---
+
+## Keyboard shortcuts
+
+| Key | Action |
+| --- | ------ |
+| `Space` | Pause / resume force simulation |
+| `F` | Fit graph to window |
+| `Esc` | Close any open drawer |
+| `⌘ K` | Open command palette (search nodes by name) |
+| Scroll | Zoom in / out |
+| Drag node | Pin / unpin position |
+
+---
+
+## See also
+
+- [Concepts → Knowledge graph](/concepts/knowledge-graph) — the data model behind the graph.
+- [User stories · Inventory](/admin/inventory) — Surface mode, dead-corner detection.
+- [Reports](/admin/reports) — open the detail view for any report node.

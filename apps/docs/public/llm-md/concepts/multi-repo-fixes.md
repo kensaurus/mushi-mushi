@@ -1,0 +1,83 @@
+# Multi-repo coordinated fixes
+
+Source: https://kensaur.us/mushi-mushi/docs/concepts/multi-repo-fixes
+
+---
+title: Multi-repo coordinated fixes
+---
+
+# Multi-repo coordinated fixes
+
+A bug like *"checkout returns 400 with 'invalid currency'"* often spans two repos:
+the FE sends a malformed shape, the BE accepts a wider range than it should.
+Mushi's `MultiRepoFixOrchestrator` plans and opens **one PR per repo** for these,
+keeping the change set coherent and cross-linked.
+
+---
+
+## Setup
+
+In **Settings → Repositories**, register each repo your project owns:
+
+| Field | Example |
+| ----- | ------- |
+| Repo URL | `https://github.com/acme/checkout-fe` |
+| Role | `frontend` |
+| Default branch | `main` |
+| Path globs | `apps/web/**`, `packages/ui/**` |
+| Primary? | one repo per project must be primary |
+
+The path globs are the routing rule the planner uses: any file the classifier
+identifies as relevant gets matched to the first repo whose globs cover it.
+When no glob matches, the file lands in the primary repo.
+
+  `MultiRepoFixOrchestrator.plan()` throws if your project has only one row in
+  `project_repos`. The admin console automatically picks the right orchestrator
+  based on repo count — you never call it directly unless you're using the MCP.
+
+---
+
+## How a coordination flows
+
+---
+
+## Cross-linking PRs
+
+After every child PR is open, the orchestrator posts a cross-link comment on each one:
+
+```text
+🤝 Mushi multi-repo coordination
+
+This PR is part of a coordinated fix across multiple repos:
+
+- [frontend] https://github.com/acme/checkout-fe/pull/812
+- [backend]  https://github.com/acme/checkout-be/pull/345
+
+Merge order matters when there are FE↔BE contract changes —
+review siblings before merging this one.
+```
+
+Reviewers see the full change set without hunting for the sibling — the comment
+is the single source of truth for the coordination ID.
+
+---
+
+## Inventory traceability
+
+If the root report is linked to an inventory `Action` node, the `inventory_action_node_id`
+flows into **every child** `fix_dispatch_jobs` and `fix_attempts` row. Each orchestrator
+independently runs `validateAgainstSpec()` before opening its PR, and a post-PR
+synthetic probe is queued for the originating Action. The synthetic monitor's
+verdict — verified or regressed — appears in the Fixes drawer under each child
+PR within minutes of merge.
+
+See [Inventory and gates → Spec traceability](/concepts/inventory-and-gates#spec-traceability--read-and-write-side)
+for the full chain.
+
+---
+
+## See also
+
+- [Concepts → Fix drafts & PRs](/concepts/fix-orchestrator) — single-repo fix flow.
+- [Connecting your orchestrator](/concepts/orchestrator-interop) — MCP / A2A dispatch paths.
+- [Admin → Fix orchestrator](/admin/fixes) — streaming view, coordination rows, PR links.

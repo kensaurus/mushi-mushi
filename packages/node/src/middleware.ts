@@ -23,7 +23,11 @@
  *                 responses (reduces volume). Default: false (emit all matched).
  */
 
-const DEFAULT_ENDPOINT = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
+// Import the single source-of-truth for the default ingest endpoint.
+// Do NOT duplicate this URL — changing the endpoint in two places is how
+// self-hoster configs silently drift apart.
+import { DEFAULT_API_ENDPOINT } from '@mushi-mushi/core'
+const DEFAULT_ENDPOINT = DEFAULT_API_ENDPOINT
 
 export interface TraceMiddlewareOptions {
   apiKey: string

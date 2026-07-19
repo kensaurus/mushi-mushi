@@ -84,7 +84,7 @@ export function CiStatusCell({ fix }: Props) {
             />
           ))}
         </div>
-        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+        {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
         <span className="text-3xs font-mono text-fg-muted truncate max-w-[5.5rem]">
           {shortLabel}
         </span>

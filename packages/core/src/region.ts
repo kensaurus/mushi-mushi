@@ -13,12 +13,18 @@
  * sessions skip the redirect.
  */
 
+import { DEFAULT_API_ENDPOINT } from './api-client';
+
 export type MushiRegion = 'us' | 'eu' | 'jp' | 'self';
 
+// Single source of truth: every region currently resolves to the canonical US
+// gateway (`DEFAULT_API_ENDPOINT`). EU/JP hosts are provisioned lazily and the
+// gateway 307-redirects cross-region traffic — so hardcoding the host here (in
+// three places) was a self-hoster drift risk. Import the one constant instead.
 export const REGION_ENDPOINTS: Record<Exclude<MushiRegion, 'self'>, string> = {
-  us: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
-  eu: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
-  jp: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
+  us: DEFAULT_API_ENDPOINT,
+  eu: DEFAULT_API_ENDPOINT,
+  jp: DEFAULT_API_ENDPOINT,
 };
 
 const ROUTING_CACHE_KEY = 'mushi_region_v1';

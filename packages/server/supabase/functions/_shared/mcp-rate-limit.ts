@@ -35,10 +35,60 @@ import { log } from './logger.ts'
 const mcpRateLog = log.child('mcp:rate-limit')
 
 const MCP_TOOL_CALL_SCOPE = 'mcp_tool_call'
-const MCP_TOOL_CALL_MAX_PER_MINUTE = 120
+export const MCP_TOOL_CALL_MAX_PER_MINUTE = 120
+export const MCP_NL_QUERY_MAX_PER_HOUR = 60
 
 export interface McpRateLimitMiss {
   retryAfterSeconds: number
+}
+
+/**
+ * Build X-RateLimit-* headers for MCP responses.
+ *
+ * Included on every successful `tools/call` response so agents and
+ * human callers can self-throttle without waiting for a 429.
+ * Published limits (mirrors SECURITY.md):
+ *   - tools/call: 120 calls per minute per actor key
+ *   - nl_query:   60 calls per hour  per actor key
+ *
+ * `remaining` is an estimate derived from the actor's window claim count
+ * (best-effort — we don't query the DB for the exact count on every call
+ * to avoid an extra RTT; the real gate is the DB-backed UPSERT).
+ *
+ * Complies with the IETF draft-ietf-httpapi-ratelimit-headers-06 format
+ * (same as GitHub, Linear, Stripe):
+ *   X-RateLimit-Limit     — total calls allowed in the window
+ *   X-RateLimit-Remaining — estimated remaining calls (may be 0 on miss)
+ *   X-RateLimit-Reset     — Unix timestamp (seconds) when the window resets
+ *   Retry-After           — seconds until retry (only on 429 responses)
+ */
+export function buildRateLimitHeaders(opts: {
+  scope: 'tools_call' | 'nl_query'
+  /** Whether this response is a rate-limit miss (429). */
+  isMiss: boolean
+  /** Unix timestamp of the window start (to compute reset). */
+  windowStartSec: number
+}): Record<string, string> {
+  const isNl = opts.scope === 'nl_query'
+  const limit = isNl ? MCP_NL_QUERY_MAX_PER_HOUR : MCP_TOOL_CALL_MAX_PER_MINUTE
+  const windowSeconds = isNl ? 3600 : 60
+  const resetSec = opts.windowStartSec + windowSeconds
+
+  const headers: Record<string, string> = {
+    'X-RateLimit-Limit': String(limit),
+    'X-RateLimit-Remaining': opts.isMiss ? '0' : String(Math.max(0, limit - 1)),
+    'X-RateLimit-Reset': String(Math.ceil(resetSec)),
+    'X-RateLimit-Policy': isNl
+      ? `${limit};w=${windowSeconds};comment="nl_query per actor"`
+      : `${limit};w=${windowSeconds};comment="mcp_tool_call per actor"`,
+  }
+
+  if (opts.isMiss) {
+    const retryAfter = Math.max(1, Math.ceil(resetSec - Date.now() / 1000))
+    headers['Retry-After'] = String(retryAfter)
+  }
+
+  return headers
 }
 
 /**

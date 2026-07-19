@@ -193,8 +193,16 @@ In your Supabase dashboard, create a storage bucket named `screenshots` with pub
 ## 6. Verify the deployment
 
 ```bash
+# API liveness (process up — does not prove DB)
 curl https://YOUR_PROJECT_REF.supabase.co/functions/v1/api/health
-# Should return: {"status":"ok","version":"1.0.0"}
+# Should return: {"status":"ok","version":"1.0.0",…}
+
+# API readiness (fails when Postgres is unreachable)
+curl https://YOUR_PROJECT_REF.supabase.co/functions/v1/api/health/ready
+
+# Standalone healthz edge function (no JWT; cheap DB probe)
+curl https://YOUR_PROJECT_REF.supabase.co/functions/v1/healthz
+# Should return: {"status":"ok","db":"ok","version":"…"}  (or status "degraded" if DB probe fails)
 ```
 
 ## 7. Connect the SDK

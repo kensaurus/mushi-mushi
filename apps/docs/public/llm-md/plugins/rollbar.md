@@ -1,0 +1,28 @@
+# Rollbar
+
+Source: https://kensaur.us/mushi-mushi/docs/plugins/rollbar
+
+---
+title: Rollbar
+---
+
+# Rollbar plugin
+
+Mirrors Mushi reports into Rollbar items and resolves them when fixes ship.
+
+## Setup
+
+1. In Mushi: **Marketplace → Rollbar → Install**.
+2. Paste Rollbar access token and environment name.
+3. Configure dedup key mapping (defaults to Mushi `report_id`).
+
+## Package
+
+[`@mushi-mushi/plugin-rollbar`](https://www.npmjs.com/package/@mushi-mushi/plugin-rollbar)
+
+## Events
+
+| Event | Action |
+| --- | --- |
+| `report.classified` | Create Rollbar item |
+| `fix.applied` | Resolve item |

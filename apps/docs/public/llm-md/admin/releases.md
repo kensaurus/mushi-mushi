@@ -1,0 +1,68 @@
+# Releases
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/releases
+
+---
+title: Releases
+---
+
+# Releases
+
+**Route:** `/releases`
+
+The Releases page generates AI-drafted changelogs for each version of your app,
+attributed to the reporters whose bug reports drove each fix.
+
+---
+
+## What it generates
+
+For each release tag, Mushi:
+1. Collects all fix-worker PRs merged between the previous and current tag.
+2. Links each PR back to the original reports that triggered it.
+3. Asks the LLM to write a user-facing changelog entry — plain English, no jargon.
+4. Attributes fixes to the reporters who submitted the original reports (for reward
+   accrual and public credit).
+
+---
+
+## Creating a release
+
+1. Click **New release**.
+2. Enter the **version tag** (e.g. `v2.4.1`).
+3. Set the **date range** for the included fixes.
+4. Click **Generate** — the LLM produces a draft in ~10 seconds.
+5. Review and edit the draft.
+6. Click **Publish**.
+
+---
+
+## Release entry fields
+
+| Field | Description |
+|-------|-------------|
+| **Version** | Tag or semver string |
+| **Title** | Optional human-readable title (e.g. "Performance & stability") |
+| **Highlights** | Bullet-point summary (AI-generated, editable) |
+| **Full changelog** | Detailed list of fixes with links to PRs |
+| **Attribution** | Reporter names/aliases who contributed reports |
+| **Published at** | When the release was made public |
+
+---
+
+## SDK surface
+
+Once published, releases are queryable via the SDK:
+```ts
+const releases = await mushi.releases.list({ projectId, limit: 5 })
+```
+
+This powers in-app "What's new" surfaces and email digests.
+
+---
+
+## Related pages
+
+- [Fix drafts](/admin/fixes) — the PRs that appear in releases
+- [Rewards](/admin/rewards) — attribution drives reward point accrual
+- [Intelligence reports](/admin/intelligence) — weekly digest includes top releases

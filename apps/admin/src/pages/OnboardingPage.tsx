@@ -638,22 +638,6 @@ export function OnboardingPage() {
           className="mb-4"
         />
       )}
-      {!ux.hideOverviewChrome ? (
-      <Card  className="overflow-hidden p-5">
-        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-        <p className="font-mono text-2xs uppercase tracking-[0.24em] text-brand">Mushi / setup</p>
-        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-        <h2 className="mt-2 font-serif text-3xl leading-none tracking-[-0.04em] text-fg">
-          User-felt bugs, ready for your first project.
-        </h2>
-        <p className="mt-3 text-xs leading-6 text-fg-muted">
-          Create a project, mint an ingest key, and verify the first report
-          against live backend state. This mirrors the cloud landing promise:
-          install the SDK once, then let every report enter the repair loop.
-        </p>
-      </Card>
-      ) : null}
-
       {!stats.hasAnyProject ? (
         <CliSetupGuide projectId={stats.projectId} className="mb-4" />
       ) : null}
@@ -718,7 +702,7 @@ export function OnboardingPage() {
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   <Btn size="sm" variant="primary" onClick={() => navigate('/integrations')}>
-                    Unlock auto-fix →
+                    Connect fix agents →
                   </Btn>
                   <Btn size="sm" variant="ghost" onClick={() => navigate('/dashboard')}>Open dashboard</Btn>
                 </div>
@@ -752,7 +736,7 @@ export function OnboardingPage() {
       {!ux.hideOverviewChrome ? (
       <section aria-label="What the loop does" className="space-y-2">
         <div className="flex items-baseline justify-between">
-          <h3 className="text-sm font-semibold text-fg">How Mushi closes the loop</h3>
+          <h3 className="text-sm font-semibold text-fg">What happens after a report</h3>
           <span className="text-2xs text-fg-faint hidden sm:block">
             Plan → Do → Check → Act (loops back)
           </span>
@@ -799,7 +783,7 @@ export function OnboardingPage() {
           </details>
         )}
         <section
-          aria-label="Meet Ask Mushi"
+          aria-label="Ask Mushi"
           // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
           className="flex flex-col gap-3 rounded-md border border-brand/40 bg-surface-raised px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
         >
@@ -815,15 +799,15 @@ export function OnboardingPage() {
               />
             </span>
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-fg">Meet Ask Mushi</h3>
+              <h3 className="text-sm font-semibold text-fg">Ask about this page</h3>
               <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">
-                Your in-console AI guide — ask how any page works, run{' '}
-                <span className="font-mono text-fg-secondary">/explain</span> on the current route,
-                or press{' '}
+                Press{' '}
                 <kbd className="rounded-sm border border-edge/80 bg-surface-overlay px-1 py-px font-mono text-2xs text-fg-secondary">
                   Cmd/Ctrl+J
                 </kbd>
-                . Look for the chat icon in the header toolbar after you open the dashboard.
+                {' '}or run{' '}
+                <span className="font-mono text-fg-secondary">/explain</span>
+                {' '}from the header chat — Ask Mushi answers from the current route and your project docs.
               </p>
             </div>
           </div>
@@ -836,7 +820,7 @@ export function OnboardingPage() {
               window.setTimeout(() => askMushiPanel.open(), 400)
             }}
           >
-            Try Ask Mushi
+            Open Ask Mushi
           </Btn>
         </section>
       </section>

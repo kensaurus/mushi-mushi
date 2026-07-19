@@ -6,7 +6,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "prebuild": "node ../../scripts/sync-docs-screenshots.mjs",
+    "prebuild": "node ../../scripts/sync-docs-screenshots.mjs && node ../../scripts/generate-llms-full.mjs",
     "dev": "next dev --webpack -p 3000",
     "build": "next build --webpack && pagefind --site out --output-subdir _pagefind",
     "start": "next start -p 3001",

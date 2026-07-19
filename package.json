@@ -48,6 +48,7 @@
     "check:export-types-order": "node scripts/fix-export-types-order.mjs --check",
     "check:changeset-orphans": "node scripts/check-changeset-orphans.mjs",
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
+    "check:catalog-count": "node scripts/check-catalog-count.mjs",
     "check:design-tokens": "node scripts/check-design-tokens.mjs",
     "check:token-parity": "node scripts/check-token-parity.mjs",
     "check:chrome-budget": "node scripts/check-chrome-budget.mjs",

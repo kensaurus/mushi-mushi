@@ -1,0 +1,30 @@
+# Sentry
+
+Source: https://kensaur.us/mushi-mushi/docs/plugins/sentry
+
+---
+title: Sentry
+---
+
+# Sentry plugin
+
+Mirrors critical Mushi reports into Sentry and resolves linked Sentry issues when a fix merges.
+
+## Setup
+
+1. In Mushi: **Marketplace → Sentry → Install**.
+2. Paste your Sentry auth token and org/project slugs.
+3. Configure severity threshold (default: P0/P1 only).
+
+## Package
+
+[`@mushi-mushi/plugin-sentry`](https://www.npmjs.com/package/@mushi-mushi/plugin-sentry)
+
+Pairs with the SDK's Sentry handshake — reports already carry `sentryContext` when `@sentry/browser` is present.
+
+## Events
+
+| Event | Action |
+| --- | --- |
+| `report.classified` (high severity) | Create or link Sentry issue |
+| `fix.applied` | Resolve linked Sentry issue |

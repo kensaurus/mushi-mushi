@@ -1,0 +1,58 @@
+# Self-hosting
+
+Source: https://kensaur.us/mushi-mushi/docs/self-hosting
+
+---
+title: Self-hosting
+description: Run the whole Mushi Mushi stack yourself with one command — Docker Compose, your own keys, AGPLv3 server, MIT SDKs, no usage limits.
+---
+
+# Self-hosting
+
+Mushi is **OSS-first**. Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the exact same code in this repo — there is no closed-source plus-tier. Every edge function, migration, and admin SPA you see here is the same binary that powers Mushi Cloud.
+
+  **Prerequisite:** Node ≥ 22, a [Supabase](https://supabase.com) project, and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
+
+## What you'll deploy
+
+| Layer | Technology | License |
+| --- | --- | --- |
+| Database + Auth | Supabase (Postgres 15 + pgvector + pgcrypto + pg_cron) | Open |
+| Edge Functions | 50+ Supabase Edge functions (Deno) — run `pnpm docs-stats` for live count | AGPLv3 |
+| Admin SPA | React + Vite, deployed to any static host | AGPLv3 |
+| Observability | Langfuse + Sentry | MIT / Commercial |
+| Sandbox | E2B managed (or self-hosted Modal) | External |
+
+## Fastest path — Docker Compose
+
+The whole stack (Postgres + Auth + REST + Storage + edge functions + console)
+in one command, no managed Supabase project required:
+
+```bash
+git clone https://github.com/kensaurus/mushi-mushi.git
+cd mushi-mushi/deploy
+cp .env.example .env   # set ANTHROPIC_API_KEY + Supabase creds
+docker compose up -d
+```
+
+See [Self-host in minutes](/self-hosting/docker-compose) for the full walkthrough.
+
+## Managed-Supabase path
+
+Prefer a hosted Supabase project? Link it and push the schema:
+
+```bash
+git clone https://github.com/kensaurus/mushi-mushi.git
+cd mushi-mushi
+pnpm install                                       # installs all workspaces
+cd packages/server                                 # Supabase CLI works relative to this dir
+npx supabase link --project-ref <your-ref>
+npx supabase db push                               # applies all migrations
+```
+
+Then follow the guides in order:
+
+1. [Supabase setup](/self-hosting/supabase) — extensions, RLS, and required seed data
+2. [Edge Functions deploy](/self-hosting/edge-functions) — all edge functions + secrets
+3. [Admin SPA deploy](/self-hosting/admin-spa) — build and deploy the console
+4. [Observability (Langfuse + Sentry)](/self-hosting/observability) — traces and error tracking

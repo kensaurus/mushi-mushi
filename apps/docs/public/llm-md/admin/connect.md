@@ -1,0 +1,128 @@
+# Connect & Update
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/connect
+
+---
+title: Connect & Update
+---
+
+# Connect & Update
+
+**Route:** `/connect`
+
+> **Scenario:** Your repo is on GitHub, the SDK is installed, but your editor still
+> can't ask Mushi what broke — and you're a couple versions behind on `@mushi-mushi/web`.
+> This page wires GitHub, SDK, MCP, CLI, and upgrade PRs in one place.
+
+The page opens with **ConnectStudio** — pick your AI client, then choose a
+lane (MCP / CLI / Skills). Work through the sections below top-to-bottom.
+Connecting GitHub enables the **Create Upgrade PR** flow; SDK and MCP
+sections work without it.
+
+---
+
+## ConnectStudio hero (3 lanes)
+
+| Lane | What it does |
+|------|--------------|
+| **MCP** | One-click install for Cursor, VS Code, Claude Code, Windsurf, and other clients (`ClientConnectButton` mints a scoped key + deeplink / config JSON) |
+| **CLI** | Install `@mushi-mushi/cli`, `mushi login`, then wire the selected IDE |
+| **Skills** | Copy skill / pipeline setup for the selected client |
+
+A collapsible **Connection status** disclosure summarizes activation, snapshot,
+and provenance chips that used to live as separate strips.
+
+---
+
+## Sections
+
+| # | Section | What it does |
+|---|---------|--------------|
+| 1 | **ConnectStudio** | Client picker + MCP / CLI / Skills lanes (above) |
+| 2 | **Connect GitHub** | Link the primary repo so upgrade PRs and CI secret sync can resolve tokens |
+| 3 | **Install SDK** | Framework tabs + copy snippet (`SdkInstallCard`) |
+| 4 | **Native app CI secrets** | Diagnose + one-click sync of `NEXT_PUBLIC_MUSHI_*` into GitHub Actions |
+| 5 | **Install MCP** | **Add to Cursor** / **Add to VS Code** deeplinks (`McpInstallButtons`) |
+| 6 | **Install CLI** | `npm i -g @mushi-mushi/cli@latest` + copy `mushi connect` / `mushi init` |
+| 7 | **Update center** | Per-package freshness chips + **Create Upgrade PR** (`SdkUpgradeCTA`) |
+
+---
+
+## Native app CI secrets
+
+Capacitor, Expo, and React Native apps bake `NEXT_PUBLIC_MUSHI_*` at **compile
+time** — a missing secret silently disables `initMushi()` and the lime banner
+never appears in the store build.
+
+The **Native app CI secrets** card calls `GET /v1/admin/projects/:id/sdk-diagnostics`
+and shows a fused verdict:
+
+| Status | Meaning |
+|--------|---------|
+| `ci-secret-missing` | Required var absent from GitHub Actions secrets/variables |
+| `native-never-seen` | Web heartbeats exist but no `capacitor://` / native UA |
+| `ok` | Secrets present and native SDK seen recently |
+
+**One-click sync:** `POST /v1/admin/projects/:id/sync-ci-secrets` mints a
+scoped ingest key and writes each required var via sealed-box encryption.
+
+The Mushi GitHub App requests `Contents` + `Pull requests` only — not Actions
+secrets. Auto-write works when a fine-grained PAT with **Actions secrets: Read
+and write** is stored in project settings. Otherwise the card expands guided
+`gh secret set` commands and a CI `env:` YAML block.
+
+See also: [Self-hosting](/self-hosting) · [`AGENTS.md` native CI section](https://github.com/kensaurus/mushi-mushi/blob/master/AGENTS.md#native-ci-secrets-diagnostic--auto-write-jun-2026)
+
+---
+
+## SDK upgrade PR
+
+When a package is outdated or deprecated:
+
+1. Click **Create Upgrade PR** on the Update center row.
+2. Backend enqueues `sdk_upgrade_jobs` → `sdk-upgrade-worker` bumps
+   `@mushi-mushi/*` in `package.json` files only (never `workspace:` / `file:`).
+3. Draft PR opens on GitHub, auto-readied, status streams via SSE.
+
+CLI equivalent: see [SDK reference → CLI](/sdks/cli) (`mushi upgrade` for local bumps).
+
+---
+
+## Quick path (5 minutes)
+
+### Connect GitHub
+Install the Mushi GitHub App on your primary repo (or paste a fine-grained PAT
+with Contents + PR + Actions secrets if you need CI auto-write).
+
+### Install SDK
+Copy the framework snippet → paste into your app → deploy or run locally.
+
+### Wire MCP
+Click **Add to Cursor** → restart IDE → `mushi doctor --server`.
+
+### Wire CLI (SDK + env + MCP)
+Copy **Connect SDK + MCP** from the CLI section:
+
+```bash
+MUSHI_API_KEY=mushi_xxx mushi connect \
+  --project-id  \
+  --endpoint https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api \
+  --write-env --wire-ide --wait
+```
+
+Run `mushi login` first if you need to paste an API key interactively. SDK-only: `mushi init --project-id `.
+
+When no SDK heartbeat is detected, a **1-2-3 setup strip** at the top links Create → Verify → CLI.
+
+### Verify
+**Send test report** on [Projects](/admin/projects) or shake/submit from the app.
+
+---
+
+## Related pages
+
+- [Onboarding](/admin/onboarding) — guided wizard (same outcome, more hand-holding)
+- [CLI ↔ console loop](/quickstart/cli-console-loop) — end-to-end setup narrative
+- [Projects](/admin/projects) — API keys + assistant config
+- [MCP](/admin/mcp) — full tool catalogue
+- [SDK health](/admin/sdk-health) — version + heartbeat diagnostics

@@ -135,9 +135,8 @@ export function FixBulkActionBar({
               Console merge unavailable — use Retry or review on GitHub
             </span>
           )}
-// mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
 
-          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+          {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
           <span className="flex-1 min-w-[8px]" />
 
           <Btn

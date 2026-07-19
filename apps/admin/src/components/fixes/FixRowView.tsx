@@ -98,7 +98,7 @@ function FixRowViewInner({
         data-tour-id={index === 0 ? 'fix-card' : undefined}
       >
         <td className={`${FIXES_TABLE_COL.stripe} p-0 align-stretch`}>
-          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+          {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
           <span className={`block w-1 min-h-[2.75rem] ${stripe}`} aria-hidden />
         </td>
         <td className={`${FIXES_TABLE_COL.status} ${TABLE_CELL.pxMeta} py-2 align-middle whitespace-nowrap`}>

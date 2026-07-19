@@ -14,7 +14,7 @@ import { getAvailableTags, formatTagsForPrompt, applyTags } from '../_shared/ont
 import { getRelevantCodeWithReason, formatCodeContext, rerankCodeContext } from '../_shared/rag.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts';
 import { logLlmInvocation } from '../_shared/telemetry.ts';
-import { withSentry, tagLangfuseTrace } from '../_shared/sentry.ts';
+import { withSentry, tagLangfuseTrace, reportError } from '../_shared/sentry.ts';
 import { GENERIC_ERROR_MESSAGE } from '../_shared/safe-error.ts';
 import { resolveLlmKey } from '../_shared/byok.ts';
 import { awardPointsForEndUser } from '../_shared/reputation.ts';
@@ -321,6 +321,19 @@ Deno.serve(
         );
       }
 
+      // MUSHI-MUSHI-SERVER-1R: Stage 2 (Sonnet + RAG + post-processing) can
+      // exceed the Edge Function *request idle* timeout (150s) while the HTTP
+      // response is still held open. That surfaces to fast-filter as
+      // `504 IDLE_TIMEOUT` even though the worker may still be mid-LLM-call.
+      // Ack immediately via EdgeRuntime.waitUntil — same pattern as
+      // webhooks-github-indexer — so the idle timer cannot kill the handoff.
+      // Docs: https://supabase.com/docs/guides/functions/background-tasks
+      const edgeRuntime = (
+        globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }
+      ).EdgeRuntime;
+      const detachStage2 = !!(edgeRuntime && typeof edgeRuntime.waitUntil === 'function');
+
+      const runStage2Heavy = async (): Promise<Response> => {
       // Extract stored traceparent to propagate through classification span.
       const inboundTraceparent =
         typeof (report.metadata as Record<string, unknown> | null)?.traceparent === 'string'
@@ -1185,6 +1198,49 @@ CRITICAL SECURITY RULES (immutable):
         }),
         { headers: { 'Content-Type': 'application/json' } },
       );
+      }; // end runStage2Heavy
+
+      if (detachStage2 && edgeRuntime) {
+        edgeRuntime.waitUntil(
+          runStage2Heavy()
+            .then(async (res) => {
+              if (!res.ok) {
+                const detail = await res.text().catch(() => '');
+                log.error('Stage 2 background finished non-2xx', {
+                  reportId,
+                  status: res.status,
+                  detail: detail.slice(0, 300),
+                });
+              }
+            })
+            .catch(async (err) => {
+              _otlpSpanCtx?.setStatus('error', String(err));
+              await _otlpSpanCtx?.end();
+              log.error('Stage 2 background crashed', { reportId, err: String(err) });
+              reportError(err, {
+                tags: { function: 'classify-report', phase: 'background' },
+                extra: { reportId, projectId },
+              });
+              try {
+                await db
+                  .from('reports')
+                  .update({
+                    processing_error: String(err).slice(0, 500),
+                    processing_attempts: (report.processing_attempts ?? 0) + 1,
+                  })
+                  .eq('id', reportId);
+              } catch {
+                // best-effort
+              }
+            }),
+        );
+        return new Response(
+          JSON.stringify({ ok: true, accepted: true, stage: 'stage2_accepted' }),
+          { status: 202, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      return await runStage2Heavy();
     } catch (err) {
       _otlpSpanCtx?.setStatus('error', String(err));
       await _otlpSpanCtx?.end();

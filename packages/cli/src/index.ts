@@ -31,6 +31,8 @@ import { registerSkillsCommands } from './commands/skills.js'
 import { registerBillingCommands } from './commands/billing.js'
 import { registerCompletionCommand } from './commands/completion-cli.js'
 import { registerSelfhostCommands } from './commands/selfhost.js'
+import { registerProfileCommands } from './commands/profile.js'
+import { setGlobalOutputFormat } from './cli-shared.js'
 import { printAndExit } from './errors.js'
 
 // Wire SIGINT/SIGTERM into a process-wide AbortController on first import.
@@ -47,12 +49,31 @@ const program = new Command()
   .name('mushi')
   .description('Mushi CLI — set up the SDK, triage a report, fix from your editor')
   .version(MUSHI_CLI_VERSION)
+  // Global credential-profile selector. Setting the env var here (before any
+  // command action runs) means every existing `loadConfig()` / `saveConfig()`
+  // call resolves the chosen profile with no per-command plumbing.
+  .option('--profile <name>', 'Use a named credential profile for this invocation (or set MUSHI_PROFILE)')
+  // Global output format. Commands keep their historical `--json` flag; this
+  // covers every command uniformly via `outputIsJson()`.
+  .option('-o, --output <format>', 'Output format: text | json', 'text')
+  .hook('preAction', (_thisCommand, actionCommand) => {
+    // optsWithGlobals() merges the leaf command's options with every ancestor's,
+    // so root-level `--profile` / `-o` are visible even for nested subcommands
+    // like `mushi -o json profile list`.
+    const opts = actionCommand.optsWithGlobals()
+    const profile = opts['profile'] as string | undefined
+    if (profile && profile.trim()) {
+      process.env['MUSHI_PROFILE'] = profile.trim()
+    }
+    setGlobalOutputFormat(opts['output'] as string | undefined)
+  })
   .addHelpText('after', `
 Environment variables:
   MUSHI_API_KEY        SDK ingest key (report:write scope — from Onboarding → Verify in the console)
   MUSHI_PROJECT_ID     Project UUID   (from the Projects page in the console)
   MUSHI_API_ENDPOINT   Supabase edge function URL
                        e.g. https://<ref>.supabase.co/functions/v1/api
+  MUSHI_PROFILE        Credential profile to use (see \`mushi profile\`)
 
 Exit codes:
   0  success
@@ -87,6 +108,7 @@ registerAuditCommands(program)
 registerSkillsCommands(program)
 registerBillingCommands(program)
 registerSelfhostCommands(program)
+registerProfileCommands(program)
 // Registered last so buildCommandTree() sees every command above when the
 // action runs (Commander builds the tree during these synchronous calls;
 // the action itself only executes later, at parseAsync() time).

@@ -1,0 +1,87 @@
+# Judge dashboard
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/judge
+
+---
+title: Judge dashboard
+---
+
+# Fix quality scores
+
+The Judge page shows how well Mushi's plain-English reads match reality over time.
+If classification quality is slipping — or a new prompt is ready to promote — you'll
+see it here before bad reads reach your queue.
+
+---
+
+## Trailing score panel
+
+The top of the page shows:
+
+- **30-day mean composite** — the rolling average of `reports.judge_score` across
+  all classifications in your project for the last 30 days.
+- **7-day moving average** — plotted as a line chart so you can spot week-over-week
+  drift at a glance.
+- **Yesterday vs. trailing baseline** — delta highlighted in green / amber / red.
+  If the delta exceeds the drift threshold (default: −0.10), a `judge.drift` alert
+  has already fired.
+
+---
+
+## Per-component breakdown
+
+A table ranked by mean composite score per component, showing:
+
+| Column | Description |
+| ------ | ----------- |
+| **Component** | The component tag the classifier assigned |
+| **Mean composite** | Average judge score for this component's reports |
+| **Volume** | Report count in the last 30 days |
+| **Accuracy** | Mean accuracy sub-score |
+| **Severity calibration** | Mean severity_calibration sub-score |
+| **Component tagging** | Mean component_tagging sub-score (lower on yourself = classifier struggles here) |
+| **Repro quality** | Mean repro_quality sub-score |
+
+Sort by any column to find which components the classifier handles worst. These
+are the best candidates for a targeted fine-tune export.
+
+---
+
+## Prompt A/B status
+
+Every active A/B experiment shows:
+
+| Column | Description |
+| ------ | ----------- |
+| **Candidate version** | The `stage1_prompt_version` or `stage2_prompt_version` under test |
+| **Sample size** | Classifications scored so far in this window |
+| **Candidate mean** | Current mean judge score for the candidate slice |
+| **Baseline mean** | Concurrent mean for the active production prompt |
+| **Delta** | Candidate − Baseline |
+| **95% CI** | Confidence interval; auto-promotes when CI excludes zero and delta ≥ 0.05 |
+| **Status** | `running` · `promoted` · `demoted` · `inconclusive` |
+
+Click **Promote** to manually promote a candidate before the automated threshold
+is reached (useful when a prompt change is clearly winning but the CI window hasn't
+closed). Click **Demote** to abort an experiment.
+
+---
+
+## Drift alerts
+
+The drift alert panel shows the last 30 `judge.drift` events with:
+
+- Timestamp of the alert.
+- The daily mean that triggered it.
+- The trailing 7-day baseline it was compared against.
+- Whether the drift was subsequently resolved (mean recovered) or is still open.
+
+Alerts route to Slack if you've configured the integration in **Settings →
+Integrations → Slack**. Each alert includes a direct link back to this panel.
+
+---
+
+## See also
+
+- [Concepts → Judge & self-improvement](/concepts/judge-loop) — how the nightly judge, A/B testing, fine-tune export, and drift detection work together.
+- [Admin → Fine-tuning](/admin/fine-tuning) — export, train, and promote a fine-tuned classifier.

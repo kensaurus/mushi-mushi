@@ -1,0 +1,52 @@
+# Data residency
+
+Source: https://kensaur.us/mushi-mushi/docs/security/data-residency
+
+---
+title: Data residency
+---
+
+# Data residency
+
+> **Scenario:** Your EU customers' data must stay in the EU to comply with GDPR. You need to ensure that report ingestion, embeddings, screenshots, and AI calls never leave your chosen region.
+
+Mushi Cloud is designed for regional isolation — separate Supabase projects per region with **no inter-region replication**. As of June 2026, all production traffic runs on a single Supabase project in `ap-northeast-1` (`dxptnwrhwsqckaftyymj`). EU and JP regional clusters are reserved; the SDK still accepts `region: 'eu' | 'jp'` and routes to the same origin until dedicated regional DNS ships.
+
+## Available regions
+
+| Region | API endpoint (today) | Planned Supabase region |
+| --- | --- | --- |
+| **US** (default) | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` | `us-east-1` (future dedicated cluster) |
+| **EU** | Same origin until EU cluster ships | `eu-central-1` |
+| **JP** | Same origin until JP cluster ships | `ap-northeast-1` |
+
+  Region is **immutable** — it is set at project creation and cannot be changed. Create a new project to move regions.
+
+## How the SDK routes
+
+The SDK reads `MushiOptions.region` (or auto-detects from the `reporterToken` prefix `us_`, `eu_`, `jp_`) and resolves the API endpoint via `resolveRegionEndpoint`:
+
+```ts
+
+const mushi = init({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey: 'eu_pk_…',
+  region: 'eu',
+})
+```
+
+If no region is set, the SDK defaults to the US Supabase endpoint above.
+
+## Attestation
+
+A nightly cron writes a `no_cross_region_transfer` attestation row to `soc2_evidence`. This record confirms that no row in `reports`, `embeddings`, `fix_attempts`, or `reporter_identities` was written outside the configured region that day. The evidence is included in the quarterly SOC 2 pack.
+
+## Self-hosting
+
+If you self-host on your own Supabase project, you control the region entirely — pick any Supabase-supported region at project creation.
+
+## GDPR notes
+
+- All PII columns (`reporter_email`, `reporter_name`, `screenshot_url`) are encrypted at rest via `pgsodium`.
+- DSAR (data subject access requests) are handled via `request_dsar()` — see [SOC 2 readiness](/security/soc2#dsar-data-subject-access-request).
+- When the EU region cluster ships, AI model calls from EU projects will be routed to Anthropic's EU endpoints where available.

@@ -609,7 +609,6 @@ function ObservedRoutesSection({
             and someone navigates your app, this fills up automatically.
           </p>
         </div>
-      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
       ) : (
         // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
         <div className="space-y-2 max-h-[36rem] overflow-auto pr-1">

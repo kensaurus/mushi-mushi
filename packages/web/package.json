@@ -22,6 +22,16 @@
       "types": "./dist/i18n/index.d.ts",
       "import": "./dist/i18n/index.js",
       "require": "./dist/i18n/index.cjs"
+    },
+    "./otel": {
+      "types": "./dist/otel.d.ts",
+      "import": "./dist/otel.js",
+      "require": "./dist/otel.cjs"
+    },
+    "./headless": {
+      "types": "./dist/headless.d.ts",
+      "import": "./dist/headless.js",
+      "require": "./dist/headless.cjs"
     }
   },
   "files": [
@@ -91,6 +101,18 @@
       "name": "Core SDK bundle (uncompressed)",
       "path": "dist/index.js",
       "limit": "105 KB"
+    },
+    {
+      "name": "Headless capture bundle (no widget, gzipped)",
+      "path": "dist/headless.js",
+      "limit": "35 KB",
+      "gzip": true
+    },
+    {
+      "name": "OTel bridge bundle (gzipped)",
+      "path": "dist/otel.js",
+      "limit": "5 KB",
+      "gzip": true
     }
   ],
   "dependencies": {

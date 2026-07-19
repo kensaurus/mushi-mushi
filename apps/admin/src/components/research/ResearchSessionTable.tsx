@@ -133,7 +133,7 @@ export function ResearchSessionTable({
                       isActive ? 'bg-brand/5' : ''
                     }`}
                   >
-                    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+                    {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
                     <td className="max-w-[32ch] truncate px-3 py-2 font-medium text-fg" title={s.query}>
                       {s.query}
                     </td>

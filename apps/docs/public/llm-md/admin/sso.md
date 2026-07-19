@@ -1,0 +1,99 @@
+# SSO
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/sso
+
+---
+title: SSO
+---
+
+# SSO — Single Sign-On
+
+**Route:** `/sso`
+
+The SSO page lets you register SAML 2.0 or OIDC identity providers for your
+organisation, so teammates can log in with your company's IdP instead of email +
+password.
+
+SSO is available on the **Pro** and **Enterprise** plans. An upgrade prompt appears if
+the `sso` entitlement is not active on your account.
+
+---
+
+## Supported protocols
+
+| Protocol | Use when |
+|----------|---------|
+| **SAML 2.0** | Your IdP exposes a metadata URL (Okta, Azure AD, Google Workspace) |
+| **OIDC** | Your IdP supports OpenID Connect (Auth0, Okta OIDC, PingFederate) |
+
+---
+
+## Registering an identity provider
+
+1. Select **Provider type** — SAML 2.0 or OIDC.
+2. Enter a **Provider name** — a human-readable label (e.g. "Acme Okta").
+3. For **SAML**: enter the **Metadata URL** (the IdP's XML metadata endpoint) and
+   optionally the **Entity ID** if your IdP requires it.
+4. For **OIDC**: enter the **Issuer URL** and **Client credentials**.
+5. Enter the **email domains** that should be routed through this provider
+   (e.g. `acme.com`). Separate multiple domains with commas.
+6. Click **Add Provider**.
+
+On success, Mushi registers the provider with Supabase Auth and shows a reveal card
+with:
+- **ACS URL** (Assertion Consumer Service) — paste this into your IdP's SP configuration
+- **Entity ID** — paste this into your IdP as the Service Provider entity ID
+- **Supabase provider ID** — the internal reference
+
+Copy the ACS URL and Entity ID before navigating away. You'll need them in your IdP's
+dashboard to complete the configuration.
+
+---
+
+## Providers table
+
+The table shows all registered providers with:
+
+| Column | Description |
+|--------|-------------|
+| **Provider name** | Label you set at registration |
+| **Type** | SAML or OIDC |
+| **Email domains** | Domains routed to this provider |
+| **Status** | `registered`, `pending`, `failed`, or `disabled` |
+| **Supabase provider ID** | Internal ID for support reference |
+
+If registration failed, an inline error appears below the provider name.
+
+---
+
+## Disconnecting a provider
+
+Click **Disconnect** on any provider row → confirm in the dialog. This removes the
+provider from Supabase Auth. Users who were using this provider will need to reset their
+password to regain access.
+
+---
+
+## End-user login flow
+
+When a user on a registered domain navigates to the Mushi login page and enters their
+email, Mushi detects the domain, skips the password field, and redirects to your IdP's
+login page. After successful authentication, they are returned to the console.
+
+---
+
+## API
+
+```bash
+GET    /v1/admin/sso
+POST   /v1/admin/sso   { provider_type, name, metadata_url, entity_id, email_domains }
+DELETE /v1/admin/sso/:id
+```
+
+---
+
+## Related pages
+
+- [Organization members](/admin/teams) — manage roles after SSO is set up
+- [Settings](/admin/settings) — other project and org configuration
+- [Billing](/admin/billing) — upgrade to Pro/Enterprise to enable SSO
