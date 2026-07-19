@@ -147,7 +147,7 @@ describe('mushiTraceMiddleware', () => {
   });
 
   it('auth header carries the API key', async () => {
-    const middleware = mushiTraceMiddleware({ apiKey: 'mushi_live_abc123' });
+    const middleware = mushiTraceMiddleware({ apiKey: 'mushi_live_abc123' }); // gitleaks:allow -- synthetic test fixture, not a real key
     const req = makeReq(VALID_TRACEPARENT);
     const res = makeRes(200);
 

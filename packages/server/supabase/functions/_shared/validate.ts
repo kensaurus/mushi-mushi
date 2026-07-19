@@ -130,7 +130,7 @@ export const ApiReportBodySchema = z.object({
       timestamp: z.string().optional(),
     })
     .optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   reporterToken: z.string().optional(),
   createdAt: z.string().datetime({ offset: true }).optional(),
   sdkPackage: z.string().optional(),
@@ -153,7 +153,7 @@ export const FastFilterBodySchema = z.object({
   projectId: z.string().min(1),
   description: z.string().min(1).max(5_000),
   category: z.string().optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 })
 
 export type FastFilterBody = z.infer<typeof FastFilterBodySchema>
