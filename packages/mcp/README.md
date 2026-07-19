@@ -146,7 +146,7 @@ The Mushi backend now exposes the same tool catalog over the **Streamable HTTP**
 
 ### Feature groups (`?features=` / `MUSHI_FEATURES`)
 
-Full catalog is **68 tools** (stdio / `MUSHI_FEATURES=all`). The hosted HTTP
+Full catalog is **69 tools** (stdio / `MUSHI_FEATURES=all`). The hosted HTTP
 endpoint exposes a leaner subset filtered by feature groups (see
 `mcp-hosted-tool-manifest.json`). New installs now default to the lean
 `triage,fixes,inventory,setup,docs` set automatically (stdio: when
@@ -390,7 +390,7 @@ Spawns `dist/index.js` with a dummy unreachable endpoint and confirms it adverti
 pnpm --filter @mushi-mushi/mcp build
 pnpm --filter @mushi-mushi/mcp test:smoke
 # OK; prints live tool/resource/prompt counts from the catalog
-# (see packages/mcp/src/catalog.ts — currently 68 tools / 8 resources / 4 prompts)
+# (see packages/mcp/src/catalog.ts — currently 69 tools / 8 resources / 4 prompts)
 ```
 
 ### Layer 3; Full localhost E2E (real binary + real backend behaviour)
