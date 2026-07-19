@@ -86,7 +86,7 @@ describe('createBrowserOtelSpanProcessor — otelPresent absent', () => {
     // module lifetime, not once per call. We get a fresh module instance via
     // resetModules + dynamic re-import to guarantee we catch that first call.
     vi.resetModules()
-    const { createBrowserOtelSpanProcessor: fresh } = await import('./otel.js') as typeof import('./otel.js')
+    const { createBrowserOtelSpanProcessor: fresh } = await import('./otel.js')
     const stub = makeMushiStub()
     fresh(stub as never)
     expect(warnSpy).toHaveBeenCalled()

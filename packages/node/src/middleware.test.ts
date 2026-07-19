@@ -147,7 +147,7 @@ describe('mushiTraceMiddleware', () => {
   });
 
   it('auth header carries the API key', async () => {
-    const middleware = mushiTraceMiddleware({ apiKey: 'mushi_live_abc123' }); // gitleaks:allow -- synthetic test fixture, not a real key
+    const middleware = mushiTraceMiddleware({ apiKey: 'TEST-FIXTURE-NOT-A-REAL-KEY' });
     const req = makeReq(VALID_TRACEPARENT);
     const res = makeRes(200);
 
@@ -157,7 +157,7 @@ describe('mushiTraceMiddleware', () => {
     await new Promise((r) => setTimeout(r, 20));
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const headers = init.headers as Record<string, string>;
-    expect(headers['X-Mushi-Api-Key']).toBe('mushi_live_abc123');
+    expect(headers['X-Mushi-Api-Key']).toBe('TEST-FIXTURE-NOT-A-REAL-KEY');
   });
 
   it('DEFAULT_API_ENDPOINT is imported from @mushi-mushi/core (not hardcoded in this file)', () => {

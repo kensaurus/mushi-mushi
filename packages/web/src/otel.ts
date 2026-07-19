@@ -91,7 +91,9 @@ export function createBrowserOtelSpanProcessor(
   const errorsOnly = options.errorsOnly ?? true
 
   const noOp: BrowserOtelSpanProcessor = {
+    // mushi-mushi-allowlist: OTel SpanProcessor requires onStart/onEnd; this no-op processor intentionally does nothing
     onStart: () => {},
+    // mushi-mushi-allowlist: no-op processor — nothing to forward
     onEnd: () => {},
     shutdown: () => Promise.resolve(),
     forceFlush: () => Promise.resolve(),
@@ -111,6 +113,7 @@ export function createBrowserOtelSpanProcessor(
   }
 
   return {
+    // mushi-mushi-allowlist: OTel SpanProcessor requires onStart; this processor only acts on onEnd
     onStart: () => {},
 
     onEnd(span: BrowserOtelSpan): void {

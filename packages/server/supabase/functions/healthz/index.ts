@@ -26,9 +26,9 @@ import { log as rootLog } from '../_shared/logger.ts'
 const ALLOWED_ORIGINS = ['*'] // health endpoint is public; no CORS restriction needed
 
 const VERSION: string =
-  (typeof Deno !== 'undefined' && Deno.env.get('MUSHI_VERSION')) ?? 'unknown'
+  (typeof Deno !== 'undefined' ? Deno.env.get('MUSHI_VERSION') : undefined) ?? 'unknown'
 
-const log = rootLog.child({ fn: 'healthz' })
+const log = rootLog.child('healthz')
 
 Deno.serve(async (req: Request): Promise<Response> => {
   // Handle CORS preflight
@@ -63,11 +63,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const db = getServiceClient()
       const { error } = await db.rpc('get_db_epoch_ms').single()
       if (error) {
-        log.warn({ err: error.message }, 'healthz DB probe failed')
+        log.warn('healthz DB probe failed', { err: error.message })
         dbStatus = 'error'
       }
     } catch (dbErr) {
-      log.warn({ err: String(dbErr) }, 'healthz DB probe threw')
+      log.warn('healthz DB probe threw', { err: String(dbErr) })
       dbStatus = 'error'
     }
 
@@ -79,7 +79,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     return new Response(body, { status: 200, headers })
   } catch (err) {
-    log.error({ err: String(err) }, 'healthz unhandled error')
+    log.error('healthz unhandled error', { err: String(err) })
     return new Response(
       JSON.stringify({ status: 'error', db: 'unknown', version: VERSION }),
       { status: 503, headers },

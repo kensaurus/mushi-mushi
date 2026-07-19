@@ -12,7 +12,7 @@
  *  3. password selectors always in the mask set, regardless of userOptions
  *  4. user-supplied redactSelectors EXTEND the default mask set (not replace)
  */
-import { beforeEach, describe, expect, it, vi, type SpyInstance } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createReplayCapture } from './replay';
 
 // ─── rrweb mock ──────────────────────────────────────────────────────────────
@@ -27,9 +27,8 @@ type RecordOptions = {
 };
 
 let capturedOptions: RecordOptions | null = null;
-let stopFnCallCount = 0;
 
-const mockStopFn = vi.fn(() => { stopFnCallCount++; });
+const mockStopFn = vi.fn();
 
 const mockRrweb = {
   record: vi.fn((opts: RecordOptions) => {
@@ -54,7 +53,6 @@ function getRecordOptions(): RecordOptions {
 describe('createReplayCapture — privacy defaults', () => {
   beforeEach(() => {
     capturedOptions = null;
-    stopFnCallCount = 0;
     mockRrweb.record.mockClear();
     mockStopFn.mockClear();
   });

@@ -39,3 +39,12 @@ fff6f49793017a556d40670418a0a66809df05ce:packages/mcp/src/__tests__/tdd-tools.te
 # the already-remediated finding. (Unlike the fixtures above, this WAS a live key
 # — the remediation here is rotation, not "it was always fake".)
 fe9eab0773f9f2d4e9ab1da178592d728b5e1680:packages/mcp/scripts/test-all-tools-yenyen.py:generic-api-key:23
+
+# Synthetic test fixture in the mushi node-middleware auth test: a fake apiKey
+# used to assert the middleware forwards the `X-Mushi-Api-Key` header. It never
+# authenticated against anything (the test stubs the request). Renamed in the
+# working tree to `TEST-FIXTURE-NOT-A-REAL-KEY`; these fingerprints pin the two
+# historical commits that briefly carried the placeholder so PR-range scans stop
+# flagging the already-audited finding.
+5368ba457b8bdfbf8fe920513a785c650fe9c1eb:packages/node/src/middleware.test.ts:generic-api-key:150
+3d9d17004c0ca923217ff9168c338e97d0e78815:packages/node/src/middleware.test.ts:generic-api-key:150
