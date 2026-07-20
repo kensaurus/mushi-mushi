@@ -48,7 +48,7 @@ import { jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { log } from '../../_shared/logger.ts'
-import { userCanAccessProject } from '../shared.ts'
+import { userCanAccessProject, dbError } from '../shared.ts'
 import { emitFunnelEvent } from '../../_shared/setup-funnel.ts'
 import {
   evaluateTokenDelivery,
