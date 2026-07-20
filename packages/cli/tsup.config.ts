@@ -35,5 +35,7 @@ export default defineConfig([
     clean: false,
     target: 'node20',
     define,
+    // Belt-and-suspenders: keep native optional dep out of all build entries.
+    external: ['@napi-rs/keyring'],
   },
 ])
