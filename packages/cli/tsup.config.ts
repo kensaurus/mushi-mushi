@@ -18,6 +18,10 @@ export default defineConfig([
     target: 'node20',
     banner: { js: '#!/usr/bin/env node' },
     define,
+    // @napi-rs/keyring is an optional N-API dep with platform-native .node
+    // binaries. We load it via require() at runtime (gracefully if absent),
+    // so tsup must not try to bundle or resolve the platform-specific files.
+    external: ['@napi-rs/keyring'],
   },
   {
     entry: {
