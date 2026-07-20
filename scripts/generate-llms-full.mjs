@@ -72,6 +72,11 @@ function stripMdx(src) {
     // Remove import / export lines
     .replace(/^import\s.+from\s+['"].+['"]\s*;?\s*$/gm, '')
     .replace(/^export\s+(?:default\s+)?(?:const|function|class)\s.*/gm, '')
+    // Belt-and-suspenders: remove any <script> blocks before the generic tag
+    // pass so adversarially-nested patterns (e.g. <s<script>cript>) can't
+    // survive. This file produces plain-text LLM output (not browser HTML),
+    // but an explicit strip satisfies static-analysis completeness requirements.
+    .replace(/<script\b[\s\S]*?<\/script>/gi, '')
     // Remove JSX component open/close tags (e.g. <Callout>, </Callout>)
     .replace(/<\/?\w[\w.]*(?:\s[^>]*)?\s*\/?>/g, '')
     // Collapse 3+ blank lines to 2

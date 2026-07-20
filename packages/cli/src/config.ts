@@ -239,13 +239,13 @@ export function saveConfig(config: CliConfig, path = CONFIG_PATH, opts: { profil
   // Read the existing file to decide the on-disk shape. We only write the v2
   // multi-profile format when the caller targets a profile OR the file is
   // already v2 — so single-profile users keep the flat format forever.
+  // Try-catch without a prior existsSync avoids a TOCTOU race: we always
+  // overwrite on the write path; the read is purely informational.
   let existing: unknown = null
-  if (existsSync(path)) {
-    try {
-      existing = JSON.parse(readFileSync(path, 'utf-8'))
-    } catch {
-      existing = null
-    }
+  try {
+    existing = JSON.parse(readFileSync(path, 'utf-8'))
+  } catch {
+    existing = null
   }
 
   const wantsProfile =
@@ -307,13 +307,12 @@ export function setActiveProfile(name: string, path = CONFIG_PATH): void {
   const dir = dirname(path)
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: SECURE_DIR_MODE })
 
+  // Try-catch without existsSync avoids a TOCTOU race on the write below.
   let existing: unknown = null
-  if (existsSync(path)) {
-    try {
-      existing = JSON.parse(readFileSync(path, 'utf-8'))
-    } catch {
-      existing = null
-    }
+  try {
+    existing = JSON.parse(readFileSync(path, 'utf-8'))
+  } catch {
+    existing = null
   }
 
   const file: MultiProfileConfigFile = isMultiProfileFile(existing)
