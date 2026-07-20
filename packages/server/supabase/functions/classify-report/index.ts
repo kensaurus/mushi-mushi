@@ -22,6 +22,7 @@ import { dispatchPluginEvent } from '../_shared/plugins.ts';
 import { createExternalIssue } from '../_shared/integrations.ts';
 import { buildReportGraph } from '../_shared/knowledge-graph.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
+import { parseBody, ClassifyReportBodySchema } from '../_shared/validate.ts';
 import { STAGE2_MODEL, STAGE2_FALLBACK } from '../_shared/models.ts';
 import { childTraceparent } from '../_shared/trace.ts';
 import { otlpSpan, setGenAiAttributes } from '../_shared/otlp-exporter.ts';
@@ -173,13 +174,24 @@ Deno.serve(
       // pass the service-role key explicitly.
       const unauthorized = requireServiceRoleAuth(req);
       if (unauthorized) return unauthorized;
+      // Validate request body — returns 400 with structured error on failure.
+      const parsedBody = await parseBody(ClassifyReportBodySchema, req);
+      if (parsedBody instanceof Response) return parsedBody;
       const {
         reportId,
         projectId,
         stage1Extraction,
         evidence: callerEvidence,
         airGap,
-      } = await req.json();
+      } = parsedBody.data as {
+        reportId: string;
+        projectId: string;
+        stage1Extraction?: unknown;
+        evidence?: unknown;
+        airGap?: boolean;
+        [k: string]: unknown;
+      };
+      // reportId + projectId are guaranteed by schema; guard kept for safety.
       if (!reportId || !projectId) {
         return new Response(JSON.stringify({ error: 'reportId and projectId required' }), {
           status: 400,

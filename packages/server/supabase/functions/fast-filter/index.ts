@@ -18,6 +18,7 @@ import { extractAnthropicCacheUsage, logLlmInvocation } from '../_shared/telemet
 import { withSentry } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { parseBody, FastFilterBodySchema } from '../_shared/validate.ts'
 import { summarizeReplayEvents } from '../_shared/replay-evidence.ts'
 import { STAGE1_MODEL, STAGE1_FALLBACK } from '../_shared/models.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
@@ -135,7 +136,11 @@ Deno.serve(withSentry('fast-filter', async (req) => {
     // key that `api` already passes when dispatching.
     const unauthorized = requireServiceRoleAuth(req)
     if (unauthorized) return unauthorized
-    const { reportId, projectId } = await req.json()
+    // Validate request body — returns 400 with structured error on failure.
+    const parsedBody = await parseBody(FastFilterBodySchema, req)
+    if (parsedBody instanceof Response) return parsedBody
+    const { reportId, projectId } = parsedBody.data
+    // reportId + projectId are guaranteed by schema; guard kept for safety.
     if (!reportId || !projectId) {
       return new Response(JSON.stringify({ error: 'reportId and projectId required' }), { status: 400 })
     }

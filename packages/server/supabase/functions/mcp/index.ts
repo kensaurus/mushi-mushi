@@ -71,10 +71,11 @@
 import { withSentry } from '../_shared/sentry.ts'
 import { propagateRequestId } from '../_shared/internal-headers.ts'
 import { recordMcpToolInvocation } from '../_shared/mcp-tool-audit.ts'
-import { claimMcpToolCallRateLimit } from '../_shared/mcp-rate-limit.ts'
+import { claimMcpToolCallRateLimit, buildRateLimitHeaders } from '../_shared/mcp-rate-limit.ts'
 import { buildManifestTools } from './manifest-tools.ts'
 import { SERVER_INFO_EXTENDED, MUSHI_ICON_SVG_INLINE } from '../_shared/mcp-branding.ts'
 import { parseFeaturesParam, toolMatchesFeatures, DEPRECATED_TOOL_ALIASES, type FeatureFilter } from './feature-groups.ts'
+import { wrapUntrustedJson } from './wrap-untrusted.ts'
 import { searchMushiDocs } from './docs-index.ts'
 import { buildMcpServerCard, MCP_SERVER_CARD_HEADERS } from '../_shared/mcp-server-card.ts'
 import {
@@ -1465,8 +1466,23 @@ async function handleToolsCall(
     // when the tool defines an outputSchema AND the data is an object —
     // a bare array or scalar would fail downstream JSON-Schema validation.
     const includeStructured = !!def.outputSchema && typeof data === 'object' && data !== null
+    // Prompt-injection mitigation: tools that return user-authored or
+    // LLM-generated text are wrapped in data delimiters so adversarial
+    // instructions inside them cannot override the agent's behaviour.
+    const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
+      'get_report_detail',
+      'get_fix_context',
+      'search_reports',
+      'get_similar_bugs',
+      'run_nl_query',
+      'query_lessons',
+      'list_lessons',
+    ])
+    const text = UNTRUSTED_TOOLS.has(name)
+      ? wrapUntrustedJson(data, name as string)
+      : JSON.stringify(data, null, 2)
     const result: Record<string, unknown> = {
-      content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+      content: [{ type: 'text', text }],
     }
     if (includeStructured) {
       result.structuredContent = data
@@ -2253,6 +2269,10 @@ async function handler(req: Request): Promise<Response> {
     })
   }
 
+  // Capture window start before dispatch so the window boundary is consistent
+  // even when the tool call itself takes many milliseconds.
+  const windowStartSec = Math.floor(Date.now() / 1000 / 60) * 60
+
   const response = await dispatchRpc(rpc, ctx)
   if (!response) {
     // Notification — no response.
@@ -2261,6 +2281,16 @@ async function handler(req: Request): Promise<Response> {
   const extraHeaders: Record<string, string> = {}
   if (rpc.method === 'tools/list') {
     extraHeaders['Cache-Control'] = 'private, max-age=300'
+  }
+  // Add X-RateLimit-* headers on tools/call responses so agents can self-throttle.
+  // Detect a rate-limit miss by the JSON-RPC error code (ERR_RATE_LIMITED = -32001).
+  if (rpc.method === 'tools/call') {
+    const isMiss =
+      typeof response === 'object' &&
+      response !== null &&
+      'error' in response &&
+      (response as { error?: { code?: number } }).error?.code === ERR_RATE_LIMITED
+    Object.assign(extraHeaders, buildRateLimitHeaders({ scope: 'tools_call', isMiss, windowStartSec }))
   }
   return jsonRpcResponse(response, extraHeaders)
 }

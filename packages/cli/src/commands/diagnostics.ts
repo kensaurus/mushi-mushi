@@ -127,6 +127,7 @@ sourcemaps
   .description('Upload source maps to Mushi (idempotent, SHA256-keyed) for stack trace symbolication')
   .requiredOption('--release <version>', 'Release identifier, e.g. 1.0.0 or a git SHA')
   .option('--dir <path>', 'Directory containing .map files', './dist')
+  .option('--inject', 'Inject a Debug ID (UUID) into each .js and .map before uploading for exact stack-trace resolution')
   .option('--dry-run', 'List files that would be uploaded without uploading')
   .option('-e, --endpoint <url>', 'API endpoint (overrides MUSHI_API_ENDPOINT)')
   .option('--api-key <key>', 'API key (overrides MUSHI_API_KEY)')
@@ -134,13 +135,14 @@ sourcemaps
   .addHelpText('after', `
 Examples:
   mushi sourcemaps upload --release 1.0.0
-  mushi sourcemaps upload --release $(git rev-parse --short HEAD) --dir ./dist`)
+  mushi sourcemaps upload --release $(git rev-parse --short HEAD) --dir ./dist
+  mushi sourcemaps upload --release 1.0.0 --inject   # recommended: adds Debug IDs`)
   .action(async (opts: {
-    release: string; dir: string; dryRun?: boolean
+    release: string; dir: string; inject?: boolean; dryRun?: boolean
     endpoint?: string; apiKey?: string; silent?: boolean
   }) => {
     await runSourcemapsUpload({
-      release: opts.release, dir: opts.dir, dryRun: opts.dryRun,
+      release: opts.release, dir: opts.dir, inject: opts.inject, dryRun: opts.dryRun,
       endpoint: opts.endpoint, apiKey: opts.apiKey, silent: opts.silent,
     })
   })

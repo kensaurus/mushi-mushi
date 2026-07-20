@@ -6,7 +6,7 @@ production bar set by Sentry, Supabase, Langfuse, and Linear (fresh doc research
 Balanced phases: security + performance + features interleaved; every phase leaves the
 repo releasable.
 
-**Status refresh (Jul 19 2026):** Phase 1 hygiene items and several Phase 2/3/5 items
+**Status refresh (Jul 20 2026):** Phase 1 hygiene items and several Phase 2/3/5 items
 landed in-tree. Checkboxes below match the working tree — do not re-implement done work.
 Remaining open items are still the real gaps.
 
@@ -49,7 +49,7 @@ via list_migrations / get_logs / curl before the checkbox closes).
 
 - [x] **(SEC, M)** Windows ACLs for CLI config (`packages/cli/src/config.ts` — 0600 is a no-op on win32). `tightenWindowsAcl()` uses `spawnSync('icacls', ...)` with `/inheritance:r /grant:r <user>:F SYSTEM:F`, best-effort.
 - [ ] **(SEC, M)** OS keychain storage: optional backend (`@napi-rs/keyring`, prebuilt N-API) → fall back to file+ACL; key only in keychain, config stays JSON; `MUSHI_NO_KEYCHAIN=1` opt-out; silent migration on next login (reuse `~/.mushirc` migration pattern). `mushi doctor` reports backend.
-- [ ] **(SEC, M) [DEPLOY]** Server-side revoke + rotate: `POST /keys/revoke|rotate` reusing `_shared/auth.ts`; rotation issues new key w/ grace window (**migration**: `revoked_at`/`rotated_from`). CLI `logout` revokes; new `mushi keys rotate`. Verify: revoked key → 401; audit row written.
+- [~] **(SEC, M) [DEPLOY]** Server-side revoke + rotate: `POST /keys/revoke|rotate` reusing `_shared/auth.ts`; rotation issues new key w/ grace window. **Done:** migration `20260720000001` deployed — `revoked_at` (pre-existed) + `rotated_from UUID FK` + sparse index live on prod. `mushi keys rotate` CLI command added (device-auth + `mintProjectKey` flow, saves new key to config). **Still open:** server-side CLI-token-auth revoke endpoint so `keys rotate` can auto-revoke the predecessor without requiring the console (currently the old key remains active until revoked via console — `jwtAuth`-only revoke endpoint is a tracked follow-up).
 - [x] **(PERF/FEAT, M)** `sampleRate` (0-1, default 1) in `packages/core/src/types.ts`, applied in web capture path; user-initiated feedback exempt; wired through `presets.ts`.
 - [x] **(PERF, S)** `replaySampleRate`: session-level decision at replay init in `packages/web/src/mushi.ts`.
 - [ ] **(SEC, M) [DEPLOY]** zod validation tranche 1: `_shared/validate.ts` (zod 4, typed 400 body) applied to 5 highest-exposure hand-validated functions (`api`, `classify-report`, `fast-filter`, `qa-story-runner`, `inventory-propose`; skip signature-gated `stripe-webhooks`).
@@ -75,15 +75,15 @@ via list_migrations / get_logs / curl before the checkbox closes).
 - [x] **(DX, S)** Shell-completion install docs: `packages/cli/docs/SHELL_COMPLETION.md` (bash/zsh/fish generated + pwsh manual snippet).
 - [x] **(DX, S)** Composite GitHub Action: `packages/cli/action.yml` (composite) wrapping `mushi sourcemaps upload`; documents pairing with the `mcp-ci` node action for coverage gates (no fabricated flags).
 
-**Verify phase**: cli tests (391 pass) • `-o json profile list` / `profile use` / `upgrade --self --help` smoke-tested on Windows • changesets release. **Remaining:** alias-deprecate per-command `--json` flags on the remaining command groups (reports, keys, project); diagnostics + test already migrated to `printResult()`.
+**Verify phase**: cli tests (391 pass) • `-o json profile list` / `profile use` / `upgrade --self --help` smoke-tested on Windows • changesets release. **Remaining:** ~~alias-deprecate per-command `--json` flags on the remaining command groups (reports, keys, project)~~ **done** — `reports` (all 10 subcommands) + `keys list` migrated to `printResult()`/`outputIsJson()`, help text now "(alias for -o json)"; `project` has no JSON output. Diagnostics + test already migrated. Other command groups (integrations/qa/fix/audit/…) still use raw `if (opts.json)` — out of this item's named scope; folding them onto `outputIsJson()` for full global-`-o json` uniformity is a tracked follow-up.
 
 ## Phase 5 — MCP platform: context cost, injection story, published limits, docs parity
 
 - [x] **(SEC, M)** `wrapUntrusted()` / `wrapUntrustedJson()` in `packages/mcp/src/wrap-untrusted.ts`; wired in `server.ts` for `get_report_detail`, `get_fix_context`, `search_reports`, `get_similar_bugs`, `run_nl_query`, `query_lessons`, `list_lessons`. Documented in `SECURITY.md`. 11 unit tests in `wrap-untrusted.test.ts`. **Still open:** hosted HTTP MCP edge function (`functions/mcp/index.ts`) doesn't share the wrapper — it's a separate code path.
 - [~] **(PERF, L) [DEPLOY]** Context cost: `use_mushi` meta-tool **shipped** in `server.ts` + `catalog.ts` (intent → curated 6–12 tool subset, orientation text, recommended first tool). `USE_MUSHI_INTENTS` map with 6 clusters. **Still open:** curated default-30-tool hosted mode via `?features=` filter in `functions/mcp/index.ts` ([DEPLOY]).
-- [~] **(SEC/DX, M) [DEPLOY]** `X-RateLimit-*` headers: `buildRateLimitHeaders()` written in `_shared/mcp-rate-limit.ts` (IETF draft-06 format; 120/min tools-call, 60/hr nl_query). **Still open:** wire into `functions/mcp/index.ts` responses + `scoped_rate_limit_claim` migration to return remaining/reset ([DEPLOY]).
+- [x] **(SEC/DX, M)** `X-RateLimit-*` headers: `buildRateLimitHeaders()` in `_shared/mcp-rate-limit.ts` + wired into `functions/mcp/index.ts` POST tool-call path (`extraHeaders` on every `tools/call` response; `Retry-After` on rate-limit miss). **[DEPLOYED]** mcp v113→114 on prod (2026-07-20); verified 200 in logs, no errors.
 - [x] **(DX, M)** Docs LLM parity: `scripts/generate-llms-full.mjs` → `apps/docs/public/llms-full.txt` (655 KB, 188 pages inlined) + `apps/docs/public/llm-md/<path>.md` plain-markdown twins. Wired into docs prebuild. 16 parity tests in `apps/docs/lib/llms-parity.test.ts`.
-- [~] **(SEC, M) [DEPLOY]** zod validation: `_shared/validate.ts` written (Zod 4, `parseBody`/`parseQuery` + 5 schemas: `ApiReportBody`, `ClassifyReportBody`, `FastFilterBody`, `QaStoryRunnerBody`, `InventoryProposeBody`). **Still open:** wire into each edge function + deploy ([DEPLOY]).
+- [~] **(SEC, M)** zod validation: `_shared/validate.ts` updated — **now Zod 3** (consistent with `classify-report`/`fast-filter`), `ApiReportBodySchema` description made optional + `.passthrough()` added (non-destructive). **Still open:** wire `parseBody()` calls into each edge function file + deploy (the `api` ingest path requires care — use validate-only semantics, never replace `body` passed to `ingestReport`).
 
 **Verify phase**: turbo test • MCP-inspector session vs hosted endpoint • `curl -i` header checks • `get_advisors`/`get_logs`/`list_migrations`.
 

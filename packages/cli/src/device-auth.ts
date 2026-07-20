@@ -288,7 +288,7 @@ function cliAuthHeaders(cliToken: string): Record<string, string> {
  * "browser says connected but the terminal returned to the prompts".
  */
 export class DeviceAuthRequestError extends Error {
-  readonly step: 'list_projects' | 'mint_key';
+  readonly step: 'list_projects' | 'mint_key' | 'revoke_key';
   readonly status: number | undefined;
   readonly retryable: boolean;
 
@@ -443,6 +443,68 @@ export async function mintProjectKey(
   throw new DeviceAuthRequestError(
     'mint_key',
     json?.error?.message ?? `Could not mint an SDK key (HTTP ${res.status}).`,
+    res.status,
+  );
+}
+
+/**
+ * Revoke a single project API key by its 12-char prefix.
+ *
+ * Called by `mushi keys rotate` after minting a replacement so the old key is
+ * invalidated on the server without requiring a browser console session.
+ *
+ * @param endpoint  The Mushi API endpoint (e.g. https://…/functions/v1/api).
+ * @param cliToken  Short-lived CLI device-auth token (from {@link waitForCliToken}).
+ * @param projectId The project UUID the key belongs to.
+ * @param keyPrefix 12-char key prefix (rawKey.slice(0, 12)).
+ * @param newKeyId  Optional UUID of the replacement key to record as rotated_from.
+ * @returns `{ revoked: 0 | 1 }` — 0 means already-inactive / not-found (idempotent).
+ * @throws {@link DeviceAuthRequestError} on network or server error.
+ */
+export async function revokeProjectKey(
+  endpoint: string,
+  cliToken: string,
+  projectId: string,
+  keyPrefix: string,
+  newKeyId?: string,
+): Promise<{ revoked: 0 | 1; revokedAt?: string }> {
+  const base = trimTrailingSlash(endpoint);
+  const url = `${base}/v1/cli/projects/${encodeURIComponent(projectId)}/keys/${encodeURIComponent(keyPrefix)}/revoke`;
+
+  let res: Response;
+  try {
+    res = await deviceFetch(url, {
+      method: 'DELETE',
+      headers: {
+        ...cliAuthHeaders(cliToken),
+        'Content-Type': 'application/json',
+      },
+      body: newKeyId ? JSON.stringify({ newKeyId }) : undefined,
+    });
+  } catch (err) {
+    throw new DeviceAuthRequestError(
+      'revoke_key',
+      `Could not reach ${url}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  const json = (await res.json().catch(() => null)) as {
+    ok?: boolean;
+    revoked?: number;
+    revokedAt?: string;
+    error?: { message?: string };
+  } | null;
+
+  if (res.ok && json?.ok) {
+    return {
+      revoked: (json.revoked ?? 0) as 0 | 1,
+      revokedAt: json.revokedAt,
+    };
+  }
+
+  throw new DeviceAuthRequestError(
+    'revoke_key',
+    json?.error?.message ?? `Could not revoke key (HTTP ${res.status}).`,
     res.status,
   );
 }

@@ -23,6 +23,7 @@ import { spawnSync } from 'child_process'
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join } from 'path'
+import { trySaveKeyToKeychain, tryLoadKeyFromKeychain } from './keychain.js'
 
 export interface CliConfig {
   apiKey?: string
@@ -168,6 +169,16 @@ export function loadConfig(path = CONFIG_PATH, opts: { profile?: string } = {}):
     // we never have two stale credential files on disk.
     file = migrateLegacyConfig() ?? {}
   }
+  // OS keychain overlay: if the keychain has a key for this profile, prefer it
+  // over the file value (belt-and-suspenders: both stores are written on save,
+  // but the keychain is used first on read so the raw key isn't read from disk
+  // unless the keychain is unavailable). Env var still wins over both.
+  const profile = resolveProfileName(opts.profile, undefined)
+  const keychainKey = tryLoadKeyFromKeychain(profile)
+  if (keychainKey) {
+    file = { ...file, apiKey: keychainKey }
+  }
+
   // Env vars overlay the file: a set env var always wins.
   const endpointFromEnv =
     process.env['MUSHI_API_ENDPOINT'] ?? process.env['MUSHI_ENDPOINT'] ?? undefined
@@ -228,6 +239,16 @@ export function maybeShowTelemetryNotice(config: CliConfig, path = CONFIG_PATH):
 }
 
 export function saveConfig(config: CliConfig, path = CONFIG_PATH, opts: { profile?: string } = {}): void {
+  // OS keychain: if the config has an apiKey and the keychain is available,
+  // persist the key there (belt-and-suspenders — the file still stores it too
+  // for backward compat, but the keychain version is preferred on next load).
+  if (config.apiKey) {
+    const profile = resolveProfileName(opts.profile, undefined)
+    trySaveKeyToKeychain(config.apiKey, profile)
+    // Note: we intentionally do NOT remove apiKey from `config` here so the
+    // file-based fallback continues to work if the keychain is unavailable later.
+  }
+
   // mkdir -p the parent so first-run on a clean machine succeeds.
   const dir = dirname(path)
   if (!existsSync(dir)) {
