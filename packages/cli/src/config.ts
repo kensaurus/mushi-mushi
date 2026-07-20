@@ -23,7 +23,7 @@ import { spawnSync } from 'child_process'
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join } from 'path'
-import { trySaveKeyToKeychain, tryLoadKeyFromKeychain } from './keychain.js'
+import { tryLoadKeyFromKeychain } from './keychain.js'
 
 export interface CliConfig {
   apiKey?: string
@@ -239,16 +239,6 @@ export function maybeShowTelemetryNotice(config: CliConfig, path = CONFIG_PATH):
 }
 
 export function saveConfig(config: CliConfig, path = CONFIG_PATH, opts: { profile?: string } = {}): void {
-  // OS keychain: if the config has an apiKey and the keychain is available,
-  // persist the key there (belt-and-suspenders — the file still stores it too
-  // for backward compat, but the keychain version is preferred on next load).
-  if (config.apiKey) {
-    const profile = resolveProfileName(opts.profile, undefined)
-    trySaveKeyToKeychain(config.apiKey, profile)
-    // Note: we intentionally do NOT remove apiKey from `config` here so the
-    // file-based fallback continues to work if the keychain is unavailable later.
-  }
-
   // mkdir -p the parent so first-run on a clean machine succeeds.
   const dir = dirname(path)
   if (!existsSync(dir)) {

@@ -1,7 +1,8 @@
 /**
  * Shared browser / API-key login flow for `mushi login` and first-run `mushi setup`.
  */
-import { ensureClientId, loadConfig, saveConfig } from './config.js'
+import { ensureClientId, loadConfig, saveConfig, resolveProfileName } from './config.js'
+import { trySaveKeyToKeychain } from './keychain.js'
 import {
   apiKeyHint,
   cliSetupDeepLink,
@@ -300,6 +301,14 @@ export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
   if (chosenProjectId) config.projectId = chosenProjectId
   if (apiKey) config.apiKey = apiKey
   saveConfig(config)
+
+  // Write the key to the OS keychain (belt-and-suspenders: file stays as backup).
+  // Only at login time — saveConfig() itself does NOT write to the keychain
+  // so generic config writes (endpoint, projectId, etc.) don't pollute the store.
+  if (apiKey) {
+    const profile = resolveProfileName(undefined, (config as Record<string, unknown>).activeProfile as string | undefined)
+    trySaveKeyToKeychain(apiKey, profile)
+  }
 
   console.log('')
   if (chosenProjectName) console.log(`  ✓ Project: ${chosenProjectName}`)
