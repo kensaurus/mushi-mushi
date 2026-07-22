@@ -161,8 +161,8 @@ export interface ReportDetail {
   user_intent: string | null
   screenshot_url: string | null
   environment: ReportEnvironment
-  console_logs: Array<{ level: string; message: string; timestamp: number }> | null
-  network_logs: Array<{ method: string; url: string; status: number; duration: number }> | null
+  console_logs: Array<{ level: string; message: string; timestamp: number; stack?: string; correlationId?: string }> | null
+  network_logs: Array<{ method: string; url: string; status: number; duration: number; timestamp: number; traceId?: string; captureMethod?: 'fetch' | 'xhr'; correlationId?: string; error?: string }> | null
   performance_metrics: Record<string, number> | null
   repro_timeline: ReportTimelineEntry[] | null
   stage1_classification: Record<string, unknown> | null
@@ -256,4 +256,33 @@ export interface ReportDetail {
     app_name: string | null
     reviewer_note: string | null
   } | null
+  // ── Phase 1a: Backend spans joined by W3C trace_id (reports.ts §1a) ──────
+  /** Server-side spans for this report's trace, joined by sentry_trace_id / traceparent. */
+  backend_spans?: Array<{
+    id: string
+    trace_id: string
+    session_id: string | null
+    span_json: {
+      spanId?: string
+      parentSpanId?: string
+      name?: string
+      status?: string
+      duration_ms?: number
+      attributes?: Record<string, unknown>
+    }
+    ingested_at: string
+  }> | null
+  // ── Phase 2a: Anomaly provenance when auto-filed by CI metric regression ──
+  /** Statistical provenance entries when this report was triggered by anomaly detection. */
+  anomalies?: Array<{
+    metric_name: string
+    dimension: string
+    baseline_mean: number
+    baseline_std: number
+    score: number
+    threshold: number
+    ts: string
+  }> | null
+  // ── Project metadata needed by CodeFramePanel (available when page fetches project) ──
+  project?: { repo_url?: string | null } | null
 }

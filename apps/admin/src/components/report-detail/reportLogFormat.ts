@@ -149,6 +149,19 @@ export function formatViewport(width: number, height: number): string {
 
 export type PerfVitalTone = 'ok' | 'warn' | 'danger' | 'neutral'
 
+/**
+ * "Poor" threshold for each Web Vital — used as the `max` for MiniInlineBar gauges.
+ * A value at or above this threshold is red; the bar fills to 100% = "as bad as it gets."
+ */
+export const PERF_VITAL_POOR_THRESHOLD: Record<string, number> = {
+  LCP: 4000,
+  CLS: 0.25,
+  INP: 500,
+  FID: 500,
+  TTFB: 1800,
+  FCP: 3000,
+}
+
 /** Web Vitals thresholds — colours values so triagers spot regressions at a glance. */
 export function perfVitalTone(metric: string, value: number): PerfVitalTone {
   const key = metric.toUpperCase()

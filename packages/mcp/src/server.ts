@@ -1123,20 +1123,33 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
 
       // Return a focused evidence packet — strip the large classification/fix
       // arrays that belong in get_report_detail, keep only the evidence fields.
-      const evidence = report
+      // Covers all three observability pillars so the AI diagnosis agent has the
+      // full causal picture (see the get_report_evidence catalog description).
+      const r = report as Record<string, unknown> | null
+      const evidence = r
         ? {
             report_id: args.report_id,
-            description: (report as Record<string, unknown>).description,
-            summary: (report as Record<string, unknown>).summary,
-            screenshot_url: (report as Record<string, unknown>).screenshot_url ?? null,
-            environment: (report as Record<string, unknown>).environment ?? null,
-            breadcrumbs: (report as Record<string, unknown>).breadcrumbs ?? null,
-            sentry_replay_id: (report as Record<string, unknown>).sentry_replay_id ?? null,
-            sentry_trace_id: (report as Record<string, unknown>).sentry_trace_id ?? null,
-            sentry_event_id: (report as Record<string, unknown>).sentry_event_id ?? null,
-            session_id: (report as Record<string, unknown>).session_id ?? null,
-            created_at: (report as Record<string, unknown>).created_at,
-            tags: (report as Record<string, unknown>).tags ?? null,
+            description: r.description,
+            summary: r.summary,
+            screenshot_url: r.screenshot_url ?? null,
+            environment: r.environment ?? null,
+            // LOGS
+            console_logs: r.console_logs ?? null,
+            breadcrumbs: r.breadcrumbs ?? null,
+            repro_timeline: r.repro_timeline ?? null,
+            // TRACES
+            network_requests: r.network_logs ?? null,
+            backend_spans: r.backend_spans ?? null,
+            sentry_replay_id: r.sentry_replay_id ?? null,
+            sentry_trace_id: r.sentry_trace_id ?? null,
+            sentry_event_id: r.sentry_event_id ?? null,
+            // METRICS
+            performance_metrics: r.performance_metrics ?? null,
+            anomalies: r.anomalies ?? null,
+            // context
+            session_id: r.session_id ?? null,
+            created_at: r.created_at,
+            tags: r.tags ?? null,
           }
         : { error: String((reportRes as PromiseRejectedResult).reason) }
 
