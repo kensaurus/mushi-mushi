@@ -1,5 +1,6 @@
 /* eslint-disable no-console */
 import type { MushiConsoleEntry } from '@mushi-mushi/core';
+import { getActiveCorrelationId } from './network.js';
 
 const MAX_ENTRIES = 50;
 const MAX_MESSAGE_LENGTH = 500;
@@ -32,10 +33,16 @@ export function createConsoleCapture(): ConsoleCapture {
         .join(' ')
         .slice(0, MAX_MESSAGE_LENGTH);
 
+      // Phase 3b: stamp the active network request's correlationId so this log
+      // entry can be linked to the fetch/XHR that was in-flight when it was emitted
+      // (e.g. "this console.error was thrown inside the catch block of that request").
+      const correlationId = getActiveCorrelationId();
+
       const entry: MushiConsoleEntry = {
         level,
         message,
         timestamp: Date.now(),
+        ...(correlationId ? { correlationId } : {}),
       };
 
       if (level === 'error' && args[0] instanceof Error) {
