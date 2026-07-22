@@ -1,0 +1,262 @@
+# @mushi-mushi/web
+
+Source: https://kensaur.us/mushi-mushi/docs/sdks/web
+
+---
+title: '@mushi-mushi/web'
+---
+
+# `@mushi-mushi/web`
+
+Browser SDK: screenshots, console logs, network breadcrumbs, and a
+shake-to-report widget in a Shadow DOM so your CSS never leaks in or out.
+
+  **Migrating from another bug-capture tool?** We have step-by-step guides
+  for [Instabug / Luciq](/migrations/instabug-to-mushi),
+  [Shake](/migrations/shake-to-mushi),
+  [LogRocket Feedback](/migrations/logrocket-feedback-to-mushi),
+  [BugHerd](/migrations/bugherd-to-mushi), and
+  [Pendo Feedback](/migrations/pendo-feedback-to-mushi). Each maps the
+  competitor's API to the Mushi equivalent and includes an interactive
+  checklist.
+
+See [Quickstart → Vanilla JS](/quickstart/web) for setup. Notable extras:
+
+- **`runtimeConfig: 'auto'`** — fetches console settings from `GET /v1/sdk/config`
+  and merges them over host init. Host-wired banner and capture flags win over
+  console defaults. See [Runtime config](/concepts/runtime-config).
+- **`onProactiveTrigger(({ context }) => …)`** — fires when the SDK detects
+  user friction (rage clicks, repeated navigation, console errors during
+  the same interaction). Use it to surface the report widget contextually.
+- **`beforeSend((report) => report | null)`** — last-mile transform after
+  built-in PII scrub. Return `null` to drop the report client-side. Prefer
+  this over the deprecated `beforeSendFeedback` (feedback-only).
+- **`sampleRate` / `replaySampleRate`** — probabilistic gates for automatic
+  error reports and session replay (see below). User-initiated feedback is
+  never sampled out.
+- **`pii`** — built-in scrubber masks emails, phones, SSNs,
+  credit-card-shaped strings, and JWTs by default. Add custom regex via
+  `pii.customPatterns`.
+
+---
+
+## Sampling & `beforeSend`
+
+High-traffic apps can thin automatic capture without turning off the widget:
+
+```typescript
+Mushi.init({
+  projectId: '00000000-0000-0000-0000-000000000000',
+  apiKey: 'mushi_xxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+  // Automatic (non-user) error reports only — feedback always sends
+  sampleRate: 0.1,
+  // Session replay: decision once at init; sampled-out sessions never load rrweb
+  replaySampleRate: 0.2,
+  beforeSend: (report) => {
+    if (report.description?.includes('internal-only')) return null
+    return report
+  },
+})
+```
+
+| Option | Default | Applies to |
+| --- | --- | --- |
+| `sampleRate` | `1` | Automatic error/exception reports. Range `0`–`1`. |
+| `replaySampleRate` | `1` | Whether this session records replay. Independent of `sampleRate`. |
+| `beforeSend` | — | Every report type after PII scrub. Async OK. |
+| `beforeSendFeedback` | — | **Deprecated.** Feedback-only; ignored when `beforeSend` is set. |
+
+Types live on `MushiConfig` in `@mushi-mushi/core`.
+
+---
+
+## Screenshot preview & consent (1.19+)
+
+When screenshot capture is enabled (`capture.screenshot: 'on-report'` or
+`'auto'`), the details step shows a **visible preview** of the image that will
+be attached — not just a "Screenshot attached ✓" label. Reporters can **Remove**
+the screenshot before submit and optionally read a **privacy caption** beneath
+the preview.
+
+```typescript
+Mushi.init({
+  projectId: '00000000-0000-0000-0000-000000000000', // UUID from Projects page
+  apiKey: 'mushi_xxxxxxxxxxxxxxxxxxxxxxxxxxxx',        // report:write key
+  widget: {
+    // true  → localized default caption (en/es/ja/th)
+    // string → your compliance copy verbatim
+    // false → hide caption (preview + Remove still show)
+    screenshotSensitiveHint: true,
+  },
+  capture: { screenshot: 'on-report' },
+})
+```
+
+Tune the caption from the admin console (**Projects → SDK install → Screenshot
+privacy caption**) without rebuilding — it travels in `GET /v1/sdk/config` under
+`widget.screenshotSensitiveHint`.
+
+The preview stays in sync if the reporter uses **Mark up** (blur/highlight).
+Keep `img-src data:` in your CSP when using screenshots on locked-down pages.
+See the [Next.js App Router + CSP recipe](/sdks/nextjs-app-router-csp).
+
+Maintainer deep-dive:
+[SDK_SCREENSHOT_PREVIEW.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md)
+
+---
+
+## Runtime config merge (Jul 2026+)
+
+When `runtimeConfig` is `'auto'`, the SDK merges console settings from
+`GET /v1/sdk/config` over your `init()` config. Explicit host wiring wins — if
+you set `widget: { trigger: 'banner' }`, a console default of `launcher: 'auto'`
+no longer hides the banner.
+
+Capture flags merge key-by-key: only values the console explicitly configured
+replace host values. Unconfigured console defaults are omitted so they cannot
+clobber host init.
+
+See [Runtime config](/concepts/runtime-config) for the setup default and
+troubleshooting table. Maintainer deep-dive:
+[SDK_RUNTIME_CONFIG.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_RUNTIME_CONFIG.md).
+
+---
+
+## Capture availability & errors
+
+Screenshot and element-picker buttons hide when that capture mode is unavailable
+(permission denied, unsupported browser, or disabled in config). When capture
+fails at runtime, the widget shows a short inline error instead of a dead button.
+
+Wire availability from host code when needed:
+
+```typescript
+mushi.setCaptureAvailability({ screenshot: true, element: false })
+```
+
+---
+
+## Description draft persistence
+
+Typed report text (description, email, follow-up reply) survives background panel
+re-renders — for example when runtime config refreshes or the route changes.
+Drafts clear on successful submit or when the reporter opens a new session.
+
+---
+
+## Identifying users & the Rewards program
+
+Call `identify()` as soon as your auth state resolves. The SDK links all
+subsequent reports and activity events to that user identity server-side.
+
+```typescript
+// On login / auth state change
+const { user } = await supabase.auth.getUser()
+if (user) {
+  mushi.identify(user.id, {
+    email: user.email,
+    name: user.user_metadata?.full_name,
+    provider: 'supabase',
+  })
+}
+```
+
+`identify()` is idempotent — calling it again with the same `userId` updates
+the stored traits. Calling it with a new `userId` flushes any buffered events
+for the previous session first.
+
+### Enabling the Rewards program
+
+Add a `rewards` block to your `init()` config:
+
+```typescript
+
+const mushi = Mushi.init({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey: 'YOUR_API_KEY',
+  rewards: {
+    enabled: true,
+    trackActivity: true,        // auto-capture page_view, navigate, session_start
+    consentMode: 'explicit',    // 'explicit' | 'auto'
+    showInWidget: true,         // show tier + points in the bug-report widget
+    showNotifications: true,    // "+X pts" toast on each award
+    flushIntervalMs: 300_000,   // how often to POST activity (min 30s)
+  },
+})
+```
+
+`trackActivity: true` automatically captures:
+
+| Action | Trigger |
+|--------|---------|
+| `session_start` | First SDK init after 30 min idle, capped 3×/day |
+| `page_view` | Every `history.pushState` / `popstate` event |
+| `navigate` | `` clicks and programmatic router pushes |
+| `button_press` | Clicks on `[data-mushi-track]` or `[data-testid]` elements |
+
+For custom actions:
+
+```typescript
+mushi.submitActivity([
+  { action: 'lesson_complete', metadata: { lessonId: 'l_123', score: 0.9 } },
+])
+```
+
+### Querying points & tier
+
+```typescript
+// Current user's points
+const points = await mushi.getReputation()
+// → { totalPoints, points30d, reputation, confirmedBugs, totalReports }
+
+// Current tier
+const tier = await mushi.getTier()
+// → { id, slug, displayName, pointsThreshold, perks } | null
+```
+
+See [Concepts → Rewards & contributor identity](/concepts/rewards) for the
+full data model, anti-gaming integration, and webhook reference.
+
+## Reporter API
+
+Let reporters see and follow up on their own submissions without a login. Every
+method is keyed to the persistent anonymous `reporterToken` the SDK stores in
+`localStorage`, so no auth wiring is required.
+
+```typescript
+// The reporter's own report history (newest first)
+const reports = await mushi.listMyReports()
+// → MushiReporterReport[]  (each carries `unread_count` for a badge)
+
+// The comment thread on one of their reports
+const comments = await mushi.listMyComments(reportId)
+// → MushiReporterComment[]  (their comments + team replies)
+
+// Post a follow-up comment on their own report
+const comment = await mushi.replyToReport(reportId, 'Still happening on iOS 18')
+// → MushiReporterComment | null
+
+// The project's public contributor leaderboard
+const leaders = await mushi.getHallOfFame(10)
+// → MushiHallOfFameEntry[]  (display_name, tier_name, points_30d, total_points)
+```
+
+All four methods fail soft: they return `[]` / `null` (never throw) when the
+network is down or no reporter token exists yet, so they're safe to call on
+first render.
+
+### React
+
+The same methods are exposed on the `useMushi()` hook, memoised so they're
+stable across renders:
+
+```tsx
+
+function MyReports() {
+  const { listMyReports, replyToReport } = useMushi()
+  // ... call inside an effect or event handler
+}
+```
+
+`useMushi()` returns no-op fallbacks (`() => Promise.resolve([])`) before the
+SDK finishes initialising, so you never need to null-check the instance.

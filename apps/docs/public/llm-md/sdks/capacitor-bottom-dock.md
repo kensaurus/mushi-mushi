@@ -1,0 +1,37 @@
+# Capacitor bottom dock
+
+Source: https://kensaur.us/mushi-mushi/docs/sdks/capacitor-bottom-dock
+
+---
+title: Capacitor bottom dock
+---
+
+# Capacitor bottom dock
+
+Use `triggerInsetPreset` for common mobile chrome:
+
+```ts
+
+await Mushi.configure({
+  projectId: '...',
+  apiKey: 'mush_pk_...',
+  triggerMode: 'both',
+  triggerInsetPreset: 'tabBarSafe',
+})
+```
+
+Explicit insets win over presets:
+
+```ts
+await Mushi.configure({
+  projectId: '...',
+  apiKey: 'mush_pk_...',
+  triggerInset: {
+    bottom: triggerInsetPresets.dockSafe.bottom + 12,
+    trailing: 20,
+    end: 20,
+  },
+})
+```
+
+For Ionic or React Native Web shells that render the web widget inside the WebView, use the browser SDK `widget.anchor` with your app's CSS tokens.

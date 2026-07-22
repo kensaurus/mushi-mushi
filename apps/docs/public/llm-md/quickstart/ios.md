@@ -1,0 +1,69 @@
+# iOS (Swift) quickstart
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/ios
+
+---
+title: iOS (Swift) quickstart
+---
+
+# iOS quickstart
+
+The `MushiMushi` Swift package ships shake-to-report, an SQLite-backed
+offline queue, automatic device-context capture, and an optional Sentry
+breadcrumb bridge.
+
+## Install
+
+### Swift Package Manager
+
+In Xcode → File → Add Package Dependencies → enter:
+
+```
+https://github.com/kensaurus/mushi-mushi
+```
+
+Pick the `MushiMushi` target.
+
+### CocoaPods
+
+```ruby filename="Podfile"
+pod 'MushiMushi', '~> 0.4'
+```
+
+## Initialize
+
+```swift filename="AppDelegate.swift"
+import MushiMushi
+
+@main
+class AppDelegate: UIResponder, UIApplicationDelegate {
+  func application(_ app: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    Mushi.shared.configure(
+      projectId: "YOUR_PROJECT_ID",
+      apiKey: "YOUR_PUBLIC_API_KEY",
+      enableShakeToReport: true
+    )
+    return true
+  }
+}
+```
+
+## Submit a report programmatically
+
+```swift
+Mushi.shared.submitReport(
+  description: "Pull-to-refresh spinner never stops on Wi-Fi switch.",
+  severity: .high
+)
+```
+
+## Sentry bridge (optional)
+
+```swift
+import Sentry
+
+SentrySDK.start { options in
+  options.dsn = "YOUR_SENTRY_DSN"
+  Mushi.shared.attachSentryBridge(options) // forwards Mushi reports as Sentry breadcrumbs
+}
+```

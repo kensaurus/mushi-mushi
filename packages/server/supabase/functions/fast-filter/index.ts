@@ -18,6 +18,7 @@ import { extractAnthropicCacheUsage, logLlmInvocation } from '../_shared/telemet
 import { withSentry } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { parseBody, FastFilterBodySchema } from '../_shared/validate.ts'
 import { summarizeReplayEvents } from '../_shared/replay-evidence.ts'
 import { STAGE1_MODEL, STAGE1_FALLBACK } from '../_shared/models.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
@@ -135,7 +136,11 @@ Deno.serve(withSentry('fast-filter', async (req) => {
     // key that `api` already passes when dispatching.
     const unauthorized = requireServiceRoleAuth(req)
     if (unauthorized) return unauthorized
-    const { reportId, projectId } = await req.json()
+    // Validate request body — returns 400 with structured error on failure.
+    const parsedBody = await parseBody(FastFilterBodySchema, req)
+    if (parsedBody instanceof Response) return parsedBody
+    const { reportId, projectId } = parsedBody.data
+    // reportId + projectId are guaranteed by schema; guard kept for safety.
     if (!reportId || !projectId) {
       return new Response(JSON.stringify({ error: 'reportId and projectId required' }), { status: 400 })
     }
@@ -506,12 +511,30 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       // A non-2xx here used to be invisible: the report stranded in
       // status='new' until (broken) recovery. Observe the outcome and record
       // it on the report so doctor/console can surface it.
+      //
+      // 202 Accepted (stage2_accepted) is success — classify-report acks early
+      // and finishes via EdgeRuntime.waitUntil so the 150s request idle timer
+      // cannot return 504 IDLE_TIMEOUT while Sonnet is still running
+      // (MUSHI-MUSHI-SERVER-1R).
       if (!stage2Res.ok) {
         const detail = await stage2Res.text().then(t => t.slice(0, 500)).catch(() => '')
         if (stage2Res.status === 402) {
           // Diagnosis quota exhausted — classify-report already marked the
           // report quota_exceeded; nothing to retry until the user upgrades.
           log.warn('Stage 2 denied: diagnosis quota exceeded', { reportId })
+        } else if (
+          stage2Res.status === 504 &&
+          /IDLE_TIMEOUT/i.test(detail)
+        ) {
+          // Infra timeout on an older classify-report deploy that still held
+          // the HTTP response open. Do not stamp a permanent processing_error
+          // — recovery / retry owns that. Warn so Sentry does not page on
+          // gateway noise while the root fix (early-ack) rolls out.
+          log.warn('Stage 2 idle-timeout (gateway); classify-report should early-ack', {
+            reportId,
+            status: stage2Res.status,
+            detail,
+          })
         } else {
           log.error('Stage 2 returned non-2xx', { reportId, status: stage2Res.status, detail })
           await db

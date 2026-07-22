@@ -1,0 +1,130 @@
+# Pricing — free tier, Pro, and self-host
+
+Source: https://kensaur.us/mushi-mushi/docs/pricing
+
+---
+title: Pricing — free tier, Pro, and self-host
+description: Mushi Mushi pricing — 50 AI bug diagnoses a month free, no card. Open-source Sentry alternative you can self-host for free, or upgrade for teams.
+---
+
+# Pricing
+
+{PRICING_LEDE}
+
+## Plans
+
+  **Annual billing saves two months.** Pay for 10 months, get 12 — about 17% off base fees. Overage is still metered monthly. Enable annual checkout from the Billing page after subscribing, or contact us for Enterprise commits.
+
+  **Overage is capped.** Indie and Pro include a default spend cap. You can lower or raise it in the console. At the cap, Mushi pauses new diagnoses with a graceful message — never a surprise invoice. Email alerts fire at **50%, 80%, and 100%** of your included quota.
+
+  **Free Cloud has a hard stop** — not a soft limit. At 50 diagnoses Mushi stops classifying new reports until the next calendar month. No card, no charge, no bill shock.
+
+## What counts as a diagnosis
+
+One diagnosis = one completed classification pass. Specifically:
+
+- The report passes the fast noise filter (not spam or incomplete junk).
+- It is not a duplicate of an existing group already classified this period.
+- The classifier finishes and writes a plain-English root cause + severity + fix hint.
+
+Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, fix attempts, knowledge-graph writes, and MCP tool calls are **not** counted separately — they are included in the per-diagnosis price.
+
+**What does NOT count:**
+
+- Reports filtered by the fast-filter (noise, spam, incomplete submissions).
+- Reports deduplicated to an existing group (same broken button, same stack trace — they collapse, you only pay once).
+- Inbound adapter events (Sentry alerts, Datadog webhooks) that don't complete a fresh diagnosis.
+- MCP `get_fix_context` calls, fix dispatch, or any read-only operation.
+
+## Pricing estimator
+
+Use the slider below to model your bill. Toggle **Annual** to see the effective monthly base fee. When you hit a tier limit, the estimator suggests the next plan.
+
+## Example bills
+
+Fixed formulas (overage metered on top of base):
+
+```
+Indie:  $15 + max(0, diagnoses − 500) × $0.03   (capped at $50/mo total)
+Pro:    $49 + max(0, diagnoses − 2,000) × $0.025 (capped at $200/mo total)
+```
+
+| Diagnoses / mo | Indie | Pro |
+|---:|---:|---:|
+| 100 | $15.00 | $49.00 |
+| 500 | $15.00 | $49.00 |
+| 1,000 | $30.00 | $49.00 |
+| 2,000 | $45.00 | $49.00 |
+| 3,000 | $50.00 *(cap)* | $74.00 |
+| 5,000 | $50.00 *(cap)* | $124.00 |
+| 8,000 | $50.00 *(cap)* | $199.00 |
+| 10,000 | $50.00 *(cap)* | $200.00 *(cap)* |
+
+A typical vibe-coder project on Indie runs **200–400 diagnoses / month** → **$15–$15** (within included quota).
+
+## Why diagnoses, not events
+
+Sentry meters errors. We meter comprehension — a unit you can actually predict and that maps 1:1 to the value delivered (a plain-English root cause + paste-ready fix). Duplicate errors from the same broken button collapse to one diagnosis. You pay once.
+
+## BYOK and the self-host path
+
+When self-hosting, Mushi uses **your** Anthropic / OpenAI key (BYOK). You pay those vendors directly at list rate; we never mark up tokens. Most teams run the full loop for under $20 / month in LLM costs.
+
+The self-host path is completely free, always will be — [see the guide](/self-hosting).
+
+## Compared to Sentry + Seer
+
+| | Sentry Team + Seer | Mushi Indie |
+|---|---|---|
+| Base plan | $26 / mo | $15 / mo |
+| AI diagnosis | + $40 / active contributor | Included |
+| Solo dev total | **$66 + / mo** | **$15 / mo** |
+| Catches non-crash friction | No — code throws only | Yes — shake-to-report, dead buttons, layout breaks |
+| Editor-native (no dashboard) | No | Yes — paste-ready fix in Cursor / Claude Code |
+
+Sentry + Seer is excellent at what it does — code-thrown errors, breadcrumbs, session replay. Mushi is the layer beneath and beside it: user-felt friction that never triggers an error, and the comprehension step that turns any signal into a paste-ready fix prompt.
+
+## Frequently asked questions
+
+### What happens when I hit my diagnosis limit?
+
+**Free Cloud:** New plain-English classifications pause until the next calendar month. Reports are still captured.
+
+**Indie / Pro:** You can keep diagnosing into overage until your **spend cap** stops new classification runs. Reports are never dropped.
+
+### When does my quota reset?
+
+Cloud plans reset on your **Stripe billing period** (shown on the Billing page as “Quota resets in N days”). Free Cloud resets on the calendar month (UTC).
+
+### Can I change my spend cap?
+
+Yes. Open **Billing → Spending cap** on your project card. Set any USD cap from $0–100,000 or clear it to use the plan default ($50 Indie, $200 Pro).
+
+### Who receives usage alert emails?
+
+By default, the **project owner**. Override the address under **Usage alert email** on the same card. Alerts fire once per threshold (50%, 80%, 100%) per billing month.
+
+### Is usage per project or per organization?
+
+**Per project.** Each app you connect has its own diagnosis counter and spend cap. Organizations aggregate billing in the console but meter usage per project.
+
+### Can I downgrade mid-cycle?
+
+Downgrades take effect at **period end** via the Stripe portal. Upgrades apply immediately and are pro-rated.
+
+### Do annual plans include overage?
+
+Annual pricing applies to the **base subscription** only. Overage diagnoses are still billed monthly through Stripe Meters at the same per-diagnosis rate.
+
+### How do I estimate before signing up?
+
+Use the interactive estimator above, or run `mushi billing status` after wiring the SDK — it shows diagnoses used, limit, and spend cap for the current period.
+
+## Sign up
+
+```bash
+npx mushi-mushi
+# wizard: detect framework → install SDK → write env vars → connect MCP
+```
+
+Or [open the console →](https://kensaur.us/mushi-mushi/signup)

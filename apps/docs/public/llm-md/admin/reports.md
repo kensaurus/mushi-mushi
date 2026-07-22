@@ -1,0 +1,86 @@
+# Reports & triage
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/reports
+
+---
+title: Reports & triage
+---
+
+# Reports
+
+The Reports list is your inbox — every user report, filterable by status, severity,
+category, component, and free text. A **Recommended action** card at the top tells you
+what needs attention first (for example, critical items waiting for a human look).
+
+## Diagnosis + Fix hero
+
+The top of every report detail leads with the brand promise — *plain-English
+diagnosis + a paste-ready fix* — as a single block:
+
+1. **"Here's why it broke"** — a 1–3 sentence plain-English diagnosis (the
+   Stage-2 `summary`) with severity, category, and a **confidence chip**
+   (`NN% sure`), plus the likely component.
+2. **"Here's the fix"** — the paste-ready Cursor prompt and Open-in-Cursor
+   deeplink (the same `CursorAgentLaunch` brief exposed to MCP as `fixPrompt`).
+
+**Fail-graceful, by design.** Accuracy matters most for this audience — a
+confident-but-wrong diagnosis is worse than none — so when classifier
+confidence is **below 0.7** (or the summary is missing), the header flips to
+**"Not sure yet — here's what I'd check first"** and lists the most concrete
+signals (component, reproduction hint, raw summary) instead of asserting a
+single root cause. The detailed sections below are unchanged; the hero just
+lifts the answer to the top.
+
+## Compact diagnosis preview
+
+Hovering a row in the list (or opening the **Action inbox**) shows a preview
+drawer with the same confidence-aware label and, when a fix brief is ready, a
+**Copy fix prompt** button — so you get the answer before the click.
+
+Selecting a report opens the full detail view:
+
+- **Recommended next action** — single-sentence guidance derived from the
+  report's status, severity, and elapsed time, with one CTA. Replaces the
+  "what should I do?" guesswork on a fresh page load.
+- **Description + screenshot + breadcrumbs** captured by the SDK. The
+  screenshot is click-to-zoom.
+- **Classification panel** — category, severity, component, confidence,
+  Bug-Ontology tags. Hover for the model + prompt version that produced
+  each field; click to see the raw judge score.
+- **Console / network / performance** — always rendered, with informative
+  empty states when the SDK didn't capture data (so silence is visible).
+- **Comments + presence** — Supabase Realtime tracks who else is on the
+  same report (badge in the header). Comments stream live with relative
+  timestamps that expose the full ISO time on hover.
+- **Actions**: change status, dispatch a fix, dedupe into a parent group,
+  flag as anti-gaming.
+- **Fix card + pipeline flow** — when a fix is dispatched, the detail page shows
+  the active attempt, CI badge, and merge controls.
+- **Related cross-links** — jump to other reports from the same component
+  or reporter, the knowledge-graph node, and the dispatched fix / PR.
+
+---
+
+## Merging a fix from report detail
+
+When a fix attempt completes with an open PR, the report detail page shows:
+
+1. **CI feedback** — check-run status with **Refresh CI status** and a link to
+   GitHub Actions.
+2. **Merge PR** — confirm popover (squash by default). Disabled when the report
+   is already **Fixed** or the PR is merged.
+3. **Primary attempt selection** — if a retry failed after a successful PR open,
+   the UI surfaces the mergeable attempt, not the failed retry.
+
+After merge, the report status becomes **Fixed**, the reporter widget receives a
+resolution notification, and `fix.applied` webhooks fire.
+
+Equivalent CLI:
+
+```bash
+mushi fixes refresh-ci 
+mushi fixes merge 
+```
+
+See [Fix orchestrator → Merging from the console](/admin/fixes#merging-from-the-console)
+for the full sequence diagram and prerequisites.

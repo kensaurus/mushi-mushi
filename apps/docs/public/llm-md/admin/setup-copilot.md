@@ -1,0 +1,30 @@
+# Setup Copilot
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/setup-copilot
+
+---
+title: Setup Copilot
+---
+
+# Setup Copilot
+
+**Route:** `/setup-copilot`
+
+> **Scenario:** SDK and CLI are almost wired, but you want a guided checklist
+> that verifies ingest + dispatch with copy-paste commands.
+
+Guided verification panel for the active project:
+
+- Copy-paste CLI blocks for env vars (framework-prefixed `*_MUSHI_*`)
+- Ingest + dispatch checks via `useSetupStatus`
+- SDK heartbeat / version badge and optional **Create Upgrade PR**
+- Links into [Connect](/admin/connect) when GitHub or MCP is still missing
+
+Use after [CLI device auth](/admin/cli-auth) and ConnectStudio install, or jump
+here from onboarding when `mushi doctor` reports gaps.
+
+## Related pages
+
+- [Connect hub](/admin/connect) — install SDK / MCP / CLI
+- [CLI device auth](/admin/cli-auth) — approve `mushi login`
+- [Onboarding](/admin/onboarding) — longer guided wizard

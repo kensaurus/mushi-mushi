@@ -1,0 +1,58 @@
+# SDK health
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/sdk-health
+
+---
+title: 'SDK health'
+---
+
+# SDK health
+
+Every project page surfaces a **SDK health** card with the live
+heartbeat of every SDK runtime that's reported in the last 24 h. It's
+the surface that catches "I installed the SDK two weeks ago and forgot
+to ship the deploy" before a stakeholder catches it for you.
+
+## What it shows
+
+For each SDK runtime that's posted in the last 24 h:
+
+- **Heartbeat dot** — green / amber / red based on age of the most
+  recent successful API call (≤ 5 min / ≤ 1 h / older).
+- **Version** with an inline link to the matching npm release notes.
+  An out-of-date pill appears when the project is more than one minor
+  behind the latest published version.
+- **Origin / platform** — the user-agent fingerprint of the runtime
+  (browser, iOS app, React Native, Node).
+- **Last error** if any — clipped to the most recent classification
+  failure, with a click-through to the report detail.
+
+## Out-of-date detection
+
+The SDK health card watches the **published** versions on npm and
+compares against the version each runtime calls in with. The check is
+gentle — minor-behind nudges live in the card; major-behind pops a
+banner across the project page until it's acknowledged or the SDK is
+upgraded.
+
+## Setup checklist integration
+
+The first SDK heartbeat flips the **Connect SDK** step on the project
+setup checklist from open to complete. If a heartbeat hasn't arrived
+within an hour of the API key being issued, the checklist surfaces the
+diagnostics card directly so you can see which call is failing.
+
+## Where it lives
+
+- **Project page** — collapsed by default unless any SDK is in the red.
+- **Onboarding wizard** — the same card mounts on the final step so the
+  first heartbeat lands while the developer's still in flow.
+- **Organization → Health** — rolls up across every project in the org,
+  for organisations with several internal apps to keep an eye on.
+
+## Related
+
+- [SDK reference → Overview](/sdks) — every published SDK with its
+  current latest version.
+- [Concepts → Architecture](/concepts/architecture) — where the
+  heartbeat data flows in the gateway.

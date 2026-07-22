@@ -1,0 +1,62 @@
+# Prompt-injection defence
+
+Source: https://kensaur.us/mushi-mushi/docs/security/prompt-injection
+
+---
+title: Prompt-injection defence
+---
+
+# Prompt-injection defence
+
+Bug reports are user-supplied content fed directly into LLMs. That makes prompt injection a first-class threat — a malicious user could craft a report body that overrides the system prompt and leaks other users' data or produces a harmful fix.
+
+  The regression suite in `packages/server/src/__tests__/injection.test.ts` runs the full OWASP LLM01 corpus on every CI push. A new injection pattern entering `sanitizeForLLM()` is a test failure, not a PR merge.
+
+## Defence layers
+
+### 1. Text sanitizer
+
+Every text field (report title, description, console lines, OCR output) passes through `sanitizeForLLM()` in `packages/server/supabase/functions/_shared/sanitize.ts`:
+
+- Strips known injection fragments (`ignore previous instructions`, `system:`, `<|im_start|>`, etc.)
+- Removes control characters and zero-width joiners
+- Decodes and re-scans base64-encoded payloads (a common injection vector)
+- Caps field length so a runaway input can't push the system prompt out of context
+
+### 2. Structural XML wrapping
+
+All user content is always enclosed in named XML tags before reaching the model:
+
+```
+
+  …
+  …
+  …
+
+```
+
+The system prompt instructs the model to treat anything inside `` as untrusted data. Instructions in that region are recognised as data, not commands.
+
+### 3. Zod-validated structured output
+
+Every classifier and fix generator uses `generateObject` with a strict Zod schema. Free-form prose responses are rejected and re-prompted once. If the second attempt also fails validation, the run is marked `failed` — no raw LLM text leaks through.
+
+### 4. Vision-channel sanitization
+
+Screenshots pass through a pixel-level OCR scrub before being forwarded to multimodal models. The scrub applies `sanitizeForLLM()` to the OCR transcript and replaces detected injection regions with a `[REDACTED]` overlay on the image.
+
+### 5. Regression suite
+
+`packages/server/src/__tests__/injection.test.ts` covers:
+
+- OWASP LLM01 injection corpus (100+ test cases)
+- Indirect injection via URL-embedded instructions
+- JSON-encoded nested instruction payloads
+- Multi-turn escalation attempts
+
+Run locally with:
+
+```bash
+cd packages/server
+npx vitest run src/__tests__/injection.test.ts
+```

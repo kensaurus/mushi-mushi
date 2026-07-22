@@ -1,12 +1,63 @@
 # Gitleaks configuration for mushi-mushi.
-# Extends the bundled default ruleset and only ADDS a narrow path allowlist,
-# so real leaks elsewhere are still caught.
+# Extends the bundled default ruleset, adds Mushi-specific detection rules,
+# and maintains a narrow path allowlist for known test fixtures.
+#
+# Registration: mushi_ and mush_pk_ prefixes are registered with the GitHub
+# Secret Scanning partner program — any leaked key matching these patterns
+# will trigger an automated revocation callback. See SECURITY.md.
 
 [extend]
 useDefault = true
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Mushi-specific secret detection rules
+# ─────────────────────────────────────────────────────────────────────────────
+
+[[rules]]
+id = "mushi-sdk-api-key"
+description = "Mushi SDK API key (mushi_… prefix)"
+# Format: mushi_<env>_<40+ base62 chars>
+# Examples: mushi_live_abc123…  mushi_test_abc123…
+regex = '''mushi_(?:live|test|dev|sk)_[A-Za-z0-9]{20,}'''
+entropy = 3.5
+keywords = ["mushi_"]
+[rules.allowlist]
+paths = [
+  '''packages/cli/src/doctor\.test\.ts''',
+  '''packages/cli/src/device-auth\.test\.ts''',
+  '''packages/cli/src/detect\.test\.ts''',
+  '''packages/cli/src/heartbeat-wait\.test\.ts''',
+  '''packages/cli/src/index\.test\.ts''',
+  '''packages/cli/src/mcp-config\.test\.ts''',
+  '''packages/cli/src/sanitize-config\.test\.ts''',
+  '''packages/cli/src/login\.test\.ts''',
+]
+
+[[rules]]
+id = "mushi-project-api-key"
+description = "Mushi project API key (mush_pk_… prefix)"
+# Format: mush_pk_<40+ base62 chars>
+regex = '''mush_pk_[A-Za-z0-9]{20,}'''
+entropy = 3.5
+keywords = ["mush_pk_"]
+[rules.allowlist]
+paths = [
+  '''packages/cli/src/doctor\.test\.ts''',
+  '''packages/cli/src/device-auth\.test\.ts''',
+  '''packages/cli/src/detect\.test\.ts''',
+  '''packages/cli/src/heartbeat-wait\.test\.ts''',
+  '''packages/cli/src/index\.test\.ts''',
+  '''packages/cli/src/mcp-config\.test\.ts''',
+  '''packages/cli/src/sanitize-config\.test\.ts''',
+  '''packages/cli/src/login\.test\.ts''',
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Global path allowlist
+# ─────────────────────────────────────────────────────────────────────────────
+
 [allowlist]
-description = "Path allowlist for a redacted legacy-AWS audit note and CLI unit-test fixtures that embed obviously-fake Mushi API keys. Real keys (mushi_live_/mushi_pk_) are never allowlisted."
+description = "Path allowlist for a redacted legacy-AWS audit note and CLI unit-test fixtures that embed obviously-fake Mushi API keys. Real keys (mushi_live_/mush_pk_) are never allowlisted."
 paths = [
   # Redacted AWS access key ID (a public identifier, not a secret) in an audit note.
   '''docs/audit-2026-06-24/pre-launch-hardening-complete\.md''',

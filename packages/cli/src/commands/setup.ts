@@ -2,7 +2,7 @@ import type { Command } from 'commander';
 import { requireConfig } from '../cli-shared.js';
 import { loadConfig } from '../config.js';
 import { runLogin } from '../login.js';
-import { buildMcpServerBlock, buildMcpServerName, writeMcpServerEntry } from '../mcp-config.js';
+import { buildMcpServerBlock, buildMcpServerName, printKeyExportHint, writeMcpServerEntry } from '../mcp-config.js';
 import { MUSHI_MCP_PIN_SPEC } from '../version.js';
 
 // Exported for unit testing — resolving the login endpoint has three sources
@@ -31,6 +31,7 @@ program
   .option('--endpoint <url>', 'Override the Mushi API endpoint (self-hosted) — used for first-run login if not yet configured')
   .option('--stdio', 'Write a local stdio entry with an API key instead of the hosted OAuth URL (cursor/claude default is hosted OAuth — no key on disk)')
   .option('--ci', 'Alias for --stdio: headless environments cannot drive the browser OAuth flow')
+  .option('--inline-key', 'Write the literal API key into the mcp.json env block (default: write ${MUSHI_API_KEY} placeholder to prevent accidental git leaks)')
   .addHelpText('after', `
 Examples:
   mushi setup                         # wire Cursor (default: hosted OAuth — sign in from the IDE, no key on disk)
@@ -183,15 +184,13 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
     // isn't needed and disables the login flow (see mcp-config.ts).
     const hostedServerBlock = { url: hostedMcpUrl }
 
-    const mcpServerBlock = {
-      command: 'npx',
-      args: ['-y', MUSHI_MCP_PIN_SPEC],
-      env: {
-        MUSHI_API_ENDPOINT: config.endpoint,
-        MUSHI_PROJECT_ID: config.projectId ?? '',
-        MUSHI_API_KEY: config.apiKey,
-      },
-    }
+    const inlineKey = !!(opts as { inlineKey?: boolean }).inlineKey
+    const mcpServerBlock = buildMcpServerBlock({
+      endpoint: config.endpoint,
+      projectId: config.projectId ?? '',
+      apiKey: config.apiKey,
+      inlineKey,
+    })
 
     // isAbsolute, not startsWith('/'): zed's dir is under os.homedir(), which
     // on Windows is a drive-letter path that startsWith('/') misclassifies as
@@ -210,6 +209,7 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
             endpoint: config.endpoint,
             projectId: p.id,
             apiKey: config.apiKey,
+            inlineKey,
           })
           if (!opts.dryRun) {
             await writeMcpServerEntry({ configPath, serverName: pServerName, serverBlock: pBlock })
@@ -233,6 +233,8 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
             console.log('  Hosted MCP with OAuth login — no API key was written to this file.')
             console.log(`  Restart ${opts.ide === 'cursor' ? 'Cursor' : 'Claude Code'}, open the MCP panel (/mcp in Claude Code), pick "${serverName}" and sign in via the browser.`)
             console.log('  Prefer a local key-based entry (headless/CI)? Re-run with --stdio.')
+          } else if (!inlineKey && config.apiKey) {
+            printKeyExportHint(config.apiKey)
           }
         }
       }
@@ -252,7 +254,7 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
           env: {
             MUSHI_API_ENDPOINT: config.endpoint,
             MUSHI_PROJECT_ID: config.projectId ?? '',
-            MUSHI_API_KEY: config.apiKey,
+            MUSHI_API_KEY: inlineKey ? config.apiKey : '${MUSHI_API_KEY}',
           },
         },
         settings: {},
@@ -385,6 +387,7 @@ The command reads credentials from ~/.config/mushi/config.json. If you are not l
                         endpoint: fresh.endpoint ?? config.endpoint,
                         projectId: fresh.projectId ?? config.projectId ?? '',
                         apiKey: fresh.apiKey,
+                        inlineKey,
                       }),
                     })
                     console.log(`✓ Rewrote ${configPath} with the upgraded key`)

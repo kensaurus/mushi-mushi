@@ -1068,7 +1068,7 @@ export function ContributorsTab() {
         onClick={() => openDrawer(c)}
       >
         <td className="py-2.5 pr-3 text-fg-faint tabular-nums w-8">{rank}</td>
-        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+        {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
         <td className="py-2.5 pr-4 max-w-0 w-[35%]">
           <div className="flex items-center gap-1.5 min-w-0">
             <div className="min-w-0">

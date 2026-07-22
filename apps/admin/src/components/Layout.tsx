@@ -56,7 +56,7 @@ import { usePostureHasStatusBanner } from '../lib/postureChromeStore'
 import { resolveLayoutHero } from '../lib/layoutHeroFromStats'
 import { usePageHeroSnapshot } from '../lib/pageHeroSnapshot'
 import { useFaviconBadge } from '../lib/favicon'
-import { useFocusMode } from '../lib/focusMode'
+import { isConsentFocusPath, useFocusMode } from '../lib/focusMode'
 import { useSidebarCollapsed } from '../lib/sidebarCollapsed'
 import { PageHelpProvider } from '../lib/pageHelpContext'
 import { RoutePageHelp } from './RoutePageHelp'
@@ -560,7 +560,9 @@ export function Layout({ children }: { children: ReactNode }) {
     [pathname, fallbackHero, navCounts, pageHeroSnapshot],
   )
   const pageShellWidth = pageLayoutWidthForPath(pathname)
-  const [focusMode, setFocusMode] = useFocusMode()
+  const [focusModePreference, setFocusMode] = useFocusMode()
+  /** Consent routes always hide chrome; preference still drives the toggle. */
+  const focusMode = focusModePreference || isConsentFocusPath(pathname)
   const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed()
 
   // UIUX-2 (2026-04-23): keep the browser tab title + favicon in sync

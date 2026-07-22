@@ -1,0 +1,116 @@
+# Natural-language query
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/query
+
+---
+title: Natural-language query
+---
+
+# Natural-language query
+
+The Query page lets you ask questions about your project's data in plain English.
+Type a question, get SQL, get a chart — no SQL knowledge required.
+
+---
+
+## How it works
+
+1. **You type a question** — e.g. *"How many critical bugs touched the checkout
+   component last week, grouped by browser?"*
+2. **The LLM generates SQL** — the prompt includes the schema for every table in
+   the allow-list so the model can write accurate queries.
+3. **The SQL is validated** — a deterministic allow-list check confirms the query
+   only reads from permitted tables. Any mutation (`INSERT`, `UPDATE`, `DELETE`,
+   `DROP`, …) is rejected before execution.
+4. **The query runs** — against a read replica (or a read-only Postgres role on
+   self-hosted setups).
+5. **Results render as a chart** — the LLM picks the most appropriate chart type
+   (bar, line, pie, table) based on the result shape. You can override the type
+   from the chart toolbar.
+
+---
+
+## Allow-listed tables
+
+Only these tables are reachable from the query page:
+
+| Table | What's in it |
+| ----- | ------------ |
+| `reports` | Every incoming user report with classification fields |
+| `mistake_clusters` | Deduplicated clusters of similar reports |
+| `lessons` | Promoted learning rules with names and summaries |
+| `fix_attempts` | Agent fix runs — status, PR URL, files changed |
+| `end_users` | Identified reporter profiles (rewards-linked) |
+| `end_user_points` | Per-user point totals and tier |
+| `classification_evaluations` | Nightly judge scores per report |
+| `graph_nodes` | Inventory model nodes (stories, pages, elements, actions) |
+| `synthetic_runs` | Synthetic monitor walk results |
+
+Attempting to query any table not on this list returns a `table_not_allowed` error
+before the SQL reaches the database.
+
+---
+
+## Example questions
+
+```
+"Which component has the most open critical reports in the last 30 days?"
+
+"Show me the daily report volume trend for the past 3 months."
+
+"What are the top 5 reporters by points this month?"
+
+"How many fix attempts failed vs. succeeded last week?"
+
+"Which lessons have been injected into the most PR reviews?"
+
+"Show reports where severity is critical and status is open, created this week."
+```
+
+---
+
+## Audit log
+
+Every query is written to the audit log with:
+
+- Executing user and timestamp
+- The natural-language prompt
+- The generated SQL (full text)
+- The row count of the result
+- Whether the query was blocked by the allow-list
+
+The audit log is accessible in **Settings → Audit** and is exportable as CSV.
+
+  The allow-list blocks access to `end_user_activity`, `api_keys`,
+  `project_settings`, and all `private.*` schema tables. If a generated query
+  tries to `UNION` or use a subquery to reach a blocked table, the validator
+  catches it.
+
+---
+
+## Chart types
+
+| Type | Auto-selected when |
+| ---- | ----------------- |
+| Bar | Comparing counts or sums across categories |
+| Line | Time-series data with a date/timestamp column |
+| Pie / Donut | Proportional breakdown with ≤ 8 categories |
+| Table | More than 8 columns, or the LLM can't infer a useful chart shape |
+
+Click the chart type selector in the toolbar to override. Charts are exportable as
+PNG or the underlying CSV via the **⋮** menu.
+
+---
+
+## Saved queries
+
+Click **Save** to store a query by name. Saved queries appear in the left panel and
+can be shared with teammates by copying the URL. Saved queries are project-scoped —
+they're visible to every member with at least Viewer access.
+
+---
+
+## See also
+
+- [Admin → Intelligence reports](/admin/intelligence) — automated weekly digest built from the same data.
+- [Concepts → Knowledge graph](/concepts/knowledge-graph) — explore relationships visually instead of via SQL.

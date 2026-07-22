@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_104 configuration knobs across 19 sections · last regenerated 2026-07-18._
+_104 configuration knobs across 19 sections · last regenerated 2026-07-20._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -407,9 +407,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `projects.key_scope.mcp_write`
 
-**Summary** — Allows MCP tool calls to mutate state — close reports, dispatch fixes, post comments.
+**Summary** — Allows MCP tool calls to mutate state — transition report status, dispatch fixes, merge PRs, post replies.
 
-**How it works** — Mutating MCP tools (`close_report`, `dispatch_fix`, etc.) gate on this scope. Add it sparingly — anything an LLM can call from a paste-able key, an attacker with the same key can call too.
+**How it works** — Mutating MCP tools (`dispatch_fix`, `transition_status`, `merge_fix`, `reopen_report`, etc.) gate on this scope. Add it sparingly — anything an LLM can call from a paste-able key, an attacker with the same key can call too.
 
 **Default** — `disabled by default`
 

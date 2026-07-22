@@ -128,6 +128,20 @@ gh secret set SUPABASE_PROJECT_REF  --body "dxptnwrhwsqckaftyymj" --repo kensaur
 Per-function secrets (LLM keys, webhook signing secrets, etc.) are set with
 `supabase secrets set` against the project ref, not in the workflow.
 
+### Post-deploy smoke (health)
+
+```bash
+# API liveness (always-green process up)
+curl -sS "$SUPABASE_URL/functions/v1/api/health"
+
+# API readiness (DB-aware — prefer this for "is the stack usable?")
+curl -sS "$SUPABASE_URL/functions/v1/api/health/ready"
+
+# Standalone healthz edge function (no JWT; cheap DB probe)
+curl -sS "$SUPABASE_URL/functions/v1/healthz"
+# → {"status":"ok","db":"ok","version":"…"}  (or "degraded" if DB probe fails)
+```
+
 ---
 
 ## 3. Admin console SPA

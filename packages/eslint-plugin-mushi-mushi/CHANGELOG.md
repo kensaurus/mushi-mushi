@@ -1,5 +1,11 @@
 # eslint-plugin-mushi-mushi
 
+## 0.3.2
+
+### Patch Changes
+
+- Add `no-allowlist-jsx-textnode` — flags `// mushi-mushi-allowlist` written as a JSX child (React renders it as visible text). Prefer `{/* … */}` in children or attribute-line `//`. Enabled as `error` in `recommended`.
+
 ## 0.3.1
 
 ### Patch Changes

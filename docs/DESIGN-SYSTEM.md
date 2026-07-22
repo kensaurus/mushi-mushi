@@ -73,13 +73,43 @@ Rules live in `packages/eslint-plugin-mushi-mushi`.
 
 1. **New rule** ships as `warn` in `recommended` (or admin-only) for one release.
 2. After debt is cleared, promote to `error` in `recommended` and/or admin config.
-3. Domain exceptions use `// mushi-mushi-allowlist: <reason>` on the preceding line.
+3. Domain exceptions use `// mushi-mushi-allowlist: <reason>` on the preceding line
+   **only in JS/attribute context** (safe). Never put bare `//` as a JSX child — React
+   renders it as visible text. Inside a children list, use
+   `{/* mushi-mushi-allowlist: <reason> */}` instead. Enforced by
+   `mushi-mushi/no-allowlist-jsx-textnode`.
+
+```tsx
+// ✅ Safe — attribute-line comment
+<div
+  // mushi-mushi-allowlist: intentional arbitrary layout
+  className="min-h-[1.375rem]"
+/>
+
+// ✅ Safe — expression-group comment
+{show && (
+  // mushi-mushi-allowlist: intentional arbitrary layout
+  <div className="min-h-[1.375rem]" />
+)}
+
+// ✅ Safe — JSX block comment in children
+<div>
+  {/* mushi-mushi-allowlist: intentional arbitrary layout */}
+  <span className="min-h-[1.375rem]" />
+</div>
+
+// ❌ Renders as text in the UI
+<div>
+  // mushi-mushi-allowlist: intentional arbitrary layout
+  <span className="min-h-[1.375rem]" />
+</div>
+```
 
 `recommended` currently includes: dead-handler, mock-leak, raw-palette, text-3xs floor,
 hand-rolled dialog/tablist, missing posture, legacy shadcn, accent-for-selection,
 raw-hex-in-widget, card-elevated allowlist, raw-semantic-on-muted, raw-css-var-text,
 redundant-border-on-chip-tone, legacy-page-header-in-pages, page-root-padding,
-arbitrary-length-value. Admin-only / warn-graduating: `prefer-card-primitive`.
+arbitrary-length-value, allowlist-jsx-textnode. Admin-only / warn-graduating: `prefer-card-primitive`.
 
 ## Related
 

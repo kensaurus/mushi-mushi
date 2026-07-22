@@ -1,0 +1,102 @@
+# Integration health
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/health
+
+---
+title: Integration health
+---
+
+# Integration health
+
+**Route:** `/health`
+
+The health page is your observatory for everything that runs in the background:
+LLM pipelines, cron jobs, and live provider connectivity. Use it to catch degradation
+before it surfaces as a user-facing bug.
+
+---
+
+## Time window
+
+Use the **1h / 24h / 7d** toggle at the top right to scope all stats and charts to a
+time window. The window is persisted in the URL (`?window=`).
+
+---
+
+## LLM health summary
+
+The top section shows aggregate stats across all LLM-touching pipelines for the selected
+window:
+
+| Stat | Description |
+|------|-------------|
+| **Total calls** | Number of `llm_invocations` rows in window |
+| **Fallback rate** | % of calls that used a fallback model |
+| **Error rate** | % of calls that returned an error |
+| **Latency p50 / p95** | Median and 95th-percentile response time |
+
+Below the summary, a **per-function breakdown** table shows calls, avg/p95 latency, cost
+(USD), fallback count, errors, and last failure time for each edge function
+(`fix-worker`, `classify-report`, `judge-batch`, `pdca-runner`, etc.).
+
+A **per-model breakdown** table shows calls, token count, and errors for each LLM model
+in use.
+
+---
+
+## Provider probes
+
+Two cards show live connectivity to your BYOK providers:
+
+| Provider | What's tested |
+|----------|--------------|
+| **Anthropic** | `POST /v1/messages` — confirms key validity and model access |
+| **OpenAI** | `POST /v1/chat/completions` with `max_completion_tokens: 10` — returns `ok` / `degraded` / `error` |
+
+Each card shows: **status badge**, **latency**, and **last probed** time. Click
+**Probe now** to run a live round-trip test on demand.
+
+The OpenAI probe uses `max_completion_tokens: 10` (not `max_tokens`) to be compatible
+with `gpt-5.4-mini` and newer models. A `degraded` status with a short message is normal
+and means the key works.
+
+---
+
+## Cron job health
+
+Cards for each background cron job — `judge-batch`, `intelligence-report`,
+`data-retention` — show:
+
+- **Last run** timestamp and staleness indicator
+- **Run count** in window
+- **Success rate** percentage
+- **Avg duration**
+
+Click **Trigger now** to run a job immediately without waiting for its schedule.
+
+---
+
+## Recent LLM calls log
+
+The bottom of the page lists the most recent `llm_invocations` rows for this project,
+with columns: timestamp, function name, model, fallback badge, error badge, key source,
+latency, token count, and links to the source report and Langfuse trace.
+
+Use the **Show** filter (`all / errors / fallbacks`) to isolate problem calls. The URL
+param `?recent=` persists the filter. The list auto-updates via a realtime subscription.
+
+---
+
+## Recommended actions
+
+A banner at the top computes a severity level (`ok` / `warn` / `urgent`) based on the
+count of red and amber signals across the page. If the system is healthy, the banner
+shows a success tone and can be dismissed.
+
+---
+
+## Related pages
+
+- [Settings](/admin/settings) — configure BYOK keys
+- [Iterate](/admin/iterate) — the highest per-run LLM cost driver
+- [Fix drafts](/admin/fixes) — fix-worker call detail

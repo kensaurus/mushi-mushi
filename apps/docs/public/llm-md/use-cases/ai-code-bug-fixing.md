@@ -1,0 +1,60 @@
+# AI code bug fixing — report to merged fix
+
+Source: https://kensaur.us/mushi-mushi/docs/use-cases/ai-code-bug-fixing
+
+---
+title: AI code bug fixing — report to merged fix
+description: AI code bug fixing end to end — user reports become plain-English diagnoses, fix prompts, and optional draft PRs, with lessons that prevent repeats.
+---
+
+# AI code bug fixing: from user report to merged fix
+
+"AI wrote the code" changes what a bug costs. You can't lean on the memory of
+having written the module; every investigation starts cold. The fix itself is
+cheap — an agent can write it in seconds — but only once someone has worked
+out **what actually broke and where**.
+
+Mushi Mushi is built around that bottleneck. It's the comprehension layer for
+AI-built apps: it turns raw user reports into diagnoses an agent (or you) can
+act on immediately.
+
+## The pipeline
+
+**Capture.** Users report bugs in your app — widget tap on web, shake on
+mobile. The report keeps the screenshot, the page, and the user's own words.
+
+**Diagnose.** Mushi reads the report against your repo and writes a
+plain-English explanation: what the user hit, the likely cause, which files
+are involved, how severe it is. Classification lands in about ten seconds.
+
+**Deduplicate.** Twenty reports about the same broken button collapse into
+one row, so your queue reflects distinct problems, not complaint volume.
+
+**Fix.** Each diagnosis ships with a fix prompt scoped to the code involved.
+Paste it into Cursor or Claude Code, or let the editor pull it over MCP.
+Optionally, an agent opens a draft PR on your repo — you merge, edit, or
+ignore it.
+
+**Learn.** Merged fixes become lessons (`.mushi/lessons.json`) that your
+editor sees on future PRs, so the same class of bug doesn't come back next
+sprint.
+
+## Where this fits with your existing tools
+
+Keep your error monitor for crashes and your test suite for regressions.
+Mushi covers the third category — the bugs only users find — and closes the
+loop back to your editor instead of a ticket queue.
+
+## Start with one command
+
+```bash
+npx mushi-mushi
+```
+
+The wizard installs the right SDK, writes env vars, and can file a test
+report so you see the loop before real users do. 50 diagnoses a month free;
+self-host if you prefer.
+
+**Next:** [Incident loop quickstart](/quickstart/incident-loop) ·
+[How the pieces fit](/concepts/architecture) ·
+[Debug Cursor-built apps](/use-cases/debug-cursor-apps)

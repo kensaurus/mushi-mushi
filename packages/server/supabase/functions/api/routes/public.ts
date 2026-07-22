@@ -43,6 +43,7 @@ import {
   triggerClassification,
   type SdkConfigRow,
 } from '../helpers.ts';
+import { safeParse, ApiReportBodySchema } from '../../_shared/validate.ts';
 import { registerReporterFeatureBoardRoutes } from './reporter-feature-board.ts';
 
 // Upper bound for reporter-supplied notes that feed `mushi_apply_reporter_feedback`
@@ -220,6 +221,12 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     try {
       const projectId = c.get('projectId') as string;
       const body = await c.req.json();
+
+      // Validate structure early — return 400 before any DB work on structurally
+      // invalid payloads.  IMPORTANT: validate-only — pass original `body` (not
+      // validation.data) to ingestReport so SDK fields not in the schema are preserved.
+      const bodyValidation = safeParse(ApiReportBodySchema, body);
+      if (bodyValidation instanceof Response) return bodyValidation;
 
       if (
         typeof body?.projectId === 'string' &&
@@ -1724,6 +1731,71 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       ok: true,
       data: { metrics_inserted: metricsInserted, findings_inserted: findingsInserted, gate_run_id: gateRunId },
     }, 201);
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Source-map / Debug-ID endpoints  (Phase 3 uplift — Debug-ID story)
+  //
+  // GET  /v1/sourcemaps?sha256=<hex>&release=<str>
+  //   Idempotency probe: returns { exists: true|false } so the CLI can skip
+  //   re-uploading files already stored for this release.
+  //
+  // POST /v1/sourcemaps  (multipart/form-data)
+  //   Fields: file (Blob), filename (string), release (string),
+  //           sha256 (string), debug_id? (string — UUID injected via --inject)
+  //   Stores the map in the `sourcemaps` table for later stack-trace resolution.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  app.get('/v1/sourcemaps', apiKeyAuth, async (c) => {
+    const projectId = c.get('projectId') as string;
+    const sha256 = c.req.query('sha256') ?? '';
+    const release = c.req.query('release') ?? '';
+    if (!sha256 || !release) {
+      return c.json({ ok: false, error: { code: 'MISSING_PARAMS', message: 'sha256 and release are required' } }, 400);
+    }
+    const db = getServiceClient();
+    const { data, error } = await db
+      .from('sourcemaps')
+      .select('id')
+      .eq('project_id', projectId)
+      .eq('release', release)
+      .eq('sha256', sha256)
+      .maybeSingle();
+    if (error) return dbError(c, error);
+    return c.json({ ok: true, data: { exists: data !== null } });
+  });
+
+  app.post('/v1/sourcemaps', apiKeyAuth, async (c) => {
+    const projectId = c.get('projectId') as string;
+    let form: FormData;
+    try {
+      form = await c.req.formData();
+    } catch {
+      return c.json({ ok: false, error: { code: 'INVALID_FORM', message: 'Expected multipart/form-data body' } }, 400);
+    }
+    const filename = form.get('filename');
+    const release = form.get('release');
+    const sha256 = form.get('sha256');
+    const debugId = form.get('debug_id');
+    const file = form.get('file');
+    if (typeof filename !== 'string' || typeof release !== 'string' || typeof sha256 !== 'string') {
+      return c.json({ ok: false, error: { code: 'MISSING_FIELDS', message: 'filename, release, and sha256 are required' } }, 400);
+    }
+    const sizeBytes = file instanceof File ? file.size : null;
+    const db = getServiceClient();
+    const { error } = await db.from('sourcemaps').upsert(
+      {
+        project_id: projectId,
+        release,
+        filename,
+        sha256,
+        debug_id: typeof debugId === 'string' && debugId.length > 0 ? debugId : null,
+        size_bytes: sizeBytes,
+      },
+      { onConflict: 'project_id,release,sha256', ignoreDuplicates: true },
+    );
+    if (error) return dbError(c, error);
+    return c.json({ ok: true }, 201);
   });
 }
 

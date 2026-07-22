@@ -1,0 +1,73 @@
+name: 'Mushi Mushi Sourcemaps Upload'
+description: 'Upload source maps (Debug-ID ready) to Mushi from CI — one composite step for your release job. For report-coverage gating, pair with the mushi-ci action.'
+author: 'Kenji Sakuramoto'
+branding:
+  icon: upload-cloud
+  color: green
+
+# Composite action (as opposed to the node action in packages/mcp-ci) so it can
+# drive the published `mushi` CLI over npx with plain shell — no bundled runtime.
+inputs:
+  api-key:
+    description: 'Mushi project API key (store as a repo secret: MUSHI_API_KEY).'
+    required: true
+  api-endpoint:
+    description: 'Override API endpoint for self-hosted instances.'
+    required: false
+    default: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
+  cli-version:
+    description: 'Version of @mushi-mushi/cli to run (default: latest).'
+    required: false
+    default: 'latest'
+  release:
+    description: 'Release identifier the source maps belong to (e.g. the git SHA or a semver tag). Must match the `release` your SDK reports at runtime.'
+    required: false
+    default: ${{ github.sha }}
+  sourcemaps-dir:
+    description: 'Directory to scan for .js.map / .css.map files.'
+    required: false
+    default: './dist'
+  dry-run:
+    description: 'List the files that would be uploaded without uploading them.'
+    required: false
+    default: 'false'
+
+outputs:
+  uploaded:
+    description: 'true when the sourcemaps upload step completed.'
+    value: ${{ steps.upload.outputs.uploaded }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Upload source maps
+      id: upload
+      shell: bash
+      env:
+        MUSHI_API_KEY: ${{ inputs.api-key }}
+        MUSHI_API_ENDPOINT: ${{ inputs.api-endpoint }}
+      run: |
+        set -euo pipefail
+        DRY=""
+        if [ "${{ inputs.dry-run }}" = "true" ]; then DRY="--dry-run"; fi
+        npx --yes @mushi-mushi/cli@"${{ inputs.cli-version }}" sourcemaps upload \
+          --release "${{ inputs.release }}" \
+          --dir "${{ inputs.sourcemaps-dir }}" \
+          $DRY
+        echo "uploaded=true" >> "$GITHUB_OUTPUT"
+
+# ── Pair with report-coverage gating ────────────────────────────────────────────
+# This action only uploads source maps. To also gate a merge on Mushi report
+# classification coverage, add the node action in the same job:
+#
+#   - uses: kensaurus/mushi-mushi/packages/mcp-ci@<ref>
+#     with:
+#       api-key:    ${{ secrets.MUSHI_API_KEY }}
+#       project-id: ${{ secrets.MUSHI_PROJECT_ID }}
+#       command:    check-coverage
+#       min-coverage: '0.8'

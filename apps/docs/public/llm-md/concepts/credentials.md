@@ -1,0 +1,71 @@
+# Project ID & API keys
+
+Source: https://kensaur.us/mushi-mushi/docs/concepts/credentials
+
+---
+title: Project ID & API keys
+---
+
+# Project ID & API keys
+
+Every SDK, CLI, and MCP call needs a **project ID** plus an **API key**. Both appear after you **create a project** on **Setup → Verify** (API key) or **Projects** (Project ID chip) — not under Settings (BYOK keys are for your own LLM providers).
+
+## API key scopes
+
+Keys are scoped at mint time. Use separate keys for SDK ingest vs IDE/MCP — never give your app's `report:write` key `mcp:write`.
+
+| Scope | Used by | Can do |
+| --- | --- | --- |
+| **`report:write`** | Web/React/RN SDK, CI ingest | Submit bug reports, SDK heartbeat |
+| **`mcp:read`** | Cursor MCP (read-only) | List reports, `get_fix_context`, lessons, docs search |
+| **`mcp:write`** | Cursor MCP (full), CLI fix dispatch | Everything in read + `dispatch_fix`, `merge_fix`, QA triggers |
+
+  MCP brings its own intelligence — you do **not** need a separate OpenAI or Anthropic key for Mushi MCP tools. You still need a Mushi project + MCP-scoped API key.
+
+## Project ID
+
+Your project identifier is a **UUID** assigned at create time:
+
+| Format | Example | Where you see it |
+| --- | --- | --- |
+| **UUID** | `542b34e0-…` | Success panel + Projects page chip — copy immediately after **Create** |
+| **`proj_…` (future)** | `proj_myapp_prod` | Reserved short-form; CLI accepts either shape |
+
+Use the UUID from the success panel for `mushi init --project-id` and SDK env vars.
+
+## API key
+
+Secret used to authenticate ingest and admin API calls. Prefix depends on surface:
+
+| Prefix | Used by | Example |
+| --- | --- | --- |
+| `mushi_…` | Web, React, Node, CLI, MCP | `mushi_live_abc123…` |
+| `mush_pk_…` | Capacitor / native hybrid plugin | `mush_pk_abc123…` |
+
+Capacitor uses a **public ingest key** (`mush_pk_…`) embedded in the hybrid app bundle — see [`@mushi-mushi/capacitor`](/sdks/capacitor).
+
+Never commit API keys. The CLI writes SDK keys to `.env.local`, CLI config to **`~/.config/mushi/config.json`** (legacy `~/.mushirc` is auto-migrated on first load), and adds `.cursor/mcp.json` to `.gitignore` when wiring Cursor.
+
+See [`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example) for a copy-paste template.
+
+## API endpoint
+
+Default cloud endpoint (when unset):
+
+```
+https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api
+```
+
+Self-hosted and staging installs override via `apiEndpoint` / `MUSHI_API_ENDPOINT`. The CLI also accepts `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` as an alias.
+
+## Environment variable names
+
+| Stack | Project ID | API key |
+| --- | --- | --- |
+| Vite / Vue / Svelte / Angular / RN | `VITE_MUSHI_PROJECT_ID` | `VITE_MUSHI_API_KEY` |
+| Next.js | `NEXT_PUBLIC_MUSHI_PROJECT_ID` | `NEXT_PUBLIC_MUSHI_API_KEY` |
+| Nuxt | `NUXT_PUBLIC_MUSHI_PROJECT_ID` | `NUXT_PUBLIC_MUSHI_API_KEY` |
+| Node (Express / Fastify / Hono) | `MUSHI_PROJECT_ID` | `MUSHI_API_KEY` |
+| CLI / MCP | `MUSHI_PROJECT_ID` | `MUSHI_API_KEY` |
+
+Run `npx mushi-mushi` to auto-detect your framework and write the correct prefix.

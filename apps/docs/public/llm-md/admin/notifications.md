@@ -1,0 +1,76 @@
+# Notifications
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/notifications
+
+---
+title: Notifications
+---
+
+# Notifications
+
+**Route:** `/notifications`
+
+The Notifications page shows the outbound notification history for this project — every
+alert Mushi sent to reporters and team members. Use it to debug delivery problems or
+audit communication history.
+
+---
+
+## What appears here
+
+| Event type | When it fires |
+|------------|--------------|
+| **Fix deployed** | A fix-worker PR was merged and the reporter's issue is resolved |
+| **Report acknowledged** | A team member triaged the report |
+| **Tier up** | A reporter crossed a reward tier threshold |
+| **Quest completed** | A reporter completed a reward quest |
+| **Judge drift** | The classifier's 7-day accuracy dropped below the threshold |
+| **Improvement loop completed** | An improvement run finished (sent to the team, not reporters) |
+
+---
+
+## Columns
+
+| Column | Description |
+|--------|-------------|
+| **Recipient** | Email or user ID of the notification target |
+| **Type** | Event type (see table above) |
+| **Channel** | `email`, `in-app`, `webhook`, or `push` |
+| **Status** | `sent`, `failed`, `bounced`, `read` |
+| **Sent at** | Timestamp |
+
+---
+
+## Marking as read
+
+Use **Mark all read** to clear the unread badge on the notifications bell in the header.
+Individual rows can be marked read by clicking the row.
+
+---
+
+## Debugging delivery failures
+
+If a notification shows `failed`:
+1. Check the **error** column (hover the row or expand it) for the delivery error.
+2. Verify the recipient's email is valid in **Organization members**.
+3. For webhook channels, confirm the webhook URL is reachable from Supabase edge functions.
+4. For push notifications, confirm the SDK's push token is registered.
+
+---
+
+## Configuring notification rules
+
+Notification routing rules are in **Settings → Notifications** (coming soon in the UI;
+currently configured via the API):
+```bash
+PUT /v1/admin/projects/:projectId/notification-rules
+Authorization: Bearer <service-role-key>
+```
+
+---
+
+## Related pages
+
+- [Rewards](/admin/rewards) — tier-up and quest notification triggers
+- [Fix drafts](/admin/fixes) — fix-deployed notification source
+- [Settings](/admin/settings) — notification channel configuration

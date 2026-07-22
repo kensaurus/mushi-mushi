@@ -1,0 +1,78 @@
+# trigger-modes
+
+Source: https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes
+
+# Where the report button lives
+
+Mushi ships a default bug-report launcher, but you decide where it appears —
+corner stamp, edge tab, help menu, or your own custom button.
+
+## Choosing a Mode
+
+| Mode | Best for | Behavior |
+| --- | --- | --- |
+| `auto` | Quick installs, prototypes, internal tools | Shows the editorial stamp trigger in the configured corner. |
+| `edge-tab` | Apps with bottom nav, chat bubbles, or dense CTAs | Pins a slim paper-tab trigger to the edge so it stays discoverable without covering content. |
+| `attach` | Production apps with a help menu or existing feedback link | Hides the default trigger and binds Mushi to `attachToSelector`. |
+| `manual` / `hidden` | White-label apps, mobile flows, or regulated screens | Renders no launcher; call `Mushi.open()`, `Mushi.openWith(category)`, or `Mushi.captureEvent()` yourself. |
+
+## Bring Your Own Button
+
+```ts
+
+const mushi = Mushi.init({
+  projectId: '00000000-0000-0000-0000-000000000000',
+  apiKey: 'mushi_xxx',
+  widget: {
+    trigger: 'attach',
+    attachToSelector: '[data-mushi-feedback]',
+  },
+})
+
+// You can also bind later, which is useful in SPAs.
+mushi.attachTo('#support-menu-feedback')
+```
+
+## Smart Hide
+
+```ts
+Mushi.init({
+  projectId: '00000000-0000-0000-0000-000000000000',
+  apiKey: 'mushi_xxx',
+  widget: {
+    trigger: 'auto',
+    smartHide: {
+      onMobile: 'edge-tab',
+      onScroll: 'shrink',
+      onIdleMs: 900,
+    },
+    inset: { bottom: 96, right: 20 },
+  },
+})
+```
+
+Use `hideOnSelector` for screens with known collisions:
+
+```ts
+Mushi.init({
+  projectId: '00000000-0000-0000-0000-000000000000',
+  apiKey: 'mushi_xxx',
+  widget: {
+    hideOnSelector: '[data-fullscreen-player]',
+    hideOnRoutes: ['/checkout/payment', '/immersive'],
+  },
+})
+```
+
+## Native SDKs
+
+iOS, Android, React Native, Flutter, and Capacitor expose the same idea:
+
+- `button` / `both` shows the native trigger.
+- `shake` installs the gesture without a visible trigger.
+- `none` / `manual` gives you a programmatic-only integration.
+- Native trigger insets are configurable so the launcher can clear tab bars,
+  player controls, and host-app CTAs.
+
+For production installs, prefer a host-owned help menu or contextual action and
+keep Mushi as the capture layer behind it.

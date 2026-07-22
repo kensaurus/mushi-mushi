@@ -71,10 +71,11 @@
 import { withSentry } from '../_shared/sentry.ts'
 import { propagateRequestId } from '../_shared/internal-headers.ts'
 import { recordMcpToolInvocation } from '../_shared/mcp-tool-audit.ts'
-import { claimMcpToolCallRateLimit } from '../_shared/mcp-rate-limit.ts'
+import { claimMcpToolCallRateLimit, buildRateLimitHeaders } from '../_shared/mcp-rate-limit.ts'
 import { buildManifestTools } from './manifest-tools.ts'
 import { SERVER_INFO_EXTENDED, MUSHI_ICON_SVG_INLINE } from '../_shared/mcp-branding.ts'
 import { parseFeaturesParam, toolMatchesFeatures, DEPRECATED_TOOL_ALIASES, type FeatureFilter } from './feature-groups.ts'
+import { wrapUntrustedJson } from './wrap-untrusted.ts'
 import { searchMushiDocs } from './docs-index.ts'
 import { buildMcpServerCard, MCP_SERVER_CARD_HEADERS } from '../_shared/mcp-server-card.ts'
 import {
@@ -1045,6 +1046,95 @@ const BASE_TOOLS: Record<string, ToolDef> = {
       return apiCall(path, { headers: ctx.authHeaders })
     },
   },
+
+  // ── use_mushi meta-tool ──────────────────────────────────────────────────
+  // Returns a curated tool subset + orientation for the caller's stated intent.
+  // Mirrors the stdio MCP server (packages/mcp/src/server.ts).  Intent map
+  // is inlined here (edge functions cannot import from packages/).
+  use_mushi: {
+    scope: 'mcp:read',
+    description:
+      'CALL THIS FIRST if you are new to this Mushi project or unsure which tool to use. ' +
+      'Pass your intent as a short natural-language phrase ' +
+      '("fix the top bug", "check what I should work on", "run QA tests", "set up Mushi", …). ' +
+      'Returns: (1) a curated list of the 5–12 tool names most relevant to that intent, ' +
+      '(2) a one-paragraph orientation to the Mushi project and dashboard state, and ' +
+      '(3) the single recommended first tool to call. ' +
+      'Avoids loading the full 68-tool catalog into context when only a small subset is needed. ' +
+      'Read-only; does not call any downstream tools itself.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        intent: {
+          type: 'string',
+          description:
+            'What you are trying to accomplish with Mushi, e.g. "fix the top bug", ' +
+            '"check project health", "run QA tests", "set up Mushi". Leave blank for general orientation.',
+        },
+      },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    handler: async (args, ctx) => {
+      const intent = String(args.intent ?? '').toLowerCase()
+
+      // Intent → curated tool subset (mirrors USE_MUSHI_INTENTS in catalog.ts).
+      const INTENTS: Record<string, { label: string; tools: string[]; hint: string }> = {
+        fix: {
+          label: 'Fix a bug',
+          tools: ['get_recent_reports', 'get_report', 'summarize_report_for_fix', 'dispatch_fix', 'start_skill_pipeline', 'checkin_pipeline_step', 'get_pipeline_run'],
+          hint: 'Call get_recent_reports to find the top unresolved bug, then summarize_report_for_fix before dispatching.',
+        },
+        status: {
+          label: 'Check project status',
+          tools: ['get_dashboard', 'triage_next_steps', 'get_usage', 'get_backend_health', 'activation_status'],
+          hint: 'Call triage_next_steps for a prioritised list of what to work on today.',
+        },
+        setup: {
+          label: 'Set up Mushi',
+          tools: ['mushi_setup', 'activation_status', 'get_backend_health', 'list_byok_keys', 'add_byok_key'],
+          hint: 'Call mushi_setup first — it diagnoses setup gaps and returns the next command to run.',
+        },
+        qa: {
+          label: 'Run / review QA tests',
+          tools: ['list_qa_stories', 'run_qa_story', 'list_qa_story_runs', 'get_qa_story_run', 'list_pending_review_stories', 'approve_qa_story', 'improve_qa_story'],
+          hint: 'Call list_qa_stories to see what test coverage exists; run_qa_story to trigger a run.',
+        },
+        pipeline: {
+          label: 'Run an agent pipeline / skill',
+          tools: ['list_skills', 'get_skill', 'start_skill_pipeline', 'checkin_pipeline_step', 'get_pipeline_run'],
+          hint: 'Call list_skills to find the right skill, then start_skill_pipeline.',
+        },
+        audit: {
+          label: 'Audit / health check',
+          tools: ['run_fullstack_audit', 'get_backend_health', 'get_dashboard', 'get_usage'],
+          hint: 'Call run_fullstack_audit for a full-stack health scorecard.',
+        },
+      }
+
+      const matched = Object.entries(INTENTS).find(([key]) => intent.includes(key))
+      const [, cluster] = matched ?? ['status', INTENTS['status']!]
+
+      const projectLine = ctx.projectIdHint
+        ? `Connected project: \`${ctx.projectIdHint}\`. `
+        : 'No project configured — run `mushi_setup` to set MUSHI_PROJECT_ID. '
+
+      const orientation = [
+        `## Mushi — ${cluster.label}`,
+        '',
+        projectLine + cluster.hint,
+        '',
+        '### Recommended tools for this intent',
+        cluster.tools.map((t) => `- \`${t}\``).join('\n'),
+        '',
+        '### First step',
+        `Call \`${cluster.tools[0]}\` to get started.`,
+        '',
+        'Tip: you can call any tool by name — `use_mushi` is read-only and never calls other tools itself. All tools remain available.',
+      ].join('\n')
+
+      return { content: [{ type: 'text', text: orientation }] }
+    },
+  },
 }
 
 /** Full catalog — base hand-authored tools + manifest-generated parity tools. */
@@ -1376,8 +1466,23 @@ async function handleToolsCall(
     // when the tool defines an outputSchema AND the data is an object —
     // a bare array or scalar would fail downstream JSON-Schema validation.
     const includeStructured = !!def.outputSchema && typeof data === 'object' && data !== null
+    // Prompt-injection mitigation: tools that return user-authored or
+    // LLM-generated text are wrapped in data delimiters so adversarial
+    // instructions inside them cannot override the agent's behaviour.
+    const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
+      'get_report_detail',
+      'get_fix_context',
+      'search_reports',
+      'get_similar_bugs',
+      'run_nl_query',
+      'query_lessons',
+      'list_lessons',
+    ])
+    const text = UNTRUSTED_TOOLS.has(name)
+      ? wrapUntrustedJson(data, name as string)
+      : JSON.stringify(data, null, 2)
     const result: Record<string, unknown> = {
-      content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+      content: [{ type: 'text', text }],
     }
     if (includeStructured) {
       result.structuredContent = data
@@ -2164,6 +2269,10 @@ async function handler(req: Request): Promise<Response> {
     })
   }
 
+  // Capture window start before dispatch so the window boundary is consistent
+  // even when the tool call itself takes many milliseconds.
+  const windowStartSec = Math.floor(Date.now() / 1000 / 60) * 60
+
   const response = await dispatchRpc(rpc, ctx)
   if (!response) {
     // Notification — no response.
@@ -2172,6 +2281,16 @@ async function handler(req: Request): Promise<Response> {
   const extraHeaders: Record<string, string> = {}
   if (rpc.method === 'tools/list') {
     extraHeaders['Cache-Control'] = 'private, max-age=300'
+  }
+  // Add X-RateLimit-* headers on tools/call responses so agents can self-throttle.
+  // Detect a rate-limit miss by the JSON-RPC error code (ERR_RATE_LIMITED = -32001).
+  if (rpc.method === 'tools/call') {
+    const isMiss =
+      typeof response === 'object' &&
+      response !== null &&
+      'error' in response &&
+      (response as { error?: { code?: number } }).error?.code === ERR_RATE_LIMITED
+    Object.assign(extraHeaders, buildRateLimitHeaders({ scope: 'tools_call', isMiss, windowStartSec }))
   }
   return jsonRpcResponse(response, extraHeaders)
 }

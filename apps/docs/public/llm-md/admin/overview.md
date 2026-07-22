@@ -1,0 +1,60 @@
+# Overview (portfolio)
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/overview
+
+---
+title: Overview (portfolio)
+---
+
+# Overview
+
+**Route:** `/overview`
+
+> **Scenario:** You manage several connected projects and want a single org-scoped
+> glance at 7-day activity and open tickets before diving into any one app.
+
+Overview is the portfolio dashboard for the active organization. Each card is one
+connected project — sessions, users, open reports, and a DAU sparkline — with
+footer links that switch the active project and open Activity, Reports, or the
+project Dashboard.
+
+---
+
+## What you see
+
+| Element | Meaning |
+|---------|---------|
+| **Portfolio totals** | Aggregated 7-day sessions / users and open-ticket counts across projects |
+| **Project cards** | Per-project `sessions_7d`, `users_7d`, open + critical reports, last report time |
+| **DAU sparkline** | Daily active users for the last week on that project |
+| **Health tone** | Critical if any critical reports; warn if open reports &gt; 5; otherwise ok |
+| **Footer links** | Switch active project → Activity, Reports, or Dashboard |
+
+Cards sort so unhealthy projects float first (critical → warn → ok).
+
+---
+
+## Data source
+
+```
+GET /v1/admin/portfolio
+```
+
+Requires a console JWT and `X-Mushi-Org-Id` (set automatically from the org
+switcher). Backed by the `org_portfolio_summary` RPC.
+
+Empty state means no projects are linked to this org yet — create or connect one
+from [Projects](/admin/projects).
+
+---
+
+## Related
+
+- [Activity](/admin/activity) — per-project session and engagement detail (30-day window)
+- [Dashboard](/admin/dashboard) — morning PDCA / fix pipeline snapshot for the active project
+- [Reports](/admin/reports) — triage queue
+- SDK session telemetry is emitted by `@mushi-mushi/web` / `@mushi-mushi/core`
+  (opt out with `trackSessions: false` in `MushiConfig`)
+
+  Overview is org-scoped. Activity and most other console pages are project-scoped —
+  use a card footer link to switch project context before drilling in.

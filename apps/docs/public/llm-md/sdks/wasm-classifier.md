@@ -1,0 +1,27 @@
+# @mushi-mushi/wasm-classifier
+
+Source: https://kensaur.us/mushi-mushi/docs/sdks/wasm-classifier
+
+---
+title: '@mushi-mushi/wasm-classifier'
+---
+
+# `@mushi-mushi/wasm-classifier`
+
+Optional on-device pre-classifier built on a Phi-3-mini ONNX model running
+under `onnxruntime-web`. Detects obvious junk before the request even
+leaves the browser, cutting your LLM bill.
+
+```bash
+pnpm add @mushi-mushi/wasm-classifier
+```
+
+```ts
+
+const classifier = await useWasmClassifier()
+const verdict = await classifier.classify('asdf qwer')
+// → { keep: false, confidence: 0.96, reason: 'low-information' }
+```
+
+The web SDK auto-loads this when present and skips classification on the
+server when the verdict is `keep: false` with confidence ≥ 0.85.

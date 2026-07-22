@@ -68,23 +68,7 @@ This is cumulative selection. The software system gets permanently better with e
   *"Cumulative selection is the key to all of evolution. … Each improvement, however slight, is retained and passed on."* — Richard Dawkins, *Climbing Mount Improbable* (1996), p. 74
 </Callout>
 
-Mushi operationalises this: catch the bug → embed it → cluster similar bugs → name the cluster → promote it to a learning rule → inject the rule into the next PR review and the next agent fix → reward the user who found it → repeat.
-
----
-
-## Antifragility as design goal
-
-Taleb's *Antifragile* (2012) distinguishes between:
-
-- **Fragile**: breaks under stress (most software without monitoring).
-- **Robust**: survives stress unchanged (good monitoring, alert fatigue).
-- **Antifragile**: gets *stronger* from stress.
-
-A Mushi-equipped project is antifragile: each bug report not only gets fixed, it also strengthens the rules that prevent the next bug of the same class. The more bugs that appear, the richer the lesson library becomes. The more stress the system absorbs, the better it gets at absorbing the next unit of stress.
-
-<Callout type="info">
-  *"Innovations emerge as a consequence of trial-and-error and then become encoded in heuristics and practical knowhow. … The more the system fails, the more it learns."* — Nassim Nicholas Taleb, *Antifragile* (2012), p. 230
-</Callout>
+In Mushi that means: catch the bug → embed it → cluster similar bugs → name the cluster → promote it to a learning rule → inject the rule into the next PR review and the next agent fix → credit the reporter → repeat.
 
 ---
 
@@ -103,16 +87,6 @@ A Mushi-equipped project is antifragile: each bug report not only gets fixed, it
 
 ---
 
-## The three intellectual anchors
-
-| Book | Principle | Mushi equivalent |
-|---|---|---|
-| *Black Box Thinking* — Syed (2015) | Every failure is data; name it, encode it, inherit it | `mistake_clusters` → `lessons` → `.mushi/lessons.json` |
-| *Antifragile* — Taleb (2012) | Systems improve by failing, learning, failing again | Each encoded lesson makes the next agent run less likely to repeat the mistake |
-| *Climbing Mount Improbable* — Dawkins (1996) | Selection with memory reaches solutions random search cannot | The lesson library grows with every bug; each iteration starts from a better baseline |
-
----
-
 ## What this means for the roadmap
 
 Every feature in the Mushi roadmap is either:
@@ -121,7 +95,7 @@ Every feature in the Mushi roadmap is either:
 2. **A processor**: something that turns raw signal into named, structured knowledge (the mistake clusterer, the judge coherence gate, the PDCA loop, anomaly detection).
 3. **An effector**: something that injects knowledge back into the development process (lesson injection into PRs, changelog attribution, the `.mushi/lessons.json` repo file, the PDCA draft PR).
 
-The loop is: **sense → process → effect → sense again**. This is the NTSB model applied to software. It is how cumulative selection works. It is why Mushi is not just a feedback widget — it is an antifragile development infrastructure layer.
+The loop is: **sense → process → effect → sense again** — each encoded lesson makes the next agent run less likely to repeat the same class of mistake.
 
 ---
 

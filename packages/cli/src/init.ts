@@ -23,7 +23,7 @@ import {
   type FrameworkId,
   type PackageManager,
 } from './detect.js';
-import { ensureClientId, loadConfig, saveConfig } from './config.js';
+import { ensureClientId, loadConfig, maybeShowTelemetryNotice, saveConfig } from './config.js';
 import {
   apiKeyHint,
   cliSetupDeepLink,
@@ -274,6 +274,8 @@ async function acquireCredentials(
 
   // 2. Reuse saved credentials from a prior login.
   const existing = loadConfig();
+  // Show one-time telemetry notice before the wizard prompts begin.
+  maybeShowTelemetryNotice(existing);
   if (!options.projectId && !options.apiKey && existing.projectId && existing.apiKey) {
     const reuse = options.yes
       ? true

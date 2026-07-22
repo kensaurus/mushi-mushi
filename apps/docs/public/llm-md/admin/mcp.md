@@ -1,0 +1,162 @@
+# MCP
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/mcp
+
+---
+title: MCP
+---
+
+# MCP — ask your editor what broke
+
+**Route:** `/mcp`
+
+Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected,
+your agent can read reports, pull fix context, and optionally dispatch fixes —
+without leaving the editor.
+
+The live **Catalog** tab mirrors the server registry (**68 tools**, 8 resources, 4 prompts).
+
+---
+
+## Quickstart
+
+The page opens with a 3-step quickstart strip. Step 1 shows complete when you already have an `mcp:read` key.
+
+### 1. Generate an MCP-scoped API key
+Click **Generate an API key** (or use **Add to Cursor** on Connect & Update) → mint a key with **`MCP read`** or **`MCP read+write`** scope. This is separate from your app's SDK ingest key (`report:write`).
+
+### 2. Install the MCP server
+Copy the snippet from the **Install** card, or click **Add to Cursor** / **Add to VS Code** for a one-click deeplink. The deeplink includes `MUSHI_FEATURES=triage,fixes,inventory,setup,docs` (lean catalog).
+
+### 3. Use it
+Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See [MCP quickstart](/quickstart/mcp) and [Incident loop](/quickstart/incident-loop).
+
+---
+
+## Install snippets
+
+### `.cursor/mcp.json` (stdio — recommended)
+
+```json
+{
+  "mcpServers": {
+    "mushi-myproject": {
+      "command": "npx",
+      "args": ["-y", "@mushi-mushi/mcp@latest"],
+      "env": {
+        "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
+        "MUSHI_PROJECT_ID": "<your-project-id>",
+        "MUSHI_API_KEY": "mushi_live_...",
+        "MUSHI_FEATURES": "triage,fixes,inventory,setup,docs"
+      }
+    }
+  }
+}
+```
+
+  There is no `--project-id` CLI flag on `@mushi-mushi/mcp`. Pass the project via **`MUSHI_PROJECT_ID`** in `env`. Server names use `mushi-` (admin deeplink) or bare `mushi` for legacy single-project configs.
+
+### Hosted HTTP (no local subprocess)
+
+```json
+{
+  "mcpServers": {
+    "mushi-http": {
+      "type": "http",
+      "url": "https://<your-ref>.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs",
+      "headers": {
+        "X-Mushi-Api-Key": "mushi_live_...",
+        "X-Mushi-Project-Id": "<your-project-id>"
+      }
+    }
+  }
+}
+```
+
+Full catalog: append `?features=all` (or set `MUSHI_FEATURES=all` for stdio).
+
+---
+
+## Key status
+
+Two badges in the quickstart strip show whether you have:
+- **`mcp:read`** — required for read tools (reports, fix context, lessons, docs search)
+- **`mcp:write`** — required for dispatch, merge, QA triggers, and other mutations
+
+  Write tools mutate production data. Store `mcp:write` keys in IDE config or CI secrets — never in a frontend bundle that ships to end users.
+
+---
+
+## Tool catalogue (representative)
+
+See the admin **Catalog** tab for the full list. Names below match `tools/call` exactly.
+
+### Read tools (`mcp:read`)
+
+| Tool | Description |
+|------|-------------|
+| `get_recent_reports` | List recent reports with status/category/severity filters |
+| `get_report_detail` | Full report payload — logs, screenshot, classification |
+| `get_fix_context` | One-shot fix brief — root cause, repro, blast radius |
+| `get_similar_bugs` | pgvector nearest-neighbour duplicates |
+| `search_reports` | Semantic + keyword search |
+| `diagnose_setup` | Unified ingest + MCP + dispatch diagnosis |
+| `search_mushi_docs` | Keyword search over Mushi documentation |
+| `query_lessons` / `list_lessons` | Evolution-loop learning rules |
+| `get_inventory` / `diff_inventory` | Inventory v2 snapshot and gate diff |
+
+### Write tools (`mcp:write`)
+
+| Tool | Description |
+|------|-------------|
+| `dispatch_fix` | Dispatch a triaged report to the fix-worker (opens draft PR when configured) |
+| `merge_fix` | Squash-merge the fix PR and mark report Fixed |
+| `transition_status` | Move a report through triage states |
+| `run_qa_story` | Trigger a QA Coverage story run |
+| `start_skill_pipeline` | Attach a skill pipeline to a report |
+
+---
+
+## Resources
+
+| URI | Description |
+|-----|-------------|
+| `project://dashboard` | PDCA dashboard snapshot |
+| `project://stats` | Report counts and severity breakdown |
+| `mushi://activation` | Setup posture — SDK heartbeat, MCP, next action |
+| `inventory://current` | Current inventory snapshot with gate status |
+| `evolution://history` | Judge scores and lesson inductions (30 days) |
+| `privacy://status` | BYOK / retention / region posture |
+
+---
+
+## Prompts
+
+MCP prompts orchestrate multiple tools into a single agent turn:
+
+| Prompt | Description |
+|--------|-------------|
+| `summarize_report_for_fix` | Build a fix plan from `get_fix_context` + blast radius before coding |
+| `triage_next_steps` | Five-item priority list from dashboard + queue |
+| `explain_judge_result` | Ship / iterate / dismiss from judge scores |
+| `mushi_setup` | Diagnose blocked setup via activation + integration health |
+
+---
+
+## Use cases
+
+1. **Incident loop** — `get_fix_context` → `summarize_report_for_fix` → paste into Cursor ([guide](/quickstart/incident-loop))
+2. **Morning triage** — `get_recent_reports` + `triage_next_steps`
+3. **PR-time lessons** — `query_lessons` before touching files
+4. **Setup unblock** — `diagnose_setup` when reports don't appear
+5. **Automated dispatch** — CI calls `dispatch_fix` on critical reports (requires `mcp:write`)
+
+---
+
+## Related pages
+
+- [Projects](/admin/projects) — mint MCP API keys
+- [Connect & Update](/admin/onboarding) — unified SDK + MCP install hub
+- [SDKs → MCP](/sdks/mcp) — `@mushi-mushi/mcp` package reference
+- [MCP tools (generated)](/sdks/mcp-tools.generated) — full catalog from `catalog.ts`
+- [Fix orchestrator](/concepts/fix-orchestrator) — what happens after `dispatch_fix`

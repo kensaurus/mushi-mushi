@@ -16,6 +16,7 @@ import { getMushiSelf, isMushiSelfEnabled, reportMushiBug } from '../lib/mushi-s
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { BETA_BANNER_ID, setBetaBannerOffset } from '../lib/appChrome'
+import { isConsentFocusPath } from '../lib/focusMode'
 import { betaBannerTone } from '../lib/tokens'
 
 const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000
@@ -40,6 +41,7 @@ export function BetaBanner() {
   const location = useLocation()
   const { session } = useAuth()
   const isTesterPortal = location.pathname === '/tester' || location.pathname.startsWith('/tester/')
+  const onConsentFocusPath = isConsentFocusPath(location.pathname)
   // Bug reports must work logged-out too (red-team #12: pre-login reports
   // were silently discarded) — the SDK widget authenticates with its own
   // project API key, no JWT needed. Feature requests still post to the
@@ -80,10 +82,10 @@ export function BetaBanner() {
   }, [dismissed, isTesterPortal])
 
   useEffect(() => {
-    if (isTesterPortal) setBetaBannerOffset(0)
-  }, [isTesterPortal])
+    if (isTesterPortal || onConsentFocusPath) setBetaBannerOffset(0)
+  }, [isTesterPortal, onConsentFocusPath])
 
-  if (isTesterPortal || dismissed) return null
+  if (isTesterPortal || onConsentFocusPath || dismissed) return null
 
   function handleDismiss() {
     try {
@@ -124,7 +126,7 @@ export function BetaBanner() {
         aria-label="Beta announcement"
         className={`shrink-0 z-[100] border-b ${betaBannerTone()}`}
       >
-        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+        {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
         <div className="mx-auto flex w-full max-w-[100rem] flex-col gap-1 px-3 py-1.5 text-xs sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1 sm:px-4">
           <span className="flex min-w-0 items-start gap-2 sm:flex-1 sm:items-center">
             <span className="inline-flex shrink-0 items-center rounded border border-lime/40 bg-lime/15 px-1.5 py-px font-mono text-2xs font-medium text-lime-foreground">

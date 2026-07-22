@@ -1,0 +1,126 @@
+# Shake → Mushi
+
+Source: https://kensaur.us/mushi-mushi/docs/migrations/shake-to-mushi
+
+---
+title: 'Shake → Mushi'
+---
+
+# Shake → Mushi
+
+ 
+
+Shake (shakebugs.com) is a closed-source bug reporting SDK with strong
+shake-to-report ergonomics. This guide swaps it for Mushi while preserving
+the same trigger UX.
+
+  Shake's shake-to-report defaults are the closest of any competitor to
+  Mushi's, so the user-facing UX after migration looks nearly identical.
+  Most apps cut over in a single afternoon.
+
+## Why switch
+
+- **Open source.** Mushi's SDK + admin console are MIT-licensed; Shake is closed.
+- **Self-host.** Mushi runs on your own Supabase / Postgres; Shake is SaaS-only.
+- **AI triage.** Mushi's two-stage classifier and judge loop ship in the box.
+- **Pricing predictability.** Mushi is free at the SDK + community-cloud
+  tier; commercial cloud has flat per-project pricing.
+
+## API mapping
+
+| Shake | Mushi |
+|-------|-------|
+| `Shake.start(apiKey)` (web) | `Mushi.init({ projectId, apiKey })` |
+| `Shake.show()` | `Mushi.openWidget()` |
+| `Shake.setUser(id, email, name)` | `Mushi.setUser({ id, email, name })` |
+| `Shake.addEventKey(key, value)` | `Mushi.setMetadata({ [key]: value })` |
+| `allowToReportBugByShakingMobile(true)` | `widget: { trigger: 'shake' }` |
+| `allowToReportBugByScreenCapture(true)` | `widget: { trigger: 'button' }` (or `'both'`) |
+| `setEnableBlackBox(true)` | Console + network capture is default-on |
+| `setMetadata(meta)` | `Mushi.setMetadata(meta)` |
+| `addPrivateView(view)` | `capture: { redactSelectors: [...] }` (web) |
+
+## Before / After
+
+### React Native
+
+```ts
+// BEFORE — Shake
+
+Shake.start('YOUR_API_KEY')
+Shake.setEnableBlackBox(true)
+Shake.setUserMetadata({ tier: 'pro' })
+```
+
+```tsx
+// AFTER — Mushi
+
+  return (
+    
+      
+    
+  )
+}
+
+// Inside any screen:
+
+const mushi = useMushi()
+mushi.setMetadata({ tier: 'pro' })
+```
+
+### Web
+
+```ts
+// BEFORE — Shake JS
+
+Shake.start('YOUR_API_KEY')
+Shake.setUser('user-42', 'jane@example.com', 'Jane Doe')
+```
+
+```ts
+// AFTER — Mushi web
+
+Mushi.init({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey:    'YOUR_PUBLIC_KEY',
+  widget:    { trigger: 'both' },
+})
+Mushi.setUser({ id: 'user-42', email: 'jane@example.com', name: 'Jane Doe' })
+```
+
+## Migration checklist
+
+Sign in to the Mushi admin console; copy projectId + apiKey.</> },
+    { id: 'install', label: 'Install the right Mushi SDK', content: {`# Web:    npm install @mushi-mushi/web
+# React:  npm install @mushi-mushi/react
+# RN:     npm install @mushi-mushi/react-native
+# Capacitor: npm install @mushi-mushi/capacitor && npx cap sync`} },
+    { id: 'mount-mushi', label: 'Mount Mushi alongside Shake (do NOT remove Shake yet)', content: <>Both will trigger on shake. To avoid double widgets, set Shake's invocation to button-only or disable it during the dual-ship window.</> },
+    { id: 'wire-user', label: 'Replicate Shake.setUser / addEventKey calls in Mushi', content: <>Anywhere you set user identity or event metadata in Shake, do the same in Mushi.</> },
+    { id: 'verify-capture', label: 'Verify Mushi captures the same context Shake did', content: <>Submit a test report. Check that console logs, network requests, and (web) screenshot are attached. Mushi captures all three by default — no extra config needed.</> },
+    { id: 'compare', label: 'Run dual-SDK in beta for ≥ 2 days', content: <>Compare the next ~10 reports between Shake and Mushi. If Mushi reports are at least as useful, proceed to remove Shake.</> },
+    { id: 'remove-shake', label: 'Uninstall the Shake SDK', content: {`npm uninstall @shakebugs/react-native-shake @softnoesis/shakebug-js
+# For React Native: cd ios && pod deintegrate && pod install`} },
+    { id: 'rotate-key', label: 'Revoke your Shake API key', content: <>In the Shake dashboard, rotate the production key so the now-removed SDK can't accidentally re-attach.</> },
+  ]}
+/>
+
+## Feature parity
+
+| Capability | Shake | Mushi |
+|------------|-------|-------|
+| Shake-to-report | ✅ | ✅ |
+| Floating button | ✅ | ✅ |
+| Screenshot on report | ✅ | ✅ (web) |
+| Black-box (console + network) | ✅ (`setEnableBlackBox`) | ✅ (default on) |
+| Activity history / repro steps | ✅ | ✅ (auto from captured streams) |
+| Crash reporting | ✅ | ❌ (keep Sentry/Crashlytics) |
+| Self-host | ❌ | ✅ |
+| Open source | ❌ | ✅ |
+| AI triage | ❌ | ✅ |
+| MCP server for IDE agents | ❌ | ✅ |
+
+## References
+
+- [Mushi web SDK](/sdks/web) / [React Native SDK](/sdks/react-native)
+- [Shake docs](https://docs.shakebugs.com/)

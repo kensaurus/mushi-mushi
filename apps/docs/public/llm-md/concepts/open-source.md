@@ -1,0 +1,83 @@
+# Open source & licensing
+
+Source: https://kensaur.us/mushi-mushi/docs/concepts/open-source
+
+---
+title: Open source & licensing
+---
+
+# Open source & licensing
+
+Mushi is **open by default**. The cloud product at `kensaur.us/mushi-mushi/` runs the
+exact same code in this repository — there is no closed-source "enterprise"
+fork. What you self-host is what we run.
+
+  **TL;DR** — Mushi is **open-core** (the Supabase / Grafana model). The SDKs you
+  embed in your app are **MIT** (use them anywhere, open or closed). The server you
+  self-host is **AGPLv3** (true OSI open source — self-host and modify freely; SaaS
+  modifiers publish changes or get a [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md)).
+  A small **enterprise-edition** boundary (`packages/server/ee/`) is source-available
+  but commercial for production use. The wedge — capture, diagnosis, fix, self-host,
+  BYOK — is always in the AGPL core, never behind EE.
+
+## Open-core, one repo
+
+| Surface | License | What you can do |
+| --- | --- | --- |
+| **SDK packages** — `core`, `web`, `react`, `vue`, `svelte`, `angular`, `react-native`, `capacitor`, `flutter`, `ios`, `android`, `node`, `cli`, `mcp`, `mcp-ci`, plugins, adapters, `brand`, `marketing-ui` | [MIT](https://github.com/kensaurus/mushi-mushi/blob/master/LICENSE) | Use, fork, sell, embed in proprietary products. No copyleft. |
+| **Server packages** — `@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify` | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) | Use, modify, self-host, fork for your own org. Modified SaaS → publish changes (§13) or [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md). The cloud runs this exact core. |
+| **Enterprise edition** — `packages/server/ee/` (SAML/OIDC SSO, audit export, retention CRUD, region pinning, SOC 2 evidence pack) | [Commercial](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/ee/LICENSE) | Read, audit, modify, and run for development/evaluation. Production use needs an Enterprise subscription or `MUSHI_EE_LICENSE_KEY`. |
+| **Third-party attributions** | [NOTICE](https://github.com/kensaurus/mushi-mushi/blob/master/NOTICE) | One-stop list of upstream projects and their licenses. |
+
+### Why MIT for the SDK?
+
+The widget runs inside *your* application. A copyleft SDK would force your app's
+license, which is unacceptable — so every package you ship to your users is MIT.
+Drop `@mushi-mushi/react` into a closed-source product with zero obligations.
+
+### Why AGPLv3 for the server?
+
+We want **honest** open source — the same model as Supabase. The server is
+**AGPLv3**: genuinely OSI-approved, self-hostable forever, copyleft only when you
+offer a *modified* version as a network service (Section 13). The project is
+funded by managed cloud hosting and a small commercial **enterprise edition**
+(`packages/server/ee/`), not by confusing license labels.
+
+Need to run modified Mushi as multi-tenant SaaS without publishing server changes?
+See [COMMERCIAL-LICENSE.md](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md).
+
+## No lock-in
+
+- **Bring your own LLM key (self-host).** When self-hosting, the diagnosis engine
+  uses *your* Anthropic/OpenAI key (BYOK) at list rate — we never mark up tokens.
+  Most teams run the full loop for under $20/month in LLM costs.
+- **Bring your own storage.** S3, Cloudflare R2, GCS, MinIO, or Supabase Storage,
+  per project.
+- **Your data lives where you choose.** Self-host the whole stack, or use Mushi
+  Cloud — same code either way. Export and leave at any time.
+
+## What's paid and what's free
+
+| Surface | Free forever? | Cloud charges |
+|---|---|---|
+| SDK packages (MIT) | Yes — embed in any app | — |
+| Self-hosted server (AGPLv3) | Yes — run on your own infra, unlimited diagnoses | Your own LLM API costs (BYOK) |
+| Mushi Cloud — Free tier | Yes — 50 diagnoses / mo, **hard stop** at limit | — |
+| Mushi Cloud — Indie / Pro / Enterprise | Flat base + usage overage | $15–$49 / mo base + $0.03–$0.025 / extra diagnosis |
+
+**One sentence:** the MIT + AGPL core self-hosts free; the cloud sells managed hosting, LLM key pooling, retention beyond 7 days, team collaboration, and security features (SSO, SOC 2).
+
+Diagnoses are the unit of cloud value. A diagnosis = one completed Stage-2 classification (Sonnet produces a plain-English root cause + fix hint). Noise-filtered reports and duplicates collapsed into an existing group do not count.
+
+## Run it yourself
+
+- [Self-host in minutes (Docker Compose)](/self-hosting/docker-compose) — the full
+  stack in one command.
+- [Self-hosting overview](/self-hosting) — managed-Supabase and step-by-step paths.
+- [Public roadmap](/roadmap) — everything we're building, in the open.
+
+## Trademarks
+
+The code is open source; the **name and logo are not**. "Mushi Mushi", the
+mushi-chan mascot, and the wordmark are trademarks. Fork the code freely, but
+ship your fork under your own brand — don't imply it's the official Mushi.

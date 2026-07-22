@@ -1,0 +1,43 @@
+# status
+
+Source: https://kensaur.us/mushi-mushi/docs/operating/status
+
+# Status & Uptime
+
+  **Status page:** [updown.io/p/b6lod](https://updown.io/p/b6lod) — live
+  component availability and historical uptime for the API, hosted MCP,
+  console, and docs.
+
+## What we monitor
+
+| Component | What it covers |
+|-----------|---------------|
+| **Ingest API** (`kensaur.us/mushi-mushi/v1/ingest`) | Report receipt, queue depth, p99 latency |
+| **Diagnosis pipeline** | Stage-2 classification jobs, model latency |
+| **MCP server** (`kensaur.us/mushi-mushi/mcp`) | OAuth endpoint, tool availability |
+| **Console** (`kensaur.us/mushi-mushi`) | Dashboard availability |
+| **CLI auth** | Device-code flow, token exchange |
+
+## Uptime commitment
+
+Mushi Cloud is operated on a **reasonable-efforts basis** for the Free and Indie tiers.
+Pro subscribers receive priority incident response.
+Enterprise SLAs (99.9 % monthly uptime with credits) are negotiated per-contract —
+contact `kensaurus@gmail.com` for details.
+
+> SLA commitments live here in the docs and in your Enterprise contract — never in
+> the product hero or marketing copy.
+
+## Incident communication
+
+1. Status page updated within **15 minutes** of detection.
+2. Active incidents posted to the `#status` channel in the
+   [Mushi Discord](https://discord.gg/mushimushi).
+3. Post-mortems published within **5 business days** for P0/P1 incidents.
+
+## Reporting availability issues
+
+If you observe degradation not reflected on the status page, email
+`kensaurus@gmail.com` with subject `[availability]` or open a thread in Discord.
+For security incidents, use `kensaurus@gmail.com` instead (see
+[Security Policy](/security)).

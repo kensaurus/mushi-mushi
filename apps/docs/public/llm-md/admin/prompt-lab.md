@@ -1,0 +1,154 @@
+# Prompt lab
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/prompt-lab
+
+---
+title: Prompt lab
+---
+
+# Prompt lab
+
+**Route:** `/prompt-lab`
+
+> **Scenario:** Your fix-worker has been generating patches that touch the wrong file
+> 20% of the time. You suspect the Stage 1 classifier is mislabelling the component
+> field — so the fix agent is looking at the wrong area of the codebase. You want to
+> try a new prompt, test it on real traffic, and promote it only if the judge confirms
+> it's better than what's live.
+
+The Prompt lab is where you iterate on the LLM prompts that power every Mushi pipeline.
+You never need to redeploy an edge function — change a prompt here and it takes effect
+immediately on the % of traffic you assign to it.
+
+---
+
+## The 4-step workflow
+
+The ribbon at the top of the page is the mental model for every prompt change:
+
+```
+1 Baseline → 2 Clone & edit → 3 A/B test → 4 Promote
+```
+
+**Step 1 — Baseline:** Every stage has one active prompt running at 100% traffic.
+This is your current production behaviour.
+
+**Step 2 — Clone & edit:** Click **Clone** on the active prompt. A fork is created at
+0% traffic — it won't affect any live requests yet. Click **Edit** to open the full
+template editor and make your changes.
+
+**Step 3 — A/B test:** Use **Set traffic %** to gradually increase the candidate's
+share (try 5% first, then 20%, then 50%). `judge-batch` runs overnight and scores both
+versions. Come back the next day and compare **Avg judge score** columns.
+
+**Step 4 — Promote:** When the candidate's score consistently beats the baseline over
+several judge runs, click **Activate** to set it to 100% and demote the old version.
+
+`judge-batch` runs once per night. A/B tests typically need 2–3 nights of data before
+the scores are statistically meaningful. Don't promote after a single night.
+
+---
+
+## KPI tiles
+
+| Tile | What to watch |
+|------|--------------|
+| **Active prompts** | Should equal the number of pipeline stages — a gap means a stage has no active prompt and is using a hardcoded fallback |
+| **Candidates** | How many prompts are currently in A/B test |
+| **Best judge score** | The highest score any candidate has achieved — if it's not beating the baseline, the edits aren't working |
+| **Eval dataset size** | More labelled examples = more reliable judge scores. Aim for > 100 labelled examples per stage |
+
+---
+
+## Stage tabs
+
+Each tab is one pipeline stage. Start with the stage that's causing your problem:
+
+| Stage | Prompt controls |
+|-------|----------------|
+| **Stage 1 (fast-filter)** | Spam detection — edit if legitimate reports are being dropped |
+| **Stage 2 (classify)** | Category / severity / component — edit if review labels are wrong |
+| **Judge** | Accuracy scoring — edit if judge scores don't match your human assessment |
+| **Fix-worker** | Code patch generation — edit if fixes keep touching the wrong files |
+| **Intelligence digest** | Weekly report format — edit for style or content changes |
+| **NL→SQL planner** | Natural-language query translation — edit if query results are off |
+
+---
+
+## Prompt table columns explained
+
+| Column | What it tells you |
+|--------|------------------|
+| **Version name** | Your label — use descriptive names like "v2-component-field-fix" |
+| **Active** | The green badge = this is running in production |
+| **Avg judge score** | Higher is better. Compare candidate vs baseline to decide |
+| **Evaluations** | How many times judge-batch has scored this version — low count = unreliable score |
+| **Traffic %** | What fraction of live requests this prompt is serving |
+
+---
+
+## Actions per row
+
+| Action | When to use it |
+|--------|---------------|
+| **Clone** | Starting point for any edit — always clone, never edit active directly |
+| **Edit** | Open the full template editor for a cloned (non-active) prompt |
+| **Diff** | Side-by-side comparison against the active prompt — use before promoting |
+| **Set traffic %** | Gradually increase a candidate's traffic share |
+| **Activate** | Set to 100% and demote all other versions — do this after A/B data confirms it's better |
+| **Delete** | Remove a candidate that didn't work out — not available for active prompts |
+
+---
+
+## Common tasks
+
+### Fixing wrong component classification
+1. Open the **Stage 2 (classify)** tab.
+2. Click **Clone** on the active prompt.
+3. Click **Edit** → in the template, add explicit examples of the component field format your codebase uses.
+4. Set traffic to 5% via **Set traffic %**.
+5. Wait 2 nights. Check Avg judge score column — is the candidate beating the baseline?
+6. If yes: diff → activate. If not: edit and retry.
+
+### Investigating a bad judge score
+1. Open the stage tab where the score is low.
+2. Click the low-score prompt → look at **Evaluations** count. If < 10, the score isn't meaningful yet — wait.
+3. If evaluations are > 20 and the score is still low: the prompt is structurally wrong. Clone and start fresh.
+
+### Building the eval dataset
+A large eval dataset makes judge scores reliable. The **Synthetic Reports** card lets
+you generate artificial reports that match your real report patterns — useful for
+quickly expanding coverage without waiting for real users.
+
+---
+
+## Supporting cards
+
+### Fine-tuning jobs
+Links to the [Fine-tuning](/admin/fine-tuning) page. Once your eval dataset is large
+enough (typically 500+ labelled examples), you can export it to train a smaller,
+faster, cheaper custom model that you own.
+
+### Eval dataset
+Shows total and labelled counts. The **labelled** count matters — only labelled
+examples contribute to judge scoring. Label examples by triaging real reports through
+the normal Reports flow — each review action generates a labelled example automatically.
+
+---
+
+## API
+
+```bash
+GET    /v1/admin/prompt-lab
+POST   /v1/admin/prompt-lab/prompts        { stage, name, promptTemplate }
+PATCH  /v1/admin/prompt-lab/prompts/:id    { isActive, trafficPercentage, promptTemplate }
+DELETE /v1/admin/prompt-lab/prompts/:id
+```
+
+---
+
+## Related pages
+
+- [Judge dashboard](/admin/judge) — nightly judge scores and A/B tournament results
+- [Fine-tuning](/admin/fine-tuning) — export the eval dataset to train a custom model
+- [Integration health](/admin/health) — verify LLM keys before testing prompt changes

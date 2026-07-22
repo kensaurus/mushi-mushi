@@ -20,6 +20,7 @@ ESLint rules that catch the dominant agentic-coding failure modes: empty handler
 | `mushi-mushi/no-page-root-padding` | Page roots missing `PAGE_CONTENT_STACK` or adding root `p-*` / `max-w-*` (shell already pads). |
 | `mushi-mushi/no-arbitrary-length-value` | Non-`var(--…)` Tailwind arbitraries (`w-[240px]`, `text-[13px]`) — prefer tokens. |
 | `mushi-mushi/prefer-card-primitive` | Hand-rolled `rounded border bg-surface-*` — prefer `<Card>` / `<Panel>`. |
+| `mushi-mushi/no-allowlist-jsx-textnode` | `// mushi-mushi-allowlist` written as a JSX child (renders as visible text). Use a JSX block comment or an attribute-line `//`. |
 
 ## Install
 
@@ -54,7 +55,9 @@ Part of the [Mushi Mushi v2](https://github.com/kensaurus/mushi-mushi) bidirecti
 
 ## Allowlist
 
-Add `// mushi-mushi-allowlist: <reason>` immediately above a handler call site to opt out of `no-dead-handler` for that one occurrence. The reason is required — silent allowlists are the failure mode this plugin exists to catch.
+Add `// mushi-mushi-allowlist: <reason>` immediately above a call site (JS/attribute context) to opt out of rules that honour the marker. The reason is required — silent allowlists are the failure mode this plugin exists to catch.
+
+**Never put bare `//` as a JSX child** — React renders it as text. Inside a children list use a JSX block comment (`{` + `/* … */` + `}`) instead. See `mushi-mushi/no-allowlist-jsx-textnode`.
 
 ## License
 
@@ -64,4 +67,4 @@ MIT.
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 54 edge functions · 324 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 55 edge functions · 327 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

@@ -1,0 +1,93 @@
+# @mushi-mushi/core
+
+Source: https://kensaur.us/mushi-mushi/docs/sdks/core
+
+---
+title: '@mushi-mushi/core'
+---
+
+# `@mushi-mushi/core`
+
+Shared types, HTTP client, offline queue helpers, and config used by every
+framework SDK. Framework-agnostic — you rarely install this package directly.
+
+## Install
+
+```bash
+pnpm add @mushi-mushi/core
+```
+
+## API
+
+### `Mushi.init(config)` (web) / `MushiProvider` (React Native)
+
+```ts
+interface MushiConfig {
+  projectId: string   // UUID from the console Projects page
+  apiKey: string      // report:write key — shown once at project creation
+  apiEndpoint?: string // override for self-hosted deployments
+  /** Automatic error reports only (0–1). User feedback always sends. Default 1. */
+  sampleRate?: number
+  /** Session-replay sampling (0–1). Decision at init. Default 1. */
+  replaySampleRate?: number
+  /** Drop or mutate any report after PII scrub. Prefer over beforeSendFeedback. */
+  beforeSend?: (report: MushiReport) => MushiReport | null | Promise
+}
+```
+
+Get both values in one step by running `mushi login` or by creating a project in
+the [Mushi console](https://kensaur.us/mushi-mushi/admin/projects) — the ID and
+key are shown together on the success screen after project creation.
+
+Sampling + `beforeSend` examples: [`@mushi-mushi/web`](/sdks/web#sampling--beforesend).
+
+### `MushiWidgetConfig` (selected keys)
+
+```ts
+interface MushiWidgetConfig {
+  position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left'
+  theme?: 'light' | 'dark' | 'auto'
+  trigger?: 'auto' | 'edge-tab' | 'attach' | 'manual' | 'hidden'
+  /** 1.19+ — privacy caption under screenshot preview */
+  screenshotSensitiveHint?: boolean | string
+}
+```
+
+See [`docs/SDK_SCREENSHOT_PREVIEW.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md)
+for the full preview + consent flow.
+
+### `submitReport(input)`
+
+```ts
+interface MushiReport {
+  description: string
+  severity?: 'low' | 'medium' | 'high' | 'critical'
+  category?: 'bug' | 'feature_request' | 'usage_question' | 'other'
+  component?: string
+  screenshot?: Blob | string      // base64 or Blob
+  metadata?: Record<string, unknown>
+}
+```
+
+### `flushOfflineQueueNow()`
+
+Force any queued reports out before page unload or app suspend. The web,
+React-Native, iOS, Android, Flutter, and Capacitor SDKs all wire this into
+the appropriate lifecycle hook automatically.
+
+### Region resolution
+
+```ts
+
+const url = await resolveRegionEndpoint({ projectId: 'p_…', region: 'eu' })
+```
+
+`REGION_ENDPOINTS` contains the canonical URLs:
+
+```ts
+const REGION_ENDPOINTS = {
+  us: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
+  eu: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
+  jp: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
+}
+```

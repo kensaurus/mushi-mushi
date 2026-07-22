@@ -51,6 +51,8 @@ const KNOWN_CONFIG_KEYS: readonly string[] = [
   'debug',
   'enabled',
   'appVersion',
+  'sampleRate',
+  'beforeSend',
   'beforeSendFeedback',
   'onCrashedLastRun',
 ];
