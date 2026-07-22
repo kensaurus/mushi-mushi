@@ -23,7 +23,7 @@
     "@react-three/fiber": "^9.6.1",
     "@theguild/remark-mermaid": "^0.3.0",
     "motion": "^12.42.2",
-    "next": "^16.2.9",
+    "next": "^16.2.10",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
     "react": "^19.2.7",
