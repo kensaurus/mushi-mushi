@@ -16,11 +16,12 @@ import { isUuid } from './ids.ts';
 import {
   type ApiErrorCode,
   SAFE_DB_MESSAGE,
+  isTransientDbConnectionError,
 } from '../_shared/error-codes.ts';
 
 /**
- * capture a Supabase / Postgres error to Sentry AND return the
- * canonical 500 JSON response in one call. Most DB errors here returned
+ * Capture a Supabase / Postgres error to Sentry AND return the canonical 500
+ * JSON response in one call. Most DB errors here returned
  * `c.json({ ok: false, error: { code: 'DB_ERROR', ... } }, 500)` directly
  * which sidesteps Hono's `app.onError` (no throw → no capture). That made
  * production drift like the 04-20 `nl_query_history.is_saved` 500 invisible
@@ -29,6 +30,14 @@ import {
  *
  * Postgres error codes propagate through `code` so Sentry filters can
  * single out e.g. `42703` (undefined column) vs `42501` (permission).
+ *
+ * TRANSIENT CONNECTIVITY ERRORS: pooler resets (`delayed connect error: 111`,
+ * `upstream connect error`), Cloudflare 522s, and TCP-level connection
+ * failures are NOT reported to Sentry — they are external infra noise that
+ * self-resolves and would regress repeatedly (same pattern as the
+ * client-abort fix in sentryHonoErrorHandler). They are emitted as a
+ * structured console.warn to Supabase Logs instead, queryable via:
+ *   metadata.parsed.event = "db_transient_error"
  */
 export function dbError(
   c: Context,
@@ -37,6 +46,26 @@ export function dbError(
     | null
     | undefined,
 ): Response {
+  if (isTransientDbConnectionError(err)) {
+    // Do NOT report transient pooler/network failures as Sentry exceptions —
+    // they are infrastructure noise, not app bugs. Route to Supabase Logs.
+    console.warn(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        level: 'warn',
+        scope: 'mushi:api:db',
+        event: 'db_transient_error',
+        msg: 'transient DB connectivity failure — not an app bug, not reported to Sentry',
+        path: c.req.path,
+        method: c.req.method,
+        db_code: err?.code ?? 'unknown',
+        // Truncate: pooler error messages can be verbose; 500 chars is enough to classify.
+        err_message: (err?.message ?? '').slice(0, 500),
+      }),
+    );
+    return jsonError(c, 'DB_ERROR', SAFE_DB_MESSAGE, 500);
+  }
+
   const captured = err instanceof Error ? err : new Error(err?.message ?? 'Unknown DB error');
   reportError(captured, {
     tags: {
