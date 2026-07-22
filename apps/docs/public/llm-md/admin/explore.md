@@ -1,0 +1,278 @@
+# Codebase Atlas
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/explore
+
+---
+title: Codebase Atlas
+description: Visual, searchable map of every indexed source file — explore architectural layers, import dependencies, and find code by meaning.
+---
+
+# Codebase Atlas — `/explore`
+
+The Explore page turns the raw indexed source files into a visual, navigable map of how your project is architecturally structured. It is the fastest way to answer "where does X live?", "what imports what?", and "which layer handles this concern?" — without opening your editor.
+
+  **Prerequisite:** The Explore page requires codebase indexing to be enabled. Run `mushi index` from your project directory, or enable **Settings → Codebase Indexing** in the admin console. Indexing typically completes in under a minute for codebases up to 10,000 files.
+
+---
+
+## Tab groups
+
+The page is organized into three rails (URL `?tab=`):
+
+| Rail | Tabs | Purpose |
+|------|------|---------|
+| **Summary** | Summary | Index health, file counts, last index attempt / error |
+| **Understand** | Ask · Tour · Domains · Knowledge | Chat with citations, guided walkthrough, business domains, wiki/docs knowledge merged into Ask |
+| **Map** | Graph · Layers · Search | Visual architecture map and semantic search (detailed below) |
+| **Index** | Index | Indexer debug — repo, webhook, embedding coverage, last error |
+
+MCP equivalents: `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `search_codebase`, `get_codebase_domains`, `analyze_codebase_impact`, `analyze_wiki_knowledge`.
+
+---
+
+## Map views
+
+### Graph
+
+A ReactFlow canvas laid out in deterministic swimlane columns (one column per architectural layer), with every file as a node coloured by layer. Nodes are freely draggable within the canvas:
+
+| Layer | Colour | What lands here |
+|-------|--------|-----------------|
+| UI | Blue | `app/`, `pages/`, `components/`, `.tsx` / `.jsx` files |
+| Library | Green | `lib/`, `utils/`, `hooks/`, `shared/`, `common/` |
+| Backend | Red/Amber | `server/`, `api/`, `supabase/functions/`, `routes/` |
+| Tests | Purple | `tests/`, `__tests__/`, `.test.ts`, `.spec.ts` files |
+| Config | Muted blue | `config/`, `.github/`, `.json`, `.yaml`, `.toml` files |
+| Other | Grey | Everything else |
+
+Each node chip shows:
+- **Left accent bar** in the layer colour
+- **Filename** truncated to fit
+- **File extension badge** (`.tsx`, `.ts`, `.py`, …)
+- **Directory context** (last two path segments) below the filename
+
+Import edges are drawn as directed arrows. Hover a node for its full path tooltip. Click a node to open the **detail panel** on the right.
+
+**Controls:**
+- Drag — pan the canvas
+- Scroll — zoom in/out
+- Layer legend (bottom-left) — expands to show counts and a proportional fill bar per layer
+- File/edge counter badge (top-left)
+- Zoom in / Zoom out / Fit view (bottom-right)
+
+### Layers
+
+A horizontal Sankey flow that groups files left-to-right: **UI → Library → Backend → Tests → Config → Other**.
+
+Each column shows:
+- Layer name and file count in the layer's colour
+- A proportional fill bar (wider = more files relative to the largest column)
+- **Hub node** — the file with the highest import degree in that column (most-imported or most-importing)
+- File cards with filename, `.ext` badge, and line count
+
+Import edges are drawn as bezier curves with directional arrows between columns. This makes cross-layer dependencies immediately obvious.
+
+Click any file card to open the detail panel below the lane.
+
+### Search
+
+Semantic search over vector embeddings. Type a natural-language description of what you're looking for — the search finds the most relevant files and symbols ranked by cosine similarity.
+
+**Layer filter tabs** appear after a search to narrow results to a single architectural layer (e.g. "Tests only" or "Backend only"). Click the layer chip, or click **All** to clear the filter.
+
+Each result shows:
+- Symbol or filename in monospace
+- Layer badge
+- File path
+- A **colour-coded similarity bar** (green ≥ 70%, amber ≥ 50%, red below 50%)
+- Content preview (first 240 characters of the indexed content)
+
+Click a result to open the detail panel. Click the panel's **View in graph** button to switch to Graph view with that file selected.
+
+---
+
+## The detail panel
+
+Clicking any node (in any view) opens a detail panel with:
+
+| Field | Description |
+|-------|-------------|
+| Layer badge | Architectural layer with colour highlight |
+| Extension badge | File type (`.tsx`, `.ts`, `.py`, …) |
+| Line count | Total lines in the file or symbol |
+| Filename / Symbol name | Large heading |
+| File path | Full path with **Copy** button |
+| Language | Detected language from the indexer |
+| Lines | Start–end line range |
+| Node type | `code_file` or `code_symbol` |
+| Preview | Content with line numbers, starting from `line_start` |
+| View in graph | Switches to the Graph tab with this file selected |
+| Bug reports | Opens `/reports?component=` to see Mushi reports filed against this file |
+
+---
+
+## Layer filter chips
+
+The **Filter:** row above Map views lets you narrow Graph, Layers, and Search simultaneously. Click `64 Tests` and the graph shows only test nodes and their inter-test edges, the Layers lane collapses to just the Tests column, and Search results are pre-scoped to Tests.
+
+Click the chip again (or **Clear**) to restore the full view.
+
+---
+
+## Stats bar
+
+Below the page title:
+
+```
+115 files · ts, tsx, js · Indexed via Mushi SDK
+```
+
+Shows total indexed file count, top languages detected by extension, and the indexing source.
+
+---
+
+## Density toggle
+
+Switch between **Files** (one node per file) and **Symbols** (one node per exported function, class, or constant). Symbol mode gives a much denser graph suited for large codebases where you want to trace a specific function's callers.
+
+---
+
+## Indexing
+
+### Install the CLI
+
+```bash
+npm install -g @mushi-mushi/cli
+```
+
+### Index your project
+
+From the root of your project:
+
+```bash
+mushi index
+```
+
+The CLI reads your project's `MUSHI_PROJECT_ID` and `MUSHI_API_KEY` from environment variables (or `.env`), walks the source tree, chunks files into overlapping windows, generates embeddings via your BYOK OpenAI key, and upserts them into `project_codebase_files`.
+
+### Or enable auto-indexing
+
+In **Settings → Codebase Indexing**, toggle **Auto-index on push**. The Mushi GitHub App listens for `push` events and re-indexes changed files automatically.
+
+  Only files tracked by git are indexed. Add large generated directories (`dist/`, `.next/`, `node_modules/`) to `.mushiignore` to skip them.
+
+---
+
+## What the search understands
+
+The semantic search uses the same embeddings that power RAG-augmented bug review and fix suggestions. It understands:
+
+- **Concepts**: "authentication and session handling", "rate limiting", "error boundary"
+- **Patterns**: "component that wraps children with a loading state", "hook that fetches paginated data"
+- **Behaviour**: "where payment processing happens", "what sends the push notification"
+- **Cross-language**: works across TypeScript, Python, Go, Swift, Kotlin, and any other language with indexed content
+
+It does **not** understand:
+
+- Exact symbol names (use your editor's Go-to-symbol for that)
+- Regex or glob patterns
+- File system structure queries ("all files in `src/screens/`") — use the Graph or Layers view instead
+
+---
+
+## API reference
+
+The Explore page is backed by two project-scoped REST endpoints:
+
+### `GET /v1/admin/projects/:id/codebase/explore`
+
+Returns the full graph payload.
+
+**Query parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `symbols` | `0` \| `1` | When `1`, returns symbol-level nodes instead of file-level |
+
+**Response:**
+
+```jsonc
+{
+  "nodes": [
+    {
+      "id": "uuid",
+      "node_type": "code_file",
+      "label": "auth-guard.tsx",
+      "metadata": {
+        "file_path": "components/auth-guard.tsx",
+        "symbol_name": null,
+        "signature": null,
+        "line_start": 1,
+        "line_end": 142,
+        "language": "tsx",
+        "layer": "ui",
+        "content_preview": "export function AuthGuard({ children, ..."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "uuid",
+      "source_node_id": "uuid",
+      "target_node_id": "uuid",
+      "edge_type": "imports",
+      "weight": 1
+    }
+  ],
+  "layers": { "ui": 12, "lib": 3, "test": 64, "other": 36 },
+  "total_files": 115
+}
+```
+
+### `POST /v1/admin/projects/:id/codebase/search`
+
+Semantic search over vector embeddings.
+
+**Body:**
+
+```jsonc
+{
+  "query": "authentication logic",
+  "k": 20
+}
+```
+
+**Response:**
+
+```jsonc
+{
+  "results": [
+    {
+      "id": "uuid",
+      "file_path": "components/auth-guard.tsx",
+      "symbol_name": "AuthGuard",
+      "signature": null,
+      "line_start": 1,
+      "line_end": 142,
+      "content_preview": "export function AuthGuard...",
+      "layer": "ui",
+      "similarity": 0.87
+    }
+  ],
+  "query": "authentication logic"
+}
+```
+
+Similarity scores range from 0 to 1. Scores above 0.7 are usually highly relevant. Below 0.3 is coincidental overlap.
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| "Codebase not indexed yet" | No files in `project_codebase_files` | Run `mushi index` or enable auto-indexing |
+| Most files show as "Other" | Files are in non-standard directories | Add a `.mushiignore` to exclude generated code; re-index |
+| 0 import edges | Project uses only path aliases (`@/`, `~/`) | Import edges only resolve relative imports; switch to Symbols view for finer granularity |
+| Search returns no results | Missing BYOK OpenAI key | Settings → BYOK → add `OPENAI_API_KEY` for embeddings |
+| Slow graph render | Very large project (1,000+ files) | Use layer filter chips to scope down, or switch to Layers view |

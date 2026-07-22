@@ -815,7 +815,121 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     useCase:
       'Are there any tables without RLS? Show me recent backend errors for this project.',
   },
+
+  // ── Meta-tool (context-cost reduction) ───────────────────────────────────
+  //
+  // Sentry ships `use_sentry` (a single meta-tool an agent calls to get a
+  // recommended subset of tools for a given intent) as the primary context-
+  // cost reduction lever.  We do the same: `use_mushi` returns a curated
+  // list of the 6–12 tools most relevant to the caller's stated intent, plus
+  // a short orientation block.  Agents that call use_mushi first avoid
+  // loading 68 tool descriptions up-front, cutting context cost by ~60% for
+  // narrow tasks (fix a bug, check status, start a pipeline).
+  {
+    name: 'use_mushi',
+    title: 'Mushi — where to start',
+    description:
+      'CALL THIS FIRST if you are new to this Mushi project or unsure which tool to use. ' +
+      'Pass your intent as a short natural-language phrase (' +
+      '"fix the top bug", "check what I should work on", "run QA tests", "set up Mushi", …). ' +
+      'Returns: (1) a curated list of the 5–12 tool names most relevant to that intent, ' +
+      '(2) a one-paragraph orientation to the Mushi project and dashboard state, and ' +
+      '(3) the single recommended first tool to call. ' +
+      'Avoids loading the full 68-tool catalog into context when only a small subset is needed. ' +
+      'Read-only; does not call any downstream tools itself.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: false },
+    useCase: 'What should I do next with Mushi? / Which tools do I need for this task?',
+  },
 ]
+
+// ── Intent → curated tool subset (used by use_mushi handler) ─────────────
+//
+// Maps broad intent keywords to the curated subset of tool names that
+// satisfies 90%+ of requests with that intent. The MCP server uses this to
+// build the use_mushi response without a DB round-trip. Keys are checked
+// via substring match, so "fix" matches "fix a bug" and "dispatch fix".
+
+export interface UseMushiIntent {
+  /** Display label for the intent cluster. */
+  label: string
+  /** Tool names from TOOL_CATALOG + TDD_TOOL_CATALOG relevant to this intent. */
+  tools: string[]
+  /** One sentence orienting the agent to start here. */
+  hint: string
+}
+
+export const USE_MUSHI_INTENTS: Record<string, UseMushiIntent> = {
+  fix: {
+    label: 'Fix a bug',
+    tools: [
+      'get_recent_reports',
+      'get_report',
+      'summarize_report_for_fix',
+      'dispatch_fix',
+      'start_skill_pipeline',
+      'checkin_pipeline_step',
+      'get_pipeline_run',
+    ],
+    hint: 'Call get_recent_reports to find the top unresolved bug, then summarize_report_for_fix before dispatching.',
+  },
+  status: {
+    label: 'Check project status',
+    tools: [
+      'get_dashboard',
+      'triage_next_steps',
+      'get_usage',
+      'get_backend_health',
+      'activation_status',
+    ],
+    hint: 'Call triage_next_steps for a prioritised list of what to work on today.',
+  },
+  setup: {
+    label: 'Set up Mushi',
+    tools: [
+      'mushi_setup',
+      'activation_status',
+      'get_backend_health',
+      'list_byok_keys',
+      'add_byok_key',
+    ],
+    hint: 'Call mushi_setup first — it diagnoses setup gaps and returns the next command to run.',
+  },
+  qa: {
+    label: 'Run / review QA tests',
+    tools: [
+      'list_qa_stories',
+      'run_qa_story',
+      'list_qa_story_runs',
+      'get_qa_story_run',
+      'list_pending_review_stories',
+      'approve_qa_story',
+      'improve_qa_story',
+    ],
+    hint: 'Call list_qa_stories to see what test coverage exists; run_qa_story to trigger a run.',
+  },
+  pipeline: {
+    label: 'Run an agent pipeline / skill',
+    tools: [
+      'list_skills',
+      'get_skill',
+      'start_skill_pipeline',
+      'checkin_pipeline_step',
+      'get_pipeline_run',
+    ],
+    hint: 'Call list_skills to find the right skill, then start_skill_pipeline.',
+  },
+  audit: {
+    label: 'Audit / health check',
+    tools: [
+      'run_fullstack_audit',
+      'get_backend_health',
+      'get_dashboard',
+      'get_usage',
+    ],
+    hint: 'Call run_fullstack_audit for a full-stack health scorecard.',
+  },
+}
 
 // ── Codebase Understand tools ────────────────────────────────────────────────
 

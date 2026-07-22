@@ -1,0 +1,132 @@
+# The evolution loop — how Mushi closes the cycle
+
+Source: https://kensaur.us/mushi-mushi/docs/concepts/evolution-loop
+
+---
+title: The evolution loop — how Mushi closes the cycle
+description: A walkthrough of the five stages that turn a user-felt bug into a merged fix and a lesson rule — the feedback loop that makes your software improve without Jira, QA teams, or PM bottlenecks.
+---
+
+# The evolution loop
+
+> *Sentry sees what code throws. Mushi sees what users feel — and closes the loop with AI.*
+
+The evolution loop is the core mechanic behind Mushi. It runs as five Supabase edge functions and closes the gap between "user felt a bug" and "the codebase can't make the same mistake again."
+
+---
+
+## Why vibe coding needs a closing loop
+
+The AI-assisted development era — building and shipping fast with LLMs — solved the **creation bottleneck**. An agent can scaffold a feature in minutes. The new bottleneck is **selection pressure**: out of everything the agent could build next, which changes actually make the app better for real users?
+
+Without a closed loop:
+- Users hit broken flows and silently churn (your monitoring sees nothing)
+- AI agents write code without knowing which classes of bug keep reappearing
+- Every sprint starts from roughly where the last one started — no institutional memory
+
+With the evolution loop:
+- Every user friction event becomes a structured signal
+- Every merged fix promotes a lesson rule into the codebase genome
+- Every future agent run starts with the accumulated knowledge of what failed before
+
+This is **selection with memory** — the property that separates cumulative evolution from a random walk.
+
+---
+
+## The five stages
+
+```
+User feels a bug (shakes phone)
+  │
+  ▼
+① Capture — Mushi captures screenshot + intent + logs
+  │
+  ▼
+② Classify — plain-English read of severity, category, component, blast radius (< 2s)
+  │
+  ▼
+③ Fix — AI agent opens a draft PR (BYOK, RAG-grounded, GitHub)
+  │
+  ▼
+④ Verify — Playwright QA stories confirm fix; judge scores quality
+  │
+  ▼
+⑤ Remember — lesson promoted to .mushi/lessons.json, feeds next agent
+  │
+  └─────────────────────────────────────────── feeds back to ②
+```
+
+### ① Capture
+
+The SDK widget (`@mushi-mushi/web`, `@mushi-mushi/react`, etc.) lives in the corner of your app. When a user shakes their phone or taps "Report a problem," Mushi captures:
+
+- A screenshot of the exact screen they were looking at
+- Their description in their own words
+- Console logs, network requests, performance metrics, and page context
+- Their session context (route, device, OS, app version)
+
+No redirect. No support form. No data loss as the moment passes.
+
+**Privacy:** description, console logs, and network logs are PII-scrubbed at ingest before writing to Postgres. Screenshots are stored behind signed time-limited URLs. See [Security → No leakage claim](/security/no-leakage-claim).
+
+### ② Classify
+
+`fast-filter` runs a WASM-based pre-filter to remove noise (gibberish, test submissions, anti-gaming flags). Reports that pass move to `classify-report`, which calls Claude structured output to produce:
+
+- `severity`: P0–P3
+- `category`: bug / slow / visual / confusing / feature
+- `component`: the affected screen or code area
+- `blast_radius`: how many users are affected
+- `summary`: a plain-English one-liner
+
+This runs in under 2 seconds. The same vocabulary your team already uses for triage — no translation layer.
+
+### ③ Fix
+
+`fix-worker` reads the lesson library, queries the RAG index of your codebase (`project_codebase_files`), and constructs a targeted diff. It opens a draft PR on your GitHub repo with:
+
+- The fix diff
+- A description grounded in the report and lesson library
+- Test notes (what to verify)
+
+You merge, request changes, or close. The agent does the first pass; you keep the final decision.
+
+**BYOK:** the fix agent uses your Anthropic key when BYOK is configured. Your code snippets never travel to Mushi's LLM account.
+
+### ④ Verify
+
+`qa-story-runner` executes Playwright-based QA stories against the branch. `judge-batch` then scores the fix with a second LLM call, reading the original report, the diff, and a rubric independently — so the fix has to earn its confidence score.
+
+Fixes that score below the threshold are flagged for human review. High-confidence fixes can be auto-merged on projects that opt in.
+
+### ⑤ Remember
+
+When the judge score exceeds the promotion threshold (`project_settings.lesson_threshold`, default 0.80), a lesson rule is extracted from the fix and written to `.mushi/lessons.json` in your repo. The lesson includes:
+
+- What pattern caused the bug
+- What fix resolved it
+- Which component is affected
+- The judge's confidence score
+
+The next time an AI agent (Cursor, Claude Code) touches a related area, Mushi injects the relevant lessons into the PR review context — so the same class of mistake cannot recur silently.
+
+---
+
+## How to see the loop close
+
+1. Install the SDK in your app — [Quick start](/quickstart)
+2. Connect your GitHub repo — [Integrations](/admin/integrations)
+3. Configure BYOK — [API keys (BYOK)](/security/byok)
+4. Submit a test report using the `mushi dogfood` CLI command or the in-app widget
+5. Watch: `/reports` → `/fixes` → `/judge` → `/lessons`
+
+The whole loop from capture to lesson typically runs in under 90 seconds on a warm deployment.
+
+---
+
+## Further reading
+
+- [Closed-loop thesis](/concepts/closed-loop) — the evolutionary biology argument (Black Box Thinking, Antifragile, cumulative selection)
+- [Security: no-leakage claim](/security/no-leakage-claim) — BYOK, RLS, signed URLs, PII scrubbing
+- [Agent contract](/concepts/agent-contract) — what Mushi expects from Cursor/Claude agents and what it promises in return
+- [Evolution-loop manifesto](https://github.com/kensaurus/mushi-mushi/blob/master/docs/EVOLUTION-LOOP.md) — the one-page thesis for engineers

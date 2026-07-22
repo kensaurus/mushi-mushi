@@ -1,0 +1,126 @@
+# SDK reference
+
+Source: https://kensaur.us/mushi-mushi/docs/sdks
+
+---
+title: SDK reference
+description: Bug-reporting SDKs for React, Vue, Svelte, Angular, React Native, Capacitor, Flutter, iOS, Android, and Node — one npx mushi-mushi wizard installs any.
+---
+
+# SDK reference
+
+Published npm packages ship on independent semver tracks (see [npm](https://www.npmjs.com/org/mushi-mushi) for live versions). Current workspace snapshots:
+
+{/* sdk-version-matrix:start */}
+| Package | Version |
+| --- | --- |
+| @mushi-mushi/core, @mushi-mushi/web | 1.26.x |
+| @mushi-mushi/react | 1.21.x |
+| @mushi-mushi/react-native | 0.21.x |
+| @mushi-mushi/cli | 0.26.x |
+| @mushi-mushi/mcp | 0.19.x |
+| @mushi-mushi/capacitor | 1.1.x |
+| @mushi-mushi/node | 1.1.x |
+| @mushi-mushi/angular, @mushi-mushi/vue, @mushi-mushi/svelte | 1.0.x |
+| mushi-mushi (launcher) | 0.8.x |
+{/* sdk-version-matrix:end */}
+
+See [Project ID & API keys](/concepts/credentials) for credential formats (`proj_*` slug vs UUID, `mushi_*` vs `mush_pk_*` keys).
+
+## Maturity, honestly
+
+Version numbers don't tell the maturity story (a 1.0.x wrapper can be
+younger than a 0.20.x SDK with three years of production miles), so here it
+is directly — what each tier means and where each package sits:
+
+| Tier | What it means | Packages |
+| --- | --- | --- |
+| **Battle-tested** | Runs in production apps daily (including Mushi's own console — we dogfood); full capture surface; deep test suites | `@mushi-mushi/core`, `@mushi-mushi/web`, `@mushi-mushi/react`, `@mushi-mushi/react-native`, `@mushi-mushi/cli`, `@mushi-mushi/mcp` |
+| **Solid** | Complete for the documented surface, used in real apps, smaller scope | `@mushi-mushi/capacitor`, `@mushi-mushi/node`, `@mushi-mushi/adapters` |
+| **Functional wrapper** | Thin framework binding over `@mushi-mushi/web` (~300 lines each); everything documented works, but expect fewer framework-specific niceties | `@mushi-mushi/vue`, `@mushi-mushi/svelte`, `@mushi-mushi/angular` |
+| **Native, earlier-stage** | Full native implementations with smaller install bases than the JS SDKs | iOS (Swift), Android (Kotlin), Flutter |
+
+If a "functional wrapper" is missing something you need, the underlying
+[`@mushi-mushi/web`](/sdks/web) API is always available alongside it — and
+[issues](https://github.com/kensaurus/mushi-mushi/issues) for framework
+bindings get prioritized by demand.
+
+The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`) are AGPLv3 — true OSI open source. A small enterprise-edition boundary (`packages/server/ee/`) is source-available but commercial for production use.
+
+## Web & frameworks
+
+| Package | Registry | Description |
+| --- | --- | --- |
+| [`@mushi-mushi/core`](/sdks/core) | npm | Shared primitives: `normaliseThrown`, `createBreadcrumbBuffer`, `captureEnvironment` |
+| [`@mushi-mushi/web`](/sdks/web) | npm | Browser SDK — shake widget, breadcrumbs, session replay, WASM pre-classifier |
+| [`@mushi-mushi/react`](/sdks/react) | npm | React provider + hooks + `` |
+| [`@mushi-mushi/vue`](/sdks/vue) | npm | Vue 3 plugin + composables |
+| [`@mushi-mushi/svelte`](/sdks/svelte) | npm | Svelte stores + context |
+| [`@mushi-mushi/angular`](/sdks/angular) | npm | Angular DI service + directive |
+| [`@mushi-mushi/adapters`](/sdks/adapters) | npm | Inbound observability webhooks (Sentry, Datadog, Bugsnag, …) |
+
+## Server
+
+| Package | Registry | Description |
+| --- | --- | --- |
+| [`@mushi-mushi/node`](/sdks/node) | npm | Forward unhandled exceptions + HTTP error handlers |
+
+## Mobile & native
+
+| Package | Registry | Description |
+| --- | --- | --- |
+| [`@mushi-mushi/react-native`](/sdks/react-native) | npm | React Native SDK — shake, offline queue, Sentry bridge |
+| [`MushiMushi`](/sdks/ios) | SwiftPM + CocoaPods | iOS / macOS / tvOS native Swift SDK |
+| [`dev.mushimushi:mushi-android`](/sdks/android) | Maven Central | Android Kotlin SDK, Compose UI, WorkManager queue |
+| [`mushi_mushi`](/sdks/flutter) | pub.dev | Flutter pure-Dart SDK, `sensors_plus` shake detection |
+| [`@mushi-mushi/capacitor`](/sdks/capacitor) | npm | Capacitor plugin — wraps native SDKs for hybrid apps |
+
+## Tooling & automation
+
+| Package | Registry | Description |
+| --- | --- | --- |
+| [`@mushi-mushi/cli`](/sdks/cli) | npm | Project setup, RAG indexing, report management, `mushi migrate` |
+| [`mushi-mushi`](/sdks/launcher) | npm | Meta-launcher — `npx mushi-mushi` wizard |
+| [`@mushi-mushi/mcp`](/sdks/mcp) | npm | MCP server — triage reports from Cursor, Claude, Codex |
+| [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) | npm | CI-aware MCP surface — attach to GitHub Actions |
+| [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) | npm | Lints for missing report calls and incorrect config |
+
+## Infrastructure & advanced
+
+| Package | Registry | Description |
+| --- | --- | --- |
+| [`@mushi-mushi/wasm-classifier`](/sdks/wasm-classifier) | npm | On-device WASM SLM — pre-classifies before sending |
+| [`@mushi-mushi/plugin-sdk`](/sdks/plugin-sdk) | npm | Build your own Marketplace plugin |
+| [`@mushi-mushi/inventory-schema`](/sdks/inventory-schema) | npm | Zod schemas for `inventory_nodes` and user stories |
+| [`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner) | npm | Auth-gated story runner for the QA coverage suite |
+
+## Recipes & presets
+
+| Page | Description |
+| --- | --- |
+| [SDK presets](/sdks/presets) | `production-calm`, `beta-loud`, `manual-only`, `internal-debug` |
+| [Next.js App Router + CSP](/sdks/nextjs-app-router-csp) | Content-Security-Policy allowlist for the widget |
+| [Next.js static export](/sdks/nextjs-static-export) | Static export + client-only init |
+| [Capacitor bottom dock](/sdks/capacitor-bottom-dock) | Anchor widget above tab bars |
+| [Sentry Replay coexistence](/sdks/sentry-replay-coexistence) | Run Mushi replay alongside Sentry |
+| [Screenshot preview & consent](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md) | Visible preview + privacy caption (`screenshotSensitiveHint`, 1.19+) |
+
+## Installation
+
+```bash
+# Minimal (browser app)
+npm install @mushi-mushi/web
+
+# React app
+npm install @mushi-mushi/react
+
+# React Native
+npm install @mushi-mushi/react-native
+
+# MCP server
+npx @mushi-mushi/mcp
+```
+
+## Upgrade from 0.x
+
+See the [@mushi-mushi/* 0.x → 1.0 migration guide](/migrations/mushi-sdk-upgrade) for breaking-change details and a codemod.

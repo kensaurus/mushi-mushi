@@ -258,5 +258,10 @@ describe('fast-filter (Stage 1)', () => {
       expect(src).toContain("stage2Res.status === 402")
       expect(src).toContain('stage2 handoff failed')
     })
+
+    it('treats gateway IDLE_TIMEOUT as warn, not a permanent handoff failure', () => {
+      expect(src).toContain('IDLE_TIMEOUT')
+      expect(src).toContain('Stage 2 idle-timeout (gateway); classify-report should early-ack')
+    })
   })
 })

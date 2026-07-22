@@ -47,6 +47,7 @@ import noLegacyPageHeaderInPages from './rules/no-legacy-page-header-in-pages.js
 import noPageRootPadding from './rules/no-page-root-padding.js'
 import noArbitraryLengthValue from './rules/no-arbitrary-length-value.js'
 import preferCardPrimitive from './rules/prefer-card-primitive.js'
+import noAllowlistJsxTextnode from './rules/no-allowlist-jsx-textnode.js'
 
 const PLUGIN_NAME = 'mushi-mushi'
 
@@ -69,6 +70,7 @@ const rules: Record<string, Rule.RuleModule> = {
   'no-page-root-padding': noPageRootPadding,
   'no-arbitrary-length-value': noArbitraryLengthValue,
   'prefer-card-primitive': preferCardPrimitive,
+  'no-allowlist-jsx-textnode': noAllowlistJsxTextnode,
 }
 
 const recommendedRules: Linter.RulesRecord = {
@@ -91,6 +93,7 @@ const recommendedRules: Linter.RulesRecord = {
   [`${PLUGIN_NAME}/no-page-root-padding`]: 'error',
   [`${PLUGIN_NAME}/no-arbitrary-length-value`]: 'error',
   [`${PLUGIN_NAME}/prefer-card-primitive`]: 'error',
+  [`${PLUGIN_NAME}/no-allowlist-jsx-textnode`]: 'error',
 }
 
 /**

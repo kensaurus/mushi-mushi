@@ -1,0 +1,91 @@
+# Self-host in minutes (Docker Compose)
+
+Source: https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose
+
+---
+title: Self-host in minutes (Docker Compose)
+---
+
+# Self-host in minutes
+
+The fastest way to run the whole Mushi stack on your own box. One Compose file
+brings up Postgres, Auth, REST, Storage, the edge functions, the admin console,
+and a Caddy reverse proxy — no managed Supabase project required.
+
+  **Prerequisite:** Docker + Docker Compose, and an `ANTHROPIC_API_KEY` (or BYOK
+  key) for the classification pipeline. Everything else has a sane default.
+
+## One command
+
+### Clone and configure
+
+```bash
+git clone https://github.com/kensaurus/mushi-mushi.git
+cd mushi-mushi/deploy
+cp .env.example .env
+```
+
+Edit `.env` and set at minimum:
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-...          # the diagnosis engine — no second key needed elsewhere
+SUPABASE_ANON_KEY=your-anon-key       # generated from your JWT_SECRET
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long
+```
+
+### Bring the stack up
+
+```bash
+docker compose up -d
+```
+
+### Open the console
+
+| Service | URL | Notes |
+| --- | --- | --- |
+| Admin console | `http://localhost:3000` | React + Vite SPA, served by nginx |
+| Edge functions (`api`) | `http://localhost:8000` | Hono on Deno |
+| PostgREST | `http://localhost:3001` | the REST surface the SPA talks to |
+| Auth (GoTrue) | `http://localhost:9999` | email auto-confirm in local mode |
+
+## What's running
+
+```
+deploy/docker-compose.yml
+├── postgres          supabase/postgres (migrations auto-applied from initdb)
+├── supabase-auth     GoTrue
+├── supabase-rest     PostgREST
+├── supabase-storage  Storage API (file backend)
+├── edge-functions    classify-report, api, fix-worker, … (Dockerfile.edge)
+├── admin             admin console SPA (Dockerfile.admin → nginx)
+└── caddy             reverse proxy / TLS (Caddyfile)
+```
+
+The Postgres container mounts `packages/server/supabase/migrations` into
+`/docker-entrypoint-initdb.d`, so a fresh volume applies the full schema on
+first boot. To re-apply after a schema change, recreate the volume
+(`docker compose down -v && docker compose up -d`) or run `supabase db push`
+against the container.
+
+## Production notes
+
+- **TLS / domain** — set `DOMAIN` in `.env` and Caddy will provision a
+  certificate automatically.
+- **Internal functions** — `classify-report`, `fix-worker`, `judge-batch`, and
+  friends authenticate via `requireServiceRoleAuth`. Only the public `api`
+  function should face the internet — never expose the others with
+  `--no-verify-jwt`.
+- **Kubernetes** — for a single-pod cluster deploy, use the Helm chart at
+  [`deploy/helm/`](https://github.com/kensaurus/mushi-mushi/tree/master/deploy/helm).
+
+## Managed Supabase instead
+
+Prefer to point the console at a hosted Supabase project rather than running
+Postgres locally? Skip Compose and follow the
+[step-by-step guides](/self-hosting) — [Supabase setup](/self-hosting/supabase),
+[Edge Functions deploy](/self-hosting/edge-functions), and
+[Admin SPA deploy](/self-hosting/admin-spa).
+
+  Same code, either way. Mushi Cloud runs this exact stack — there is no
+  closed-source plus-tier. See [Open source & licensing](/concepts/open-source).

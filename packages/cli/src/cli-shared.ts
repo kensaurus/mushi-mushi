@@ -179,6 +179,50 @@ export async function apiCall<T = unknown>(
   }
 }
 
+// ─── Output format ───────────────────────────────────────────────────────────
+
+export type OutputFormat = 'text' | 'json'
+
+// Process-wide output format, set once by the global `-o/--output` option in
+// index.ts (via a Commander preAction hook, before any command action runs).
+// Individual commands still accept their historical `--json` flag; both funnel
+// through `outputIsJson()` so either mechanism works.
+let globalOutputFormat: OutputFormat = 'text'
+
+/** Set the global output format. Called once from the CLI bootstrap. */
+export function setGlobalOutputFormat(fmt: string | undefined): void {
+  globalOutputFormat = fmt === 'json' ? 'json' : 'text'
+}
+
+/** The global output format (default 'text'). */
+export function getGlobalOutputFormat(): OutputFormat {
+  return globalOutputFormat
+}
+
+/**
+ * Resolve whether to emit JSON: true when the global `-o json` OR a command's
+ * local `--json` flag is set. Commands pass their own flag so a per-command
+ * `--json` keeps working and a global `-o json` covers commands uniformly.
+ */
+export function outputIsJson(localJsonFlag?: boolean): boolean {
+  return globalOutputFormat === 'json' || localJsonFlag === true
+}
+
+/**
+ * Print a result in the resolved format. In JSON mode prints
+ * `JSON.stringify(data)`; otherwise invokes `render(data)` for human output.
+ */
+export function printResult<T>(
+  data: T,
+  opts: { json?: boolean; render: (data: T) => void },
+): void {
+  if (outputIsJson(opts.json)) {
+    console.log(JSON.stringify(data, null, 2))
+    return
+  }
+  opts.render(data)
+}
+
 // ─── Shared helpers ──────────────────────────────────────────────────────────
 
 /** Print an API error and exit with the appropriate code.

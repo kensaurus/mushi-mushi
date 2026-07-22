@@ -22,12 +22,20 @@ interface MushiConfig {
   projectId: string   // UUID from the console Projects page
   apiKey: string      // report:write key — shown once at project creation
   apiEndpoint?: string // override for self-hosted deployments
+  /** Automatic error reports only (0–1). User feedback always sends. Default 1. */
+  sampleRate?: number
+  /** Session-replay sampling (0–1). Decision at init. Default 1. */
+  replaySampleRate?: number
+  /** Drop or mutate any report after PII scrub. Prefer over beforeSendFeedback. */
+  beforeSend?: (report: MushiReport) => MushiReport | null | Promise<MushiReport | null>
 }
 ```
 
 Get both values in one step by running `mushi login` or by creating a project in
 the [Mushi console](https://kensaur.us/mushi-mushi/admin/projects) — the ID and
 key are shown together on the success screen after project creation.
+
+Sampling + `beforeSend` examples: [`@mushi-mushi/web`](/sdks/web#sampling--beforesend).
 
 ### `MushiWidgetConfig` (selected keys)
 

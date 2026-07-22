@@ -1,0 +1,55 @@
+# Debug apps built with Claude Code
+
+Source: https://kensaur.us/mushi-mushi/docs/use-cases/debug-claude-code-apps
+
+---
+title: Debug apps built with Claude Code
+description: How to debug an app Claude Code built — bug reports arrive as plain-English diagnoses your Claude Code agent reads and fixes over MCP, fix prompt included.
+---
+
+# How to debug an app Claude Code built
+
+Claude Code can build a full app in an afternoon — and then a real user finds
+the bug the tests didn't. The hard part isn't fixing it; it's *understanding*
+it: which user action, which component, which of the hundred files the agent
+touched last week.
+
+Mushi Mushi gives Claude Code that understanding. Users report bugs from
+inside your app, Mushi diagnoses each one in plain English against your actual
+repo, and Claude Code reads the queue over MCP — so "check what's broken and
+fix it" becomes a one-line instruction.
+
+## The loop, end to end
+
+1. **Install the SDK** — `npx mushi-mushi` detects your framework (React,
+   Vue, Svelte, mobile, Node) and wires it up.
+2. **Register the MCP server** — `npx mushi-mushi setup --ide claude` (see
+   the [MCP quickstart](/quickstart/mcp)) adds
+   Mushi's tools to Claude Code: list reports, get fix context, check blast
+   radius, dispatch and submit fixes.
+3. **A user shakes their phone or clicks the widget** — the report lands with
+   a screenshot and Mushi's read on severity and cause.
+4. **Tell Claude Code to work the queue** — it pulls the diagnosis and fix
+   context, writes the patch, and can open a draft PR once GitHub is
+   connected. Fixes become lessons the agent sees on the next change.
+
+## What makes this different from error monitoring
+
+Error monitors capture what the code threw. Mushi captures what the **user
+felt** — including bugs that never throw: wrong copy, dead links, a flow that
+silently no-ops. For AI-built apps those are the majority, and they're
+invisible to a stack-trace tool.
+
+## Set it up
+
+```bash
+npx mushi-mushi
+npx mushi-mushi setup --ide claude
+```
+
+Free tier: 50 diagnoses a month, no card. MIT SDKs, AGPLv3 server,
+self-hostable with one command.
+
+**Next:** [MCP server quickstart](/quickstart/mcp) ·
+[Incident loop walkthrough](/quickstart/incident-loop) ·
+[Compare with Sentry](/use-cases/sentry-alternative)

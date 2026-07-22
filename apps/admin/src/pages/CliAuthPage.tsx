@@ -31,6 +31,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
+import { humanizeApiError } from '../lib/humanizeApiError'
 import { CliAuthReadout } from '../components/cli-auth/CliAuthReadout'
 import { Btn, ErrorAlert } from '../components/ui'
 
@@ -111,7 +112,7 @@ export function CliAuthPage() {
     const check = async () => {
       const res = await apiFetch<{ status: string; claimed: boolean }>(
         `/v1/cli/auth/device/status?user_code=${encodeURIComponent(userCode)}`,
-        { cache: 'no-store' },
+        { cache: 'no-store', scope: 'none' },
       ).catch(() => null)
       if (cancelled) return
       if (res?.ok && res.data?.claimed) {
@@ -162,16 +163,25 @@ export function CliAuthPage() {
     setErrorMessage(null)
     setWaitingSlow(false)
 
+    // Device approve is account-scoped — no active project required. Avoid
+    // sending a stale/missing project header that can confuse gate middleware.
     const res = await apiFetch<{ message: string }>('/v1/cli/auth/device/approve', {
       method: 'POST',
       body: JSON.stringify({ user_code: userCode }),
+      scope: 'none',
+      cache: 'no-store',
     })
 
     if (res.ok) {
       setApproveState('waiting')
     } else {
       setApproveState('error')
-      setErrorMessage(res.error?.message ?? 'Something went wrong — please try again.')
+      const humanized = humanizeApiError(res.error?.message, res.error?.code)
+      setErrorMessage(
+        humanized
+          ? `${humanized.title}${humanized.hint ? ` ${humanized.hint}` : ''}`
+          : (res.error?.message ?? 'Something went wrong — please try again.'),
+      )
     }
   }
 
@@ -183,6 +193,8 @@ export function CliAuthPage() {
       await apiFetch('/v1/cli/auth/device/reject', {
         method: 'POST',
         body: JSON.stringify({ user_code: userCode }),
+        scope: 'none',
+        cache: 'no-store',
       }).catch(() => {})
     }
     setApproveState('denied')
@@ -266,9 +278,7 @@ export function CliAuthPage() {
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-4 py-10">
       <div className="w-full max-w-lg">
-        <CliAuthReadout userCode={userCode || null} />
-
-        {/* Header */}
+        {/* Header — code + Approve/Deny are the only first-viewport job */}
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
           <TerminalIcon />
           <h1 className="text-xl font-semibold text-fg">Connect your CLI</h1>
@@ -335,7 +345,12 @@ export function CliAuthPage() {
         {/* Error */}
         {approveState === 'error' && errorMessage && (
           <div className="mb-4">
-            <ErrorAlert title="Couldn't approve CLI connection" message={errorMessage} />
+            <ErrorAlert
+              title="Couldn't approve CLI connection"
+              message={errorMessage}
+              endpoint="/v1/cli/auth/device/approve"
+              onRetry={() => void handleApprove()}
+            />
           </div>
         )}
 
@@ -353,7 +368,11 @@ export function CliAuthPage() {
             disabled={!userCode || approveState === 'approving'}
             loading={approveState === 'approving'}
           >
-            {approveState === 'approving' ? 'Connecting…' : 'Approve CLI connection'}
+            {approveState === 'approving'
+              ? 'Connecting…'
+              : approveState === 'error'
+                ? 'Retry approve'
+                : 'Approve CLI connection'}
           </Btn>
         </div>
 
@@ -364,6 +383,16 @@ export function CliAuthPage() {
           <code className="font-mono">npx mushi-mushi</code> in your terminal.
           Never approve a request you didn't initiate.
         </p>
+
+        {/* Operator endpoint dump — collapsed so it never steals the CTA */}
+        <details className="mt-8 rounded-lg border border-edge-subtle bg-surface-raised px-4 py-3">
+          <summary className="cursor-pointer text-xs font-medium text-fg-muted hover:text-fg">
+            Technical details
+          </summary>
+          <div className="mt-3">
+            <CliAuthReadout userCode={userCode || null} />
+          </div>
+        </details>
       </div>
     </div>
   )

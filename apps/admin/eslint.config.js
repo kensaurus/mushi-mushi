@@ -22,6 +22,7 @@ export default [
       'mushi-mushi/no-page-root-padding': 'error',
       'mushi-mushi/no-arbitrary-length-value': 'error',
       'mushi-mushi/prefer-card-primitive': 'error',
+      'mushi-mushi/no-allowlist-jsx-textnode': 'error',
       'mushi-mushi/no-card-elevated-outside-allowlist': [
         'warn',
         {

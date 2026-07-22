@@ -48,7 +48,7 @@ import { jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { log } from '../../_shared/logger.ts'
-import { userCanAccessProject } from '../shared.ts'
+import { userCanAccessProject, dbError } from '../shared.ts'
 import { emitFunnelEvent } from '../../_shared/setup-funnel.ts'
 import {
   evaluateTokenDelivery,
@@ -874,6 +874,94 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
     })
 
     return c.json({ ok: true, data: { key: rawKey, prefix, scopes } }, 201)
+  })
+
+  // DELETE /v1/cli/projects/:id/keys/:keyPrefix/revoke  (cliTokenAuth)
+  //
+  // Revoke a single project API key by its 12-char prefix. Called by
+  // `mushi keys rotate` immediately after minting a fresh key so the old key
+  // is atomically invalidated without requiring a browser console session.
+  //
+  // Only the key's project owner/admin (authenticated via CLI device-auth token)
+  // may revoke. The key must belong to the specified project — cross-project
+  // revocation is rejected 404. Revoking an already-inactive key is idempotent
+  // (returns 200). If `newKeyId` is provided in the request body it is recorded
+  // as `rotated_from` on the new key (forensic breadcrumb for key lineage).
+  app.delete('/v1/cli/projects/:id/keys/:keyPrefix/revoke', cliTokenAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const projectId = c.req.param('id')!
+    const keyPrefix = c.req.param('keyPrefix')!
+    const db = getServiceClient()
+
+    // Validate inputs.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!UUID_RE.test(projectId)) {
+      return c.json({ ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } }, 400)
+    }
+    // key_prefix is 12 chars: "mushi_" (6) + first 6 chars of the UUID hex.
+    if (!/^mushi_[0-9a-f]{6}$/i.test(keyPrefix)) {
+      return c.json({ ok: false, error: { code: 'INVALID_KEY_PREFIX', message: 'keyPrefix must be 12 chars starting with mushi_' } }, 400)
+    }
+
+    // Auth gate: caller must be project owner or admin.
+    const access = await userCanAccessProject(db, userId, projectId)
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
+    }
+    if (access.role !== 'owner' && access.role !== 'admin') {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Owner or admin access required' } }, 403)
+    }
+
+    // Look up the key row by prefix + project_id. We never revoke across projects.
+    const { data: keyRow, error: lookupErr } = await db
+      .from('project_api_keys')
+      .select('id, is_active')
+      .eq('project_id', projectId)
+      .eq('key_prefix', keyPrefix)
+      .single()
+
+    if (lookupErr || !keyRow) {
+      // Key not found on this project — treat as already-gone (idempotent).
+      return c.json({ ok: true, revoked: 0, message: 'Key not found — already removed or wrong project' })
+    }
+
+    // Idempotent: already inactive → success with no mutation.
+    if (!keyRow.is_active) {
+      return c.json({ ok: true, revoked: 0, message: 'Key was already inactive' })
+    }
+
+    const revokedAt = new Date().toISOString()
+    const { error: revokeErr } = await db
+      .from('project_api_keys')
+      .update({ is_active: false, revoked_at: revokedAt })
+      .eq('id', keyRow.id)
+      .eq('project_id', projectId) // belt-and-suspenders: double-bind to project
+
+    if (revokeErr) return dbError(c, revokeErr)
+
+    // Optional: wire rotated_from on the successor key.
+    const body = await c.req.json().catch(() => ({})) as { newKeyId?: unknown }
+    if (typeof body.newKeyId === 'string' && UUID_RE.test(body.newKeyId)) {
+      await db
+        .from('project_api_keys')
+        .update({ rotated_from: keyRow.id })
+        .eq('id', body.newKeyId)
+        .eq('project_id', projectId)
+      // Non-fatal if this update fails — the revoke already succeeded.
+    }
+
+    void logAudit(
+      db,
+      projectId,
+      userId,
+      'api_key.revoked',
+      'project_api_key',
+      keyRow.id,
+      { source: 'cli_rotate', key_prefix: keyPrefix, revoked_at: revokedAt },
+      { actorType: 'cli' },
+    )
+
+    return c.json({ ok: true, revoked: 1, revokedAt })
   })
 
   // ─── CLI funnel signal (authenticated with API key) ───────────────────────

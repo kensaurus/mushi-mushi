@@ -2,7 +2,7 @@
  * FILE: apps/admin/src/components/dashboard/HeroIntro.tsx
  * PURPOSE: Pinned dashboard hero \u2014 the *one* thing the user should look at on
  *          login. Surfaces the "current focus" PDCA stage as a single,
- *          unmissable next-action card with brand glow + a primary CTA.
+ *          unmissable next-action card with a primary CTA.
  *
  *          This is the audit's #1 fix: end-users opening the dashboard had to
  *          read four KPI tiles, four PDCA tiles, and a checklist before
@@ -40,11 +40,7 @@ export function HeroIntro({ stages, focusStage, projectName, lastReportAt }: Pro
       aria-label="Dashboard hero"
       className={`relative mb-3 overflow-hidden rounded-lg border ${meta.tintBorder} ${meta.tintBg}`}
     >
-      <span
-        aria-hidden="true"
-        className={`absolute -top-12 -right-12 h-40 w-40 rounded-full blur-3xl opacity-30 ${HALO[focus.id]}`}
-      />
-      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+      {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
       <div className="relative grid gap-3 p-3 md:grid-cols-[1fr_auto] md:items-center">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-2xs font-medium text-fg-muted uppercase tracking-wider">
@@ -89,15 +85,6 @@ export function HeroIntro({ stages, focusStage, projectName, lastReportAt }: Pro
       </div>
     </section>
   )
-}
-
-/** Halos use a colour-matched, brand-leaning glow so the hero feels alive
- *  without breaking the dark theme. */
-const HALO: Record<PdcaStageId, string> = {
-  plan:  'bg-info',
-  do:    'bg-brand',
-  check: 'bg-warn',
-  act:   'bg-ok',
 }
 
 function pickFocus(stages: PdcaStage[], focusStage: PdcaStageId | null | undefined): PdcaStage {

@@ -28,11 +28,45 @@ See [Quickstart → Vanilla JS](/quickstart/web) for setup. Notable extras:
 - **`onProactiveTrigger(({ context }) => …)`** — fires when the SDK detects
   user friction (rage clicks, repeated navigation, console errors during
   the same interaction). Use it to surface the report widget contextually.
-- **`onBeforeSubmit((report) => report | null)`** — last-mile transform.
-  Return `null` to drop the report client-side.
+- **`beforeSend((report) => report | null)`** — last-mile transform after
+  built-in PII scrub. Return `null` to drop the report client-side. Prefer
+  this over the deprecated `beforeSendFeedback` (feedback-only).
+- **`sampleRate` / `replaySampleRate`** — probabilistic gates for automatic
+  error reports and session replay (see below). User-initiated feedback is
+  never sampled out.
 - **`pii`** — built-in scrubber masks emails, phones, SSNs,
   credit-card-shaped strings, and JWTs by default. Add custom regex via
   `pii.customPatterns`.
+
+---
+
+## Sampling & `beforeSend`
+
+High-traffic apps can thin automatic capture without turning off the widget:
+
+```typescript
+Mushi.init({
+  projectId: '00000000-0000-0000-0000-000000000000',
+  apiKey: 'mushi_xxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+  // Automatic (non-user) error reports only — feedback always sends
+  sampleRate: 0.1,
+  // Session replay: decision once at init; sampled-out sessions never load rrweb
+  replaySampleRate: 0.2,
+  beforeSend: (report) => {
+    if (report.description?.includes('internal-only')) return null
+    return report
+  },
+})
+```
+
+| Option | Default | Applies to |
+| --- | --- | --- |
+| `sampleRate` | `1` | Automatic error/exception reports. Range `0`–`1`. |
+| `replaySampleRate` | `1` | Whether this session records replay. Independent of `sampleRate`. |
+| `beforeSend` | — | Every report type after PII scrub. Async OK. |
+| `beforeSendFeedback` | — | **Deprecated.** Feedback-only; ignored when `beforeSend` is set. |
+
+Types live on `MushiConfig` in `@mushi-mushi/core`.
 
 ---
 

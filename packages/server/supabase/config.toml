@@ -70,6 +70,9 @@ verify_jwt = false
 #   - is never exposed publicly.
 # Gateway-level JWT verification is therefore unnecessary and was actively
 # breaking the pipeline.
+[functions.healthz]
+verify_jwt = false
+
 [functions.fast-filter]
 verify_jwt = false
 

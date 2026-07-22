@@ -45,6 +45,7 @@ import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { parseBody, InventoryProposeBodySchema } from '../_shared/validate.ts'
 import { withLlmFailover } from '../_shared/llm-failover.ts'
 import { ANTHROPIC_SONNET } from '../_shared/models.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
@@ -442,15 +443,10 @@ async function handler(req: Request): Promise<Response> {
   const authResp = requireServiceRoleAuth(req)
   if (authResp) return authResp
 
-  let body: ProposeBody
-  try {
-    body = await req.json()
-  } catch {
-    return new Response(JSON.stringify({ ok: false, error: { code: 'INVALID_JSON' } }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+  // Validate request body — returns 400 with structured error on failure.
+  const parsedBody = await parseBody(InventoryProposeBodySchema, req)
+  if (parsedBody instanceof Response) return parsedBody
+  const body: ProposeBody = parsedBody.data as ProposeBody
   const db = getServiceClient()
 
   if (body.mode === 'drift_watch') {

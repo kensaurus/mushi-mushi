@@ -8,6 +8,15 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ## Unreleased *(pending release)*
 
+### Highlights
+
+- **`mushi upgrade --self`** — — upgrade the globally-installed CLI itself (detects npm/pnpm/yarn/bun install method, semver-guarded, registry cooldown).
+- **Multi-profile credentials** — — `mushi profile list|current|use`, plus a global `--profile <name>` flag and `MUSHI_PROFILE` env var. Legacy single-profile config files keep the flat format until the first profile-scoped write, then upgrade transparently (all profiles preserved).
+- **Global `-o, --output <text|json>`** — — uniform machine-readable output across commands (wired into `reports list`, `keys list`, `profile list`; per-command `--json` still works).
+- **Shell-completion install docs** — (`docs/SHELL_COMPLETION.md`) and a **composite GitHub Action** (`action.yml`) wrapping `mushi sourcemaps upload`.
+- **`@mushi-mushi/web/otel`** — — new subpath: `createBrowserOtelSpanProcessor(mushi, { otelPresent: context })` forwards OTel error spans to Mushi as programmatic reports. Dependency-injection design (caller passes an import from `@opentelemetry/api`) avoids dynamic-import probing that breaks Vite's static analysis. Size-limit gated at ≤5 KB gzip. 16 unit tests.
+- **`@mushi-mushi/web/headless`** — — new subpath: zero-widget capture bundle. Exports `createHeadlessCapture({ projectId, apiKey })` (programmatic `captureEvent`/`captureException` over fetch, no DOM mutations), browser capture primitives (`createConsoleCapture`, `createNetworkCapture`, `createPerformanceCapture`, etc.), and the OTel bridge. Size-limit gated at ≤35 KB gzip. 17 unit tests. Both subpaths are tree-shakeable and independently published — applications that skip the widget pay zero widget bytes.
+
 ## v1.26.x
 
 Latest tag: `v1.26.0`
@@ -899,7 +908,7 @@ Latest tag: `v0.3.8`
 - `@mushi-mushi/svelte` → 0.3.2
 - `@mushi-mushi/vue` → 0.3.2
 - `@mushi-mushi/web` → 0.3.1
-- `eslint-plugin-mushi-mushi` → 0.3.1
+- `eslint-plugin-mushi-mushi` → 0.3.2
 
 ## v0.2.x
 

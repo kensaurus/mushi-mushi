@@ -145,7 +145,7 @@ export function UpgradePrompt({ flag, currentPlan, upgradeTo }: InlineProps) {
   return (
     <div className="rounded-xl border border-brand/30 bg-brand/5 p-6 shadow-sm">
       <div className="flex flex-col gap-1">
-        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+        {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
         <p className="text-2xs uppercase tracking-[0.18em] text-brand font-semibold">
           Locked on your current plan
         </p>

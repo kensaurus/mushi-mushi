@@ -273,8 +273,8 @@ export const LANDING_ARCHITECTURE_LINK =
   'See **[Concepts → Architecture](/concepts/architecture)** for the wire-level sequence diagram and component-by-component spec.'
 
 export const LANDING_OPERATOR = {
-  question: 'Ready to try it?',
-  soloCta: 'Know why. Fix fast. →',
+  question: 'Run the 60-second proof',
+  soloCta: 'npx mushi-mushi →',
   soloHref: '/quickstart/incident-loop',
   teamLead:
     'Need SSO, audit trails, or adapters for a team? Setup notes live in the operators docs on GitHub.',

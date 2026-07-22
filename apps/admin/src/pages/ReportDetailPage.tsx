@@ -595,7 +595,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
             <ClassificationFields report={report} />
           ) : report.processing_error ? (
             <Callout tone="danger" label="Classification failed">
-              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+              {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
               <p className="text-[0.8125rem] font-mono text-fg-secondary leading-relaxed wrap-break-word">
                 {report.processing_error}
               </p>

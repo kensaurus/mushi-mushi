@@ -6,7 +6,7 @@ const pkg = require('./package.json') as { version: string };
 
 export default defineConfig([
   {
-    entry: ['src/index.ts', 'src/test-utils.ts', 'src/i18n/index.ts'],
+    entry: ['src/index.ts', 'src/test-utils.ts', 'src/i18n/index.ts', 'src/otel.ts', 'src/headless.ts'],
     format: ['esm', 'cjs'],
     dts: true,
     sourcemap: true,

@@ -21,7 +21,7 @@ import type { Variables } from '../types.ts'
 
 // Keep in sync with packages/mcp/src/catalog.ts counts.
 // Update when tools/resources/prompts are added.
-const TOOL_COUNT = 68
+const TOOL_COUNT = 69
 const RESOURCE_COUNT = 8
 const PROMPT_COUNT = 4
 

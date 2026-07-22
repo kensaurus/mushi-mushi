@@ -1,0 +1,51 @@
+# Quickstart — fix your first bug in 60 seconds
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart
+
+---
+title: Quickstart — fix your first bug in 60 seconds
+description: Install Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.
+---
+
+# Quickstart
+
+{QUICKSTART_HUB_LEDE}
+
+Or run the wizard: `npx mushi-mushi` (detects your framework, signs in via browser, writes env vars, optional test report).
+
+## Start here (MCP)
+
+1. [Incident loop](/quickstart/incident-loop) — broken prod → diagnosis → fix in the editor
+2. [MCP server](/quickstart/mcp) — wire Cursor / VS Code / Claude
+
+## Pick your stack
+
+**Web:** [React](/quickstart/react) · [Vue](/quickstart/vue) · [Svelte](/quickstart/svelte) · [Angular](/quickstart/angular) · [Vanilla JS](/quickstart/web)
+
+**Mobile:** [React Native](/quickstart/react-native) · [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter) · [Capacitor](/quickstart/capacitor)
+
+**CLI ↔ console:** [CLI console loop](/quickstart/cli-console-loop)
+
+## How do I install the SDK?
+
+**Option A — wizard (recommended):**
+
+```bash
+npx mushi-mushi
+```
+
+The wizard opens your browser, you click **Approve**, picks or creates a project,
+installs the SDK, and writes `.env.local`.
+
+  {QUICKSTART_ONE_KEY_CALLOUT}
+
+**Option B — manual:**
+
+See [Project ID & API keys](/concepts/credentials) for env var names per framework.
+
+  The SDK needs only framework-prefixed project id + API key (see
+  [`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example)).
+  The repo's root `.env.example` is for **self-hosting the backend** — you do
+  not need Supabase or an LLM key to use the SDK.
+
+## Troubleshooting

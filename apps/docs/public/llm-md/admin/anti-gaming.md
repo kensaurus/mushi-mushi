@@ -1,0 +1,76 @@
+# Anti-gaming
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/anti-gaming
+
+---
+title: Anti-gaming
+---
+
+# Anti-gaming
+
+**Route:** `/anti-gaming`
+
+The Anti-gaming page surfaces reporters whose submission patterns look anomalous — devices
+sending many near-identical reports, accounts farming reward points, or sessions that
+appear synthetic. Review flagged reporters here and take action.
+
+---
+
+## How detection works
+
+Mushi runs a set of server-side heuristics on every incoming report batch:
+
+| Rule | What it detects |
+|------|----------------|
+| **Velocity** | More than N reports from the same device in a 1-hour window |
+| **Duplicate content** | Report bodies with cosine similarity > 0.95 to a recent report |
+| **Reward farming** | Submissions clustered immediately after a quest milestone |
+| **Synthetic session** | Sessions with no real user interaction (no scroll, no focus events) |
+| **Device rotation** | Same user rotating device IDs to avoid per-device limits |
+
+Reports that trip a rule are assigned a **risk score** (0–100) and surfaced here.
+
+---
+
+## Actions
+
+| Action | Description |
+|--------|-------------|
+| **Flag reporter** | Mark the reporter as suspected gaming; stops reward accrual |
+| **Unflag reporter** | Clear the flag; restore reward eligibility |
+| **Ban device** | Block future reports from this device ID |
+| **Dismiss** | Mark the alert as a false positive; the report proceeds normally |
+| **View reports** | Jump to the Reports page filtered to this reporter |
+
+Flagging a reporter stops their reward accrual but does NOT delete their submitted reports.
+Those reports are still triaged and fixed normally.
+
+---
+
+## Velocity rules
+
+Velocity thresholds are configurable per-project. Defaults:
+- **100 reports / device / hour** — trip the velocity alert
+- **500 reports / device / day** — auto-ban the device
+
+To change limits, go to **Settings → Anti-gaming** or use the API:
+```bash
+PUT /v1/admin/projects/:projectId/anti-gaming/rules
+{ "velocity_hour": 100, "velocity_day": 500 }
+```
+
+---
+
+## False positive rate
+
+The classification model targets < 2% false positive rate. If you're seeing legitimate
+reporters flagged, consider raising the velocity threshold or reducing the duplicate
+similarity threshold.
+
+---
+
+## Related pages
+
+- [Reports](/admin/reports) — the source of flagged submissions
+- [Rewards](/admin/rewards) — reward program that gaming attempts target
+- [Settings](/admin/settings) — configure velocity thresholds
