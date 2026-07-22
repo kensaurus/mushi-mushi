@@ -70,6 +70,8 @@ import { GenerateTestButton } from '../components/report-detail/GenerateTestButt
 import { SentryContextPanel } from '../components/report-detail/SentryContextPanel'
 import { ReportReplayPlayer } from '../components/report-detail/ReportReplayPlayer'
 import { AgentTracePanel } from '../components/report-detail/AgentTracePanel'
+import { TraceWaterfall } from '../components/report-detail/TraceWaterfall'
+import { CodeFramePanel } from '../components/report-detail/CodeFramePanel'
 import { deriveRecommendation } from '../components/report-detail/deriveRecommendation'
 import type { ReportDetail } from '../components/report-detail/types'
 import { DispatchPreflightBanner } from '../components/reports/DispatchPreflightBanner'
@@ -624,15 +626,35 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         )}
 
         <Section title="Performance metrics" icon={<IconGauge />}>
-          <PerformanceMetrics metrics={report.performance_metrics} />
+          {/* Phase 4b: pass anomalies for σ-above-baseline provenance badges */}
+          <PerformanceMetrics
+            metrics={report.performance_metrics}
+            anomalies={report.anomalies}
+          />
         </Section>
 
         <Section title="Console logs" icon={<IconTerminal />}>
           <ConsoleLogs logs={report.console_logs} />
+          {/* Phase 4d: stack-frame panel with GitHub deeplinks when a fix commit exists */}
+          <CodeFramePanel
+            consoleLogs={report.console_logs}
+            repoUrl={report.project?.repo_url}
+            commitSha={report.fix_attempts?.[0]?.commit_sha}
+          />
         </Section>
 
         <Section title="Network requests" icon={<IconNetwork />}>
           <NetworkLogs logs={report.network_logs} projectId={report.project_id} />
+          {/* Phase 4a: trace waterfall — client requests + backend spans in causal order */}
+          {((report.network_logs?.some((r) => r.traceId)) || (report.backend_spans?.length ?? 0) > 0) && (
+            <div className="mt-2">
+              <p className="text-2xs font-medium text-fg-faint mb-1">Trace waterfall (client → backend)</p>
+              <TraceWaterfall
+                networkRequests={report.network_logs}
+                backendSpans={report.backend_spans}
+              />
+            </div>
+          )}
         </Section>
 
         <Section title="Unified timeline" icon={<IconTerminal />}>
