@@ -889,6 +889,13 @@ export interface MushiBreadcrumb {
   message: string;
   /** Optional structured payload — kept small to keep ingest cheap. */
   data?: Record<string, unknown>;
+  /**
+   * Correlation ID linking this breadcrumb to the `MushiNetworkEntry` and
+   * `MushiConsoleEntry` entries emitted during the same network request's
+   * lifetime (Phase 3b). Set for `fetch` / `xhr` category crumbs and for
+   * console entries captured while a request was in-flight.
+   */
+  correlationId?: string;
 }
 
 /**
@@ -1110,6 +1117,13 @@ export interface MushiConsoleEntry {
   message: string;
   timestamp: number;
   stack?: string;
+  /**
+   * Correlation ID linking this console entry to the network request that was
+   * active when this log was emitted (e.g. the fetch whose catch block called
+   * console.error). Matches `MushiNetworkEntry.correlationId`. Set by the SDK's
+   * active-request tracker (Phase 3b).
+   */
+  correlationId?: string;
 }
 
 export interface MushiNetworkEntry {
@@ -1128,6 +1142,17 @@ export interface MushiNetworkEntry {
    * Used to correlate this network entry with a backend span in the admin console.
    */
   traceId?: string;
+  /**
+   * Whether this entry was captured by the fetch interceptor or the XHR interceptor
+   * (Phase 3a). Used for row-level provenance badges in the console UI.
+   */
+  captureMethod?: 'fetch' | 'xhr';
+  /**
+   * Correlation ID shared with `MushiConsoleEntry.correlationId` and
+   * `MushiBreadcrumb.correlationId` for entries emitted during this request's
+   * lifetime (Phase 3b). Enables "highlight all logs/crumbs from this request."
+   */
+  correlationId?: string;
 }
 
 export interface MushiPerformanceMetrics {

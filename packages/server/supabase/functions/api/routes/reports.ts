@@ -547,7 +547,17 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // Inventory anchor: walk graph_edges to find the action node this report is
     // filed against (edge type='reports_against') and return its metadata so
     // MCP get_fix_context.inventoryAction is always populated when one exists.
-    const [invocationsRes, fixesRes, judgeRes, inventoryAnchorRes, endUserRes, childrenRes, testerSubRes] = await Promise.all([
+    // Extract W3C traceparent trace-id from custom_metadata so we can join backend_spans.
+    // traceparent format: 00-<32hex trace_id>-<16hex parent_id>-<flags>
+    const customMeta = data.custom_metadata as Record<string, unknown> | null
+    const rawTraceparent = typeof customMeta?.traceparent === 'string' ? customMeta.traceparent : null
+    const traceparentTraceId = rawTraceparent ? (rawTraceparent.split('-')[1] ?? null) : null
+    const sentryTraceId = typeof data.sentry_trace_id === 'string' ? data.sentry_trace_id : null
+
+    // Build trace_id filter for backend_spans: match on sentry_trace_id or W3C traceparent trace-id.
+    const traceIds = Array.from(new Set([traceparentTraceId, sentryTraceId].filter((t): t is string => Boolean(t))))
+
+    const [invocationsRes, fixesRes, judgeRes, inventoryAnchorRes, endUserRes, childrenRes, testerSubRes, backendSpansRes, anomaliesRes] = await Promise.all([
       db
         .from('llm_invocations')
         .select(
@@ -610,6 +620,26 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
             .eq('id', data.tester_submission_id)
             .maybeSingle()
         : Promise.resolve({ data: null, error: null }),
+      // Phase 1a: JOIN backend_spans on trace_id — server-side spans recorded when the
+      // client's W3C traceparent header was propagated. Keyed on sentry_trace_id or
+      // the trace-id from custom_metadata.traceparent (whichever is present).
+      traceIds.length > 0
+        ? db
+            .from('backend_spans')
+            .select('id, trace_id, session_id, span_json, ingested_at')
+            .eq('project_id', data.project_id as string)
+            .in('trace_id', traceIds)
+            .order('ingested_at', { ascending: true })
+            .limit(50)
+        : Promise.resolve({ data: null, error: null }),
+      // Phase 2a: JOIN anomaly_detections when this report was auto-filed by CI metrics
+      // pipeline, providing statistical provenance ("X σ above baseline") for diagnoses.
+      db
+        .from('anomaly_detections')
+        .select('metric_name, dimension, baseline_mean, baseline_std, score, threshold, ts')
+        .eq('auto_report_id', reportId)
+        .order('ts', { ascending: false })
+        .limit(5),
     ]);
 
     const testerSubRow = testerSubRes.data as {
@@ -704,6 +734,13 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         child_report_ids: (childrenRes.data ?? []).map((r: { id: string }) => r.id),
         tester_submission,
         fix_packet,
+        // Phase 1a: backend spans joined by W3C trace_id for trace waterfall display.
+        // Spans have the shape: { id, trace_id, session_id, span_json, ingested_at }
+        // where span_json = { spanId, parentSpanId, name, status, duration_ms, attributes }.
+        backend_spans: backendSpansRes.data ?? [],
+        // Phase 2a: anomaly context when this report was auto-filed by CI metric regression.
+        // Provides provenance: baseline_mean/std + score (σ above baseline) + threshold.
+        anomalies: anomaliesRes.data ?? [],
       },
     });
   });
