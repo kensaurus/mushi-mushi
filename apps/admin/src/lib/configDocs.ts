@@ -477,9 +477,9 @@ const PROJECTS: ConfigDoc[] = [
     id: 'projects.key_scope.mcp_write',
     label: 'Key scope: mcp:write',
     summary:
-      'Allows MCP tool calls to mutate state — close reports, dispatch fixes, post comments.',
+      'Allows MCP tool calls to mutate state — transition report status, dispatch fixes, merge PRs, post replies.',
     howItWorks:
-      'Mutating MCP tools (`close_report`, `dispatch_fix`, etc.) gate on this scope. Add it sparingly — anything an LLM can call from a paste-able key, an attacker with the same key can call too.',
+      'Mutating MCP tools (`dispatch_fix`, `transition_status`, `merge_fix`, `reopen_report`, etc.) gate on this scope. Add it sparingly — anything an LLM can call from a paste-able key, an attacker with the same key can call too.',
     default: { value: 'disabled by default' },
     backend: {
       table: 'project_api_keys',

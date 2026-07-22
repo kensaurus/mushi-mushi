@@ -1,0 +1,97 @@
+# Real-time collaboration
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/realtime
+
+---
+title: Real-time collaboration
+---
+
+# Real-time collaboration
+
+Reports are collaborative documents. Every report detail page shows who else is
+looking at it right now, and all comments stream in without a refresh — so you can
+review bugs together without stepping on each other.
+
+---
+
+## Presence
+
+A **presence bar** in the report header shows an avatar stack of every teammate
+currently viewing the same report. Presence is backed by a `report_presence` table:
+each client sends a heartbeat row every 30 seconds. The bar considers a user
+"viewing" if their heartbeat is ≤ 60 seconds old.
+
+| State | Indicator |
+| ----- | --------- |
+| 1 viewer (you) | No bar — you're alone |
+| 2–4 viewers | Avatar stack with initials |
+| 5+ viewers | "3 others + N more" |
+
+Presence is visible to everyone on the project with at least Viewer access.
+Viewer identities are shown only to Admin and Owner roles — Members see anonymous
+avatars unless the project enables **Show presence to all members** in
+**Settings → Collaboration**.
+
+---
+
+## Comments
+
+Comments are append-only, Markdown-aware threads backed by the `report_comments`
+table. The admin SPA subscribes to new comments via **Supabase Realtime** so they
+stream into the panel the moment a teammate posts — no manual refresh.
+
+### Writing a comment
+
+Click **Add comment** below the report detail. The composer supports:
+
+- Full Markdown (headings, bold, code blocks, bullet lists)
+- `@mention` to notify a specific teammate (triggers an in-app notification and
+  an email if the mentioned user has email notifications enabled)
+- File attachments (uploaded to your project's storage bucket, linked inline)
+
+### Editing and deleting
+
+- **Authors** can edit their own comment within 10 minutes of posting. After that,
+  edits are disabled to preserve audit integrity.
+- **Authors and admins** can soft-delete a comment. The row is marked `deleted_at`
+  and the comment body is replaced with *"[deleted]"* in the UI. The audit log
+  retains the original content.
+
+### Timestamps
+
+Comments show a relative timestamp ("3 minutes ago") that reveals the full ISO
+datetime on hover. The full timestamp is always shown in the audit log export.
+
+---
+
+## Notifications
+
+In-app notifications fire for:
+
+- A new comment on a report you're watching (auto-watch on first comment or
+  dispatch).
+- A `@mention` in any comment.
+- A fix you dispatched completing or failing.
+- A tier-up for a reporter whose report you're watching (if rewards is enabled).
+
+Notification preferences are per-user in **Profile → Notifications**. Email
+delivery requires a verified email address on the account.
+
+  Watching a report is opt-in. You're auto-watched when you add the first comment
+  or dispatch a fix. Click the **Watch** toggle on any report to manually subscribe
+  or unsubscribe.
+
+---
+
+## Audit log
+
+All comment writes, edits, and deletions are written to the project audit log with
+the actor, action, and — for deletions — the deleted content. The audit log is
+accessible in **Settings → Audit** and is exportable as CSV.
+
+---
+
+## See also
+
+- [Admin → Reports](/admin/reports) — the full report detail surface where collaboration happens.
+- [Admin → Teams and Members](/admin/teams) — manage who has access to your project.

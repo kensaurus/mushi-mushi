@@ -701,7 +701,7 @@ function BranchRow({ branch }: { branch: RepoBranch }) {
           1024 px — the same "corner-stuck" pattern as the repo header
           card above. A 1fr / 16rem grid keeps both children reading as
           attached siblings instead of corner-anchored islands. */}
-      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+      {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
       <div className="grid gap-x-3 gap-y-2 sm:grid-cols-[minmax(0,1fr)_16rem]">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">

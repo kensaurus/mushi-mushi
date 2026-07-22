@@ -1,0 +1,84 @@
+# @mushi-mushi/capacitor
+
+Source: https://kensaur.us/mushi-mushi/docs/sdks/capacitor
+
+---
+title: '@mushi-mushi/capacitor'
+---
+
+# `@mushi-mushi/capacitor`
+
+Capacitor plugin for Ionic / Capacitor apps. The web fallback uses
+`@mushi-mushi/core` so the plugin works in WebView previews; native iOS and
+Android delegate to the standalone Mushi SDKs so a hybrid app gets the same
+shake-to-report and screenshot UX as a pure-native app.
+
+## Install
+
+```bash
+npm install @mushi-mushi/capacitor
+npx cap sync
+```
+
+## Configure
+
+```ts
+
+await Mushi.configure({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey:    'YOUR_PUBLIC_API_KEY',
+
+  triggerMode: 'shake',         // 'shake' | 'button' | 'both' | 'none'
+  captureScreenshot: true,      // base64 PNG of the active webview
+  triggerInsetPreset: 'tabBarSafe',  // or 'dockSafe'
+  // useNativeWidget: true       // present the native iOS/Android bottom sheet
+})
+```
+
+Full config options are documented in [`MushiCapacitorPluginConfig`](https://github.com/kensaurus/mushi-mushi/blob/master/packages/capacitor/src/definitions.ts).
+
+## Submit a report
+
+```ts
+await Mushi.report({
+  description: 'Lesson screen renders blank after deep link',
+  category:    'bug',
+  metadata:    { lessonId: 'l_42' },
+})
+```
+
+## Programmatic widget + listeners
+
+```ts
+await Mushi.showWidget({ category: 'visual' })
+await Mushi.flushQueue()
+await Mushi.setUser({ id: 'u_42', email: 'me@example.com' })
+await Mushi.setMetadata({ build: '2026.4.29' })
+
+const sub = await Mushi.addListener('reportSubmitted', (e) => {
+  console.log('Report accepted:', e)
+})
+```
+
+## Position the trigger above your tab bar / dock
+
+Use a preset (`triggerInsetPreset: 'tabBarSafe'` for a 72 dp lift, or
+`'dockSafe'` for a 96 dp lift) or pass your own offsets:
+
+```ts
+await Mushi.configure({
+  /* ... */
+  triggerInset: { bottom: 88, trailing: 16 },
+})
+```
+
+  Considering a move to React Native? The
+  [Capacitor → React Native migration guide](/migrations/capacitor-to-react-native)
+  covers the plugin map, the API mapping (`Mushi.configure` → ``,
+  `Mushi.report` → `useMushiReport()`), CI/CD on GitHub Actions + Fastlane,
+  and how to keep the same Mushi project / API key across both clients during
+  the cutover.
+
+See [Quickstart → Capacitor](/quickstart/capacitor) for the end-to-end setup,
+and [Capacitor bottom-dock notes](/sdks/capacitor-bottom-dock) for native shell
+integration tips.

@@ -1,0 +1,153 @@
+# Projects
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/projects
+
+---
+title: Projects
+---
+
+# Projects
+
+**Route:** `/projects`
+
+> **Scenario:** You're setting up Mushi for a new mobile app. You need to create the
+> project, grab an API key, paste the install snippet into your codebase, and send a
+> test report to confirm everything is wired up — all before your next PR review.
+
+This page handles the full project lifecycle: create, configure, monitor, and (if
+needed) delete.
+
+---
+
+## Project card
+
+Each project gets a card showing:
+
+| Field | Description |
+|-------|-------------|
+| **Name / slug** | Editable inline via the pencil icon |
+| **SDK version badge** | `ok`, `outdated`, `deprecated`, or `unknown` |
+| **PDCA bottleneck** | Chip showing where reports are stuck in the loop (classify → fix → verify) |
+| **Repo strip** | Connected repo URL, default branch, index health (`ok` / `stale` / `failed` / `off` / `never`), indexed file count |
+| **30-day severity chips** | Count of `critical` / `major` / `minor` / `trivial` reports |
+| **7-day report trend** | Arrow indicating whether report volume is rising or falling |
+| **Sentry connected** | Badge if a Sentry DSN is wired in |
+| **Plan tier + region** | The project's current plan and data-residency region |
+
+---
+
+## Creating a project
+
+Use **Setup → Steps** or **Projects → New project**:
+
+1. Enter a name and click **Create**.
+2. A **success panel** appears immediately with your **Project ID** (UUID) and copy-ready CLI commands (`mushi init` / `mushi connect`).
+3. Click **Generate API key** to mint a `report:write` ingest key on the Verify tab — **not** Settings (Settings is for BYOK provider keys only).
+
+When the CLI wizard opens your browser, it lands on `?setup=cli` with the same success panel flow.
+
+Local dev console: `http://localhost:6464` after `pnpm dev`. Override with `MUSHI_CONSOLE_URL` in the CLI. See [CLI ↔ console loop](/quickstart/cli-console-loop).
+
+---
+
+## API keys
+
+Each project card lists its API keys:
+
+| Column | Description |
+|--------|-------------|
+| **Prefix** | First 8 characters of the key (full key only shown once at creation) |
+| **Scopes** | `SDK ingest`, `MCP read`, or `MCP read+write` |
+| **Created** | Timestamp |
+| **Revoke** | Trash icon → confirmation → undo toast (30-second window) |
+
+**Generate a key:**
+1. Select a **scope** from the picker (SDK ingest / MCP read / MCP read+write).
+2. Click **Generate API key**.
+3. Copy the key immediately — it is only shown once in plaintext.
+
+SDK ingest keys are for use in your frontend/mobile SDK. MCP read+write keys grant
+write access to Mushi via MCP tools — treat them like a service-role key and store them
+only in server-side environments.
+
+---
+
+## SDK install configurator
+
+Each project card includes a live SDK snippet configurator:
+- **Framework tabs** — React, Next.js, React Native, Flutter, etc.
+- **Position picker** — where the feedback stamp appears on screen
+- **Theme** — light / dark / system
+- **Copy snippet** — copies the ready-to-paste install code
+
+---
+
+## Send test report
+
+Click **Send test report** on any project card to fire a synthetic report through the
+full ingest pipeline. Use this to verify your API key is valid and the classifier is
+running. The result appears as a new row in Reports.
+
+---
+
+## Deleting a project
+
+Click the trash icon → type the project slug in the confirmation dialog → confirm.
+A 30-second undo window appears via toast. Deletion is irreversible after the window
+closes — all reports, fix attempts, and QA stories for the project are removed.
+
+---
+
+## Common tasks
+
+### Connecting a new app (5 minutes)
+1. Click **Create** (or **Name your app** on Setup), enter a project name.
+2. Copy the **Project ID** from the success panel.
+3. Go to **Setup → Verify** → **Generate API key** (`report:write`) → copy immediately.
+4. In your app repo run `mushi connect --write-env --wire-ide --wait` (or `mushi init --project-id `).
+5. Click **Send test report** — a `pass` status chip confirms the pipeline is live.
+
+### Sharing with a teammate who only needs read access via AI
+1. Select scope **MCP read** → **Generate API key**.
+2. Share the key — they configure it in their AI assistant using the snippet on the [MCP](/admin/mcp) page.
+
+### Rotating a compromised key
+1. Click the trash icon next to the exposed key → confirm → it's revoked immediately.
+2. Generate a new key with the same scope.
+3. Update the key in your app's environment variables.
+4. Click **Send test report** to confirm the new key works.
+
+---
+
+## Actions at a glance
+
+| Action | Where |
+|--------|-------|
+| Create project | Name input + **Create** button at the top of the page |
+| Rename | Pencil icon → edit inline → Save / Cancel |
+| Switch to (set active) | **Switch to** button on the card |
+| Jump to Reports | Reports link chip |
+| Jump to Integrations | Integrations link chip |
+| Jump to Settings | Settings link chip |
+
+---
+
+## API
+
+```bash
+GET  /v1/admin/projects
+POST /v1/admin/projects            { name }
+PATCH /v1/admin/projects/:id       { name }
+DELETE /v1/admin/projects/:id      { confirm_slug }
+POST /v1/admin/projects/:id/keys   { scope }
+DELETE /v1/admin/projects/:id/keys/:keyId
+POST /v1/admin/projects/:id/test-report
+```
+
+---
+
+## Related pages
+
+- [Onboarding](/admin/onboarding) — guided first-project setup wizard
+- [Settings](/admin/settings) — BYOK keys and SDK config
+- [MCP](/admin/mcp) — MCP key usage and tool catalogue

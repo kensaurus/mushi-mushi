@@ -1,0 +1,340 @@
+# @mushi-mushi/react-native
+
+Source: https://kensaur.us/mushi-mushi/docs/sdks/react-native
+
+---
+title: '@mushi-mushi/react-native'
+---
+
+# `@mushi-mushi/react-native`
+
+Let testers shake their phone when something feels broken — the native SDK captures
+console logs, network errors, and screenshots, then queues reports offline until
+connectivity returns. Works in bare React Native CLI projects and Expo.
+
+```tsx
+
+```
+
+## Install
+
+```bash
+npm install @mushi-mushi/react-native
+```
+
+Optional peer dependencies — install the ones whose features you want:
+
+| Peer | Enables |
+|------|---------|
+| `@react-native-async-storage/async-storage` | Offline report queue (recommended for production) |
+| `@react-navigation/native` | Auto-captured navigation timeline via `useNavigationCapture()` |
+| `react-native-view-shot` | Screenshot on widget open (optional; see [Screenshots](#screenshots-react-native-view-shot)) |
+| `expo-sensors` | Shake-to-report trigger |
+
+For shake-to-report on a bare RN CLI project, install Expo modules first:
+
+```bash
+npx install-expo-modules@latest
+npm install expo-sensors
+cd ios && bundle exec pod install
+```
+
+## Mount the provider
+
+```tsx filename="App.tsx"
+
+  return (
+    
+      
+    
+  )
+}
+```
+
+A floating bug button is rendered automatically for `trigger: 'button' | 'both' | 'auto'`.
+Set `trigger: 'manual'` if you want to drive the widget yourself.
+
+## Submit a report from a screen
+
+```tsx
+
+function ChatScreen() {
+  const { open } = useMushiWidget()
+  const { submit, submitting } = useMushiReport()
+
+  return (
+    
+        submit({
+          description: 'AI returned an off-topic answer',
+          severity: 'medium',
+          metadata: { screen: 'chat' },
+        })
+      }
+    />
+  )
+}
+```
+
+## Offline queue
+
+Reports submitted while offline are buffered in `AsyncStorage` (key
+`@mushi:offline_queue`, default cap 50 items) and replayed on the next
+provider mount or whenever you call `useMushi().flush()`.
+
+  For **pure-native** projects with no JS bundle, use the
+  [iOS](/quickstart/ios) or [Android](/quickstart/android) SDKs directly.
+  **Capacitor** users have a [dedicated plugin](/sdks/capacitor); see
+  [Capacitor → React Native migration](/migrations/capacitor-to-react-native)
+  if you're moving from one to the other.
+
+See [Quickstart → React Native](/quickstart/react-native) for the end-to-end setup.
+
+---
+
+## What gets captured (v0.19+)
+
+Every report submitted through the bottom sheet or `submitReport()` carries
+Sentry-grade context when running SDK **≥ 0.17.0** (screenshot preview caption
+added in **0.19.0**):
+
+| Field | Description |
+| ----- | ----------- |
+| `sessionId` | Per-launch UUID — groups all reports from one app open |
+| `sdkPackage` / `sdkVersion` | Package name + build-time version stamp |
+| `appVersion` | Native app version from device info |
+| `fingerprintHash` | Stable RN device hash (`rnfp_*` prefix) for anti-gaming |
+| `breadcrumbs` | Ring buffer (default 50) of console, navigation, and host events |
+| `timeline` | Derived repro trail rendered in the admin **Repro timeline** card |
+| `metadata.user` | Nested reporter identity — see [Identifying users](#identifying-users) |
+| `screenshotDataUrl` | Optional JPEG data-URI when capture is enabled |
+
+Configure the ring buffer and screenshot gate under `config.capture`:
+
+```tsx
+
+  
+
+```
+
+### Screenshots (`react-native-view-shot`)
+
+Install the optional peer when you want auto-capture on widget open:
+
+```bash
+npx expo install react-native-view-shot
+# v4.x works on Expo SDK 55; v5+ recommended for New Architecture (Fabric)
+```
+
+The SDK captures **before** the bottom sheet overlays the screen. Users see a
+**thumbnail preview**, can **Remove** it before submit, and read an optional
+**privacy caption** under the image (1.19+).
+
+```tsx
+
+```
+
+Console operators can override the caption via **Projects → SDK install →
+Screenshot privacy caption** (runtime config — no app rebuild).
+
+On finance/health apps, keeping capture on with a clear caption is often better
+than disabling screenshots entirely. For screens that must never be captured,
+use `capture.screenshot: false` while those routes are focused.
+
+Maintainer deep-dive:
+[SDK_SCREENSHOT_PREVIEW.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md)
+
+### Manual breadcrumbs
+
+```tsx
+const sdk = useMushi()
+
+sdk?.addBreadcrumb({
+  category: 'user',
+  message: 'Opened FX conversion sheet',
+  level: 'info',
+})
+
+sdk?.setScreen({ name: 'accounts/[id]', route: '/accounts/abc' })
+// ^ also emits a navigation breadcrumb → timeline `route` entry
+```
+
+---
+
+## Reporter identity contract
+
+Call `identify()` or the web-parity `setUser()` alias whenever auth state changes.
+The SDK emits **both** shapes for back-compat:
+
+```tsx
+// Canonical (server reads this first)
+metadata.user = { id, email, name, provider }
+
+// Legacy flat keys (RN ≤ 0.16)
+metadata.userId / userEmail / userName / userProvider
+```
+
+Server-side `resolveReporterIdentity()` in the ingest path reads nested **or** flat
+keys plus Sentry scope user, then links `reports.reporter_user_id` to `end_users`.
+A signed-in Supabase user should never appear as an anonymous token hash on the
+report detail page when identity is wired correctly.
+
+```tsx
+sdk?.setUser({
+  id: session.user.id,
+  email: session.user.email,
+  name: session.user.user_metadata?.full_name ?? session.user.email?.split('@')[0],
+  provider: 'supabase',
+})
+```
+
+Only a SHA-256 hash of the email is stored at rest; the console shows `name` as the
+human-facing reporter label.
+
+---
+
+## End-user progress (in-app inbox)
+
+The bottom sheet (v0.17+) includes **Your reports** and **Community** tabs.
+Host apps can also surface the same data on a dedicated screen:
+
+```tsx
+
+function MyReportsScreen() {
+  const sdk = useMushi()
+  const [reports, setReports] = useState([])
+  const [reputation, setReputation] = useState(null)
+
+  useEffect(() => {
+    if (!sdk) return
+    Promise.all([sdk.listMyReports(), sdk.getReputation()])
+      .then(([r, rep]) => { setReports(r); setReputation(rep) })
+  }, [sdk])
+
+  return (/* render status pills + points */)
+}
+```
+
+| Method | Returns |
+| ------ | ------- |
+| `listMyReports()` | User's submitted reports with status, category, timestamps |
+| `listMyComments(reportId)` | Thread between reporter and admin |
+| `replyToReport(reportId, body)` | Post a follow-up from the app |
+| `getReputation()` / `getTier()` | Points balance and tier for contribution UI |
+| `getHallOfFame(limit?)` | Leaderboard entries for community context |
+
+**yen-yen reference:** `apps/mobile/app/feedback.tsx` renders contribution +
+My reports sections below the native Supabase feedback inbox.
+
+---
+
+## Identifying users
+
+Call `identify()` inside your auth state listener. On bare React Native this
+is typically a Supabase `onAuthStateChange` subscriber; on Expo it's wherever
+you consume the session from your auth context.
+
+```tsx filename="navigation/AuthGate.tsx"
+
+  const sdk = useMushi()
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (session?.user) {
+          sdk?.setUser({
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.user_metadata?.full_name,
+            provider: 'supabase',
+          })
+          // equivalent: sdk?.identify(session.user.id, { email, name, provider })
+        }
+      }
+    )
+    return () => subscription.unsubscribe()
+  }, [sdk])
+
+  return children
+}
+```
+
+`identify()` is idempotent. Calling it with the same `userId` on each session
+restore is safe — the server upserts the `end_users` row and updates
+`last_seen_at`.
+
+---
+
+## Enabling the Rewards program
+
+```tsx filename="App.tsx"
+
+  return (
+    
+      
+        
+      
+    
+  )
+}
+```
+
+### Wiring screen tracking
+
+Call `setScreen()` on every navigation event to feed `page_view` and
+`navigate` activity events automatically:
+
+```tsx filename="navigation/RootNavigator.tsx"
+
+  const sdk = useMushi()
+
+  return (
+     {
+        const routeName = getActiveRouteName(state)
+        sdk?.setScreen(routeName)
+      }}
+    >
+      {/* … */}
+    
+  )
+}
+```
+
+### Custom activity events
+
+```tsx
+
+function LessonScreen({ lessonId }) {
+  const sdk = useMushi()
+
+  const onComplete = () => {
+    sdk?.submitActivity([
+      { action: 'lesson_complete', metadata: { lessonId } },
+    ])
+  }
+
+  return 
+}
+```
+
+---
+
+## Querying reputation & tier
+
+```tsx
+
+function ProfileBadge() {
+  const sdk = useMushi()
+  const [tier, setTier] = useState(null)
+
+  useEffect(() => {
+    sdk?.getTier().then(setTier)
+  }, [sdk])
+
+  if (!tier) return null
+  return {tier.displayName}
+}
+```
+
+The `MushiRewardsBadge` component from `@mushi-mushi/react` is web-only
+(uses ``). On React Native, render tier data from `getTier()` and
+`getReputation()` directly using your own `` / `` elements.

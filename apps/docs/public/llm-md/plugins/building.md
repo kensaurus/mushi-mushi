@@ -1,0 +1,75 @@
+# Building a plugin
+
+Source: https://kensaur.us/mushi-mushi/docs/plugins/building
+
+---
+title: Building a plugin
+---
+
+# Building a plugin
+
+A Mushi plugin is an HTTP endpoint that receives HMAC-signed webhook events and does something useful with them. The `@mushi-mushi/plugin-sdk` gives you typed event helpers and a one-liner signature verifier.
+
+```bash
+npm install @mushi-mushi/plugin-sdk hono
+```
+
+## Minimal receiver
+
+```ts
+
+const app = new Hono()
+
+app.post('/webhook', async (c) => {
+  const raw = await c.req.text()
+  const ok = await verifyMushiSignature({
+    secret: process.env.MUSHI_WEBHOOK_SECRET!,
+    signatureHeader: c.req.header('x-mushi-signature') ?? '',
+    body: raw,
+  })
+  if (!ok) return c.text('bad signature', 401)
+
+  const event = JSON.parse(raw) as MushiEvent
+  switch (event.event) {
+    case 'report.created':
+      await handleNewReport(event.data)
+      break
+    case 'fix.applied':
+      await handleFixApplied(event.data)
+      break
+  }
+  return c.text('ok')
+})
+
+export default app
+```
+
+  Always return `200 ok` quickly and process async. Mushi retries on any non-2xx response with exponential backoff (3 attempts: 0 / 30 / 120s). Long-running work should be queued, not awaited inline.
+
+## Typed event shapes
+
+```ts
+import type {
+  ReportCreatedEvent,
+  ReportClassifiedEvent,
+  FixProposedEvent,
+  FixAppliedEvent,
+  JudgeScoreRecordedEvent,
+} from '@mushi-mushi/plugin-sdk'
+```
+
+See [Webhook events](/plugins/events) for the full event reference.
+
+## Signature verification
+
+Mushi signs every dispatch with `HMAC-SHA256` over `${webhookId}.${timestamp}.${rawBody}` using your secret. The `verifyMushiSignature` helper implements the [Standard Webhooks](https://www.standardwebhooks.com/) verification spec — the same algorithm any spec-compliant library understands.
+
+## Publishing to the marketplace
+
+1. Open a PR adding a row to the `plugin_registry` seed migration in `packages/server/supabase/migrations/`. Required fields: `slug`, `name`, `description`, `homepage_url`, `icon_url`, `default_events`.
+2. Add a doc page at `apps/docs/content/plugins/.mdx`.
+3. Once merged, the plugin appears under **Marketplace** for every tenant.
+
+## Local testing
+
+Point your local webhook endpoint at a tunnel (e.g. `ngrok http 3000`) and paste the tunnel URL into **Marketplace → Your Plugin → Deliveries → Test delivery**. The test delivery sends a `report.created` event with a synthetic payload.

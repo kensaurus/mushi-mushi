@@ -35,7 +35,7 @@ export function IntelligenceReportCard({ report, onDownload }: Props) {
         </Btn>
       </div>
 
-      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
+      {/* mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile) */}
       <div className="mb-3 grid grid-cols-2 gap-2 rounded-md border border-edge-subtle bg-surface-raised/25 p-2 sm:grid-cols-4">
         <Stat label="Reports" value={report.stats?.reports?.total?.toLocaleString() ?? '—'} />
         <Stat label="Fix attempts" value={report.stats?.fixes?.total?.toLocaleString() ?? '—'} />

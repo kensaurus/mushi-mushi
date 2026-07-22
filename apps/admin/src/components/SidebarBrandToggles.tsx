@@ -62,7 +62,7 @@ export function SidebarBrandToggles({
           const active = p.id === 'tester' ? onTester : !onTester
           return (
             <MicroSegmentCell key={p.id} active={active}>
-              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+              {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
               <Tooltip content={p.hint} side="auto" nowrap={false} className="flex h-full w-full min-h-[1.375rem] self-stretch">
                 <Link
                   to={p.to}
@@ -91,7 +91,7 @@ export function SidebarBrandToggles({
             const active = mode === m.id
             return (
               <MicroSegmentCell key={m.id} active={active}>
-              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+              {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
               <Tooltip content={m.hint} side="auto" nowrap={false} className="flex h-full w-full min-h-[1.375rem] self-stretch">
                 <button
                   type="button"

@@ -42,6 +42,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { parseBody, QaStoryRunnerBodySchema, type QaStoryRunnerBody } from '../_shared/validate.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { sendBotMessage, sendSlackText, buildQaStoryRunBlocks, sendDiscordNotification } from '../_shared/slack.ts'
@@ -666,13 +667,13 @@ Deno.serve(
     // Manual triggers come from POST /qa-stories/:sid/run in the API route.
     // They create a pending run row and call us with the run_id so we can
     // update that row in-place instead of inserting a new cron run row.
-    let body: { trigger?: string; story_id?: string; run_id?: string } = {}
-    try {
-      if (req.headers.get('content-type')?.includes('application/json')) {
-        body = await req.json() as typeof body
-      }
-    } catch {
-      // Non-JSON body (e.g. cron ping) — continue as cron
+    // Parse body only when JSON content-type is present (cron pings have no body).
+    // Returns 400 with structured error if JSON is present but structurally invalid.
+    let body: QaStoryRunnerBody = {}
+    if (req.headers.get('content-type')?.includes('application/json')) {
+      const parsedBody = await parseBody(QaStoryRunnerBodySchema, req)
+      if (parsedBody instanceof Response) return parsedBody
+      body = parsedBody.data
     }
 
     if (body.trigger === 'manual' && body.story_id && body.run_id) {

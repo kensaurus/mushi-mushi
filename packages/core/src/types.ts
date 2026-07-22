@@ -48,7 +48,52 @@ export interface MushiConfig {
    * when omitted (legacy Vercel Analytics wiring).
    */
   appVersion?: string;
-  /** Hook called before a report is sent. Return null to cancel, or return the (possibly modified) report. */
+  /**
+   * Probabilistic sampling rate for session-replay recording (rrweb/lite).
+   * Range 0–1, default 1 (record all sessions). The sampling decision is made
+   * once at session init — a sampled-out session never loads the rrweb chunk,
+   * reducing bundle cost and CPU for excluded users.
+   *
+   * Independent of `sampleRate` (error reporting). A session can have replay
+   * on but errors sampled, or vice versa.
+   *
+   * @example
+   * replaySampleRate: 0.2  // record replay for ~20% of sessions
+   */
+  replaySampleRate?: number;
+  /**
+   * Probabilistic sampling rate for automatic (non-user-initiated) error
+   * reports. Range 0–1, default 1 (send all). User-initiated feedback reports
+   * are always sent regardless of this value.
+   *
+   * Examples:
+   *   sampleRate: 0.1  → send ~10% of auto-captured errors
+   *   sampleRate: 1    → send all (default)
+   *   sampleRate: 0    → send none (disables automatic capture; feedback unaffected)
+   *
+   * When rate limiting or circuit breaker is also active, the stricter of the
+   * two gates applies. Use sampleRate for sustained high-volume apps; use
+   * rate limiting for burst protection.
+   */
+  sampleRate?: number;
+  /**
+   * Hook called before ANY report (error, exception, or user feedback) is
+   * sent. Return null to cancel the report; return the (possibly modified)
+   * report to proceed. Async version supported — resolution is awaited before
+   * submission. Runs AFTER built-in PII scrubbing.
+   *
+   * @example
+   * beforeSend: (report) => {
+   *   if (report.category === 'bug' && report.description.includes('internal')) return null
+   *   return { ...report, description: sanitize(report.description) }
+   * }
+   */
+  beforeSend?: (report: MushiReport) => MushiReport | null | Promise<MushiReport | null>;
+  /**
+   * @deprecated Use `beforeSend` instead. `beforeSendFeedback` is kept for
+   * backwards compatibility and applies only to user-submitted feedback reports.
+   * `beforeSend` covers all report types and takes precedence when both are set.
+   */
   beforeSendFeedback?: (report: MushiReport) => MushiReport | null | Promise<MushiReport | null>;
   /** Called once if the app crashed during the previous session. */
   onCrashedLastRun?: (crashed: boolean) => void;

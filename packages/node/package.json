@@ -99,7 +99,7 @@
     "clean": "rm -rf dist .turbo",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "size": "size-limit"
   },
   "size-limit": [

@@ -1,0 +1,164 @@
+# Onboarding
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/onboarding
+
+---
+title: Onboarding
+---
+
+# Onboarding
+
+**Route:** `/onboarding`
+
+> **Scenario:** You signed up 5 minutes ago. Your goal: get a real bug report from your
+> app into Mushi before your afternoon standup. This page takes you from zero to your
+> first classified report in under 10 minutes.
+
+The onboarding wizard is the fastest path from signup to a live report in your queue.
+Work through the steps in order — each one opens the next.
+
+---
+
+## Setup checklist
+
+A progress strip tracks your completion status across five steps. Completed steps show
+a green tick; the current step glows.
+
+### Create a project
+Enter a project name and click **Create**. A project is created immediately and becomes
+the active project.
+
+After create, a **success panel** appears with:
+
+- Your **Project ID** (UUID) in a one-click copy chip
+- Prefilled **`mushi init --project-id …`** and **`mushi connect …`** commands
+- A shortcut to **Generate API key** on the Verify tab
+
+This panel closes the gap between "I created something" and "I can paste credentials into
+the CLI."
+
+### Generate an API key
+Click **Generate API key** on the **Verify** tab to create an SDK-scoped key
+(`report:write`). The key is shown in plaintext exactly once — copy it immediately.
+
+  **Not Settings → BYOK.** Settings is for your own Anthropic/Firecrawl keys. SDK ingest
+  keys are minted here on Verify (or from the Projects page key picker).
+
+### Test the connection
+Click **Submit test report** to send a synthetic report through the full ingest pipeline.
+A status chip shows `idle` → `running` → `pass` / `fail`. A `pass` means the key is
+valid, the classify function ran, and the report appeared in the Reports queue.
+
+Click **Send another** to fire additional test reports.
+
+The **Verify** tab also shows a **First report in your queue** timer — how long from
+minting your first API key to seeing a plain-English diagnosis on a classified report.
+The target is **under 2 minutes**; the card reads "Under the 2-minute target ✓" once
+you beat it, or "Target: under 2 minutes" while pending.
+
+### Install the SDK
+The **SDK install configurator** shows framework-specific install snippets (React,
+Next.js, React Native, Flutter, etc.) pre-filled with your API key and project ID.
+Copy and paste into your codebase.
+
+Or run the CLI wizard from your app repo — see [CLI ↔ console loop](/quickstart/cli-console-loop).
+
+### Go to dashboard
+Once all steps are complete, a **Go to Dashboard** button appears. The setup checklist
+banner on the dashboard will clear.
+
+---
+
+## CLI setup mode (`?setup=cli`)
+
+When you run `npx mushi-mushi` without saved credentials, the wizard can open the console
+at:
+
+```
+/onboarding?tab=steps&setup=cli
+```
+
+| Behavior | Normal onboarding | `setup=cli` |
+| --- | --- | --- |
+| Create form | Hidden if you already have projects | **Always shown** — add another project |
+| Banner copy | Generic checklist | "CLI setup — name your app below" |
+| Success panel | Same UUID + CLI commands | Same — optimized for paste-back into terminal |
+
+Use this path when the terminal wizard sent you here, or when you need a **second project**
+without leaving the onboarding UX.
+
+---
+
+## CliSetupGuide strip
+
+Several surfaces reuse the same **1-2-3 CLI setup** strip (`CliSetupGuide`):
+
+- **Connect hub** when no SDK heartbeat has landed yet
+- **Projects → New project** empty state
+
+Steps match the [CLI ↔ console loop](/quickstart/cli-console-loop): create → mint key →
+`mushi init` or `mushi connect`.
+
+---
+
+## How the loop works
+
+The onboarding page includes a static flow diagram (the same stages as on the
+dashboard, but with outcome copy instead of live counts) so you know what happens after
+a report lands — classify, fix draft, verify, remember — before you see live numbers.
+
+---
+
+**One-time key reveal** — the plaintext API key is shown exactly once after generation.
+Copy it before clicking away. If you lose it, generate a new key from the [Projects](/admin/projects)
+page — you can't recover the old one.
+
+---
+
+## Troubleshooting the test report
+
+If the test report shows `fail`:
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| `401 Unauthorized` | Wrong API key in the SDK install | Re-copy the key from the reveal card |
+| `429 Too Many Requests` | You've hit the hourly rate limit | Wait 60 seconds, try again |
+| Status stuck at `running` | Classifier BYOK key missing | Go to [Settings](/admin/settings) → BYOK tab → add Anthropic key |
+| Success but no report in Reports page | Wrong project selected in the SDK snippet | Check `projectId` in your install code |
+
+---
+
+## What happens after setup
+
+Once the SDK sends its first real report from your app:
+1. The dashboard **First Report** hero card appears and disappears.
+2. The report gets a plain-English read and appears in [Reports](/admin/reports).
+3. The setup checklist on the dashboard marks "First report" as complete.
+
+---
+
+## Restarting the tour
+
+Click **Restart tour** at the bottom of the page to reset the checklist state and walk
+through setup again. This does not delete any existing projects or data.
+
+---
+
+## API
+
+```bash
+POST /v1/admin/projects               { name }
+POST /v1/admin/projects/:id/keys      { scope: 'ingest' }
+POST /v1/admin/projects/:id/test-report
+GET  /v1/admin/onboarding/time-to-first-diagnosis   → { keyMintedAt, firstDiagnosisAt, ms }
+```
+
+---
+
+## Related pages
+
+- [CLI ↔ console loop](/quickstart/cli-console-loop) — terminal wizard + deep link
+- [Projects](/admin/projects) — manage multiple projects and keys
+- [Connect & Update](/admin/connect) — SDK heartbeat + copy-ready CLI commands
+- [Settings](/admin/settings) — BYOK keys and SDK config after initial setup
+- [Dashboard](/admin/dashboard) — where you land after completing onboarding

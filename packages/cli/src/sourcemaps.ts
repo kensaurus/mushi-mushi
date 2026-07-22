@@ -10,8 +10,8 @@
  */
 
 import { createReadStream } from 'node:fs'
-import { readFile, readdir } from 'node:fs/promises'
-import { createHash } from 'node:crypto'
+import { readFile, readdir, writeFile } from 'node:fs/promises'
+import { createHash, randomUUID } from 'node:crypto'
 import { join, relative, basename } from 'node:path'
 import * as p from '@clack/prompts'
 
@@ -22,6 +22,8 @@ export interface SourcemapsUploadOptions {
   apiKey?: string
   dryRun?: boolean
   silent?: boolean
+  /** When true, inject a debug ID into each .js file and its .map before uploading. */
+  inject?: boolean
 }
 
 /** Find all .js.map and .css.map files recursively in a directory. */
@@ -56,12 +58,57 @@ function fileHash(path: string): Promise<string> {
   })
 }
 
+/**
+ * Inject a Debug ID into a compiled `.js` file and its paired `.map` file.
+ *
+ * Mirrors Sentry's Debug-ID workflow:
+ *   - Appends `//# debugId=<uuid>` to the end of the `.js` file.
+ *   - Sets `"debugId": "<uuid>"` on the root of the `.map` JSON.
+ *
+ * @returns The injected UUID so it can be forwarded to the upload call.
+ */
+async function injectDebugId(mapPath: string): Promise<string | null> {
+  // Derive the .js path: /foo/bar.js.map → /foo/bar.js
+  const jsPath = mapPath.endsWith('.js.map')
+    ? mapPath.slice(0, -4) // remove ".map"
+    : null
+  if (!jsPath) return null // CSS maps — skip injection
+
+  const debugId = randomUUID()
+
+  // 1. Inject into the compiled .js file (append magic comment).
+  try {
+    const jsContents = await readFile(jsPath, 'utf-8')
+    // Idempotent: don't double-inject if already present.
+    if (!jsContents.includes('//# debugId=')) {
+      await writeFile(jsPath, `${jsContents}\n//# debugId=${debugId}`, 'utf-8')
+    }
+  } catch {
+    // .js file missing — map-only upload, skip JS injection.
+  }
+
+  // 2. Inject into the .map JSON.
+  try {
+    const mapContents = await readFile(mapPath, 'utf-8')
+    const parsed = JSON.parse(mapContents) as Record<string, unknown>
+    if (!parsed['debugId']) {
+      parsed['debugId'] = debugId
+      await writeFile(mapPath, JSON.stringify(parsed), 'utf-8')
+    }
+  } catch {
+    return null // Malformed map — skip.
+  }
+
+  return debugId
+}
+
 /** Upload a single source map; returns whether it was uploaded or skipped. */
 async function uploadFile(
   filePath: string,
   release: string,
   endpoint: string,
   apiKey: string,
+  debugId?: string,
 ): Promise<{ ok: boolean; skipped: boolean; reason?: string }> {
   const sha256 = await fileHash(filePath)
 
@@ -85,6 +132,7 @@ async function uploadFile(
   form.append('filename', relative(process.cwd(), filePath).replaceAll('\\', '/'))
   form.append('release', release)
   form.append('sha256', sha256)
+  if (debugId) form.append('debug_id', debugId)
 
   const res = await fetch(`${endpoint}/v1/sourcemaps`, {
     method: 'POST',
@@ -163,6 +211,25 @@ export async function runSourcemapsUpload(
     return
   }
 
+  // Phase 3 uplift: --inject builds a Debug-ID map (mapPath → uuid) so that
+  // compiled .js files and their .map counterparts carry a shared UUID.
+  // Stack-trace resolution can then match by debugId rather than fragile
+  // release/filename keys.
+  const debugIds = new Map<string, string>()
+  if (opts.inject) {
+    const injectSpin = p.spinner()
+    injectSpin.start('Injecting Debug IDs…')
+    let injected = 0
+    for (const filePath of files) {
+      const debugId = await injectDebugId(filePath)
+      if (debugId) {
+        debugIds.set(filePath, debugId)
+        injected++
+      }
+    }
+    injectSpin.stop(`Injected Debug IDs into ${injected} file${injected === 1 ? '' : 's'}`)
+  }
+
   let uploaded = 0
   let skipped = 0
   let failed = 0
@@ -171,7 +238,7 @@ export async function runSourcemapsUpload(
     const rel = relative(process.cwd(), filePath).replaceAll('\\', '/')
     const fs = p.spinner()
     fs.start(rel)
-    const result = await uploadFile(filePath, opts.release, endpoint, apiKey)
+    const result = await uploadFile(filePath, opts.release, endpoint, apiKey, debugIds.get(filePath))
     if (result.skipped) {
       fs.stop(`↩  ${rel} (already uploaded)`)
       skipped++

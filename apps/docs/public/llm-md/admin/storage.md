@@ -1,0 +1,105 @@
+# Storage
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/storage
+
+---
+title: Storage
+---
+
+# Storage
+
+**Route:** `/storage`
+
+The Storage page configures where Mushi writes report attachments, session recordings,
+and evidence artifacts. By default, Mushi uses managed Supabase storage. You can switch
+to your own bucket for data-residency or cost reasons.
+
+---
+
+## Providers
+
+| Provider | Notes |
+|----------|-------|
+| **Supabase** (default) | Managed — no configuration required. Files stored in your Supabase project. |
+| **AWS S3** | Requires `bucket`, `region`, and an IAM key pair with `s3:PutObject` / `s3:GetObject`. |
+| **Cloudflare R2** | Requires `bucket`, `region` (use `auto`), and an R2 API token. |
+| **Google Cloud Storage** | Requires `bucket` and a service-account JSON key. |
+
+---
+
+## Configuring a custom bucket
+
+Each project has its own storage config card. The card shows:
+- **Health status chip** — `unknown`, `healthy`, `degraded`, or `failing` with last-check time
+- **Last health error** if the previous check failed
+- **Debug log** — a toggle that reveals a per-step test table (step name, ok/fail, ms, detail)
+
+To configure:
+
+1. Choose a **Provider** from the dropdown.
+2. Fill in the required fields for your provider (see table below).
+3. Click **Save** (saves without activating) or **Save & enable** (saves and marks the config active).
+4. Click **Health check** to confirm Mushi can reach the bucket — the debug log opens automatically.
+
+| Field | Required for |
+|-------|-------------|
+| **Bucket** | S3, R2, GCS, MinIO |
+| **Region** | S3 (`us-east-1`), R2 (`auto`) |
+| **Endpoint** | MinIO, custom S3-compatible |
+| **Path prefix** | All providers (optional subfolder) |
+| **Signed URL TTL** | All providers (seconds, default 3600) |
+| **Access key Vault ref** | S3, R2, MinIO — Vault secret name |
+| **Secret key Vault ref** | S3, R2, MinIO — Vault secret name |
+| **GCS service-account Vault ref** | GCS — Vault secret name |
+| **KMS Key ID** | Optional server-side encryption |
+| **Use signed URLs** | Checkbox |
+| **Require encryption** | Checkbox |
+
+**Bucket and region are required** for S3 and R2. The API will return a `400 VALIDATION_ERROR`
+if either is empty — this is enforced on the server to prevent saving a broken config.
+
+Storage settings are per-project. Different projects can use different providers.
+
+---
+
+## Required IAM permissions (S3)
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:ListBucket"],
+      "Resource": ["arn:aws:s3:::YOUR_BUCKET", "arn:aws:s3:::YOUR_BUCKET/*"]
+    }
+  ]
+}
+```
+
+---
+
+## Required R2 permissions
+
+Create an R2 API token with **Object Read & Write** scope scoped to the target bucket.
+
+---
+
+## Required GCS permissions
+
+Attach the `roles/storage.objectAdmin` role to your service account, scoped to the bucket.
+
+---
+
+## Data residency
+
+For data-residency requirements, use a bucket in the same region as your Supabase instance.
+See [Security → Data residency](/security/data-residency) for the full matrix.
+
+---
+
+## Related pages
+
+- [Security → BYO storage](/security/byo-storage) — architecture and encryption details
+- [Integration health](/admin/health) — verify the storage probe
+- [Settings](/admin/settings) — other project configuration

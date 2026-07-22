@@ -1,0 +1,39 @@
+# Mushi Cloud
+
+Source: https://kensaur.us/mushi-mushi/docs/cloud
+
+---
+title: Mushi Cloud
+description: Hosted Mushi Mushi — bug reports, plain-English diagnoses, and fix dispatch without running servers. Free tier includes 50 diagnoses a month.
+---
+
+# Mushi Cloud
+
+{CLOUD_INTRO.lead}
+
+## Plans
+
+{CLOUD_INTRO.diagnosisNote}
+
+## Sign-up flow
+
+1. `kensaur.us/mushi-mushi/admin` — email + password.
+2. Email confirmation → sign in → `/onboarding` wizard.
+3. Create your first project, mint an API key, run `npx mushi-mushi` to install the SDK.
+4. The admin dashboard at `kensaur.us/mushi-mushi/admin` shows diagnoses used / limit and a single button:
+   **Add a card via Stripe**.
+5. Stripe Checkout → on success, your subscription becomes active. Overage bills through Stripe meter events.
+
+## Why metered on diagnoses
+
+{CLOUD_INTRO.meteredWhy}
+
+## Spend controls
+
+Every paid plan supports a **hard monthly spend cap** — set it in the console under Billing → Spending Cap. When the cap is reached, Mushi pauses new diagnoses for the calendar month with an upgrade prompt. You also receive email alerts at 80 % and 100 % of your included quota.
+
+## Self-hosting
+
+If you'd rather run Mushi on your own Supabase project, see
+[Self-hosting](/self-hosting) — every feature on Cloud is in the OSS
+repo. Self-hosting is free forever; you supply your own LLM keys.

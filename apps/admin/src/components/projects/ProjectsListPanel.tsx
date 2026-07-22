@@ -685,7 +685,7 @@ function ProjectMetricsRail({ project }: { project: Project }) {
           />
         )}
       </div>
-      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+      {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
       <div className="grid grid-cols-1 gap-2 border-t border-edge-subtle bg-surface-overlay px-3 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-3">
         <span
           className="inline-flex shrink-0 items-center gap-1.5 text-2xs font-medium text-fg-muted"

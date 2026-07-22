@@ -1,0 +1,52 @@
+# Android (Kotlin) quickstart
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/android
+
+---
+title: Android (Kotlin) quickstart
+---
+
+# Android quickstart
+
+`dev.mushimushi:mushi-android` ships shake detection (via `SensorManager`), a
+bottom-sheet capture UI, an offline queue with `WorkManager`-style retry,
+and an optional Sentry breadcrumb bridge.
+
+## Install
+
+```kotlin filename="app/build.gradle.kts"
+dependencies {
+  implementation("dev.mushimushi:mushi-android:0.4.0")
+}
+```
+
+## Initialize
+
+```kotlin filename="app/src/main/java/com/example/App.kt"
+class App : Application() {
+  override fun onCreate() {
+    super.onCreate()
+    Mushi.configure(
+      context = this,
+      projectId = "YOUR_PROJECT_ID",
+      apiKey = "YOUR_PUBLIC_API_KEY",
+      enableShakeToReport = true,
+    )
+  }
+}
+```
+
+```xml filename="AndroidManifest.xml"
+
+  <!-- ... -->
+
+```
+
+## Submit a report
+
+```kotlin
+Mushi.submitReport(
+  description = "Search results sometimes appear twice.",
+  severity = Severity.MEDIUM,
+)
+```

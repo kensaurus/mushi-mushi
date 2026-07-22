@@ -6,7 +6,7 @@ import { Callout } from 'nextra/components'
 
 # Edge Functions deploy
 
-Mushi ships **51** Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). For a working self-host you only need the **minimal ingest + classification** set below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. The repo root guide [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md) remains the authoritative step-by-step.
+Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count — currently **55**). For a working self-host you only need the **minimal ingest + classification** set below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md) remains the authoritative step-by-step.
 
 ## Minimal required (ingest + classify)
 
@@ -18,10 +18,11 @@ npx supabase functions deploy fast-filter --no-verify-jwt
 npx supabase functions deploy classify-report --no-verify-jwt
 ```
 
-Also deploy **`mcp`** if you use the hosted MCP transport:
+Also deploy **`mcp`** if you use the hosted MCP transport, and **`healthz`** for unauthenticated monitoring:
 
 ```bash
 npx supabase functions deploy mcp --no-verify-jwt
+npx supabase functions deploy healthz --no-verify-jwt
 ```
 
 <Callout type="warning">

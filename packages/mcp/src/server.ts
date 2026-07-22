@@ -18,10 +18,17 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { createLogger } from '@mushi-mushi/core'
-import { TOOL_CATALOG, TDD_TOOL_CATALOG, CODEBASE_TOOL_CATALOG, type McpScope } from './catalog.js'
+import {
+  TOOL_CATALOG,
+  TDD_TOOL_CATALOG,
+  CODEBASE_TOOL_CATALOG,
+  USE_MUSHI_INTENTS,
+  type McpScope,
+} from './catalog.js'
 import { MUSHI_SERVER_METADATA } from './branding.js'
 import { toolMatchesFeatures, DEPRECATED_TOOL_ALIASES, type FeatureFilter } from './feature-groups.js'
 import { searchMushiDocs } from './docs-index.js'
+import { wrapUntrustedJson, type UntrustedContentRole } from './wrap-untrusted.js'
 
 /** Explicit schema for no-argument MCP tools (avoids ambiguous empty `{}`). */
 const NO_ARG_INPUT: Record<string, never> = {}
@@ -249,6 +256,32 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     }
   }
 
+  /**
+   * Prompt-injection-safe variant of jsonText for tools whose results contain
+   * user-authored free text (report bodies, NL-query output, lesson text, etc.).
+   *
+   * The text content block is wrapped with anti-injection delimiters so an LLM
+   * that reads it knows the content is DATA, not instructions. MCP clients that
+   * consume `structuredContent` are unaffected — they skip the text block.
+   *
+   * References:
+   *   - https://simonwillison.net/2024/Apr/23/sqlite-web/#prompt-injection
+   *   - Supabase MCP SQL-result wrapping pattern
+   */
+  function wrappedJsonText(value: unknown, role: UntrustedContentRole) {
+    return {
+      content: [{ type: 'text' as const, text: wrapUntrustedJson(value, role) }],
+    }
+  }
+
+  /** Like wrappedJsonText but also carries structuredContent (for outputSchema tools). */
+  function wrappedJsonResult(value: unknown, role: UntrustedContentRole) {
+    return {
+      content: [{ type: 'text' as const, text: wrapUntrustedJson(value, role) }],
+      structuredContent: value as Record<string, unknown>,
+    }
+  }
+
   const server = new McpServer({
     name: MUSHI_SERVER_METADATA.name,
     version,
@@ -352,7 +385,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     async (args) => {
       const { headers } = await projectScopeHeaders(args.project_id)
       const data = await apiCall(`/v1/admin/reports/${args.reportId}`, { headers })
-      const res = jsonResult({ report: data })
+      // Report bodies contain user-authored text — wrap with anti-injection delimiters.
+      const res = wrappedJsonResult({ report: data }, 'report body')
       return {
         ...res,
         resource_links: [
@@ -409,7 +443,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           ...(projectId ? { projectId } : {}),
         }),
       })
-      return jsonResult(data)
+      // Report titles and descriptions are user-authored — wrap with anti-injection delimiters.
+      return wrappedJsonResult(data, 'report description')
     },
   )
 
@@ -437,7 +472,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           ...(projectId ? { projectId } : {}),
         }),
       })
-      return jsonResult(data)
+      // Similar-bug descriptions are user-authored — wrap with anti-injection delimiters.
+      return wrappedJsonResult(data, 'report description')
     },
   )
 
@@ -468,7 +504,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       const report = await apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.reportId}`, {
         headers,
       })
-      return jsonResult({
+      // fix_packet, report body, and rootCause are user-authored or LLM-generated
+      // free text — wrap with anti-injection delimiters.
+      return wrappedJsonResult({
         report,
         // Paste-ready fix prompt composed server-side by composeFixPacket()
         // (diagnosis + repro + suggested fix + relevant code + blast radius).
@@ -478,7 +516,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         component: report.component,
         rootCause: (report.stage2_analysis as Record<string, unknown> | undefined)?.rootCause,
         bugOntologyTags: report.bug_ontology_tags,
-      })
+      }, 'fix context')
     },
   )
 
@@ -688,7 +726,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         method: 'POST',
         body: JSON.stringify({ question: args.question }),
       })
-      return jsonText(data)
+      // NL-query results may contain user-authored row values — wrap with
+      // anti-injection delimiters so the LLM treats them as data, not instructions.
+      return wrappedJsonText(data, 'nl-query result')
     },
   )
 
@@ -1519,7 +1559,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           ...(pid ? { project_id: pid } : {}),
         }),
       })
-      return jsonText(data)
+      // Lesson text is user-authored/AI-generated — wrap with anti-injection delimiters.
+      return wrappedJsonText(data, 'lesson text')
     },
   )
 
@@ -1545,7 +1586,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       params.set('limit', String(Math.min(args.limit ?? 50, 200)))
       if (pid) params.set('projectId', pid)
       const lessons = await apiCall<unknown[]>(`/v1/admin/lessons?${params}`)
-      return jsonResult({ lessons })
+      // Lesson text is user-authored/AI-generated — wrap with anti-injection delimiters.
+      return wrappedJsonResult({ lessons }, 'lesson text')
     },
   )
 
@@ -2552,6 +2594,58 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required')
       const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/knowledge/graph`)
       return jsonText(data)
+    },
+  )
+
+  // ── use_mushi meta-tool ────────────────────────────────────────────────────
+  // Single entry point for orientation and context-cost reduction.
+  // Returns a curated tool list for the agent's stated intent so it can skip
+  // loading all 68 tool descriptions up-front (mirrors Sentry's `use_sentry`).
+  server.registerTool(
+    'use_mushi',
+    {
+      title: titleOf('use_mushi'),
+      description: descOf('use_mushi'),
+      inputSchema: {
+        intent: z.string().optional().describe(
+          'What you are trying to accomplish with Mushi, e.g. "fix the top bug", ' +
+          '"check project health", "run QA tests", "set up Mushi". ' +
+          'Leave blank for a general orientation.',
+        ),
+      },
+      annotations: annotationsFor('use_mushi'),
+    },
+    async (args) => {
+      const intent = (args.intent ?? '').toLowerCase()
+
+      // Match intent to curated tool subset.
+      let matched = Object.entries(USE_MUSHI_INTENTS).find(([key]) => intent.includes(key))
+      // If no keyword match, default to "status" orientation.
+      if (!matched) matched = ['status', USE_MUSHI_INTENTS['status']!]
+
+      const [, cluster] = matched
+
+      // Build project-aware orientation line.
+      const projectLine = projectId
+        ? `Connected project: \`${projectId}\`. `
+        : 'No project configured — run `mushi_setup` or set MUSHI_PROJECT_ID. '
+
+      const orientation = [
+        `## Mushi — ${cluster.label}`,
+        '',
+        projectLine + cluster.hint,
+        '',
+        '### Recommended tools for this intent',
+        cluster.tools.map((t) => `- \`${t}\``).join('\n'),
+        '',
+        '### First step',
+        `Call \`${cluster.tools[0]}\` to get started.`,
+        '',
+        '> Tip: call any tool by name — \`use_mushi\` is a read-only helper that ' +
+          'never calls other tools itself. All 68 tools remain available.',
+      ].join('\n')
+
+      return { content: [{ type: 'text', text: orientation }] }
     },
   )
 

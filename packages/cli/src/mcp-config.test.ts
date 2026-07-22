@@ -1,10 +1,11 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   buildMcpServerBlock,
   buildMcpServerName,
+  printKeyExportHint,
   writeMcpServerEntry,
 } from './mcp-config.js'
 import { MUSHI_MCP_PIN_SPEC } from './version.js'
@@ -24,11 +25,36 @@ describe('buildMcpServerName', () => {
 })
 
 describe('buildMcpServerBlock', () => {
-  it('builds the canonical npx mcp server block', () => {
+  it('uses ${MUSHI_API_KEY} placeholder by default (no inlineKey / inlineKey: false)', () => {
+    const block = buildMcpServerBlock({
+      endpoint: 'https://api.example.test',
+      projectId: 'proj-1',
+      apiKey: 'mushi_live_supersecret',
+    })
+    // buildMcpServerBlock always returns the stdio form with command/args/env
+    const stdioBlock = block as { command: string; args: string[]; env: Record<string, string> }
+    // The literal key must NOT appear anywhere — it could be committed to git
+    expect(JSON.stringify(block)).not.toContain('mushi_live_supersecret')
+    expect(stdioBlock.env['MUSHI_API_KEY']).toBe('${MUSHI_API_KEY}')
+  })
+
+  it('inlines the literal key when inlineKey: true', () => {
+    const block = buildMcpServerBlock({
+      endpoint: 'https://api.example.test',
+      projectId: 'proj-1',
+      apiKey: 'mushi_test_key',
+      inlineKey: true,
+    })
+    const stdioBlock = block as { command: string; args: string[]; env: Record<string, string> }
+    expect(stdioBlock.env['MUSHI_API_KEY']).toBe('mushi_test_key')
+  })
+
+  it('builds the full canonical npx mcp server block with inlineKey: true', () => {
     expect(buildMcpServerBlock({
       endpoint: 'https://api.example.test',
       projectId: 'proj-1',
       apiKey: 'mushi_test_key',
+      inlineKey: true,
     })).toEqual({
       command: 'npx',
       args: ['-y', MUSHI_MCP_PIN_SPEC],
@@ -47,6 +73,18 @@ describe('buildMcpServerBlock', () => {
   })
 })
 
+describe('printKeyExportHint', () => {
+  it('prints the key and does NOT leak it in any indirect channel', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    printKeyExportHint('mushi_live_test_key')
+    const output = spy.mock.calls.flat().join('\n')
+    expect(output).toContain('mushi_live_test_key')
+    expect(output).toContain('export MUSHI_API_KEY')
+    expect(output).toContain('--inline-key')
+    spy.mockRestore()
+  })
+})
+
 describe('writeMcpServerEntry', () => {
   const dirs: string[] = []
 
@@ -54,7 +92,7 @@ describe('writeMcpServerEntry', () => {
     await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
   })
 
-  it('creates a new mcp.json when missing', async () => {
+  it('creates a new mcp.json when missing (placeholder key)', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'mushi-mcp-'))
     dirs.push(dir)
     const configPath = join(dir, 'mcp.json')
@@ -65,14 +103,17 @@ describe('writeMcpServerEntry', () => {
       serverBlock: buildMcpServerBlock({
         endpoint: 'https://api.example.test',
         projectId: 'proj-1',
-        apiKey: 'mushi_test_key',
+        apiKey: 'mushi_live_supersecret',
+        // default: no inlineKey → placeholder
       }),
     })
 
     expect(result.created).toBe(true)
-    const parsed = JSON.parse(await readFile(configPath, 'utf8')) as {
-      mcpServers: Record<string, unknown>
-    }
+    const raw = await readFile(configPath, 'utf8')
+    // Placeholder present; literal key absent
+    expect(raw).toContain('${MUSHI_API_KEY}')
+    expect(raw).not.toContain('mushi_live_supersecret')
+    const parsed = JSON.parse(raw) as { mcpServers: Record<string, unknown> }
     expect(parsed.mcpServers['mushi-demo']).toBeTruthy()
   })
 
@@ -93,6 +134,7 @@ describe('writeMcpServerEntry', () => {
         endpoint: 'https://api.example.test',
         projectId: 'proj-1',
         apiKey: 'mushi_test_key',
+        inlineKey: true,
       }),
     })
 

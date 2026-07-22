@@ -729,6 +729,32 @@ async function handler(req: Request): Promise<Response> {
   const cron = await startCronRun(db, 'synthetic-monitor', 'cron')
 
   try {
+    // Self-probe: verify the healthz edge function is reachable. This is the
+    // cheapest uptime check — a single HTTP GET that confirms the edge runtime
+    // is up and the DB round-trip succeeds. Logged as `healthz_ok` in cron
+    // metadata so external monitors (updown.io, etc.) can key off it.
+    let healthzOk = false
+    let healthzStatus: number | null = null
+    try {
+      const healthzUrl =
+        (typeof Deno !== 'undefined' ? Deno.env.get('SUPABASE_URL') : undefined) +
+        '/functions/v1/healthz'
+      const healthzRes = await fetch(healthzUrl, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${
+            typeof Deno !== 'undefined' ? Deno.env.get('SUPABASE_ANON_KEY') : ''
+          }`,
+        },
+        signal: AbortSignal.timeout(5_000),
+      })
+      healthzStatus = healthzRes.status
+      healthzOk = healthzRes.ok
+    } catch {
+      healthzOk = false
+    }
+    rlog.info('synthetic-monitor.healthz', { ok: healthzOk, status: healthzStatus })
+
     const projects = await loadProbeProjects(db)
     rlog.info('synthetic-monitor.start', { project_count: projects.length })
 

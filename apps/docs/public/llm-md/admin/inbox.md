@@ -1,0 +1,102 @@
+# Action inbox
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/inbox
+
+---
+title: Action inbox
+---
+
+# Action inbox
+
+**Route:** `/inbox`
+
+> **Scenario:** It's Monday morning. You open Mushi and want to know in one glance
+> what actually needs a human decision right now — without clicking through Reports,
+> Queue, Health, and Drift separately to piece it together.
+
+The Inbox is your to-do list across the whole loop — every action that still needs
+you, in one prioritised view. Think of it as Monday-morning standup prep, auto-generated.
+
+---
+
+## How it works
+
+The Inbox reads entirely from `GET /v1/admin/dashboard` — no extra API calls, no extra
+latency. Every card you see is a state in the pipeline that Mushi has identified as
+requiring a human decision or awareness.
+
+---
+
+## Reading an action card
+
+Each card has four parts:
+
+| Part | Example |
+|------|---------|
+| **PDCA stage chip** | `PLAN` (triage backlog), `DO` (failed fix), `OPS` (dead-letter item) |
+| **Page label** | "Reports", "Queue", "Integration health" |
+| **Action title** | "5 reports awaiting triage" |
+| **Reason** | "Oldest is 18 hours old — over your 12-hour SLA" |
+
+The **primary action button** takes you directly to the page with the relevant item
+pre-selected. You never need to search.
+
+---
+
+## Cleared stages strip
+
+Below the open cards, a row of chips shows every pipeline stage that currently has
+**nothing pending** — with a ✓ badge. This is deliberate: it's a positive signal. When
+all chips are checked and there are no open cards, your pipeline is clear.
+
+Click any cleared chip to navigate to that page and verify the state yourself.
+
+---
+
+## Filtering by PDCA phase
+
+Use the filter chips to focus on one part of the loop:
+
+| Filter | Shows |
+|--------|-------|
+| **All** | Everything open |
+| **Plan** | Triage backlog — reports needing a human decision |
+| **Do** | Failed fix runs, stuck PRs |
+| **Check** | Quality failures — judge drift, health probe errors |
+| **Act** | Promotable lessons, unattributed releases |
+| **Ops** | Dead-letter items, cron failures |
+
+---
+
+## Common tasks
+
+### Morning triage (the fast path)
+1. Open Inbox. Look at the **Open** count in the top-left tile.
+2. If it's 0 — all cleared. You're done. Dashboard is the next stop.
+3. If not, scan the cards top-to-bottom — they're ordered by severity.
+4. Click the primary action on each card to resolve it.
+5. Refresh (button top-right) — cleared cards disappear as you resolve them.
+
+### Understanding a stage chip colour
+- **Red chip** — critical severity or SLA breach — do this first.
+- **Amber chip** — warning — action today.
+- **Grey chip** — informational — awareness only.
+
+### When the Inbox seems wrong
+If you resolved an issue but the card is still showing: click **Refresh**. The Inbox
+reads from the dashboard cache (60-second TTL). The card will clear on the next poll.
+
+---
+
+The Inbox is a read-only view — it doesn't take actions itself. Every primary action
+button navigates to the page that owns the action. This keeps the audit trail clear:
+actions are logged on their source page, not here.
+
+---
+
+## Related pages
+
+- [Dashboard](/admin/dashboard) — the data source; shows the same pipeline state as charts
+- [Reports & triage](/admin/reports) — source of Plan-phase cards
+- [Processing queue](/admin/queue) — source of Ops-phase cards
+- [Integration health](/admin/health) — source of Check-phase health cards

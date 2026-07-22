@@ -1,0 +1,95 @@
+# Repo graph
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/repo
+
+---
+title: Repo graph
+---
+
+# Repo graph
+
+**Route:** `/repo`
+
+The Repo page shows the live state of every fix branch in your connected GitHub
+repository — which ones have open PRs, which are passing or failing CI, and what the
+fix-worker did on each. It's the "Do" phase view: where code changes actually land.
+
+---
+
+## Repo header
+
+The header card shows:
+- **Repository URL** — with an **Open on GitHub ↗** link
+- **Default branch**
+- **GitHub App installation status** — whether the Mushi GitHub App has the necessary
+  permissions
+- **Last indexed** time
+
+Count chips in the header summarise the branch states across the project:
+**Total** / **PR open** / **CI passing** / **CI failing** / **Merged** / **Stuck**
+
+---
+
+## Branch list
+
+Branches are shown as cards. Use the **segmented filter** to narrow by state:
+
+| Filter | Shows |
+|--------|-------|
+| **All** | Every fix branch |
+| **PR open** | Branches with an open pull request |
+| **CI passing** | PRs with all CI checks green |
+| **CI failing** | PRs with at least one failing CI check |
+| **Failed** | Branches where the fix-worker failed |
+
+Each branch card shows:
+
+| Field | Description |
+|-------|-------------|
+| **CI badge** | Passing / failing / pending |
+| **Branch name** | `mushi/fix-` format |
+| **PR link** | External link to the GitHub pull request |
+| **Report summary** | Title and severity of the original report |
+| **Files changed / Lines changed** | Diff size |
+| **Category** | Bug category from the classifier |
+| **FixGitGraph** | Mini timeline of fix-worker commits on this branch |
+
+---
+
+## Repo activity log
+
+The right panel shows a chronological log of all fix-worker events across the project:
+
+| Event type | Description |
+|------------|-------------|
+| `dispatched` | Fix-worker run started for a report |
+| `branch` | Branch created |
+| `commit` | Commit pushed to the fix branch |
+| `pr_opened` | Pull request opened |
+| `ci_resolved` | CI checks completed |
+| `completed` | Fix-worker run succeeded |
+| `failed` | Fix-worker run failed |
+
+---
+
+## Managing the GitHub connection
+
+The **Manage** link in the header navigates to `/integrations/config` where you can
+update the GitHub token, repository URL, and default branch.
+
+---
+
+## API
+
+```bash
+GET /v1/admin/repo/overview?project_id=
+GET /v1/admin/repo/activity?project_id=&limit=100
+```
+
+---
+
+## Related pages
+
+- [Fix drafts](/admin/fixes) — full fix-worker run detail and streamed logs
+- [Integrations](/admin/integrations) — configure the GitHub App connection
+- [Reports](/admin/reports) — the source of dispatched fixes

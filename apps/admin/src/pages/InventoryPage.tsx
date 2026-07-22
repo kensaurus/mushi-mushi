@@ -564,7 +564,7 @@ export function InventoryPage() {
               )
             })}
           </div>
-          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+          {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
           <div className="space-y-2 max-h-[28rem] overflow-auto">
             {findings.slice(0, 80).map((f) => (
               <GateFindingCard
@@ -617,7 +617,7 @@ export function InventoryPage() {
                 Ingest selected file
               </Btn>
             </div>
-            // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+            {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
             <pre className="mushi-code-block mushi-code-body text-2xs p-3 rounded-md overflow-auto max-h-[32rem] font-mono">
               {yamlDraft ?? snapshot?.raw_yaml ?? '—'}
             </pre>

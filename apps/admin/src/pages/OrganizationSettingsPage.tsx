@@ -866,7 +866,7 @@ export function OrganizationSettingsPage() {
           headline="Teams require Pro"
           taglineOverride="Invite teammates, set their role per project, and share every project in this org."
         >
-          // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+          {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
           <div className="grid gap-3 md:grid-cols-[1fr_12rem_auto]">
             <Input
               label="Email"

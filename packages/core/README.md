@@ -88,6 +88,17 @@ the nested option objects.
 | 3        | Environment variables               | `NEXT_PUBLIC_MUSHI_*` / `VITE_MUSHI_*`    |
 | 4        | SDK defaults                        | built-in fallbacks                        |
 
+### Sampling & `beforeSend`
+
+Top-level `MushiConfig` fields (consumed by `@mushi-mushi/web` and framework wrappers):
+
+| Field | Default | Behavior |
+|-------|---------|----------|
+| `sampleRate` | `1` | Probabilistic gate for **automatic** error reports (`0`–`1`). User-initiated feedback always sends. |
+| `replaySampleRate` | `1` | Probabilistic gate for session replay; decided once at session init. Independent of `sampleRate`. |
+| `beforeSend` | — | `(report) => report \| null \| Promise<…>` after built-in PII scrub. Return `null` to drop. |
+| `beforeSendFeedback` | — | Deprecated feedback-only hook; ignored when `beforeSend` is set. |
+
 ### Validation
 
 `validateConfig(config)` runs at init and **fails loud but never throws**: it
@@ -127,4 +138,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 54 edge functions · 324 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 55 edge functions · 327 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

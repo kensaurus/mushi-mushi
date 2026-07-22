@@ -60,6 +60,7 @@ Primary work UI
 - ESLint `mushi-mushi/no-raw-semantic-on-muted` — error on WCAG-failing chip pairings
 - ESLint `mushi-mushi/no-redundant-border-on-chip-tone` — warn when appending `border` onto CHIP_TONE recipes
 - ESLint `mushi-mushi/no-text-3xs-on-interactive` — error (12px floor on buttons/links)
+- ESLint `mushi-mushi/no-allowlist-jsx-textnode` — error (`// mushi-mushi-allowlist` as JSX child text; use `{/* … */}` or attribute-line `//`)
 - `node scripts/audit-chip-contrast.mjs --strict` — CI gate for muted **and** opacity chip contrast drift
 - `node scripts/check-design-tokens.mjs` — unknown roots, hex, raw `var(--mushi-*)` in operator TSX, theme pairs
 - `node scripts/audit-admin-hint-duplication.mjs` — PageHeaderBar hint dedupe audit

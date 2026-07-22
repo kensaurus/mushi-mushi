@@ -1,0 +1,29 @@
+# Slack app
+
+Source: https://kensaur.us/mushi-mushi/docs/plugins/slack
+
+---
+title: Slack app
+---
+
+# Slack app plugin
+
+Posts classified reports and fix updates to your team channel. Supports Block Kit messages and the `/mushi` slash command for inline triage.
+
+## Setup
+
+1. Create a Slack app with bot scopes for your workspace.
+2. In Mushi: **Marketplace → Slack → Install** and paste the bot token + signing secret.
+3. Pick the channel for report notifications and optional thread replies on QA failures.
+
+## Package
+
+[`@mushi-mushi/plugin-slack-app`](https://www.npmjs.com/package/@mushi-mushi/plugin-slack-app)
+
+## Events
+
+| Event | Action |
+| --- | --- |
+| `report.created` / `report.classified` | Post Block Kit summary to channel |
+| `fix.pr_opened` | Thread with PR link |
+| `qa_story.failed` / `qa_story.recovered` | Transition-aware threaded updates |

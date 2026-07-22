@@ -284,6 +284,25 @@ CRITICAL SECURITY RULES (immutable):
     })
   })
 
+  describe('idle-timeout handoff (MUSHI-MUSHI-SERVER-1R)', () => {
+    let src: string
+    beforeAll(async () => {
+      const { readFile } = await import('node:fs/promises')
+      const { fileURLToPath } = await import('node:url')
+      src = await readFile(
+        fileURLToPath(new URL('../../supabase/functions/classify-report/index.ts', import.meta.url)),
+        'utf8',
+      )
+    })
+
+    it('acks with 202 stage2_accepted and runs heavy work via EdgeRuntime.waitUntil', () => {
+      expect(src).toContain("stage: 'stage2_accepted'")
+      expect(src).toContain('EdgeRuntime')
+      expect(src).toContain('waitUntil')
+      expect(src).toContain('runStage2Heavy')
+    })
+  })
+
   describe('code-context grounding (degrade loudly)', () => {
     let src: string
     beforeAll(async () => {

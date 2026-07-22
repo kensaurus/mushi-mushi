@@ -42,6 +42,11 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   // Main HTTP API — uses `adminOrApiKey` / `apiKeyAuth` / `jwtAuth` per
   // route, which is the correct auth surface for user-facing endpoints.
   api: 'Per-route JWT / API-key auth via _shared/auth middlewares',
+  // Health check — verify_jwt=false by design so external monitors, load
+  // balancers, and synthetic checks can reach it without credentials. Exposes
+  // no user data (only {status, db, version}); DB probe is a no-table
+  // get_db_epoch_ms RPC. Gating it would defeat its purpose.
+  healthz: 'Public health endpoint — verify_jwt=false, exposes no user data',
   // Webhook receivers — verify provider HMAC/signature in-handler.
   'stripe-webhooks': 'Stripe signature verified in handler',
   'webhooks-github-indexer': 'GitHub HMAC verified in handler',

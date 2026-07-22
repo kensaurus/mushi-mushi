@@ -416,7 +416,13 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     }
 
     const replayMode = activeConfig.capture?.replay ?? 'off';
-    if (replayMode === 'rrweb' || replayMode === 'lite') {
+    // Session-level replay sampling: make the decision once per session init,
+    // not per-report, so the replay buffer is either fully on or fully off
+    // for this user. This also avoids loading the rrweb chunk for sampled-out
+    // sessions, which reduces bundle cost for those users.
+    const replaySampleRate = activeConfig.replaySampleRate ?? 1;
+    const replaySampled = replaySampleRate >= 1 || Math.random() < replaySampleRate;
+    if ((replayMode === 'rrweb' || replayMode === 'lite') && replaySampled) {
       const generation = ++replayGeneration;
       void createReplayCapture({
         enabled: true,
@@ -1092,6 +1098,17 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       }
     }
 
+    // Probabilistic sampling gate — applies only to automatically-triggered
+    // (proactive) reports, never to user-initiated feedback. This mirrors
+    // Sentry's `tracesSampleRate` pattern: user-clicked reports always send.
+    const isAutomatic = pendingProactiveTrigger !== null;
+    if (isAutomatic && config.sampleRate !== undefined && config.sampleRate < 1) {
+      if (config.sampleRate <= 0 || Math.random() > config.sampleRate) {
+        log.debug('Report dropped by sampleRate', { sampleRate: config.sampleRate, trigger: pendingProactiveTrigger });
+        return undefined;
+      }
+    }
+
     if (!rateLimiter.tryConsume()) {
       log.warn('Report throttled — rate limit exceeded');
       return undefined;
@@ -1201,16 +1218,18 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       config.integrations.custom(builder);
     }
 
-    // Sentry-spec-1.0 `beforeSendFeedback` hook (introduced in v1.4):
-    // last chance for the host app to mutate or drop the report.
-    // Errors and timeouts ship the *unmodified* report so a buggy hook
-    // never silently swallows user feedback. Returning `null` drops
-    // the report — emits no `report:sent` and no `report:failed`.
+    // `beforeSend` / `beforeSendFeedback` hook — last chance for the host app
+    // to mutate or drop the report. `beforeSend` covers all report types;
+    // `beforeSendFeedback` is kept for backwards compatibility and runs only
+    // when `beforeSend` is NOT set. Errors and timeouts ship the *unmodified*
+    // report so a buggy hook never silently swallows user feedback.
+    // Returning `null` drops the report — emits no `report:sent`/`failed`.
     let finalReport: MushiReport = report;
-    if (config.beforeSendFeedback) {
+    const sendHook = config.beforeSend ?? config.beforeSendFeedback;
+    if (sendHook) {
       try {
         const hookResult = await Promise.race([
-          Promise.resolve(config.beforeSendFeedback(report)),
+          Promise.resolve(sendHook(report)),
           // 2s timeout — async hooks must not block the user's "submit"
           // for longer than the network would. Falls back to original.
           new Promise<MushiReport>((resolve) =>
@@ -1218,12 +1237,12 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
           ),
         ]);
         if (hookResult === null) {
-          log.info('Report dropped by beforeSendFeedback hook', { reportId: report.id });
+          log.info('Report dropped by beforeSend hook', { reportId: report.id });
           return;
         }
         finalReport = hookResult;
       } catch (err) {
-        log.warn('beforeSendFeedback hook threw — sending unmodified report', {
+        log.warn('beforeSend hook threw — sending unmodified report', {
           error: err instanceof Error ? err.message : String(err),
         });
       }

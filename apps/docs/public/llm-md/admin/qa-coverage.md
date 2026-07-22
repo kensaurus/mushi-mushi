@@ -1,0 +1,113 @@
+# QA Coverage
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/qa-coverage
+
+---
+title: QA Coverage
+---
+
+# QA Coverage
+
+**Route:** `/qa-coverage`
+
+> **Scenario:** You shipped a login flow last week and want to know automatically
+> if it still works — without writing a full Playwright suite from scratch.
+
+QA Coverage lets you describe user flows in plain English or paste Playwright scripts,
+run them on a schedule, and get screenshots plus failure evidence when something breaks.
+
+---
+
+## Story lifecycle
+
+```
+Create story (NL prompt or Playwright script)
+  → stored in qa_stories (schedule_cron: '0 * * * *' default)
+  → pg_cron fires qa-story-runner every minute
+  → BYOK key resolution (firecrawl / browserbase / openai)
+  → execute via provider
+  → write qa_story_runs (status, latency_ms, provider_session_url, assertion_failures)
+  → write qa_story_evidence (screenshots, console logs, HAR)
+  → on fail/recover → Slack Block Kit (transition-aware) + Discord webhook + dispatchPluginEvent
+```
+
+---
+
+## Execution providers
+
+| Provider | Description | When to use |
+|----------|-------------|-------------|
+| **Firecrawl** | Cloud-hosted — no setup required | Default. Good for content checks and basic navigation |
+| **Browserbase** | Full Chromium in the cloud | Complex UI interactions, video recording, HAR export |
+| **Local** | Playwright on your machine via CLI | Full Playwright access; not schedulable via edge function |
+
+To use Browserbase or Firecrawl, add your BYOK key in **Settings → API keys** first,
+then select the provider when creating a story.
+
+---
+
+## Creating a story
+
+1. Click **+ New story** (header or empty state).
+2. In the creation modal, fill in:
+   - **Name** — short label for the story card
+   - **Prompt** — your user-story in plain English (e.g. "Open the Reports page, click the first report, verify the classification badge is visible")
+   - **Provider** — Firecrawl / Browserbase / Local
+3. Click **Create**.
+
+Schedule and script editing are available in the story drawer after creation.
+
+The **Generate from report** flow (available in the Reports page) automatically creates a
+story and opens a draft GitHub PR with a full Playwright test. The story is pre-configured
+with `local` provider and a weekly cron.
+
+---
+
+## Story cards
+
+The main grid shows one card per story with:
+- **Provider badge** — Local / Browserbase / Firecrawl
+- **24h pass rate** — colour-coded bar and percentage
+- **Run count** and **last run** time
+- **Disabled / Queued** chip when applicable
+- Link to last failure Browserbase replay session
+
+## Story drawer
+
+Click any card to open the story drawer:
+
+- **Story prompt** and **provider** at the top
+- **Script** section (collapsible) — the raw Playwright script if one was generated
+- **Run history** — newest runs first. Expand any run to see:
+  - Meta (status, provider, latency)
+  - **Summary** and error message
+  - **Assertion failures** table — each failing assertion listed
+  - **Evidence** — screenshots, video thumbnail, HAR download
+  - **Browserbase replay** link (if Browserbase was used)
+- A live indicator and 3-second auto-poll when a run is active
+
+---
+
+## Manual run
+
+Click **Run now** on any story to trigger an immediate execution regardless of its
+schedule. The story must be **enabled** to trigger manually (use the toggle on the row).
+
+---
+
+## Coverage report
+
+The **Coverage** tab shows a 24-hour summary (powered by the `qa_story_coverage_24h`
+materialised view, refreshed every 15 minutes):
+- Total stories
+- Pass rate
+- Coverage by page / flow
+- Stories that haven't run in 7 days
+
+---
+
+## Related pages
+
+- [Integration health](/admin/health) — verify Firecrawl / Browserbase keys
+- [Iterate (PDCA)](/admin/iterate) — full autonomous iteration loop
+- [Fix orchestrator](/admin/fixes) — act on test failures

@@ -2,17 +2,17 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-07-18 · **515** routes.
+> Generated: 2026-07-20 · **518** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
 | `adminOrApiKey` | 85 |
-| `apiKeyAuth` | 44 |
+| `apiKeyAuth` | 46 |
 | `jwtAuth` | 324 |
 | `jwtOrApiKey` | 3 |
-| `unknown` | 59 |
+| `unknown` | 60 |
 
 ## Routes by path
 
@@ -425,6 +425,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/cli/projects` | `unknown` | `packages/server/supabase/functions/api/routes/cli-auth.ts` |
 | POST | `/v1/cli/projects` | `unknown` | `packages/server/supabase/functions/api/routes/cli-auth.ts` |
 | POST | `/v1/cli/projects/:id/keys` | `unknown` | `packages/server/supabase/functions/api/routes/cli-auth.ts` |
+| DELETE | `/v1/cli/projects/:id/keys/:keyPrefix/revoke` | `unknown` | `packages/server/supabase/functions/api/routes/cli-auth.ts` |
 | POST | `/v1/content-quality` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/content-quality.ts` |
 | POST | `/v1/content-quality/callback` | `unknown` | `packages/server/supabase/functions/api/routes/content-quality.ts` |
 | POST | `/v1/ingest/metrics` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
@@ -489,6 +490,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/sdk/me/points` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/rewards.ts` |
 | GET | `/v1/sdk/me/tier` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/rewards.ts` |
 | POST | `/v1/sdk/session` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/sessions.ts` |
+| GET | `/v1/sourcemaps` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
+| POST | `/v1/sourcemaps` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
 | GET | `/v1/super-admin/metrics` | `jwtAuth` | `packages/server/supabase/functions/api/routes/modernization-health-super.ts` |
 | PATCH | `/v1/super-admin/support/tickets/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
 | GET | `/v1/super-admin/users` | `jwtAuth` | `packages/server/supabase/functions/api/routes/modernization-health-super.ts` |

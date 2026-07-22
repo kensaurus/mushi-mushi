@@ -599,9 +599,9 @@ function FindingsTab({
               <tr key={f.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-opacity">
                 <td className="px-3 py-2">{severityBadge(f.severity)}</td>
                 <td className="px-3 py-2 text-xs font-mono text-fg-muted">{f.surface}</td>
-                // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+                {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
                 <td className="px-3 py-2 max-w-[180px] truncate font-mono text-xs">{f.path ?? '—'}</td>
-                // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+                {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
                 <td className="px-3 py-2 max-w-[280px] truncate text-xs">{f.message}</td>
                 <td className="px-3 py-2 text-xs text-fg-muted"><RelativeTime value={f.created_at} /></td>
                 <td className="px-3 py-2">

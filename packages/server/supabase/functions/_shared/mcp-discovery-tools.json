@@ -357,5 +357,9 @@
   "trigger_judge": {
     "description": "Queue the Sonnet-as-Judge to grade recent fix quality across accessible projects. Returns { dispatched: number } — one judge-batch job per project; scores land asynchronously in judge_results (read back with run_nl_query). Write; consumes LLM budget. Idempotent within a short window. Use before shipping to vet fix quality; use get_fix_timeline to inspect a single attempt instead.",
     "scope": "mcp:write"
+  },
+  "use_mushi": {
+    "description": "CALL THIS FIRST if you are new to this Mushi project or unsure which tool to use. Pass your intent as a short natural-language phrase (\"fix the top bug\", \"check what I should work on\", \"run QA tests\", \"set up Mushi\", …). Returns: (1) a curated list of the 5–12 tool names most relevant to that intent, (2) a one-paragraph orientation to the Mushi project and dashboard state, and (3) the single recommended first tool to call. Avoids loading the full 68-tool catalog into context when only a small subset is needed. Read-only; does not call any downstream tools itself.",
+    "scope": "mcp:read"
   }
 }

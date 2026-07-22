@@ -125,10 +125,12 @@ export async function runConnect(
       endpoint,
       projectId,
       apiKey: opts.apiKey,
+      inlineKey: false, // use ${MUSHI_API_KEY} placeholder; caller must export the key
     })
     await writeMcpServerEntry({ configPath: mcpPath, serverName, serverBlock })
     await ensureMcpJsonGitignored(cwd, messages)
     messages.push(`✓ Wired ${mcpPath} — restart Cursor and run "list mushi tools"`)
+    messages.push(`  Set MUSHI_API_KEY="${opts.apiKey}" in your shell / .env.local before restarting the IDE.`)
   }
 
   let heartbeat: ConnectResult['heartbeat'] = null

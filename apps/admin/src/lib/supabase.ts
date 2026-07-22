@@ -481,10 +481,22 @@ async function doFetch<T>(
         contexts: { http: { method, url: path, duration_ms: ms, request_id: requestId } },
       })
     }
+    // Prefer a host-tagged message so UI can show "Failed to fetch (host)"
+    // without leaking full URLs/query strings into Sentry free-text fields.
+    let hostHint = ''
+    try {
+      if (url.startsWith('http')) hostHint = ` (${new URL(url).host})`
+      else if (typeof window !== 'undefined') hostHint = ` (${window.location.host} → API proxy)`
+    } catch { /* ignore */ }
+    const baseMsg = err instanceof Error ? err.message : String(err)
     return {
       ok: false,
       requestId,
-      error: { code: 'NETWORK_ERROR', message: String(err), requestId },
+      error: {
+        code: 'NETWORK_ERROR',
+        message: `${baseMsg}${hostHint}`,
+        requestId,
+      },
     }
   }
 }

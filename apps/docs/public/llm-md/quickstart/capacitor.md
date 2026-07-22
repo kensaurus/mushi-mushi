@@ -1,0 +1,55 @@
+# Capacitor quickstart
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/capacitor
+
+---
+title: Capacitor quickstart
+---
+
+# Capacitor quickstart
+
+Ship the same bug-report widget on iOS, Android, and web from one Capacitor shell.
+
+  {QUICKSTART_ONE_KEY_CALLOUT}
+
+The Capacitor plugin delegates to the native iOS / Android SDKs at runtime
+and falls back to `@mushi-mushi/core` on the web.
+
+## 1. Install
+
+```bash
+pnpm add @mushi-mushi/capacitor
+npx cap sync
+```
+
+## 2. Configure
+
+```ts filename="src/mushi.ts"
+
+await Mushi.configure({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey:    'YOUR_PUBLIC_API_KEY',
+  triggerMode: 'shake',          // 'shake' | 'button' | 'both' | 'none'
+  captureScreenshot: true,
+})
+```
+
+## 3. Submit a report
+
+```ts
+await Mushi.report({
+  description: 'Date picker is in UTC, not local',
+  category:    'bug',
+})
+```
+
+  **Coming from Cordova?** Migrate in place to Capacitor first — the
+  [Cordova → Capacitor migration guide](/migrations/cordova-to-capacitor)
+  walks through the plugin map and the Mushi widget swap.
+
+  Considering React Native? See the
+  [Capacitor → React Native migration guide](/migrations/capacitor-to-react-native)
+  for the full porting plan, plugin map, and CI/CD recipe.
+
+See [`@mushi-mushi/capacitor`](/sdks/capacitor) for the full API surface
+(listeners, `setUser`, `setMetadata`, `triggerInset`, `useNativeWidget`).

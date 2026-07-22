@@ -363,7 +363,14 @@ const ADMIN_ALLOWED_HEADERS = [
   'Authorization',
   'X-Mushi-Project-Id',
   'X-Mushi-Org-Id',
+  // Legacy alias stamped alongside X-Mushi-Org-Id by apps/admin apiFetch
+  // (supabase.ts). Browsers list every requested header in the preflight;
+  // omitting this alias fails the whole OPTIONS with
+  // "Request header field x-org-id is not allowed" — which surfaces as
+  // TypeError: Failed to fetch on CLI device approve + every admin page.
+  'x-org-id',
   'X-Request-Id',
+  'Idempotency-Key',
 ];
 
 /** Browser-visible response headers for admin apiFetch correlation. */

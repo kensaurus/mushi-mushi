@@ -1068,9 +1068,9 @@ function RunDetail({
         </div>
       </div>
 
-      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+      {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
       {/* React Flow pipeline canvas */}
-      // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+      {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
       <div className="min-h-[220px]" style={{ height: embedded ? 220 : 240 }}>
         <ReactFlow
           nodes={nodes}
