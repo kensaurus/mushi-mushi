@@ -31,10 +31,10 @@
     "@size-limit/file": "^12.1.0",
     "eslint": "^10.6.0",
     "size-limit": "^12.1.0",
-    "svelte": "^5.56.4",
+    "svelte": "^5.56.5",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   },
   "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
   "repository": {
