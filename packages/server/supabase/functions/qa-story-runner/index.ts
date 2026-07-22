@@ -41,6 +41,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
+import { isTransientDbConnectionError } from '../_shared/error-codes.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { parseBody, QaStoryRunnerBodySchema, type QaStoryRunnerBody } from '../_shared/validate.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
@@ -707,8 +708,34 @@ Deno.serve(
         .eq('enabled', true)
 
       if (storiesErr) {
-        rlog.error('Failed to fetch qa_stories', { err: storiesErr })
-        await cronRun.fail(new Error(storiesErr.message))
+        // Truncate the message before logging and persisting — a transient Supabase
+        // 522/pooler failure carries a ~20KB Cloudflare HTML page in `.message`.
+        // Storing or logging that raw would pollute cron_runs, Supabase Logs, and
+        // (incorrectly) Sentry with unreadable noise.
+        const errMsg = (storiesErr.message ?? String(storiesErr)).slice(0, 500)
+
+        if (isTransientDbConnectionError(storiesErr)) {
+          // Transient infra failure (pooler reset, Cloudflare 522) — do NOT send
+          // to Sentry. Route to Supabase Logs only, queryable via:
+          //   metadata.parsed.event = "qa_transient_fetch_error"
+          console.warn(
+            JSON.stringify({
+              ts: new Date().toISOString(),
+              level: 'warn',
+              scope: 'mushi:qa-story-runner',
+              event: 'qa_transient_fetch_error',
+              msg: 'transient DB/network error fetching qa_stories — not an app bug',
+              db_code: storiesErr.code ?? 'unknown',
+              err_message: errMsg,
+            }),
+          )
+        } else {
+          rlog.error('Failed to fetch qa_stories', {
+            err: { ...storiesErr, message: errMsg },
+          })
+        }
+
+        await cronRun.fail(new Error(errMsg))
         return new Response('Internal error', { status: 500 })
       }
 
