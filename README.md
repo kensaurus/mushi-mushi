@@ -287,6 +287,7 @@ Other free apps and tools from the same Tokyo studio:
 | **[glot.it — Learn Thai Free](https://kensaur.us/glot-it/)** | 161 lessons, pitch-contour tone mirror, AI roleplay chat, offline-first. | [App Store](https://apps.apple.com/us/app/glot-it/id6761582648) · [Google Play](https://play.google.com/store/apps/details?id=com.glotit.app) |
 | **[yen-yen — Expense Tracker](https://kensaur.us/yen-yen/)** | Kakeibo-style household ledger. No bank password, no ads, no auto-writes. | [App Store](https://apps.apple.com/app/id6764548441) · [Google Play](https://play.google.com/store/apps/details?id=app.yenyen) |
 | **[The Wanting Mind — Free Book](https://kensaur.us/the-wanting-mind/)** | 147,000-word interactive book — 3D knowledge graph, 12 narrators, 22 simulations. | [App Store](https://apps.apple.com/us/app/the-wanting-mind/id6761361305) · [Google Play](https://play.google.com/store/apps/details?id=us.kensaur.thewantingmind) |
+| **[How to Talk to Girls](https://talk.kensaur.us/)** | Practice tense conversations — write a scored reply, role-play a hard chat with an AI persona, or read short field notes. BYOK; your key stays in the browser. | [Live demo](https://talk.kensaur.us/) |
 | **[cursor-kenji](https://github.com/kensaurus/cursor-kenji)** | 58 Cursor AI agent skills for React / Next.js / Supabase development. | `npx skills add kensaurus/cursor-kenji` |
 
 ---

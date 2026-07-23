@@ -56,6 +56,17 @@ minimumReleaseAgeExclude:
   # CI gate green. undici is maintained by the Node.js core team (low
   # supply-chain risk) and provenance/audit-signatures run as compensating controls.
   - "undici"
+  # next 16.2.11 fixes GHSA-6gpp-xcg3-4w24 (App Router middleware/proxy
+  # bypass), GHSA-m99w-x7hq-7vfj (App Router DoS), and GHSA-89xv-2m56-2m9x +
+  # GHSA-p9j2-gv94-2wf4 (SSRF via Server Actions / rewrites) — 4 HIGH CVEs
+  # in every next >=16.0.0 <16.2.11. Used only by the apps/docs + apps/testers
+  # marketing surfaces. Published 2026-07; exempt from the 7-day cooldown
+  # because the advisories affect every prior 16.x and CI runs dependency-review
+  # + npm audit --audit-level=high as compensating controls. The @next/swc-*
+  # native binaries are published in lockstep with next by the same team, so
+  # they share the exemption (otherwise the cooldown blocks the patched build).
+  - "next"
+  - "@next/*"
 
 # strictDepBuilds: fail-fast on any dep that tries to run a postinstall
 # hook the workspace hasn't pre-approved (via .npmrc → onlyBuiltDependencies
