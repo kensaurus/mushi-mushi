@@ -353,6 +353,81 @@ importers:
         specifier: ^8.1.0
         version: 8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
 
+  examples/realworld:
+    devDependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@4.4.3)
+      '@playwright/test':
+        specifier: ^1.61.1
+        version: 1.61.1
+      '@types/node':
+        specifier: ^22.20.0
+        version: 22.20.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  examples/realworld/backend-express:
+    dependencies:
+      '@mushi-mushi/node':
+        specifier: workspace:*
+        version: link:../../../packages/node
+      express:
+        specifier: ^5.1.0
+        version: 5.2.1
+    devDependencies:
+      '@types/express':
+        specifier: ^5.0.3
+        version: 5.0.6
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  examples/realworld/frontend-hash:
+    dependencies:
+      '@mushi-mushi/web':
+        specifier: workspace:*
+        version: link:../../../packages/web
+    devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vite:
+        specifier: ^8.1.0
+        version: 8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
+
+  examples/realworld/frontend-react-vite:
+    dependencies:
+      '@mushi-mushi/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      '@mushi-mushi/web':
+        specifier: workspace:*
+        version: link:../../../packages/web
+      react:
+        specifier: ^19.2.7
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.2.7
+        version: 19.2.7(react@19.2.7)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.17
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.17)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.3
+        version: 6.0.3(babel-plugin-react-compiler@1.0.0)(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vite:
+        specifier: ^8.1.0
+        version: 8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)
+
   packages/adapters:
     dependencies:
       '@mushi-mushi/core':

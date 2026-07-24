@@ -3,6 +3,7 @@ packages:
   - "apps/*"
   - "tooling/*"
   - "examples/*"
+  - "examples/realworld/*"
 
 # ---------------------------------------------------------------------------
 # Supply-chain hardening (pnpm)

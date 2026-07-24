@@ -138,7 +138,8 @@
     "check:drift": "pnpm check:catalog-sync && pnpm check:mcp-tools-doc && pnpm check:internal-doc-links && pnpm check:onboarding-drift && pnpm check:env-docs && pnpm check:docs-drift && pnpm check:docs-stats && pnpm check:route-manifest && pnpm check:edge-fn-deploy-docs && pnpm check:admin-docs-coverage && pnpm check:humanize-parity && pnpm check:error-codes",
     "check:mcp-tools-doc": "node scripts/gen-mcp-tools-doc.mjs --check",
     "check:page-scaffold": "node scripts/audit-page-scaffold.mjs",
-    "check:page-scaffold:cluster": "node scripts/audit-page-scaffold.mjs --cluster"
+    "check:page-scaffold:cluster": "node scripts/audit-page-scaffold.mjs --cluster",
+    "e2e:realworld": "pnpm --filter mushi-realworld e2e:gate"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
