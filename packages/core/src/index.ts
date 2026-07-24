@@ -106,7 +106,7 @@ export {
   type SessionTrackerOptions,
 } from './session-tracker';
 export { createRateLimiter, type RateLimiter, type RateLimiterConfig } from './rate-limiter';
-export { createPiiScrubber, scrubPii, type PiiScrubberConfig } from './pii-scrubber';
+export { createPiiScrubber, scrubPii, scrubUrl, type PiiScrubberConfig } from './pii-scrubber';
 export {
   createBreadcrumbBuffer,
   type BreadcrumbBuffer,

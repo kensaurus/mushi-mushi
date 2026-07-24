@@ -1,4 +1,5 @@
 import type { MushiNetworkEntry, MushiUrlMatcher, MushiTracePropagationConfig } from '@mushi-mushi/core';
+import { scrubUrl } from '@mushi-mushi/core';
 import { getInternalRequestKind, getRequestUrl, shouldIgnoreMushiUrl } from '../internal-requests';
 
 const MAX_ENTRIES = 30;
@@ -67,11 +68,19 @@ export interface NetworkCaptureOptions {
  * request's lifetime (e.g. inside a catch block that immediately calls console.error)
  * can read the current active ID via `getActiveCorrelationId()`.
  *
- * This is intentionally best-effort: it works perfectly for the common pattern
- *   try { await fetch(...) } catch (e) { console.error(e) }
- * but does NOT track log lines emitted in other async microtasks that happen to
- * be scheduled while a request is in-flight.  The ID is exposed as a module-level
- * export so the console capturer and breadcrumb module can read it.
+ * This is intentionally best-effort.  The correlationId is stamped on the
+ * network entry itself (always reliable) — prefer correlating via that field.
+ * `getActiveCorrelationId()` is also available synchronously, but coverage is
+ * limited:
+ *   - ✗ Does NOT work in the caller's own catch block.  JavaScript runs the
+ *     wrapper's `finally` (which pops the ID) before the outer `catch` block
+ *     executes, so `getActiveCorrelationId()` returns `undefined` there.
+ *   - ✗ Does NOT track log lines emitted in other async microtasks scheduled
+ *     while a request is in-flight.
+ *   - ✓ Works for synchronous console calls made within the mushi wrapper's
+ *     own catch/finally (the network entry is already stamped at that point).
+ * The ID is exposed as a module-level export so the console capturer and
+ * breadcrumb module can read it for cases where it IS available.
  */
 const _activeCorrelationStack: string[] = [];
 
@@ -201,6 +210,11 @@ export function createNetworkCapture(options: NetworkCaptureOptions = {}): Netwo
     traceId?: string;
     correlationId?: string;
     shouldRecord: boolean;
+    /** readystatechange handler registered during send(); stored here so that
+     *  open() can removeEventListener on XHR reuse, preventing duplicate /
+     *  garbled entries (both the stale and the new listener would otherwise
+     *  fire on the second request's completion). */
+    _listener?: () => void;
   };
   const xhrStateMap = typeof WeakMap !== 'undefined' ? new WeakMap<XMLHttpRequest, XhrState>() : null;
 
@@ -215,6 +229,11 @@ export function createNetworkCapture(options: NetworkCaptureOptions = {}): Netwo
     ): void {
       const [method, url] = args;
       const urlStr = typeof url === 'string' ? url : String(url);
+      // Note: we omit the `getInternalRequestKind` header check used by the
+      // fetch path.  XHR headers are set via setRequestHeader() (called after
+      // open(), usually before send()), so they are not available here in
+      // open().  URL-based filtering via shouldIgnoreMushiUrl covers all
+      // Mushi-internal traffic; the SDK's own ingest calls always use fetch.
       const shouldRecord = !shouldIgnoreMushiUrl(urlStr, activeOptions);
       const correlationId = shouldRecord ? generateCorrelationId() : undefined;
 
@@ -227,6 +246,16 @@ export function createNetworkCapture(options: NetworkCaptureOptions = {}): Netwo
         const generated = generateTraceparent();
         traceId = generated.traceId;
         storedTraceparent = generated.traceparent;
+      }
+
+      // On XHR reuse (open → send → open → send), remove the stale
+      // readystatechange listener from the previous send() before overwriting
+      // state.  Without this, both the old and the new listener fire on the
+      // second request's completion, producing a garbled duplicate entry
+      // (old url/method with the new response's status code).
+      const _prevXhrState = xhrStateMap.get(this);
+      if (_prevXhrState?._listener) {
+        this.removeEventListener('readystatechange', _prevXhrState._listener);
       }
 
       xhrStateMap.set(this, {
@@ -261,36 +290,49 @@ export function createNetworkCapture(options: NetworkCaptureOptions = {}): Netwo
         // Push correlation ID so synchronous readystatechange handlers can read it.
         if (state.correlationId) _activeCorrelationStack.push(state.correlationId);
 
-        this.addEventListener('readystatechange', () => {
+        // Store the handler on state so that open() can removeEventListener on
+        // XHR reuse (see the cleanup block in the open() override above).
+        const _readystateHandler = () => {
           if (this.readyState !== 4) return; // DONE
 
-          const duration = Date.now() - state.startTime;
-          const entry: MushiNetworkEntry = {
-            method: state.method,
-            url: state.url,
-            status: this.status,
-            duration,
-            timestamp: state.startTime,
-            captureMethod: 'xhr',
-            ...(state.traceId ? { traceId: state.traceId } : {}),
-            ...(state.correlationId ? { correlationId: state.correlationId } : {}),
-          };
-          if (this.status === 0) {
-            entry.error = 'XHR network error or aborted';
+          // Mirror fetch: skip SDK-internal / ignoreUrls traffic so it does not
+          // pollute the MAX_ENTRIES ring buffer.
+          if (state.shouldRecord) {
+            const duration = Date.now() - state.startTime;
+            const entry: MushiNetworkEntry = {
+              method: state.method,
+              url: state.url,
+              status: this.status,
+              duration,
+              timestamp: state.startTime,
+              captureMethod: 'xhr',
+              ...(state.traceId ? { traceId: state.traceId } : {}),
+              ...(state.correlationId ? { correlationId: state.correlationId } : {}),
+            };
+            if (this.status === 0) {
+              entry.error = 'XHR network error or aborted';
+            }
+            addEntry(entry);
           }
-          addEntry(entry);
 
           // Pop correlationId after the final state change.
           if (state.correlationId) {
             const idx = _activeCorrelationStack.lastIndexOf(state.correlationId);
             if (idx !== -1) _activeCorrelationStack.splice(idx, 1);
           }
-        });
+        };
+        state._listener = _readystateHandler;
+        this.addEventListener('readystatechange', _readystateHandler);
       }
 
       originalXhrSend!.call(this, body);
     };
   }
+
+  // Capture the wrappers we installed so destroy() can refuse to restore when
+  // another tool (Sentry, Datadog, …) has wrapped XHR on top of us.
+  const xhrOpenWrapper = OriginalXHR ? XMLHttpRequest.prototype.open : null;
+  const xhrSendWrapper = OriginalXHR ? XMLHttpRequest.prototype.send : null;
 
   function addEntry(entry: MushiNetworkEntry): void {
     entries.push(entry);
@@ -316,24 +358,32 @@ export function createNetworkCapture(options: NetworkCaptureOptions = {}): Netwo
       if (globalThis.fetch === fetchWrapper) {
         globalThis.fetch = originalFetch;
       }
-      // Restore XHR prototype methods.
+      // Restore XHR only if our wrappers are still the active ones — same
+      // clobber-prevention as fetch above (Sentry breadcrumbs wrap XHR too).
       if (OriginalXHR && originalXhrOpen && originalXhrSend) {
-        XMLHttpRequest.prototype.open = originalXhrOpen;
-        XMLHttpRequest.prototype.send = originalXhrSend;
+        if (xhrOpenWrapper && XMLHttpRequest.prototype.open === xhrOpenWrapper) {
+          XMLHttpRequest.prototype.open = originalXhrOpen;
+        }
+        if (xhrSendWrapper && XMLHttpRequest.prototype.send === xhrSendWrapper) {
+          XMLHttpRequest.prototype.send = originalXhrSend;
+        }
       }
     },
   };
 }
 
 function truncateUrl(url: string): string {
+  // Scrub query-string PII (token/email/JWT values) BEFORE truncation so a
+  // long path can never push a secret past the cut and back again on replay.
+  const scrubbed = scrubUrl(url);
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(scrubbed);
     const path = parsed.pathname + parsed.search;
     if (path.length > 200) {
       return parsed.origin + path.slice(0, 200) + '...';
     }
     return parsed.origin + path;
   } catch {
-    return url.slice(0, 200);
+    return scrubbed.slice(0, 200);
   }
 }

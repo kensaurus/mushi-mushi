@@ -26,7 +26,7 @@
 // Import the single source-of-truth for the default ingest endpoint.
 // Do NOT duplicate this URL — changing the endpoint in two places is how
 // self-hoster configs silently drift apart.
-import { DEFAULT_API_ENDPOINT } from '@mushi-mushi/core'
+import { DEFAULT_API_ENDPOINT, scrubUrl } from '@mushi-mushi/core'
 const DEFAULT_ENDPOINT = DEFAULT_API_ENDPOINT
 
 export interface TraceMiddlewareOptions {
@@ -131,8 +131,9 @@ export function mushiTraceMiddleware(opts: TraceMiddlewareOptions) {
     const sessionId = getHeader(req.headers, 'x-mushi-session')
     const start = Date.now()
 
-    // Capture response status via `finish` event.
-    const url = req.originalUrl ?? req.url ?? ''
+    // Capture response status via `finish` event. Query values are scrubbed
+    // — span names / http.url reach the trace waterfall UI verbatim.
+    const url = scrubUrl(req.originalUrl ?? req.url ?? '')
     const method = req.method ?? 'GET'
 
     // We use `res.on('finish', ...)` pattern for Express/Connect.

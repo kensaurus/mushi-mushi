@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { ApiClientOptions } from '@mushi-mushi/core'
-import { DEFAULT_API_ENDPOINT } from '@mushi-mushi/core'
+import { DEFAULT_API_ENDPOINT, scrubPii, scrubUrl } from '@mushi-mushi/core'
 
 /**
  * Wave G1 — server-originated report shape.
@@ -146,17 +146,31 @@ export class MushiNodeClient {
         body: JSON.stringify({
           projectId: this.opts.projectId,
           category: payload.userCategory ?? this.opts.defaultCategory ?? 'bug',
-          description: payload.description,
+          // RealWorld attunement: parity with the web SDK's wire-time
+          // scrubbing. Server errors routinely embed request URLs and user
+          // input ("user jake@x.com not found") — scrub description, error
+          // text, and URL query values before anything leaves the process.
+          description: scrubPii(payload.description),
           ...(payload.severity ? { severity: payload.severity } : {}),
           environment: buildNodeEnvironment({
-            url: payload.url,
+            url: payload.url ? scrubUrl(payload.url) : undefined,
             env: this.opts.environment,
             release: this.opts.release,
             traceContext: payload.traceContext,
           }),
           metadata: {
             ...(payload.metadata ?? {}),
-            error: payload.error,
+            error: payload.error
+              ? {
+                  ...payload.error,
+                  ...(payload.error.message !== undefined
+                    ? { message: scrubPii(payload.error.message) }
+                    : {}),
+                  ...(payload.error.stack !== undefined
+                    ? { stack: scrubPii(payload.error.stack) }
+                    : {}),
+                }
+              : payload.error,
             userId: payload.userId,
             ...(payload.component ? { component: payload.component } : {}),
           },

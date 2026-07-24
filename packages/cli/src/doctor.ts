@@ -626,6 +626,100 @@ export async function checkHostAppWiring(cwd: string): Promise<DoctorCheck[]> {
   return checks;
 }
 
+// ── Check 7b: Hash-router route-capture advisory ─────────────────────────────
+//
+// Detects hash-routed SPAs (HashRouter, createHashRouter, location.hash,
+// hashchange) in host app source and advises on discoverInventory.routeTemplates
+// using `/#/` prefixes, which the web SDK requires for hash fragments.
+//
+// Returns an advisory (ok:true, warn:true) when hash routing is detected but the
+// Mushi init call doesn't appear to configure `/#/` route templates.
+// Returns ok:true (no warn) when the templates appear configured.
+// Returns nothing ([]) when no hash-router usage is found.
+
+const HASH_ROUTER_PATTERNS = [
+  /\bHashRouter\b/,
+  /\bcreateHashRouter\b/,
+  /location\.hash\b/,
+  /addEventListener\(['"]hashchange['"]/,
+];
+
+const HASH_TEMPLATE_PATTERN = /['"`]#\//; // detects '/#/...' or '#/...' in Mushi config
+
+async function scanDirForPattern(
+  dir: string,
+  patterns: RegExp[],
+  maxDepth = 6,
+  maxFiles = 2000,
+): Promise<string | null> {
+  const { readdir, readFile } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+  let count = 0;
+  async function walk(d: string, depth: number): Promise<string | null> {
+    if (depth > maxDepth || count > maxFiles) return null;
+    let entries: { name: string; isDirectory(): boolean }[] = [];
+    try {
+      entries = await readdir(d, { withFileTypes: true });
+    } catch {
+      return null;
+    }
+    for (const e of entries) {
+      if (e.name.startsWith('.') || e.name === 'node_modules' || e.name === 'dist') continue;
+      const full = join(d, e.name);
+      if (e.isDirectory()) {
+        const found = await walk(full, depth + 1);
+        if (found) return found;
+      } else if (/\.[cm]?[jt]sx?$/.test(e.name)) {
+        count++;
+        try {
+          const src = await readFile(full, 'utf8');
+          if (patterns.some((p) => p.test(src))) return full;
+        } catch {
+          /* unreadable, skip */
+        }
+      }
+    }
+    return null;
+  }
+  const { resolve } = await import('node:path');
+  for (const sub of ['src', 'app', 'pages', 'lib', 'components']) {
+    const found = await walk(join(resolve(dir), sub), 0);
+    if (found) return found;
+  }
+  // Also check root-level entry points
+  return walk(resolve(dir), 0);
+}
+
+export async function checkHashRouterCapture(cwd: string): Promise<DoctorCheck[]> {
+  const hashFile = await scanDirForPattern(cwd, HASH_ROUTER_PATTERNS);
+  if (!hashFile) return []; // no hash routing detected — no advisory needed
+
+  // Now check whether the Mushi init has '/#/' templates configured
+  const templateFile = await scanDirForPattern(cwd, [HASH_TEMPLATE_PATTERN]);
+  if (templateFile) {
+    return [
+      {
+        name: '[host] Hash-router route capture',
+        ok: true,
+        detail: `Hash-router detected (${hashFile}) and /#/ route templates found in Mushi config — routes will be captured correctly.`,
+      },
+    ];
+  }
+
+  return [
+    {
+      name: '[host] Hash-router route capture',
+      ok: true,
+      warn: true,
+      detail:
+        `Hash-router detected (${hashFile}) but no /#/ route templates found in your Mushi init call. ` +
+        `Add discoverInventory.routeTemplates with /#/-prefixed patterns (e.g. ['/#/article/[slug]']) ` +
+        `so Mushi captures parametric hash routes correctly — without these, all hash navigations ` +
+        `appear as a single "/#/" route in the inventory.`,
+    },
+  ];
+}
+
 // ── Check 8: MCP config health ───────────────────────────────────────────────
 
 export async function checkMcpConfig(
@@ -1147,6 +1241,9 @@ export async function runDoctor(
   if (isFull || options.hostApp) {
     const hostChecks = await checkHostAppWiring(options.cwd ?? process.cwd());
     checks.push(...hostChecks);
+    // 7b. Hash-router advisory (piggybacks on hostApp; zero-noise when no hash routing present)
+    const hashChecks = await checkHashRouterCapture(options.cwd ?? process.cwd());
+    checks.push(...hashChecks);
   }
 
   // 8. MCP config health (opt-in, or --full)

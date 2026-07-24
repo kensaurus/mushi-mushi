@@ -215,6 +215,22 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       return next;
     });
   }
+  /**
+   * Console entries were previously the one observability surface that
+   * reached the wire unscrubbed — `console.log(jwt)` during dev shipped the
+   * token verbatim inside a bug report. Same wire-only policy as breadcrumbs:
+   * the in-memory buffer keeps the host's raw values.
+   */
+  function scrubConsoleForWire<T extends { message: string; stack?: string }>(
+    logs: T[] | undefined,
+  ): T[] | undefined {
+    if (!logs) return logs;
+    return logs.map((entry) => ({
+      ...entry,
+      message: piiScrubber.scrub(entry.message),
+      ...(entry.stack ? { stack: piiScrubber.scrub(entry.stack) } : {}),
+    }));
+  }
   function scrubTagsForWire(
     tags: Record<string, string | number | boolean> | undefined,
   ): Record<string, string | number | boolean> | undefined {
@@ -1118,7 +1134,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
     const sentryCtx = config.sentry ? captureSentryContext(config.sentry) : undefined;
     const fingerprintHash = await getDeviceFingerprintHash().catch(() => null);
-    const consoleLogs = activeConfig.capture?.console === false ? undefined : consoleCap?.getEntries();
+    const consoleLogs = activeConfig.capture?.console === false
+      ? undefined
+      : scrubConsoleForWire(consoleCap?.getEntries());
     const networkLogs = activeConfig.capture?.network === false ? undefined : networkCap?.getEntries();
 
     // Snapshot breadcrumbs *before* we add the lifecycle "submitting"
