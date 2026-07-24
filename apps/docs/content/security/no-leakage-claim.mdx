@@ -27,6 +27,8 @@ This page is the single-source citation for the privacy claims made on the Mushi
 
 **Control (at-rest, Wave 5 Gap A):** `scrubPii()` from `_shared/pii-scrubber.ts` is called in the ingest path (`api/helpers.ts::ingestReport`) before the `reports` row is inserted. Fields scrubbed: `description`, `user_intent`, `console_logs[].message`, `network_logs[].url` (including query parameters). Patterns cover: SSN, credit-card PAN, AWS/Stripe/Slack/GitHub/OpenAI/Anthropic keys, JWTs, IPv4, IPv6, emails, phone numbers.
 
+**Control (client-side, at capture — SDK 1.27+):** The web and Node SDKs now scrub PII *before the report leaves the browser or server process*, so sensitive values never travel the wire in the first place. The web SDK runs `scrubUrl()` over every captured network URL and route-timeline entry; the Node SDK runs `scrubPii()` / `scrubUrl()` over `description`, `environment.url`, and `error.message` / `error.stack` in `captureReport`, the Express handler, and the trace middleware. This is the same pattern set as the server-side scrubber (shared source of truth), so client and server redact identically — the at-rest and pre-LLM scrubs below are now defence-in-depth behind it rather than the first line.
+
 **Control (pre-LLM, defence-in-depth):** `scrubReport()` is also called in `classify-report` and `fast-filter` before building the Anthropic prompt, so even if the ingest scrub is ever bypassed the LLM never sees raw PII.
 
 **Gap not yet closed:** `performance_metrics` and `selected_element` JSONB columns are not yet scrubbed — these fields are unlikely to contain PII but are not covered by the current scrubber. Filed as a follow-up.
