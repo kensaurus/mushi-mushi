@@ -13,6 +13,7 @@
  * canonical catalog (packages/mcp/src/catalog.ts) changes.
  */
 
+import { PUBLIC_CORS_HEADERS } from './cors.ts'
 import manifestRaw from './mcp-discovery-tools.json' with { type: 'json' }
 import { SERVER_INFO_EXTENDED } from './mcp-branding.ts'
 
@@ -105,5 +106,5 @@ export function buildMcpServerCard(): Record<string, unknown> {
 export const MCP_SERVER_CARD_HEADERS: Record<string, string> = {
   'Content-Type': 'application/json; charset=utf-8',
   'Cache-Control': 'public, max-age=3600, s-maxage=3600',
-  'Access-Control-Allow-Origin': '*',
+  ...PUBLIC_CORS_HEADERS,
 }

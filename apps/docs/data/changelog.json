@@ -22,6 +22,14 @@
         "description": "(`docs/SHELL_COMPLETION.md`) and a **composite GitHub Action** (`action.yml`) wrapping `mushi sourcemaps upload`."
       },
       {
+        "title": "Global XHR capture",
+        "description": "`init()` now patches both `XMLHttpRequest` and `window.fetch`. Every network request — including legacy jQuery/axios XHR calls — is captured as a `MushiNetworkEntry` and appears in the Network breadcrumbs tab. `destroy()` removes the patches; if another APM tool (Sentry, Datadog) has since wrapped the same globals the SDK detects the unsafe state and leaves the native references alone."
+      },
+      {
+        "title": "Hash-router inventory",
+        "description": "`discovery` now subscribes to `hashchange` and stores `'/#' + hashPath` entries so hash-routed SPAs appear in Inventory. `routeTemplates` authored with or without the `/#` prefix are both matched. Hash query params (`#/path?key=value`) are stripped before template matching; param *keys* (never values) are still collected for filter metadata."
+      },
+      {
         "title": "`@mushi-mushi/web/otel`",
         "description": "— new subpath: `createBrowserOtelSpanProcessor(mushi, { otelPresent: context })` forwards OTel error spans to Mushi as programmatic reports. Dependency-injection design (caller passes an import from `@opentelemetry/api`) avoids dynamic-import probing that breaks Vite's static analysis. Size-limit gated at ≤5 KB gzip. 16 unit tests."
       },

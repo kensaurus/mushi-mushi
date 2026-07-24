@@ -10,6 +10,7 @@
  * runtime. The JWT is trivial to mint by hand with Web Crypto + RSA-PKCS1-v1_5.
  */
 
+import { fetchWithTimeout } from './http.ts'
 import type { getServiceClient } from './db.ts'
 
 async function importPkcs8(pem: string): Promise<CryptoKey> {
@@ -54,7 +55,7 @@ export async function mintInstallationToken(installationId: number): Promise<str
     .replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
   const jwt = `${data}.${sigB64}`
 
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://api.github.com/app/installations/${installationId}/access_tokens`,
     {
       method: 'POST',
@@ -184,7 +185,7 @@ export async function fetchPullRequest(
   ref: GithubRepoRef,
   pullNumber: number,
 ): Promise<PullRequestSnapshot | null> {
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://api.github.com/repos/${ref.owner}/${ref.repo}/pulls/${pullNumber}`,
     { headers: githubAuthHeaders(token) },
   )
@@ -211,7 +212,7 @@ export async function fetchPullRequestDetails(
   ref: GithubRepoRef,
   pullNumber: number,
 ): Promise<PullRequestDetails | null> {
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://api.github.com/repos/${ref.owner}/${ref.repo}/pulls/${pullNumber}`,
     { headers: githubAuthHeaders(token) },
   )
@@ -273,7 +274,7 @@ export async function markPullRequestReady(
   // REST PATCH { draft: false } does not reliably undraft on GitHub; the
   // supported path is the GraphQL markPullRequestAsReady mutation (same as
   // `gh pr ready`).
-  const gqlRes = await fetch('https://api.github.com/graphql', {
+  const gqlRes = await fetchWithTimeout('https://api.github.com/graphql', {
     method: 'POST',
     headers: { ...githubAuthHeaders(token), 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -322,7 +323,7 @@ export async function fetchLatestCheckRun(
   ref: GithubRepoRef,
   commitSha: string,
 ): Promise<CheckRunSnapshot | null> {
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://api.github.com/repos/${ref.owner}/${ref.repo}/commits/${commitSha}/check-runs?per_page=100`,
     {
       headers: {
@@ -389,7 +390,7 @@ export async function fetchLatestWorkflowRunForSha(
 ): Promise<WorkflowRunSnapshot | null> {
   const params = new URLSearchParams({ per_page: '20' })
   if (branch) params.set('branch', branch)
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://api.github.com/repos/${ref.owner}/${ref.repo}/actions/runs?${params.toString()}`,
     { headers: githubAuthHeaders(token) },
   )
@@ -432,7 +433,7 @@ export async function fetchLatestDeploymentStatusForSha(
   commitSha: string,
 ): Promise<DeploymentStatusSnapshot | null> {
   const params = new URLSearchParams({ sha: commitSha, per_page: '10' })
-  const deploymentsRes = await fetch(
+  const deploymentsRes = await fetchWithTimeout(
     `https://api.github.com/repos/${ref.owner}/${ref.repo}/deployments?${params.toString()}`,
     { headers: githubAuthHeaders(token) },
   )
@@ -444,7 +445,7 @@ export async function fetchLatestDeploymentStatusForSha(
   }>
   const deployment = deployments.find((d) => d.id)
   if (!deployment?.id) return null
-  const statusesRes = await fetch(
+  const statusesRes = await fetchWithTimeout(
     `https://api.github.com/repos/${ref.owner}/${ref.repo}/deployments/${deployment.id}/statuses?per_page=1`,
     { headers: githubAuthHeaders(token) },
   )

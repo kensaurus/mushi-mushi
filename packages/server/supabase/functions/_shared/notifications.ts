@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from './http.ts'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
 
@@ -212,7 +213,7 @@ async function sendEmailNotification(
   if (!apiKey) return { ok: false, error: 'RESEND_API_KEY not configured' }
 
   try {
-    const res = await fetch('https://api.resend.com/emails', {
+    const res = await fetchWithTimeout('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,

@@ -11,6 +11,7 @@
  *            webhooks-linear/, webhooks-linear-agent/, linear-oauth-callback/.
  */
 
+import { fetchWithTimeout } from './http.ts'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from './logger.ts'
 import { dereferenceMaybeVault } from './integration-probes.ts'
@@ -103,7 +104,7 @@ export async function refreshLinearToken(
     client_secret: clientSecret,
   })
 
-  const res = await fetch(LINEAR_TOKEN_ENDPOINT, {
+  const res = await fetchWithTimeout(LINEAR_TOKEN_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
@@ -165,7 +166,7 @@ export async function linearGql<T>(
   if (!authHeader) throw new Error(`No Linear credentials configured for project ${projectId}`)
 
   const doRequest = async (auth: string): Promise<T> => {
-    const res = await fetch(LINEAR_GRAPHQL, {
+    const res = await fetchWithTimeout(LINEAR_GRAPHQL, {
       method: 'POST',
       headers: {
         Authorization: auth,

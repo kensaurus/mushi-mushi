@@ -16,10 +16,12 @@ import {
   inferLevelFromMessage,
   normaliseConsoleLevel,
   PERF_TONE_CLASS,
+  PERF_VITAL_POOR_THRESHOLD,
   perfVitalTone,
   platformPillClass,
   type ConsoleLevel,
 } from './reportLogFormat'
+import { MiniInlineBar } from '../ui/metrics'
 import { apiFetch } from '../../lib/supabase'
 import { CHIP_TONE } from '../../lib/chipTone'
 
@@ -212,7 +214,22 @@ const PERF_TOOLTIPS: Record<string, string> = {
   FID: 'First Input Delay — legacy metric, replaced by INP.',
 }
 
-export function PerformanceMetrics({ metrics }: { metrics: Record<string, number> | null }) {
+/** Gauge bar colour classes matching the perfVitalTone result. */
+const VITAL_BAR_CLASS: Record<string, string> = {
+  ok: 'bg-ok',
+  warn: 'bg-warn',
+  danger: 'bg-danger',
+  neutral: 'bg-fg-muted',
+}
+
+export function PerformanceMetrics({
+  metrics,
+  anomalies,
+}: {
+  metrics: Record<string, number> | null
+  /** Statistical provenance from anomaly_detections (auto-filed metric regression reports). */
+  anomalies?: Array<{ metric_name: string; baseline_mean: number; baseline_std: number; score: number; threshold: number }> | null
+}) {
   const entries = metrics ? Object.entries(metrics) : []
   if (entries.length === 0) {
     return (
@@ -222,6 +239,12 @@ export function PerformanceMetrics({ metrics }: { metrics: Record<string, number
       />
     )
   }
+
+  // Index anomalies by metric_name for O(1) lookup.
+  const anomalyByMetric = new Map(
+    (anomalies ?? []).map((a) => [a.metric_name.toUpperCase(), a]),
+  )
+
   return (
     <div className="@container/vitals">
       <DefinitionChips
@@ -236,13 +259,34 @@ export function PerformanceMetrics({ metrics }: { metrics: Record<string, number
                 ? val.toFixed(3)
                 : `${val.toFixed(0)} ms`
               : String(val)
+          const poorThreshold = PERF_VITAL_POOR_THRESHOLD[upper]
+          const anomaly = anomalyByMetric.get(upper)
           return {
             label: upper,
             hint: tooltip,
             value: (
-              <span className={`font-mono tabular-nums font-semibold ${PERF_TONE_CLASS[tone]}`}>
-                {display}
-              </span>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className={`font-mono tabular-nums font-semibold ${PERF_TONE_CLASS[tone]}`}>
+                  {display}
+                </span>
+                {/* Phase 4b: threshold gauge bar — shows visually how close this vital is
+                    to the "poor" threshold (100% fill = at or above poor threshold). */}
+                {typeof val === 'number' && poorThreshold != null && (
+                  <MiniInlineBar
+                    value={val}
+                    max={poorThreshold}
+                    widthClass="w-full"
+                    barClassName={VITAL_BAR_CLASS[tone] ?? 'bg-fg-muted'}
+                    aria-label={`${upper} gauge: ${display} of ${poorThreshold}${upper === 'CLS' ? '' : 'ms'} poor threshold`}
+                  />
+                )}
+                {/* Phase 2a: anomaly provenance badge when auto-filed by CI metric regression. */}
+                {anomaly != null && (
+                  <span className="text-3xs text-warn font-medium" title={`Baseline: ${anomaly.baseline_mean.toFixed(1)}±${anomaly.baseline_std.toFixed(1)}, threshold: ${anomaly.threshold}σ`}>
+                    {anomaly.score.toFixed(1)}σ above baseline
+                  </span>
+                )}
+              </div>
             ),
           }
         })}
@@ -283,6 +327,7 @@ export function ConsoleLogs({ logs }: { logs: ReportDetail['console_logs'] }) {
   return (
     <div className="max-h-64 overflow-y-auto rounded-sm border border-edge-subtle bg-surface-overlay/40">
       {logs.map((log, i) => {
+        const entry = log as typeof log & { correlationId?: string }
         const baseLevel = normaliseLevel(log.level)
         const message = formatConsoleMessage(log.message)
         const level = inferLevelFromMessage(log.message, baseLevel)
@@ -300,6 +345,8 @@ export function ConsoleLogs({ logs }: { logs: ReportDetail['console_logs'] }) {
           <div
             key={i}
             className={`flex items-start gap-2 border-b border-b-edge-subtle/25 border-l-2 px-2 py-1 last:border-b-0 ${rowTone}`}
+            // Phase 4c: data attribute for correlation highlight (future: hover to highlight matching network row)
+            data-correlation-id={entry.correlationId}
           >
             {time ? (
               // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
@@ -311,6 +358,13 @@ export function ConsoleLogs({ logs }: { logs: ReportDetail['console_logs'] }) {
               className={`mt-0.5 inline-flex min-w-11 shrink-0 items-center justify-center rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${badge}`}
             >
               {level}
+            </span>
+            {/* Phase 4c: row-level provenance badge — "SDK" or "Sentry" */}
+            <span
+              className="mt-0.5 shrink-0 inline-flex items-center rounded-sm px-1 py-0.5 text-3xs font-medium bg-surface-overlay text-fg-faint border border-edge-subtle"
+              title={entry.correlationId ? `Captured by Mushi SDK (correlationId: ${entry.correlationId})` : 'Captured by Mushi SDK — console-wrap instrumentation'}
+            >
+              SDK
             </span>
             <code className="min-w-0 flex-1 font-mono text-2xs leading-snug wrap-anywhere text-fg-secondary">
               {message}
@@ -447,16 +501,20 @@ export function NetworkLogs({
       {logs.map((req, i) => {
         const methodCls = httpMethodPillClass(req.method)
         const slow = req.duration >= 1000
-        const hasTrace = Boolean((req as { traceId?: string }).traceId)
+        const reqExt = req as typeof req & { traceId?: string; captureMethod?: 'fetch' | 'xhr'; correlationId?: string }
+        const hasTrace = Boolean(reqExt.traceId)
         const isExpanded = expandedTraceIdx === i
-        const traceId = (req as { traceId?: string }).traceId
+        const traceId = reqExt.traceId
+        // Phase 4c: row-level provenance — which capture method recorded this request.
+        const captureMethod = reqExt.captureMethod // 'fetch' | 'xhr' | undefined
         return (
           <div
             key={i}
             className="border-b border-edge-subtle/30 last:border-b-0"
+            data-correlation-id={reqExt.correlationId}
           >
             <div
-              className={`grid items-center gap-1.5 px-2 py-1 ${hasTrace ? 'grid-cols-[auto_1fr_auto_auto_auto] cursor-pointer hover:bg-surface-overlay/60' : 'grid-cols-[auto_1fr_auto_auto]'}`}
+              className={`grid items-center gap-1.5 px-2 py-1 ${hasTrace ? 'grid-cols-[auto_1fr_auto_auto_auto_auto] cursor-pointer hover:bg-surface-overlay/60' : 'grid-cols-[auto_1fr_auto_auto_auto]'}`}
               onClick={hasTrace ? () => setExpandedTraceIdx(isExpanded ? null : i) : undefined}
               role={hasTrace ? 'button' : undefined}
               tabIndex={hasTrace ? 0 : undefined}
@@ -475,6 +533,13 @@ export function NetworkLogs({
                 className={`shrink-0 font-mono text-3xs tabular-nums ${slow ? 'font-semibold text-warn' : 'text-fg-faint'}`}
               >
                 {req.duration}ms
+              </span>
+              {/* Phase 4c: capture method provenance badge ("fetch" | "xhr" | "SDK") */}
+              <span
+                className="shrink-0 inline-flex items-center rounded-sm px-1 py-0.5 text-3xs font-medium bg-surface-overlay text-fg-faint border border-edge-subtle"
+                title={captureMethod === 'xhr' ? 'Captured via XMLHttpRequest patch' : 'Captured via fetch patch'}
+              >
+                {captureMethod ?? 'SDK'}
               </span>
               {hasTrace && (
                 <span

@@ -31,13 +31,14 @@
  * served payload to `AGENT_JSON_SCHEMAS`.
  */
 
+import { PUBLIC_CORS_HEADERS } from '../../_shared/cors.ts'
 import type { Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 
 const HEADERS: Record<string, string> = {
   'Content-Type': 'application/schema+json; charset=utf-8',
   'Cache-Control': 'public, max-age=300, s-maxage=300',
-  'Access-Control-Allow-Origin': '*',
+  ...PUBLIC_CORS_HEADERS,
 }
 
 const EXPECTED_OUTCOME_JSON_SCHEMA = {
@@ -243,7 +244,7 @@ export function registerSchemaRoutes(app: Hono<{ Variables: Variables }>): void 
         })),
       },
       200,
-      { 'Access-Control-Allow-Origin': '*' },
+      PUBLIC_CORS_HEADERS,
     )
   })
 
