@@ -136,7 +136,7 @@ nul
 # Machine-local agent config (proxy base URL, tool-search toggles) and the
 # local burndown scratch state. The shared .claude/settings.json is allowed.
 .claude/settings.local.json
-.cursor/burndown-state.md
+.cursor/*-state.md
 
 # Archive holding-pens for ad-hoc audit screenshots. Kept out of git so they
 # can't grow unbounded; the canonical product screenshots live in

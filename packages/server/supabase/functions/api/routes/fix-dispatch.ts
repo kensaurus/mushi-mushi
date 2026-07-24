@@ -200,7 +200,9 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
       // do not await — the SSE stream above is the channel the UI uses to track
       // progress. EdgeRuntime.waitUntil keeps the worker alive after the
       // dispatch response returns. If the worker invocation fails, the dispatch
-      // row sits in 'queued' until a future cron-driven retry picks it up.
+      // row sits in 'queued' until fix_dispatch_sweeper() (pg_cron, every
+      // minute) re-invokes it after a 2-minute grace window — see migration
+      // 20260724000001_fix_dispatch_sweeper_requeue_primaries.
       invokeFixWorker(job.id, c.get('requestId') as string | undefined).catch((err) => {
         log.warn('fix-dispatch worker invocation failed', {
           dispatchId: job.id,

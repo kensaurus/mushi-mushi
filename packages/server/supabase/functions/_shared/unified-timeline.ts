@@ -13,6 +13,20 @@ export type UnifiedTimelineLane =
   | 'qa'
   | 'skill_pipeline'
   | 'ask_mushi'
+  // Telemetry lanes (Phase 1c): SDK-captured events merged by wall-clock timestamp.
+  // These give the AI diagnosis agent a full causal picture: what the user did,
+  // what network requests fired, and what the backend observed — all in one feed.
+  | 'breadcrumb' // SDK breadcrumbs: navigation, click, lifecycle, custom
+  | 'console'    // console.error / console.warn captured by the SDK
+  | 'span'       // backend span lifecycle events (from backend_spans table)
+
+/** Provenance: which system produced this timeline entry and how confident we are. */
+export interface UnifiedTimelineProvenance {
+  /** The system that produced this entry. */
+  source: 'sdk' | 'sentry' | 'backend' | 'mushi'
+  /** The specific SDK hook or capture mechanism, e.g. 'fetch-patch', 'console-wrap', 'breadcrumb-auto'. */
+  capture_hook?: string
+}
 
 export interface UnifiedTimelineEntry {
   id: string
@@ -23,6 +37,8 @@ export interface UnifiedTimelineEntry {
   status?: string | null
   actor?: string | null
   links?: Record<string, string>
+  /** Added in Phase 1c: which system emitted this event and via which hook. */
+  provenance?: UnifiedTimelineProvenance
 }
 
 export async function buildUnifiedReportTimeline(
@@ -32,9 +48,11 @@ export async function buildUnifiedReportTimeline(
 ): Promise<UnifiedTimelineEntry[]> {
   const entries: UnifiedTimelineEntry[] = []
 
+  // Phase 1c: include telemetry columns in the initial report fetch so we can merge
+  // breadcrumbs, console errors, and backend spans into the timeline without a 2nd round-trip.
   const { data: report } = await db
     .from('reports')
-    .select('id, status, description, category, created_at')
+    .select('id, status, description, category, created_at, breadcrumbs, console_logs, custom_metadata, sentry_trace_id')
     .eq('id', reportId)
     .eq('project_id', projectId)
     .maybeSingle()
@@ -172,6 +190,106 @@ export async function buildUnifiedReportTimeline(
       body: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
       actor: m.role,
     })
+  }
+
+  // ── Phase 1c: Telemetry lanes ─────────────────────────────────────────────
+  // Merge SDK-captured evidence events (breadcrumbs, console errors, backend spans)
+  // into the timeline so AI agents and human readers see the full causal sequence:
+  //   user action → SDK event → network request → backend span → error → report.
+  // Only error/warn console entries are included to avoid noise (not all 50 log entries).
+  // Breadcrumbs use their wall-clock timestamp; backend_spans use ingested_at.
+  // `report` already contains these columns from the select above — no extra round-trip.
+
+  // Breadcrumbs: navigation, click, lifecycle, custom — entire ring buffer.
+  const breadcrumbs = report.breadcrumbs as Array<{
+    timestamp: number
+    category: string
+    level: string
+    message: string
+    data?: Record<string, unknown>
+  }> | null
+  for (const b of breadcrumbs ?? []) {
+    const isoAt = new Date(b.timestamp).toISOString()
+    // Sentry-forwarded crumbs (category starts with 'sentry') get sentry provenance.
+    const isSentry = b.category?.startsWith('sentry')
+    entries.push({
+      id: `breadcrumb-${b.timestamp}-${b.category}`,
+      lane: 'breadcrumb',
+      at: isoAt,
+      title: `${b.category}: ${b.message}`,
+      body: b.data ? JSON.stringify(b.data) : null,
+      status: b.level,
+      actor: isSentry ? 'sentry' : 'reporter',
+      provenance: {
+        source: isSentry ? 'sentry' : 'sdk',
+        capture_hook: 'breadcrumb-auto',
+      },
+    })
+  }
+
+  // Console logs: only error and warn entries (keeps the timeline focused on signals).
+  const consoleLogs = report.console_logs as Array<{
+    level: string
+    message: string
+    timestamp: number
+    stack?: string
+  }> | null
+  for (const log of consoleLogs ?? []) {
+    if (log.level !== 'error' && log.level !== 'warn') continue
+    entries.push({
+      id: `console-${log.timestamp}-${log.level}`,
+      lane: 'console',
+      at: new Date(log.timestamp).toISOString(),
+      title: `console.${log.level}: ${String(log.message).slice(0, 120)}`,
+      body: log.stack ?? null,
+      status: log.level,
+      actor: 'sdk',
+      provenance: {
+        source: 'sdk',
+        capture_hook: 'console-wrap',
+      },
+    })
+  }
+
+  // Backend spans: join on trace_id extracted from sentry_trace_id or traceparent.
+  const customMeta = report.custom_metadata as Record<string, unknown> | null
+  const rawTraceparent = typeof customMeta?.traceparent === 'string' ? customMeta.traceparent : null
+  const traceparentTraceId = rawTraceparent ? (rawTraceparent.split('-')[1] ?? null) : null
+  const sentryTraceId = typeof report.sentry_trace_id === 'string' ? report.sentry_trace_id : null
+  const traceIds = Array.from(
+    new Set([traceparentTraceId, sentryTraceId].filter((t): t is string => Boolean(t))),
+  )
+
+  if (traceIds.length > 0) {
+    const { data: spans } = await db
+      .from('backend_spans')
+      .select('id, trace_id, span_json, ingested_at')
+      .eq('project_id', projectId)
+      .in('trace_id', traceIds)
+      .order('ingested_at', { ascending: true })
+      .limit(50)
+
+    for (const s of spans ?? []) {
+      const spanJson = s.span_json as {
+        name?: string
+        status?: string
+        duration_ms?: number
+        spanId?: string
+      } | null
+      entries.push({
+        id: `span-${s.id}`,
+        lane: 'span',
+        at: s.ingested_at,
+        title: spanJson?.name ?? `span ${s.trace_id.slice(0, 8)}`,
+        body: spanJson?.duration_ms != null ? `${spanJson.duration_ms}ms` : null,
+        status: spanJson?.status ?? null,
+        actor: 'backend',
+        provenance: {
+          source: 'backend',
+          capture_hook: 'otel-middleware',
+        },
+      })
+    }
   }
 
   entries.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())

@@ -1,0 +1,19 @@
+{
+  "name": "mushi-realworld",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "test": "echo 'realworld fixtures are driven by pnpm e2e:realworld, not pnpm test (boots 4 servers)' && exit 0",
+    "e2e": "playwright test",
+    "e2e:gate": "node -e \"process.env.MUSHI_REALWORLD='1'; const {execSync}=require('child_process'); execSync('pnpm e2e', {stdio:'inherit', env:process.env})\"",
+    "e2e:headed": "playwright test --headed",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^22.20.0",
+    "typescript": "^6.0.3"
+  }
+}

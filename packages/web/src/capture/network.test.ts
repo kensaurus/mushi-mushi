@@ -70,6 +70,42 @@ describe('createNetworkCapture', () => {
     expect(entries[0].url).toContain('api.example.com/host');
   });
 
+  it('scrubs sensitive query values from captured URLs (RealWorld attunement)', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }));
+    globalThis.fetch = mockFetch;
+    capture = createNetworkCapture();
+
+    const jwt = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJqYWtlIn0', 'abc-123_XYZ'].join('.');
+    await fetch('https://api.example.com/articles?tag=dragons&limit=10&token=supersecret');
+    await fetch(`https://api.example.com/next?redirect=${jwt}`);
+
+    const entries = capture.getEntries();
+    // Known-sensitive key: value redacted, benign Conduit filters preserved.
+    expect(entries[0].url).toBe(
+      'https://api.example.com/articles?tag=dragons&limit=10&token=[Scrubbed]',
+    );
+    // JWT under an innocent key name is still pattern-scrubbed.
+    expect(entries[1].url).not.toContain('eyJ');
+    expect(entries[1].url).toContain('REDACTED_JWT');
+  });
+
+  it('never captures request headers on network entries (Token auth regression)', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }));
+    globalThis.fetch = mockFetch;
+    capture = createNetworkCapture();
+
+    const jwt = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJqYWtlIn0', 'abc-123_XYZ'].join('.');
+    await fetch('https://api.example.com/user', {
+      headers: { Authorization: `Token ${jwt}` },
+    });
+
+    const [entry] = capture.getEntries();
+    // Entry shape is method/url/status/timing only — assert the JWT cannot
+    // leak through ANY captured field.
+    expect(JSON.stringify(entry)).not.toContain(jwt);
+    expect(entry).not.toHaveProperty('headers');
+  });
+
   it('respects ring buffer limit (max 30)', async () => {
     const mockFetch = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }));
     globalThis.fetch = mockFetch;
@@ -98,5 +134,72 @@ describe('createNetworkCapture', () => {
     expect(globalThis.fetch).not.toBe(orig);
     capture.destroy();
     expect(globalThis.fetch).toBe(orig);
+  });
+
+  it('ignores XHR to ignoreUrls / SDK endpoints (shouldRecord gate)', async () => {
+    capture = createNetworkCapture({
+      apiEndpoint: 'https://mushi.example.com/functions/v1/api',
+      ignoreUrls: ['analytics.example.com'],
+    });
+
+    const sendXhr = (url: string) =>
+      new Promise<void>((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', url);
+        xhr.addEventListener('loadend', () => resolve());
+        xhr.addEventListener('error', () => resolve());
+        xhr.send();
+      });
+
+    // Mock XHR transport via fake server responses isn't available in all
+    // environments — drive readyState via the real XHR against data: URLs
+    // for the host request, and against ignored hosts that will fail/abort.
+    await sendXhr('https://analytics.example.com/noisy');
+    await sendXhr('https://mushi.example.com/functions/v1/api/v1/sdk/config');
+    await sendXhr('https://mushi.example.com/functions/v1/api/v1/reports');
+
+    // Host request that should be recorded (data: completes with status 200
+    // in happy-dom/jsdom-like environments; fall back to checking ignore only).
+    await new Promise<void>((resolve) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', 'data:text/plain,ok');
+      xhr.addEventListener('loadend', () => resolve());
+      xhr.addEventListener('error', () => resolve());
+      xhr.send();
+    });
+
+    const entries = capture.getEntries();
+    expect(entries.every((e) => !e.url.includes('analytics.example.com'))).toBe(true);
+    expect(entries.every((e) => !e.url.includes('/v1/sdk/'))).toBe(true);
+    expect(entries.every((e) => !e.url.includes('/v1/reports'))).toBe(true);
+    expect(entries.some((e) => e.captureMethod === 'xhr')).toBe(true);
+  });
+
+  it('destroy does not clobber a later XHR wrapper (Sentry-style)', () => {
+    const openBefore = XMLHttpRequest.prototype.open;
+    const sendBefore = XMLHttpRequest.prototype.send;
+    capture = createNetworkCapture();
+    const mushiOpen = XMLHttpRequest.prototype.open;
+    const mushiSend = XMLHttpRequest.prototype.send;
+    expect(mushiOpen).not.toBe(openBefore);
+
+    // Simulate Sentry wrapping on top of Mushi.
+    const sentryOpen = function sentryOpen(this: XMLHttpRequest, ...args: Parameters<typeof XMLHttpRequest.prototype.open>) {
+      return mushiOpen.apply(this, args);
+    } as typeof XMLHttpRequest.prototype.open;
+    const sentrySend = function sentrySend(this: XMLHttpRequest, body?: Document | XMLHttpRequestBodyInit | null) {
+      return mushiSend.call(this, body);
+    } as typeof XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = sentryOpen;
+    XMLHttpRequest.prototype.send = sentrySend;
+
+    capture.destroy();
+
+    expect(XMLHttpRequest.prototype.open).toBe(sentryOpen);
+    expect(XMLHttpRequest.prototype.send).toBe(sentrySend);
+
+    // Clean up so later tests see a sane prototype.
+    XMLHttpRequest.prototype.open = openBefore;
+    XMLHttpRequest.prototype.send = sendBefore;
   });
 });

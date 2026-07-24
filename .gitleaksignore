@@ -48,3 +48,20 @@ fe9eab0773f9f2d4e9ab1da178592d728b5e1680:packages/mcp/scripts/test-all-tools-yen
 # flagging the already-audited finding.
 5368ba457b8bdfbf8fe920513a785c650fe9c1eb:packages/node/src/middleware.test.ts:generic-api-key:150
 3d9d17004c0ca923217ff9168c338e97d0e78815:packages/node/src/middleware.test.ts:generic-api-key:150
+
+# RealWorld-attunement PII scrubber test fixtures (2026-07-24): hand-crafted
+# "JWT-shaped" strings used to verify scrubPii()/scrubUrl() redact JWTs across
+# core/node/web tests, plus the Conduit example's FIXTURE_JWT (signature is the
+# literal string "fixture_signature" — never signed by any key). All are the
+# same pattern as the Android/iOS entries above: header {"alg":"HS256"} base64,
+# fake payload, non-cryptographic signature. The working tree now constructs
+# every one of these via ['...','...','...'].join('.') so future scans see only
+# the split parts; these fingerprints pin the historical commits 1f21f898 /
+# 90c530cd where the literals first appeared so PR-range scans stop flagging
+# the already-audited findings.
+1f21f898e1a0503f5aa1c37eb574d178f88b42f5:packages/core/src/pii-scrubber.test.ts:jwt:60
+1f21f898e1a0503f5aa1c37eb574d178f88b42f5:packages/core/src/pii-scrubber.test.ts:jwt:68
+1f21f898e1a0503f5aa1c37eb574d178f88b42f5:packages/node/src/__tests__/pii-scrub.test.ts:jwt:11
+1f21f898e1a0503f5aa1c37eb574d178f88b42f5:packages/web/src/capture/network.test.ts:jwt:78
+1f21f898e1a0503f5aa1c37eb574d178f88b42f5:packages/web/src/capture/network.test.ts:jwt:97
+90c530cd795bc364c1e7258af195c63236172e14:examples/realworld/backend-express/src/server.ts:jwt:121

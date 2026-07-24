@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from './http.ts'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
 import { attachTraceparent } from './trace.ts'
@@ -177,7 +178,7 @@ async function resolveForProvider(
 
 async function resolveJiraIssue(config: Record<string, unknown>, externalId: string): Promise<void> {
   const transitionId = Deno.env.get('JIRA_DONE_TRANSITION_ID') ?? '31'
-  const res = await fetch(`${config.baseUrl}/rest/api/2/issue/${externalId}/transitions`, {
+  const res = await fetchWithTimeout(`${config.baseUrl}/rest/api/2/issue/${externalId}/transitions`, {
     method: 'POST',
     headers: {
       'Authorization': `Basic ${btoa(`${config.email}:${config.apiToken}`)}`,
@@ -259,7 +260,7 @@ async function resolveLinearIssue(
     'Content-Type': 'application/json',
   }
   const legacyGql = async <T>(query: string, variables: Record<string, unknown> = {}): Promise<T> => {
-    const res = await fetch('https://api.linear.app/graphql', {
+    const res = await fetchWithTimeout('https://api.linear.app/graphql', {
       method: 'POST',
       headers,
       body: JSON.stringify({ query, variables }),
@@ -278,7 +279,7 @@ async function resolveLinearIssue(
 }
 
 async function resolveGitHubIssue(config: Record<string, unknown>, externalId: string): Promise<void> {
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://api.github.com/repos/${config.owner}/${config.repo}/issues/${externalId}`,
     {
       method: 'PATCH',
@@ -293,7 +294,7 @@ async function resolveGitHubIssue(config: Record<string, unknown>, externalId: s
 }
 
 async function resolvePagerDutyAlert(config: Record<string, unknown>, externalId: string): Promise<void> {
-  const res = await fetch('https://events.pagerduty.com/v2/enqueue', {
+  const res = await fetchWithTimeout('https://events.pagerduty.com/v2/enqueue', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -317,7 +318,7 @@ async function resolveSentryIssue(
   // Match by the tag fingerprint we set on capture (mirrors plugin-sentry resolveIssue).
   const query = encodeURIComponent(`mushi.report_id:${reportId}`)
   const url = `https://sentry.io/api/0/projects/${config.orgSlug}/${config.projectSlug}/issues/?query=${query}`
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -348,7 +349,7 @@ async function dispatchToProvider(
 }
 
 async function createJiraIssue(config: Record<string, unknown>, report: IntegrationReport, traceparent?: string): Promise<ExternalIssue> {
-  const res = await fetch(`${config.baseUrl}/rest/api/3/issue`, {
+  const res = await fetchWithTimeout(`${config.baseUrl}/rest/api/3/issue`, {
     method: 'POST',
     headers: attachTraceparent({
       'Authorization': `Basic ${btoa(`${config.email}:${config.apiToken}`)}`,
@@ -410,7 +411,7 @@ async function createLinearIssue(
 
   // Legacy fallback: use plaintext apiKey from project_integrations.config
   log.warn('Linear: falling back to legacy project_integrations.config.apiKey for issue creation', { projectId })
-  const res = await fetch('https://api.linear.app/graphql', {
+  const res = await fetchWithTimeout('https://api.linear.app/graphql', {
     method: 'POST',
     headers: attachTraceparent({
       Authorization: String(config.apiKey),
@@ -424,7 +425,7 @@ async function createLinearIssue(
 }
 
 async function createGitHubIssue(config: Record<string, unknown>, report: IntegrationReport, traceparent?: string): Promise<ExternalIssue> {
-  const res = await fetch(`https://api.github.com/repos/${config.owner}/${config.repo}/issues`, {
+  const res = await fetchWithTimeout(`https://api.github.com/repos/${config.owner}/${config.repo}/issues`, {
     method: 'POST',
     headers: attachTraceparent({
       'Authorization': `token ${config.token}`,
@@ -443,7 +444,7 @@ async function createGitHubIssue(config: Record<string, unknown>, report: Integr
 async function triggerPagerDuty(config: Record<string, unknown>, report: IntegrationReport, traceparent?: string): Promise<ExternalIssue | null> {
   if (report.severity !== 'critical') return null
 
-  const res = await fetch('https://events.pagerduty.com/v2/enqueue', {
+  const res = await fetchWithTimeout('https://events.pagerduty.com/v2/enqueue', {
     method: 'POST',
     headers: attachTraceparent({ 'Content-Type': 'application/json' }, traceparent),
     body: JSON.stringify({
