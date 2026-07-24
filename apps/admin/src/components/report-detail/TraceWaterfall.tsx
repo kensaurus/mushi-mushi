@@ -222,6 +222,7 @@ export function TraceWaterfall({
             {/* Expanded attributes panel */}
             {isExpanded && attrs && Object.keys(attrs).length > 0 && (
               <div className="px-4 py-1 bg-surface-overlay/30 border-t border-edge-subtle/20">
+                {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
                 <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
                   {Object.entries(attrs).slice(0, 12).map(([k, v]) => (
                     <Fragment key={k}>
