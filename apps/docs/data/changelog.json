@@ -1,33 +1,19 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "Unreleased",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.27",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.27.0"
+    ],
     "highlights": [
-      {
-        "title": "`mushi upgrade --self`",
-        "description": "— upgrade the globally-installed CLI itself (detects npm/pnpm/yarn/bun install method, semver-guarded, registry cooldown)."
-      },
-      {
-        "title": "Multi-profile credentials",
-        "description": "— `mushi profile list|current|use`, plus a global `--profile <name>` flag and `MUSHI_PROFILE` env var. Legacy single-profile config files keep the flat format until the first profile-scoped write, then upgrade transparently (all profiles preserved)."
-      },
-      {
-        "title": "Global `-o, --output <text|json>`",
-        "description": "— uniform machine-readable output across commands (wired into `reports list`, `keys list`, `profile list`; per-command `--json` still works)."
-      },
-      {
-        "title": "Shell-completion install docs",
-        "description": "(`docs/SHELL_COMPLETION.md`) and a **composite GitHub Action** (`action.yml`) wrapping `mushi sourcemaps upload`."
-      },
       {
         "title": "Global XHR capture",
         "description": "`init()` now patches both `XMLHttpRequest` and `window.fetch`. Every network request — including legacy jQuery/axios XHR calls — is captured as a `MushiNetworkEntry` and appears in the Network breadcrumbs tab. `destroy()` removes the patches; if another APM tool (Sentry, Datadog) has since wrapped the same globals the SDK detects the unsafe state and leaves the native references alone."
       },
       {
         "title": "Hash-router inventory",
-        "description": "`discovery` now subscribes to `hashchange` and stores `'/#' + hashPath` entries so hash-routed SPAs appear in Inventory. `routeTemplates` authored with or without the `/#` prefix are both matched. Hash query params (`#/path?key=value`) are stripped before template matching; param *keys* (never values) are still collected for filter metadata."
+        "description": "`discovery` now subscribes to `hashchange` and stores `'/#' + hashPath` entries so hash-routed SPAs appear in Inventory. `routeTemplates` authored with or without the `/#` prefix are both matched. Hash query params (`#/path?key=value`) are stripped before template matching; param _keys_ (never values) are still collected for filter metadata."
       },
       {
         "title": "`@mushi-mushi/web/otel`",
@@ -38,7 +24,16 @@
         "description": "— new subpath: zero-widget capture bundle. Exports `createHeadlessCapture({ projectId, apiKey })` (programmatic `captureEvent`/`captureException` over fetch, no DOM mutations), browser capture primitives (`createConsoleCapture`, `createNetworkCapture`, `createPerformanceCapture`, etc.), and the OTel bridge. Size-limit gated at ≤35 KB gzip. 17 unit tests. Both subpaths are tree-shakeable and independently published — applications that skip the widget pay zero widget bytes."
       }
     ],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.27.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.27.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.26",
@@ -819,11 +814,23 @@
       {
         "title": "MCP",
         "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
+      },
+      {
+        "title": "Global XHR capture",
+        "description": "`init()` now patches both `XMLHttpRequest` and `window.fetch`. Every network request — including legacy jQuery/axios XHR calls — is captured as a `MushiNetworkEntry` and appears in the Network breadcrumbs tab. `destroy()` removes the patches; if another APM tool (Sentry, Datadog) has since wrapped the same globals the SDK detects the unsafe state and leaves the native references alone."
+      },
+      {
+        "title": "Hash-router inventory",
+        "description": "`discovery` now subscribes to `hashchange` and stores `'/#' + hashPath` entries so hash-routed SPAs appear in Inventory. `routeTemplates` authored with or without the `/#` prefix are both matched. Hash query params (`#/path?key=value`) are stripped before template matching; param _keys_ (never values) are still collected for filter metadata."
       }
     ],
     "packages": [
       {
         "name": "@mushi-mushi/core",
+        "version": "1.2.0"
+      },
+      {
+        "name": "@mushi-mushi/node",
         "version": "1.2.0"
       },
       {
@@ -948,6 +955,46 @@
       {
         "name": "@mushi-mushi/web",
         "version": "1.0.0"
+      }
+    ]
+  },
+  {
+    "majorMinor": "0.27",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.27.0"
+    ],
+    "highlights": [
+      {
+        "title": "`mushi upgrade --self`",
+        "description": "— upgrade the globally-installed CLI itself (detects npm/pnpm/yarn/bun install method, semver-guarded, registry cooldown)."
+      },
+      {
+        "title": "Multi-profile credentials",
+        "description": "— `mushi profile list|current|use`, plus a global `--profile <name>` flag and `MUSHI_PROFILE` env var. Legacy single-profile config files keep the flat format until the first profile-scoped write, then upgrade transparently (all profiles preserved)."
+      },
+      {
+        "title": "Global `-o, --output <text|json>`",
+        "description": "— uniform machine-readable output across commands (wired into `reports list`, `keys list`, `profile list`; per-command `--json` still works)."
+      },
+      {
+        "title": "Shell-completion install docs",
+        "description": "(`docs/SHELL_COMPLETION.md`) and a **composite GitHub Action** (`action.yml`) wrapping `mushi sourcemaps upload`."
+      },
+      {
+        "title": "Global XHR capture",
+        "description": "`init()` now patches both `XMLHttpRequest` and `window.fetch`. Every network request — including legacy jQuery/axios XHR calls — is captured as a `MushiNetworkEntry` and appears in the Network breadcrumbs tab. `destroy()` removes the patches; if another APM tool (Sentry, Datadog) has since wrapped the same globals the SDK detects the unsafe state and leaves the native references alone."
+      },
+      {
+        "title": "Hash-router inventory",
+        "description": "`discovery` now subscribes to `hashchange` and stores `'/#' + hashPath` entries so hash-routed SPAs appear in Inventory. `routeTemplates` authored with or without the `/#` prefix are both matched. Hash query params (`#/path?key=value`) are stripped before template matching; param _keys_ (never values) are still collected for filter metadata."
+      }
+    ],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.27.0"
       }
     ]
   },
@@ -1140,6 +1187,10 @@
     "packages": [
       {
         "name": "@mushi-mushi/cli",
+        "version": "0.20.0"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
         "version": "0.20.0"
       },
       {
@@ -1881,7 +1932,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.8.0"
+        "version": "0.8.1"
       }
     ]
   },
@@ -2099,7 +2150,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.6.0"
+        "version": "0.6.1"
       },
       {
         "name": "mushi-mushi",
@@ -2450,6 +2501,10 @@
       },
       {
         "name": "@mushi-mushi/plugin-cursor-cloud",
+        "version": "0.3.0"
+      },
+      {
+        "name": "@mushi-mushi/plugin-linear",
         "version": "0.3.0"
       },
       {
