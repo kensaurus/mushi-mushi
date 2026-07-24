@@ -1,5 +1,71 @@
 # @mushi-mushi/node
 
+## 1.2.0
+
+### Minor Changes
+
+- b5fb780: Add Linear integration — `LinearConnector` in `@mushi-mushi/node` for programmatic OAuth management and connection status, plus updated `@mushi-mushi/plugin-linear` routing to use the new platform integration API.
+- b858f5d: Phase 3 / Phase 5 non-deploy completion (production-readiness uplift, Jul 2026):
+
+  **`@mushi-mushi/node` — test uplift (Phase 3 DX/TEST)**
+  - `unhandled.test.ts` (6 tests) — verifies `attachUnhandledHook` fires `captureReport` on `unhandledRejection` and `uncaughtException`, coerces non-Error reasons, respects `swallowCrashes`, uses custom `component` label, and teardown removes both process listeners.
+  - `otel.test.ts` (12 tests) — verifies `createOtelSpanProcessor` active path: ERROR span → `captureException`, traceparent inclusion, span-name fallback, non-error skip when `errorsOnly=true`, OTLP fetch POST shape, OTLP env-var headers, OTLP object-headers, shutdown/forceFlush no-throw.
+
+  **`@mushi-mushi/mcp` — `use_mushi` meta-tool + X-RateLimit headers (Phase 5)**
+  - `use_mushi` tool registered in `server.ts` and `catalog.ts`: intent-aware orientation tool returning a curated subset of 6–12 relevant tool names for the caller's stated intent, a project-aware orientation paragraph, and a recommended first tool. Mirrors Sentry's `use_sentry` context-cost-reduction pattern.
+  - `USE_MUSHI_INTENTS` map in `catalog.ts`: 6 intent clusters (fix, status, setup, qa, pipeline, audit) each with curated tool lists and hint text.
+  - `buildRateLimitHeaders()` in `_shared/mcp-rate-limit.ts`: produces `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `X-RateLimit-Policy`, and `Retry-After` (on 429) headers conforming to IETF draft-ietf-httpapi-ratelimit-headers-06 (same format as GitHub, Linear, Stripe). Published limits: 120/min tools-call, 60/hr nl_query.
+
+  **`@mushi-mushi/cli` — Phase 4 `printResult()` migration**
+  - `diagnostics.ts` `test` command: migrated from `if (opts.json)` to `printResult()` — respects both per-command `--json` (alias) and global `-o json`.
+  - `diagnostics.ts` `index` command: migrated to `outputIsJson()` for parity.
+  - `reports.ts` (all 10 subcommands: list/thread/show/triage/resolve/reopen/verify/dismiss/reply/search) and `keys.ts` `list`: migrated to `printResult()`/`outputIsJson()` so global `-o json` works uniformly; per-command `--json` help text now reads "(alias for -o json)".
+
+  **`@mushi-mushi/eslint-plugin-mushi-mushi` — typecheck fix**
+  - `no-allowlist-jsx-textnode.ts`: annotated `create()` return as `Rule.RuleListener` so TypeScript's index-signature check accepts the JSX visitor overloads. No behaviour change.
+
+  **`@mushi-mushi/cli` — `mushi keys rotate` (Phase 2)**
+  - New `keys rotate` command: re-runs device auth inline, mints a fresh project API key for the same project, saves it to local config. Prints old/new key prefixes and a reminder to revoke the predecessor in the console (server-side revoke needs jwtAuth, CLI-token revoke endpoint is a tracked follow-up).
+
+  **Supabase migrations (deployed to production `dxptnwrhwsqckaftyymj`)**
+  - `20260720000001_add_rotated_from_to_project_api_keys.sql`: adds `rotated_from UUID REFERENCES project_api_keys(id)` + sparse index to support key rotation lineage. (`revoked_at` was already present from an earlier migration.)
+
+  **Supabase edge functions — `mcp/index.ts` (code-only, deploy via `supabase functions deploy mcp`)**
+  - `buildRateLimitHeaders()` now imported and wired into the POST `tools/call` response path: every tool-call response includes `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `X-RateLimit-Policy` headers (IETF draft-06 format). On rate-limit miss (`ERR_RATE_LIMITED = -32001`), also adds `Retry-After`.
+  - The `?features=` curated-tool filter (`parseFeaturesParam` / `toolMatchesFeatures`) was already wired in `feature-groups.ts` — no additional change needed.
+
+  **Supabase edge functions — `_shared/validate.ts` (code-only, deploy via function deploys)**
+  - Changed from `npm:zod@4` → `npm:zod@3` for consistency with `classify-report` / `fast-filter` (avoids dual-version bundle bloat).
+  - `ApiReportBodySchema`: `description` changed from required `.min(1)` to optional (backward-compat; legacy SDK < v1.21 doesn't always include it). Added `.passthrough()` so unknown keys (console_logs, breadcrumbs, screenshot_url, etc.) are preserved — prevents data loss when schema is used alongside `ingestReport`.
+
+- 76ec932: **SDK: PII scrubbing, XHR capture, hash-router inventory, and Node middleware hardening**
+
+  ### @mushi-mushi/core
+  - New `scrubUrl(url, options?)` export: scrubs sensitive query-param keys (`token`, `password`, `api_key`, `secret`, `auth`, `session`, `email`, `phone`, `ssn`, JWT-shaped values under innocent keys) to `[Scrubbed]`, decodes percent-encoding before matching, handles hash-router query fragments (`#/path?query`), and never throws on malformed input.
+  - New `scrubPii(text)` export: redacts emails → `[REDACTED_EMAIL]`, phones → `[REDACTED_PHONE]`, JWT-shaped tokens (three dot-separated `eyJ…` segments) → `[REDACTED_JWT]`, SSNs → `[REDACTED_SSN]`, and CC-shaped strings → `[REDACTED_CC]`.
+
+  ### @mushi-mushi/web
+  - **Global XHR capture**: `init()` now patches both `XMLHttpRequest` and `window.fetch`. Every network request — including legacy jQuery/axios XHR calls — is captured as a `MushiNetworkEntry` and appears in the Network breadcrumbs tab. `destroy()` removes the patches; if another APM tool (Sentry, Datadog) has since wrapped the same globals the SDK detects the unsafe state and leaves the native references alone.
+  - Network entries include `captureMethod: 'fetch' | 'xhr'` and an optional `correlationId` linking to synchronous console errors captured during the same request. URLs are PII-scrubbed at capture time (before truncation).
+  - **Hash-router inventory**: `discovery` now subscribes to `hashchange` and stores `'/#' + hashPath` entries so hash-routed SPAs appear in Inventory. `routeTemplates` authored with or without the `/#` prefix are both matched. Hash query params (`#/path?key=value`) are stripped before template matching; param _keys_ (never values) are still collected for filter metadata.
+  - Timeline route/href fields are now passed through `scrubUrl` before storage.
+  - `beforeSend` hook 2s timeout now applies per-report (not globally).
+
+  ### @mushi-mushi/node
+  - `captureReport` scrubs `description`, `environment.url`, `error.message`, and `error.stack` before the payload leaves the process.
+  - `mushiExpressErrorHandler` scrubs `req.originalUrl` with `scrubUrl` before embedding it in the report description.
+  - `mushiTraceMiddleware` scrubs the request URL for span names and `http.url` trace attributes.
+  - `mushiExpressErrorHandler` and `ExpressMiddlewareOptions` are now exported from the main entry point (`@mushi-mushi/node`).
+
+  ### @mushi-mushi/cli
+  - `mushi doctor --host-app` (Check 7b) detects `HashRouter`/`createHashRouter`/`location.hash`/`hashchange` in host source files and warns when `/#/`-prefixed `routeTemplates` are missing from the Mushi init call. Advisory-only; runs under `--full` mode.
+
+### Patch Changes
+
+- Updated dependencies [b858f5d]
+- Updated dependencies [76ec932]
+  - @mushi-mushi/core@1.27.0
+
 ## 1.1.1
 
 ### Patch Changes

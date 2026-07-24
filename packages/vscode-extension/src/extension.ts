@@ -18,7 +18,7 @@ const SERVER_LABEL_STDIO = 'Mushi Mushi (npx)'
 const SERVER_LABEL_HTTP = 'Mushi Mushi (hosted)'
 const VERSION = '0.17.0'
 // Pinned MCP npm spec — synced to packages/mcp/package.json by scripts/sync-mcp-pin.mjs.
-const MCP_PIN_SPEC = '@mushi-mushi/mcp@0.19.0'
+const MCP_PIN_SPEC = '@mushi-mushi/mcp@0.20.0'
 const DEFAULT_API = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
 const DEFAULT_MCP = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp'
 
