@@ -1,5 +1,42 @@
 # @mushi-mushi/web
 
+## 1.27.0
+
+### Minor Changes
+
+- 76ec932: **SDK: PII scrubbing, XHR capture, hash-router inventory, and Node middleware hardening**
+
+  ### @mushi-mushi/core
+  - New `scrubUrl(url, options?)` export: scrubs sensitive query-param keys (`token`, `password`, `api_key`, `secret`, `auth`, `session`, `email`, `phone`, `ssn`, JWT-shaped values under innocent keys) to `[Scrubbed]`, decodes percent-encoding before matching, handles hash-router query fragments (`#/path?query`), and never throws on malformed input.
+  - New `scrubPii(text)` export: redacts emails → `[REDACTED_EMAIL]`, phones → `[REDACTED_PHONE]`, JWT-shaped tokens (three dot-separated `eyJ…` segments) → `[REDACTED_JWT]`, SSNs → `[REDACTED_SSN]`, and CC-shaped strings → `[REDACTED_CC]`.
+
+  ### @mushi-mushi/web
+  - **Global XHR capture**: `init()` now patches both `XMLHttpRequest` and `window.fetch`. Every network request — including legacy jQuery/axios XHR calls — is captured as a `MushiNetworkEntry` and appears in the Network breadcrumbs tab. `destroy()` removes the patches; if another APM tool (Sentry, Datadog) has since wrapped the same globals the SDK detects the unsafe state and leaves the native references alone.
+  - Network entries include `captureMethod: 'fetch' | 'xhr'` and an optional `correlationId` linking to synchronous console errors captured during the same request. URLs are PII-scrubbed at capture time (before truncation).
+  - **Hash-router inventory**: `discovery` now subscribes to `hashchange` and stores `'/#' + hashPath` entries so hash-routed SPAs appear in Inventory. `routeTemplates` authored with or without the `/#` prefix are both matched. Hash query params (`#/path?key=value`) are stripped before template matching; param _keys_ (never values) are still collected for filter metadata.
+  - Timeline route/href fields are now passed through `scrubUrl` before storage.
+  - `beforeSend` hook 2s timeout now applies per-report (not globally).
+
+  ### @mushi-mushi/node
+  - `captureReport` scrubs `description`, `environment.url`, `error.message`, and `error.stack` before the payload leaves the process.
+  - `mushiExpressErrorHandler` scrubs `req.originalUrl` with `scrubUrl` before embedding it in the report description.
+  - `mushiTraceMiddleware` scrubs the request URL for span names and `http.url` trace attributes.
+  - `mushiExpressErrorHandler` and `ExpressMiddlewareOptions` are now exported from the main entry point (`@mushi-mushi/node`).
+
+  ### @mushi-mushi/cli
+  - `mushi doctor --host-app` (Check 7b) detects `HashRouter`/`createHashRouter`/`location.hash`/`hashchange` in host source files and warns when `/#/`-prefixed `routeTemplates` are missing from the Mushi init call. Advisory-only; runs under `--full` mode.
+
+- b858f5d: Phase 3 SDK capability parity:
+
+  - **`@mushi-mushi/web/otel`** — new subpath: `createBrowserOtelSpanProcessor(mushi, { otelPresent: context })` forwards OTel error spans to Mushi as programmatic reports. Dependency-injection design (caller passes an import from `@opentelemetry/api`) avoids dynamic-import probing that breaks Vite's static analysis. Size-limit gated at ≤5 KB gzip. 16 unit tests.
+  - **`@mushi-mushi/web/headless`** — new subpath: zero-widget capture bundle. Exports `createHeadlessCapture({ projectId, apiKey })` (programmatic `captureEvent`/`captureException` over fetch, no DOM mutations), browser capture primitives (`createConsoleCapture`, `createNetworkCapture`, `createPerformanceCapture`, etc.), and the OTel bridge. Size-limit gated at ≤35 KB gzip. 17 unit tests. Both subpaths are tree-shakeable and independently published — applications that skip the widget pay zero widget bytes.
+
+### Patch Changes
+
+- Updated dependencies [b858f5d]
+- Updated dependencies [76ec932]
+  - @mushi-mushi/core@1.27.0
+
 ## 1.26.0
 
 ### Minor Changes

@@ -1,5 +1,11 @@
 # @mushi-mushi/plugin-linear
 
+## 0.3.0
+
+### Minor Changes
+
+- b5fb780: Add Linear integration — `LinearConnector` in `@mushi-mushi/node` for programmatic OAuth management and connection status, plus updated `@mushi-mushi/plugin-linear` routing to use the new platform integration API.
+
 ## 0.2.7
 
 ### Patch Changes
