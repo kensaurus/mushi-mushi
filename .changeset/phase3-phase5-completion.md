@@ -2,7 +2,7 @@
 "@mushi-mushi/node": minor
 "@mushi-mushi/mcp": minor
 "@mushi-mushi/cli": patch
-"@mushi-mushi/eslint-plugin-mushi-mushi": patch
+"eslint-plugin-mushi-mushi": patch
 ---
 
 Phase 3 / Phase 5 non-deploy completion (production-readiness uplift, Jul 2026):
