@@ -99,3 +99,36 @@ await mushi.captureReport({
 The Node SDK speaks the same wire protocol as the web SDK and shares
 classification quotas — server-thrown bugs and user-side bugs land in
 the same queue.
+
+## PII and credential scrubbing
+
+Every `description`, `url`, and `error.message` value is passed through the
+core PII scrubber before it leaves the process:
+
+- **JWT-shaped tokens** (three dot-separated `eyJ…` segments, regardless of
+  header scheme) are redacted to `[REDACTED_JWT]`.
+- **Emails, phone numbers** and similar patterns are replaced with
+  `[REDACTED_EMAIL]`, `[REDACTED_PHONE]`, and friends.
+- **Sensitive query-string keys** (`token`, `api_key`, `password`, `secret`, …)
+  have their values replaced with `[Scrubbed]`.
+
+This applies to `captureReport`, `mushiExpressErrorHandler`, and
+`mushiTraceMiddleware` — no extra configuration required.
+
+If you use `Authorization: Token <jwt>` (Conduit / RealWorld spec), the JWT in
+that header is **never captured** — the SDK only reads response status codes and
+timing from network spans, not request headers.
+
+The following fields are scrubbed **before the report leaves the Node process**:
+
+| Field | Scrubber applied |
+| --- | --- |
+| `description` | PII scrub (emails, phones, JWTs, SSNs, CC-shaped strings) |
+| `environment.url` | URL scrub (sensitive query-param keys and value patterns) |
+| `error.message` | PII scrub |
+| `error.stack` | PII scrub |
+| `request.url` *(trace middleware)* | URL scrub |
+
+`userId` and host-supplied `metadata` are left unmodified — the SDK cannot know
+which IDs or metadata keys are safe to alter, so the host is responsible for any
+additional scrubbing at those sites.

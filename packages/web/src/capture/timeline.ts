@@ -1,3 +1,4 @@
+import { scrubUrl } from '@mushi-mushi/core';
 import type { MushiConsoleEntry, MushiNetworkEntry, MushiTimelineEntry } from '@mushi-mushi/core';
 import { subscribeHistory } from '../history-patch';
 
@@ -32,8 +33,11 @@ export function createTimelineCapture(): TimelineCapture {
       kind: 'route',
       payload: {
         source,
-        route: `${location.pathname}${location.search}${location.hash}`,
-        href: location.href,
+        // Query VALUES are a PII channel (`?token=…`, `?email=…`) — scrub
+        // them at capture, both in the search string and inside hash-router
+        // fragments (`#/path?query`). Keys and paths are preserved.
+        route: scrubUrl(`${location.pathname}${location.search}${location.hash}`),
+        href: scrubUrl(location.href),
       },
     });
   }

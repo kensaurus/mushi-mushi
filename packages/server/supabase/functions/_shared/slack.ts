@@ -37,6 +37,7 @@
  *   Do NOT put it in the repo or in project_settings — keep it as a Supabase secret.
  */
 
+import { fetchWithTimeout } from './http.ts'
 import { log } from './logger.ts'
 
 const slackLog = log.child('slack')
@@ -474,7 +475,7 @@ export function buildQaStoryRunBlocks(payload: QaRunPayload): unknown[] {
 
 async function postToSlack(webhookUrl: string, body: object): Promise<void> {
   try {
-    const res = await fetch(webhookUrl, {
+    const res = await fetchWithTimeout(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -586,7 +587,7 @@ export async function sendBotMessage(opts: BotMessageOptions): Promise<BotMessag
   if (opts.threadTs) body.thread_ts = opts.threadTs
 
   try {
-    const res = await fetch('https://slack.com/api/chat.postMessage', {
+    const res = await fetchWithTimeout('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
@@ -657,7 +658,7 @@ export async function sendDiscordNotification(
       ? { embeds: [{ title: opts.title, description: text, color: opts.color ?? 0x57f287 }] }
       : { content: text }
 
-    const res = await fetch(webhookUrl, {
+    const res = await fetchWithTimeout(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

@@ -157,7 +157,7 @@
     "scope": "mcp:read"
   },
   "get_report_evidence": {
-    "description": "Return the full evidence package for a single bug report: screenshot URL, console logs, network excerpts, browser environment (user agent, URL, viewport, SDK version), user replay link if available, breadcrumb trail, and the reporter's own comments thread. This is the same data an engineer would collect for a root-cause investigation. Faster than calling get_report_detail + report timeline separately.",
+    "description": "Return the full evidence package for a single bug report covering all three observability pillars: (1) LOGS — console_logs (error/warn/info/debug entries with timestamps), breadcrumbs (SDK ring buffer: navigation, clicks, network, lifecycle events with category/level), repro_timeline (merged SDK event stream: route/click/request/log/screen), and the reporter's own comments thread; (2) TRACES — network_requests (SDK-captured fetch/XHR with method/status/duration/traceId), backend_spans (server-side spans joined by W3C trace_id: name/duration_ms/parentSpanId/status), and Sentry trace correlation IDs (sentry_trace_id, sentry_event_id) for deeplinks; (3) METRICS — performance_metrics (Web Vitals snapshot: LCP/CLS/INP/TTFB/FCP + INP attribution + page timing + connection info), anomalies (statistical provenance when auto-filed by CI metric regression: baseline_mean/std, score in σ, threshold); plus screenshot_url, browser environment (user agent, URL, viewport, SDK version), and tags. This is the same data an engineer would collect for a root-cause investigation. Faster than calling get_report_detail + report timeline separately.",
     "scope": "mcp:read"
   },
   "get_report_timeline": {

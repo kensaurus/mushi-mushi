@@ -68,6 +68,7 @@
  * checks fire one more time at the REST layer too.
  */
 
+import { PUBLIC_CORS_HEADERS } from '../_shared/cors.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { propagateRequestId } from '../_shared/internal-headers.ts'
 import { recordMcpToolInvocation } from '../_shared/mcp-tool-audit.ts'
@@ -930,12 +931,29 @@ const BASE_TOOLS: Record<string, ToolDef> = {
             status: report.status,
             severity: report.severity,
             category: report.category,
-            screenshot_url: (report.evidence as Record<string, unknown> | null)?.screenshot_url ?? null,
-            console_logs: (report.evidence as Record<string, unknown> | null)?.console ?? null,
-            network_requests: (report.evidence as Record<string, unknown> | null)?.network ?? null,
+            // screenshot_url is a top-level signed column on the reports row
+            screenshot_url: (report.screenshot_url as string | null) ?? null,
+            // console_logs / network_logs are top-level jsonb columns (not nested under .evidence)
+            console_logs: (report.console_logs as unknown[] | null) ?? null,
+            network_requests: (report.network_logs as unknown[] | null) ?? null,
+            // breadcrumbs: Sentry-schema ring buffer {timestamp,category,level,message,data?}
+            breadcrumbs: (report.breadcrumbs as unknown[] | null) ?? null,
+            // performance_metrics: Web Vitals snapshot (LCP, CLS, INP, TTFB, FCP, FID, longTasks)
+            performance_metrics: (report.performance_metrics as Record<string, unknown> | null) ?? null,
+            // backend_spans: client→server trace spans joined by trace_id (if available)
+            backend_spans: (report.backend_spans as unknown[] | null) ?? null,
+            // repro_timeline: merged SDK event stream (route/click/request/log/screen entries)
+            repro_timeline: (report.repro_timeline as unknown[] | null) ?? null,
+            // anomalies: statistical provenance when this report was auto-filed by anomaly detection
+            anomalies: (report.anomalies as unknown[] | null) ?? null,
+            // sentry trace correlation IDs for deeplinks
+            sentry_trace_id: (report.sentry_trace_id as string | null) ?? null,
+            sentry_event_id: (report.sentry_event_id as string | null) ?? null,
+            sentry_release: (report.sentry_release as string | null) ?? null,
             environment: report.environment ?? null,
             user_agent: report.user_agent ?? null,
             user_comments: report.comments ?? null,
+            tags: (report.tags as Record<string, string> | null) ?? null,
             created_at: report.created_at,
           }
         : { error: String((reportRes as PromiseRejectedResult).reason) }
@@ -1926,7 +1944,7 @@ function oauthOperationalPath(pathname: string): boolean {
   )
 }
 const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
+  ...PUBLIC_CORS_HEADERS,
   'Access-Control-Allow-Methods': ALLOWED_METHODS,
   'Access-Control-Allow-Headers':
     'Content-Type, Authorization, X-Mushi-Api-Key, X-Mushi-Project-Id, MCP-Session-Id, MCP-Protocol-Version',

@@ -91,6 +91,36 @@ export function normalizeSegment(seg: string): string {
 }
 
 /**
+ * Derive the route for the current location, hash-router aware.
+ *
+ * Hash-routed SPAs (RealWorld/Conduit-style `#/login`, `#/article/:slug`)
+ * keep `location.pathname` pinned at `/`, so pathname-only inventory
+ * collapses every screen into one route while the timeline capturer (which
+ * records the hash) sees them all — the two must agree. When the fragment
+ * looks like a hash ROUTE (`#/…`) we template the hash path instead and
+ * prefix the result with `/#` so hash routes stay distinguishable from path
+ * routes in the inventory. Pure anchors (`#section`) are not routes and fall
+ * through to the pathname as before.
+ */
+export function deriveRoute(
+  pathname: string,
+  hash: string,
+  templates: string[] | undefined,
+): string {
+  if (hash.startsWith('#/')) {
+    const raw = hash.slice(1); // '#/article/x?y=1' → '/article/x?y=1'
+    const qIdx = raw.indexOf('?');
+    const hashPath = qIdx === -1 ? raw : raw.slice(0, qIdx);
+    // Hosts may author templates with or without the '/#' prefix.
+    const hashTemplates = templates?.map((t) =>
+      t.startsWith('/#/') ? t.slice(2) : t,
+    );
+    return '/#' + normalizeRoute(hashPath, hashTemplates);
+  }
+  return normalizeRoute(pathname, templates);
+}
+
+/**
  * Normalize a pathname to a route template, preferring an exact-match
  * against `routeTemplates` if the host has provided them.
  *
@@ -160,9 +190,15 @@ function readTestids(): string[] {
 function readQueryParamKeys(): string[] {
   if (typeof window === 'undefined') return [];
   try {
-    const params = new URLSearchParams(window.location.search);
     const out = new Set<string>();
-    params.forEach((_, key) => out.add(key));
+    const collect = (qs: string) => {
+      new URLSearchParams(qs).forEach((_, key) => out.add(key));
+    };
+    collect(window.location.search);
+    // Hash routers carry their query inside the fragment (`#/path?tag=x`).
+    const hash = window.location.hash;
+    const qIdx = hash.indexOf('?');
+    if (hash.startsWith('#/') && qIdx !== -1) collect(hash.slice(qIdx + 1));
     return Array.from(out).sort();
   } catch {
     return [];
@@ -218,8 +254,9 @@ async function hashUserId(input: string | null): Promise<string | null> {
  *    directly (Next.js / React Router both do this).
  *  - The first emission fires after a 100ms delay so the host app has
  *    a chance to settle the new DOM before we read testids.
- *  - Hash-only changes (`#section`) are intentionally ignored; they're
- *    not real navigations as far as the inventory is concerned.
+ *  - Hash ROUTE changes (`#/login` → `#/article/x`) are real navigations
+ *    (RealWorld-style hash routers) and emit like path changes; pure
+ *    anchor changes (`#section`) are still intentionally ignored.
  */
 export function createDiscoveryCapture(opts: DiscoveryCaptureOptions): DiscoveryCapture {
   const {
@@ -240,7 +277,11 @@ export function createDiscoveryCapture(opts: DiscoveryCaptureOptions): Discovery
 
   async function emitForCurrent() {
     if (typeof window === 'undefined') return;
-    const route = normalizeRoute(window.location.pathname, config.routeTemplates);
+    const route = deriveRoute(
+      window.location.pathname,
+      window.location.hash,
+      config.routeTemplates,
+    );
     const now = Date.now();
     const last = lastEmittedAt.get(route) ?? 0;
     if (now - last < throttleMs) return;
@@ -278,7 +319,12 @@ export function createDiscoveryCapture(opts: DiscoveryCaptureOptions): Discovery
 
   function onMaybeNavigation() {
     if (typeof window === 'undefined') return;
-    const path = window.location.pathname + window.location.search;
+    // Include the fragment only when it's a hash ROUTE (`#/…`) — pure
+    // anchors (`#section`) must not look like navigations.
+    const hashPart = window.location.hash.startsWith('#/')
+      ? window.location.hash
+      : '';
+    const path = window.location.pathname + window.location.search + hashPart;
     if (path === lastPath) return;
     lastPath = path;
     scheduleEmit();
@@ -297,6 +343,10 @@ export function createDiscoveryCapture(opts: DiscoveryCaptureOptions): Discovery
     onReplace: onNav,
     onPop: onNav,
   });
+  // Hash routers navigate by mutating `location.hash`, which fires
+  // `hashchange` but no history-API call — subscribe directly (the timeline
+  // capturer already does; inventory must see the same navigations).
+  window.addEventListener('hashchange', onNav);
 
   // Initial emission for the landing page.
   scheduleEmit();
@@ -304,6 +354,7 @@ export function createDiscoveryCapture(opts: DiscoveryCaptureOptions): Discovery
   return {
     destroy() {
       unsubHistory();
+      window.removeEventListener('hashchange', onNav);
       if (pendingTimer) {
         clearTimeout(pendingTimer);
         pendingTimer = null;

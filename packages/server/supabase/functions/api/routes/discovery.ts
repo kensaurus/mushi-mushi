@@ -1,3 +1,4 @@
+import { PUBLIC_CORS_HEADERS } from '../../_shared/cors.ts'
 import type { Hono, Context } from 'npm:hono@4';
 import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
@@ -241,7 +242,7 @@ export function registerPostRegionDiscoveryRoutes(app: Hono<{ Variables: Variabl
   const AGENT_CARD_HEADERS: Record<string, string> = {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'public, max-age=3600, s-maxage=3600',
-    'Access-Control-Allow-Origin': '*',
+    ...PUBLIC_CORS_HEADERS,
   };
 
   app.get('/.well-known/agent-card', (c) => {

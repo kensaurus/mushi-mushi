@@ -14,6 +14,7 @@
 // Direct REST calls — no `npm:stripe@x` SDK so we can run on Deno Edge
 // without bundling 600KB. The contract is documented inline.
 // ============================================================
+import { fetchWithTimeout } from './http.ts'
 import { log } from './logger.ts'
 import { SUPPORT_EMAIL } from './support.ts'
 
@@ -59,7 +60,7 @@ const stripeFetch = async <T>(
   path: string,
   init: { method: string; body?: URLSearchParams } = { method: 'GET' },
 ): Promise<T> => {
-  const res = await fetch(`${STRIPE_API}${path}`, {
+  const res = await fetchWithTimeout(`${STRIPE_API}${path}`, {
     method: init.method,
     headers: {
       Authorization: `Bearer ${cfg.secretKey}`,
@@ -470,7 +471,7 @@ export const createConnectTransfer = async (
       Object.entries(args.metadata ?? {}).map(([k, v]) => [`metadata[${k}]`, v]),
     ),
   })
-  const res = await fetch(`${STRIPE_API}/transfers`, {
+  const res = await fetchWithTimeout(`${STRIPE_API}/transfers`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${cfg.secretKey}`,
@@ -503,7 +504,7 @@ export const createCustomerBalanceCredit = async (
     currency: args.currency,
     description: args.description,
   })
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `${STRIPE_API}/customers/${encodeURIComponent(args.customerId)}/balance_transactions`,
     {
       method: 'POST',

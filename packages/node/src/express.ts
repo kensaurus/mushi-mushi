@@ -1,3 +1,4 @@
+import { scrubUrl } from '@mushi-mushi/core'
 import type { MushiNodeClient } from './client'
 import { parseTraceContext } from './trace'
 
@@ -40,12 +41,16 @@ export function mushiExpressErrorHandler(opts: ExpressMiddlewareOptions) {
             : Array.isArray(req.headers['traceparent'])
               ? req.headers['traceparent'][0]
               : undefined
+        // Scrub query values BEFORE the URL is embedded in free text — the
+        // client's scrubPii pass can't key-redact `?token=` once it's inside
+        // a sentence.
+        const safeUrl = scrubUrl(req.originalUrl ?? req.url ?? '')
         void opts.client.captureReport({
-          description: `[${req.method ?? 'REQ'} ${req.originalUrl ?? req.url ?? ''}] ${e.message}`,
+          description: `[${req.method ?? 'REQ'} ${safeUrl}] ${e.message}`,
           userCategory: 'bug',
           severity: (res.statusCode ?? 500) >= 500 ? 'high' : 'medium',
           component: opts.component ?? 'node:express',
-          url: req.originalUrl ?? req.url,
+          url: safeUrl,
           traceContext,
           error: { name: e.name, message: e.message, stack: e.stack },
           ...(rawTraceparent ? { metadata: { traceparent: rawTraceparent } } : {}),

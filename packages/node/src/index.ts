@@ -9,6 +9,8 @@ export type { TraceContext } from './trace'
 export { createOtelSpanProcessor } from './otel'
 export { mushiTraceMiddleware, emitMushiSpan } from './middleware'
 export type { TraceMiddlewareOptions } from './middleware'
+export { mushiExpressErrorHandler } from './express'
+export type { ExpressMiddlewareOptions } from './express'
 
 // Linear integration — programmatic connect/disconnect for CI and server-side scripts.
 export { connectLinearApiKey, getLinearConnectionStatus, disconnectLinear } from './linear'
