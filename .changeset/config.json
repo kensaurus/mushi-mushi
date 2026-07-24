@@ -18,6 +18,10 @@
     "@mushi-mushi/e2e-dogfood",
     "@mushi-mushi/marketing-ui",
     "@mushi-mushi/codebase-graph",
-    "mushi-mushi-vscode"
+    "mushi-mushi-vscode",
+    "mushi-realworld",
+    "mushi-realworld-backend-express",
+    "mushi-realworld-frontend-hash",
+    "mushi-realworld-react-vite"
   ]
 }
