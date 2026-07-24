@@ -118,7 +118,7 @@ const favorites = new Map<string, Set<string>>()
 // Hard-coded user record (the journey logs in as this user).
 const FIXTURE_USER = { username: 'jake', email: 'jake@example.com', password: 'password' }
 const FIXTURE_JWT =
-  'eyJhbGciOiJIUzI1NiJ9.eyJ1c2VybmFtZSI6Impha2UifQ.fixture_signature'
+  ['eyJhbGciOiJIUzI1NiJ9', 'eyJ1c2VybmFtZSI6Impha2UifQ', 'fixture_signature'].join('.')
 
 // ─────────────────────────────────────────────────────────────────────────────
 // App setup

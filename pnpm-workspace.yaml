@@ -57,6 +57,20 @@ minimumReleaseAgeExclude:
   # CI gate green. undici is maintained by the Node.js core team (low
   # supply-chain risk) and provenance/audit-signatures run as compensating controls.
   - "undici"
+  # next 16.2.11 fixes three HIGH advisories (middleware/proxy auth bypass in
+  # App Router w/ Turbopack single locale, Server Actions DoS, Server Actions
+  # SSRF on custom servers) affecting every >=16.0.0 <16.2.11 release.
+  # Exempt from the 7-day cooldown so the pnpm.overrides pin can resolve the
+  # patch and keep the `npm audit --audit-level=high` CI gate green. Vercel-
+  # maintained; provenance + audit signatures run as compensating controls.
+  - "next"
+  # next's version-locked platform binaries/compiler packages must move in
+  # lockstep with the next override above.
+  - "@next/*"
+  # find-my-way 9.7.0 fixes the HTTP/2 DDoS advisory (<=9.6.0). Dev/test-only
+  # in this tree (pulled via fastify in the Node SDK's framework-adapter
+  # tests). Same compensating controls as above.
+  - "find-my-way"
 
 # strictDepBuilds: fail-fast on any dep that tries to run a postinstall
 # hook the workspace hasn't pre-approved (via .npmrc → onlyBuiltDependencies

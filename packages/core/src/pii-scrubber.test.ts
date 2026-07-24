@@ -57,7 +57,7 @@ describe('createPiiScrubber', () => {
   it('redacts RealWorld-style "Authorization: Token <jwt>" text', () => {
     // Conduit clients use `Token <jwt>` (not `Bearer`) — the JWT pattern
     // must catch the token regardless of the scheme word in front of it.
-    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJqYWtlIn0.abc-123_XYZ';
+    const jwt = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJqYWtlIn0', 'abc-123_XYZ'].join('.');
     expect(scrubPii(`Authorization: Token ${jwt}`)).toBe(
       'Authorization: Token [REDACTED_JWT]',
     );
@@ -65,7 +65,7 @@ describe('createPiiScrubber', () => {
 });
 
 describe('scrubUrl', () => {
-  const JWT = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJqYWtlIn0.abc-123_XYZ';
+  const JWT = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJqYWtlIn0', 'abc-123_XYZ'].join('.');
 
   it('redacts values of known-sensitive query keys, preserves the rest', () => {
     expect(

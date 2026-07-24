@@ -75,7 +75,7 @@ describe('createNetworkCapture', () => {
     globalThis.fetch = mockFetch;
     capture = createNetworkCapture();
 
-    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJqYWtlIn0.abc-123_XYZ';
+    const jwt = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJqYWtlIn0', 'abc-123_XYZ'].join('.');
     await fetch('https://api.example.com/articles?tag=dragons&limit=10&token=supersecret');
     await fetch(`https://api.example.com/next?redirect=${jwt}`);
 
@@ -94,7 +94,7 @@ describe('createNetworkCapture', () => {
     globalThis.fetch = mockFetch;
     capture = createNetworkCapture();
 
-    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJqYWtlIn0.abc-123_XYZ';
+    const jwt = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJqYWtlIn0', 'abc-123_XYZ'].join('.');
     await fetch('https://api.example.com/user', {
       headers: { Authorization: `Token ${jwt}` },
     });

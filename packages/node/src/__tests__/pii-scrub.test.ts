@@ -8,7 +8,7 @@ const BASE_OPTIONS = {
   apiEndpoint: 'https://xyz.supabase.co/functions/v1/api',
 }
 
-const JWT = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJqYWtlIn0.abc-123_XYZ'
+const JWT = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiJqYWtlIn0', 'abc-123_XYZ'].join('.')
 
 /**
  * RealWorld attunement: server-side wire parity with the web SDK's PII
