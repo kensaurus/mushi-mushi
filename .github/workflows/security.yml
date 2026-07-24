@@ -65,6 +65,19 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           queries: security-extended
+          # examples/ are deliberately-minimal demo fixtures (the RealWorld
+          # Conduit app has no rate limiting / uses innerHTML by design — it
+          # exists to exercise the SDK against a typical small app, and its
+          # server only ever binds to localhost in e2e). Test files contain
+          # intentionally vulnerable-looking fixtures (fake JWTs, mock URL
+          # checks). Neither is shipped; scanning them produces alerts no one
+          # can act on. The three npm entrypoints this workflow protects all
+          # live under packages/ and remain fully scanned.
+          config: |
+            paths-ignore:
+              - examples
+              - '**/*.test.ts'
+              - '**/__tests__'
 
       - uses: github/codeql-action/analyze@95e58e9a2cdfd71adc6e0353d5c52f41a045d225  # v4.35.2
         with:
