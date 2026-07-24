@@ -15,7 +15,7 @@
  * Both sources are already available on ReportDetailPage — networkRequests comes
  * from the evidence and backendSpans comes from the Phase 1a join in reports.ts.
  */
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { LegendDot } from '../charts'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -63,7 +63,10 @@ interface WaterfallRow {
 function spanStatus(span: WaterfallSpanEntry['span_json']): 'ok' | 'error' | 'pending' {
   const s = span?.status?.toLowerCase()
   if (!s) return 'pending'
-  if (s.includes('error') || s.includes('fail') || s.includes('unset')) return 'error'
+  // OTel UNSET (code 0) is the default for spans that finished without an
+  // explicit setStatus — not an error (see otlp-exporter.ts).
+  if (s.includes('unset')) return 'ok'
+  if (s.includes('error') || s.includes('fail')) return 'error'
   return 'ok'
 }
 
@@ -221,10 +224,12 @@ export function TraceWaterfall({
               <div className="px-4 py-1 bg-surface-overlay/30 border-t border-edge-subtle/20">
                 <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
                   {Object.entries(attrs).slice(0, 12).map(([k, v]) => (
-                    <>
-                      <dt key={`k-${k}`} className="font-mono text-3xs text-fg-faint truncate">{k}</dt>
-                      <dd key={`v-${k}`} className="font-mono text-3xs text-fg-secondary truncate">{String(v)}</dd>
-                    </>
+                    <Fragment key={k}>
+                      <dt className="font-mono text-3xs text-fg-faint truncate">{k}</dt>
+                      <dd className="font-mono text-3xs text-fg-secondary truncate">
+                        {typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v)}
+                      </dd>
+                    </Fragment>
                   ))}
                 </dl>
               </div>

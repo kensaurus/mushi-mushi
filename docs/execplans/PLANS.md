@@ -516,3 +516,32 @@ The billing API accepts `billing_interval: 'monthly' | 'annual'` on checkout sta
 - [ ] Enterprise: one real customer onboarded via manual subscription row — confirms the gate works end-to-end.
 - [ ] Sentry upsell: visible on billing overview when Sentry is not connected; hidden when it is.
 - [ ] Annual billing: `stripe-bootstrap.mjs` creates prices without error; env lines printed.
+
+---
+
+## Plan 016 — RealWorld SDK Attunement (2026-07-23) `COMPLETE`
+
+### Goal
+Use RealWorld/Conduit reference apps (canonical realistic apps in every
+framework Mushi ships) to harden SDK, CLI, and MCP. Full gap analysis,
+spec-conformance matrix, and burndown live in
+[realworld-attunement.md](./realworld-attunement.md).
+
+### Phase 1 — SDK gap fixes `COMPLETE` (2026-07-23)
+- [x] `scrubUrl` in `@mushi-mushi/core` — query-value PII redaction (sensitive
+      keys + pattern scrub), hash-fragment-query aware.
+- [x] Network capture scrubs URLs before storing (fetch + XHR).
+- [x] Timeline route payloads (`route`, `href`) scrubbed at capture.
+- [x] Console logs scrubbed for wire (`scrubConsoleForWire` in `mushi.ts`) —
+      previously the one surface shipping raw `console.log(jwt)`.
+- [x] Hash-route inventory discovery: `deriveRoute` (`/#/article/[id]`),
+      `hashchange` subscription, fragment query keys.
+- [x] `Authorization: Token <jwt>` regression tests (header never captured;
+      JWT pattern catches Conduit's non-Bearer scheme).
+- Verified: core 192 tests, web 225 tests, typecheck 47/47 green.
+
+### Phase 2 — Conduit fixture matrix + dogfood harness `PLANNED`
+Vendored `examples/realworld/` (express backend + react-vite + hash-router
+frontends), non-interactive `mushi init` wiring, `conduit-journey.spec.ts`
+capture→ingest assertions, MCP fix-loop dogfood step, `MUSHI_REALWORLD=1`
+CI gate + `pnpm e2e:realworld`.

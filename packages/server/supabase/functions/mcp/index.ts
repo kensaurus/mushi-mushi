@@ -68,6 +68,7 @@
  * checks fire one more time at the REST layer too.
  */
 
+import { PUBLIC_CORS_HEADERS } from '../_shared/cors.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { propagateRequestId } from '../_shared/internal-headers.ts'
 import { recordMcpToolInvocation } from '../_shared/mcp-tool-audit.ts'
@@ -1943,7 +1944,7 @@ function oauthOperationalPath(pathname: string): boolean {
   )
 }
 const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
+  ...PUBLIC_CORS_HEADERS,
   'Access-Control-Allow-Methods': ALLOWED_METHODS,
   'Access-Control-Allow-Headers':
     'Content-Type, Authorization, X-Mushi-Api-Key, X-Mushi-Project-Id, MCP-Session-Id, MCP-Protocol-Version',

@@ -39,6 +39,7 @@
  * in the contract.
  */
 
+import { PUBLIC_CORS_HEADERS } from '../../_shared/cors.ts'
 import type { Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { API_ERROR_CODES } from '../../_shared/error-codes.ts'
@@ -49,7 +50,7 @@ const OPENAPI_HEADERS: Record<string, string> = {
   // the build deploys it deterministically. 5 min is short enough that a
   // mid-day point release reaches consumers within the next refresh.
   'Cache-Control': 'public, max-age=300, s-maxage=300',
-  'Access-Control-Allow-Origin': '*',
+  ...PUBLIC_CORS_HEADERS,
 }
 
 export function registerOpenApiRoute(app: Hono<{ Variables: Variables }>): void {
