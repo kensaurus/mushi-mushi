@@ -35,11 +35,11 @@
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
-    "@types/node": "^22.20.0",
+    "@types/node": "^22.20.1",
     "eslint": "^10.6.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   },
   "repository": {
     "type": "git",
