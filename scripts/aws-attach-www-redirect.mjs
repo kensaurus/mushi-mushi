@@ -4,23 +4,35 @@
  *
  * RUN: AWS_PROFILE=sbc-deploy node scripts/aws-attach-www-redirect.mjs
  */
-import { execSync } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const DIST = process.env.CLOUDFRONT_DISTRIBUTION_ID || process.env.CF_DIST_ID || 'E246VQ1C9QYZVB'
 const FN = 'kensaur-www-redirect'
 
-function awsJson(cmd) {
+// execFileSync, not execSync: the distribution id comes from the environment and
+// must never be interpolated into a shell command line.
+function awsJson(args) {
   return JSON.parse(
-    execSync(`aws ${cmd} --output json`, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 }),
+    execFileSync('aws', [...args, '--output', 'json'], {
+      encoding: 'utf8',
+      maxBuffer: 20 * 1024 * 1024,
+    }),
   )
 }
 
-const live = awsJson(
-  `cloudfront describe-function --name ${FN} --stage LIVE --region us-east-1`,
-)
+const live = awsJson([
+  'cloudfront',
+  'describe-function',
+  '--name',
+  FN,
+  '--stage',
+  'LIVE',
+  '--region',
+  'us-east-1',
+])
 const arn = live.FunctionSummary?.FunctionMetadata?.FunctionARN
 if (!arn) {
   console.error(`ERROR: ${FN} is not LIVE. Publish it first.`)
@@ -28,7 +40,14 @@ if (!arn) {
 }
 console.log(`Function ARN: ${arn}`)
 
-const resp = awsJson(`cloudfront get-distribution-config --id ${DIST} --region us-east-1`)
+const resp = awsJson([
+  'cloudfront',
+  'get-distribution-config',
+  '--id',
+  DIST,
+  '--region',
+  'us-east-1',
+])
 const etag = resp.ETag
 const config = resp.DistributionConfig
 let attached = 0
@@ -59,10 +78,21 @@ if (attached === 0) {
   process.exit(0)
 }
 
-const tmp = join(tmpdir(), 'cf-www-attach.json').replaceAll('\\', '/')
+// mkdtemp, not a fixed name in the temp dir: a predictable path in a world-
+// writable directory can be pre-created or symlinked by another user.
+const tmp = join(mkdtempSync(join(tmpdir(), 'cf-www-attach-')), 'config.json').replaceAll('\\', '/')
 writeFileSync(tmp, JSON.stringify(config))
 console.log(`Updating distribution (${attached} behaviors)...`)
-const out = awsJson(
-  `cloudfront update-distribution --id ${DIST} --if-match ${etag} --distribution-config file://${tmp} --region us-east-1`,
-)
+const out = awsJson([
+  'cloudfront',
+  'update-distribution',
+  '--id',
+  DIST,
+  '--if-match',
+  etag,
+  '--distribution-config',
+  `file://${tmp}`,
+  '--region',
+  'us-east-1',
+])
 console.log(`Done. Status=${out.Distribution?.Status} ETag=${out.ETag}`)

@@ -12,8 +12,8 @@
  * ENV: CLOUDFRONT_DISTRIBUTION_ID (or CF_DIST_ID), AWS credentials via OIDC or keys
  */
 
-import { execSync } from 'node:child_process'
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { writeFileSync, mkdtempSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -24,13 +24,20 @@ const COMBINED_FN_NAME = 'kensaur-default-viewer'
 const LEGACY_GLOT_FN = 'glot-it-spa-router'
 const BEHAVIOR_LIMIT = 75
 
-function aws(cmd) {
-  return JSON.parse(execSync(`aws ${cmd} --output json 2>&1`, { encoding: 'utf8' }))
+// execFileSync with an argument array, not execSync with a template string:
+// DIST_ID comes from the environment and must never reach a shell command line.
+function aws(args) {
+  return JSON.parse(
+    execFileSync('aws', [...args, '--output', 'json'], {
+      encoding: 'utf8',
+      maxBuffer: 20 * 1024 * 1024,
+    }),
+  )
 }
 
-function awsRawOrThrow(cmd) {
+function awsRawOrThrow(args) {
   try {
-    return execSync(`aws ${cmd} 2>&1`, { encoding: 'utf8' })
+    return execFileSync('aws', args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 })
   } catch (err) {
     const detail = err.stdout?.toString() || err.stderr?.toString() || err.message
     console.error('AWS CLI error:')
@@ -41,12 +48,19 @@ function awsRawOrThrow(cmd) {
 
 function getLiveFunctionArn(name) {
   try {
-    const resp = aws(
-      `cloudfront describe-function --name ${name} --stage LIVE --region us-east-1`,
-    )
+    const resp = aws([
+      'cloudfront',
+      'describe-function',
+      '--name',
+      name,
+      '--stage',
+      'LIVE',
+      '--region',
+      'us-east-1',
+    ])
     return resp?.FunctionSummary?.FunctionMetadata?.FunctionARN ?? ''
   } catch (err) {
-    const msg = err.stdout?.toString() || err.message || ''
+    const msg = err.stdout?.toString() || err.stderr?.toString() || err.message || ''
     if (/NoSuchFunctionExists|cannot be found|not.*found/i.test(msg)) {
       return ''
     }
@@ -58,7 +72,12 @@ function getLiveFunctionArn(name) {
 function publishFunction(name, codeFile) {
   // Write function-config to a temp file — inline JSON + shell quoting breaks
   // on Windows (AWS CLI treats the em-dash comment as a parse error).
-  const configPath = join(tmpdir(), `cf-fn-config-${name}.json`).replace(/\\/g, '/')
+  // mkdtemp, not a fixed name: a predictable path in the world-writable temp
+  // dir can be pre-created or symlinked by another local user.
+  const configPath = join(mkdtempSync(join(tmpdir(), 'cf-fn-config-')), `${name}.json`).replace(
+    /\\/g,
+    '/',
+  )
   writeFileSync(
     configPath,
     JSON.stringify({
@@ -68,27 +87,48 @@ function publishFunction(name, codeFile) {
   )
   const posixCode = codeFile.replace(/\\/g, '/')
 
+  const describeArgs = ['cloudfront', 'describe-function', '--name', name, '--region', 'us-east-1']
   let etag = ''
   try {
-    etag = aws(`cloudfront describe-function --name ${name} --region us-east-1`).ETag
+    etag = aws(describeArgs).ETag
   } catch {
     etag = ''
   }
 
+  const codeArgs = [
+    '--function-config',
+    `file://${configPath}`,
+    '--function-code',
+    `fileb://${posixCode}`,
+    '--region',
+    'us-east-1',
+  ]
+
   if (!etag) {
-    awsRawOrThrow(
-      `cloudfront create-function --name ${name} --function-config file://${configPath} --function-code fileb://${posixCode} --region us-east-1`,
-    )
+    awsRawOrThrow(['cloudfront', 'create-function', '--name', name, ...codeArgs])
   } else {
-    awsRawOrThrow(
-      `cloudfront update-function --name ${name} --if-match ${etag} --function-config file://${configPath} --function-code fileb://${posixCode} --region us-east-1`,
-    )
+    awsRawOrThrow([
+      'cloudfront',
+      'update-function',
+      '--name',
+      name,
+      '--if-match',
+      etag,
+      ...codeArgs,
+    ])
   }
 
-  etag = aws(`cloudfront describe-function --name ${name} --region us-east-1`).ETag
-  awsRawOrThrow(
-    `cloudfront publish-function --name ${name} --if-match ${etag} --region us-east-1`,
-  )
+  etag = aws(describeArgs).ETag
+  awsRawOrThrow([
+    'cloudfront',
+    'publish-function',
+    '--name',
+    name,
+    '--if-match',
+    etag,
+    '--region',
+    'us-east-1',
+  ])
 }
 
 function viewerRequestAssoc(behavior) {
@@ -97,7 +137,7 @@ function viewerRequestAssoc(behavior) {
 }
 
 console.log('Building combined Default viewer function...')
-execSync('node scripts/build-kensaur-default-viewer.mjs', {
+execFileSync(process.execPath, [join(SCRIPT_DIR, 'build-kensaur-default-viewer.mjs')], {
   cwd: join(SCRIPT_DIR, '..'),
   stdio: 'inherit',
 })
@@ -114,7 +154,14 @@ if (!fnArn) {
 console.log(`Combined function ARN: ${fnArn}`)
 
 console.log(`Fetching distribution config for ${DIST_ID}...`)
-const distResp = aws(`cloudfront get-distribution-config --id ${DIST_ID} --region us-east-1`)
+const distResp = aws([
+  'cloudfront',
+  'get-distribution-config',
+  '--id',
+  DIST_ID,
+  '--region',
+  'us-east-1',
+])
 const etag = distResp.ETag
 const config = distResp.DistributionConfig
 
@@ -165,19 +212,22 @@ defaultBehavior.FunctionAssociations = {
   Items: [...otherAssocs, { FunctionARN: fnArn, EventType: 'viewer-request' }],
 }
 
-const tmpDir = join(tmpdir(), 'mushi-cf-apex-redirect')
-try {
-  mkdirSync(tmpDir, { recursive: true })
-} catch {
-  /* exists */
-}
-const tmpFile = join(tmpDir, 'cf-update-config.json')
+const tmpFile = join(mkdtempSync(join(tmpdir(), 'mushi-cf-apex-redirect-')), 'cf-update-config.json')
 writeFileSync(tmpFile, JSON.stringify(config))
 console.log(`Attaching ${COMBINED_FN_NAME} to Default cache behavior (viewer-request)...`)
 
-const resultRaw = awsRawOrThrow(
-  `cloudfront update-distribution --id ${DIST_ID} --if-match ${etag} --distribution-config file://${tmpFile.replace(/\\/g, '/')} --region us-east-1`,
-)
+const resultRaw = awsRawOrThrow([
+  'cloudfront',
+  'update-distribution',
+  '--id',
+  DIST_ID,
+  '--if-match',
+  etag,
+  '--distribution-config',
+  `file://${tmpFile.replace(/\\/g, '/')}`,
+  '--region',
+  'us-east-1',
+])
 const parsed = JSON.parse(resultRaw)
 console.log(`SUCCESS. New ETag: ${parsed.ETag}`)
 console.log(`Distribution status: ${parsed.Distribution?.Status ?? parsed.Status}`)
