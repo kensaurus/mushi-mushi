@@ -28,6 +28,20 @@
 function handler(event) {
   var request = event.request;
   var uri = request.uri;
+  var hostHeader = request.headers && request.headers.host;
+  var host = hostHeader && hostHeader.value ? hostHeader.value.toLowerCase() : '';
+
+  // www → apex (this behavior is more specific than Default).
+  if (host === 'www.kensaur.us') {
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: {
+        'location': { value: 'https://kensaur.us' + uri },
+        'cache-control': { value: 'public, max-age=31536000' },
+      },
+    };
+  }
 
   // 1. Bare docs root with no trailing slash: 301 to the canonical
   //    trailing-slash form. The static export's docs root lives at
@@ -46,10 +60,22 @@ function handler(event) {
     };
   }
 
-  // 2. Trailing slash: serve the folder index (e.g. /mushi-mushi/docs/ -> /mushi-mushi/docs/index.html)
-  if (uri.charAt(uri.length - 1) === '/') {
+  // 2. Trailing slash: docs root keeps folder index; sub-pages 301 to
+  //    slashless form (Next `trailingSlash: false` → `slug.html`, not
+  //    `slug/index.html`). Mirrors cloudfront-mushi-spa-router.js.
+  if (uri === '/mushi-mushi/docs/' || uri === '/docs/') {
     request.uri = uri + 'index.html';
     return request;
+  }
+  if (uri.charAt(uri.length - 1) === '/') {
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: {
+        'location': { value: uri.slice(0, -1) },
+        'cache-control': { value: 'public, max-age=31536000' },
+      },
+    };
   }
 
   // 3. Has a file extension: pass through (assets, JSON, sitemap, etc.)

@@ -154,8 +154,14 @@ export interface LandingPlatformCard {
   badge?: string
 }
 
-/** Shared brand mark path (served from apps/docs/public). */
-export const LANDING_BRAND_MARK = '/brand/logo-mark.svg'
+/**
+ * Shared brand mark path (served from apps/docs/public).
+ * Prefix with MUSHI_BASE_PATH so static export under
+ * `/mushi-mushi/docs` does not emit root-absolute `/brand/*`
+ * (those 404 on the kensaur Default origin; CF 301 is only a safety net).
+ */
+const DOCS_BASE = (process.env.NEXT_PUBLIC_MUSHI_BASE_PATH ?? '').replace(/\/+$/, '')
+export const LANDING_BRAND_MARK = `${DOCS_BASE}/brand/logo-mark.svg`
 
 export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
   {

@@ -120,6 +120,25 @@ function handler(event) {
   var request = event.request;
   var uri = request.uri;
   var qs = request.querystring;
+  var hostHeader = request.headers && request.headers.host;
+  var host = hostHeader && hostHeader.value ? hostHeader.value.toLowerCase() : '';
+
+  // www → apex (this behavior is more specific than Default).
+  if (host === 'www.kensaur.us') {
+    var wwwQs = serializeQuerystring(qs);
+    var wwwLocation = 'https://kensaur.us' + uri;
+    if (wwwQs) {
+      wwwLocation = wwwLocation + '?' + wwwQs;
+    }
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: {
+        'location': { value: wwwLocation },
+        'cache-control': { value: 'public, max-age=31536000' },
+      },
+    };
+  }
 
   // 1. Static assets (anything with a file extension): pass through to S3 unchanged.
   //    Examples: .js .css .png .json .ico .map .woff2 .svg .txt
@@ -157,11 +176,30 @@ function handler(event) {
     };
   }
   if (uri.indexOf('/mushi-mushi/docs/') === 0) {
-    if (uri.charAt(uri.length - 1) === '/') {
+    // Docs root folder index is real (`docs/index.html`). Sub-pages are
+    // slashless `.html` keys (`docs/admin.html`). A trailing slash on a
+    // sub-page used to rewrite to `…/index.html` → S3 404 and GSC
+    // "Not found" noise — 301 to the slashless canonical instead.
+    if (uri === '/mushi-mushi/docs/') {
       request.uri = uri + 'index.html';
-    } else {
-      request.uri = uri + '.html';
+      return request;
     }
+    if (uri.charAt(uri.length - 1) === '/') {
+      var docsSlashQs = serializeQuerystring(qs);
+      var docsSlashLoc = uri.slice(0, -1);
+      if (docsSlashQs) {
+        docsSlashLoc = docsSlashLoc + '?' + docsSlashQs;
+      }
+      return {
+        statusCode: 301,
+        statusDescription: 'Moved Permanently',
+        headers: {
+          'location': { value: docsSlashLoc },
+          'cache-control': { value: 'public, max-age=31536000' },
+        },
+      };
+    }
+    request.uri = uri + '.html';
     return request;
   }
 
@@ -230,10 +268,15 @@ function handler(event) {
 
   // 6. Mis-prefixed docs paths (/mushi-mushi/quickstart/… without /docs/) ->
   //    301 to the canonical docs URL before the admin SPA fallback.
+  //    Strip trailing slash — Next export is slashless (.html keys).
   var suffix = uri.replace(/^\/mushi-mushi\/?/, '');
   if (suffix && matchesDocsSuffix(suffix)) {
     var docsQs = serializeQuerystring(qs);
-    var docsLocation = '/mushi-mushi/docs/' + suffix.replace(/^\/+/, '');
+    var docsSuffix = suffix.replace(/^\/+/, '');
+    if (docsSuffix.length > 1 && docsSuffix.charAt(docsSuffix.length - 1) === '/') {
+      docsSuffix = docsSuffix.slice(0, -1);
+    }
+    var docsLocation = '/mushi-mushi/docs/' + docsSuffix;
     if (docsQs) {
       docsLocation = docsLocation + '?' + docsQs;
     }

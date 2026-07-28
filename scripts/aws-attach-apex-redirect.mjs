@@ -56,10 +56,16 @@ function getLiveFunctionArn(name) {
 }
 
 function publishFunction(name, codeFile) {
-  const configJson = JSON.stringify({
-    Comment: 'kensaur.us Default viewer — Mushi apex redirects + glot.it SPA routing',
-    Runtime: 'cloudfront-js-2.0',
-  })
+  // Write function-config to a temp file — inline JSON + shell quoting breaks
+  // on Windows (AWS CLI treats the em-dash comment as a parse error).
+  const configPath = join(tmpdir(), `cf-fn-config-${name}.json`).replace(/\\/g, '/')
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      Comment: 'kensaur.us Default viewer - Mushi apex redirects + glot.it SPA routing',
+      Runtime: 'cloudfront-js-2.0',
+    }),
+  )
   const posixCode = codeFile.replace(/\\/g, '/')
 
   let etag = ''
@@ -71,11 +77,11 @@ function publishFunction(name, codeFile) {
 
   if (!etag) {
     awsRawOrThrow(
-      `cloudfront create-function --name ${name} --function-config '${configJson}' --function-code fileb://${posixCode} --region us-east-1`,
+      `cloudfront create-function --name ${name} --function-config file://${configPath} --function-code fileb://${posixCode} --region us-east-1`,
     )
   } else {
     awsRawOrThrow(
-      `cloudfront update-function --name ${name} --if-match ${etag} --function-config '${configJson}' --function-code fileb://${posixCode} --region us-east-1`,
+      `cloudfront update-function --name ${name} --if-match ${etag} --function-config file://${configPath} --function-code fileb://${posixCode} --region us-east-1`,
     )
   }
 
