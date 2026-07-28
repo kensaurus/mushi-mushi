@@ -10,11 +10,16 @@
  * - When users hit a clean URL with no trailing slash, S3 returns 403/404
  *   because there's no key at that exact name. This function appends
  *   `/index.html` (or `.html`) so the request resolves.
+ * - Also consolidates www → apex and trailing-slash docs sub-pages to the
+ *   slashless Next export form, preserving query strings on every 301.
  *
  * RULES:
- * - URI ends with `/`               -> append `index.html`
- * - URI has no file extension       -> append `.html` (catches /quickstart -> /quickstart.html)
- * - URI has any file extension      -> pass through (assets, JSON, images)
+ * - Host www.kensaur.us           -> 301 https://kensaur.us{uri}{qs}
+ * - Bare `/…/docs` (no slash)     -> 301 `{uri}/`{qs}
+ * - Docs root trailing slash      -> rewrite to `index.html`
+ * - Other trailing slash          -> 301 slashless{qs}
+ * - URI has any file extension    -> pass through (assets, JSON, images)
+ * - Clean URL with no extension   -> append `.html`
  *
  * ASSOCIATIONS:
  * - Attached to the `/mushi-mushi/docs/*` cache behavior (S3 origin) on viewer-request.
@@ -25,22 +30,55 @@
  *   idempotently on every docs deploy.
  */
 
+// CloudFront exposes querystring as { key: { value } }, not a
+// pre-encoded string — naively concatenating it into a URL yields the literal
+// text "[object Object]". Mirrors cloudfront-mushi-spa-router.js.
+function serializeQuerystring(qs) {
+  if (!qs) {
+    return '';
+  }
+  if (typeof qs === 'string') {
+    return qs;
+  }
+  var parts = [];
+  var key;
+  for (key in qs) {
+    if (!Object.prototype.hasOwnProperty.call(qs, key)) {
+      continue;
+    }
+    var entry = qs[key];
+    if (entry && entry.value !== undefined && entry.value !== '') {
+      parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(entry.value));
+    }
+  }
+  return parts.join('&');
+}
+
+function redirect301(location, qs) {
+  var serialized = serializeQuerystring(qs);
+  if (serialized) {
+    location = location + '?' + serialized;
+  }
+  return {
+    statusCode: 301,
+    statusDescription: 'Moved Permanently',
+    headers: {
+      'location': { value: location },
+      'cache-control': { value: 'public, max-age=31536000' },
+    },
+  };
+}
+
 function handler(event) {
   var request = event.request;
   var uri = request.uri;
+  var qs = request.querystring;
   var hostHeader = request.headers && request.headers.host;
   var host = hostHeader && hostHeader.value ? hostHeader.value.toLowerCase() : '';
 
   // www → apex (this behavior is more specific than Default).
   if (host === 'www.kensaur.us') {
-    return {
-      statusCode: 301,
-      statusDescription: 'Moved Permanently',
-      headers: {
-        'location': { value: 'https://kensaur.us' + uri },
-        'cache-control': { value: 'public, max-age=31536000' },
-      },
-    };
+    return redirect301('https://kensaur.us' + uri, qs);
   }
 
   // 1. Bare docs root with no trailing slash: 301 to the canonical
@@ -54,7 +92,13 @@ function handler(event) {
       statusCode: 301,
       statusDescription: 'Moved Permanently',
       headers: {
-        'location': { value: uri + '/' },
+        'location': {
+          value: (function () {
+            var loc = uri + '/';
+            var serialized = serializeQuerystring(qs);
+            return serialized ? loc + '?' + serialized : loc;
+          })(),
+        },
         'cache-control': { value: 'public, max-age=300' },
       },
     };
@@ -68,14 +112,7 @@ function handler(event) {
     return request;
   }
   if (uri.charAt(uri.length - 1) === '/') {
-    return {
-      statusCode: 301,
-      statusDescription: 'Moved Permanently',
-      headers: {
-        'location': { value: uri.slice(0, -1) },
-        'cache-control': { value: 'public, max-age=31536000' },
-      },
-    };
+    return redirect301(uri.slice(0, -1), qs);
   }
 
   // 3. Has a file extension: pass through (assets, JSON, sitemap, etc.)
