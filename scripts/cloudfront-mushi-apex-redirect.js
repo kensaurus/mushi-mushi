@@ -2,7 +2,7 @@
  * FILE: cloudfront-mushi-apex-redirect.js
  * PURPOSE: CloudFront Function (viewer-request) that 301-redirects apex-domain
  *          URLs to their canonical form under /mushi-mushi/docs/ or
- *          /mushi-mushi/admin/.
+ *          /mushi-mushi/admin/, and consolidates www → apex host.
  *
  * PROBLEM SOLVED
  * --------------
@@ -13,12 +13,26 @@
  *    payloads (e.g. {"route":"/quickstart/incident-loop"}). Crawlers and
  *    bookmarks hit https://kensaur.us/quickstart/incident-loop which would
  *    otherwise 404 with raw S3 NoSuchKey XML.
+ * 3. Trailing-slash trap (GSC 2026-07) — Next export uses `trailingSlash:
+ *    false`, so `/mushi-mushi/docs/admin` → `admin.html` (200) but
+ *    `/mushi-mushi/docs/admin/` → `admin/index.html` (404). Apex redirects
+ *    MUST strip a trailing slash on docs targets or Google burns crawl
+ *    budget on 301→404 chains (/admin/, /sdks/, …).
+ * 4. www host duplicate — www.kensaur.us and kensaur.us both returned 200
+ *    with apex-only canonical; 301 www → https://kensaur.us{uri}.
  *
  * MATCHING ORDER (first win):
- *   1. Static assets (has extension) → pass through
- *   2. Docs routes → /mushi-mushi/docs{uri}
- *   3. Admin SPA routes → /mushi-mushi/admin{uri}
- *   4. Unknown → pass through
+ *   1. www host → 301 https://kensaur.us{uri}{qs}
+ *   2. /brand/* docs public assets → 301 /mushi-mushi/docs/brand/*
+ *      (must run before the extension early-return — homepage HTML at
+ *      /mushi-mushi/ still emits root-absolute /brand/logo-mark.svg.
+ *      Must be a redirect, not a URI rewrite: Default origin is the
+ *      kensaur homepage bucket; only a new request rematches the
+ *      /mushi-mushi* cache behavior.)
+ *   3. Static assets (has extension) → pass through
+ *   4. Docs routes → /mushi-mushi/docs{uri} (slash-stripped)
+ *   5. Admin SPA routes → /mushi-mushi/admin{uri}
+ *   6. Unknown → pass through
  *
  * CONFLICT: /integrations alone is the admin console route; /integrations/*
  * is docs-only (e.g. /integrations/cursor). Nested docs prefixes use a
@@ -125,6 +139,13 @@ function serializeQuerystring(qs) {
   return parts.join('&');
 }
 
+function stripTrailingSlash(path) {
+  if (path.length > 1 && path.charAt(path.length - 1) === '/') {
+    return path.slice(0, -1);
+  }
+  return path;
+}
+
 function redirect301(targetPath, querystring) {
   var qs = serializeQuerystring(querystring);
   var location = targetPath;
@@ -144,7 +165,8 @@ function redirect301(targetPath, querystring) {
 function matchesDocs(uri) {
   var i;
   for (i = 0; i < DOCS_EXACT.length; i++) {
-    if (uri === DOCS_EXACT[i]) {
+    // Exact root and its trailing-slash twin (/admin and /admin/).
+    if (uri === DOCS_EXACT[i] || uri === DOCS_EXACT[i] + '/') {
       return true;
     }
   }
@@ -171,6 +193,33 @@ function handler(event) {
   var request = event.request;
   var uri = request.uri;
   var qs = request.querystring;
+  var hostHeader = request.headers && request.headers.host;
+  var host = hostHeader && hostHeader.value ? hostHeader.value.toLowerCase() : '';
+
+  // www → apex (absolute Location). Runs before path routing so every
+  // www URL consolidates onto the HTML-declared canonical host.
+  if (host === 'www.kensaur.us') {
+    var wwwQs = serializeQuerystring(qs);
+    var wwwLocation = 'https://kensaur.us' + uri;
+    if (wwwQs) {
+      wwwLocation = wwwLocation + '?' + wwwQs;
+    }
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: {
+        'location': { value: wwwLocation },
+        'cache-control': { value: 'public, max-age=31536000' },
+      },
+    };
+  }
+
+  // Docs public brand assets — root-absolute /brand/* from the rewritten
+  // /mushi-mushi/ homepage. 301 (not rewrite): Default origin is the
+  // homepage bucket; rematch /mushi-mushi* behavior on the follow-up.
+  if (uri === '/brand' || uri.indexOf('/brand/') === 0) {
+    return redirect301('/mushi-mushi/docs' + uri, qs);
+  }
 
   // Static assets: never redirect.
   if (/\.[a-zA-Z0-9]+$/.test(uri)) {
@@ -178,8 +227,9 @@ function handler(event) {
   }
 
   // Docs before SPA — unprefixed Nextra routes and nested docs paths.
+  // Strip trailing slash: Next export is slashless (.html keys).
   if (matchesDocs(uri)) {
-    return redirect301('/mushi-mushi/docs' + uri, qs);
+    return redirect301('/mushi-mushi/docs' + stripTrailingSlash(uri), qs);
   }
 
   // Admin SPA shared-link rescue.
