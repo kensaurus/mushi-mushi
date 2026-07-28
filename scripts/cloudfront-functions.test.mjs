@@ -76,9 +76,41 @@ describe('cloudfront-mushi-apex-redirect', () => {
     assert.equal(out.headers.location.value, '/mushi-mushi/docs/quickstart/incident-loop');
   });
 
-  it('redirects trailing-slash docs paths', () => {
+  it('strips trailing slash on docs redirect targets (Nextra slashless)', () => {
     const out = apex(req('/quickstart/incident-loop/'));
-    assert.equal(out.headers.location.value, '/mushi-mushi/docs/quickstart/incident-loop/');
+    assert.equal(out.headers.location.value, '/mushi-mushi/docs/quickstart/incident-loop');
+  });
+
+  it('strips trailing slash on docs root leaks (/admin/ → …/docs/admin)', () => {
+    const out = apex(req('/admin/'));
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, '/mushi-mushi/docs/admin');
+  });
+
+  it('redirects slashless /sdks to docs/sdks', () => {
+    const out = apex(req('/sdks'));
+    assert.equal(out.headers.location.value, '/mushi-mushi/docs/sdks');
+  });
+
+  it('301 www host to apex absolute URL', () => {
+    const event = req('/glot-it/');
+    event.request.headers = {
+      ...event.request.headers,
+      host: { value: 'www.kensaur.us' },
+    };
+    const out = apex(event);
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, 'https://kensaur.us/glot-it/');
+  });
+
+  it('does not host-redirect when Host is apex', () => {
+    const event = req('/admin/');
+    event.request.headers = {
+      ...event.request.headers,
+      host: { value: 'kensaur.us' },
+    };
+    const out = apex(event);
+    assert.equal(out.headers.location.value, '/mushi-mushi/docs/admin');
   });
 
   it('preserves query string on docs redirect', () => {
@@ -115,6 +147,12 @@ describe('cloudfront-mushi-apex-redirect', () => {
     assert.equal(out.uri, '/quickstart/app.js');
     assert.equal(out.statusCode, undefined);
   });
+
+  it('301 /brand/* docs assets before extension early-return', () => {
+    const out = apex(req('/brand/logo-mark.svg'));
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, '/mushi-mushi/docs/brand/logo-mark.svg');
+  });
 });
 
 describe('cloudfront-kensaur-default-viewer', () => {
@@ -150,6 +188,17 @@ describe('cloudfront-mushi-spa-router', () => {
   it('rewrites canonical docs path to .html', () => {
     const out = spa(req('/mushi-mushi/docs/quickstart/incident-loop'));
     assert.equal(out.uri, '/mushi-mushi/docs/quickstart/incident-loop.html');
+  });
+
+  it('301 docs sub-page trailing slash to slashless canonical', () => {
+    const out = spa(req('/mushi-mushi/docs/admin/'));
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, '/mushi-mushi/docs/admin');
+  });
+
+  it('rewrites docs root trailing slash to index.html', () => {
+    const out = spa(req('/mushi-mushi/docs/'));
+    assert.equal(out.uri, '/mushi-mushi/docs/index.html');
   });
 
   it('302 unknown mushi path to admin SPA', () => {

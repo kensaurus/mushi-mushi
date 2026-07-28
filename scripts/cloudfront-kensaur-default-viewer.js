@@ -100,6 +100,13 @@ function serializeQuerystring(qs) {
   return parts.join('&');
 }
 
+function stripTrailingSlash(path) {
+  if (path.length > 1 && path.charAt(path.length - 1) === '/') {
+    return path.slice(0, -1);
+  }
+  return path;
+}
+
 function redirect301(targetPath, querystring) {
   var qs = serializeQuerystring(querystring);
   var location = targetPath;
@@ -119,7 +126,8 @@ function redirect301(targetPath, querystring) {
 function matchesDocs(uri) {
   var i;
   for (i = 0; i < DOCS_EXACT.length; i++) {
-    if (uri === DOCS_EXACT[i]) {
+    // Exact root and its trailing-slash twin (/admin and /admin/).
+    if (uri === DOCS_EXACT[i] || uri === DOCS_EXACT[i] + '/') {
       return true;
     }
   }
@@ -146,6 +154,33 @@ function mushiApexHandler(event) {
   var request = event.request;
   var uri = request.uri;
   var qs = request.querystring;
+  var hostHeader = request.headers && request.headers.host;
+  var host = hostHeader && hostHeader.value ? hostHeader.value.toLowerCase() : '';
+
+  // www → apex (absolute Location). Runs before path routing so every
+  // www URL consolidates onto the HTML-declared canonical host.
+  if (host === 'www.kensaur.us') {
+    var wwwQs = serializeQuerystring(qs);
+    var wwwLocation = 'https://kensaur.us' + uri;
+    if (wwwQs) {
+      wwwLocation = wwwLocation + '?' + wwwQs;
+    }
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: {
+        'location': { value: wwwLocation },
+        'cache-control': { value: 'public, max-age=31536000' },
+      },
+    };
+  }
+
+  // Docs public brand assets — root-absolute /brand/* from the rewritten
+  // /mushi-mushi/ homepage. 301 (not rewrite): Default origin is the
+  // homepage bucket; rematch /mushi-mushi* behavior on the follow-up.
+  if (uri === '/brand' || uri.indexOf('/brand/') === 0) {
+    return redirect301('/mushi-mushi/docs' + uri, qs);
+  }
 
   // Static assets: never redirect.
   if (/\.[a-zA-Z0-9]+$/.test(uri)) {
@@ -153,8 +188,9 @@ function mushiApexHandler(event) {
   }
 
   // Docs before SPA — unprefixed Nextra routes and nested docs paths.
+  // Strip trailing slash: Next export is slashless (.html keys).
   if (matchesDocs(uri)) {
-    return redirect301('/mushi-mushi/docs' + uri, qs);
+    return redirect301('/mushi-mushi/docs' + stripTrailingSlash(uri), qs);
   }
 
   // Admin SPA shared-link rescue.
@@ -184,9 +220,49 @@ var ROUTE_ALIASES = {
   "/glot-it/learn/": "/glot-it/practice/",
 };
 
+function serializeQuerystring(qs) {
+  if (!qs) {
+    return '';
+  }
+  if (typeof qs === 'string') {
+    return qs;
+  }
+  var parts = [];
+  var key;
+  for (key in qs) {
+    if (!Object.prototype.hasOwnProperty.call(qs, key)) {
+      continue;
+    }
+    var entry = qs[key];
+    if (entry && entry.value !== undefined && entry.value !== '') {
+      parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(entry.value));
+    }
+  }
+  return parts.join('&');
+}
+
 function glotSpaHandler(event) {
   var request = event.request;
   var uri = request.uri;
+  var hostHeader = request.headers && request.headers.host;
+  var host = hostHeader && hostHeader.value ? hostHeader.value.toLowerCase() : '';
+
+  // www → apex (path behaviors don't run kensaur-default-viewer).
+  if (host === 'www.kensaur.us') {
+    var wwwQs = serializeQuerystring(request.querystring);
+    var wwwLocation = 'https://kensaur.us' + uri;
+    if (wwwQs) {
+      wwwLocation = wwwLocation + '?' + wwwQs;
+    }
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: Object.assign({}, SECURITY_HEADERS, {
+        'location': { value: wwwLocation },
+        'cache-control': { value: 'public, max-age=31536000' },
+      }),
+    };
+  }
 
   if (uri === '/.well-known/assetlinks.json') {
     return {

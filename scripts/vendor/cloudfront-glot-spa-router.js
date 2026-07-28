@@ -21,9 +21,49 @@ var ROUTE_ALIASES = {
   "/glot-it/learn/": "/glot-it/practice/",
 };
 
+function serializeQuerystring(qs) {
+  if (!qs) {
+    return '';
+  }
+  if (typeof qs === 'string') {
+    return qs;
+  }
+  var parts = [];
+  var key;
+  for (key in qs) {
+    if (!Object.prototype.hasOwnProperty.call(qs, key)) {
+      continue;
+    }
+    var entry = qs[key];
+    if (entry && entry.value !== undefined && entry.value !== '') {
+      parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(entry.value));
+    }
+  }
+  return parts.join('&');
+}
+
 function handler(event) {
   var request = event.request;
   var uri = request.uri;
+  var hostHeader = request.headers && request.headers.host;
+  var host = hostHeader && hostHeader.value ? hostHeader.value.toLowerCase() : '';
+
+  // www → apex (path behaviors don't run kensaur-default-viewer).
+  if (host === 'www.kensaur.us') {
+    var wwwQs = serializeQuerystring(request.querystring);
+    var wwwLocation = 'https://kensaur.us' + uri;
+    if (wwwQs) {
+      wwwLocation = wwwLocation + '?' + wwwQs;
+    }
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: Object.assign({}, SECURITY_HEADERS, {
+        'location': { value: wwwLocation },
+        'cache-control': { value: 'public, max-age=31536000' },
+      }),
+    };
+  }
 
   if (uri === '/.well-known/assetlinks.json') {
     return {

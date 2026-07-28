@@ -108,8 +108,27 @@ function buildToc(groups) {
   return lines.join('\n')
 }
 
-function build(groups) {
-  const generated = new Date().toISOString().slice(0, 10)
+const STAMP_LINE = /^_\d+ configuration knobs across \d+ sections · last regenerated (\d{4}-\d{2}-\d{2})\._$/m
+
+function withoutStamp(markdown) {
+  return markdown.replace(STAMP_LINE, '')
+}
+
+/**
+ * The date stamp is the only volatile part of the output, so stamping today on
+ * every run makes the drift guard fail once a day even when the dictionary has
+ * not changed. Keep the recorded date whenever the rest of the document is
+ * identical, so it reads as "last time this reference actually changed".
+ */
+function stableStampDate(next) {
+  if (!existsSync(OUT_PATH)) return null
+  const current = readFileSync(OUT_PATH, 'utf8')
+  const stamp = current.match(STAMP_LINE)
+  if (!stamp) return null
+  return withoutStamp(current) === withoutStamp(next) ? stamp[1] : null
+}
+
+function build(groups, generated = new Date().toISOString().slice(0, 10)) {
   const totalEntries = groups.reduce((acc, g) => acc + g.entries.length, 0)
   const dictRel = relative(ROOT, DICT_PATH).replace(/\\/g, '/')
 
@@ -143,7 +162,9 @@ function build(groups) {
 async function main() {
   const mode = process.argv[2] ?? 'write'
   const { CONFIG_DOC_GROUPS } = await loadDictionary()
-  const next = build(CONFIG_DOC_GROUPS)
+  let next = build(CONFIG_DOC_GROUPS)
+  const keptDate = stableStampDate(next)
+  if (keptDate) next = build(CONFIG_DOC_GROUPS, keptDate)
 
   if (mode === 'check') {
     if (!existsSync(OUT_PATH)) {
