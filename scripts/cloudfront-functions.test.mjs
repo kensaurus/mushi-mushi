@@ -318,3 +318,38 @@ describe('cloudfront-mushi-hosted-mcp', () => {
     assert.match(out.body, /authorization_servers/);
   });
 });
+
+describe('cloudfront-mushi-docs-router', () => {
+  const docs = loadHandler('cloudfront-mushi-docs-router.js');
+
+  it('301 www host to apex and preserves query string', () => {
+    const event = reqWithQs('/mushi-mushi/docs/admin', { utm_source: 'gsc' });
+    event.request.headers = {
+      ...event.request.headers,
+      host: { value: 'www.kensaur.us' },
+    };
+    const out = docs(event);
+    assert.equal(out.statusCode, 301);
+    assert.equal(
+      out.headers.location.value,
+      'https://kensaur.us/mushi-mushi/docs/admin?utm_source=gsc',
+    );
+  });
+
+  it('301 docs sub-page trailing slash to slashless and preserves query string', () => {
+    const out = docs(reqWithQs('/mushi-mushi/docs/admin/', { foo: 'bar' }));
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, '/mushi-mushi/docs/admin?foo=bar');
+  });
+
+  it('rewrites docs root trailing slash to index.html', () => {
+    const out = docs(req('/mushi-mushi/docs/'));
+    assert.equal(out.uri, '/mushi-mushi/docs/index.html');
+    assert.equal(out.statusCode, undefined);
+  });
+
+  it('appends .html for clean docs paths', () => {
+    const out = docs(req('/mushi-mushi/docs/admin'));
+    assert.equal(out.uri, '/mushi-mushi/docs/admin.html');
+  });
+});
