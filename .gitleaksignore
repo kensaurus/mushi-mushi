@@ -69,8 +69,8 @@ fe9eab0773f9f2d4e9ab1da178592d728b5e1680:packages/mcp/scripts/test-all-tools-yen
 # BYOK validation parser fixture: intentionally non-provider-shaped text used
 # to prove opaque credentials are trimmed without imposing brittle `sk-*`
 # prefix validation. The value exists only in a Deno unit test and was never a
-# provider credential. These fingerprints pin the two additions in the
-# historical PR commit; the runtime response-redaction assertion below the
-# fixture separately proves credentials are not returned to callers.
-55a4d729f21a005e0ff947b3f67b9e7b42966911:packages/server/supabase/functions/_shared/byok-validation.test.ts:generic-api-key:27
-55a4d729f21a005e0ff947b3f67b9e7b42966911:packages/server/supabase/functions/_shared/byok-validation.test.ts:generic-api-key:31
+# provider credential. These fingerprints pin the permanent squash-merge
+# commit where the fixture entered `master`; the runtime response-redaction
+# assertion below the fixture separately proves credentials are not returned.
+0400cdce96a853bf158d57cb80e3e7e8ef441aff:packages/server/supabase/functions/_shared/byok-validation.test.ts:generic-api-key:27
+0400cdce96a853bf158d57cb80e3e7e8ef441aff:packages/server/supabase/functions/_shared/byok-validation.test.ts:generic-api-key:31
