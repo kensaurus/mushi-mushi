@@ -1,13 +1,5 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "Unreleased",
-    "pending": true,
-    "versions": [],
-    "highlights": [],
-    "packages": []
-  },
-  {
     "majorMinor": "1.27",
     "headline": null,
     "pending": false,
@@ -971,6 +963,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.27.1",
       "0.27.0"
     ],
     "highlights": [
@@ -1002,7 +995,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/cli",
-        "version": "0.27.0"
+        "version": "0.27.1"
       }
     ]
   },
@@ -1199,7 +1192,7 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.20.0"
+        "version": "0.20.1"
       },
       {
         "name": "@mushi-mushi/react-native",
