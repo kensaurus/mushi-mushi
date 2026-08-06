@@ -1,33 +1,18 @@
 # FILE: publish-mcp-registry.yml
-# PURPOSE: On-demand publish of the @mushi-mushi/mcp server metadata to the
-#          official MCP registry (registry.modelcontextprotocol.io).
+# PURPOSE: Manually (re)publish @mushi-mushi/mcp to the official MCP registry
+#          when the Release workflow's post-publish step is skipped (e.g. CDN
+#          audit-signature race after a successful npm publish).
 #
-# WHY THIS EXISTS:
-#   release.yml already publishes to the registry automatically whenever the
-#   @mushi-mushi/mcp npm package ships. This workflow is the manual path to
-#   (re)list or repair the record WITHOUT cutting a full npm release — useful
-#   for the first listing, after a server.json metadata fix, or if the
-#   continue-on-error publish step in release.yml silently failed.
-#
-# PRECONDITION:
-#   The version in packages/mcp/server.json MUST already exist on npm — the
-#   registry verifies the package before accepting the record. The sync step
-#   below aligns server.json with packages/mcp/package.json; ensure that
-#   version is published to npm first.
-#
-# AUTH:
-#   GitHub OIDC authenticates the `io.github.kensaurus/*` namespace via the
-#   job's `id-token: write` permission — no extra secret required.
-#
-# SUPPLY-CHAIN HARDENING:
-#   Third-party actions pinned to commit SHAs (matching release.yml).
+# USAGE:   gh workflow run "Publish MCP Registry" --ref master
 
 name: Publish MCP Registry
 
 on:
   workflow_dispatch:
 
-concurrency: publish-mcp-registry-${{ github.ref }}
+concurrency:
+  group: publish-mcp-registry-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -35,38 +20,49 @@ permissions:
 
 jobs:
   publish:
-    name: Publish to MCP Registry
+    name: Publish to MCP registry
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Sync server.json version with package.json
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: 24
+
+      - name: Sync server.json to package.json version
         run: node scripts/sync-server-json-version.mjs
 
-      - name: Download mcp-publisher
+      - name: Install mcp-publisher
         run: |
           set -euo pipefail
           os=$(uname -s | tr '[:upper:]' '[:lower:]')
           arch=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
           curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${os}_${arch}.tar.gz" | tar xz mcp-publisher
 
-      - name: Login (GitHub OIDC) and publish
+      - name: Login + publish
         run: |
           set -euo pipefail
           ./mcp-publisher login github-oidc
-          cd packages/mcp && ../../mcp-publisher publish
+          cd packages/mcp
+          ../../mcp-publisher publish
+          cd ../..
 
       - name: Verify registry record
         run: |
-          set -uo pipefail
+          set -euo pipefail
+          expected=$(node -p "require('./packages/mcp/package.json').version")
+          echo "Expecting registry version ${expected}"
           sleep 5
-          if curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.kensaurus/mushi-mushi" | grep -q "io.github.kensaurus/mushi-mushi"; then
-            echo "✓ Mushi MCP server is live in the official registry"
+          body=$(curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.kensaurus/mushi-mushi")
+          echo "$body" | grep -q "io.github.kensaurus/mushi-mushi"
+          if echo "$body" | grep -q "\"version\": \"${expected}\""; then
+            echo "✓ Mushi MCP server ${expected} is live in the official registry"
           else
-            echo "::warning::Registry record not visible yet — allow a few minutes for propagation, then re-check."
+            echo "::warning::Registry may still be propagating ${expected}; record exists but exact version string not yet visible."
+            echo "$body" | head -c 2000
           fi
