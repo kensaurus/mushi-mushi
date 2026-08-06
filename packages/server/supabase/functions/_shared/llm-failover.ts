@@ -23,31 +23,59 @@
  *   })
  */
 
-import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { NoObjectGeneratedError } from 'npm:ai@4'
-import { resolveLlmKeys, markKeyStatus, type ResolvedKey, type LlmProvider } from './byok.ts'
-import { log as rootLog } from './logger.ts'
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
+import { NoObjectGeneratedError } from 'npm:ai@4';
+import {
+  resolveLlmKeys,
+  markKeyStatus,
+  markKeyUsed,
+  type ResolvedKey,
+  type LlmProvider,
+} from './byok.ts';
+import { log as rootLog } from './logger.ts';
 
-const log = rootLog.child('llm-failover')
+const log = rootLog.child('llm-failover');
+
+const LLM_API_KEY_RX = /\bsk-[A-Za-z0-9_*=-]{8,}/gi;
+const BEARER_TOKEN_RX = /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi;
+const CURSOR_API_KEY_RX = /\bcrsr_[A-Za-z0-9._~+/=-]{8,}/gi;
+const FIRECRAWL_API_KEY_RX = /\bfc-[A-Za-z0-9._~+/=-]{8,}/gi;
+const BROWSERBASE_API_KEY_RX = /\bbb_[A-Za-z0-9._~+/=-]{8,}/gi;
+const SECRET_ASSIGNMENT_RX =
+  /((?:api[_-]?key|x-api-key|authorization)\s*["']?\s*[:=]\s*["']?)(?!\[redacted\])([A-Za-z0-9._~+/=-]{8,})/gi;
+
+/** Remove provider credentials before errors reach logs, DB status, or Sentry. */
+export function sanitizeLlmError(value: unknown): string {
+  return String(value)
+    .replace(LLM_API_KEY_RX, 'sk-[redacted]')
+    .replace(BEARER_TOKEN_RX, 'Bearer [redacted]')
+    .replace(CURSOR_API_KEY_RX, 'crsr_[redacted]')
+    .replace(FIRECRAWL_API_KEY_RX, 'fc-[redacted]')
+    .replace(BROWSERBASE_API_KEY_RX, 'bb_[redacted]')
+    .replace(SECRET_ASSIGNMENT_RX, '$1[redacted]');
+}
 
 export class LlmFailoverError extends Error {
-  code: 'ALL_KEYS_EXHAUSTED' | 'NO_KEYS_CONFIGURED'
-  provider: LlmProvider
-  attempts: number
-  lastError: string
+  code: 'ALL_KEYS_EXHAUSTED' | 'NO_KEYS_CONFIGURED';
+  provider: LlmProvider;
+  attempts: number;
+  lastError: string;
 
   constructor(opts: {
-    code: 'ALL_KEYS_EXHAUSTED' | 'NO_KEYS_CONFIGURED'
-    provider: LlmProvider
-    attempts: number
-    lastError: string
+    code: 'ALL_KEYS_EXHAUSTED' | 'NO_KEYS_CONFIGURED';
+    provider: LlmProvider;
+    attempts: number;
+    lastError: string;
   }) {
-    super(`LLM failover: ${opts.code} for provider ${opts.provider} after ${opts.attempts} attempt(s). Last error: ${opts.lastError}`)
-    this.name = 'LlmFailoverError'
-    this.code = opts.code
-    this.provider = opts.provider
-    this.attempts = opts.attempts
-    this.lastError = opts.lastError
+    const lastError = sanitizeLlmError(opts.lastError);
+    super(
+      `LLM failover: ${opts.code} for provider ${opts.provider} after ${opts.attempts} attempt(s). Last error: ${lastError}`,
+    );
+    this.name = 'LlmFailoverError';
+    this.code = opts.code;
+    this.provider = opts.provider;
+    this.attempts = opts.attempts;
+    this.lastError = lastError;
   }
 }
 
@@ -58,11 +86,11 @@ export class LlmFailoverError extends Error {
  * and the transient-retry decision are pure and worth testing in isolation.
  */
 export function classifyLlmError(err: unknown): 'quota' | 'auth' | 'transient' | 'other' {
-  const msg = String(err).toLowerCase()
+  const msg = String(err).toLowerCase();
 
   // HTTP status codes in the error message (Vercel AI SDK wraps them)
   if (msg.includes('429') || msg.includes('rate limit') || msg.includes('quota')) {
-    return 'quota'
+    return 'quota';
   }
   // Anthropic returns "invalid x-api-key" (note the hyphenated header name) —
   // that string does NOT contain the substring "invalid api key", so we match
@@ -78,22 +106,27 @@ export function classifyLlmError(err: unknown): 'quota' | 'auth' | 'transient' |
     msg.includes('api key not valid') ||
     msg.includes('incorrect api key')
   ) {
-    return 'auth'
+    return 'auth';
   }
 
   // Check for structured error objects from the AI SDK. Type the access
   // explicitly — `Record<string, unknown>` makes `errObj.response` `unknown`,
   // and reading `.status` off that fails Deno's stricter type check.
-  const errObj = err as { status?: number; statusCode?: number; response?: { status?: number }; code?: string }
-  const statusCode = errObj?.status ?? errObj?.statusCode ?? errObj?.response?.status
-  if (statusCode === 429) return 'quota'
-  if (statusCode === 401 || statusCode === 403) return 'auth'
-  if (statusCode !== undefined && statusCode >= 500 && statusCode < 600) return 'transient'
+  const errObj = err as {
+    status?: number;
+    statusCode?: number;
+    response?: { status?: number };
+    code?: string;
+  };
+  const statusCode = errObj?.status ?? errObj?.statusCode ?? errObj?.response?.status;
+  if (statusCode === 429) return 'quota';
+  if (statusCode === 401 || statusCode === 403) return 'auth';
+  if (statusCode !== undefined && statusCode >= 500 && statusCode < 600) return 'transient';
 
   // Transient transport/provider-outage signals: connection resets, DNS
   // hiccups, timeouts, and Anthropic/OpenAI's own "overloaded" 529-shaped
   // errors (some SDK versions surface this as a string, not a status code).
-  const code = String(errObj?.code ?? '').toLowerCase()
+  const code = String(errObj?.code ?? '').toLowerCase();
   if (
     code === 'econnreset' ||
     code === 'etimedout' ||
@@ -116,17 +149,17 @@ export function classifyLlmError(err: unknown): 'quota' | 'auth' | 'transient' |
     msg.includes(' 503') ||
     msg.includes(' 504')
   ) {
-    return 'transient'
+    return 'transient';
   }
 
-  return 'other'
+  return 'other';
 }
 
 function readEnvNumber(name: string, fallback: number): number {
-  const raw = Deno.env.get(name)
-  if (!raw) return fallback
-  const n = Number(raw)
-  return Number.isFinite(n) ? n : fallback
+  const raw = Deno.env.get(name);
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 /**
@@ -135,17 +168,17 @@ function readEnvNumber(name: string, fallback: number): number {
  * to ride out a momentary blip without stalling a synchronous edge-function
  * request for too long. Override via MUSHI_LLM_TRANSIENT_MAX_RETRIES.
  */
-const LLM_TRANSIENT_MAX_RETRIES = readEnvNumber('MUSHI_LLM_TRANSIENT_MAX_RETRIES', 2)
-const LLM_TRANSIENT_BASE_BACKOFF_MS = readEnvNumber('MUSHI_LLM_TRANSIENT_BASE_BACKOFF_MS', 400)
+const LLM_TRANSIENT_MAX_RETRIES = readEnvNumber('MUSHI_LLM_TRANSIENT_MAX_RETRIES', 2);
+const LLM_TRANSIENT_BASE_BACKOFF_MS = readEnvNumber('MUSHI_LLM_TRANSIENT_BASE_BACKOFF_MS', 400);
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function computeTransientRetryDelay(attempt: number): number {
-  const base = LLM_TRANSIENT_BASE_BACKOFF_MS * Math.pow(2, attempt)
-  const jitter = base * 0.2 * (Math.random() * 2 - 1)
-  return Math.min(Math.max(base + jitter, 100), 10_000)
+  const base = LLM_TRANSIENT_BASE_BACKOFF_MS * Math.pow(2, attempt);
+  const jitter = base * 0.2 * (Math.random() * 2 - 1);
+  return Math.min(Math.max(base + jitter, 100), 10_000);
 }
 
 type CandidateOutcome<T> =
@@ -158,7 +191,7 @@ type CandidateOutcome<T> =
   // (e.g. `NoObjectGeneratedError.isInstance`) after it round-trips through
   // this helper.
   | { ok: false; kind: 'quota' | 'auth' | 'transient_exhausted'; lastError: string }
-  | { ok: false; kind: 'fatal'; lastError: string; error: unknown }
+  | { ok: false; kind: 'fatal'; lastError: string; error: unknown };
 
 /**
  * Call `fn(candidate)`, transparently retrying transient errors on the same
@@ -170,19 +203,19 @@ export async function callWithTransientRetry<T>(
   candidate: ResolvedKey,
   provider: LlmProvider,
 ): Promise<CandidateOutcome<T>> {
-  let transientAttempt = 0
+  let transientAttempt = 0;
   for (;;) {
     try {
-      const result = await fn(candidate)
-      return { ok: true, result }
+      const result = await fn(candidate);
+      return { ok: true, result };
     } catch (err) {
-      const lastError = String(err).slice(0, 500)
-      const kind = classifyLlmError(err)
+      const lastError = sanitizeLlmError(err).slice(0, 500);
+      const kind = classifyLlmError(err);
 
       if (kind === 'transient') {
         if (transientAttempt < LLM_TRANSIENT_MAX_RETRIES) {
-          const delay = computeTransientRetryDelay(transientAttempt)
-          transientAttempt++
+          const delay = computeTransientRetryDelay(transientAttempt);
+          transientAttempt++;
           log.warn('Transient LLM error — retrying same key before rotating', {
             provider,
             hint: candidate.hint,
@@ -191,22 +224,22 @@ export async function callWithTransientRetry<T>(
             maxAttempts: LLM_TRANSIENT_MAX_RETRIES,
             delayMs: Math.round(delay),
             err: lastError,
-          })
-          await sleep(delay)
-          continue
+          });
+          await sleep(delay);
+          continue;
         }
         return {
           ok: false,
           kind: 'transient_exhausted',
           lastError: `${lastError} (after ${transientAttempt} transient retries on this key)`,
-        }
+        };
       }
 
       if (kind === 'quota' || kind === 'auth') {
-        return { ok: false, kind, lastError }
+        return { ok: false, kind, lastError };
       }
 
-      return { ok: false, kind: 'fatal', lastError, error: err }
+      return { ok: false, kind: 'fatal', lastError, error: err };
     }
   }
 }
@@ -221,7 +254,7 @@ export async function withLlmFailover<T>(
   provider: LlmProvider,
   fn: (key: ResolvedKey) => Promise<T>,
 ): Promise<T> {
-  const candidates = await resolveLlmKeys(db, projectId, provider)
+  const candidates = await resolveLlmKeys(db, projectId, provider);
 
   if (candidates.length === 0) {
     throw new LlmFailoverError({
@@ -229,18 +262,25 @@ export async function withLlmFailover<T>(
       provider,
       attempts: 0,
       lastError: `No ${provider} key configured. Add one in Settings → API Keys.`,
-    })
+    });
   }
 
-  let lastError = ''
-  let attempts = 0
+  let lastError = '';
+  let attempts = 0;
 
   for (const candidate of candidates) {
-    attempts++
-    const outcome = await callWithTransientRetry(fn, candidate, provider)
+    attempts++;
+    const outcome = await callWithTransientRetry(fn, candidate, provider);
 
-    if (outcome.ok) return outcome.result
-    lastError = outcome.lastError
+    if (outcome.ok) {
+      if (candidate.source === 'byok') {
+        void markKeyUsed(db, projectId, provider, candidate.keyId).catch(() => {
+          /* usage bookkeeping never converts a successful provider call into a failure */
+        });
+      }
+      return outcome.result;
+    }
+    lastError = outcome.lastError;
 
     switch (outcome.kind) {
       case 'quota':
@@ -248,22 +288,22 @@ export async function withLlmFailover<T>(
           provider,
           hint: candidate.hint,
           keyId: candidate.keyId,
-        })
+        });
         if (candidate.keyId) {
-          await markKeyStatus(db, candidate.keyId, 'quota_exhausted', lastError)
+          await markKeyStatus(db, candidate.keyId, 'quota_exhausted', lastError);
         }
-        continue
+        continue;
 
       case 'auth':
         log.warn('LLM key auth failed; trying next', {
           provider,
           hint: candidate.hint,
           keyId: candidate.keyId,
-        })
+        });
         if (candidate.keyId) {
-          await markKeyStatus(db, candidate.keyId, 'auth_failed', lastError)
+          await markKeyStatus(db, candidate.keyId, 'auth_failed', lastError);
         }
-        continue
+        continue;
 
       case 'transient_exhausted':
         // Not a key problem — don't mark the key bad, just rotate to the
@@ -273,15 +313,15 @@ export async function withLlmFailover<T>(
           provider,
           hint: candidate.hint,
           keyId: candidate.keyId,
-        })
-        continue
+        });
+        continue;
 
       case 'fatal':
         // Non-key, non-transient error (schema violation, validation, etc.)
         // — re-throw the original error immediately rather than burning the
         // rest of the pool. Re-throwing `outcome.error` (not a wrapped
         // Error) preserves `instanceof` checks callers rely on downstream.
-        throw outcome.error
+        throw outcome.error;
     }
   }
 
@@ -290,7 +330,7 @@ export async function withLlmFailover<T>(
     provider,
     attempts,
     lastError,
-  })
+  });
 }
 
 /**
@@ -305,23 +345,26 @@ export async function withAnthropicOrOpenAi<T>(
 ): Promise<{ result: T; usedProvider: 'anthropic' | 'openai' }> {
   // Try Anthropic pool first
   try {
-    const result = await withLlmFailover(db, projectId, 'anthropic', anthropicFn)
-    return { result, usedProvider: 'anthropic' }
+    const result = await withLlmFailover(db, projectId, 'anthropic', anthropicFn);
+    return { result, usedProvider: 'anthropic' };
   } catch (err) {
-    if (err instanceof LlmFailoverError && (err.code === 'NO_KEYS_CONFIGURED' || err.code === 'ALL_KEYS_EXHAUSTED')) {
+    if (
+      err instanceof LlmFailoverError &&
+      (err.code === 'NO_KEYS_CONFIGURED' || err.code === 'ALL_KEYS_EXHAUSTED')
+    ) {
       // No Anthropic keys available — fall through to OpenAI.
-      log.warn('Anthropic exhausted, trying OpenAI', { projectId, reason: err.code })
+      log.warn('Anthropic exhausted, trying OpenAI', { projectId, reason: err.code });
     } else if (NoObjectGeneratedError.isInstance(err)) {
       // Anthropic responded but its output didn't match the required schema.
       // OpenAI often handles complex structured-output schemas more reliably —
       // try it as a fallback before giving up.
-      log.warn('Anthropic NoObjectGeneratedError; falling back to OpenAI', { projectId })
+      log.warn('Anthropic NoObjectGeneratedError; falling back to OpenAI', { projectId });
     } else {
-      throw err
+      throw err;
     }
   }
 
   // Try OpenAI pool
-  const result = await withLlmFailover(db, projectId, 'openai', openAiFn)
-  return { result, usedProvider: 'openai' }
+  const result = await withLlmFailover(db, projectId, 'openai', openAiFn);
+  return { result, usedProvider: 'openai' };
 }

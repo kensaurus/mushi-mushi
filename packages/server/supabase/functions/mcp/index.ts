@@ -1109,7 +1109,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
         },
         setup: {
           label: 'Set up Mushi',
-          tools: ['mushi_setup', 'activation_status', 'get_backend_health', 'list_byok_keys', 'add_byok_key'],
+          tools: ['mushi_setup', 'activation_status', 'get_backend_health', 'list_byok_keys', 'add_byok_key', 'test_byok_key', 'remove_byok_key'],
           hint: 'Call mushi_setup first — it diagnoses setup gaps and returns the next command to run.',
         },
         qa: {

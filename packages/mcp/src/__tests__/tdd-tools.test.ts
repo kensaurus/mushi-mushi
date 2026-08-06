@@ -230,6 +230,41 @@ describe('TDD MCP tools', () => {
     })
   })
 
+  describe('test_byok_key', () => {
+    it('calls the per-key validation endpoint', async () => {
+      const keyId = '3a1763bf-5a64-4e42-abde-85dc0219787d'
+      fetchMock.pushOk({
+        key: { id: keyId, status: 'active', test_status: 'ok' },
+        validation: { status: 'ok' },
+      })
+
+      await client.callTool({
+        name: 'test_byok_key',
+        arguments: { projectId: PROJECT_ID, keyId },
+      })
+
+      const call = fetchMock.lastCall()
+      expect(call.url).toContain(`/byok/keys/${keyId}/test`)
+      expect(call.method).toBe('POST')
+    })
+  })
+
+  describe('remove_byok_key', () => {
+    it('calls DELETE for one pooled key', async () => {
+      const keyId = '3a1763bf-5a64-4e42-abde-85dc0219787d'
+      fetchMock.pushOk({ removed: true })
+
+      await client.callTool({
+        name: 'remove_byok_key',
+        arguments: { projectId: PROJECT_ID, keyId },
+      })
+
+      const call = fetchMock.lastCall()
+      expect(call.url).toContain(`/byok/keys/${keyId}`)
+      expect(call.method).toBe('DELETE')
+    })
+  })
+
   describe('list_pending_review_stories', () => {
     it('returns stories from pending review endpoint', async () => {
       fetchMock.pushOk({

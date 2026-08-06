@@ -114,6 +114,12 @@ function parseJwtUnsafe(token: string): { header: Record<string, string>; payloa
   return { header, payload };
 }
 
+function ownedArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
 // ── Verify signature using Web Crypto ────────────────────────────
 async function verifyJwtSignature(
   token: string,
@@ -132,8 +138,8 @@ async function verifyJwtSignature(
   }
 
   const [headerB64, payloadB64, sigB64] = token.split(".");
-  const signingInput = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
-  const sig = base64UrlDecode(sigB64);
+  const signingInput = ownedArrayBuffer(new TextEncoder().encode(`${headerB64}.${payloadB64}`));
+  const sig = ownedArrayBuffer(base64UrlDecode(sigB64));
 
   for (const jwk of candidateKeys) {
     try {

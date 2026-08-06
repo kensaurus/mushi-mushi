@@ -43,4 +43,10 @@ describe('shell chrome static contract', () => {
     expect(micro).toContain('text-2xs')
     expect(micro).not.toContain('text-3xs')
   })
+
+  it('privacy posture BYOK links use the SettingsPage tab query contract', () => {
+    const posture = readFileSync(resolve(root, 'components/PrivacyPostureBadge.tsx'), 'utf8')
+    expect(posture.match(/\/settings\?tab=byok/g)).toHaveLength(2)
+    expect(posture).not.toContain('/settings?panel=byok')
+  })
 })

@@ -435,7 +435,7 @@ class S3CompatibleAdapter implements StorageAdapter {
       headers['x-amz-server-side-encryption-aws-kms-key-id'] = this.opts.kmsKeyId
     }
     const signed = await sigV4(this.opts, 'PUT', url, headers, input.body)
-    const res = await fetch(url, { method: 'PUT', headers: signed, body: input.body })
+    const res = await fetch(url, { method: 'PUT', headers: signed, body: ownedArrayBuffer(input.body) })
     if (!res.ok) {
       const txt = await res.text().catch(() => '')
       throw new Error(`S3 PUT failed: ${res.status} ${txt.slice(0, 200)}`)
@@ -557,7 +557,7 @@ class GcsAdapter implements StorageAdapter {
     const res = await fetch(url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': input.contentType },
-      body: input.body,
+      body: ownedArrayBuffer(input.body),
     })
     if (!res.ok) throw new Error(`GCS upload failed: ${res.status}`)
     const signed = await this.signedUrl(input.key)
@@ -725,7 +725,7 @@ function encodePath(path: string): string {
 }
 
 async function sha256Hex(data: Uint8Array): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', data)
+  const buf = await crypto.subtle.digest('SHA-256', ownedArrayBuffer(data))
   return bufToHex(buf)
 }
 
@@ -734,8 +734,15 @@ function bufToHex(buf: ArrayBuffer): string {
 }
 
 async function hmac(key: ArrayBuffer | Uint8Array, msg: string): Promise<ArrayBuffer> {
-  const k = await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const keyData = key instanceof ArrayBuffer ? key : ownedArrayBuffer(key)
+  const k = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
   return crypto.subtle.sign('HMAC', k, new TextEncoder().encode(msg))
+}
+
+function ownedArrayBuffer(data: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(data.byteLength)
+  copy.set(data)
+  return copy.buffer
 }
 
 async function deriveSigningKey(secret: string, date: string, region: string, service: string): Promise<ArrayBuffer> {
