@@ -119,8 +119,10 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   start_skill_pipeline: 'skills',
   get_pipeline_run: 'skills',
   checkin_pipeline_step: 'skills',
-  list_byok_keys: 'skills',
-  add_byok_key: 'skills',
+  list_byok_keys: 'setup',
+  add_byok_key: 'setup',
+  test_byok_key: 'setup',
+  remove_byok_key: 'setup',
 
   // audit
   run_fullstack_audit: 'audit',

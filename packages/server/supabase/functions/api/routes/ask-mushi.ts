@@ -4,7 +4,7 @@ import { streamSSE } from 'npm:hono@4/streaming';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { createAnthropic } from 'npm:@ai-sdk/anthropic@1';
 import { createOpenAI } from 'npm:@ai-sdk/openai@1';
-import { generateObject, streamText } from 'npm:ai@4';
+import { streamText } from 'npm:ai@4';
 import { z } from 'npm:zod@3';
 
 import { toSseEvent } from '../../_shared/sse.ts';
@@ -16,6 +16,7 @@ import { ASSIST_MODEL, ASSIST_FALLBACK } from '../../_shared/models.ts';
 import { logLlmInvocation, extractAnthropicCacheUsage } from '../../_shared/telemetry.ts';
 import { withAnthropicOrOpenAi } from '../../_shared/llm-failover.ts';
 import { createTrace, scoreExistingTrace } from '../../_shared/observability.ts';
+import { generateValidatedObject } from '../../_shared/structured-output.ts';
 import {
   buildConsoleAssistSystemPrompt,
   detectNavigateMode,
@@ -424,9 +425,8 @@ async function runAskMushiLlmTurn(args: {
         try {
           const anthropic = createAnthropic({ apiKey: anthropicKey });
           keySource = 'env';
-          const result = await generateObject({
+          const result = await generateValidatedObject(AskMushiReplyLlmSchema, {
             model: anthropic(primaryModel),
-            schema: AskMushiReplyLlmSchema,
             messages: [
               {
                 role: 'system',
@@ -472,9 +472,8 @@ async function runAskMushiLlmTurn(args: {
       fallbackUsed = true;
       keySource = 'env';
       const openai = createOpenAI({ apiKey: openaiKey });
-      const result = await generateObject({
+      const result = await generateValidatedObject(AskMushiReplyLlmSchema, {
         model: openai(ASSIST_FALLBACK),
-        schema: AskMushiReplyLlmSchema,
         system: systemPrompt,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
         maxTokens,
@@ -508,9 +507,8 @@ async function runAskMushiLlmTurn(args: {
       async (key) => {
         keySource = key.source;
         const anthropic = createAnthropic({ apiKey: key.key });
-        return generateObject({
+        return generateValidatedObject(AskMushiReplyLlmSchema, {
           model: anthropic(primaryModel),
-          schema: AskMushiReplyLlmSchema,
           messages: [
             {
               role: 'system',
@@ -530,9 +528,8 @@ async function runAskMushiLlmTurn(args: {
         fallbackUsed = true;
         fallbackReason = 'anthropic unavailable';
         const openai = createOpenAI({ apiKey: key.key, baseURL: key.baseUrl });
-        return generateObject({
+        return generateValidatedObject(AskMushiReplyLlmSchema, {
           model: openai(ASSIST_FALLBACK),
-          schema: AskMushiReplyLlmSchema,
           system: systemPrompt,
           messages: messages.map((m) => ({ role: m.role, content: m.content })),
           maxTokens,

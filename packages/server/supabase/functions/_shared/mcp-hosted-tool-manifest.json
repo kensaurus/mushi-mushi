@@ -12,7 +12,12 @@
     "method": "POST",
     "path": "/v1/admin/reports/similarity",
     "required": ["query"],
-    "body": { "query": "{query}", "k": "{limit|5}", "threshold": 0.3, "projectId": "{projectIdHint}" }
+    "body": {
+      "query": "{query}",
+      "k": "{limit|5}",
+      "threshold": 0.3,
+      "projectId": "{projectIdHint}"
+    }
   },
   "diff_inventory": {
     "scope": "mcp:read",
@@ -164,7 +169,12 @@
     "method": "POST",
     "path": "/v1/admin/inventory/{projectId}/map-from-live",
     "required": ["projectId", "baseUrl"],
-    "body": { "base_url": "{baseUrl}", "max_pages": "{maxPages}", "provider": "{provider}", "cursor_cloud_refine": "{cursorCloudRefine}" }
+    "body": {
+      "base_url": "{baseUrl}",
+      "max_pages": "{maxPages}",
+      "provider": "{provider}",
+      "cursor_cloud_refine": "{cursorCloudRefine}"
+    }
   },
   "get_map_run_status": {
     "scope": "mcp:read",
@@ -194,20 +204,6 @@
     "method": "POST",
     "path": "/v1/admin/projects/{projectId}/qa-stories/{qaStoryId}/run",
     "required": ["projectId", "qaStoryId"]
-  },
-  "list_byok_keys": {
-    "scope": "mcp:read",
-    "description": "List BYOK API key pool.",
-    "method": "GET",
-    "path": "/v1/admin/byok/keys?project_id={projectId}",
-    "required": ["projectId"]
-  },
-  "add_byok_key": {
-    "scope": "mcp:write",
-    "description": "Add BYOK API key.",
-    "method": "POST",
-    "path": "/v1/admin/byok/keys",
-    "bodyPassthrough": true
   },
   "list_pending_review_stories": {
     "scope": "mcp:read",
@@ -295,6 +291,45 @@
     "path": "/v1/admin/skills/pipelines/{run_id}/steps/{step_index}/checkin",
     "required": ["run_id", "step_index", "status"],
     "bodyPassthrough": true
+  },
+  "list_byok_keys": {
+    "scope": "mcp:read",
+    "description": "List validated and quarantined pooled BYOK keys plus read-only legacy credential metadata for the authenticated project.",
+    "method": "GET",
+    "path": "/v1/admin/byok/keys",
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "add_byok_key": {
+    "scope": "mcp:write",
+    "description": "Store and validate a pooled BYOK key before runtime activation.",
+    "method": "POST",
+    "path": "/v1/admin/byok/keys",
+    "body": {
+      "project_id": "{projectId}",
+      "provider_slug": "{provider}",
+      "key": "{key}",
+      "label": "{label}",
+      "priority": "{priority|100}",
+      "base_url": "{baseUrl}"
+    },
+    "required": ["projectId", "provider", "key"],
+    "hints": { "destructive": false, "idempotent": false }
+  },
+  "test_byok_key": {
+    "scope": "mcp:write",
+    "description": "Re-test one pooled BYOK key and activate it only after successful provider validation.",
+    "method": "POST",
+    "path": "/v1/admin/byok/keys/{keyId}/test",
+    "required": ["keyId"],
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "remove_byok_key": {
+    "scope": "mcp:write",
+    "description": "Remove one pooled BYOK key and its Vault secret from the authenticated project.",
+    "method": "DELETE",
+    "path": "/v1/admin/byok/keys/{keyId}",
+    "required": ["keyId"],
+    "hints": { "destructive": true, "idempotent": true }
   },
   "run_fullstack_audit": {
     "scope": "mcp:write",

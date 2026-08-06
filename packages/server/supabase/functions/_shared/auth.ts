@@ -596,7 +596,7 @@ export function adminOrApiKey(options: AdminOrApiKeyOptions = {}) {
     }
 
     // Fall through to JWT — keeps existing console flows unchanged.
-    await jwtAuth(c, next)
+    return await jwtAuth(c, next)
   }
 }
 

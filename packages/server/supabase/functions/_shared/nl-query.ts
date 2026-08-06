@@ -1,4 +1,4 @@
-import { generateObject, generateText } from 'npm:ai@4'
+import { generateText } from 'npm:ai@4'
 import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { z } from 'npm:zod@3'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
@@ -7,6 +7,7 @@ import { resolveLlmKey } from './byok.ts'
 import { detectGraphQuery, executeGraphQuery } from './graph-nl.ts'
 import { NL_QUERY_PLANNER_MODEL, NL_QUERY_SUMMARY_MODEL } from './models.ts'
 import { getPromptForStage } from './prompt-ab.ts'
+import { generateValidatedObject } from './structured-output.ts'
 
 // SEC (Wave S1 / D-12): widen the blocklist. The original regex missed
 // administrative and filesystem-style verbs that happen to be valid Postgres
@@ -202,9 +203,8 @@ export async function executeNaturalLanguageQuery(
     : { promptTemplate: null, promptVersion: null, isCandidate: false }
   const nlPlanBasePrompt = nlPlanSelection.promptTemplate
     ?? `You are a SQL query generator. Generate a single SELECT query that answers the user's question about their bug reports.`
-  const { object: queryPlan, usage: planUsage } = await generateObject({
+  const { object: queryPlan, usage: planUsage } = await generateValidatedObject(sqlSchema, {
     model: anthropic(NL_QUERY_PLANNER_MODEL),
-    schema: sqlSchema,
     system: `${nlPlanBasePrompt}\n\n${SCHEMA_CONTEXT}`,
     prompt: question,
   })

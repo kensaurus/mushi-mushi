@@ -10,72 +10,68 @@
  *          The popover CTA links to Settings → BYOK to resolve the issue.
  */
 
-import { useRef } from 'react'
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { usePageData } from '../lib/usePageData'
-import { Tooltip } from './ui'
-import { CHIP_TONE } from '../lib/chipTone'
+import { useRef } from 'react';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { usePageData } from '../lib/usePageData';
+import { Tooltip } from './ui';
+import { CHIP_TONE } from '../lib/chipTone';
 
 interface PrivacyStatus {
-  byok_configured: boolean
-  llm_provider?: 'byok' | 'platform' | string
-  storage_provider: string | null
-  region: string | null
-  retention_days: number | null
-  last_audit_at: string | null
-  require_byok?: boolean
+  byok_configured: boolean;
+  llm_provider?: 'byok' | 'platform' | string;
+  storage_provider: string | null;
+  region: string | null;
+  retention_days: number | null;
+  last_audit_at: string | null;
+  require_byok?: boolean;
 }
 
 interface Props {
   /** Collapse to icon-only when sidebar is collapsed */
-  compact?: boolean
+  compact?: boolean;
 }
 
 export function PrivacyPostureBadge({ compact = false }: Props) {
-  const { data, loading, error, reload } = usePageData<PrivacyStatus>('/v1/admin/privacy-status')
+  const { data, loading, error, reload } = usePageData<PrivacyStatus>('/v1/admin/privacy-status');
 
-  const [popoverOpen, setPopoverOpen] = useState(false)
-  const badgeRef = useRef<HTMLButtonElement>(null)
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const badgeRef = useRef<HTMLButtonElement>(null);
 
-  if (loading) return null
+  if (loading) return null;
 
-  const isByok = data?.byok_configured ?? false
-  const label = error
-    ? 'Privacy unavailable'
-    : isByok
-      ? 'BYOK'
-      : 'Platform key'
+  const isByok = data?.byok_configured ?? false;
+  const label = error ? 'Privacy unavailable' : isByok ? 'BYOK' : 'Platform key';
   const labelLong = error
     ? 'Privacy status unavailable'
     : isByok
       ? 'All systems BYOK'
-      : 'Platform key in use'
-  const dotClass = error ? 'bg-danger' : isByok ? 'bg-ok' : 'bg-warn'
+      : 'Platform key in use';
+  const dotClass = error ? 'bg-danger' : isByok ? 'bg-ok' : 'bg-warn';
   const textClass = error
     ? CHIP_TONE.dangerSubtle
     : isByok
       ? CHIP_TONE.okSubtle
-      : CHIP_TONE.warnSubtle
+      : CHIP_TONE.warnSubtle;
 
   const tooltipContent = error
     ? 'Could not load privacy posture. Open BYOK settings or retry.'
     : isByok
       ? 'All LLM calls run under your own API key — your data never transits the Mushi platform account.'
-      : 'At least one pipeline is using the Mushi platform API key. Configure BYOK in Settings to keep your data in your own LLM account. Click for details.'
+      : 'At least one pipeline is using the Mushi platform API key. Configure BYOK in Settings to keep your data in your own LLM account. Click for details.';
 
   if (compact) {
     return (
       <Tooltip content={tooltipContent} side="right" portal>
         <Link
-          to="/settings?panel=byok"
+          to="/settings?tab=byok"
           className="flex items-center justify-center p-2 rounded-sm hover:bg-surface-raised transition-opacity"
           aria-label={label}
         >
           <span className={`inline-block w-2 h-2 rounded-full ${dotClass}`} />
         </Link>
       </Tooltip>
-    )
+    );
   }
 
   return (
@@ -90,7 +86,11 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
           onClick={() => setPopoverOpen((v) => !v)}
         >
           <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} />
-          <span className={`inline-flex min-w-0 truncate rounded-sm px-1 py-px text-2xs font-medium ${textClass}`}>{label}</span>
+          <span
+            className={`inline-flex min-w-0 truncate rounded-sm px-1 py-px text-2xs font-medium ${textClass}`}
+          >
+            {label}
+          </span>
         </button>
       </Tooltip>
 
@@ -110,13 +110,15 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
           </button>
           <p className="font-semibold text-fg text-xs">Privacy posture</p>
 
-            {error ? (
+          {error ? (
             <p className="text-danger-foreground leading-snug">{error}</p>
           ) : (
             <div className="space-y-1 text-fg-muted">
               <div className="flex justify-between">
                 <span>LLM provider</span>
-                <span className={`font-mono ${isByok ? 'text-ok-foreground' : 'text-warning-foreground'}`}>
+                <span
+                  className={`font-mono ${isByok ? 'text-ok-foreground' : 'text-warning-foreground'}`}
+                >
                   {data?.llm_provider === 'byok' || isByok ? 'BYOK' : 'platform'}
                 </span>
               </div>
@@ -143,7 +145,7 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
 
           <div className="flex flex-wrap gap-2 pt-1">
             <Link
-              to="/settings?panel=byok"
+              to="/settings?tab=byok"
               className="text-2xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity hover:no-underline"
               onClick={() => setPopoverOpen(false)}
             >
@@ -154,8 +156,8 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
                 type="button"
                 className="text-2xs text-danger underline hover:no-underline"
                 onClick={() => {
-                  reload()
-                  setPopoverOpen(false)
+                  reload();
+                  setPopoverOpen(false);
                 }}
               >
                 Retry
@@ -171,5 +173,5 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
         </div>
       )}
     </div>
-  )
+  );
 }
