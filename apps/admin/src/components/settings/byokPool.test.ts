@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   isRuntimeEligiblePoolKey,
   providerPoolKeys,
@@ -75,6 +75,28 @@ describe('BYOK pool selection', () => {
     });
 
     expect(selectPrimaryProviderKey([quarantined, runnable], 'firecrawl')?.id).toBe(runnable.id);
+  });
+
+  it('selects a quota-exhausted key after its cooldown expires', () => {
+    const now = Date.parse('2026-08-06T12:00:00.000Z');
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
+    const cooledDown = key({
+      id: '00000000-0000-4000-8000-000000000006',
+      priority: 10,
+      status: 'quota_exhausted',
+      test_status: 'error_quota',
+      cooldown_until: '2026-08-06T11:59:59.000Z',
+    });
+    const fallback = key({
+      id: '00000000-0000-4000-8000-000000000007',
+      priority: 20,
+    });
+
+    try {
+      expect(selectPrimaryProviderKey([cooledDown, fallback], 'firecrawl')?.id).toBe(cooledDown.id);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it('returns the highest-priority quarantined row when none are runnable', () => {

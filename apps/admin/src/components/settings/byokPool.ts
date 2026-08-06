@@ -48,5 +48,10 @@ export function providerPoolKeys(keys: PoolKey[], provider: PoolProvider): PoolK
  */
 export function selectPrimaryProviderKey(keys: PoolKey[], provider: PoolProvider): PoolKey | null {
   const providerKeys = providerPoolKeys(keys, provider);
-  return providerKeys.find(isRuntimeEligiblePoolKey) ?? providerKeys[0] ?? null;
+  const nowMs = Date.now();
+  // Do not pass the helper directly: Array#find supplies its index as the
+  // callback's second argument, which would replace the helper's timestamp.
+  return (
+    providerKeys.find((key) => isRuntimeEligiblePoolKey(key, nowMs)) ?? providerKeys[0] ?? null
+  );
 }
