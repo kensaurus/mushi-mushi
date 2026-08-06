@@ -1,9 +1,73 @@
 packages:
-  - "packages/*"
-  - "apps/*"
-  - "tooling/*"
-  - "examples/*"
-  - "examples/realworld/*"
+  - 'packages/*'
+  - 'apps/*'
+  - 'tooling/*'
+  - 'examples/*'
+  - 'examples/realworld/*'
+
+# pnpm 10.33+ no longer reads these root policies from `package.json#pnpm`.
+# Keep dependency resolution, audit policy, patches, and build-script trust in
+# this canonical workspace config so local installs and frozen CI installs use
+# the same controls.
+allowBuilds:
+  '@sentry/cli': true
+  esbuild: true
+  msw: true
+  protobufjs: true
+  sharp: true
+  sqlite3: true
+  supabase: true
+
+overrides:
+  'undici@<6.24.0': '>=6.24.0'
+  'undici@>=7.0.0 <7.29.0': '>=7.29.0 <8'
+  'undici@>=8.0.0 <8.9.0': '>=8.9.0 <9'
+  'jsdom>undici': '7.29.0'
+  '@actions/http-client>undici': '8.9.0'
+  '@connectrpc/connect-node>undici': '8.9.0'
+  'axios@<1.16.0': '>=1.16.0'
+  'form-data@<4.0.6': '>=4.0.6'
+  'esbuild@>=0.27.3 <0.28.1': '>=0.28.1'
+  '@xmldom/xmldom@<0.9.10': '>=0.9.10'
+  'uuid@<14.0.0': '>=14.0.0'
+  'postcss@<8.5.18': '>=8.5.18'
+  'react-router@<7.18.0': '>=7.18.0 <8'
+  'react-router-dom@<7.18.0': '>=7.18.0 <8'
+  'next@<15.5.18': '>=15.5.18'
+  'next@>=16.0.0 <16.2.11': '>=16.2.11'
+  'find-my-way@<=9.6.0': '>=9.7.0'
+  'devalue@<5.8.1': '>=5.8.1'
+  'hono@<4.12.25': '>=4.12.25'
+  'ip-address@<=10.3.0': '>=10.3.1'
+  'fast-uri@<3.1.2': '>=3.1.2'
+  'ajv>fast-uri': '4.1.2'
+  'mermaid@<11.15.0': '>=11.15.0'
+  'dompurify@<=3.4.10': '>=3.4.11'
+  'js-yaml@>=3.0.0 <3.15.0': '>=3.15.0 <4'
+  'js-yaml@>=4.0.0 <4.3.0': '>=4.3.0'
+  'brace-expansion@<1.1.16': '1.1.16'
+  'brace-expansion@>=3.0.0 <5.0.9': '5.0.9'
+  'fast-uri@>=4.0.0 <4.1.2': '4.1.2'
+  '@fastify/ajv-compiler>fast-uri': '4.1.2'
+  'fast-json-stringify>fast-uri': '4.1.2'
+  'sharp@<0.35.0': '>=0.35.0'
+  'protobufjs@<=7.5.7': '>=7.5.8'
+  'onnxruntime-web>protobufjs': '>=8.4.1'
+  'qs@>=6.11.1 <=6.15.1': '>=6.15.2'
+  'tar@<7': '>=7.4.3'
+  'ws@>=8.0.0 <8.21.0': '>=8.21.0'
+  'ws@>=7.0.0 <7.5.11': '>=7.5.11'
+  'ws@>=6.0.0 <6.2.4': '>=6.2.4'
+  'shell-quote@<=1.8.4': '1.10.0'
+  'react-router@>=7.0.0 <7.15.0': '>=7.15.0'
+  'brace-expansion': '5.0.9'
+
+patchedDependencies:
+  'nextra-theme-docs@4.6.1': 'patches/nextra-theme-docs@4.6.1.patch'
+
+auditConfig:
+  ignoreGhsas:
+    - 'GHSA-qwww-vcr4-c8h2'
 
 # ---------------------------------------------------------------------------
 # Supply-chain hardening (pnpm)
@@ -26,65 +90,69 @@ packages:
 # ---------------------------------------------------------------------------
 minimumReleaseAge: 10080
 minimumReleaseAgeExclude:
-  - "@mushi-mushi/*"
-  - "mushi-mushi"
-  # 2026-07-28: clear high advisories blocking required CI (postcss 8.5.18
-  # path traversal, brace-expansion 5.0.8 DoS, react-router 7.18 DoS).
+  - '@mushi-mushi/*'
+  - 'mushi-mushi'
+  # Clear high advisories blocking required CI (postcss 8.5.18 path traversal,
+  # brace-expansion 5.0.9 DoS, react-router 7.18 DoS).
   # GHSA-qwww-vcr4-c8h2 (react-router RSC CSRF, patched only in
-  # react-router>=8.3.0) is ignored via package.json pnpm.auditConfig —
+  # react-router>=8.3.0) is ignored via this file's auditConfig —
   # react-router-dom has no 8.x release yet, and admin uses BrowserRouter
   # (not RSC). Remove the ignore when react-router-dom@8.3+ ships.
-  - "postcss"
-  - "brace-expansion"
-  - "react-router"
-  - "react-router-dom"
-  # Security-patched transitive dep. fast-uri 3.1.2 fixes
-  # GHSA-q3j6-qgpj-74h6 (path traversal) + the host-confusion CVE pulled
+  - 'postcss'
+  - 'brace-expansion'
+  - 'react-router'
+  - 'react-router-dom'
+  # Security-patched transitive dep. fast-uri 3.1.2 / 4.1.2 fixes
+  # GHSA-q3j6-qgpj-74h6 (path traversal) + host-confusion advisories pulled
   # in via @modelcontextprotocol/sdk → ajv. Patch shipped 2026-05-05; we
   # exempt it from the 7-day cooldown because the HIGH-severity vuln is
   # in every <=3.1.0 release and we run npm audit signatures + provenance
   # in CI as compensating controls.
-  - "fast-uri"
+  - 'fast-uri'
   # devalue 5.8.1 fixes GHSA-77vg-94rm-hx3p (DoS via sparse array). Patch
   # shipped 2026-05-15; exempt from 7-day cooldown — CI dependency-review
   # and npm audit --audit-level=high both gate on this advisory.
-  - "devalue"
+  - 'devalue'
   # protobufjs 7.5.6 fixes GHSA-66ff-xgx4-vchm / GHSA-jvwf-75h9-cwgg /
   # GHSA-75px-5xx7-5xc7 / GHSA-685m-2w69-288q (4 HIGH CVEs). Exempt from
   # 7-day cooldown — same compensating controls as devalue above.
-  - "protobufjs"
+  - 'protobufjs'
   # form-data 4.0.6 fixes GHSA-fjxv-7rqg-78g4 (HIGH: CRLF injection via
   # unescaped field names). Pulled in transitively via node-fetch in the dev
   # SDKs. Published 2026-06-13; exempt from the 7-day cooldown because the
   # vuln is in every <4.0.6 release and CI runs npm audit + provenance as
   # compensating controls. Enforced tree-wide via pnpm.overrides.
-  - "form-data"
-  # undici 7.28.0 / 8.5.0 fix GHSA-pr7r-676h-xcf6 (HIGH: TLS certificate
-  # validation bypass) + the WebSocket-client DoS advisory. Dev/test-only in
+  - 'form-data'
+  # undici 7.29.0 / 8.9.0 include the current fixes for TLS validation bypass,
+  # WebSocket DoS, and private-cache cross-user disclosure. Dev/test-only in
   # this tree (pulled via jsdom for the admin vitest DOM env). Patches shipped
   # 2026-06-15; exempt from the 7-day cooldown so the pnpm.overrides above can
   # resolve the patched versions, keeping the `npm audit --audit-level=high`
   # CI gate green. undici is maintained by the Node.js core team (low
   # supply-chain risk) and provenance/audit-signatures run as compensating controls.
-  - "undici"
+  - 'undici'
+  # ip-address 10.3.1 fixes leading-zero octet ambiguity that can bypass SSRF
+  # trust boundaries when parsers and resolvers disagree. It is transitive via
+  # express-rate-limit; exempt only so the security override can resolve now.
+  - 'ip-address'
   # next 16.2.11 fixes three HIGH advisories (middleware/proxy auth bypass in
   # App Router w/ Turbopack single locale, Server Actions DoS, Server Actions
   # SSRF on custom servers) affecting every >=16.0.0 <16.2.11 release.
   # Exempt from the 7-day cooldown so the pnpm.overrides pin can resolve the
   # patch and keep the `npm audit --audit-level=high` CI gate green. Vercel-
   # maintained; provenance + audit signatures run as compensating controls.
-  - "next"
+  - 'next'
   # next's version-locked platform binaries/compiler packages must move in
   # lockstep with the next override above.
-  - "@next/*"
+  - '@next/*'
   # find-my-way 9.7.0 fixes the HTTP/2 DDoS advisory (<=9.6.0). Dev/test-only
   # in this tree (pulled via fastify in the Node SDK's framework-adapter
   # tests). Same compensating controls as above.
-  - "find-my-way"
+  - 'find-my-way'
 
 # strictDepBuilds: fail-fast on any dep that tries to run a postinstall
-# hook the workspace hasn't pre-approved (via .npmrc → onlyBuiltDependencies
-# or this file's allowBuilds). Without this, pnpm only warns and keeps
+# hook the workspace hasn't pre-approved via this file's allowBuilds. Without
+# this, pnpm only warns and keeps
 # installing — turning it on means a malicious postinstall slipping into a
 # transitive dep stops the install instead of running silently.
 # SOURCE: https://pnpm.io/settings#strictdepbuilds  (default flips to true

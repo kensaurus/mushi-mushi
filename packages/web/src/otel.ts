@@ -78,6 +78,9 @@ const SPAN_STATUS_ERROR = 2
 
 let warnedMissing = false
 
+const noopOnStart = (_span: BrowserOtelSpan, _parentContext: unknown): void => {}
+const noopOnEnd = (_span: BrowserOtelSpan): void => {}
+
 /**
  * Create a SpanProcessor that forwards browser OTel error spans to Mushi.
  *
@@ -92,9 +95,9 @@ export function createBrowserOtelSpanProcessor(
 
   const noOp: BrowserOtelSpanProcessor = {
     // mushi-mushi-allowlist: OTel SpanProcessor requires onStart/onEnd; this no-op processor intentionally does nothing
-    onStart: () => {},
+    onStart: noopOnStart,
     // mushi-mushi-allowlist: no-op processor — nothing to forward
-    onEnd: () => {},
+    onEnd: noopOnEnd,
     shutdown: () => Promise.resolve(),
     forceFlush: () => Promise.resolve(),
   }
@@ -114,7 +117,7 @@ export function createBrowserOtelSpanProcessor(
 
   return {
     // mushi-mushi-allowlist: OTel SpanProcessor requires onStart; this processor only acts on onEnd
-    onStart: () => {},
+    onStart: noopOnStart,
 
     onEnd(span: BrowserOtelSpan): void {
       try {
