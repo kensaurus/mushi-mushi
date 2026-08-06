@@ -116,7 +116,7 @@ describe('validated BYOK lifecycle contract', () => {
     expect(route).toContain('id: `legacy:${provider}`');
     expect(panel).toContain('legacy credential');
     expect(panel).toContain('isLegacyKey');
-    expect(cliKeys).toContain('res.data.legacyKeys ?? []');
+    expect(cliKeys).toContain('legacyKeys = d.legacyKeys ?? []');
     expect(cliKeys).toContain('manage in the console');
   });
 
