@@ -135,6 +135,8 @@ describe('MCP protocol handshake', () => {
       'improve_qa_story',
       'run_qa_story',
       'add_byok_key',
+      'test_byok_key',
+      'remove_byok_key',
       'approve_qa_story',
       'reply_to_reporter',
       // Phase 5: notification + full-stack audit write tools

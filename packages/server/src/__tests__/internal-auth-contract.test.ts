@@ -32,6 +32,7 @@ const functionsRoot = resolve(
   __dirname,
   '../../supabase/functions',
 )
+const sharedAuthSource = readFileSync(join(functionsRoot, '_shared', 'auth.ts'), 'utf-8')
 
 /**
  * Allow-list of functions that are publicly reachable by design and must
@@ -56,6 +57,9 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   'linear-oauth-callback': 'OAuth2 redirect — state nonce CSRF + Linear token exchange',
   'webhooks-linear': 'Linear HMAC-SHA256 webhook signature verified in handler',
   'webhooks-linear-agent': 'Linear HMAC-SHA256 agent webhook signature verified in handler',
+  // Deliberately unauthenticated liveness/readiness surface. It returns only
+  // process/DB health and a version, never tenant data.
+  healthz: 'Public liveness probe — exposes only status, DB health, and version',
   // Intelligence report is called by the admin UI via JWT and by internal
   // callers via service role — handler branches on the caller.
   'intelligence-report': 'Dual JWT/service-role handled in handler',
@@ -135,4 +139,12 @@ describe('internal-auth contract', () => {
       ).not.toMatch(/function\s+authorized\s*\(\s*req\s*:\s*Request\s*\)\s*:\s*boolean/)
     })
   }
+})
+
+describe('adminOrApiKey response contract', () => {
+  it('returns the JWT middleware response for missing or invalid credentials', () => {
+    expect(sharedAuthSource).toMatch(
+      /\/\/ Fall through to JWT[\s\S]{0,120}return await jwtAuth\(c, next\)/,
+    )
+  })
 })

@@ -2,15 +2,15 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-07-18 · **515** routes.
+> Generated: 2026-08-06 · **520** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 85 |
+| `adminOrApiKey` | 89 |
 | `apiKeyAuth` | 44 |
-| `jwtAuth` | 324 |
+| `jwtAuth` | 325 |
 | `jwtOrApiKey` | 3 |
 | `unknown` | 59 |
 
@@ -59,15 +59,20 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/admin/byok/:provider` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PUT | `/v1/admin/byok/:provider` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/byok/:provider/test` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| DELETE | `/v1/admin/byok/browserbase` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| GET | `/v1/admin/byok/browserbase` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| PUT | `/v1/admin/byok/browserbase` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| POST | `/v1/admin/byok/browserbase/test` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | DELETE | `/v1/admin/byok/firecrawl` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/byok/firecrawl` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PUT | `/v1/admin/byok/firecrawl` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/byok/firecrawl/test` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
-| GET | `/v1/admin/byok/health` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| GET | `/v1/admin/byok/health` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/byok/keys` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/byok/keys` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
-| DELETE | `/v1/admin/byok/keys/:keyId` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
-| PATCH | `/v1/admin/byok/keys/:keyId` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| DELETE | `/v1/admin/byok/keys/:keyId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| PATCH | `/v1/admin/byok/keys/:keyId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| POST | `/v1/admin/byok/keys/:keyId/test` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/chart-events` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |
 | GET | `/v1/admin/clusters` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lessons.ts` |
 | GET | `/v1/admin/clusters/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lessons.ts` |

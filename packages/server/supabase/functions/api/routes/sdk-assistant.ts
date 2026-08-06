@@ -25,7 +25,6 @@ import type { Variables } from '../types.ts'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { createOpenAI } from 'npm:@ai-sdk/openai@1'
-import { generateObject } from 'npm:ai@4'
 import { z } from 'npm:zod@3'
 
 import { getServiceClient } from '../../_shared/db.ts'
@@ -37,6 +36,7 @@ import { logLlmInvocation } from '../../_shared/telemetry.ts'
 import { createTrace } from '../../_shared/observability.ts'
 import { tagLangfuseTrace } from '../../_shared/sentry.ts'
 import { withAnthropicOrOpenAi } from '../../_shared/llm-failover.ts'
+import { generateValidatedObject } from '../../_shared/structured-output.ts'
 import { verifyEndUserToken, MUSHI_USER_TOKEN_HEADER } from '../../_shared/end-user-identity.ts'
 import { canManageProjectSdkConfig } from '../helpers.ts'
 import { logAudit } from '../../_shared/audit.ts'
@@ -248,9 +248,8 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
         projectId,
         (key) => {
           const anthropic = createAnthropic({ apiKey: key.key })
-          return generateObject({
+          return generateValidatedObject(ReplyLlmSchema, {
             model: anthropic(ASSIST_MODEL),
-            schema: ReplyLlmSchema,
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: message },
@@ -262,9 +261,8 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
           usedModel = ASSIST_FALLBACK
           fallbackUsed = true
           const openai = createOpenAI({ apiKey: key.key, baseURL: key.baseUrl })
-          return generateObject({
+          return generateValidatedObject(ReplyLlmSchema, {
             model: openai(ASSIST_FALLBACK),
-            schema: ReplyLlmSchema,
             system: systemPrompt,
             messages: [{ role: 'user', content: message }],
             maxTokens,

@@ -64,9 +64,7 @@ export function createNetworkCapture(options: NetworkCaptureOptions = {}): Netwo
   const originalFetch = globalThis.fetch;
   let activeOptions = options;
 
-  // eslint-disable-next-line prefer-const
-  let fetchWrapper: typeof globalThis.fetch;
-  globalThis.fetch = fetchWrapper = async function mushiFetchInterceptor(
+  const fetchWrapper: typeof globalThis.fetch = async function mushiFetchInterceptor(
     input: RequestInfo | URL,
     init?: RequestInit,
   ): Promise<Response> {
@@ -131,6 +129,7 @@ export function createNetworkCapture(options: NetworkCaptureOptions = {}): Netwo
       throw error;
     }
   };
+  globalThis.fetch = fetchWrapper;
 
   function addEntry(entry: MushiNetworkEntry): void {
     entries.push(entry);

@@ -33,7 +33,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP68 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP71 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*OpenAPI 3.1 at /openapi.jsonadminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/taskscreate / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSEfix dispatch streamAPI key OR JWT"]
@@ -81,7 +81,7 @@ your client:
 }
 ```
 
-The full tool catalog (68 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (71 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools (generated)`](/sdks/mcp-tools.generated). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -256,7 +256,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 68 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 71 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |

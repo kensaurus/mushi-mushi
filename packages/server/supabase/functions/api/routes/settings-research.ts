@@ -1,12 +1,18 @@
 import type { Hono } from 'npm:hono@4';
-import type { Variables } from '../types.ts'
+import type { Variables } from '../types.ts';
 
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { jwtAuth, adminOrApiKey, apiKeyAuth } from '../../_shared/auth.ts';
 import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
-import { dbError, resolveOwnedProject, ownedProjectIds, callerProjectIds, userCanAccessProject } from '../shared.ts';
+import {
+  dbError,
+  resolveOwnedProject,
+  ownedProjectIds,
+  callerProjectIds,
+  userCanAccessProject,
+} from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -14,6 +20,15 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 import { validateFixBranchTemplate } from '../../_shared/github-pr.ts';
+import {
+  byokKeyIdSchema,
+  type ByokProvider as PooledByokProvider,
+  createByokKeySchema,
+  isRunnableByokPoolState,
+  patchByokKeySchema,
+  probeByokKey,
+  validateOpenAiBaseUrl,
+} from '../../_shared/byok-validation.ts';
 
 // ── Slack OAuth state signing ────────────────────────────────────────────────
 // The OAuth `state` parameter is round-tripped through the user's browser and
@@ -22,6 +37,13 @@ import { validateFixBranchTemplate } from '../../_shared/github-pr.ts';
 // to the victim's project (cross-tenant token write / notification hijack).
 // We HMAC-sign `projectId:nonce:exp` and verify (constant-time) on callback.
 const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+function openAiCompatibleHostAllowlist(): string[] {
+  return (Deno.env.get('MUSHI_OPENAI_BASE_URL_ALLOWLIST') ?? '')
+    .split(',')
+    .map((host) => host.trim())
+    .filter(Boolean);
+}
 
 function b64urlEncode(bytes: Uint8Array): string {
   let bin = '';
@@ -234,7 +256,11 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     // Derive BYOK counts from the byok_keys pool table (source of truth).
     // Fall back to legacy key_ref presence so existing single-key setups
     // continue to show as "configured" until they migrate to the pool.
-    const activePoolKeys = (poolKeys ?? []) as Array<{ provider_slug: string; test_status: string | null; status: string }>;
+    const activePoolKeys = (poolKeys ?? []) as Array<{
+      provider_slug: string;
+      test_status: string | null;
+      status: string;
+    }>;
     let byokKeysConfigured = activePoolKeys.length;
     let byokKeysPassing = 0;
     let byokKeysFailing = 0;
@@ -247,9 +273,11 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
     // Per-provider configured flag: pool has at least one active key OR legacy ref exists
     const poolProviders = new Set(activePoolKeys.map((k) => k.provider_slug));
-    const byokAnthropicConfigured = poolProviders.has('anthropic') || Boolean(row.byok_anthropic_key_ref);
+    const byokAnthropicConfigured =
+      poolProviders.has('anthropic') || Boolean(row.byok_anthropic_key_ref);
     const byokOpenaiConfigured = poolProviders.has('openai') || Boolean(row.byok_openai_key_ref);
-    const byokFirecrawlConfigured = poolProviders.has('firecrawl') || Boolean(row.byok_firecrawl_key_ref);
+    const byokFirecrawlConfigured =
+      poolProviders.has('firecrawl') || Boolean(row.byok_firecrawl_key_ref);
 
     // Fold in legacy single-key refs whose provider has no pool row yet, so a
     // project that hasn't migrated to the pool still reports its keys as
@@ -439,27 +467,47 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       .eq('project_id', project.id)
       .maybeSingle();
 
-    const channelId = (settings as Record<string, unknown> | null)?.slack_channel_id as string | null;
-    const webhookUrl = (settings as Record<string, unknown> | null)?.slack_webhook_url as string | null;
+    const channelId = (settings as Record<string, unknown> | null)?.slack_channel_id as
+      | string
+      | null;
+    const webhookUrl = (settings as Record<string, unknown> | null)?.slack_webhook_url as
+      | string
+      | null;
     const botToken = Deno.env.get('SLACK_BOT_TOKEN');
     const globalChannel = Deno.env.get('SLACK_CHANNEL_ID');
 
     const targetChannel = channelId || globalChannel;
     if (!targetChannel && !webhookUrl) {
-      return c.json({ ok: false, error: { code: 'NO_SLACK_CONFIG', message: 'Configure a channel ID or webhook URL first.' } }, 400);
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'NO_SLACK_CONFIG',
+            message: 'Configure a channel ID or webhook URL first.',
+          },
+        },
+        400,
+      );
     }
 
     if (botToken && targetChannel) {
       const res = await fetch('https://slack.com/api/chat.postMessage', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: `Bearer ${botToken}` },
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          Authorization: `Bearer ${botToken}`,
+        },
         body: JSON.stringify({
           channel: targetChannel,
           text: `🐛 Mushi Mushi test message — your Slack integration is working! Project: *${project.name}*.`,
         }),
       });
-      const json = await res.json() as { ok: boolean; error?: string };
-      if (!json.ok) return c.json({ ok: false, error: { code: 'SLACK_API_ERROR', message: json.error ?? 'slack error' } }, 502);
+      const json = (await res.json()) as { ok: boolean; error?: string };
+      if (!json.ok)
+        return c.json(
+          { ok: false, error: { code: 'SLACK_API_ERROR', message: json.error ?? 'slack error' } },
+          502,
+        );
       return c.json({ ok: true });
     }
 
@@ -467,13 +515,25 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       const res = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: `🐛 Mushi Mushi test — Slack integration working for *${project.name}*.` }),
+        body: JSON.stringify({
+          text: `🐛 Mushi Mushi test — Slack integration working for *${project.name}*.`,
+        }),
       });
-      if (!res.ok) return c.json({ ok: false, error: { code: 'WEBHOOK_ERROR', message: `HTTP ${res.status}` } }, 502);
+      if (!res.ok)
+        return c.json(
+          { ok: false, error: { code: 'WEBHOOK_ERROR', message: `HTTP ${res.status}` } },
+          502,
+        );
       return c.json({ ok: true });
     }
 
-    return c.json({ ok: false, error: { code: 'NO_SLACK_CONFIG', message: 'SLACK_BOT_TOKEN env var not set.' } }, 500);
+    return c.json(
+      {
+        ok: false,
+        error: { code: 'NO_SLACK_CONFIG', message: 'SLACK_BOT_TOKEN env var not set.' },
+      },
+      500,
+    );
   });
 
   // ── Slack OAuth install flow ──────────────────────────────────────────────
@@ -486,9 +546,26 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
   // The `state` encodes the project ID + a random nonce (HMAC-verified on callback).
   app.get('/v1/admin/integrations/slack/install', jwtAuth, async (c) => {
     const clientId = Deno.env.get('SLACK_CLIENT_ID');
-    if (!clientId) return c.json({ ok: false, error: { code: 'NOT_CONFIGURED', message: 'SLACK_CLIENT_ID is not set on this server.' } }, 500);
+    if (!clientId)
+      return c.json(
+        {
+          ok: false,
+          error: { code: 'NOT_CONFIGURED', message: 'SLACK_CLIENT_ID is not set on this server.' },
+        },
+        500,
+      );
     const stateSecret = slackStateSecret();
-    if (!stateSecret) return c.json({ ok: false, error: { code: 'NOT_CONFIGURED', message: 'SLACK_CLIENT_SECRET is not set on this server.' } }, 500);
+    if (!stateSecret)
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'NOT_CONFIGURED',
+            message: 'SLACK_CLIENT_SECRET is not set on this server.',
+          },
+        },
+        500,
+      );
 
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -499,7 +576,13 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     // state = b64url(projectId:nonce:exp).b64url(HMAC) — verified on callback
     const state = await signSlackState(projectId, stateSecret);
     const redirectUri = slackRedirectUri();
-    const scopes = ['chat:write', 'chat:write.public', 'commands', 'channels:read', 'users:read'].join(',');
+    const scopes = [
+      'chat:write',
+      'chat:write.public',
+      'commands',
+      'channels:read',
+      'users:read',
+    ].join(',');
     const url = `https://slack.com/oauth/v2/authorize?client_id=${encodeURIComponent(clientId)}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`;
     return c.json({ ok: true, data: { url } });
   });
@@ -529,7 +612,12 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if (!projectId) return c.redirect(`${failRedirect}invalid_state`, 302);
 
     const redirectUri = slackRedirectUri();
-    const form = new URLSearchParams({ client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUri });
+    const form = new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      code,
+      redirect_uri: redirectUri,
+    });
 
     let tokens: { botToken: string; teamId: string; teamName: string };
     try {
@@ -538,7 +626,13 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: form,
       });
-      const data = await res.json() as { ok: boolean; error?: string; access_token: string; team: { id: string; name: string }; bot_user_id: string };
+      const data = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        access_token: string;
+        team: { id: string; name: string };
+        bot_user_id: string;
+      };
       if (!data.ok) throw new Error(data.error ?? 'slack_error');
       tokens = { botToken: data.access_token, teamId: data.team.id, teamName: data.team.name };
     } catch (err) {
@@ -554,12 +648,15 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     });
     const vaultId = secretRow as string | null;
 
-    await db.from('project_settings').upsert({
-      project_id: projectId,
-      slack_bot_token_ref: vaultId ?? undefined,
-      slack_team_id: tokens.teamId,
-      slack_team_name: tokens.teamName,
-    } as Record<string, unknown>, { onConflict: 'project_id' });
+    await db.from('project_settings').upsert(
+      {
+        project_id: projectId,
+        slack_bot_token_ref: vaultId ?? undefined,
+        slack_team_id: tokens.teamId,
+        slack_team_name: tokens.teamName,
+      } as Record<string, unknown>,
+      { onConflict: 'project_id' },
+    );
 
     return c.redirect(`${adminBase}/integrations/config?slack_connected=1`, 302);
   });
@@ -574,93 +671,129 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
     // Resolve bot token: per-project vault ref first, then env fallback
     let botToken: string | null = null;
-    const { data: ps } = await db.from('project_settings').select('slack_bot_token_ref').eq('project_id', projectId).maybeSingle();
+    const { data: ps } = await db
+      .from('project_settings')
+      .select('slack_bot_token_ref')
+      .eq('project_id', projectId)
+      .maybeSingle();
     const tokenRef = (ps as Record<string, unknown> | null)?.slack_bot_token_ref as string | null;
     if (tokenRef) {
       const { data } = await db.rpc('vault_get_secret', { secret_id: tokenRef });
       botToken = typeof data === 'string' ? data : null;
     }
     if (!botToken) botToken = Deno.env.get('SLACK_BOT_TOKEN') ?? null;
-    if (!botToken) return c.json({ ok: false, error: { code: 'NO_BOT_TOKEN', message: 'Add to Slack first.' } }, 400);
+    if (!botToken)
+      return c.json(
+        { ok: false, error: { code: 'NO_BOT_TOKEN', message: 'Add to Slack first.' } },
+        400,
+      );
 
-    const res = await fetch('https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=200&exclude_archived=true', {
-      headers: { Authorization: `Bearer ${botToken}` },
-    });
-    const data = await res.json() as { ok: boolean; error?: string; channels?: Array<{ id: string; name: string; is_private: boolean }> };
+    const res = await fetch(
+      'https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=200&exclude_archived=true',
+      {
+        headers: { Authorization: `Bearer ${botToken}` },
+      },
+    );
+    const data = (await res.json()) as {
+      ok: boolean;
+      error?: string;
+      channels?: Array<{ id: string; name: string; is_private: boolean }>;
+    };
     if (!data.ok) {
       const errCode = data.error ?? 'SLACK_API_ERROR';
       const isScopeError = errCode === 'missing_scope';
-      const isAuthError = ['invalid_auth', 'not_authed', 'account_inactive', 'token_revoked'].includes(errCode);
-      return c.json({
-        ok: false,
-        error: {
-          code: errCode,
-          message: isScopeError
-            ? "Your Slack app doesn't have 'channels:read' permission. Re-add to Slack with the correct scopes."
-            : isAuthError
-              ? 'Slack token is invalid or revoked. Re-add to Slack to reconnect.'
-              : `Slack API error: ${errCode}. Re-add to Slack to fix this.`,
+      const isAuthError = [
+        'invalid_auth',
+        'not_authed',
+        'account_inactive',
+        'token_revoked',
+      ].includes(errCode);
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: errCode,
+            message: isScopeError
+              ? "Your Slack app doesn't have 'channels:read' permission. Re-add to Slack with the correct scopes."
+              : isAuthError
+                ? 'Slack token is invalid or revoked. Re-add to Slack to reconnect.'
+                : `Slack API error: ${errCode}. Re-add to Slack to fix this.`,
+          },
         },
-      }, 502);
+        502,
+      );
     }
-    return c.json({ channels: (data.channels ?? []).map((ch) => ({ id: ch.id, name: ch.name, private: ch.is_private })) });
+    return c.json({
+      channels: (data.channels ?? []).map((ch) => ({
+        id: ch.id,
+        name: ch.name,
+        private: ch.is_private,
+      })),
+    });
   });
 
   // ── Per-project integration probe endpoint ─────────────────────────────────
   // POST /v1/admin/projects/:pid/integrations/probe/:kind
   // adminOrApiKey() accepts: Supabase JWT (browser console) OR project API key with mcp:read scope (CLI/MCP).
-  app.post('/v1/admin/projects/:pid/integrations/probe/:kind', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
-    const pid = c.req.param('pid')!;
-    const kind = c.req.param('kind')!;
-    const userId = c.get('userId') as string;
-    const db = getServiceClient();
+  app.post(
+    '/v1/admin/projects/:pid/integrations/probe/:kind',
+    adminOrApiKey({ scope: 'mcp:read' }),
+    async (c) => {
+      const pid = c.req.param('pid')!;
+      const kind = c.req.param('kind')!;
+      const userId = c.get('userId') as string;
+      const db = getServiceClient();
 
-    // Verify project access:
-    // - API key path: adminOrApiKey set projectId on the context; check it matches :pid
-    // - JWT path: projectId is not set; fall through to ownership check
-    const contextPid = (c.get as (k: string) => string | undefined)('projectId');
-    if (contextPid) {
-      // API key auth — project is bound to the key; reject mismatch
-      if (contextPid !== pid) return c.json({ error: 'API key does not belong to this project' }, 403);
-    } else {
-      // JWT auth — verify the user can access this *specific* project with a
-      // header-independent ownership/membership check. callerProjectIds()
-      // honours X-Mushi-Project-Id, so it would wrongly 403 a legitimate owner
-      // whenever the admin SPA has a *different* project pinned as active.
-      const access = await userCanAccessProject(db, userId, pid);
-      if (!access.allowed) return c.json({ error: 'Project not found or access denied' }, 403);
-    }
+      // Verify project access:
+      // - API key path: adminOrApiKey set projectId on the context; check it matches :pid
+      // - JWT path: projectId is not set; fall through to ownership check
+      const contextPid = (c.get as (k: string) => string | undefined)('projectId');
+      if (contextPid) {
+        // API key auth — project is bound to the key; reject mismatch
+        if (contextPid !== pid)
+          return c.json({ error: 'API key does not belong to this project' }, 403);
+      } else {
+        // JWT auth — verify the user can access this *specific* project with a
+        // header-independent ownership/membership check. callerProjectIds()
+        // honours X-Mushi-Project-Id, so it would wrongly 403 a legitimate owner
+        // whenever the admin SPA has a *different* project pinned as active.
+        const access = await userCanAccessProject(db, userId, pid);
+        if (!access.allowed) return c.json({ error: 'Project not found or access denied' }, 403);
+      }
 
-    try {
-      // Fetch project_settings — may be null if no settings saved yet
-      const { data: settingsRow } = await db
-        .from('project_settings')
-        .select('slack_bot_token_ref, slack_channel_id, slack_webhook_url, sentry_auth_token_ref, sentry_org_slug, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref')
-        .eq('project_id', pid)
-        .maybeSingle();
+      try {
+        // Fetch project_settings — may be null if no settings saved yet
+        const { data: settingsRow } = await db
+          .from('project_settings')
+          .select(
+            'slack_bot_token_ref, slack_channel_id, slack_webhook_url, sentry_auth_token_ref, sentry_org_slug, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref',
+          )
+          .eq('project_id', pid)
+          .maybeSingle();
 
-      const settings = (settingsRow ?? {}) as {
-        slack_bot_token_ref?: string | null;
-        sentry_auth_token_ref?: string | null;
-        sentry_org_slug?: string | null;
-        langfuse_public_key_ref?: string | null;
-        langfuse_secret_key_ref?: string | null;
-        github_repo_url?: string | null;
-        github_installation_token_ref?: string | null;
-      };
+        const settings = (settingsRow ?? {}) as {
+          slack_bot_token_ref?: string | null;
+          sentry_auth_token_ref?: string | null;
+          sentry_org_slug?: string | null;
+          langfuse_public_key_ref?: string | null;
+          langfuse_secret_key_ref?: string | null;
+          github_repo_url?: string | null;
+          github_installation_token_ref?: string | null;
+        };
 
-      const { probeIntegration } = await import('../../_shared/integration-probes.ts');
-      const result = await probeIntegration(
-        kind as Parameters<typeof probeIntegration>[0],
-        db,
-        settings,
-      );
-      return c.json({ ok: true, data: { status: result.status, detail: result.detail ?? null } });
-    } catch (err) {
-      log.error('probe unhandled error', { scope: 'settings-research', err: String(err) });
-      return c.json({ ok: false, error: { code: 'PROBE_ERROR', message: String(err) } }, 500);
-    }
-  });
+        const { probeIntegration } = await import('../../_shared/integration-probes.ts');
+        const result = await probeIntegration(
+          kind as Parameters<typeof probeIntegration>[0],
+          db,
+          settings,
+        );
+        return c.json({ ok: true, data: { status: result.status, detail: result.detail ?? null } });
+      } catch (err) {
+        log.error('probe unhandled error', { scope: 'settings-research', err: String(err) });
+        return c.json({ ok: false, error: { code: 'PROBE_ERROR', message: String(err) } }, 500);
+      }
+    },
+  );
 
   // ── Per-project integration list ───────────────────────────────────────────
   // GET /v1/admin/projects/:pid/integrations — surfaces configured integrations from project_settings.
@@ -668,13 +801,20 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
   async function handleIntegrationsList(pid: string, db: ReturnType<typeof getServiceClient>) {
     const { data: settings } = await db
       .from('project_settings')
-      .select('slack_channel_id, slack_webhook_url, slack_bot_token_ref, discord_webhook_url, teams_webhook_url')
+      .select(
+        'slack_channel_id, slack_webhook_url, slack_bot_token_ref, discord_webhook_url, teams_webhook_url',
+      )
       .eq('project_id', pid)
       .maybeSingle();
     const ps = settings as Record<string, unknown> | null;
 
     // Check Slack: per-project vault ref OR server-wide env var fallback
-    const slackConfigured = !!(ps?.slack_channel_id || ps?.slack_webhook_url || ps?.slack_bot_token_ref || Deno.env.get('SLACK_BOT_TOKEN'));
+    const slackConfigured = !!(
+      ps?.slack_channel_id ||
+      ps?.slack_webhook_url ||
+      ps?.slack_bot_token_ref ||
+      Deno.env.get('SLACK_BOT_TOKEN')
+    );
 
     const integrations: Array<{ kind: string; status: string; detail: string | null }> = [
       {
@@ -700,166 +840,223 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
   }
 
   // Combined route: accepts JWT (browser) or API key (CLI/MCP)
-  app.get('/v1/admin/projects/:pid/integrations', async (c, next) => {
-    const hasApiKey = !!(c.req.header('X-Mushi-Api-Key') || c.req.header('X-Mushi-Project'));
-    if (hasApiKey) return apiKeyAuth(c as never, next);
-    return jwtAuth(c as never, next);
-  }, async (c) => {
-    const pid = c.req.param('pid')!;
-    const db = getServiceClient();
+  app.get(
+    '/v1/admin/projects/:pid/integrations',
+    async (c, next) => {
+      const hasApiKey = !!(c.req.header('X-Mushi-Api-Key') || c.req.header('X-Mushi-Project'));
+      if (hasApiKey) return apiKeyAuth(c as never, next);
+      return jwtAuth(c as never, next);
+    },
+    async (c) => {
+      const pid = c.req.param('pid')!;
+      const db = getServiceClient();
 
-    // For API key auth: validate the project matches
-    const contextPid = c.get('projectId' as keyof typeof c.var) as string | undefined;
-    if (contextPid && contextPid !== pid) return c.json({ error: 'Forbidden' }, 403);
+      // For API key auth: validate the project matches
+      const contextPid = c.get('projectId' as keyof typeof c.var) as string | undefined;
+      if (contextPid && contextPid !== pid) return c.json({ error: 'Forbidden' }, 403);
 
-    // For JWT auth: validate project ownership
-    if (!contextPid) {
-      const userId = c.get('userId') as string;
-      const resolvedProject = await resolveOwnedProject(c, db, userId);
-      if ('response' in resolvedProject) return resolvedProject.response;
-    }
+      // For JWT auth: validate project ownership
+      if (!contextPid) {
+        const userId = c.get('userId') as string;
+        const resolvedProject = await resolveOwnedProject(c, db, userId);
+        if ('response' in resolvedProject) return resolvedProject.response;
+      }
 
-    const integrations = await handleIntegrationsList(pid, db);
-    return c.json({ integrations });
-  });
+      const integrations = await handleIntegrationsList(pid, db);
+      return c.json({ integrations });
+    },
+  );
 
   // ── Per-project Slack test endpoint ────────────────────────────────────────
   // POST /v1/admin/projects/:pid/integrations/slack/test
   // Used by `mushi slack test` and the console Send test button. JWT or API key (mcp:read).
-  app.post('/v1/admin/projects/:pid/integrations/slack/test', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
-    const pid = c.req.param('pid')!;
-    const userId = c.get('userId') as string;
-    const db = getServiceClient();
+  app.post(
+    '/v1/admin/projects/:pid/integrations/slack/test',
+    adminOrApiKey({ scope: 'mcp:read' }),
+    async (c) => {
+      const pid = c.req.param('pid')!;
+      const userId = c.get('userId') as string;
+      const db = getServiceClient();
 
-    // Resolve project: API key path uses contextPid; JWT path uses ownership check
-    const contextPid = (c.get as (k: string) => string | undefined)('projectId');
-    let projectId: string;
-    let projectName: string;
-    if (contextPid) {
-      if (contextPid !== pid) return c.json({ ok: false, error: 'API key does not belong to this project' }, 403);
-      projectId = pid;
-      projectName = (c.get as (k: string) => string | undefined)('projectName') ?? 'your project';
-    } else {
-      const resolvedProject = await resolveOwnedProject(c, db, userId);
-      if ('response' in resolvedProject) return resolvedProject.response;
-      const project = resolvedProject.project;
-      projectId = project.id;
-      projectName = project.name ?? 'your project';
-    }
+      // Resolve project: API key path uses contextPid; JWT path uses ownership check
+      const contextPid = (c.get as (k: string) => string | undefined)('projectId');
+      let projectId: string;
+      let projectName: string;
+      if (contextPid) {
+        if (contextPid !== pid)
+          return c.json({ ok: false, error: 'API key does not belong to this project' }, 403);
+        projectId = pid;
+        projectName = (c.get as (k: string) => string | undefined)('projectName') ?? 'your project';
+      } else {
+        const resolvedProject = await resolveOwnedProject(c, db, userId);
+        if ('response' in resolvedProject) return resolvedProject.response;
+        const project = resolvedProject.project;
+        projectId = project.id;
+        projectName = project.name ?? 'your project';
+      }
 
-    const { data: settings } = await db
-      .from('project_settings')
-      .select('slack_channel_id, slack_webhook_url, slack_bot_token_ref')
-      .eq('project_id', projectId)
-      .maybeSingle();
-    const ps = settings as Record<string, unknown> | null;
-    const channelId = (ps?.slack_channel_id as string | null) || Deno.env.get('SLACK_CHANNEL_ID') || null;
-    const webhookUrl = (ps?.slack_webhook_url as string | null) || null;
+      const { data: settings } = await db
+        .from('project_settings')
+        .select('slack_channel_id, slack_webhook_url, slack_bot_token_ref')
+        .eq('project_id', projectId)
+        .maybeSingle();
+      const ps = settings as Record<string, unknown> | null;
+      const channelId =
+        (ps?.slack_channel_id as string | null) || Deno.env.get('SLACK_CHANNEL_ID') || null;
+      const webhookUrl = (ps?.slack_webhook_url as string | null) || null;
 
-    let botToken: string | null = null;
-    const tokenRef = ps?.slack_bot_token_ref as string | null;
-    if (tokenRef) {
-      const { data } = await db.rpc('vault_get_secret', { secret_id: tokenRef });
-      botToken = typeof data === 'string' ? data : null;
-    }
-    if (!botToken) botToken = Deno.env.get('SLACK_BOT_TOKEN') ?? null;
+      let botToken: string | null = null;
+      const tokenRef = ps?.slack_bot_token_ref as string | null;
+      if (tokenRef) {
+        const { data } = await db.rpc('vault_get_secret', { secret_id: tokenRef });
+        botToken = typeof data === 'string' ? data : null;
+      }
+      if (!botToken) botToken = Deno.env.get('SLACK_BOT_TOKEN') ?? null;
 
-    if (botToken && channelId) {
-      const res = await fetch('https://slack.com/api/chat.postMessage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: `Bearer ${botToken}` },
-        body: JSON.stringify({ channel: channelId, text: `🐛 Mushi test — Slack is wired up for *${projectName}*.` }),
+      if (botToken && channelId) {
+        const res = await fetch('https://slack.com/api/chat.postMessage', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            Authorization: `Bearer ${botToken}`,
+          },
+          body: JSON.stringify({
+            channel: channelId,
+            text: `🐛 Mushi test — Slack is wired up for *${projectName}*.`,
+          }),
+        });
+        const json = (await res.json()) as { ok: boolean; error?: string };
+        if (!json.ok)
+          return c.json({ ok: true, data: { ok: false, error: json.error ?? 'Slack API error' } });
+        return c.json({ ok: true, data: { ok: true } });
+      }
+      if (webhookUrl) {
+        const res = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: `🐛 Mushi test — Slack is wired up for *${projectName}*.` }),
+        });
+        if (!res.ok)
+          return c.json({ ok: true, data: { ok: false, error: `Webhook HTTP ${res.status}` } });
+        return c.json({ ok: true, data: { ok: true } });
+      }
+
+      return c.json({
+        ok: true,
+        data: {
+          ok: false,
+          error:
+            'No Slack channel or bot token configured. Use `mushi slack status` to check or visit /integrations → Add to Slack.',
+        },
       });
-      const json = await res.json() as { ok: boolean; error?: string };
-      if (!json.ok) return c.json({ ok: true, data: { ok: false, error: json.error ?? 'Slack API error' } });
-      return c.json({ ok: true, data: { ok: true } });
-    }
-    if (webhookUrl) {
-      const res = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: `🐛 Mushi test — Slack is wired up for *${projectName}*.` }),
-      });
-      if (!res.ok) return c.json({ ok: true, data: { ok: false, error: `Webhook HTTP ${res.status}` } });
-      return c.json({ ok: true, data: { ok: true } });
-    }
-
-    return c.json({ ok: true, data: { ok: false, error: 'No Slack channel or bot token configured. Use `mushi slack status` to check or visit /integrations → Add to Slack.' } });
-  });
+    },
+  );
 
   // ── Per-project Discord test endpoint ──────────────────────────────────────
   // POST /v1/admin/projects/:pid/integrations/discord/test
   // JWT or API key (mcp:read) so CLI can call it.
-  app.post('/v1/admin/projects/:pid/integrations/discord/test', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
-    const pid = c.req.param('pid')!;
-    const userId = c.get('userId') as string;
-    const db = getServiceClient();
+  app.post(
+    '/v1/admin/projects/:pid/integrations/discord/test',
+    adminOrApiKey({ scope: 'mcp:read' }),
+    async (c) => {
+      const pid = c.req.param('pid')!;
+      const userId = c.get('userId') as string;
+      const db = getServiceClient();
 
-    const contextPid = (c.get as (k: string) => string | undefined)('projectId');
-    let projectId: string;
-    let displayName: string;
-    if (contextPid) {
-      if (contextPid !== pid) return c.json({ ok: false, error: 'API key does not belong to this project' }, 403);
-      projectId = pid;
-      displayName = (c.get as (k: string) => string | undefined)('projectName') ?? pid;
-    } else {
-      const resolvedProject = await resolveOwnedProject(c, db, userId);
-      if ('response' in resolvedProject) return resolvedProject.response;
-      const project = resolvedProject.project;
-      projectId = project.id;
-      displayName = project.name ?? pid;
-    }
+      const contextPid = (c.get as (k: string) => string | undefined)('projectId');
+      let projectId: string;
+      let displayName: string;
+      if (contextPid) {
+        if (contextPid !== pid)
+          return c.json({ ok: false, error: 'API key does not belong to this project' }, 403);
+        projectId = pid;
+        displayName = (c.get as (k: string) => string | undefined)('projectName') ?? pid;
+      } else {
+        const resolvedProject = await resolveOwnedProject(c, db, userId);
+        if ('response' in resolvedProject) return resolvedProject.response;
+        const project = resolvedProject.project;
+        projectId = project.id;
+        displayName = project.name ?? pid;
+      }
 
-    const { data: settings } = await db
-      .from('project_settings')
-      .select('discord_webhook_url')
-      .eq('project_id', projectId)
-      .maybeSingle();
-    const webhookUrl = (settings as Record<string, unknown> | null)?.discord_webhook_url as string | null;
-    if (!webhookUrl) return c.json({ ok: false, error: 'No Discord webhook URL configured. Set one in Integrations → Discord.' }, 400);
+      const { data: settings } = await db
+        .from('project_settings')
+        .select('discord_webhook_url')
+        .eq('project_id', projectId)
+        .maybeSingle();
+      const webhookUrl = (settings as Record<string, unknown> | null)?.discord_webhook_url as
+        | string
+        | null;
+      if (!webhookUrl)
+        return c.json(
+          {
+            ok: false,
+            error: 'No Discord webhook URL configured. Set one in Integrations → Discord.',
+          },
+          400,
+        );
 
-    const { sendDiscordNotification } = await import('../../_shared/slack.ts');
-    const discordResult = await sendDiscordNotification(webhookUrl, `🐛 Mushi test — Discord is wired up for **${displayName}**.`);
-    if (!discordResult.ok) return c.json({ ok: false, error: discordResult.error ?? 'Discord test failed' }, 502);
-    return c.json({ ok: true });
-  });
+      const { sendDiscordNotification } = await import('../../_shared/slack.ts');
+      const discordResult = await sendDiscordNotification(
+        webhookUrl,
+        `🐛 Mushi test — Discord is wired up for **${displayName}**.`,
+      );
+      if (!discordResult.ok)
+        return c.json({ ok: false, error: discordResult.error ?? 'Discord test failed' }, 502);
+      return c.json({ ok: true });
+    },
+  );
 
   // ── Per-project Teams test endpoint ────────────────────────────────────────
   // POST /v1/admin/projects/:pid/integrations/teams/test
   // JWT or API key (mcp:read) so CLI can call it.
-  app.post('/v1/admin/projects/:pid/integrations/teams/test', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
-    const pid = c.req.param('pid')!;
-    const userId = c.get('userId') as string;
-    const db = getServiceClient();
+  app.post(
+    '/v1/admin/projects/:pid/integrations/teams/test',
+    adminOrApiKey({ scope: 'mcp:read' }),
+    async (c) => {
+      const pid = c.req.param('pid')!;
+      const userId = c.get('userId') as string;
+      const db = getServiceClient();
 
-    const contextPid = (c.get as (k: string) => string | undefined)('projectId');
-    let projectId: string;
-    let displayName: string;
-    if (contextPid) {
-      if (contextPid !== pid) return c.json({ ok: false, error: 'API key does not belong to this project' }, 403);
-      projectId = pid;
-      displayName = (c.get as (k: string) => string | undefined)('projectName') ?? pid;
-    } else {
-      const resolvedProject = await resolveOwnedProject(c, db, userId);
-      if ('response' in resolvedProject) return resolvedProject.response;
-      const project = resolvedProject.project;
-      projectId = project.id;
-      displayName = project.name ?? pid;
-    }
+      const contextPid = (c.get as (k: string) => string | undefined)('projectId');
+      let projectId: string;
+      let displayName: string;
+      if (contextPid) {
+        if (contextPid !== pid)
+          return c.json({ ok: false, error: 'API key does not belong to this project' }, 403);
+        projectId = pid;
+        displayName = (c.get as (k: string) => string | undefined)('projectName') ?? pid;
+      } else {
+        const resolvedProject = await resolveOwnedProject(c, db, userId);
+        if ('response' in resolvedProject) return resolvedProject.response;
+        const project = resolvedProject.project;
+        projectId = project.id;
+        displayName = project.name ?? pid;
+      }
 
-    const { data: settings } = await db
-      .from('project_settings')
-      .select('teams_webhook_url')
-      .eq('project_id', projectId)
-      .maybeSingle();
-    const webhookUrl = (settings as Record<string, unknown> | null)?.teams_webhook_url as string | null;
-    if (!webhookUrl) return c.json({ ok: false, error: 'No Teams webhook URL configured. Set one in Integrations → Microsoft Teams.' }, 400);
+      const { data: settings } = await db
+        .from('project_settings')
+        .select('teams_webhook_url')
+        .eq('project_id', projectId)
+        .maybeSingle();
+      const webhookUrl = (settings as Record<string, unknown> | null)?.teams_webhook_url as
+        | string
+        | null;
+      if (!webhookUrl)
+        return c.json(
+          {
+            ok: false,
+            error: 'No Teams webhook URL configured. Set one in Integrations → Microsoft Teams.',
+          },
+          400,
+        );
 
-    const { sendTeamsTestMessage } = await import('../../_shared/teams.ts');
-    const result = await sendTeamsTestMessage(webhookUrl, displayName);
-    if (!result.ok) return c.json({ ok: false, error: result.error ?? 'Teams test failed' }, 502);
-    return c.json({ ok: true });
-  });
+      const { sendTeamsTestMessage } = await import('../../_shared/teams.ts');
+      const result = await sendTeamsTestMessage(webhookUrl, displayName);
+      if (!result.ok) return c.json({ ok: false, error: result.error ?? 'Teams test failed' }, 502);
+      return c.json({ ok: true });
+    },
+  );
 
   app.get('/v1/admin/projects/:id/sdk-config', jwtAuth, async (c) => {
     const projectId = c.req.param('id')!;
@@ -1010,22 +1207,18 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const rawBaseUrl =
       provider === 'openai' && typeof body?.baseUrl === 'string' ? body.baseUrl.trim() : '';
     let baseUrl: string | null = null;
-    if (rawBaseUrl) {
-      try {
-        const u = new URL(rawBaseUrl);
-        if (u.protocol !== 'https:') {
-          return c.json(
-            { ok: false, error: { code: 'BAD_BASE_URL', message: 'baseUrl must be https://' } },
-            400,
-          );
-        }
-        baseUrl = u.toString().replace(/\/$/, '');
-      } catch {
+    if (provider === 'openai') {
+      const validation = validateOpenAiBaseUrl(
+        rawBaseUrl || undefined,
+        openAiCompatibleHostAllowlist(),
+      );
+      if (!validation.ok) {
         return c.json(
-          { ok: false, error: { code: 'BAD_BASE_URL', message: 'baseUrl is not a valid URL' } },
+          { ok: false, error: { code: 'INVALID_BASE_URL', message: validation.message } },
           400,
         );
       }
+      baseUrl = validation.value;
     }
 
     const db = getServiceClient();
@@ -1039,24 +1232,29 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       secret_value: key,
     });
     if (vaultErr) {
-      log.error('vault_store_secret failed', { provider, error: vaultErr.message });
+      log.error('vault_store_secret failed', { provider, code: vaultErr.code });
       return c.json(
-        { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: vaultErr.message } },
+        {
+          ok: false,
+          error: {
+            code: 'VAULT_WRITE_FAILED',
+            message: 'The credential could not be stored securely.',
+          },
+        },
         500,
       );
     }
 
     const now = new Date().toISOString();
     const hint = byokKeyHint(key);
+    const probe = await probeByokKey(provider, key, baseUrl ?? undefined);
     const update: Record<string, string | null> = {
       [`byok_${provider}_key_ref`]: `vault://${secretName}`,
       [`byok_${provider}_key_hint`]: hint,
       [`byok_${provider}_key_added_at`]: now,
       [`byok_${provider}_key_last_used_at`]: null,
-      // Reset the connectivity test cache on every key change — stale "ok"
-      // chips are dangerous; require an explicit re-test after rotation.
-      [`byok_${provider}_test_status`]: null,
-      [`byok_${provider}_tested_at`]: null,
+      [`byok_${provider}_test_status`]: probe.status,
+      [`byok_${provider}_tested_at`]: now,
     };
     if (provider === 'openai') {
       update.byok_openai_base_url = baseUrl;
@@ -1077,13 +1275,22 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     // `TypeError: .catch is not a function`, which bubbles to the Hono onError
     // handler and erases the successful upsert above. Use try/await instead.
     try {
-      await db.from('byok_audit_log').insert({
-        project_id: project.id,
-        provider,
-        action: 'rotated',
-        actor_user_id: userId,
-        meta: { added_at: now },
-      });
+      await db.from('byok_audit_log').insert([
+        {
+          project_id: project.id,
+          provider,
+          action: 'rotated',
+          actor_user_id: userId,
+          meta: { added_at: now },
+        },
+        {
+          project_id: project.id,
+          provider,
+          action: 'tested',
+          actor_user_id: userId,
+          meta: { status: probe.status, http_status: probe.httpStatus },
+        },
+      ]);
     } catch {
       /* audit log is best-effort */
     }
@@ -1093,7 +1300,19 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
     return c.json({
       ok: true,
-      data: { provider, configured: true, addedAt: now, hint, keyHint: hint },
+      data: {
+        provider,
+        configured: true,
+        addedAt: now,
+        hint,
+        keyHint: hint,
+        validation: {
+          status: probe.status,
+          detail: probe.detail,
+          httpStatus: probe.httpStatus,
+          latencyMs: probe.latencyMs,
+        },
+      },
     });
   });
 
@@ -1122,6 +1341,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         [`byok_${provider}_key_hint`]: null,
         [`byok_${provider}_key_added_at`]: null,
         [`byok_${provider}_key_last_used_at`]: null,
+        [`byok_${provider}_test_status`]: null,
+        [`byok_${provider}_tested_at`]: null,
+        ...(provider === 'openai' ? { byok_openai_base_url: null } : {}),
       },
       { onConflict: 'project_id' },
     );
@@ -1170,74 +1392,66 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    // Reuse the same resolver path the LLM pipeline takes. If this returns null
-    // the user has no BYOK and no env fallback — surface that as 'untested'.
-    const { resolveLlmKey } = await import('../../_shared/byok.ts');
-    const resolved = await resolveLlmKey(db, project.id, provider);
-    if (!resolved) {
+    const { data: settings, error: settingsError } = await db
+      .from('project_settings')
+      .select(
+        provider === 'openai'
+          ? 'byok_openai_key_ref, byok_openai_base_url'
+          : 'byok_anthropic_key_ref',
+      )
+      .eq('project_id', project.id)
+      .maybeSingle();
+    if (settingsError) return dbError(c, settingsError);
+    const settingsRow = settings as unknown as Record<string, string | null> | null;
+    const ref =
+      provider === 'openai'
+        ? settingsRow?.byok_openai_key_ref
+        : settingsRow?.byok_anthropic_key_ref;
+    if (!ref) {
       return c.json(
         {
           ok: false,
-          error: { code: 'NO_KEY', message: 'No BYOK key set and no platform default available.' },
+          error: { code: 'NO_KEY', message: 'No BYOK key is configured.' },
         },
         400,
       );
     }
-
-    const startedAt = Date.now();
-    let status: 'ok' | 'error_auth' | 'error_network' | 'error_quota' = 'ok';
-    let detail = '';
-    let httpStatus = 0;
-
-    try {
-      if (provider === 'anthropic') {
-        const res = await fetch('https://api.anthropic.com/v1/models', {
-          method: 'GET',
-          headers: {
-            'x-api-key': resolved.key,
-            'anthropic-version': '2023-06-01',
+    const secretRef = String(ref).replace(/^vault:\/\//, '');
+    const { data: key, error: keyError } = await db.rpc('vault_get_secret', {
+      secret_id: secretRef,
+    });
+    if (keyError || typeof key !== 'string') {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'VAULT_READ_FAILED',
+            message: 'The provider key could not be read from Vault.',
           },
-          signal: AbortSignal.timeout(8_000),
-        });
-        httpStatus = res.status;
-        if (res.status === 401 || res.status === 403) status = 'error_auth';
-        else if (res.status === 429) status = 'error_quota';
-        else if (!res.ok) {
-          status = 'error_network';
-          detail = `HTTP ${res.status}`;
-        }
-      } else {
-        // BYOK base URLs come in two flavors:
-        //   - "https://api.openai.com" (no version) → append "/v1/models"
-        //   - "https://openrouter.ai/api/v1" (already versioned) → append "/models"
-        // Detect either form so OpenRouter / Together / Fireworks all probe
-        // their actual /models endpoint instead of /v1/v1/models (404).
-        const rawBase = (resolved.baseUrl ?? 'https://api.openai.com').replace(/\/$/, '');
-        const modelsUrl = /\/v\d+$/.test(rawBase) ? `${rawBase}/models` : `${rawBase}/v1/models`;
-        const res = await fetch(modelsUrl, {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${resolved.key}` },
-          signal: AbortSignal.timeout(8_000),
-        });
-        httpStatus = res.status;
-        if (res.status === 401 || res.status === 403) status = 'error_auth';
-        else if (res.status === 429) status = 'error_quota';
-        else if (!res.ok) {
-          status = 'error_network';
-          detail = `HTTP ${res.status}`;
-        }
-      }
-    } catch (err) {
-      status = 'error_network';
-      detail = String(err).slice(0, 200);
+        },
+        500,
+      );
     }
-
-    const latencyMs = Date.now() - startedAt;
+    let baseUrl: string | undefined;
+    if (provider === 'openai') {
+      const baseUrlValidation = validateOpenAiBaseUrl(
+        settingsRow?.byok_openai_base_url ?? undefined,
+        openAiCompatibleHostAllowlist(),
+      );
+      if (!baseUrlValidation.ok) {
+        return c.json(
+          { ok: false, error: { code: 'INVALID_BASE_URL', message: baseUrlValidation.message } },
+          400,
+        );
+      }
+      baseUrl = baseUrlValidation.value;
+    }
+    const probe = await probeByokKey(provider, key, baseUrl);
     const now = new Date().toISOString();
     await db.from('project_settings').upsert(
       {
         project_id: project.id,
-        [`byok_${provider}_test_status`]: status,
+        [`byok_${provider}_test_status`]: probe.status,
         [`byok_${provider}_tested_at`]: now,
       },
       { onConflict: 'project_id' },
@@ -1248,23 +1462,35 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     await db.from('integration_health_history').insert({
       project_id: project.id,
       kind: provider,
-      status: status === 'ok' ? 'ok' : status === 'error_quota' ? 'degraded' : 'down',
-      latency_ms: latencyMs,
-      message: detail || `HTTP ${httpStatus}`,
+      status: probe.status === 'ok' ? 'ok' : probe.status === 'error_quota' ? 'degraded' : 'down',
+      latency_ms: probe.latencyMs,
+      message: probe.detail,
       source: 'manual',
     });
+
+    try {
+      await db.from('byok_audit_log').insert({
+        project_id: project.id,
+        provider,
+        action: 'tested',
+        actor_user_id: userId,
+        meta: { status: probe.status, http_status: probe.httpStatus },
+      });
+    } catch {
+      /* best-effort */
+    }
 
     return c.json({
       ok: true,
       data: {
         provider,
-        status,
-        hint: resolved.hint,
-        source: resolved.source,
-        baseUrl: resolved.baseUrl ?? null,
-        httpStatus,
-        latencyMs,
-        detail,
+        status: probe.status,
+        hint: byokKeyHint(key),
+        source: 'byok',
+        baseUrl: baseUrl ?? null,
+        httpStatus: probe.httpStatus,
+        latencyMs: probe.latencyMs,
+        detail: probe.detail,
         testedAt: now,
       },
     });
@@ -1329,6 +1555,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const project = resolvedProject.project;
 
     const update: Record<string, unknown> = { project_id: project.id };
+    let validation: Awaited<ReturnType<typeof probeByokKey>> | null = null;
 
     if (typeof body.key === 'string' && body.key.trim().length > 0) {
       const key = body.key.trim();
@@ -1347,9 +1574,15 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         secret_value: key,
       });
       if (vaultErr) {
-        log.error('vault_store_secret failed for firecrawl', { error: vaultErr.message });
+        log.error('vault_store_secret failed for firecrawl', { code: vaultErr.code });
         return c.json(
-          { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: vaultErr.message } },
+          {
+            ok: false,
+            error: {
+              code: 'VAULT_WRITE_FAILED',
+              message: 'The credential could not be stored securely.',
+            },
+          },
           500,
         );
       }
@@ -1357,8 +1590,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       update.byok_firecrawl_key_hint = byokKeyHint(key);
       update.byok_firecrawl_key_added_at = new Date().toISOString();
       update.byok_firecrawl_key_last_used_at = null;
-      update.byok_firecrawl_test_status = null;
-      update.byok_firecrawl_tested_at = null;
+      validation = await probeByokKey('firecrawl', key);
+      update.byok_firecrawl_test_status = validation.status;
+      update.byok_firecrawl_tested_at = new Date().toISOString();
     }
 
     if (Array.isArray(body.allowedDomains)) {
@@ -1383,12 +1617,23 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
     if (update.byok_firecrawl_key_ref) {
       try {
-        await db.from('byok_audit_log').insert({
-          project_id: project.id,
-          provider: 'firecrawl',
-          action: 'rotated',
-          actor_user_id: userId,
-        });
+        await db.from('byok_audit_log').insert([
+          {
+            project_id: project.id,
+            provider: 'firecrawl',
+            action: 'rotated',
+            actor_user_id: userId,
+          },
+          {
+            project_id: project.id,
+            provider: 'firecrawl',
+            action: 'tested',
+            actor_user_id: userId,
+            meta: validation
+              ? { status: validation.status, http_status: validation.httpStatus }
+              : {},
+          },
+        ]);
       } catch {
         /* audit log is best-effort */
       }
@@ -1397,7 +1642,19 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       }).catch(() => {});
     }
 
-    return c.json({ ok: true });
+    return c.json({
+      ok: true,
+      data: validation
+        ? {
+            validation: {
+              status: validation.status,
+              detail: validation.detail,
+              httpStatus: validation.httpStatus,
+              latencyMs: validation.latencyMs,
+            },
+          }
+        : null,
+    });
   });
 
   app.delete('/v1/admin/byok/firecrawl', jwtAuth, requireFeature('byok'), async (c) => {
@@ -1454,8 +1711,38 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    const { probeFirecrawl } = await import('../../_shared/firecrawl.ts');
-    const probe = await probeFirecrawl(db, project.id);
+    const { data: settings, error: settingsError } = await db
+      .from('project_settings')
+      .select('byok_firecrawl_key_ref')
+      .eq('project_id', project.id)
+      .maybeSingle();
+    if (settingsError) return dbError(c, settingsError);
+    if (!settings?.byok_firecrawl_key_ref) {
+      return c.json(
+        {
+          ok: false,
+          error: { code: 'KEY_NOT_CONFIGURED', message: 'No Firecrawl key is configured.' },
+        },
+        404,
+      );
+    }
+    const secretRef = String(settings.byok_firecrawl_key_ref).replace(/^vault:\/\//, '');
+    const { data: key, error: keyError } = await db.rpc('vault_get_secret', {
+      secret_id: secretRef,
+    });
+    if (keyError || typeof key !== 'string') {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'VAULT_READ_FAILED',
+            message: 'The Firecrawl key could not be read from Vault.',
+          },
+        },
+        500,
+      );
+    }
+    const probe = await probeByokKey('firecrawl', key);
 
     const now = new Date().toISOString();
     await db.from('project_settings').upsert(
@@ -1468,6 +1755,13 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     );
 
     try {
+      await db.from('byok_audit_log').insert({
+        project_id: project.id,
+        provider: 'firecrawl',
+        action: 'tested',
+        actor_user_id: userId,
+        meta: { status: probe.status, http_status: probe.httpStatus },
+      });
       await db.from('integration_health_history').insert({
         project_id: project.id,
         kind: 'firecrawl',
@@ -1484,10 +1778,252 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       ok: true,
       data: {
         status: probe.status,
-        hint: probe.hint,
-        source: probe.source,
+        hint: byokKeyHint(key),
+        source: 'byok',
         latencyMs: probe.latencyMs,
         detail: probe.detail,
+        testedAt: now,
+      },
+    });
+  });
+
+  // ============================================================
+  // Browserbase BYOK admin endpoints
+  // ============================================================
+
+  function browserbaseSecretName(projectId: string): string {
+    return `mushi/byok/${projectId}/browserbase`;
+  }
+
+  app.get('/v1/admin/byok/browserbase', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: null }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const { data, error } = await db
+      .from('project_settings')
+      .select(
+        'byok_browserbase_key_ref, byok_browserbase_key_hint, byok_browserbase_key_added_at, byok_browserbase_key_last_used_at, byok_browserbase_test_status, byok_browserbase_tested_at, byok_browserbase_session_count',
+      )
+      .eq('project_id', project.id)
+      .maybeSingle();
+    if (error) return dbError(c, error);
+
+    return c.json({
+      ok: true,
+      data: {
+        configured: Boolean(data?.byok_browserbase_key_ref),
+        keyHint: (data?.byok_browserbase_key_hint as string | null) ?? null,
+        addedAt: (data?.byok_browserbase_key_added_at as string | null) ?? null,
+        lastUsedAt: (data?.byok_browserbase_key_last_used_at as string | null) ?? null,
+        testStatus: (data?.byok_browserbase_test_status as string | null) ?? null,
+        testedAt: (data?.byok_browserbase_tested_at as string | null) ?? null,
+        sessionCount: (data?.byok_browserbase_session_count as number | null) ?? 0,
+      },
+    });
+  });
+
+  app.put('/v1/admin/byok/browserbase', jwtAuth, requireFeature('byok'), async (c) => {
+    const userId = c.get('userId') as string;
+    const raw = (await c.req.json().catch(() => ({}))) as { key?: unknown };
+    const key = typeof raw.key === 'string' ? raw.key.trim() : '';
+    if (key.length < 8 || key.length > 4096) {
+      return c.json(
+        {
+          ok: false,
+          error: { code: 'INVALID_KEY', message: 'Provide the full Browserbase API key.' },
+        },
+        400,
+      );
+    }
+
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+    const secretName = browserbaseSecretName(project.id);
+    const { error: vaultError } = await db.rpc('vault_store_secret', {
+      secret_name: secretName,
+      secret_value: key,
+    });
+    if (vaultError) {
+      log.error('vault_store_secret failed for browserbase', { code: vaultError.code });
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'VAULT_WRITE_FAILED',
+            message: 'The credential could not be stored securely.',
+          },
+        },
+        500,
+      );
+    }
+
+    const probe = await probeByokKey('browserbase', key);
+    const now = new Date().toISOString();
+    const { error } = await db.from('project_settings').upsert(
+      {
+        project_id: project.id,
+        byok_browserbase_key_ref: `vault://${secretName}`,
+        byok_browserbase_key_hint: byokKeyHint(key),
+        byok_browserbase_key_added_at: now,
+        byok_browserbase_key_last_used_at: null,
+        byok_browserbase_test_status: probe.status,
+        byok_browserbase_tested_at: now,
+      },
+      { onConflict: 'project_id' },
+    );
+    if (error) return dbError(c, error);
+
+    try {
+      await db.from('byok_audit_log').insert([
+        {
+          project_id: project.id,
+          provider: 'browserbase',
+          action: 'rotated',
+          actor_user_id: userId,
+        },
+        {
+          project_id: project.id,
+          provider: 'browserbase',
+          action: 'tested',
+          actor_user_id: userId,
+          meta: { status: probe.status, http_status: probe.httpStatus },
+        },
+      ]);
+    } catch {
+      /* best-effort */
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        validation: {
+          status: probe.status,
+          detail: probe.detail,
+          httpStatus: probe.httpStatus,
+          latencyMs: probe.latencyMs,
+        },
+      },
+    });
+  });
+
+  app.delete('/v1/admin/byok/browserbase', jwtAuth, requireFeature('byok'), async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    try {
+      await db.rpc('vault_delete_secret', { secret_name: browserbaseSecretName(project.id) });
+    } catch (error) {
+      log.warn('vault_delete_secret failed for browserbase (non-fatal)', {
+        error: String(error),
+      });
+    }
+    const { error } = await db.from('project_settings').upsert(
+      {
+        project_id: project.id,
+        byok_browserbase_key_ref: null,
+        byok_browserbase_key_hint: null,
+        byok_browserbase_key_added_at: null,
+        byok_browserbase_key_last_used_at: null,
+        byok_browserbase_test_status: null,
+        byok_browserbase_tested_at: null,
+      },
+      { onConflict: 'project_id' },
+    );
+    if (error) return dbError(c, error);
+
+    try {
+      await db.from('byok_audit_log').insert({
+        project_id: project.id,
+        provider: 'browserbase',
+        action: 'removed',
+        actor_user_id: userId,
+      });
+    } catch {
+      /* best-effort */
+    }
+    return c.json({ ok: true });
+  });
+
+  app.post('/v1/admin/byok/browserbase/test', jwtAuth, requireFeature('byok'), async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const { data: settings, error: settingsError } = await db
+      .from('project_settings')
+      .select('byok_browserbase_key_ref')
+      .eq('project_id', project.id)
+      .maybeSingle();
+    if (settingsError) return dbError(c, settingsError);
+    if (!settings?.byok_browserbase_key_ref) {
+      return c.json(
+        {
+          ok: false,
+          error: { code: 'KEY_NOT_CONFIGURED', message: 'No Browserbase key is configured.' },
+        },
+        404,
+      );
+    }
+    const secretRef = String(settings.byok_browserbase_key_ref).replace(/^vault:\/\//, '');
+    const { data: key, error: keyError } = await db.rpc('vault_get_secret', {
+      secret_id: secretRef,
+    });
+    if (keyError || typeof key !== 'string') {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'VAULT_READ_FAILED',
+            message: 'The Browserbase key could not be read from Vault.',
+          },
+        },
+        500,
+      );
+    }
+
+    const probe = await probeByokKey('browserbase', key);
+    const now = new Date().toISOString();
+    const { error: updateError } = await db.from('project_settings').upsert(
+      {
+        project_id: project.id,
+        byok_browserbase_test_status: probe.status,
+        byok_browserbase_tested_at: now,
+      },
+      { onConflict: 'project_id' },
+    );
+    if (updateError) return dbError(c, updateError);
+
+    try {
+      await db.from('byok_audit_log').insert({
+        project_id: project.id,
+        provider: 'browserbase',
+        action: 'tested',
+        actor_user_id: userId,
+        meta: { status: probe.status, http_status: probe.httpStatus },
+      });
+    } catch {
+      /* best-effort */
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        status: probe.status,
+        detail: probe.detail,
+        httpStatus: probe.httpStatus,
+        latencyMs: probe.latencyMs,
         testedAt: now,
       },
     });
@@ -1684,9 +2220,16 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       { count: attachedCount },
       { data: lastSessionRow },
       { data: settingsRow },
+      { data: pooledFirecrawlRows },
     ] = await Promise.all([
-      db.from('research_sessions').select('id', { count: 'exact', head: true }).eq('project_id', pid),
-      db.from('research_snippets').select('id', { count: 'exact', head: true }).eq('project_id', pid),
+      db
+        .from('research_sessions')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid),
+      db
+        .from('research_snippets')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid),
       db
         .from('research_snippets')
         .select('id', { count: 'exact', head: true })
@@ -1706,6 +2249,13 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         )
         .eq('project_id', pid)
         .maybeSingle(),
+      db
+        .from('byok_keys')
+        .select('key_hint, test_status, status, cooldown_until, priority')
+        .eq('project_id', pid)
+        .eq('provider_slug', 'firecrawl')
+        .order('priority', { ascending: true })
+        .order('created_at', { ascending: true }),
     ]);
 
     const sessions = sessionCount ?? 0;
@@ -1717,10 +2267,30 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       ? Math.floor((Date.now() - new Date(lastSessionAt).getTime()) / (24 * 60 * 60 * 1000))
       : null;
 
-    const firecrawlConfigured = Boolean(settingsRow?.byok_firecrawl_key_ref);
-    const firecrawlTestStatus = (settingsRow?.byok_firecrawl_test_status as string | null) ?? null;
-    const firecrawlReady =
-      firecrawlConfigured && (!firecrawlTestStatus || firecrawlTestStatus === 'ok');
+    const poolRows = (pooledFirecrawlRows ?? []) as Array<{
+      key_hint: string | null;
+      test_status: 'ok' | 'error_auth' | 'error_network' | 'error_quota' | null;
+      status: 'pending_validation' | 'active' | 'disabled' | 'quota_exhausted' | 'auth_failed';
+      cooldown_until: string | null;
+    }>;
+    const runnablePoolRow = poolRows.find((row) => isRunnableByokPoolState(row)) ?? null;
+    const diagnosticPoolRow = runnablePoolRow ?? poolRows[0] ?? null;
+    const legacyConfigured = Boolean(settingsRow?.byok_firecrawl_key_ref);
+    const legacyTestStatus = (settingsRow?.byok_firecrawl_test_status as string | null) ?? null;
+    const legacyReady = legacyConfigured && legacyTestStatus === 'ok';
+    const firecrawlConfigured = poolRows.length > 0 || legacyConfigured;
+    const firecrawlReady = Boolean(runnablePoolRow || legacyReady);
+    const firecrawlTestStatus =
+      (runnablePoolRow?.test_status as string | null) ??
+      (legacyReady ? legacyTestStatus : null) ??
+      (diagnosticPoolRow?.test_status as string | null) ??
+      legacyTestStatus;
+    const firecrawlKeyHint =
+      (runnablePoolRow?.key_hint as string | null) ??
+      (legacyReady ? (settingsRow?.byok_firecrawl_key_hint as string | null) : null) ??
+      (diagnosticPoolRow?.key_hint as string | null) ??
+      (settingsRow?.byok_firecrawl_key_hint as string | null) ??
+      '';
     const allowedDomains = (settingsRow?.firecrawl_allowed_domains as string[] | null) ?? [];
     const maxPagesPerCall = (settingsRow?.firecrawl_max_pages_per_call as number | null) ?? 5;
 
@@ -1735,7 +2305,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       topPriorityTo = '/settings?tab=firecrawl';
     } else if (firecrawlTestStatus === 'error_auth') {
       topPriority = 'firecrawl_auth_failed';
-      topPriorityLabel = `Firecrawl rejected key ${settingsRow?.byok_firecrawl_key_hint ?? ''} — re-test in Settings.`;
+      topPriorityLabel = `Firecrawl rejected key ${firecrawlKeyHint} — re-test in Settings.`;
       topPriorityTo = '/settings?tab=firecrawl';
     } else if (firecrawlTestStatus && firecrawlTestStatus !== 'ok') {
       topPriority = 'firecrawl_error';
@@ -1775,7 +2345,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         firecrawlConfigured,
         firecrawlReady,
         firecrawlTestStatus,
-        firecrawlKeyHint: (settingsRow?.byok_firecrawl_key_hint as string | null) ?? null,
+        firecrawlKeyHint: firecrawlKeyHint || null,
         allowedDomainsCount: allowedDomains.length,
         maxPagesPerCall,
         topPriority,
@@ -1889,7 +2459,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     // API-key callers (CLI/MCP) are bound to a single project; scope to it so
     // they don't accidentally read a different owned project's pool. JWT
     // (console) callers keep the header/query/first-project resolution.
-    const apiKeyProjectId = c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined;
+    const apiKeyProjectId =
+      c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined;
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
       noProjectResponse: () => c.json({ ok: true, data: { keys: [] } }),
       ...(apiKeyProjectId ? { overrideProjectId: apiKeyProjectId } : {}),
@@ -1897,168 +2468,566 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    const { data, error } = await db
-      .from('byok_keys')
-      .select('id, provider_slug, label, priority, status, cooldown_until, key_hint, last_tested_at, test_status, created_at, rotated_at')
-      .eq('project_id', project.id)
-      .order('provider_slug', { ascending: true })
-      .order('priority', { ascending: true });
+    const [poolResult, legacyResult] = await Promise.all([
+      db
+        .from('byok_keys')
+        .select(
+          'id, provider_slug, label, priority, status, cooldown_until, key_hint, base_url, last_tested_at, last_used_at, test_status, created_at, rotated_at',
+        )
+        .eq('project_id', project.id)
+        .order('provider_slug', { ascending: true })
+        .order('priority', { ascending: true }),
+      db
+        .from('project_settings')
+        .select(
+          'byok_anthropic_key_ref, byok_anthropic_key_hint, byok_anthropic_key_added_at, byok_anthropic_key_last_used_at, byok_anthropic_test_status, byok_anthropic_tested_at, ' +
+            'byok_openai_key_ref, byok_openai_key_hint, byok_openai_key_added_at, byok_openai_key_last_used_at, byok_openai_base_url, byok_openai_test_status, byok_openai_tested_at, ' +
+            'byok_firecrawl_key_ref, byok_firecrawl_key_hint, byok_firecrawl_key_added_at, byok_firecrawl_key_last_used_at, byok_firecrawl_test_status, byok_firecrawl_tested_at, ' +
+            'byok_browserbase_key_ref, byok_browserbase_key_hint, byok_browserbase_key_added_at, byok_browserbase_key_last_used_at, byok_browserbase_test_status, byok_browserbase_tested_at',
+        )
+        .eq('project_id', project.id)
+        .maybeSingle(),
+    ]);
 
-    if (error) return dbError(c, error);
-    return c.json({ ok: true, data: { projectId: project.id, keys: data ?? [] } });
+    if (poolResult.error) return dbError(c, poolResult.error);
+    if (legacyResult.error) return dbError(c, legacyResult.error);
+
+    const legacyRow = (legacyResult.data as Record<string, unknown> | null) ?? {};
+    const legacyKeys = (['anthropic', 'openai', 'firecrawl', 'browserbase'] as const).flatMap(
+      (provider) => {
+        if (!legacyRow[`byok_${provider}_key_ref`]) return [];
+        const testStatus = (legacyRow[`byok_${provider}_test_status`] as string | null) ?? null;
+        const status =
+          testStatus === 'ok'
+            ? 'active'
+            : testStatus === 'error_quota'
+              ? 'quota_exhausted'
+              : testStatus === 'error_auth'
+                ? 'auth_failed'
+                : 'pending_validation';
+        return [
+          {
+            id: `legacy:${provider}`,
+            provider_slug: provider,
+            label: 'Legacy credential',
+            status,
+            test_status: testStatus,
+            cooldown_until: null,
+            key_hint: (legacyRow[`byok_${provider}_key_hint`] as string | null) ?? null,
+            base_url:
+              provider === 'openai'
+                ? ((legacyRow.byok_openai_base_url as string | null) ?? null)
+                : null,
+            last_tested_at: (legacyRow[`byok_${provider}_tested_at`] as string | null) ?? null,
+            last_used_at: (legacyRow[`byok_${provider}_key_last_used_at`] as string | null) ?? null,
+            created_at: (legacyRow[`byok_${provider}_key_added_at`] as string | null) ?? null,
+            legacy: true as const,
+          },
+        ];
+      },
+    );
+
+    return c.json({
+      ok: true,
+      data: { projectId: project.id, keys: poolResult.data ?? [], legacyKeys },
+    });
   });
 
   /**
    * POST /v1/admin/byok/keys
    * Add a key to the pool. Body: { provider, key, label?, priority? }
    */
-  app.post('/v1/admin/byok/keys', adminOrApiKey({ scope: 'mcp:write' }), requireFeature('byok'), async (c) => {
-    const userId = c.get('userId') as string;
-    // Accept both `provider` (console) and `provider_slug` (CLI/MCP) so the
-    // advertised `mushi keys add` and `add_byok_key` tools work.
-    const body = (await c.req.json().catch(() => ({}))) as {
-      provider?: string;
-      provider_slug?: string;
-      key?: string;
-      label?: string;
-      priority?: number;
-    };
+  app.post(
+    '/v1/admin/byok/keys',
+    adminOrApiKey({ scope: 'mcp:write' }),
+    requireFeature('byok'),
+    async (c) => {
+      const userId = c.get('userId') as string;
+      const db = getServiceClient();
+      const apiKeyProjectId =
+        c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined;
+      const resolvedProject = await resolveOwnedProject(
+        c,
+        db,
+        userId,
+        apiKeyProjectId ? { overrideProjectId: apiKeyProjectId } : {},
+      );
+      if ('response' in resolvedProject) return resolvedProject.response;
+      const project = resolvedProject.project;
 
-    const provider = body.provider ?? body.provider_slug;
-    const VALID_PROVIDERS = ['anthropic', 'openai', 'firecrawl', 'browserbase', 'cursor'];
-    if (!provider || !VALID_PROVIDERS.includes(provider)) {
-      return c.json({ ok: false, error: { code: 'BAD_PROVIDER', message: `provider must be one of: ${VALID_PROVIDERS.join(', ')}` } }, 400);
-    }
-    const keyVal = typeof body.key === 'string' ? body.key.trim() : '';
-    if (keyVal.length < 8) {
-      return c.json({ ok: false, error: { code: 'KEY_TOO_SHORT', message: 'Provide the full API key.' } }, 400);
-    }
+      const raw = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+      const parsed = createByokKeySchema.safeParse({
+        projectId: project.id,
+        provider: raw.provider ?? raw.provider_slug,
+        apiKey: raw.apiKey ?? raw.key,
+        label: raw.label,
+        priority: raw.priority,
+        baseUrl: raw.baseUrl ?? raw.base_url,
+      });
+      if (!parsed.success) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: parsed.error.issues.map((issue) => issue.message).join('; '),
+            },
+          },
+          400,
+        );
+      }
 
-    const db = getServiceClient();
-    const apiKeyProjectId = c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined;
-    const resolvedProject = await resolveOwnedProject(c, db, userId, apiKeyProjectId ? { overrideProjectId: apiKeyProjectId } : {});
-    if ('response' in resolvedProject) return resolvedProject.response;
-    const project = resolvedProject.project;
+      const { provider, apiKey: keyVal, label, priority } = parsed.data;
+      let baseUrl: string | undefined;
+      if (provider === 'openai') {
+        const validation = validateOpenAiBaseUrl(
+          parsed.data.baseUrl,
+          openAiCompatibleHostAllowlist(),
+        );
+        if (!validation.ok) {
+          return c.json(
+            { ok: false, error: { code: 'INVALID_BASE_URL', message: validation.message } },
+            400,
+          );
+        }
+        baseUrl = validation.value;
+      } else if (parsed.data.baseUrl) {
+        return c.json(
+          {
+            ok: false,
+            error: { code: 'INVALID_BASE_URL', message: 'baseUrl is supported only for OpenAI.' },
+          },
+          400,
+        );
+      }
 
-    const secretName = `mushi/byok/${project.id}/${provider}/${Date.now()}`;
-    const { data: secretData, error: vaultErr } = await db.rpc('vault_store_secret', {
-      secret_name: secretName,
-      secret_value: keyVal,
-    });
-    if (vaultErr) {
-      log.error('vault_store_secret failed for byok pool key', { provider, error: vaultErr.message });
-      return c.json({ ok: false, error: { code: 'VAULT_WRITE_FAILED', message: vaultErr.message } }, 500);
-    }
+      const secretName = `mushi/byok/${project.id}/${provider}/${Date.now()}`;
+      const { data: secretData, error: vaultErr } = await db.rpc('vault_store_secret', {
+        secret_name: secretName,
+        secret_value: keyVal,
+      });
+      if (vaultErr) {
+        log.error('vault_store_secret failed for byok pool key', {
+          provider,
+          code: vaultErr.code,
+        });
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'VAULT_WRITE_FAILED',
+              message: 'The credential could not be stored securely.',
+            },
+          },
+          500,
+        );
+      }
 
-    const hint = byokKeyHint(keyVal);
-    const { data: row, error: insertErr } = await db
-      .from('byok_keys')
-      .insert({
-        project_id: project.id,
-        provider_slug: provider,
-        vault_secret_id: secretData,
-        key_hint: hint,
-        label: body.label ?? null,
-        priority: body.priority ?? 100,
-        status: 'active',
-        created_by: userId,
-      })
-      .select('id, provider_slug, label, priority, status, key_hint, created_at')
-      .single();
+      const hint = byokKeyHint(keyVal);
+      const { data: row, error: insertErr } = await db
+        .from('byok_keys')
+        .insert({
+          project_id: project.id,
+          provider_slug: provider,
+          vault_secret_id: secretData,
+          key_hint: hint,
+          label: label ?? null,
+          priority: priority ?? 100,
+          status: 'pending_validation',
+          test_status: null,
+          base_url: provider === 'openai' ? baseUrl : null,
+          created_by: userId,
+        })
+        .select(
+          'id, provider_slug, label, priority, status, key_hint, base_url, last_tested_at, last_used_at, test_status, created_at',
+        )
+        .single();
 
-    if (insertErr) return dbError(c, insertErr);
+      if (insertErr) {
+        try {
+          await db.rpc('vault_delete_secret', { secret_id: secretData });
+        } catch {
+          /* best-effort orphan cleanup */
+        }
+        return dbError(c, insertErr);
+      }
 
-    try {
-      await db.from('byok_audit_log').insert({ project_id: project.id, provider, action: 'added', actor_user_id: userId });
-    } catch { /* best-effort */ }
+      const probe = await probeByokKey(provider, keyVal, baseUrl);
+      const now = new Date().toISOString();
+      const cooldownUntil =
+        probe.keyStatus === 'quota_exhausted'
+          ? new Date(Date.now() + 60 * 60 * 1000).toISOString()
+          : null;
+      const { data: validatedRow, error: validationUpdateError } = await db
+        .from('byok_keys')
+        .update({
+          status: probe.keyStatus,
+          test_status: probe.status,
+          last_tested_at: now,
+          last_error: probe.status === 'ok' ? null : probe.detail,
+          cooldown_until: cooldownUntil,
+        })
+        .eq('id', row.id)
+        .eq('project_id', project.id)
+        .select(
+          'id, provider_slug, label, priority, status, key_hint, base_url, last_tested_at, last_used_at, test_status, cooldown_until, created_at',
+        )
+        .single();
+      if (validationUpdateError) return dbError(c, validationUpdateError);
 
-    return c.json({ ok: true, data: row });
-  });
+      try {
+        await db.from('byok_audit_log').insert([
+          { project_id: project.id, provider, action: 'added', actor_user_id: userId },
+          {
+            project_id: project.id,
+            provider,
+            action: 'tested',
+            actor_user_id: userId,
+            meta: { key_id: row.id, status: probe.status, http_status: probe.httpStatus },
+          },
+        ]);
+        await db.from('integration_health_history').insert({
+          project_id: project.id,
+          kind: provider,
+          status:
+            probe.status === 'ok' ? 'ok' : probe.status === 'error_quota' ? 'degraded' : 'down',
+          latency_ms: probe.latencyMs,
+          message: probe.detail,
+          source: 'manual',
+        });
+      } catch {
+        /* best-effort */
+      }
+
+      return c.json({
+        ok: true,
+        data: {
+          ...validatedRow,
+          validation: {
+            status: probe.status,
+            detail: probe.detail,
+            httpStatus: probe.httpStatus,
+            latencyMs: probe.latencyMs,
+          },
+        },
+      });
+    },
+  );
 
   /**
    * PATCH /v1/admin/byok/keys/:keyId
    * Update label, priority, or status for a specific key row.
    */
-  app.patch('/v1/admin/byok/keys/:keyId', jwtAuth, requireFeature('byok'), async (c) => {
-    const userId = c.get('userId') as string;
-    const keyId = c.req.param('keyId')!;
-    const body = (await c.req.json().catch(() => ({}))) as {
-      label?: string | null;
-      priority?: number;
-      status?: string;
-    };
+  app.patch(
+    '/v1/admin/byok/keys/:keyId',
+    adminOrApiKey({ scope: 'mcp:write' }),
+    requireFeature('byok'),
+    async (c) => {
+      const userId = c.get('userId') as string;
+      const keyId = c.req.param('keyId')!;
+      if (!byokKeyIdSchema.safeParse(keyId).success) {
+        return c.json(
+          { ok: false, error: { code: 'INVALID_KEY_ID', message: 'keyId must be a UUID.' } },
+          400,
+        );
+      }
 
-    const db = getServiceClient();
-    const resolvedProject = await resolveOwnedProject(c, db, userId);
-    if ('response' in resolvedProject) return resolvedProject.response;
-    const project = resolvedProject.project;
+      const db = getServiceClient();
+      const apiKeyProjectId =
+        c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined;
+      const resolvedProject = await resolveOwnedProject(
+        c,
+        db,
+        userId,
+        apiKeyProjectId ? { overrideProjectId: apiKeyProjectId } : {},
+      );
+      if ('response' in resolvedProject) return resolvedProject.response;
+      const project = resolvedProject.project;
 
-    const updates: Record<string, unknown> = {};
-    if (body.label !== undefined) updates.label = body.label;
-    if (typeof body.priority === 'number') updates.priority = body.priority;
-    if (body.status && ['active', 'disabled'].includes(body.status)) updates.status = body.status;
+      const raw = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+      const parsed = patchByokKeySchema.safeParse({ projectId: project.id, ...raw });
+      if (!parsed.success) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: parsed.error.issues.map((issue) => issue.message).join('; '),
+            },
+          },
+          400,
+        );
+      }
+      const body = parsed.data;
 
-    if (Object.keys(updates).length === 0) {
-      return c.json({ ok: false, error: { code: 'NO_UPDATES', message: 'No valid fields to update.' } }, 400);
-    }
+      if (body.status === 'active') {
+        const { data: current, error: currentError } = await db
+          .from('byok_keys')
+          .select('test_status')
+          .eq('id', keyId)
+          .eq('project_id', project.id)
+          .maybeSingle();
+        if (currentError) return dbError(c, currentError);
+        if (!current) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+        if (current.test_status !== 'ok') {
+          return c.json(
+            {
+              ok: false,
+              error: {
+                code: 'KEY_NOT_VALIDATED',
+                message: 'Test this credential successfully before activating it.',
+              },
+            },
+            409,
+          );
+        }
+      }
 
-    const { data, error } = await db
-      .from('byok_keys')
-      .update(updates)
-      .eq('id', keyId)
-      .eq('project_id', project.id)
-      .select('id, provider_slug, label, priority, status, key_hint')
-      .single();
+      const updates: Record<string, unknown> = {};
+      if (body.label !== undefined) updates.label = body.label;
+      if (body.priority !== undefined) updates.priority = body.priority;
+      if (body.status !== undefined) updates.status = body.status;
 
-    if (error) return dbError(c, error);
-    return c.json({ ok: true, data });
-  });
+      const { data, error } = await db
+        .from('byok_keys')
+        .update(updates)
+        .eq('id', keyId)
+        .eq('project_id', project.id)
+        .select(
+          'id, provider_slug, label, priority, status, key_hint, base_url, last_tested_at, last_used_at, test_status, cooldown_until',
+        )
+        .single();
+
+      if (error) return dbError(c, error);
+      return c.json({ ok: true, data });
+    },
+  );
+
+  /**
+   * POST /v1/admin/byok/keys/:keyId/test
+   * Re-probe one credential and update its lifecycle atomically.
+   */
+  app.post(
+    '/v1/admin/byok/keys/:keyId/test',
+    adminOrApiKey({ scope: 'mcp:write' }),
+    requireFeature('byok'),
+    async (c) => {
+      const userId = c.get('userId') as string;
+      const keyId = c.req.param('keyId')!;
+      if (!byokKeyIdSchema.safeParse(keyId).success) {
+        return c.json(
+          { ok: false, error: { code: 'INVALID_KEY_ID', message: 'keyId must be a UUID.' } },
+          400,
+        );
+      }
+
+      const db = getServiceClient();
+      const apiKeyProjectId =
+        c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined;
+      const resolvedProject = await resolveOwnedProject(
+        c,
+        db,
+        userId,
+        apiKeyProjectId ? { overrideProjectId: apiKeyProjectId } : {},
+      );
+      if ('response' in resolvedProject) return resolvedProject.response;
+      const project = resolvedProject.project;
+
+      const { data: keyRow, error: keyError } = await db
+        .from('byok_keys')
+        .select('id, provider_slug, vault_secret_id, base_url')
+        .eq('id', keyId)
+        .eq('project_id', project.id)
+        .maybeSingle();
+      if (keyError) return dbError(c, keyError);
+      if (!keyRow) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+
+      let validatedBaseUrl: string | undefined;
+      if (keyRow.provider_slug === 'openai') {
+        const validation = validateOpenAiBaseUrl(
+          (keyRow.base_url as string | null) ?? undefined,
+          openAiCompatibleHostAllowlist(),
+        );
+        if (!validation.ok) {
+          return c.json(
+            { ok: false, error: { code: 'INVALID_BASE_URL', message: validation.message } },
+            400,
+          );
+        }
+        validatedBaseUrl = validation.value;
+      } else if (keyRow.base_url) {
+        return c.json(
+          {
+            ok: false,
+            error: { code: 'INVALID_BASE_URL', message: 'baseUrl is supported only for OpenAI.' },
+          },
+          400,
+        );
+      }
+
+      const { data: secret, error: secretError } = await db.rpc('vault_get_secret', {
+        secret_id: keyRow.vault_secret_id,
+      });
+      if (secretError || typeof secret !== 'string') {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'VAULT_READ_FAILED',
+              message: 'The credential could not be read from Vault.',
+            },
+          },
+          500,
+        );
+      }
+
+      const probe = await probeByokKey(
+        keyRow.provider_slug as PooledByokProvider,
+        secret,
+        validatedBaseUrl,
+      );
+      const now = new Date().toISOString();
+      const cooldownUntil =
+        probe.keyStatus === 'quota_exhausted'
+          ? new Date(Date.now() + 60 * 60 * 1000).toISOString()
+          : null;
+      const { data: updated, error: updateError } = await db
+        .from('byok_keys')
+        .update({
+          status: probe.keyStatus,
+          test_status: probe.status,
+          last_tested_at: now,
+          last_error: probe.status === 'ok' ? null : probe.detail,
+          cooldown_until: cooldownUntil,
+        })
+        .eq('id', keyId)
+        .eq('project_id', project.id)
+        .select(
+          'id, provider_slug, label, priority, status, key_hint, base_url, last_tested_at, last_used_at, test_status, cooldown_until, created_at',
+        )
+        .single();
+      if (updateError) return dbError(c, updateError);
+
+      try {
+        await db.from('byok_audit_log').insert({
+          project_id: project.id,
+          provider: keyRow.provider_slug,
+          action: 'tested',
+          actor_user_id: userId,
+          meta: { key_id: keyId, status: probe.status, http_status: probe.httpStatus },
+        });
+        await db.from('integration_health_history').insert({
+          project_id: project.id,
+          kind: keyRow.provider_slug,
+          status:
+            probe.status === 'ok' ? 'ok' : probe.status === 'error_quota' ? 'degraded' : 'down',
+          latency_ms: probe.latencyMs,
+          message: probe.detail,
+          source: 'manual',
+        });
+      } catch {
+        /* best-effort */
+      }
+
+      return c.json({
+        ok: true,
+        data: {
+          key: updated,
+          validation: {
+            status: probe.status,
+            detail: probe.detail,
+            httpStatus: probe.httpStatus,
+            latencyMs: probe.latencyMs,
+          },
+        },
+      });
+    },
+  );
 
   /**
    * DELETE /v1/admin/byok/keys/:keyId
    * Remove a key from the pool.
    */
-  app.delete('/v1/admin/byok/keys/:keyId', jwtAuth, requireFeature('byok'), async (c) => {
-    const userId = c.get('userId') as string;
-    const keyId = c.req.param('keyId')!;
+  app.delete(
+    '/v1/admin/byok/keys/:keyId',
+    adminOrApiKey({ scope: 'mcp:write' }),
+    requireFeature('byok'),
+    async (c) => {
+      const userId = c.get('userId') as string;
+      const keyId = c.req.param('keyId')!;
+      if (!byokKeyIdSchema.safeParse(keyId).success) {
+        return c.json(
+          { ok: false, error: { code: 'INVALID_KEY_ID', message: 'keyId must be a UUID.' } },
+          400,
+        );
+      }
 
-    const db = getServiceClient();
-    const resolvedProject = await resolveOwnedProject(c, db, userId);
-    if ('response' in resolvedProject) return resolvedProject.response;
-    const project = resolvedProject.project;
+      const db = getServiceClient();
+      const apiKeyProjectId =
+        c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined;
+      const resolvedProject = await resolveOwnedProject(
+        c,
+        db,
+        userId,
+        apiKeyProjectId ? { overrideProjectId: apiKeyProjectId } : {},
+      );
+      if ('response' in resolvedProject) return resolvedProject.response;
+      const project = resolvedProject.project;
 
-    const { data: keyRow } = await db
-      .from('byok_keys')
-      .select('provider_slug, vault_secret_id')
-      .eq('id', keyId)
-      .eq('project_id', project.id)
-      .single();
+      const { data: keyRow } = await db
+        .from('byok_keys')
+        .select('provider_slug, vault_secret_id')
+        .eq('id', keyId)
+        .eq('project_id', project.id)
+        .single();
 
-    if (!keyRow) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+      if (!keyRow) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
-    try {
-      await db.rpc('vault_delete_secret', { secret_id: keyRow.vault_secret_id });
-    } catch { /* best-effort */ }
+      const { error } = await db
+        .from('byok_keys')
+        .delete()
+        .eq('id', keyId)
+        .eq('project_id', project.id);
+      if (error) return dbError(c, error);
 
-    const { error } = await db.from('byok_keys').delete().eq('id', keyId).eq('project_id', project.id);
-    if (error) return dbError(c, error);
+      const { error: vaultDeleteError } = await db.rpc('vault_delete_secret', {
+        secret_id: keyRow.vault_secret_id,
+      });
+      if (vaultDeleteError) {
+        log.warn('Pooled BYOK row removed but Vault cleanup failed', {
+          keyId,
+          provider: keyRow.provider_slug,
+          error: vaultDeleteError.message,
+        });
+      }
 
-    try {
-      await db.from('byok_audit_log').insert({ project_id: project.id, provider: keyRow.provider_slug, action: 'removed', actor_user_id: userId });
-    } catch { /* best-effort */ }
+      try {
+        await db.from('byok_audit_log').insert({
+          project_id: project.id,
+          provider: keyRow.provider_slug,
+          action: 'removed',
+          actor_user_id: userId,
+        });
+      } catch {
+        /* best-effort */
+      }
 
-    return c.json({ ok: true });
-  });
+      return c.json({ ok: true, data: { removed: true, keyId } });
+    },
+  );
 
   /**
    * GET /v1/admin/byok/health
    * Summarise pool health across all providers.
    */
-  app.get('/v1/admin/byok/health', jwtAuth, async (c) => {
+  app.get('/v1/admin/byok/health', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
+    const apiKeyProjectId =
+      c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined;
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
       noProjectResponse: () => c.json({ ok: true, data: { providers: [] } }),
+      ...(apiKeyProjectId ? { overrideProjectId: apiKeyProjectId } : {}),
     });
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
@@ -2069,12 +3038,17 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       .eq('project_id', project.id);
 
     const rows = data ?? [];
-    const byProvider: Record<string, { total: number; active: number; exhausted: number; failed: number }> = {};
+    const byProvider: Record<
+      string,
+      { total: number; active: number; pending: number; exhausted: number; failed: number }
+    > = {};
     for (const r of rows) {
       const p = r.provider_slug as string;
-      if (!byProvider[p]) byProvider[p] = { total: 0, active: 0, exhausted: 0, failed: 0 };
+      if (!byProvider[p])
+        byProvider[p] = { total: 0, active: 0, pending: 0, exhausted: 0, failed: 0 };
       byProvider[p]!.total++;
       if (r.status === 'active') byProvider[p]!.active++;
+      if (r.status === 'pending_validation') byProvider[p]!.pending++;
       if (r.status === 'quota_exhausted') byProvider[p]!.exhausted++;
       if (r.status === 'auth_failed') byProvider[p]!.failed++;
     }
