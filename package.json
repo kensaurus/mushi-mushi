@@ -1,7 +1,7 @@
 {
   "name": "mushi-mushi",
   "private": true,
-  "description": "Know why your AI-built app broke \u2014 plain-English diagnosis + ready fix, in your editor. Open source. Sentry optional.",
+  "description": "Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor. Open source. Sentry optional.",
   "license": "MIT",
   "homepage": "https://kensaur.us/mushi-mushi",
   "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
@@ -140,65 +140,6 @@
     "check:page-scaffold": "node scripts/audit-page-scaffold.mjs",
     "check:page-scaffold:cluster": "node scripts/audit-page-scaffold.mjs --cluster",
     "e2e:realworld": "pnpm --filter mushi-realworld e2e:gate"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@sentry/cli",
-      "esbuild",
-      "msw",
-      "protobufjs",
-      "sharp",
-      "sqlite3",
-      "supabase"
-    ],
-    "overrides": {
-      "undici@<6.24.0": ">=6.24.0",
-      "undici@>=7.0.0 <7.28.0": ">=7.28.0 <8",
-      "undici@>=8.0.0 <8.5.0": ">=8.5.0 <9",
-      "axios@<1.16.0": ">=1.16.0",
-      "form-data@<4.0.6": ">=4.0.6",
-      "esbuild@>=0.27.3 <0.28.1": ">=0.28.1",
-      "@xmldom/xmldom@<0.9.10": ">=0.9.10",
-      "uuid@<14.0.0": ">=14.0.0",
-      "postcss@<8.5.18": ">=8.5.18",
-      "react-router@<7.18.0": ">=7.18.0 <8",
-      "react-router-dom@<7.18.0": ">=7.18.0 <8",
-      "next@<15.5.18": ">=15.5.18",
-      "next@>=16.0.0 <16.2.11": ">=16.2.11",
-      "find-my-way@<=9.6.0": ">=9.7.0",
-      "devalue@<5.8.1": ">=5.8.1",
-      "hono@<4.12.25": ">=4.12.25",
-      "ip-address@<=10.1.0": ">=10.1.1",
-      "fast-uri@<3.1.2": ">=3.1.2",
-      "mermaid@<11.15.0": ">=11.15.0",
-      "dompurify@<=3.4.10": ">=3.4.11",
-      "js-yaml@>=3.0.0 <3.15.0": ">=3.15.0 <4",
-      "js-yaml@>=4.0.0 <4.3.0": ">=4.3.0",
-      "brace-expansion@<1.1.16": "1.1.16",
-      "brace-expansion@>=3.0.0 <5.0.8": "5.0.8",
-      "fast-uri@>=4.0.0 <4.1.1": "4.1.1",
-      "@fastify/ajv-compiler>fast-uri": "4.1.1",
-      "fast-json-stringify>fast-uri": "4.1.1",
-      "sharp@<0.35.0": ">=0.35.0",
-      "protobufjs@<=7.5.7": ">=7.5.8",
-      "onnxruntime-web>protobufjs": ">=8.4.1",
-      "qs@>=6.11.1 <=6.15.1": ">=6.15.2",
-      "tar@<7": ">=7.4.3",
-      "ws@>=8.0.0 <8.21.0": ">=8.21.0",
-      "ws@>=7.0.0 <7.5.11": ">=7.5.11",
-      "ws@>=6.0.0 <6.2.4": ">=6.2.4",
-      "shell-quote@<=1.8.4": "1.10.0",
-      "react-router@>=7.0.0 <7.15.0": ">=7.15.0",
-      "brace-expansion": "5.0.8"
-    },
-    "patchedDependencies": {
-      "nextra-theme-docs@4.6.1": "patches/nextra-theme-docs@4.6.1.patch"
-    },
-    "auditConfig": {
-      "ignoreGhsas": [
-        "GHSA-qwww-vcr4-c8h2"
-      ]
-    }
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
