@@ -1,5 +1,11 @@
 # @mushi-mushi/mcp
 
+## 0.20.1
+
+### Patch Changes
+
+- 0400cdc: Validate BYOK credentials before activation, expose pooled and legacy key health consistently, and add MCP lifecycle actions for testing, reactivating, and removing keys.
+
 ## 0.20.0
 
 ### Minor Changes
