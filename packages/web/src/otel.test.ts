@@ -15,8 +15,7 @@
  *  - shutdown() and forceFlush() resolve without rejecting
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createBrowserOtelSpanProcessor } from './otel.js'
-import type { BrowserOtelSpan } from './otel.js'
+import { createBrowserOtelSpanProcessor, type BrowserOtelSpan } from './otel.js'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

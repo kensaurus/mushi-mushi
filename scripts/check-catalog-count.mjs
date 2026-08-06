@@ -13,7 +13,7 @@
  *
  * Why: catalog.ts also declares RESOURCE_CATALOG + PROMPT_CATALOG. A naive
  * `name:` count inflated the marketplace listing to "80 tools" while the
- * generated docs correctly say "68 tools · 8 resources · 4 prompts".
+ * generated docs correctly report tools, resources, and prompts separately.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs'

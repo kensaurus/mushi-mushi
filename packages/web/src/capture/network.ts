@@ -110,9 +110,7 @@ export function createNetworkCapture(options: NetworkCaptureOptions = {}): Netwo
 
   let activeOptions = options;
 
-  // eslint-disable-next-line prefer-const
-  let fetchWrapper: typeof globalThis.fetch;
-  globalThis.fetch = fetchWrapper = async function mushiFetchInterceptor(
+  const fetchWrapper: typeof globalThis.fetch = async function mushiFetchInterceptor(
     input: RequestInfo | URL,
     init?: RequestInit,
   ): Promise<Response> {
@@ -195,6 +193,7 @@ export function createNetworkCapture(options: NetworkCaptureOptions = {}): Netwo
       }
     }
   };
+  globalThis.fetch = fetchWrapper;
 
   // ── Phase 3a: XHR capture ────────────────────────────────────────────────
   // Many popular HTTP libraries (axios ≤1.x, jQuery, legacy code) use

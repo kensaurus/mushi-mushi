@@ -78,6 +78,9 @@ const SPAN_STATUS_ERROR = 2
 
 let warnedMissing = false
 
+const noopOnStart = (_span: BrowserOtelSpan, _parentContext: unknown): void => {}
+const noopOnEnd = (_span: BrowserOtelSpan): void => {}
+
 /**
  * Create a SpanProcessor that forwards browser OTel error spans to Mushi.
  *

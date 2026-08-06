@@ -4,8 +4,13 @@
     "scope": "mcp:read"
   },
   "add_byok_key": {
-    "description": "Add a BYOK API key to the project pool for a provider (anthropic | openai | firecrawl | browserbase | cursor), with a label and priority for failover ordering. The raw key is stored encrypted in Supabase Vault and never returned. Returns { id, provider, label }. Write; NOT idempotent — adds a new row each call. Use to register a backup/rotated key; use list_byok_keys to review the pool.",
-    "scope": "mcp:write"
+    "description": "Add and immediately validate a BYOK API key for anthropic | openai | firecrawl | browserbase | cursor. The raw key is stored encrypted in Supabase Vault and never returned; failed probes remain quarantined. Optional baseUrl is accepted only for allow-listed OpenAI-compatible HTTPS providers. Write; NOT idempotent.",
+    "scope": "mcp:write",
+    "required": [
+      "projectId",
+      "provider",
+      "key"
+    ]
   },
   "analyze_codebase_impact": {
     "description": "Find files that depend on a set of changed paths by walking the reverse import graph. Source paths from: manual list, last push, a GitHub compare range, or a fix PR's files. Returns { changed_paths, source, affected_file_paths, affected_node_ids, meta }. Requires codebase indexing. Read-only. Use to gauge a diff's blast radius before merging; use get_blast_radius for a bug's component impact, or search_codebase to locate files.",
@@ -194,11 +199,8 @@
     "scope": "mcp:write"
   },
   "list_byok_keys": {
-    "description": "List the project's BYOK API keys grouped by provider (anthropic | openai | firecrawl | browserbase | cursor). Returns { keys: [{ id, provider, label, priority, status, cooldownUntil }] } — metadata only, never the raw secret. Read-only. Use to see which keys are active vs rate-limited/exhausted; use add_byok_key to add one.",
-    "scope": "mcp:read",
-    "required": [
-      "projectId"
-    ]
+    "description": "List the project's BYOK API keys grouped by provider (anthropic | openai | firecrawl | browserbase | cursor). Returns pooled { keys: [{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at }] } plus read-only { legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, or rate-limited; use add_byok_key to add one.",
+    "scope": "mcp:read"
   },
   "list_gate_findings": {
     "description": "List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead-handler | mock-leak | crawl | status-claim) or minimum severity (low|medium|high|critical). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.",
@@ -258,6 +260,13 @@
     "scope": "mcp:write",
     "required": [
       "fixId"
+    ]
+  },
+  "remove_byok_key": {
+    "description": "Permanently remove one pooled BYOK credential by key id from the authenticated project, including its Vault secret. Write; destructive; idempotent.",
+    "scope": "mcp:write",
+    "required": [
+      "keyId"
     ]
   },
   "reopen_report": {
@@ -330,6 +339,13 @@
     "scope": "mcp:read",
     "required": [
       "reportId"
+    ]
+  },
+  "test_byok_key": {
+    "description": "Re-test one pooled BYOK credential by key id. A successful provider probe activates the key; auth, quota, and network failures keep it out of the runtime pool. Returns the sanitized validation result and updated key metadata. Write; idempotent.",
+    "scope": "mcp:write",
+    "required": [
+      "keyId"
     ]
   },
   "test_gen_from_report": {
