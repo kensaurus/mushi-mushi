@@ -294,3 +294,16 @@ Other free apps and tools from the same Tokyo studio:
 <div align="center">
 <sub>If Mushi helped, <a href="https://github.com/kensaurus/mushi-mushi/stargazers">star the repo</a> so the next vibe coder finds it. <a href="https://github.com/kensaurus/mushi-mushi/issues/new/choose">Open an issue</a> · <a href="https://bsky.app/profile/mushimushi.dev">Follow on Bluesky</a></sub>
 </div>
+
+## More from KENSAURUS
+
+| App | What it is |
+|---|---|
+| [Glot It](https://kensaur.us/glot-it/?utm_source=github&utm_medium=readme) | Learn Thai — bite-size lessons, smart flashcards, and an AI tutor |
+| [yen-yen](https://kensaur.us/yen-yen/?utm_source=github&utm_medium=readme) | Household kakeibo — where did the money go? Now you'll know |
+| [The Wanting Mind](https://kensaur.us/the-wanting-mind/?utm_source=github&utm_medium=readme) | A book about wanting less — read it free |
+| [Help Her Take Photo](https://kensaur.us/help-her-take-photo/?utm_source=github&utm_medium=readme) | Pair phones, direct the pose, nail the photo |
+| [一人社長 Solo Boss](https://solo-boss.kensaur.us/?utm_source=github&utm_medium=readme) | Bookkeeping and tax-filing co-pilot for one-person companies in Japan |
+| [Tsumagoi Work&Camp 嬬恋牧場](https://tsumagoi.kensaur.us/?utm_source=github&utm_medium=readme) | Physical coworking camp & digital-nomad base at 1,444 m in Gunma, Japan |
+
+All apps live under [kensaur.us](https://kensaur.us).
