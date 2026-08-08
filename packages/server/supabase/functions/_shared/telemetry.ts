@@ -8,7 +8,6 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from './logger.ts'
 import { estimateCallCostUsd } from './pricing.ts'
 import { otlpSpan, setGenAiAttributes, type GenAiProvider } from './otlp-exporter.ts'
-import { providerFromModel, scheduleHostedLlmCharge } from './hosted-llm-billing.ts'
 
 const log = rootLog.child('telemetry')
 
@@ -136,9 +135,19 @@ export function logLlmInvocation(
   // Disabled entirely unless MUSHI_HOSTED_LLM_BILLING is set — see
   // `_shared/hosted-llm-billing.README.md`.
   if (rec.status === 'success' && rec.keySource === 'env' && rec.projectId) {
-    scheduleHostedLlmCharge({
-      db,
-      projectId: rec.projectId,
+    // Imported lazily: the billing chain reaches Deno-only globals, and
+    // Node-side vitest suites import this module transitively (via
+    // status-reconciler). A static import breaks their collection with
+    // `Deno is not defined`. Deferring also keeps the wallet code out of
+    // cold starts that never bill.
+    // Captured before the closure: the `if` above narrows rec.projectId, but
+    // that narrowing does not survive into a deferred callback.
+    const billedProjectId = rec.projectId;
+    void import('./hosted-llm-billing.ts').then(
+      ({ providerFromModel, scheduleHostedLlmCharge }) =>
+        scheduleHostedLlmCharge({
+          db,
+          projectId: billedProjectId,
       feature: rec.stage ? `${rec.functionName}.${rec.stage}` : rec.functionName,
       provider: providerFromModel(rec.usedModel),
       model: rec.usedModel,
@@ -158,8 +167,9 @@ export function logLlmInvocation(
         report_id: rec.reportId ?? null,
         fallback_used: rec.fallbackUsed,
         cost_usd_estimate: costUsd,
-      },
-    })
+          },
+        }),
+    );
   }
 
   // P2: Emit OTLP/GenAI span on every LLM invocation so users see model usage
