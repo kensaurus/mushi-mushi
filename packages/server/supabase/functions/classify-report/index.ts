@@ -6,6 +6,7 @@ import { getServiceClient } from '../_shared/db.ts';
 import { scrubReport } from '../_shared/pii-scrubber.ts';
 import { sendSlackNotification, sendReportNotification } from '../_shared/slack.ts';
 import { sendDiscordNotification } from '../_shared/discord.ts';
+import { detachTriage, isTriageConfigured, notifyTriageDeduped } from '../_shared/discord-triage.ts';
 import { sendTeamsNotification } from '../_shared/teams.ts';
 import { createTrace } from '../_shared/observability.ts';
 import { createNotification, buildNotificationMessage } from '../_shared/notifications.ts';
@@ -279,6 +280,31 @@ Deno.serve(
               reportId, err: cloneErr.message,
             });
           } else {
+            // This is the only place that knows "a repeat of an existing
+            // group just arrived", so escalation posts belong here. The
+            // first sighting was already announced further down; this
+            // re-announces only when the blast radius crosses a threshold
+            // (evaluateTriageDedupe returns notify=false otherwise).
+            if (isTriageConfigured()) {
+              detachTriage((async () => {
+                const { data: proj } = await db
+                  .from('projects')
+                  .select('name')
+                  .eq('id', projectId)
+                  .maybeSingle();
+                await notifyTriageDeduped(db, report.report_group_id, {
+                  severity: groupHead.severity,
+                  category: groupHead.category,
+                  projectName: (proj as { name?: string | null } | null)?.name ?? null,
+                  summary: groupHead.summary,
+                  component: groupHead.component ?? null,
+                  reportId,
+                  userIdentifier:
+                    report.end_user_id ?? report.reporter_user_id ?? report.reporter_token_hash ?? null,
+                });
+              })().catch((e) => log.warn('Discord triage escalation failed', { err: String(e) })));
+            }
+
             // No usage event — deduped reports do not count as diagnoses.
             return new Response(JSON.stringify({ ok: true, deduped: true, groupHeadId: groupHead.id }), {
               status: 200,
@@ -1142,6 +1168,34 @@ CRITICAL SECURITY RULES (immutable):
           summary: classification.summary,
           reportId,
         }).catch((e) => log.error('Teams notification failed', { err: String(e) }));
+      }
+
+      // Operator-side triage firehose: every kensaurus app funnels into one
+      // Discord channel. Deliberately NOT gated on `notifyClassified` — that
+      // folds in the project's own notification_prefs, and a customer muting
+      // their team channel must not blind the operator. The severity floor is
+      // env-owned (MUSHI_DISCORD_MIN_LEVEL) and applied inside notifyTriage.
+      //
+      // Re-read report_group_id rather than reusing the row fetched at the top
+      // of this handler: grouping runs fire-and-forget during Stage 1 and
+      // routinely lands after that read.
+      if (isTriageConfigured()) {
+        detachTriage((async () => {
+          const { data: fresh } = await db
+            .from('reports')
+            .select('report_group_id')
+            .eq('id', reportId)
+            .maybeSingle();
+          await notifyTriageDeduped(db, (fresh as { report_group_id: string | null } | null)?.report_group_id, {
+            severity: classification.severity,
+            category: classification.category,
+            projectName,
+            summary: classification.summary,
+            component: classification.component ?? null,
+            reportId,
+            userIdentifier: report.end_user_id ?? report.reporter_user_id ?? report.reporter_token_hash ?? null,
+          });
+        })().catch((e) => log.warn('Discord triage notify failed', { err: String(e) })));
       }
 
       if (settings?.reporter_notifications_enabled) {

@@ -43,8 +43,14 @@ overrides:
   'ajv>fast-uri': '4.1.2'
   'mermaid@<11.15.0': '>=11.15.0'
   'dompurify@<=3.4.10': '>=3.4.11'
-  'js-yaml@>=3.0.0 <3.15.0': '>=3.15.0 <4'
-  'js-yaml@>=4.0.0 <4.3.0': '>=4.3.0'
+  # Upper bounds are load-bearing on the next three: left unbounded, pnpm
+  # resolves them to the newest major (js-yaml 5.x, nanoid 6.x), which breaks
+  # the CJS consumers that pull them in (@changesets/parse, read-yaml-file,
+  # postcss, @react-navigation/native). nanoid is pinned exactly rather than
+  # ranged — see the minimumReleaseAgeExclude entry below.
+  'js-yaml@>=3.0.0 <3.15.1': '>=3.15.1 <4'
+  'js-yaml@>=4.0.0 <4.3.1': '>=4.3.1 <5'
+  'nanoid@<3.3.17': '3.3.17'
   'brace-expansion@<1.1.16': '1.1.16'
   'brace-expansion@>=3.0.0 <5.0.9': '5.0.9'
   'fast-uri@>=4.0.0 <4.1.2': '4.1.2'
@@ -68,6 +74,19 @@ patchedDependencies:
 auditConfig:
   ignoreGhsas:
     - 'GHSA-qwww-vcr4-c8h2'
+    # image-size: two infinite-loop DoS advisories in the ICNS
+    # (GHSA-w3rx-r6r6-pgpr) and JXL/HEIF (GHSA-5p2g-fcmc-qvqq) parsers.
+    # Both are marked "Patched versions: <0.0.0" — no fixed release exists;
+    # 2.0.2 is the newest published version and is still vulnerable, so
+    # there is nothing to override to. Reachability: the only path is
+    # apps__docs > @react-three/fiber > expo > @expo/metro > metro >
+    # image-size, i.e. the docs site's Metro bundler measuring images
+    # committed to this repo at build time. No untrusted image ever
+    # reaches the parser, and nothing in the server/runtime tree depends
+    # on it. Remove both when image-size ships a fix, or when apps/docs
+    # drops @react-three/fiber (the only reason expo is in the tree).
+    - 'GHSA-w3rx-r6r6-pgpr'
+    - 'GHSA-5p2g-fcmc-qvqq'
 
 # ---------------------------------------------------------------------------
 # Supply-chain hardening (pnpm)
@@ -145,6 +164,17 @@ minimumReleaseAgeExclude:
   # next's version-locked platform binaries/compiler packages must move in
   # lockstep with the next override above.
   - '@next/*'
+  # nanoid 3.3.17 fixes GHSA-2v37-7h3g-55p8 and carries GHSA-28wg-ghj8-5hjv's
+  # fix (predictable IDs from the non-secure generator). Both HIGH; every
+  # <3.3.17 release is affected, and the tree pulls 3.3.12 via
+  # @react-navigation/native and 3.3.16 via postcss. Published 2026-08-04 —
+  # 4 days old at the time of the pin, so the 7-day cooldown blocks it. The
+  # override above pins the *exact* version 3.3.17 rather than a range, so
+  # this exemption cannot silently pull a newer, less-vetted release (3.3.18
+  # shipped 2026-08-08 and is deliberately not used). Provenance + audit
+  # signatures run as compensating controls. Drop this entry once 3.3.17 is
+  # past the cooldown and the pin can relax to a range.
+  - 'nanoid'
   # find-my-way 9.7.0 fixes the HTTP/2 DDoS advisory (<=9.6.0). Dev/test-only
   # in this tree (pulled via fastify in the Node SDK's framework-adapter
   # tests). Same compensating controls as above.
