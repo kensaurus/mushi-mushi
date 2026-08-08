@@ -46,7 +46,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { parseBody, InventoryProposeBodySchema } from '../_shared/validate.ts'
-import { withLlmFailover } from '../_shared/llm-failover.ts'
+import { withLlmFailover, WalletDeniedError } from '../_shared/llm-failover.ts'
 import { ANTHROPIC_SONNET } from '../_shared/models.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import {
@@ -350,17 +350,34 @@ async function proposeAndPersist(
   let lastError: { message: string; summary?: string } | null = null
   while (attempt < 3) {
     try {
-      last = await withLlmFailover(db, projectId, 'anthropic', async (resolved) => {
-        return runProposer({
-          apiKey: resolved.key,
-          modelId,
-          prompt,
-          previousIssues,
-          systemPrompt: managedSystemPrompt ?? undefined,
-        })
-      })
+      last = await withLlmFailover(
+        db,
+        projectId,
+        'anthropic',
+        async (resolved) => {
+          return runProposer({
+            apiKey: resolved.key,
+            modelId,
+            prompt,
+            previousIssues,
+            systemPrompt: managedSystemPrompt ?? undefined,
+          })
+        },
+        // This path writes no llm_invocations row, so the hosted-key debit is
+        // taken here rather than in logLlmInvocation.
+        {
+          feature: 'inventory-propose',
+          model: modelId,
+          extractUsage: (r) => ({ inputTokens: r.tokens.in, outputTokens: r.tokens.out }),
+        },
+      )
       break
     } catch (err) {
+      // A wallet refusal is not a retryable model failure — retrying only hits
+      // the bridge again, and the draft row would end up carrying a billing
+      // error in its `issues` text instead of surfacing `reason` /
+      // `balanceMicro` to the caller.
+      if (err instanceof WalletDeniedError) throw err
       lastError = {
         message: err instanceof Error ? err.message : String(err),
         summary: (err as { issuesSummary?: string }).issuesSummary,
