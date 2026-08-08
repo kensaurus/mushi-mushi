@@ -8,6 +8,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from './logger.ts'
 import { estimateCallCostUsd } from './pricing.ts'
 import { otlpSpan, setGenAiAttributes, type GenAiProvider } from './otlp-exporter.ts'
+import { providerFromModel, scheduleHostedLlmCharge } from './hosted-llm-billing.ts'
 
 const log = rootLog.child('telemetry')
 
@@ -124,6 +125,42 @@ export function logLlmInvocation(
     rec.inputTokens ?? 0,
     rec.outputTokens ?? 0,
   )
+
+  // Hosted-LLM billing: a call that ran on a platform key (`key_source='env'`)
+  // spent kensaurus's provider budget, so the project owner's KENSAURUS wallet
+  // is debited for it. BYOK calls are never charged — the customer already
+  // paid their own provider. This is the one place in the codebase that sees
+  // project, model, key source, and token counts together, which is why the
+  // debit lives here rather than at each route. Scheduled on `waitUntil`
+  // because most callers invoke this as `void logLlmInvocation(...)`.
+  // Disabled entirely unless MUSHI_HOSTED_LLM_BILLING is set — see
+  // `_shared/hosted-llm-billing.README.md`.
+  if (rec.status === 'success' && rec.keySource === 'env' && rec.projectId) {
+    scheduleHostedLlmCharge({
+      db,
+      projectId: rec.projectId,
+      feature: rec.stage ? `${rec.functionName}.${rec.stage}` : rec.functionName,
+      provider: providerFromModel(rec.usedModel),
+      model: rec.usedModel,
+      usage: {
+        // Anthropic reports cache-creation tokens separately from input
+        // tokens and bills them at 1.25x. The wallet price table has no
+        // cache-creation rate, so they are folded into input at 1.0x —
+        // a small, deliberate undercharge rather than an unpriced call.
+        inputTokens: (rec.inputTokens ?? 0) + (rec.cacheCreationInputTokens ?? 0),
+        outputTokens: rec.outputTokens ?? 0,
+        cachedInputTokens: rec.cacheReadInputTokens ?? 0,
+      },
+      traceId: rec.langfuseTraceId,
+      metadata: {
+        function_name: rec.functionName,
+        stage: rec.stage ?? null,
+        report_id: rec.reportId ?? null,
+        fallback_used: rec.fallbackUsed,
+        cost_usd_estimate: costUsd,
+      },
+    })
+  }
 
   // P2: Emit OTLP/GenAI span on every LLM invocation so users see model usage
   // in their APM without per-call boilerplate. Uses the caller's traceparent
