@@ -33,8 +33,18 @@ import {
   type LlmProvider,
 } from './byok.ts';
 import { log as rootLog } from './logger.ts';
+import {
+  hostedLlmPreflight,
+  providerFromModel,
+  scheduleHostedLlmCharge,
+  WalletDeniedError,
+} from './hosted-llm-billing.ts';
 
 const log = rootLog.child('llm-failover');
+
+// Re-exported so call sites that must let a wallet refusal escape their retry
+// loop can `instanceof`-check it without importing the billing module.
+export { WalletDeniedError };
 
 const LLM_API_KEY_RX = /\bsk-[A-Za-z0-9_*=-]{8,}/gi;
 const BEARER_TOKEN_RX = /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi;
@@ -245,14 +255,39 @@ export async function callWithTransientRetry<T>(
 }
 
 /**
+ * Hosted-LLM wallet metering for callers that don't write an
+ * `llm_invocations` row. Paths that call `logLlmInvocation` are already
+ * debited there and must NOT pass this, or the call is charged twice.
+ */
+export interface LlmFailoverMeterOptions<T> {
+  /** Ledger feature slug — the function/stage that spent the money. */
+  feature: string;
+  /** Model id as sent to the provider; must have a wallet price row. */
+  model: string;
+  /** Langfuse trace id, so the ledger row joins back to its generation. */
+  traceId?: string | null;
+  /** Pull token counts out of `fn`'s result. Return null to skip the debit. */
+  extractUsage: (
+    result: T,
+  ) => { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number } | null;
+}
+
+/**
  * Run `fn` with automatic key-failover. `fn` receives one `ResolvedKey` at a
  * time. On quota/auth failure the key is marked and the next candidate is tried.
+ *
+ * When the resolved credential is the platform key (`source === 'env'`) and
+ * hosted-LLM billing is `on`, the project owner's KENSAURUS wallet is checked
+ * before any provider money is spent; an insufficient balance throws
+ * `WalletDeniedError` (reason + balanceMicro) instead of running the call.
+ * BYOK credentials skip the wallet entirely.
  */
 export async function withLlmFailover<T>(
   db: SupabaseClient,
   projectId: string,
   provider: LlmProvider,
   fn: (key: ResolvedKey) => Promise<T>,
+  meter?: LlmFailoverMeterOptions<T>,
 ): Promise<T> {
   const candidates = await resolveLlmKeys(db, projectId, provider);
 
@@ -263,6 +298,15 @@ export async function withLlmFailover<T>(
       attempts: 0,
       lastError: `No ${provider} key configured. Add one in Settings → API Keys.`,
     });
+  }
+
+  // The env fallback in byok.ts always returns exactly one candidate, so a
+  // hosted call is never mixed with pooled BYOK keys in the same list.
+  if (candidates.some((c) => c.source === 'env')) {
+    const preflight = await hostedLlmPreflight({ db, projectId });
+    if (!preflight.allowed) {
+      throw new WalletDeniedError(preflight.reason ?? 'insufficient', preflight.balanceMicro);
+    }
   }
 
   let lastError = '';
@@ -277,6 +321,23 @@ export async function withLlmFailover<T>(
         void markKeyUsed(db, projectId, provider, candidate.keyId).catch(() => {
           /* usage bookkeeping never converts a successful provider call into a failure */
         });
+      } else if (meter) {
+        // Platform key — kensaurus paid the provider, so debit the owner's
+        // wallet. Only for callers that don't write an llm_invocations row;
+        // those are metered once in logLlmInvocation instead.
+        const usage = meter.extractUsage(outcome.result);
+        if (usage) {
+          scheduleHostedLlmCharge({
+            db,
+            projectId,
+            feature: meter.feature,
+            provider: providerFromModel(meter.model),
+            model: meter.model,
+            usage,
+            traceId: meter.traceId,
+            metadata: { key_source: 'env', failover_attempts: attempts },
+          });
+        }
       }
       return outcome.result;
     }
