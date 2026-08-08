@@ -1540,6 +1540,13 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
           ? undefined
           : (Deno.env.get('STRIPE_PRICE_PRO_DIAGNOSES_OVERAGE') ?? Deno.env.get('STRIPE_PRICE_PRO_OVERAGE')),
       },
+      // Enterprise is self-serve as of 2026-08-08. Flat annual-style base fee
+      // with no metered overage — enterprise commits are negotiated, so an
+      // overage line item would double-bill against the contract.
+      enterprise: {
+        base: Deno.env.get('STRIPE_PRICE_ENTERPRISE_BASE'),
+        overage: undefined,
+      },
       // Legacy plan kept for existing subscribers migrating off starter.
       starter: {
         base: Deno.env.get('STRIPE_PRICE_STARTER_BASE') ?? cfg.defaultPriceId,
