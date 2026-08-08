@@ -6,6 +6,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { scrubReport } from '../_shared/pii-scrubber.ts'
 import { sendSlackNotification, sendReportNotification } from '../_shared/slack.ts'
 import { sendDiscordNotification } from '../_shared/discord.ts'
+import { detachTriage, isTriageConfigured, notifyTriageDeduped } from '../_shared/discord-triage.ts'
 import { sendTeamsNotification } from '../_shared/teams.ts'
 import { generateAndStoreEmbedding, suggestGrouping } from '../_shared/embeddings.ts'
 import { createTrace } from '../_shared/observability.ts'
@@ -465,6 +466,39 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
           summary,
           reportId,
         }).catch(e => log.error('Teams notification failed', { err: String(e) }))
+      }
+
+      // Operator-side triage firehose. This branch is Stage 1 terminal
+      // (`stage1_final`) — a high-confidence report returns below and never
+      // reaches classify-report, so without a hook here those reports would
+      // be invisible in triage. The low-confidence path skips this whole
+      // block and is announced by classify-report instead, so the two sites
+      // are mutually exclusive and cannot double-post.
+      //
+      // Not gated on `notifyClassified`: that honours the project's own
+      // notification_prefs, which must not silence the operator feed. The
+      // severity floor comes from MUSHI_DISCORD_MIN_LEVEL inside notifyTriage.
+      if (isTriageConfigured()) {
+        detachTriage((async () => {
+          // Re-read rather than reusing the row fetched before the Stage 1 LLM
+          // call: this report's own grouping pass is kicked off moments earlier
+          // and routinely lands in between.
+          const { data: fresh } = await db
+            .from('reports')
+            .select('report_group_id')
+            .eq('id', reportId)
+            .maybeSingle()
+          await notifyTriageDeduped(db, (fresh as { report_group_id: string | null } | null)?.report_group_id, {
+            severity: classification.severity,
+            category: classification.category,
+            projectName,
+            summary,
+            // Stage 1 never resolves a component — that is Stage 2's job.
+            component: null,
+            reportId,
+            userIdentifier: report.end_user_id ?? report.reporter_user_id ?? report.reporter_token_hash ?? null,
+          })
+        })().catch(e => log.warn('Discord triage notify failed', { err: String(e) })))
       }
 
       if (settings?.reporter_notifications_enabled) {
