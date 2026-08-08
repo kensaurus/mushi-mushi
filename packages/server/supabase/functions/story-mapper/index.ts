@@ -21,7 +21,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { withLlmFailover } from '../_shared/llm-failover.ts'
+import { withLlmFailover, WalletDeniedError } from '../_shared/llm-failover.ts'
 import { validateInventoryObject } from '../_shared/inventory.ts'
 import { assertSafeOutboundUrl } from '../_shared/inventory-guards.ts'
 import { ANTHROPIC_SONNET } from '../_shared/models.ts'
@@ -264,18 +264,34 @@ Deno.serve(
           : prompt
 
         try {
-          const rawText = await withLlmFailover(db, project_id, 'anthropic', async (k) => {
-            const anthropic = createAnthropic({ apiKey: k.key })
-            const { text } = await generateText({
-              model: anthropic(ANTHROPIC_SONNET),
-              system: STORY_MAPPER_SYSTEM,
-              prompt: promptWithRetry,
-              maxTokens: 8000,
-            })
-            return text
-          })
+          const completion = await withLlmFailover(
+            db,
+            project_id,
+            'anthropic',
+            async (k) => {
+              const anthropic = createAnthropic({ apiKey: k.key })
+              const { text, usage } = await generateText({
+                model: anthropic(ANTHROPIC_SONNET),
+                system: STORY_MAPPER_SYSTEM,
+                prompt: promptWithRetry,
+                maxTokens: 8000,
+              })
+              return { text, usage }
+            },
+            // This path writes no llm_invocations row, so the hosted-key debit
+            // is taken here rather than in logLlmInvocation.
+            {
+              feature: 'story-mapper',
+              model: ANTHROPIC_SONNET,
+              traceId: trace.id,
+              extractUsage: (r) => ({
+                inputTokens: r.usage?.promptTokens ?? 0,
+                outputTokens: r.usage?.completionTokens ?? 0,
+              }),
+            },
+          )
 
-          const parsed = extractFencedJson(rawText) as ProposerOutput
+          const parsed = extractFencedJson(completion.text) as ProposerOutput
           const inventoryCandidate = parsed?.inventory ?? parsed
           const validated = validateInventoryObject(inventoryCandidate)
 
@@ -289,6 +305,10 @@ Deno.serve(
             log.warn('Inventory validation failed, retrying', { run_id, attempt, issues: lastIssues })
           }
         } catch (err) {
+          // A wallet refusal is not a retryable model failure — retrying only
+          // hits the bridge again and would stringify away `reason` /
+          // `balanceMicro`, which the caller needs to prompt a top-up.
+          if (err instanceof WalletDeniedError) throw err
           log.warn('LLM call failed on story-mapper attempt', { run_id, attempt, error: String(err).slice(0, 200) })
           lastIssues = String(err).slice(0, 300)
         }
