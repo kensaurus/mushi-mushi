@@ -44,12 +44,33 @@ function openKeyDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(KEY_DB, 1);
     req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(KEY_STORE)) {
-        db.createObjectStore(KEY_STORE);
+      // Same broken-WebView guard as queue.ts openDb(): null `result` /
+      // dead versionchange transactions in iOS in-app browsers make these
+      // calls throw as uncaught GLOBAL errors. Swallow — the store check in
+      // onsuccess rejects and callers fall back to plaintext storage.
+      try {
+        const db = req.result;
+        if (!db) return;
+        if (!db.objectStoreNames.contains(KEY_STORE)) {
+          db.createObjectStore(KEY_STORE);
+        }
+      } catch {
+        // handled below
       }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      if (!db || !db.objectStoreNames.contains(KEY_STORE)) {
+        try {
+          db?.close();
+        } catch {
+          // ignore
+        }
+        reject(new Error('key object store unavailable'));
+        return;
+      }
+      resolve(db);
+    };
     req.onerror = () => reject(req.error);
   });
 }
