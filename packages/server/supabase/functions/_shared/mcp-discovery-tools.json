@@ -64,7 +64,7 @@
     ]
   },
   "dispatch_fix": {
-    "description": "Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent=\"cursor_cloud\" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns { fixAttemptId }; poll get_fix_timeline for progress and merge_fix when CI is green. Write; NOT idempotent — each call starts a new attempt. Report must be classified — run triage_issue if not.",
+    "description": "Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent=\"cursor_cloud\" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns { fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not.",
     "scope": "mcp:write"
   },
   "generate_tdd_from_story": {
@@ -368,6 +368,10 @@
   },
   "triage_issue": {
     "description": "Read-only combined tool: merges report detail, evidence, similar bugs, fix context, blast radius, and recent pipeline logs for a report into a single structured review packet. Returns a prioritised list of recommended next actions (investigate, dispatch_fix, group_with, dismiss). Equivalent to a Sentry \"Analyze with Seer\" flow grounded in user-felt reports. Pass report_id to kick off review. Call this before dispatch_fix.",
+    "scope": "mcp:read"
+  },
+  "triage_next_steps": {
+    "description": "Prioritised \"do this next\" list for the project: blocked auto-fixes first (with the unblock action), then in-flight fixes to shepherd to merge, then user-felt classified reports by severity, with robot/cron chores (dependency bumps) last. Returns { steps: [{ priority, action, reason, tool, args }], summary }. Read-only. Call this first when the user asks \"what needs my attention / what should I triage or fix\".",
     "scope": "mcp:read"
   },
   "trigger_judge": {

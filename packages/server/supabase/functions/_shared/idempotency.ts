@@ -186,8 +186,15 @@ export async function withIdempotency(
     }
 
     // We need a project_id (NOT NULL) to insert. If we couldn't resolve one
-    // (purely user-scoped admin endpoint), skip the store rather than fail.
+    // (purely user-scoped admin endpoint), skip the store rather than fail —
+    // but say so loudly: the caller sent an Idempotency-Key expecting dedupe
+    // and is silently not getting it. The next route to adopt this wrapper
+    // must notice here, not in production (2026-08-16 resilience audit M4).
     if (!projectId) {
+      log.child('idempotency').warn(
+        'Idempotency-Key received but no projectId resolvable — response NOT stored, retries will re-execute',
+        { path: c.req.path, key: idempotencyKey.slice(0, 16) },
+      )
       return response
     }
 

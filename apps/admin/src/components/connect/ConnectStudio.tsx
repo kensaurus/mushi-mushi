@@ -77,13 +77,31 @@ function CliLane({ client }: { client: McpClientDef }) {
 }
 
 function SkillsLane({ client }: { client: McpClientDef }) {
-  const skillsCmd = 'npx skills add kensaurus/cursor-kenji'
+  const skillsCmd = 'npx skills add kensaurus/mushi-mushi'
+  // Agent-install prompt (Sentry "Copy Prompt" pattern) — mirrors the public
+  // /connect page so both onboarding surfaces lead with the zero-typing path.
+  const agentPrompt =
+    'Install the Mushi skills from github.com/kensaurus/mushi-mushi ' +
+    '(`npx skills add kensaurus/mushi-mushi`), then run the mushi-setup skill to wire the ' +
+    'Mushi SDK and MCP server into this app and send a test report to verify the connection.'
 
   return (
     <div className="space-y-4">
       <p className="text-xs text-fg-muted">{CONNECT_SKILLS.intro}</p>
       <div className="space-y-2">
-        <p className="text-xs font-medium text-fg">Install Mushi skills</p>
+        <p className="text-xs font-medium text-fg">Fastest: paste this prompt into {client.label}</p>
+        <div className="flex items-center gap-2">
+          <code className="min-w-0 flex-1 break-all rounded-md border border-edge-subtle bg-surface-raised px-2 py-1.5 font-mono text-xs text-fg-secondary">
+            {agentPrompt}
+          </code>
+          <CopyButton value={agentPrompt} label="Copy" copiedLabel="Copied" size="sm" />
+        </div>
+        <p className="text-2xs text-fg-muted">
+          Your agent installs the skills, wires the SDK + MCP, and verifies with a test report.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-fg">Or install Mushi skills yourself</p>
         <div className="flex items-center gap-2">
           <code className="min-w-0 flex-1 break-all rounded-md border border-edge-subtle bg-surface-raised px-2 py-1.5 font-mono text-xs text-fg-secondary">
             {skillsCmd}

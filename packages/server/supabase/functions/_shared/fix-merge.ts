@@ -12,7 +12,7 @@ import {
   type GithubRepoRef,
 } from './github.ts';
 import { log } from './logger.ts';
-import { dispatchPluginEvent } from './plugins.ts';
+import { dispatchPluginEventDetached } from './plugins.ts';
 import { notifyTeamFixEvent } from './team-notify.ts';
 import { notifyReportStatusTransition } from './report-status-notify.ts';
 import { resolveExternalIssue } from './integrations.ts';
@@ -161,7 +161,7 @@ export async function finalizeFixMerge(
 
   if (reportStatus === 'fixed' && previousStatus !== 'fixed') {
     try {
-      void dispatchPluginEvent(db, attempt.project_id, 'report.status_changed', {
+      dispatchPluginEventDetached(db, attempt.project_id, 'report.status_changed', {
         report: { id: attempt.report_id, status: 'fixed' },
         previousStatus,
         actor: meta.actorUserId ? { kind: 'admin', userId: meta.actorUserId } : { kind: 'system' },
@@ -174,7 +174,7 @@ export async function finalizeFixMerge(
   }
 
   if (justMerged) {
-    void dispatchPluginEvent(db, attempt.project_id, 'fix.applied', {
+    dispatchPluginEventDetached(db, attempt.project_id, 'fix.applied', {
       report: { id: attempt.report_id },
       fix: {
         id: attempt.id,

@@ -6,13 +6,19 @@
  * Smithery RFC 8414 discovery. CloudFront Functions omit bodies on synthetic HEAD.
  *
  * OAuth authorize GET is handled here (viewer has querystring; UserAgentReferer ORP
- * does not forward query strings to Supabase).
+ * does not forward query strings to Supabase). Smithery's publisher scan gets
+ * the stub redirect at the edge; every REAL MCP client (claude mcp login,
+ * Cursor — loopback redirect URIs) is 302'd to the api function's authorize
+ * endpoint with the query string reassembled, which validates and forwards to
+ * the console consent page.
  *
  * POST/DELETE/OPTIONS/SSE GET → rewrite URI and forward to custom origin.
  */
 
 var PREFIX = '/mushi-mushi/hosted-mcp'
 var SMITHERY_SERVER_URL = 'https://smithery.ai/servers/kensaurus/mushi-mushi'
+var SUPABASE_HOST = 'dxptnwrhwsqckaftyymj.supabase.co'
+var API_AUTHORIZE_URL = 'https://' + SUPABASE_HOST + '/functions/v1/api/v1/mcp-oauth/authorize'
 
 function smitheryBacklinkHtml() {
   return (
@@ -44,25 +50,52 @@ function isSmitheryRedirect(uri) {
   return uri.indexOf('https://smithery.run/') === 0 || uri.indexOf('https://smithery.ai/') === 0
 }
 
+/** Reassemble the raw query string (values stay URL-encoded as received). */
+function rawQueryString(qs) {
+  if (!qs) return ''
+  var parts = []
+  for (var key in qs) {
+    var entry = qs[key]
+    if (!entry) continue
+    if (entry.multiValue && entry.multiValue.length) {
+      for (var i = 0; i < entry.multiValue.length; i++) {
+        parts.push(key + '=' + (entry.multiValue[i].value || ''))
+      }
+    } else {
+      parts.push(key + '=' + (entry.value || ''))
+    }
+  }
+  return parts.join('&')
+}
+
 function oauthAuthorizeResponse(request) {
   var redirectUri = qsValue(request.querystring, 'redirect_uri')
   var state = qsValue(request.querystring, 'state')
   var responseType = qsValue(request.querystring, 'response_type')
 
+  // Real MCP clients (loopback/https redirect URIs) never terminate at the
+  // edge: hand them to the api function's authorize endpoint, query intact,
+  // where RFC 6749/PKCE validation lives. The edge must NOT 400 here — that
+  // regression broke `claude mcp login` for every non-Smithery client.
+  if (!redirectUri || !isSmitheryRedirect(redirectUri)) {
+    var qs = rawQueryString(request.querystring)
+    return {
+      statusCode: 302,
+      statusDescription: 'Found',
+      headers: {
+        location: { value: API_AUTHORIZE_URL + (qs ? '?' + qs : '') },
+        'cache-control': { value: 'no-store' },
+      },
+    }
+  }
+
+  // Smithery publisher scan: stub redirect at the edge.
   if (responseType && responseType !== 'code') {
     return {
       statusCode: 400,
       statusDescription: 'Bad Request',
       headers: { 'content-type': { value: 'application/json' } },
-      body: '{"error":"unsupported_response_type"}',
-    }
-  }
-  if (!redirectUri || !isSmitheryRedirect(redirectUri)) {
-    return {
-      statusCode: 400,
-      statusDescription: 'Bad Request',
-      headers: { 'content-type': { value: 'application/json' } },
-      body: '{"error":"invalid_redirect_uri"}',
+      body: '{"error":"unsupported_response_type","error_description":"Only response_type=code is supported for publisher scan"}',
     }
   }
 

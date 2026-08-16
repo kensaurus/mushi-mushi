@@ -5,8 +5,14 @@ import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 // below.
 Deno.env.set('MUSHI_LLM_TRANSIENT_BASE_BACKOFF_MS', '1');
 Deno.env.set('MUSHI_LLM_TRANSIENT_MAX_RETRIES', '2');
-const { LlmFailoverError, callWithTransientRetry, classifyLlmError, sanitizeLlmError } =
-  await import('./llm-failover.ts');
+const {
+  LlmFailoverError,
+  WalletDeniedError,
+  callWithTransientRetry,
+  classifyLlmError,
+  isStage1LlmUnavailable,
+  sanitizeLlmError,
+} = await import('./llm-failover.ts');
 
 import type { ResolvedKey } from './byok.ts';
 
@@ -30,6 +36,23 @@ Deno.test('classifyLlmError detects auth errors from message text', () => {
   // the key auth_failed / rotating to the next candidate.
   assertEquals(classifyLlmError(new Error('AI_APICallError: invalid x-api-key')), 'auth');
   assertEquals(classifyLlmError(new Error('authentication_error: invalid x-api-key')), 'auth');
+});
+
+Deno.test('isStage1LlmUnavailable covers failover, wallet, and raw 401', () => {
+  assertEquals(
+    isStage1LlmUnavailable(
+      new LlmFailoverError({
+        code: 'ALL_KEYS_EXHAUSTED',
+        provider: 'openai',
+        attempts: 2,
+        lastError: '401 Unauthorized',
+      }),
+    ),
+    true,
+  );
+  assertEquals(isStage1LlmUnavailable(new WalletDeniedError('insufficient', 0)), true);
+  assertEquals(isStage1LlmUnavailable(new Error('401 invalid x-api-key')), true);
+  assertEquals(isStage1LlmUnavailable(new Error('No object generated')), false);
 });
 
 Deno.test('classifyLlmError detects quota/auth from structured status codes', () => {

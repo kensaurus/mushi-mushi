@@ -64,7 +64,7 @@ const STATUS_BUCKETS: { id: StatusBucket; label: string }[] = [
   { id: 'inflight', label: 'In flight' },
   { id: 'pr_open', label: 'PR open' },
   { id: 'merged', label: 'Shipped' },
-  { id: 'failed', label: 'Failed' },
+  { id: 'failed', label: 'Failed / skipped' },
 ]
 
 const FIXES_TABS: Array<{ id: FixesTabId; label: string; description: string }> = [
@@ -93,7 +93,11 @@ function resolveFixesTab(value: string | null): FixesTabId {
 function bucketize(fix: FixAttempt): StatusBucket {
   const status = fix.status?.toLowerCase()
   if (status === 'queued' || status === 'running') return 'inflight'
-  if (status === 'failed') return 'failed'
+  // skipped_* (unsupported agent, sandbox policy, no context, awaiting
+  // approval) needs the same "look at me" treatment as failed — the old
+  // bucketing dropped them into 'all' where they were invisible
+  // (2026-08-16 audit P1-4).
+  if (status === 'failed' || status?.startsWith('skipped')) return 'failed'
   if (isFixMerged(fix)) return 'merged'
   // Open PRs (including CI-green) stay in pr_open — "Shipped" is merged-only.
   if (fix.pr_url) return 'pr_open'

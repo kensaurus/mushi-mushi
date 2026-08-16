@@ -56,6 +56,7 @@ export function SdkInstallCard({
   apiKey,
   keyPrefixes,
   compact,
+  embedded = false,
   showConnectionStatus = false,
 }: SdkInstallCardProps) {
   const detectedFramework = useMemo(
@@ -204,7 +205,12 @@ export function SdkInstallCard({
     config.native.minDescriptionLength === DEFAULT_SDK_CONFIG.native.minDescriptionLength
 
   return (
-    <Card className={compact ? 'p-3 space-y-4' : 'p-5 space-y-5'}>
+    // Embedded call sites already sit inside a Card, so drawing our own
+    // border/background there stacks two frames around the same content.
+    <SdkInstallShell
+      embedded={embedded}
+      className={embedded ? 'space-y-4' : compact ? 'p-3 space-y-4' : 'p-5 space-y-5'}
+    >
       {showConnectionStatus && (
         <div className="flex flex-wrap items-center gap-2">
           <ConnectionStatus compact />
@@ -308,6 +314,20 @@ export function SdkInstallCard({
         />
       </div>
       </div>
-    </Card>
+    </SdkInstallShell>
   )
+}
+
+/** Card root standalone; bare div when the caller already owns the frame. */
+function SdkInstallShell({
+  embedded,
+  className,
+  children,
+}: {
+  embedded: boolean
+  className: string
+  children: React.ReactNode
+}) {
+  if (embedded) return <div className={className}>{children}</div>
+  return <Card className={className}>{children}</Card>
 }

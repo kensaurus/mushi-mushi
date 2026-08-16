@@ -134,6 +134,39 @@ interface WebhookPlugin {
 const DISPATCH_TIMEOUT_MS = 8_000
 const RESPONSE_EXCERPT_MAX = 512
 
+/**
+ * Fire-and-forget plugin dispatch that SURVIVES the response returning.
+ * Callers used `void dispatchPluginEvent(...)`, which let the isolate tear
+ * down mid-delivery — and deliveries dropped that way never reached
+ * plugin_dispatch_log, so the retry sweep couldn't see them either
+ * (2026-08-16 audit P2-4). EdgeRuntime.waitUntil keeps the isolate alive
+ * until delivery completes; outside the edge runtime (vitest/deno test) it
+ * degrades to the old detached-promise behavior.
+ */
+export function dispatchPluginEventDetached(
+  db: SupabaseClient,
+  projectId: string,
+  event: MushiEventName | string,
+  data: unknown,
+): Promise<void> {
+  const p = dispatchPluginEvent(db, projectId, event, data)
+  // Guarded copy for waitUntil: attaching .catch here also marks `p` handled,
+  // so a bare (un-chained) call never surfaces as an unhandled rejection.
+  const guarded = p.catch((err) => {
+    pluginLog.warn('Detached plugin dispatch failed', {
+      projectId,
+      event,
+      err: err instanceof Error ? err.message : String(err),
+    })
+  })
+  const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } })
+    .EdgeRuntime
+  if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(guarded)
+  // Return the ORIGINAL promise so call sites can keep their site-specific
+  // .catch / .then logging.
+  return p
+}
+
 export async function dispatchPluginEvent(
   db: SupabaseClient,
   projectId: string,
@@ -585,6 +618,122 @@ async function failSkillPipelineStep(
     .in('status', ['pending', 'running'])
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Signed webhook transport — SINGLE source of truth for the SSRF guard, the
+// header set, and the HMAC signing used by BOTH the first dispatch
+// (deliverOne, below) and the plugin-dispatch-retry cron. Before this was
+// extracted the retry worker hand-rolled its own header set and emitted only
+// the legacy X-Mushi-* pair, so every replayed delivery failed Standard
+// Webhooks verification and bypassed the SSRF guard entirely
+// (2026-08-16 audit C2/H4). Change signing here and both paths move together.
+// ──────────────────────────────────────────────────────────────────────────
+
+export interface SignedWebhookHeaderInput {
+  secret: string
+  event: MushiEventName | string
+  projectId: string
+  pluginSlug: string
+  /** Reused VERBATIM on retries — Standard Webhooks receivers dedupe on it. */
+  deliveryId: string
+  /** The exact bytes that are signed AND sent. Never re-serialise this: the
+   *  signature and payload_digest are over these bytes, not over the object. */
+  rawBody: string
+  /** Signing instant (ms). Defaults to now, and MUST be fresh on a retry —
+   *  receivers reject webhook-timestamp outside a ±5 minute window, so
+   *  replaying the original timestamp would fail every late retry. */
+  nowMs?: number
+  /** Retry sequence number. Emits X-Mushi-Retry-Attempt only when set, so the
+   *  first-dispatch header set stays byte-identical to what it was before. */
+  retryAttempt?: number
+}
+
+export async function buildSignedWebhookHeaders(
+  input: SignedWebhookHeaderInput,
+): Promise<Record<string, string>> {
+  const t = input.nowMs ?? Date.now()
+  const sig = await signHmac(input.secret, `${t}.${input.rawBody}`)
+  // Standard Webhooks: webhook-id=<deliveryId>, webhook-timestamp=<unix-secs>,
+  // webhook-signature=v1,<base64-hmac> where payload = "${id}.${ts}.${body}"
+  const stdTimestamp = String(Math.floor(t / 1000))
+  const stdSig = await signHmacBase64(
+    input.secret,
+    `${input.deliveryId}.${stdTimestamp}.${input.rawBody}`,
+  )
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    // Legacy X-Mushi-* headers (kept for back-compat)
+    'X-Mushi-Event': input.event,
+    'X-Mushi-Signature': `t=${t},v1=${sig}`,
+    'X-Mushi-Project': input.projectId,
+    'X-Mushi-Plugin': input.pluginSlug,
+    'X-Mushi-Delivery': input.deliveryId,
+    // Standard Webhooks (https://www.standardwebhooks.com/) headers
+    'webhook-id': input.deliveryId,
+    'webhook-timestamp': stdTimestamp,
+    'webhook-signature': `v1,${stdSig}`,
+  }
+  if (input.retryAttempt !== undefined) {
+    headers['X-Mushi-Retry-Attempt'] = String(input.retryAttempt)
+  }
+  return headers
+}
+
+export interface SignedWebhookRequest extends SignedWebhookHeaderInput {
+  url: string
+  timeoutMs?: number
+}
+
+export interface SignedWebhookResult {
+  /** 'blocked' = the SSRF guard rejected the URL. Callers MUST treat this as
+   *  terminal: a URL resolving to a private/loopback target does not become
+   *  safe on the next retry. */
+  status: 'ok' | 'error' | 'timeout' | 'blocked'
+  httpStatus: number | null
+  durationMs: number
+  excerpt: string
+}
+
+/** Guard → sign → POST → excerpt the response. Never throws. */
+export async function postSignedWebhook(req: SignedWebhookRequest): Promise<SignedWebhookResult> {
+  const safeUrl = assertSafeOutboundUrl(req.url, {})
+  if (!safeUrl.ok) {
+    return {
+      status: 'blocked',
+      httpStatus: null,
+      durationMs: 0,
+      excerpt: (safeUrl.reason ?? 'unsafe_url').slice(0, RESPONSE_EXCERPT_MAX),
+    }
+  }
+
+  const headers = await buildSignedWebhookHeaders(req)
+
+  const start = Date.now()
+  let status: SignedWebhookResult['status'] = 'error'
+  let httpStatus: number | null = null
+  let excerpt = ''
+
+  try {
+    const controller = new AbortController()
+    const tm = setTimeout(() => controller.abort(), req.timeoutMs ?? DISPATCH_TIMEOUT_MS)
+    const res = await fetch(req.url, {
+      method: 'POST',
+      headers,
+      body: req.rawBody,
+      signal: controller.signal,
+    })
+    clearTimeout(tm)
+    httpStatus = res.status
+    const text = await res.text().catch(() => '')
+    excerpt = text.slice(0, RESPONSE_EXCERPT_MAX)
+    status = res.ok ? 'ok' : 'error'
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') status = 'timeout'
+    excerpt = String(err).slice(0, RESPONSE_EXCERPT_MAX)
+  }
+
+  return { status, httpStatus, durationMs: Date.now() - start, excerpt }
+}
+
 async function deliverOne(
   db: SupabaseClient,
   projectId: string,
@@ -617,33 +766,19 @@ async function deliverOne(
     return
   }
 
-  const t = Date.now()
-  const sig = await signHmac(secret, `${t}.${rawBody}`)
-  // Standard Webhooks: webhook-id=<deliveryId>, webhook-timestamp=<unix-secs>,
-  // webhook-signature=v1,<base64-hmac> where payload = "${id}.${ts}.${body}"
-  const stdTimestamp = String(Math.floor(t / 1000))
-  const stdSig = await signHmacBase64(secret, `${deliveryId}.${stdTimestamp}.${rawBody}`)
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    // Legacy X-Mushi-* headers (kept for back-compat)
-    'X-Mushi-Event': event,
-    'X-Mushi-Signature': `t=${t},v1=${sig}`,
-    'X-Mushi-Project': projectId,
-    'X-Mushi-Plugin': plugin.plugin_slug,
-    'X-Mushi-Delivery': deliveryId,
-    // Standard Webhooks (https://www.standardwebhooks.com/) headers
-    'webhook-id': deliveryId,
-    'webhook-timestamp': stdTimestamp,
-    'webhook-signature': `v1,${stdSig}`,
-  }
+  const result = await postSignedWebhook({
+    url: plugin.webhook_url,
+    secret,
+    event,
+    projectId,
+    pluginSlug: plugin.plugin_slug,
+    deliveryId,
+    rawBody,
+  })
 
-  const start = Date.now()
-  let status: 'ok' | 'error' | 'timeout' = 'error'
-  let httpStatus: number | null = null
-  let excerpt = ''
-
-  const safeUrl = assertSafeOutboundUrl(plugin.webhook_url, {})
-  if (!safeUrl.ok) {
+  // SSRF guard rejection is terminal — no payload is stored, so the retry
+  // cron never picks it up.
+  if (result.status === 'blocked') {
     try {
       await db.from('plugin_dispatch_log').insert({
         delivery_id: deliveryId,
@@ -651,32 +786,17 @@ async function deliverOne(
         plugin_slug: plugin.plugin_slug,
         event,
         status: 'error',
-        response_excerpt: (safeUrl.reason ?? 'unsafe_url').slice(0, RESPONSE_EXCERPT_MAX),
+        response_excerpt: result.excerpt,
         payload_digest: digest,
       })
     } catch { /* dispatch log is best-effort */ }
     return
   }
 
-  try {
-    const controller = new AbortController()
-    const tm = setTimeout(() => controller.abort(), DISPATCH_TIMEOUT_MS)
-    const res = await fetch(plugin.webhook_url, {
-      method: 'POST',
-      headers,
-      body: rawBody,
-      signal: controller.signal,
-    })
-    clearTimeout(tm)
-    httpStatus = res.status
-    const text = await res.text().catch(() => '')
-    excerpt = text.slice(0, RESPONSE_EXCERPT_MAX)
-    status = res.ok ? 'ok' : 'error'
-  } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') status = 'timeout'
-    excerpt = String(err).slice(0, RESPONSE_EXCERPT_MAX)
-  }
-  const durationMs = Date.now() - start
+  const status: 'ok' | 'error' | 'timeout' = result.status
+  const httpStatus = result.httpStatus
+  const excerpt = result.excerpt
+  const durationMs = result.durationMs
 
   // Non-ok deliveries are stored as 'pending' with a retry timestamp so the
   // plugin-dispatch-retry cron can replay them with exponential backoff.
@@ -696,6 +816,13 @@ async function deliverOne(
       response_excerpt: excerpt || null,
       duration_ms: durationMs,
       next_retry_at,
+      // Store the EXACT signed bytes so the retry cron can replay the original
+      // envelope instead of fabricating one (2026-08-16 audit C2). Only kept
+      // for retryable rows — terminal rows above are never replayed.
+      // REQUIRES migration 20260816120000; deploy that first or this insert
+      // throws on the unknown column and the swallowing catch below loses the
+      // failure row entirely.
+      payload: isFinal ? null : rawBody,
       payload_digest: digest,
     })
   } catch { /* dispatch log is best-effort */ }
@@ -782,24 +909,16 @@ export async function sendTestDelivery(
     return { ok: false, httpStatus: null, durationMs: 0, excerpt: 'missing_secret' }
   }
 
-  const t = Date.now()
-  const sig = await signHmac(secret, `${t}.${rawBody}`)
-  // Standard Webhooks: same ID as original delivery for idempotent retry tracking
-  const stdTimestamp = String(Math.floor(t / 1000))
-  const stdSig = await signHmacBase64(secret, `${deliveryId}.${stdTimestamp}.${rawBody}`)
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    // Legacy X-Mushi-* headers (kept for back-compat)
-    'X-Mushi-Event': event,
-    'X-Mushi-Signature': `t=${t},v1=${sig}`,
-    'X-Mushi-Project': projectId,
-    'X-Mushi-Plugin': pluginSlug,
-    'X-Mushi-Delivery': deliveryId,
-    // Standard Webhooks (https://www.standardwebhooks.com/) headers
-    'webhook-id': deliveryId,
-    'webhook-timestamp': stdTimestamp,
-    'webhook-signature': `v1,${stdSig}`,
-  }
+  // Same header set and signing as a real dispatch — shared helper so a
+  // successful test delivery proves the production path, not a copy of it.
+  const headers = await buildSignedWebhookHeaders({
+    secret,
+    event,
+    projectId,
+    pluginSlug,
+    deliveryId,
+    rawBody,
+  })
 
   const start = Date.now()
   let status: 'ok' | 'error' | 'timeout' = 'error'

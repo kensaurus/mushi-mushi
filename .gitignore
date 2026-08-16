@@ -170,3 +170,4 @@ tsup.config.bundled_*.mjs
 
 # Built CloudFront Function artifacts (scripts/build-cf-function.mjs)
 scripts/.cf-dist/
+.playwright-cli/

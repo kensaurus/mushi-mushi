@@ -68,8 +68,12 @@ async function getJwks(
     return keys;
   }
 
-  // Fetch fresh
-  const res = await fetch(jwksUrl, { headers: { Accept: "application/json" } });
+  // Fetch fresh. Auth hot path: a hung JWKS origin on a cache miss would
+  // stall every request behind it (2026-08-16 resilience audit H12).
+  const res = await fetch(jwksUrl, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(8_000),
+  });
   if (!res.ok) throw new Error(`JWKS fetch failed: ${res.status} ${jwksUrl}`);
   const json = await res.json() as { keys: JwkKey[] };
   const keys = json.keys;

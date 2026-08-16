@@ -449,6 +449,7 @@ export function ProjectsListPanel({
                 projectName={project.name}
                 adminHost={adminHost}
                 compact
+                embedded
               />
             </div>
           )}
@@ -572,7 +573,7 @@ export function ProjectsListPanel({
                   (or reloads), `revealed` becomes undefined and the
                   card cleanly falls back to the placeholder — which
                   is what we want, since we don't persist plaintext. */}
-              <SdkInstallCard projectId={project.id} projectSlug={project.slug} apiKey={revealed?.key} compact />
+              <SdkInstallCard projectId={project.id} projectSlug={project.slug} apiKey={revealed?.key} compact embedded />
               <div className="mt-4 border-t border-edge-subtle pt-4">
                 <AssistantConfigCard projectId={project.id} />
               </div>

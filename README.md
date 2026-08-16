@@ -43,6 +43,12 @@ npx mushi-mushi
 
 ## 60-second proof
 
+**Using Cursor, Claude Code, or another AI editor?** Paste this prompt and your agent does the whole setup — install, wiring, and a verified test report:
+
+> Install the Mushi skills from github.com/kensaurus/mushi-mushi (`npx skills add kensaurus/mushi-mushi`), then run the mushi-setup skill to wire the Mushi SDK and MCP server into this app and send a test report to verify the connection.
+
+Or run the wizard yourself:
+
 ```bash
 npx mushi-mushi
 ```
@@ -245,7 +251,7 @@ npx skills add kensaurus/mushi-mushi
 
 Then: `/mushi-setup` (guided SDK install + MCP wiring), `/mushi-debug` (diagnose ingest / MCP / pipeline failures), `/mushi-health` (pass/fail check across CLI, API, edge functions, BYOK keys), `/mushi-integration` (two-way loop, fix dispatch, lessons). The admin **Connect & Update** page (`/connect`) mirrors the same flows with one-click **Add to Cursor** deeplinks.
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~367K TS lines · 1,760 source files · 44 workspace / 36 npm packages · 55 edge functions · 331 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~370K TS lines · 1,763 source files · 44 workspace / 36 npm packages · 55 edge functions · 336 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ---
 

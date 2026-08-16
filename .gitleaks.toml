@@ -31,6 +31,8 @@ paths = [
   '''packages/cli/src/mcp-config\.test\.ts''',
   '''packages/cli/src/sanitize-config\.test\.ts''',
   '''packages/cli/src/login\.test\.ts''',
+  # Fake Mushi API key in the MCP stdio resilience unit tests (stub fetch only).
+  '''packages/mcp/src/__tests__/resilience\.test\.ts''',
 ]
 
 [[rules]]
@@ -50,6 +52,8 @@ paths = [
   '''packages/cli/src/mcp-config\.test\.ts''',
   '''packages/cli/src/sanitize-config\.test\.ts''',
   '''packages/cli/src/login\.test\.ts''',
+  # Fake Mushi API key in the MCP stdio resilience unit tests (stub fetch only).
+  '''packages/mcp/src/__tests__/resilience\.test\.ts''',
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -68,4 +72,6 @@ paths = [
   '''packages/cli/src/heartbeat-wait\.test\.ts''',
   '''packages/cli/src/index\.test\.ts''',
   '''packages/cli/src/mcp-config\.test\.ts''',
+  # Fake Mushi API key in the MCP stdio resilience unit tests (stub fetch only).
+  '''packages/mcp/src/__tests__/resilience\.test\.ts''',
 ]

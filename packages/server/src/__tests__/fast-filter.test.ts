@@ -6,6 +6,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
+import {
+  heuristicStage1Classification,
+  normalizeStage1Category,
+} from '../../supabase/functions/_shared/stage1-heuristic.ts'
 
 // --- Mock types mirroring the Edge Function's behavior ---
 
@@ -124,6 +128,19 @@ function createMockDb() {
 describe('fast-filter (Stage 1)', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it('heuristic classification maps console errors to high-severity bug', () => {
+    expect(normalizeStage1Category('bug')).toBe('bug')
+    const result = heuristicStage1Classification({
+      description: 'Checkout button does nothing',
+      user_category: 'bug',
+      user_intent: 'Complete purchase',
+      console_logs: [{ level: 'error', message: 'TypeError' }],
+    })
+    expect(result.severity).toBe('high')
+    expect(result.confidence).toBeLessThan(0.85)
+    expect(result.emotion).toBe('')
   })
 
   it('should classify a report with high confidence and mark as classified', async () => {
@@ -262,6 +279,19 @@ describe('fast-filter (Stage 1)', () => {
     it('treats gateway IDLE_TIMEOUT as warn, not a permanent handoff failure', () => {
       expect(src).toContain('IDLE_TIMEOUT')
       expect(src).toContain('Stage 2 idle-timeout (gateway); classify-report should early-ack')
+    })
+
+    it('routes Stage 1 through withAnthropicOrOpenAi instead of a raw 401 throw', () => {
+      expect(src).toContain('withAnthropicOrOpenAi')
+      expect(src).toContain('isStage1LlmUnavailable')
+      expect(src).toContain('heuristicStage1Classification')
+    })
+
+    it('finalizes heuristic classification so recovery cron cannot retry-storm', () => {
+      expect(src).toContain('usedHeuristic')
+      expect(src).toContain('stage1_llm_unavailable')
+      expect(src).toContain("sentry: false")
+      expect(src).toContain('stage1_unhandled')
     })
   })
 })

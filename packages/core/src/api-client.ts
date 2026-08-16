@@ -93,6 +93,12 @@ export const DEFAULT_TIMEOUT = 10_000;
 export const DEFAULT_MAX_RETRIES = 2;
 const DEFAULT_CIRCUIT_THRESHOLD = 4;
 const DEFAULT_CIRCUIT_COOLDOWN_MS = 30_000;
+// Longest Retry-After window we will sit out inside a single request. Anything
+// beyond this is left to the offline queue, whose flush ticks are the right
+// place for a multi-minute wait — parking the caller on that sleep would stall
+// the SDK (and, on the direct-submit path, the user's report) for minutes.
+// Matches the ceiling of getBackoffDelay below.
+const MAX_INLINE_RETRY_WAIT_MS = 10_000;
 
 export function createApiClient(options: ApiClientOptions): MushiApiClient {
   const {
@@ -201,13 +207,29 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
           );
         }
 
-        if (response.status >= 500 && retries > 0) {
-          await sleep(getBackoffDelay(maxRetries - retries));
+        // H17: 429 means "you are going too fast", not "your request is
+        // wrong". It used to be returned as terminal — never retried — while
+        // also counting as proof the endpoint was reachable, which reset the
+        // circuit breaker on every response and left it unable to open under
+        // sustained rate limiting. Treat it like a 5xx on both counts, and
+        // honour Retry-After when the server sends one.
+        const rateLimited = response.status === 429;
+        const unusable = response.status >= 500 || rateLimited;
+        const retryAfterMs = rateLimited
+          ? parseRetryAfter(response.headers.get('Retry-After'))
+          : null;
+
+        // A server-supplied window wins over our backoff curve, but only while
+        // it is short enough to wait out inline.
+        const canWaitInline = retryAfterMs === null || retryAfterMs <= MAX_INLINE_RETRY_WAIT_MS;
+        if (unusable && retries > 0 && canWaitInline) {
+          await sleep(retryAfterMs ?? getBackoffDelay(maxRetries - retries));
           return request<T>(method, path, body, retries - 1, internalKind, extraHeaders);
         }
-        // A 5xx that survived all retries means the endpoint is effectively
-        // down; a 4xx means it's reachable (app-level error) — reset the circuit.
-        if (response.status >= 500) cbRecordUnreachable();
+        // A 5xx or 429 that survived all retries means the endpoint is
+        // effectively unusable; any other 4xx means it's reachable (app-level
+        // error) — reset the circuit.
+        if (unusable) cbRecordUnreachable();
         else cbRecordReachable();
         return {
           ok: false,
@@ -234,7 +256,9 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
 
       if (retries > 0 && isRetryable(error)) {
         await sleep(getBackoffDelay(maxRetries - retries));
-        return request<T>(method, path, body, retries - 1, internalKind);
+        // `extraHeaders` must ride along — dropping it here stripped the
+        // Authorization header from every retried tester/community call.
+        return request<T>(method, path, body, retries - 1, internalKind, extraHeaders);
       }
 
       // Network error (timeout / DNS / refused) that exhausted retries —
@@ -582,6 +606,27 @@ function sleep(ms: number): Promise<void> {
 
 function getBackoffDelay(attempt: number): number {
   return Math.min(1000 * 2 ** attempt + Math.random() * 500, 10_000);
+}
+
+/**
+ * Parse a `Retry-After` header into a delay in milliseconds. The header comes
+ * in two shapes (RFC 9110): delta-seconds, or an HTTP-date to wait until.
+ * Returns null when the header is absent, malformed, or negative, so the
+ * caller falls back to its own backoff curve.
+ */
+export function parseRetryAfter(value: string | null | undefined, now = Date.now()): number | null {
+  if (!value) return null;
+  const raw = value.trim();
+  if (!raw) return null;
+
+  // delta-seconds. Guard against '' / whitespace (Number('') === 0) above.
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds)) return seconds < 0 ? null : seconds * 1000;
+
+  // HTTP-date. A date already in the past means "retry now", not a negative delay.
+  const at = Date.parse(raw);
+  if (Number.isNaN(at)) return null;
+  return Math.max(at - now, 0);
 }
 
 function isRetryable(error: unknown): boolean {

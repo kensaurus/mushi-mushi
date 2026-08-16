@@ -89,4 +89,52 @@ describe('api-client circuit breaker', () => {
     }
     expect(fetchSpy).toHaveBeenCalledTimes(5);
   });
+
+  it('counts a 429 toward the breaker instead of resetting it', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response('', { status: 429 }));
+    const client = createApiClient({
+      projectId: 'proj_test',
+      apiKey: 'k',
+      apiEndpoint: 'https://api.test.local',
+      timeout: 5000,
+      maxRetries: 0,
+      circuitBreaker: { threshold: 2, cooldownMs: 30_000 },
+    });
+
+    const r1 = await client.submitReport(minimalReport);
+    const r2 = await client.submitReport(minimalReport);
+    expect(r1.error?.code).toBe('HTTP_429');
+    expect(r2.error?.code).toBe('HTTP_429');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+    // Sustained rate limiting has to trip the breaker. Treating 429 as proof
+    // the endpoint is reachable reset the failure count on every response, so
+    // the breaker could never open while the client was being throttled.
+    const r3 = await client.submitReport(minimalReport);
+    expect(r3.error?.code).toBe('CIRCUIT_OPEN');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('still resets the breaker on a non-429 4xx', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response('', { status: 400 }));
+    const client = createApiClient({
+      projectId: 'proj_test',
+      apiKey: 'k',
+      apiEndpoint: 'https://api.test.local',
+      timeout: 5000,
+      maxRetries: 0,
+      circuitBreaker: { threshold: 2, cooldownMs: 30_000 },
+    });
+
+    for (let i = 0; i < 4; i++) {
+      const res = await client.submitReport(minimalReport);
+      expect(res.error?.code).toBe('HTTP_400');
+    }
+    // An app-level rejection proves the endpoint is up — the circuit stays closed.
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+  });
 });

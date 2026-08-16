@@ -373,7 +373,13 @@ export async function evaluateTriageDedupe(
       return { notify: true, occurrenceCount: count, escalation: false }
     }
 
-    if (ESCALATION_THRESHOLDS.includes(count)) {
+    // Escalate in a WINDOW past each threshold, not on exact equality: dedup
+    // batches make the count jump (8 → 14 skips 10 entirely), so
+    // `.includes(count)` silently missed most threshold crossings
+    // (2026-08-16 audit P2-1). The +5 window bounds re-notification spam
+    // while catching bursty crossings; a per-group last-notified-count column
+    // would be exact but isn't worth the migration yet.
+    if (ESCALATION_THRESHOLDS.some((t) => count >= t && count <= t + 5)) {
       return { notify: true, occurrenceCount: count, escalation: true }
     }
     return { notify: false, occurrenceCount: count, escalation: false }

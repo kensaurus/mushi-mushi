@@ -43,7 +43,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { startCronRun } from '../_shared/telemetry.ts';
 import type { Status } from '../_shared/inventory.ts';
 import { notifyOperator } from '../_shared/operator-notify.ts';
-import { dispatchPluginEvent } from '../_shared/plugins.ts';
+import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void;
@@ -550,7 +550,7 @@ async function alertOnRegressions(
           // Fan out report.created so plugin-jira / plugin-linear can
           // open a tracker ticket for the regression — same downstream
           // path as a real user report.
-          void dispatchPluginEvent(db, projectId, 'report.created', {
+          dispatchPluginEventDetached(db, projectId, 'report.created', {
             source: 'status-reconciler',
             regressedActionNodeId: action.id,
             actionLabel: action.label,
