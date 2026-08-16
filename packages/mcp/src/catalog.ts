@@ -233,7 +233,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'dispatch_fix',
     title: 'Dispatch Mushi fix agent',
     description:
-      'Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns { fixAttemptId }; poll get_fix_timeline for progress and merge_fix when CI is green. Write; NOT idempotent — each call starts a new attempt. Report must be classified — run triage_issue if not.',
+      'Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns { fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'Let the in-repo agent attempt this fix for me (or: dispatch a Cursor Cloud Agent).',
@@ -429,6 +429,18 @@ export const TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Analyze this bug report end-to-end and tell me what to do.',
+  },
+  {
+    name: 'triage_next_steps',
+    title: 'What should I work on now?',
+    description:
+      'Prioritised "do this next" list for the project: blocked auto-fixes first (with the unblock action), ' +
+      'then in-flight fixes to shepherd to merge, then user-felt classified reports by severity, with ' +
+      'robot/cron chores (dependency bumps) last. Returns { steps: [{ priority, action, reason, tool, args }], summary }. ' +
+      'Read-only. Call this first when the user asks "what needs my attention / what should I triage or fix".',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What should I triage or fix right now?',
   },
   // ── Lessons / evolution loop ─────────────────────────────────────────────
   {
@@ -888,24 +900,29 @@ export interface UseMushiIntent {
 }
 
 export const USE_MUSHI_INTENTS: Record<string, UseMushiIntent> = {
+  // NOTE: every name below MUST be a registered TOOL (scopes.test.ts guards
+  // this). 2026-08-16 audit P0-3 found phantom names (get_report,
+  // get_dashboard, list_qa_stories) and prompts listed as tools
+  // (summarize_report_for_fix, mushi_setup) — agents routed here then
+  // failed the call and gave up.
   fix: {
     label: 'Fix a bug',
     tools: [
       'get_recent_reports',
-      'get_report',
-      'summarize_report_for_fix',
+      'get_report_detail',
+      'triage_issue',
       'dispatch_fix',
       'start_skill_pipeline',
       'checkin_pipeline_step',
       'get_pipeline_run',
     ],
-    hint: 'Call get_recent_reports to find the top unresolved bug, then summarize_report_for_fix before dispatching.',
+    hint: 'Call get_recent_reports to find the top unresolved bug, then triage_issue before dispatching.',
   },
   status: {
     label: 'Check project status',
     tools: [
-      'get_dashboard',
       'triage_next_steps',
+      'get_account_overview',
       'get_usage',
       'get_backend_health',
       'activation_status',
@@ -915,7 +932,7 @@ export const USE_MUSHI_INTENTS: Record<string, UseMushiIntent> = {
   setup: {
     label: 'Set up Mushi',
     tools: [
-      'mushi_setup',
+      'diagnose_setup',
       'activation_status',
       'get_backend_health',
       'list_byok_keys',
@@ -923,12 +940,11 @@ export const USE_MUSHI_INTENTS: Record<string, UseMushiIntent> = {
       'test_byok_key',
       'remove_byok_key',
     ],
-    hint: 'Call mushi_setup first — it diagnoses setup gaps and returns the next command to run.',
+    hint: 'Call diagnose_setup first — it diagnoses setup gaps and returns the next action to take.',
   },
   qa: {
     label: 'Run / review QA tests',
     tools: [
-      'list_qa_stories',
       'run_qa_story',
       'list_qa_story_runs',
       'get_qa_story_run',
@@ -936,7 +952,7 @@ export const USE_MUSHI_INTENTS: Record<string, UseMushiIntent> = {
       'approve_qa_story',
       'improve_qa_story',
     ],
-    hint: 'Call list_qa_stories to see what test coverage exists; run_qa_story to trigger a run.',
+    hint: 'Call list_qa_story_runs to see recent coverage and outcomes; run_qa_story to trigger a run.',
   },
   pipeline: {
     label: 'Run an agent pipeline / skill',
@@ -951,7 +967,7 @@ export const USE_MUSHI_INTENTS: Record<string, UseMushiIntent> = {
   },
   audit: {
     label: 'Audit / health check',
-    tools: ['run_fullstack_audit', 'get_backend_health', 'get_dashboard', 'get_usage'],
+    tools: ['run_fullstack_audit', 'get_backend_health', 'get_account_overview', 'get_usage'],
     hint: 'Call run_fullstack_audit for a full-stack health scorecard.',
   },
 };

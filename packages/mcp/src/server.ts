@@ -33,9 +33,92 @@ import {
 } from './feature-groups.js';
 import { searchMushiDocs } from './docs-index.js';
 import { wrapUntrustedJson, type UntrustedContentRole } from './wrap-untrusted.js';
+import { installStdoutGuard } from './stdout-guard.js';
+
+// stdout belongs to the JSON-RPC framing. `src/index.ts` installs this too,
+// but the `@mushi-mushi/mcp/server` export path is a supported entrypoint for
+// anyone wiring their own StdioServerTransport — without this call they got a
+// stream that any stray `console.log` (ours or a dependency's) could corrupt.
+// Idempotent, and a no-op when `MUSHI_MCP_STDOUT_GUARD=off` or when there is
+// no stderr to write to (browser bundles that import this module for types).
+installStdoutGuard();
 
 /** Explicit schema for no-argument MCP tools (avoids ambiguous empty `{}`). */
 const NO_ARG_INPUT: Record<string, never> = {};
+
+/**
+ * Default per-request timeout for every Mushi API call made by a tool.
+ *
+ * 15s is comfortably above p99 for hosted Mushi (edge functions answer in <2s) while
+ * still bounded well under the ~60s an MCP client typically waits before it
+ * gives up on a tool call. Without a timeout a hung TCP connection pinned the
+ * tool call forever: the agent shows a spinner, the client eventually kills
+ * the session, and nothing is logged.
+ */
+const DEFAULT_API_TIMEOUT_MS = 15_000;
+/** Floor/ceiling for the env override — a typo'd `MUSHI_MCP_TIMEOUT_MS=5`
+ *  (seconds, not ms) would otherwise make every tool call unusable. */
+const MIN_API_TIMEOUT_MS = 250;
+const MAX_API_TIMEOUT_MS = 300_000;
+
+/** Resolve the per-request timeout from `MUSHI_MCP_TIMEOUT_MS`, clamped. Exported for tests. */
+export function resolveTimeoutMsFromEnv(): number {
+  const raw = process.env?.MUSHI_MCP_TIMEOUT_MS?.trim();
+  if (!raw) return DEFAULT_API_TIMEOUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_API_TIMEOUT_MS;
+  return Math.min(Math.max(parsed, MIN_API_TIMEOUT_MS), MAX_API_TIMEOUT_MS);
+}
+
+/**
+ * Strip the `[CODE] ` prefix `MushiApiError` prepends, so wrapping one error
+ * inside another's message does not produce `[A] … [A] …`.
+ */
+function bareMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  return raw.replace(/^\[[A-Z0-9_]+\]\s*/, '');
+}
+
+/** Namespace for derived idempotency keys — bump the suffix if the key inputs change. */
+const IDEMPOTENCY_NAMESPACE = 'mushi.mcp.submit_fix_result.v1';
+
+/**
+ * Derive a stable, name-based UUID from the given parts.
+ *
+ * Shaped as an RFC 4122 v5 (name-based) UUID — same wire format, SHA-256
+ * instead of SHA-1 for the digest. The server treats `Idempotency-Key` as an
+ * opaque UUID string (`_shared/idempotency.ts`), so what matters is that the
+ * same inputs always produce the same key: a retried tool call then replays
+ * the stored response instead of writing a second row.
+ */
+async function stableUuidFrom(...parts: readonly string[]): Promise<string> {
+  // Joined with the ASCII unit separator: it cannot appear in a UUID, a git
+  // branch name or a URL, so ('a','bc') and ('ab','c') can never collide.
+  const input = parts.join('');
+  const digest = new Uint8Array(
+    await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input)),
+  );
+  const bytes = digest.slice(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x50; // version 5 (name-based)
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // RFC 4122 variant (10xx)
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+/**
+ * Combine a caller-supplied abort signal with our timeout signal.
+ * `AbortSignal.any` landed in Node 20.3 — older runtimes keep the timeout
+ * (the guarantee this whole change exists for) and drop the caller signal.
+ */
+function withTimeoutSignal(
+  callerSignal: AbortSignal | null | undefined,
+  timeoutSignal: AbortSignal,
+): AbortSignal {
+  if (!callerSignal) return timeoutSignal;
+  const anyFn = (AbortSignal as unknown as { any?: (s: AbortSignal[]) => AbortSignal }).any;
+  if (typeof anyFn === 'function') return anyFn.call(AbortSignal, [callerSignal, timeoutSignal]);
+  return timeoutSignal;
+}
 
 /**
  * Every admin endpoint returns `{ ok: boolean; data?: T; error?: { code, message } }`.
@@ -91,6 +174,12 @@ export interface MushiServerConfig {
    * Set via `MUSHI_FEATURES` env (CSV) on stdio; HTTP uses `?features=` query.
    */
   features?: FeatureFilter;
+  /**
+   * Per-request timeout in ms for every Mushi API call a tool makes.
+   * Defaults to `MUSHI_MCP_TIMEOUT_MS` (clamped to 250ms…5min) or 15000.
+   * Explicit values are honoured as given — tests use small ones.
+   */
+  timeoutMs?: number;
 }
 
 /**
@@ -101,6 +190,13 @@ export interface MushiServerConfig {
 export function createMushiServer(config: MushiServerConfig): McpServer {
   const { version, apiEndpoint, apiKey, projectId } = config;
   const doFetch = config.fetch ?? globalThis.fetch;
+  // Resolved once per server instance: env is read at construction time so a
+  // host can set MUSHI_MCP_TIMEOUT_MS before booting, and tests can inject an
+  // explicit (unclamped) value without touching process.env.
+  const timeoutMs =
+    typeof config.timeoutMs === 'number' && Number.isFinite(config.timeoutMs) && config.timeoutMs > 0
+      ? config.timeoutMs
+      : resolveTimeoutMsFromEnv();
   const apiLog = createLogger({
     scope: 'mushi:mcp:api',
     level:
@@ -125,23 +221,87 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   async function apiCall<T = unknown>(path: string, options?: RequestInit): Promise<T> {
     const requestId = crypto.randomUUID().slice(0, 12);
     const started = Date.now();
-    const res = await doFetch(`${apiEndpoint}${path}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        // Authorization is accepted by `adminOrApiKey` only as a JWT, but we
-        // still send it for endpoints still behind plain `jwtAuth` (legacy)
-        // and for transparent proxies that strip X-Mushi-* headers.
-        Authorization: `Bearer ${apiKey}`,
-        'X-Mushi-Api-Key': apiKey,
-        'X-Request-Id': requestId,
-        ...(projectId ? { 'X-Mushi-Project-Id': projectId } : {}),
-        ...(options?.headers ?? {}),
-      },
-    });
+    // Every one of the ~90 tool bodies funnels through here, so this is the
+    // only place a timeout has to exist. `AbortSignal.timeout` fires a
+    // `TimeoutError` DOMException that fetch surfaces as the rejection reason.
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    let res: Response;
+    try {
+      res = await doFetch(`${apiEndpoint}${path}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          // Authorization is accepted by `adminOrApiKey` only as a JWT, but we
+          // still send it for endpoints still behind plain `jwtAuth` (legacy)
+          // and for transparent proxies that strip X-Mushi-* headers.
+          Authorization: `Bearer ${apiKey}`,
+          'X-Mushi-Api-Key': apiKey,
+          'X-Request-Id': requestId,
+          ...(projectId ? { 'X-Mushi-Project-Id': projectId } : {}),
+          ...(options?.headers ?? {}),
+        },
+        // After the spread so a caller-supplied `signal` is merged, not lost.
+        signal: withTimeoutSignal(options?.signal, timeoutSignal),
+      });
+    } catch (err) {
+      throw classifyTransportError(err);
+    }
+
+    let text: string;
+    try {
+      // The body read is inside the same timeout budget: a server that sends
+      // headers and then stalls the body would otherwise hang here forever,
+      // past the guard we just installed. undici rejects the body read with
+      // the abort reason, so the same classifier applies.
+      text = await res.text();
+    } catch (err) {
+      throw classifyTransportError(err);
+    }
+
+    /** Map a fetch/body-read rejection onto a typed, actionable Mushi error. */
+    function classifyTransportError(err: unknown): MushiApiError {
+      const durationMs = Date.now() - started;
+      // Timeout and "cannot reach the host" are different operator problems —
+      // one says "the API is slow / raise the budget", the other says "check
+      // your endpoint, DNS, proxy or VPN". A single generic failure string
+      // sent people down the wrong path.
+      if (timeoutSignal.aborted) {
+        apiLog.warn('api.timeout', { path, requestId, durationMs, timeoutMs });
+        return new MushiApiError(
+          504,
+          'MUSHI_TIMEOUT',
+          `Timed out after ${timeoutMs}ms waiting for ${path}. The Mushi API accepted ` +
+            'the connection but did not answer in time — retry, or raise the budget ' +
+            'with MUSHI_MCP_TIMEOUT_MS (ms) in your MCP env block if you self-host ' +
+            `and cold starts are slow. Endpoint: ${apiEndpoint}`,
+        );
+      }
+      const name = err instanceof Error ? err.name : '';
+      if (name === 'AbortError') {
+        apiLog.warn('api.aborted', { path, requestId, durationMs });
+        return new MushiApiError(
+          499,
+          'REQUEST_ABORTED',
+          `The request to ${path} was aborted by the caller after ${durationMs}ms.`,
+        );
+      }
+      apiLog.warn('api.unreachable', {
+        path,
+        requestId,
+        durationMs,
+        err: bareMessage(err),
+      });
+      return new MushiApiError(
+        503,
+        'NETWORK_ERROR',
+        `Could not reach the Mushi API at ${apiEndpoint}${path} — ${bareMessage(err)}. ` +
+          'This is a connectivity failure, not an API rejection: check that you are ' +
+          'online, that MUSHI_API_ENDPOINT points at your `.../functions/v1/api` URL, ' +
+          'and that no proxy/VPN is blocking it.',
+      );
+    }
 
     const durationMs = Date.now() - started;
-    const text = await res.text();
     let body: unknown = null;
     if (text) {
       try {
@@ -188,7 +348,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
    * This lets agents using an org-scoped (multi-project) key work transparently
    * when they have a single project — and fail with a helpful message when they
    * need to specify which of several projects to target.
+   *
+   * Step 3 is memoised in `resolvedAccountProjectId` (per server instance).
    */
+  let resolvedAccountProjectId: string | null = null;
+
   async function resolveProjectId(explicitId?: string | null): Promise<string> {
     if (explicitId) {
       if (projectId && explicitId !== projectId) {
@@ -204,6 +368,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       return explicitId;
     }
     if (projectId) return projectId;
+    // Memoised account-mode resolution: the probe is a network round-trip that
+    // returns the same answer for the lifetime of the process (the key's
+    // project set does not change mid-session), yet every project-scoped tool
+    // call paid for it. Scoped to this server instance — NOT module-level —
+    // so a host that builds several servers (different keys/endpoints, or the
+    // test suite) never serves one tenant's project to another.
+    if (resolvedAccountProjectId) return resolvedAccountProjectId;
     // Account mode: probe the API to find accessible projects.
     try {
       const data = await apiCall<{
@@ -211,7 +382,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         total: number;
       }>('/v1/admin/mcp/account-overview');
       if (data.total === 1 && data.projects[0]) {
-        return data.projects[0].id;
+        resolvedAccountProjectId = data.projects[0].id;
+        return resolvedAccountProjectId;
       }
       if (data.total === 0) {
         throw new MushiApiError(
@@ -229,11 +401,37 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           'Pass projectId explicitly to target a specific project, or set MUSHI_PROJECT_ID in your MCP env config.',
       );
     } catch (err) {
-      if (err instanceof MushiApiError) throw err;
+      // Everything used to collapse into MISSING_PROJECT_ID — so an offline
+      // laptop, an expired key, and a genuinely absent project id all told the
+      // operator to "set MUSHI_PROJECT_ID", which fixes none of the first two.
+      if (err instanceof MushiApiError) {
+        if (err.code === 'MUSHI_TIMEOUT' || err.code === 'NETWORK_ERROR') {
+          throw new MushiApiError(
+            err.status,
+            err.code,
+            `Could not resolve which project to use because the Mushi API is unreachable: ` +
+              `${bareMessage(err)} This is a connectivity problem — setting MUSHI_PROJECT_ID ` +
+              'would only skip the lookup, not fix the tool call that follows it.',
+          );
+        }
+        if (err.status === 401 || err.status === 403) {
+          throw new MushiApiError(
+            err.status,
+            err.code,
+            `The API key was rejected while resolving the project: ${bareMessage(err)} ` +
+              'Mint a fresh key in the console (Settings → API keys) and update MUSHI_API_KEY, ' +
+              'or re-run `mushi login`. This is an authentication problem, not a missing project id.',
+          );
+        }
+        // NO_ACCESSIBLE_PROJECTS / PROJECT_ID_REQUIRED / PROJECT_SCOPE_MISMATCH
+        // already carry their own actionable text.
+        throw err;
+      }
       throw new MushiApiError(
         400,
         'MISSING_PROJECT_ID',
-        'projectId is required. Set MUSHI_PROJECT_ID in .cursor/mcp.json or pass it explicitly.',
+        'projectId is required. Set MUSHI_PROJECT_ID in .cursor/mcp.json or pass it explicitly. ' +
+          `(Project lookup failed with: ${bareMessage(err)})`,
       );
     }
   }
@@ -784,11 +982,32 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .describe('Reproduction steps recorded on the report (array; [] if none)'),
         summary: z.unknown().describe('One-line report summary, or null'),
         component: z.unknown().describe('Component/page the bug was attributed to, or null'),
+        note: z
+          .string()
+          .optional()
+          .describe('Present when no Stage-2 analysis exists — explains why and what to call instead'),
       },
     },
     async (args) => {
       const report = await apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.reportId}`);
       const s2 = report.stage2_analysis as Record<string, unknown> | null | undefined;
+      // Stage-1-final reports (the common fast-filter path) have NO
+      // stage2_analysis — every live report returned a well-formed object of
+      // nulls here, which read as "the tool is broken" (2026-08-16 audit
+      // P1-3). Say what is missing and what produces it instead.
+      if (!s2 || (s2.rootCause == null && s2.suggestedFix == null)) {
+        return jsonResult({
+          reportId: args.reportId,
+          rootCause: null,
+          suggestedFix: null,
+          reproductionSteps: report.reproduction_steps ?? [],
+          summary: report.summary ?? null,
+          component: report.component ?? null,
+          note:
+            'No Stage-2 analysis exists for this report (it was classified by the fast Stage-1 path, which does not produce root-cause/fix hints). ' +
+            'Use triage_issue for the full review packet, or dispatch_fix — the fix worker does its own grounded analysis.',
+        });
+      }
       return jsonResult({
         reportId: args.reportId,
         rootCause: s2?.rootCause ?? null,
@@ -1362,12 +1581,46 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         args?: Record<string, unknown>;
       }> = [];
 
-      if (status === 'new' || status === 'classified') {
+      // A dispatched-then-skipped/failed fix used to leave the report in
+      // 'classified' with no trace, so this branch recommended dispatch_fix
+      // forever (2026-08-16 audit P0-2). fix-worker now stamps
+      // processing_error ('autofix_blocked: …') and closes the attempt —
+      // surface the blocker instead of re-recommending the same dispatch.
+      const processingError = report
+        ? ((report as Record<string, unknown>).processing_error as string | null)
+        : null;
+      const attempts = report
+        ? (((report as Record<string, unknown>).fix_attempts as Array<Record<string, unknown>>) ?? [])
+        : [];
+      const lastAttempt = attempts.length > 0 ? attempts[attempts.length - 1] : null;
+      const lastAttemptStatus = lastAttempt ? String(lastAttempt.status ?? '') : '';
+      const autofixBlocked =
+        (typeof processingError === 'string' && processingError.startsWith('autofix_blocked:')) ||
+        lastAttemptStatus.startsWith('skipped') ||
+        lastAttemptStatus === 'failed';
+
+      if (autofixBlocked && status !== 'fixing' && status !== 'fixed') {
+        const blockReason =
+          (typeof processingError === 'string' && processingError) ||
+          String(lastAttempt?.error ?? 'previous fix attempt was skipped or failed');
+        actions.push({
+          action: 'unblock_autofix',
+          reason: `Auto-fix is blocked: ${blockReason}. Resolve the blocker (settings/integration/budget), then re-dispatch.`,
+          tool: 'diagnose_setup',
+          args: { mode: 'dispatch' },
+        });
+        actions.push({
+          action: 'redispatch_after_unblock',
+          reason: 'Once the blocker above is resolved, dispatch a fresh fix attempt.',
+          tool: 'dispatch_fix',
+          args: { reportId: args.report_id },
+        });
+      } else if (status === 'new' || status === 'classified') {
         actions.push({
           action: 'dispatch_fix',
-          reason: 'Report is classified but no fix has been attempted',
+          reason: 'Report is classified and no fix has been attempted',
           tool: 'dispatch_fix',
-          args: { reportId: args.report_id, agent: 'cursor_cloud' },
+          args: { reportId: args.report_id },
         });
       } else if (status === 'fixing') {
         actions.push({
@@ -1457,7 +1710,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .uuid()
           .optional()
           .describe(
-            'Optional UUID — resend the same key to safely retry without creating duplicate fix rows',
+            'Optional UUID — resend the same key to safely retry without creating duplicate ' +
+              'fix rows. Omit it and a stable key is derived from reportId + branch + prUrl, ' +
+              'so a retried submission carries the identical key instead of a fresh random one.',
           ),
       },
       outputSchema: {
@@ -1466,25 +1721,172 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       },
     },
     async (args) => {
-      const idemKey = args.idempotencyKey ?? crypto.randomUUID();
+      // Derived, NOT random: a fresh randomUUID() per invocation meant every
+      // retry (agent retry, client re-dispatch, flaky network) minted a new
+      // key and wrote a second fix_attempt row for the same fix. Deriving the
+      // key from the identity of the submission makes the POST genuinely
+      // idempotent — `_shared/idempotency.ts` replays the stored response.
+      const idemKey =
+        args.idempotencyKey ??
+        (await stableUuidFrom(
+          IDEMPOTENCY_NAMESPACE,
+          args.reportId,
+          args.branch,
+          args.prUrl ?? '',
+        ));
       const created = await apiCall<{ fixId: string }>('/v1/admin/fixes', {
         method: 'POST',
         headers: { 'Idempotency-Key': idemKey },
         body: JSON.stringify({ reportId: args.reportId, agent: 'mcp' }),
       });
-      await apiCall(`/v1/admin/fixes/${created.fixId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          status: 'completed',
-          branch: args.branch,
-          pr_url: args.prUrl,
-          files_changed: args.filesChanged,
-          lines_changed: args.linesChanged,
-          summary: args.summary,
-          completed_at: new Date().toISOString(),
-        }),
-      });
+      // Two-step write: the row exists after step 1, so a step-2 failure is a
+      // half-applied state. Say so explicitly instead of surfacing a bare
+      // `[HTTP_500] …` that reads like nothing happened — the agent needs to
+      // know the row is there and that retrying is safe, not destructive.
+      try {
+        await apiCall(`/v1/admin/fixes/${created.fixId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            status: 'completed',
+            branch: args.branch,
+            pr_url: args.prUrl,
+            files_changed: args.filesChanged,
+            lines_changed: args.linesChanged,
+            summary: args.summary,
+            completed_at: new Date().toISOString(),
+          }),
+        });
+      } catch (err) {
+        const status = err instanceof MushiApiError ? err.status : 500;
+        throw new MushiApiError(
+          status,
+          'FIX_PATCH_FAILED',
+          `Fix row ${created.fixId} was created for report ${args.reportId}, but marking it ` +
+            `completed failed: ${bareMessage(err)} — the fix row exists and is still in its ` +
+            'initial (pending) state, so no work is lost. Preferred repair: PATCH ' +
+            `/v1/admin/fixes/${created.fixId} with {"status":"completed"} to finish this exact ` +
+            'row. Re-running submit_fix_result re-sends the same derived Idempotency-Key ' +
+            '(reportId + branch + prUrl) rather than a fresh one, so it dedupes wherever the ' +
+            'API honours that header — retry only with identical arguments.',
+        );
+      }
       return jsonResult({ ok: true, fixId: created.fixId });
+    },
+  );
+
+  server.registerTool(
+    'triage_next_steps',
+    {
+      title: titleOf('triage_next_steps'),
+      description: descOf('triage_next_steps'),
+      annotations: annotationsFor('triage_next_steps'),
+      inputSchema: {
+        project_id: z
+          .string()
+          .uuid()
+          .optional()
+          .describe('Project UUID (defaults to the configured project).'),
+      },
+      outputSchema: {
+        steps: z.array(
+          z.object({
+            priority: z.number(),
+            action: z.string(),
+            reason: z.string(),
+            tool: z.string().optional(),
+            args: z.record(z.string(), z.unknown()).optional(),
+          }),
+        ),
+        summary: z.string(),
+      },
+    },
+    async (args) => {
+      // The "what should I work on" answer, ordered by leverage:
+      //   1. blocked auto-fixes (autofix_blocked stamp / skipped attempts)
+      //   2. in-flight fixes to shepherd to merge
+      //   3. user-felt classified reports, critical → low
+      //   4. robot/cron chores (library-modernizer bumps) last
+      // Existed only as an MCP *prompt* until 2026-08-16 (audit P0-3) —
+      // most clients never surface prompts, so nobody could reach it.
+      const pid = await resolveProjectId(args.project_id);
+      const extraHeaders: Record<string, string> =
+        pid !== projectId ? { 'X-Mushi-Project-Id': pid } : {};
+      const data = await apiCall<{ reports: Array<Record<string, unknown>>; total: number }>(
+        '/v1/admin/reports?limit=100',
+        { headers: extraHeaders },
+      );
+      const reports = data.reports ?? [];
+      const isCron = (r: Record<string, unknown>) =>
+        typeof r.reporter_token_hash === 'string' && r.reporter_token_hash.startsWith('cron:');
+      const isBlocked = (r: Record<string, unknown>) =>
+        typeof r.processing_error === 'string' && r.processing_error.startsWith('autofix_blocked:');
+      const label = (r: Record<string, unknown>) =>
+        String(r.title ?? r.summary ?? r.description ?? '').slice(0, 90);
+
+      const steps: Array<{
+        priority: number;
+        action: string;
+        reason: string;
+        tool?: string;
+        args?: Record<string, unknown>;
+      }> = [];
+      let priority = 1;
+
+      const blocked = reports.filter(isBlocked);
+      if (blocked.length > 0) {
+        steps.push({
+          priority: priority++,
+          action: `Unblock auto-fix (${blocked.length} report${blocked.length === 1 ? '' : 's'} blocked)`,
+          reason: String(blocked[0].processing_error).slice(0, 200),
+          tool: 'diagnose_setup',
+          args: { mode: 'dispatch' },
+        });
+      }
+
+      const fixing = reports.filter((r) => r.status === 'fixing');
+      for (const r of fixing.slice(0, 2)) {
+        steps.push({
+          priority: priority++,
+          action: `Shepherd in-flight fix: ${label(r)}`,
+          reason: 'A fix branch/PR is open — check CI and merge when green.',
+          tool: 'get_report_timeline',
+          args: { report_id: r.id },
+        });
+      }
+
+      const openUserReports = reports
+        .filter((r) => (r.status === 'new' || r.status === 'classified') && !isCron(r) && !isBlocked(r))
+        .sort((a, b) => {
+          const rank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+          return (rank[String(a.severity)] ?? 4) - (rank[String(b.severity)] ?? 4);
+        });
+      for (const r of openUserReports.slice(0, Math.max(0, 4 - steps.length))) {
+        steps.push({
+          priority: priority++,
+          action: `Triage [${r.severity}] ${label(r)}`,
+          reason: 'User-felt report awaiting triage — review the packet, then dispatch or dismiss.',
+          tool: 'triage_issue',
+          args: { report_id: r.id },
+        });
+      }
+
+      const chores = reports.filter((r) => r.status === 'classified' && isCron(r) && !isBlocked(r));
+      if (chores.length > 0 && steps.length < 5) {
+        steps.push({
+          priority: priority++,
+          action: `Batch ${chores.length} maintenance chore${chores.length === 1 ? '' : 's'} (dependency bumps)`,
+          reason: 'Robot-filed modernization reports — batch-dispatch or dismiss in one sitting; do not let them crowd out user bugs.',
+          tool: 'get_recent_reports',
+          args: { status: 'classified' },
+        });
+      }
+
+      const summary =
+        steps.length === 0
+          ? 'Inbox is clear — no blocked fixes, no open user reports, no chores. Nothing needs your attention.'
+          : `${steps.length} prioritised step${steps.length === 1 ? '' : 's'}: ` +
+            steps.map((s) => s.action).join(' → ');
+      return jsonResult({ steps, summary });
     },
   );
 
@@ -1539,7 +1941,12 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           /* client doesn't support progress — fine */
         }
       }
-      const data = await apiCall('/v1/admin/fixes/dispatch', {
+      // apiCall unwraps the { ok, data } envelope — this is the inner payload.
+      const dispatch = await apiCall<{
+        dispatchId?: string;
+        status?: string;
+        createdAt?: string;
+      }>('/v1/admin/fixes/dispatch', {
         method: 'POST',
         headers: args.idempotencyKey ? { 'Idempotency-Key': args.idempotencyKey } : undefined,
         body: JSON.stringify({
@@ -1549,7 +1956,18 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           ...(projectId ? { projectId } : {}),
         }),
       });
-      return jsonResult(data);
+      // The API's inner payload is { dispatchId, status, createdAt }. The
+      // declared outputSchema is { fixId, status } — return exactly that, or
+      // clients (Claude Code, Cursor) fail output validation AFTER the
+      // dispatch already fired and the user is told a working dispatch
+      // "failed". The timeline endpoint accepts the dispatch-job id, so
+      // fixId is pollable immediately via get_fix_timeline.
+      if (!dispatch?.dispatchId) {
+        throw new Error(
+          `Dispatch response missing dispatchId — got: ${JSON.stringify(dispatch).slice(0, 300)}`,
+        );
+      }
+      return jsonResult({ fixId: dispatch.dispatchId, status: dispatch.status ?? 'queued' });
     },
   );
 
@@ -1720,6 +2138,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .enum([
             'pending',
             'classified',
+            // Workflow states added 20260520600000 but missing from this
+            // enum ever since (2026-08-16 audit P2-2) — agents could not
+            // mark a report as being looked at.
+            'triaged',
+            'in_progress',
             'grouped',
             'fixing',
             'fixed',
@@ -1728,7 +2151,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
             'reopened',
             'dismissed',
           ])
-          .describe('Target status'),
+          .describe('Target status (resolved is stored as fixed)'),
         reason: z.string().optional().describe('Reason for the transition (audit trail)'),
       },
     },
