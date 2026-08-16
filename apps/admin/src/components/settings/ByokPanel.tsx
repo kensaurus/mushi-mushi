@@ -8,7 +8,8 @@
 import { useState } from 'react';
 import { apiFetch } from '../../lib/supabase';
 import { usePageData } from '../../lib/usePageData';
-import { Section, Input, Btn, ErrorAlert, ResultChip } from '../ui';
+import { Section, Input, Btn, ErrorAlert, ResultChip, Tooltip } from '../ui';
+import { IconPlay, IconTrash } from '../icons';
 import { PanelSkeleton } from '../skeletons/PanelSkeleton';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { useEntitlements } from '../../lib/useEntitlements';
@@ -455,15 +456,25 @@ export function ByokPanel() {
                           )}
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <Btn
-                            size="sm"
-                            variant="ghost"
-                            type="button"
-                            loading={testPending === k.id}
-                            onClick={() => void testKey(k)}
-                          >
-                            Test
-                          </Btn>
+                          {/* Icon suppressed while loading — Btn puts its
+                              spinner in the leading slot, so passing both
+                              would render spinner *and* glyph. */}
+                          <Tooltip content="Test key">
+                            <Btn
+                              size="sm"
+                              variant="ghost"
+                              type="button"
+                              className="px-2"
+                              aria-label={`Test key ${k.key_hint ?? k.label ?? ''}`.trim()}
+                              loading={testPending === k.id}
+                              onClick={() => void testKey(k)}
+                            >
+                              {testPending === k.id ? null : <IconPlay />}
+                            </Btn>
+                          </Tooltip>
+                          {/* Left as text: the label is dynamic across three
+                              states (Disable / Enable / Test first) and no
+                              single glyph carries that. */}
                           <Btn
                             size="sm"
                             variant="ghost"
@@ -478,14 +489,18 @@ export function ByokPanel() {
                                 ? 'Enable'
                                 : 'Test first'}
                           </Btn>
-                          <Btn
-                            size="sm"
-                            variant="ghost"
-                            type="button"
-                            onClick={() => setRemoveTarget(k)}
-                          >
-                            Remove
-                          </Btn>
+                          <Tooltip content="Remove key">
+                            <Btn
+                              size="sm"
+                              variant="ghost"
+                              type="button"
+                              className="px-2"
+                              aria-label={`Remove key ${k.key_hint ?? k.label ?? ''}`.trim()}
+                              onClick={() => setRemoveTarget(k)}
+                            >
+                              <IconTrash />
+                            </Btn>
+                          </Tooltip>
                         </div>
                       </div>
                     );
@@ -541,23 +556,31 @@ export function ByokPanel() {
                           )}
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <Btn
-                            size="sm"
-                            variant="ghost"
-                            type="button"
-                            loading={testPending === k.id}
-                            onClick={() => void testKey(k)}
-                          >
-                            Test
-                          </Btn>
-                          <Btn
-                            size="sm"
-                            variant="ghost"
-                            type="button"
-                            onClick={() => setRemoveTarget(k)}
-                          >
-                            Remove
-                          </Btn>
+                          <Tooltip content="Test key">
+                            <Btn
+                              size="sm"
+                              variant="ghost"
+                              type="button"
+                              className="px-2"
+                              aria-label={`Test legacy key ${k.key_hint ?? k.label ?? ''}`.trim()}
+                              loading={testPending === k.id}
+                              onClick={() => void testKey(k)}
+                            >
+                              {testPending === k.id ? null : <IconPlay />}
+                            </Btn>
+                          </Tooltip>
+                          <Tooltip content="Remove key">
+                            <Btn
+                              size="sm"
+                              variant="ghost"
+                              type="button"
+                              className="px-2"
+                              aria-label={`Remove legacy key ${k.key_hint ?? k.label ?? ''}`.trim()}
+                              onClick={() => setRemoveTarget(k)}
+                            >
+                              <IconTrash />
+                            </Btn>
+                          </Tooltip>
                         </div>
                       </div>
                     );

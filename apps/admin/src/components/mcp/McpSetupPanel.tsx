@@ -438,7 +438,14 @@ export function McpSetupPanel({
           </pre>
         </div>
 
-        <Card  className="p-3 space-y-2" data-testid="mcp-json-helper">
+        {/* Was a Card nested inside the `mcp-install` Card — two borders and
+            two backgrounds around one group. A rule separates it now; the
+            outer Card owns the only frame. (The old `data-testid` here never
+            reached the DOM: Card does not forward unknown props.) */}
+        <div
+          className="space-y-2 border-t border-edge-subtle pt-4"
+          data-testid="mcp-json-helper"
+        >
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div>
               <h3 className="text-sm font-semibold text-fg">mcp.json syntax helper</h3>
@@ -471,7 +478,7 @@ export function McpSetupPanel({
               ))}
             </ul>
           </ContainedBlock>
-        </Card>
+        </div>
       </Card>
 
       {projects && projects.length > 0 && (

@@ -18,6 +18,7 @@ export type DispatchStatus =
   | 'running'
   | 'completed'
   | 'completed_no_pr'
+  | 'skipped'
   | 'failed'
 
 export interface DispatchState {
@@ -29,13 +30,29 @@ export interface DispatchState {
 
 interface DispatchResponse {
   dispatchId: string
-  status: 'queued' | 'running' | 'completed' | 'completed_no_pr' | 'failed' | 'cancelled'
+  status:
+    | 'queued'
+    | 'running'
+    | 'completed'
+    | 'completed_no_pr'
+    | 'failed'
+    | 'cancelled'
+    | 'skipped'
+    | 'skipped_no_sandbox'
   pr_url?: string | null
   error?: string | null
 }
 
 interface StatusEventPayload {
-  status: 'queued' | 'running' | 'completed' | 'completed_no_pr' | 'failed' | 'cancelled'
+  status:
+    | 'queued'
+    | 'running'
+    | 'completed'
+    | 'completed_no_pr'
+    | 'failed'
+    | 'cancelled'
+    | 'skipped'
+    | 'skipped_no_sandbox'
   fixAttemptId?: string
   prUrl?: string | null
   error?: string | null
@@ -83,6 +100,14 @@ export function useDispatchFix(reportId: string, projectId: string) {
     if (res.data.status === 'failed' || res.data.status === 'cancelled') {
       reachedTerminal.current = true
       setState({ status: 'failed', dispatchId, error: res.data.error ?? `Dispatch ${res.data.status}` })
+      return
+    }
+    if (res.data.status === 'skipped' || res.data.status === 'skipped_no_sandbox') {
+      // Terminal: the worker declined (budget, approval, unsupported agent,
+      // sandbox policy, no context). Without this branch the poll loop spun
+      // for the full 10 minutes and then reported a bogus timeout.
+      reachedTerminal.current = true
+      setState({ status: 'skipped', dispatchId, error: res.data.error ?? 'Dispatch skipped — see report for the reason' })
       return
     }
     setState(s => ({ ...s, status: res.data!.status as DispatchStatus, dispatchId }))
@@ -156,6 +181,9 @@ export function useDispatchFix(reportId: string, projectId: string) {
                 } else if (p.status === 'failed' || p.status === 'cancelled') {
                   reachedTerminal.current = true
                   setState({ status: 'failed', dispatchId, error: p.error ?? `Dispatch ${p.status}` })
+                } else if (p.status === 'skipped' || p.status === 'skipped_no_sandbox') {
+                  reachedTerminal.current = true
+                  setState({ status: 'skipped', dispatchId, error: p.error ?? 'Dispatch skipped — see report for the reason' })
                 } else {
                   setState(s => ({ ...s, status: p.status as DispatchStatus, dispatchId }))
                 }

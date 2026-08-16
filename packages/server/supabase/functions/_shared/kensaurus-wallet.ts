@@ -129,6 +129,9 @@ export function makeRemoteBackend(opts: {
         email: opts.email,
         ...body,
       }),
+      // This sits on the LLM preflight hot path — a hung wallet backend must
+      // not stall the request (2026-08-16 resilience audit H11).
+      signal: AbortSignal.timeout(10_000),
     })
     if (!resp.ok) {
       return { _status: resp.status, ...(await resp.json().catch(() => ({}))) }
@@ -305,7 +308,10 @@ export async function meteredCall<T>(
     debitMicro = debit.debit_micro ?? 0
     balanceMicro = debit.balance_micro ?? null
   } catch (err) {
-    // Never fail the user after a successful provider call; one retry then log.
+    // Never fail the user after a successful provider call; one retry, then
+    // hand the loss to the dead-letter sink (if the host registered one) so
+    // it is replayable and alertable instead of a console line nobody reads
+    // (2026-08-16 resilience audit C3: silent revenue loss).
     try {
       await opts.backend.debit({
         app: opts.app,
@@ -316,17 +322,61 @@ export async function meteredCall<T>(
         traceId: opts.traceId,
         metadata: { ...(opts.metadata ?? {}), usage, retry: true },
       })
-    } catch {
+    } catch (retryErr) {
       console.error('[kensaurus-wallet] debit lost after retry:', (err as Error).message, {
         app: opts.app,
         feature: opts.feature,
         requestId,
         providerCostMicro,
       })
+      if (walletDeadLetterSink) {
+        try {
+          await walletDeadLetterSink({
+            requestId,
+            app: opts.app,
+            feature: opts.feature,
+            model: opts.model,
+            providerCostMicro: opts.shadowMode ? 0 : providerCostMicro,
+            error: `${(err as Error).message} | retry: ${(retryErr as Error).message}`,
+            payload: {
+              traceId: opts.traceId ?? null,
+              usage,
+              shadowMode: opts.shadowMode ?? false,
+              metadata: opts.metadata ?? {},
+            },
+          })
+        } catch (sinkErr) {
+          console.error('[kensaurus-wallet] dead-letter sink failed:', (sinkErr as Error).message)
+        }
+      }
     }
   }
 
   return { result, debitMicro, balanceMicro }
+}
+
+/** A permanently-lost debit, handed to the host for storage + alerting. */
+export interface WalletDebitDeadLetter {
+  requestId: string
+  app: string
+  feature: string
+  model: string
+  providerCostMicro: number
+  error: string
+  payload: Record<string, unknown>
+}
+
+let walletDeadLetterSink: ((entry: WalletDebitDeadLetter) => Promise<void>) | null = null
+
+/**
+ * Register where lost debits go. This module is deliberately import-free
+ * (verbatim twin in glot.it), so persistence + Sentry are injected by the
+ * host — see hosted-llm-billing.ts for the mushi wiring.
+ */
+export function setWalletDeadLetterSink(
+  sink: (entry: WalletDebitDeadLetter) => Promise<void>,
+): void {
+  walletDeadLetterSink = sink
 }
 
 /** Standard 402 payload for WalletDeniedError. */

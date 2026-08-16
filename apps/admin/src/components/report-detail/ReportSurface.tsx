@@ -80,11 +80,14 @@ interface SignalChipProps {
   children: ReactNode
   tone?: ChipTone
   className?: string
+  /** Native hover hint. Chips are terse by design; this carries the "why". */
+  title?: string
 }
 
-export function SignalChip({ children, tone = 'neutral', className = '' }: SignalChipProps) {
+export function SignalChip({ children, tone = 'neutral', className = '', title }: SignalChipProps) {
   return (
     <span
+      title={title}
       className={`inline-flex max-w-full min-w-0 items-center rounded-full border px-2 py-0.5 text-2xs font-medium whitespace-nowrap ${SIGNAL_CHIP_TONE[tone]} ${className}`}
     >
       <span className="min-w-0 truncate">{children}</span>

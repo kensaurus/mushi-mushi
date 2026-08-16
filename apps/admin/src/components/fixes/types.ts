@@ -70,7 +70,21 @@ export interface DispatchJob {
   id: string;
   project_id: string;
   report_id: string;
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  /**
+   * Full 8-value set from fix_dispatch_jobs_status_check (20260601000001).
+   * The console previously typed only 5 — skipped / skipped_no_sandbox /
+   * completed_no_pr rows rendered as nothing at all, making a skipped
+   * dispatch indistinguishable from no dispatch (2026-08-16 audit P1-4).
+   */
+  status:
+    | 'queued'
+    | 'running'
+    | 'completed'
+    | 'completed_no_pr'
+    | 'failed'
+    | 'cancelled'
+    | 'skipped'
+    | 'skipped_no_sandbox';
   pr_url?: string;
   error?: string;
   created_at: string;
@@ -116,16 +130,22 @@ export const DISPATCH_STATUS: Record<DispatchJob['status'], string> = {
   queued: 'bg-surface-overlay text-fg-muted',
   running: CHIP_TONE.infoSubtle,
   completed: CHIP_TONE.okSubtle,
+  completed_no_pr: CHIP_TONE.warnSubtle,
   failed: CHIP_TONE.dangerSubtle,
   cancelled: 'bg-surface-overlay text-fg-faint',
+  skipped: CHIP_TONE.warnSubtle,
+  skipped_no_sandbox: CHIP_TONE.warnSubtle,
 };
 
 export const DISPATCH_STATUS_LABEL: Record<DispatchJob['status'], string> = {
   queued: 'Queued',
   running: 'Running',
   completed: 'Completed',
+  completed_no_pr: 'Fix ready — connect GitHub',
   failed: 'Failed',
   cancelled: 'Cancelled',
+  skipped: 'Skipped',
+  skipped_no_sandbox: 'Skipped — sandbox required',
 };
 
 const CHECK_RUN_TONE: Record<string, string> = {

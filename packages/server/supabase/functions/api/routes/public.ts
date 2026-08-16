@@ -45,11 +45,87 @@ import {
 } from '../helpers.ts';
 import { safeParse, ApiReportBodySchema } from '../../_shared/validate.ts';
 import { registerReporterFeatureBoardRoutes } from './reporter-feature-board.ts';
+import { claimIpRateLimit, extractClientIp } from './cli-auth.ts';
 
 // Upper bound for reporter-supplied notes that feed `mushi_apply_reporter_feedback`
 // (these can seed a reopened child report's description). Keeps a hostile or
 // runaway client from creating oversized reports through the public routes.
 const REPORTER_NOTE_MAX = 2000;
+
+/**
+ * Per-project burst rate limit for report ingest: default 120 reports/minute.
+ * Reads the configurable cap from project_settings.report_ingest_max_per_minute
+ * (null = use the default). The RPC raises P0001 on breach. supabase-js returns
+ * RPC failures in `error` (it does not throw), so the breach must be read from
+ * the result object.
+ *
+ * Fails CLOSED on unexpected RPC errors, matching claimIpRateLimit in
+ * cli-auth.ts: ingest already needs this database for its real work, so
+ * rejecting costs no availability a DB outage wouldn't already cost. The single
+ * deliberate fail-open is Postgres 42883 (function missing during a migration
+ * window).
+ *
+ * `reportCount` weights the claim by how many reports the call carries, so
+ * POST /v1/reports/batch cannot buy 10× the budget of POST /v1/reports for the
+ * same one claim. `report_ingest_rate_limit_claim` has no count/weight
+ * argument and its underlying `scoped_rate_limit_claim` increments the counter
+ * by exactly 1 per call, so N reports means N claims — issued sequentially and
+ * stopped at the first breach, so a batch arriving with only k slots left burns
+ * k, not all N. (Lowering the cap on a single call instead would move the
+ * breach threshold but still consume one slot for N reports, leaving a pure
+ * batch caller ~10× over budget.)
+ *
+ * Returns `null` when the caller is under the cap, otherwise the Retry-After
+ * and message the route should send with its 429.
+ */
+async function claimReportIngestBurst(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  reportCount: number,
+): Promise<{ retryAfterSeconds: number; message: string } | null> {
+  const { data: burstCap } = await db
+    .from('project_settings')
+    .select('report_ingest_max_per_minute')
+    .eq('project_id', projectId)
+    .maybeSingle();
+  const cap = (burstCap as { report_ingest_max_per_minute?: number | null } | null)
+    ?.report_ingest_max_per_minute ?? 120;
+
+  const claims = Math.max(1, reportCount);
+  for (let i = 0; i < claims; i++) {
+    const { error: rateErr } = await db.rpc('report_ingest_rate_limit_claim', {
+      p_project_id: projectId,
+      p_max_per_minute: cap,
+    });
+    const rateOutcome = classifyIngestRateLimitError(rateErr);
+    if (rateOutcome === 'breach') {
+      return {
+        retryAfterSeconds: 60,
+        message: 'Report ingest rate limit exceeded. Retry in 60 seconds.',
+      };
+    }
+    if (rateOutcome === 'fail-open') {
+      // Migration window: the claim function isn't deployed yet. Log and
+      // continue so SDK ingestion is not blocked by a missing migration.
+      // Retrying the remaining claims would only repeat the same 42883.
+      log.warn('report_ingest_rate_limit_claim missing (fail-open, migration window)', {
+        err: rateErr?.message,
+      });
+      return null;
+    }
+    if (rateOutcome === 'fail-closed') {
+      log.error('report_ingest_rate_limit_claim failed — failing closed', {
+        err: rateErr?.message,
+        pgCode: (rateErr as { code?: string } | null)?.code,
+      });
+      return {
+        retryAfterSeconds: 30,
+        message: 'Report ingest temporarily throttled. Retry in 30 seconds.',
+      };
+    }
+  }
+  return null;
+}
 
 export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -147,6 +223,25 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   // ============================================================
   app.post('/v1/sdk/discovery', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;
+    const db = getServiceClient();
+
+    // Light per-(project, IP) rate limit. The per-(project, route) throttle
+    // below only drops DUPLICATE routes — a client walking a synthetic route
+    // per request (or a leaked SDK key in a loop) writes an unbounded row per
+    // call, and this endpoint is deliberately quota-free. 60/min matches the
+    // SDK's own client-side cap of 1 event per route per minute with plenty of
+    // headroom for a real user navigating fast. Bucketed by project as well as
+    // IP so one busy tenant behind a NAT can't starve another's budget.
+    const discoveryBucketKey = `${projectId}:${extractClientIp(c)}`;
+    const discoveryRateMiss = await claimIpRateLimit(db, discoveryBucketKey, 'sdk_discovery', 60, '1 minute');
+    if (discoveryRateMiss) {
+      c.header('Retry-After', String(discoveryRateMiss.retryAfterSeconds));
+      return c.json(
+        { ok: false, error: { code: 'RATE_LIMITED', message: 'Discovery event rate limit exceeded.' } },
+        429,
+      );
+    }
+
     let raw: unknown;
     try {
       raw = await c.req.json();
@@ -173,8 +268,6 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       );
     }
     const event = parsed.data;
-
-    const db = getServiceClient();
 
     // Soft per-(project, route) throttle: drop if a row already exists
     // for this minute. Cheap because we have an index on (project_id,
@@ -253,47 +346,13 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       // identifyWithToken() is used. Passed to ingestReport for verified linkage.
       const userToken = c.req.header('x-mushi-user-token') ?? undefined;
 
-      // Per-project burst rate limit: default 120 reports/minute.
-      // Reads the configurable cap from project_settings.report_ingest_max_per_minute
-      // (null = use the default). Raises P0001 on breach. supabase-js returns RPC
-      // failures in `error` (it does not throw), so the breach must be read from
-      // the result object. Fails CLOSED on unexpected RPC errors, matching
-      // claimIpRateLimit in cli-auth.ts: ingest already needs this database for
-      // its real work, so rejecting costs no availability a DB outage wouldn't
-      // already cost. The single deliberate fail-open is Postgres 42883
-      // (function missing during a migration window).
-      const { data: burstCap } = await db
-        .from('project_settings')
-        .select('report_ingest_max_per_minute')
-        .eq('project_id', projectId)
-        .maybeSingle();
-      const cap = (burstCap as { report_ingest_max_per_minute?: number | null } | null)
-        ?.report_ingest_max_per_minute ?? 120;
-      const { error: rateErr } = await db.rpc('report_ingest_rate_limit_claim', {
-        p_project_id: projectId,
-        p_max_per_minute: cap,
-      });
-      const rateOutcome = classifyIngestRateLimitError(rateErr);
-      if (rateOutcome === 'breach') {
-        c.header('Retry-After', '60');
+      // Per-project burst rate limit — see claimReportIngestBurst above for the
+      // cap, the fail-open/fail-closed classification, and the weighting rule.
+      const rateMiss = await claimReportIngestBurst(db, projectId, 1);
+      if (rateMiss) {
+        c.header('Retry-After', String(rateMiss.retryAfterSeconds));
         return c.json(
-          { ok: false, error: { code: 'RATE_LIMITED', message: 'Report ingest rate limit exceeded. Retry in 60 seconds.' } },
-          429,
-        );
-      }
-      if (rateOutcome === 'fail-open') {
-        // Migration window: the claim function isn't deployed yet. Log and
-        // continue so SDK ingestion is not blocked by a missing migration.
-        log.warn('report_ingest_rate_limit_claim missing (fail-open, migration window)', { err: rateErr?.message });
-      }
-      if (rateOutcome === 'fail-closed') {
-        log.error('report_ingest_rate_limit_claim failed — failing closed', {
-          err: rateErr?.message,
-          pgCode: (rateErr as { code?: string } | null)?.code,
-        });
-        c.header('Retry-After', '30');
-        return c.json(
-          { ok: false, error: { code: 'RATE_LIMITED', message: 'Report ingest temporarily throttled. Retry in 30 seconds.' } },
+          { ok: false, error: { code: 'RATE_LIMITED', message: rateMiss.message } },
           429,
         );
       }
@@ -354,6 +413,20 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     const ipAddress =
       c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip');
     const userAgent = c.req.header('user-agent');
+
+    // Same per-project burst rate limit POST /v1/reports enforces, weighted by
+    // the number of reports this call actually carries. Without it a client
+    // could bypass the cap entirely by wrapping every report in a batch of one.
+    // Claimed for the truncated `batch`, not `reports` — anything past the
+    // first 10 is dropped, so it must not be charged.
+    const rateMiss = await claimReportIngestBurst(db, projectId, batch.length);
+    if (rateMiss) {
+      c.header('Retry-After', String(rateMiss.retryAfterSeconds));
+      return c.json(
+        { ok: false, error: { code: 'RATE_LIMITED', message: rateMiss.message } },
+        429,
+      );
+    }
 
     const quota = await checkIngestQuota(db, projectId);
     if (!quota.allowed) {
@@ -1767,6 +1840,29 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
 
   app.post('/v1/sourcemaps', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;
+    const db = getServiceClient();
+
+    // Per-(project, IP) upload rate limit. This route has no ingest quota — a
+    // leaked CLI key can otherwise write `sourcemaps` rows in an unbounded
+    // loop — and the claim runs BEFORE formData() so a hostile caller can't
+    // make us buffer the multipart body first.
+    //
+    // The cap is deliberately generous: `mushi sourcemaps upload` POSTs one
+    // file at a time, sequentially, for every .map in a build (a large app
+    // ships hundreds), does NOT retry a 429, and exits non-zero if a single
+    // file fails — so a tight cap would break real releases rather than harden
+    // them. 300 per 10 minutes clears a full release upload while still
+    // bounding a runaway loop. Raise this before lowering it.
+    const sourcemapBucketKey = `${projectId}:${extractClientIp(c)}`;
+    const sourcemapRateMiss = await claimIpRateLimit(db, sourcemapBucketKey, 'sourcemap_upload', 300, '10 minutes');
+    if (sourcemapRateMiss) {
+      c.header('Retry-After', String(sourcemapRateMiss.retryAfterSeconds));
+      return c.json(
+        { ok: false, error: { code: 'RATE_LIMITED', message: 'Source-map upload rate limit exceeded. Retry shortly.' } },
+        429,
+      );
+    }
+
     let form: FormData;
     try {
       form = await c.req.formData();
@@ -1782,7 +1878,6 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       return c.json({ ok: false, error: { code: 'MISSING_FIELDS', message: 'filename, release, and sha256 are required' } }, 400);
     }
     const sizeBytes = file instanceof File ? file.size : null;
-    const db = getServiceClient();
     const { error } = await db.from('sourcemaps').upsert(
       {
         project_id: projectId,

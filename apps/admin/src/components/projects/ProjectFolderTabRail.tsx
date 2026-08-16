@@ -16,6 +16,12 @@ import {
 import type { PdcaStageId } from '../../lib/pdca'
 import type { SdkStatus } from '../SdkVersionBadge'
 import { CHIP_TONE } from '../../lib/chipTone'
+import {
+  HEARTBEAT_HINT,
+  HEARTBEAT_LABEL,
+  heartbeatStateFromKeys,
+  type HeartbeatState,
+} from '../../lib/heartbeat'
 
 export interface ProjectFolderTabItem {
   id: string
@@ -50,10 +56,14 @@ interface ProjectFolderTabRailProps {
   onSelect: (projectId: string, name: string) => void
 }
 
-function projectHasHeartbeat(project: ProjectFolderTabItem): boolean {
-  return project.api_keys.some(
-    (key) => !key.revoked && key.is_active !== false && Boolean(key.last_seen_at),
-  )
+/**
+ * Connectivity is a recency question, not a boolean one. This used to be
+ * `some(key => Boolean(key.last_seen_at))`, which reported a project whose SDK
+ * last checked in six months ago as identical to one that checked in a minute
+ * ago. See lib/heartbeat.ts for the window definitions.
+ */
+function projectHeartbeat(project: ProjectFolderTabItem): HeartbeatState {
+  return heartbeatStateFromKeys(project.api_keys)
 }
 
 function shortRepoLabel(url: string | null | undefined): string | null {
@@ -78,7 +88,21 @@ function projectStatusDot(project: ProjectFolderTabItem): string {
   const critical = project.severity_breakdown_30d?.critical ?? 0
   if (critical > 0) return 'bg-danger'
   if (project.sdk_status === 'deprecated' || project.sdk_status === 'outdated') return 'bg-warn'
-  if (project.report_count > 0 && projectHasHeartbeat(project)) return 'bg-ok'
+
+  switch (projectHeartbeat(project)) {
+    case 'fresh':
+      return 'bg-ok'
+    case 'stale':
+      return 'bg-warn'
+    case 'dead':
+    case 'never':
+      return 'bg-fg-faint'
+    case 'unknown':
+      break
+  }
+
+  // Payload carried no `api_keys` field at all — fall back to the legacy
+  // report-count read rather than inventing a connectivity verdict.
   if (project.report_count > 0) return 'bg-warn'
   if (project.active_key_count > 0) return 'bg-warn'
   return 'bg-fg-faint'
@@ -96,7 +120,7 @@ function faviconSource(project: ProjectFolderTabItem) {
 
 function ProjectMetaRow({ project }: { project: ProjectFolderTabItem }) {
   const critical = project.severity_breakdown_30d?.critical ?? 0
-  const heartbeat = projectHasHeartbeat(project)
+  const heartbeat = projectHeartbeat(project)
   const repoLabel = shortRepoLabel(project.primary_repo?.repo_url ?? null)
   const trend = project.trend_7d
   const showTrend =
@@ -134,9 +158,16 @@ function ProjectMetaRow({ project }: { project: ProjectFolderTabItem }) {
           {critical} critical
         </Badge>
       ) : null}
-      {!heartbeat && project.active_key_count > 0 ? (
-        <SignalChip tone="warn" className="text-3xs normal-case tracking-normal">
-          No heartbeat
+      {/* Previously gated on `active_key_count > 0`, which silenced the chip
+          for projects with zero active keys — the single most disconnected
+          state there is. Those now warn loudest. */}
+      {heartbeat !== 'fresh' && heartbeat !== 'unknown' ? (
+        <SignalChip
+          tone="warn"
+          className="text-3xs normal-case tracking-normal"
+          title={HEARTBEAT_HINT[heartbeat]}
+        >
+          {HEARTBEAT_LABEL[heartbeat]}
         </SignalChip>
       ) : null}
       {project.pdca_bottleneck && project.pdca_bottleneck_label ? (

@@ -19,7 +19,7 @@ import { withSentry, tagLangfuseTrace, reportError } from '../_shared/sentry.ts'
 import { GENERIC_ERROR_MESSAGE } from '../_shared/safe-error.ts';
 import { resolveLlmKey } from '../_shared/byok.ts';
 import { awardPointsForEndUser } from '../_shared/reputation.ts';
-import { dispatchPluginEvent } from '../_shared/plugins.ts';
+import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
 import { createExternalIssue } from '../_shared/integrations.ts';
 import { buildReportGraph } from '../_shared/knowledge-graph.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
@@ -838,7 +838,7 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
       // D1: notify webhook plugins. Async + tolerant: plugins must not
       // affect classification latency.
       try {
-        void dispatchPluginEvent(db, projectId, 'report.classified', {
+        dispatchPluginEventDetached(db, projectId, 'report.classified', {
           report: {
             id: reportId,
             status: 'classified',

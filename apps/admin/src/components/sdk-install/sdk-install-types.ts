@@ -50,6 +50,11 @@ export interface SdkInstallCardProps {
   /** When true, drops outer padding and the descriptive subhead so the card
    *  reads as a sub-block inside another card rather than a full section. */
   compact?: boolean
+  /** Render without the card's own border/background, for call sites that
+   *  already sit inside a Card. `compact` tunes density, `embedded` removes
+   *  chrome — a caller nested one level deep needs both, but they are separate
+   *  decisions, so keep them separate props. */
+  embedded?: boolean
   /** Show live connection / ingest status chip above the snippet. */
   showConnectionStatus?: boolean
 }

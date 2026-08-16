@@ -76,6 +76,11 @@ export function ReportTriageBar({
     dispatchState.status === 'queued' ? 'Queued…' :
     dispatchState.status === 'running' ? 'Agent running…' :
     dispatchState.status === 'completed' ? 'PR ready' :
+    // Distinct labels: 'completed_no_pr' is a setup gap and 'skipped' a
+    // policy stop — both used to render as "Failed — retry", which retried
+    // straight into the same wall (2026-08-16 audit P1-4).
+    dispatchState.status === 'completed_no_pr' ? 'Fix ready — connect GitHub' :
+    dispatchState.status === 'skipped' ? 'Skipped — see reason' :
     'Failed — retry'
 
   const syncToIntegrations = async () => {
@@ -177,6 +182,12 @@ export function ReportTriageBar({
               {dispatchState.error}
             </span>
           )}
+          {(dispatchState.status === 'skipped' || dispatchState.status === 'completed_no_pr') &&
+            dispatchState.error && (
+              <span className={`rounded-sm px-2 py-1 text-2xs max-w-xs text-right ${CHIP_TONE.warnSubtle}`}>
+                {dispatchState.error}
+              </span>
+            )}
         </div>
       </div>
     </Card>

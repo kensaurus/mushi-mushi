@@ -319,10 +319,17 @@ export function createWebhookMiddleware(source: WebhookSource) {
    *
    * NOTE: per-isolate. Across N isolates the effective budget is N × the
    * documented limit. Use a centralized store for global enforcement.
+   *
+   * A missing source IP does NOT skip the limiter. Returning early there let
+   * any caller who can strip / forge away the proxy headers rotate past the
+   * throttle entirely — the one case where the limiter matters most. Those
+   * requests share a single `unknown` bucket instead, which is what
+   * `extractSourceIp` above already documents as the behaviour and what
+   * `extractClientIp` in api/routes/cli-auth.ts does for the public
+   * device-auth endpoints. The per-source budget already accounts for it.
    */
   function checkRateLimit(sourceIp: string | null): void {
-    if (!sourceIp) return // Cannot rate-limit without an IP
-    if (!checkInMemoryRateLimit(source, sourceIp)) {
+    if (!checkInMemoryRateLimit(source, sourceIp ?? 'unknown')) {
       throw new RateLimitError(source, RATE_LIMIT_BUDGET[source] ?? 5)
     }
   }

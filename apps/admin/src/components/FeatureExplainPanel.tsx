@@ -12,7 +12,6 @@ import {
   IconTerminal,
   IconUser,
 } from './icons'
-import { ContainedBlock } from './report-detail/ReportSurface'
 import { GUIDE_EXPAND_HINT } from '../lib/guideCopy'
 import {
   GUIDE_PANEL_SHELL_DEFAULT,
@@ -90,13 +89,18 @@ interface EffectCalloutProps {
   children: ReactNode
 }
 
-/** One visible line under a settings section: "What this changes for your app." */
+/** One visible line under a settings section: "What this changes for your app."
+ *
+ *  Deliberately borderless. Every call site sits directly inside a `Section`,
+ *  which is itself a bordered Card — the old `ContainedBlock` drew a second
+ *  outline immediately inside the first, so each settings group opened with a
+ *  box in a box. A tinted background separates the copy without a second frame. */
 export function SettingEffectCallout({ label = 'What this changes', children }: EffectCalloutProps) {
   return (
-    <ContainedBlock tone="muted">
+    <div className="rounded-md bg-surface-overlay px-3 py-2">
       <p className="text-2xs leading-relaxed text-fg-muted">
         <span className="font-medium text-fg-secondary">{label}:</span> {children}
       </p>
-    </ContainedBlock>
+    </div>
   )
 }

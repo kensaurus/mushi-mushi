@@ -80,6 +80,7 @@ import { wrapUntrustedJson } from './wrap-untrusted.ts'
 import { searchMushiDocs } from './docs-index.ts'
 import { buildMcpServerCard, MCP_SERVER_CARD_HEADERS } from '../_shared/mcp-server-card.ts'
 import {
+  buildJwksDocument,
   buildOAuthAuthorizationServerMetadata,
   buildOAuthProtectedResourceMetadata,
   bearerWwwAuthenticateResourceMetadata,
@@ -446,7 +447,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
     outputSchema: {
       type: 'object',
       properties: {
-        fixId: { type: 'string', description: 'Newly created fix_attempt UUID' },
+        fixId: { type: 'string', description: 'Dispatch id — poll get_fix_timeline with it (also resolves the fix_attempt once the worker starts)' },
         status: { type: 'string', description: 'Initial status (queued, running, delegated, …)' },
         agentId: { type: 'string', description: 'Cursor agent ID when agent=cursor_cloud' },
         runId: { type: 'string', description: 'Cursor run ID when agent=cursor_cloud' },
@@ -461,7 +462,13 @@ const BASE_TOOLS: Record<string, ToolDef> = {
       requireString(args.reportId, 'reportId')
       const projectId = (args.projectId as string | undefined) ?? ctx.projectIdHint
       if (!projectId) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for dispatch_fix')
-      return apiCall(`/v1/admin/fixes/dispatch`, {
+      const dispatch = await apiCall<{
+        dispatchId?: string
+        status?: string
+        agentId?: string
+        runId?: string
+        prUrl?: string
+      }>(`/v1/admin/fixes/dispatch`, {
         method: 'POST',
         headers: ctx.authHeaders,
         body: JSON.stringify({
@@ -472,6 +479,17 @@ const BASE_TOOLS: Record<string, ToolDef> = {
             : {}),
         }),
       })
+      // REST returns { dispatchId, status } — map to the declared { fixId, … }
+      // shape or strict clients reject the response after the dispatch already
+      // fired (the stdio server had the identical bug; keep both aligned).
+      // get_fix_timeline accepts the dispatch id, so it is pollable at once.
+      return {
+        fixId: dispatch?.dispatchId ?? '',
+        status: dispatch?.status ?? 'queued',
+        ...(dispatch?.agentId ? { agentId: dispatch.agentId } : {}),
+        ...(dispatch?.runId ? { runId: dispatch.runId } : {}),
+        ...(dispatch?.prUrl ? { prUrl: dispatch.prUrl } : {}),
+      }
     },
   },
   transition_status: {
@@ -1005,12 +1023,26 @@ const BASE_TOOLS: Record<string, ToolDef> = {
       const status = report?.status ?? 'unknown'
 
       const actions: Array<{ action: string; reason: string }> = []
-      if (status === 'open' || status === 'triage') {
-        actions.push({ action: 'dispatch_fix', reason: 'Report is open — initiate an automated fix attempt.' })
+      // Blocked-fix awareness (2026-08-16 audit P0-2): fix-worker stamps
+      // processing_error='autofix_blocked: …' when a dispatch is skipped or
+      // fails — recommend the unblock, not another doomed dispatch.
+      const processingError =
+        typeof report?.processing_error === 'string' ? report.processing_error : null
+      const autofixBlocked = processingError?.startsWith('autofix_blocked:') ?? false
+      if (autofixBlocked && status !== 'fixing' && status !== 'fixed') {
+        actions.push({
+          action: 'diagnose_setup',
+          reason: `Auto-fix is blocked: ${processingError}. Run diagnose_setup (mode=dispatch), resolve the blocker, then re-dispatch.`,
+        })
+      } else if (status === 'new' || status === 'classified' || status === 'triaged' || status === 'reopened') {
+        // Real report statuses — the previous 'open'/'triage' branch matched
+        // values that do not exist in the 14-status vocabulary, so this
+        // recommendation never fired for any live report.
+        actions.push({ action: 'dispatch_fix', reason: 'Report is classified — initiate an automated fix attempt.' })
       } else if (status === 'fixing') {
         actions.push({ action: 'get_fix_context', reason: 'Fix is in progress — check fix context for details.' })
       } else if (status === 'fixed') {
-        actions.push({ action: 'close_report', reason: 'Fix has been applied — verify and close the report.' })
+        actions.push({ action: 'transition_status', reason: 'Fix has been applied — verify, then mark the report verified (or reopen).' })
       }
       if (severity === 'critical' || severity === 'high') {
         actions.push({ action: 'get_blast_radius', reason: 'High severity — check blast radius for affected scope.' })
@@ -1028,6 +1060,118 @@ const BASE_TOOLS: Record<string, ToolDef> = {
           ? `[${severity?.toString().toUpperCase()}] "${report.title ?? report.id}" — status: ${status}. ${actions.length} recommended action(s).`
           : 'Could not fetch report.',
       }
+    },
+  },
+
+  triage_next_steps: {
+    scope: 'mcp:read',
+    description:
+      'Prioritised "do this next" list for the project: blocked auto-fixes first (with the unblock action), then in-flight fixes to shepherd to merge, then user-felt classified reports by severity, with robot/cron chores (dependency bumps) last. Returns { steps: [{ priority, action, reason, tool, args }], summary }. Read-only. Call this first when the user asks "what needs my attention / what should I triage or fix".',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: { type: 'string', description: 'Project UUID (defaults to the configured project).' },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        steps: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              priority: { type: 'number' },
+              action: { type: 'string' },
+              reason: { type: 'string' },
+              tool: { type: 'string' },
+              args: { type: 'object' },
+            },
+          },
+        },
+        summary: { type: 'string' },
+      },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (args, ctx) => {
+      // Mirrors the stdio server's triage_next_steps tool (packages/mcp) —
+      // existed only as an MCP prompt on the hosted surface until 2026-08-16,
+      // and most clients never surface prompts (audit P0-3).
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      const data = await apiCall<{ reports: Array<Record<string, unknown>>; total: number }>(
+        '/v1/admin/reports?limit=100',
+        { headers: pid ? { ...ctx.authHeaders, 'X-Mushi-Project-Id': pid } : ctx.authHeaders },
+      )
+      const reports = data.reports ?? []
+      const isCron = (r: Record<string, unknown>) =>
+        typeof r.reporter_token_hash === 'string' && r.reporter_token_hash.startsWith('cron:')
+      const isBlocked = (r: Record<string, unknown>) =>
+        typeof r.processing_error === 'string' && r.processing_error.startsWith('autofix_blocked:')
+      const label = (r: Record<string, unknown>) =>
+        String(r.title ?? r.summary ?? r.description ?? '').slice(0, 90)
+
+      const steps: Array<{
+        priority: number
+        action: string
+        reason: string
+        tool?: string
+        args?: Record<string, unknown>
+      }> = []
+      let priority = 1
+
+      const blocked = reports.filter(isBlocked)
+      if (blocked.length > 0) {
+        steps.push({
+          priority: priority++,
+          action: `Unblock auto-fix (${blocked.length} report${blocked.length === 1 ? '' : 's'} blocked)`,
+          reason: String(blocked[0].processing_error).slice(0, 200),
+          tool: 'diagnose_setup',
+          args: { mode: 'dispatch' },
+        })
+      }
+
+      const fixing = reports.filter((r) => r.status === 'fixing')
+      for (const r of fixing.slice(0, 2)) {
+        steps.push({
+          priority: priority++,
+          action: `Shepherd in-flight fix: ${label(r)}`,
+          reason: 'A fix branch/PR is open — check CI and merge when green.',
+          tool: 'get_fix_timeline',
+          args: { reportId: r.id },
+        })
+      }
+
+      const rank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
+      const openUserReports = reports
+        .filter((r) => (r.status === 'new' || r.status === 'classified') && !isCron(r) && !isBlocked(r))
+        .sort((a, b) => (rank[String(a.severity)] ?? 4) - (rank[String(b.severity)] ?? 4))
+      for (const r of openUserReports.slice(0, Math.max(0, 4 - steps.length))) {
+        steps.push({
+          priority: priority++,
+          action: `Triage [${r.severity}] ${label(r)}`,
+          reason: 'User-felt report awaiting triage — review the packet, then dispatch or dismiss.',
+          tool: 'triage_issue',
+          args: { report_id: r.id },
+        })
+      }
+
+      const chores = reports.filter((r) => r.status === 'classified' && isCron(r) && !isBlocked(r))
+      if (chores.length > 0 && steps.length < 5) {
+        steps.push({
+          priority: priority++,
+          action: `Batch ${chores.length} maintenance chore${chores.length === 1 ? '' : 's'} (dependency bumps)`,
+          reason: 'Robot-filed modernization reports — batch-dispatch or dismiss in one sitting; do not let them crowd out user bugs.',
+          tool: 'get_recent_reports',
+          args: { status: 'classified' },
+        })
+      }
+
+      const summary =
+        steps.length === 0
+          ? 'Inbox is clear — no blocked fixes, no open user reports, no chores. Nothing needs your attention.'
+          : `${steps.length} prioritised step${steps.length === 1 ? '' : 's'}: ` +
+            steps.map((s) => s.action).join(' → ')
+      return { steps, summary }
     },
   },
 
@@ -1096,26 +1240,30 @@ const BASE_TOOLS: Record<string, ToolDef> = {
       const intent = String(args.intent ?? '').toLowerCase()
 
       // Intent → curated tool subset (mirrors USE_MUSHI_INTENTS in catalog.ts).
+      // Every name MUST be a tool this hosted server actually exposes —
+      // the previous table named four phantoms (get_dashboard, mushi_setup,
+      // list_qa_stories, triage_next_steps-as-prompt); agents routed there,
+      // failed the call, and gave up (2026-08-16 audit P0-3).
       const INTENTS: Record<string, { label: string; tools: string[]; hint: string }> = {
         fix: {
           label: 'Fix a bug',
-          tools: ['get_recent_reports', 'get_report', 'summarize_report_for_fix', 'dispatch_fix', 'start_skill_pipeline', 'checkin_pipeline_step', 'get_pipeline_run'],
-          hint: 'Call get_recent_reports to find the top unresolved bug, then summarize_report_for_fix before dispatching.',
+          tools: ['get_recent_reports', 'get_report_detail', 'triage_issue', 'dispatch_fix', 'start_skill_pipeline', 'checkin_pipeline_step', 'get_pipeline_run'],
+          hint: 'Call get_recent_reports to find the top unresolved bug, then triage_issue before dispatching.',
         },
         status: {
           label: 'Check project status',
-          tools: ['get_dashboard', 'triage_next_steps', 'get_usage', 'get_backend_health', 'activation_status'],
+          tools: ['triage_next_steps', 'get_account_overview', 'get_usage', 'get_backend_health', 'activation_status'],
           hint: 'Call triage_next_steps for a prioritised list of what to work on today.',
         },
         setup: {
           label: 'Set up Mushi',
-          tools: ['mushi_setup', 'activation_status', 'get_backend_health', 'list_byok_keys', 'add_byok_key', 'test_byok_key', 'remove_byok_key'],
-          hint: 'Call mushi_setup first — it diagnoses setup gaps and returns the next command to run.',
+          tools: ['diagnose_setup', 'activation_status', 'get_backend_health', 'list_byok_keys', 'add_byok_key', 'test_byok_key', 'remove_byok_key'],
+          hint: 'Call diagnose_setup first — it diagnoses setup gaps and returns the next action to take.',
         },
         qa: {
           label: 'Run / review QA tests',
-          tools: ['list_qa_stories', 'run_qa_story', 'list_qa_story_runs', 'get_qa_story_run', 'list_pending_review_stories', 'approve_qa_story', 'improve_qa_story'],
-          hint: 'Call list_qa_stories to see what test coverage exists; run_qa_story to trigger a run.',
+          tools: ['run_qa_story', 'list_qa_story_runs', 'get_qa_story_run', 'list_pending_review_stories', 'approve_qa_story', 'improve_qa_story'],
+          hint: 'Call list_qa_story_runs to see recent coverage and outcomes; run_qa_story to trigger a run.',
         },
         pipeline: {
           label: 'Run an agent pipeline / skill',
@@ -1124,7 +1272,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
         },
         audit: {
           label: 'Audit / health check',
-          tools: ['run_fullstack_audit', 'get_backend_health', 'get_dashboard', 'get_usage'],
+          tools: ['run_fullstack_audit', 'get_backend_health', 'get_account_overview', 'get_usage'],
           hint: 'Call run_fullstack_audit for a full-stack health scorecard.',
         },
       }
@@ -2040,6 +2188,11 @@ async function handler(req: Request): Promise<Response> {
     if (url.pathname.includes('oauth-protected-resource')) {
       const metadata = buildOAuthProtectedResourceMetadata(url)
       return jsonResponse(metadata, 200, { ...MCP_OAUTH_METADATA_HEADERS, ...CORS_HEADERS }, req.method)
+    }
+    if (url.pathname.includes('jwks.json')) {
+      // Advertised as jwks_uri in the AS metadata; empty on purpose (opaque
+      // API-key tokens, no JWTs). See _shared/mcp-oauth-metadata.ts.
+      return jsonResponse(buildJwksDocument(), 200, { ...MCP_OAUTH_AS_METADATA_HEADERS, ...CORS_HEADERS }, req.method)
     }
     if (
       url.pathname.includes('oauth-authorization-server') ||
