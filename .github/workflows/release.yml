@@ -235,7 +235,19 @@ jobs:
       # `--audit-level=high` keeps the gate noise-free — low/info findings
       # don't block the release, but tampered/missing signatures will.
       - name: Audit signatures of installed dependencies
+        id: audit_sigs
         if: steps.changesets.outputs.published == 'true'
+        # 2026-08-16 (run 31952907617): the race outlasted the 255s window a
+        # THIRD time and, because this step is a hard failure, it skipped every
+        # post-publish step behind it — the changelog aggregate, the MCP
+        # registry publish, and the sdk_versions catalog sync all silently did
+        # not run even though the packages were published and verified. The
+        # tarballs are already signature-verified by the previous step, so a
+        # propagation-flake here must not strand the follow-ups. It now runs
+        # non-blocking and the job is failed at the very END instead (see
+        # "Fail the release if the signature audit did not pass"), which keeps
+        # the red signal without losing the work.
+        continue-on-error: true
         # CDN PROPAGATION RACE (observed 2026-05-20, run 26149167393; recurred
         # 2026-07-04, run 28698365327 — create-mushi-mushi@0.5.21 still
         # ETARGET after the full 63s/7-attempt window, even though the
@@ -383,3 +395,14 @@ jobs:
             echo "$PUBLISHED" | jq '.'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Terminal gate: the signature audit runs non-blocking so the
+      # post-publish steps above always execute, but a genuine audit failure
+      # still has to turn the release red. Runs last so nothing is skipped by
+      # it. Re-running the failed job after the registry catches up is the
+      # normal remedy for the propagation race.
+      - name: Fail the release if the signature audit did not pass
+        if: steps.audit_sigs.outcome == 'failure'
+        run: |
+          echo "::error::npm signature audit failed (see the 'Audit signatures of installed dependencies' step). Packages ARE published; the post-publish steps completed. If this was the known registry-propagation race, re-run this job once npm has caught up."
+          exit 1
