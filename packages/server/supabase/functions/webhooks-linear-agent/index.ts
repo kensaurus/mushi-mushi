@@ -15,6 +15,12 @@
  * Security: signed with Linear-Signature HMAC-SHA256 using the actor token.
  * If no signature is present we fall back to verifying against the
  * webhook secret (same key used for the main webhooks-linear receiver).
+ * Every request also goes through `_shared/webhook-middleware.ts` for the
+ * audit log, the per-IP rate limit, and the 24h replay cache keyed on the
+ * `Linear-Delivery` header. The replay cache matters most here: this handler
+ * dispatches a code-mutating fix-worker job, and Linear retries any delivery
+ * it does not see acknowledged inside 10 seconds — so a retry used to start a
+ * SECOND fix job for the same agent session.
  */
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
@@ -25,8 +31,24 @@ import {
   postAgentActivity,
 } from '../_shared/linear-agent.ts'
 import { dereferenceMaybeVault } from '../_shared/integration-probes.ts'
+import { createWebhookMiddleware, ReplayAttackError, RateLimitError } from '../_shared/webhook-middleware.ts'
 
 const log = rootLog.child('webhooks-linear-agent')
+
+/**
+ * Minimal shim so the Hono-shaped `createWebhookMiddleware().audit()` can read
+ * headers/method/url off a raw `Request` — this function uses `Deno.serve`
+ * directly. Mirrors the identical shim in slack-interactions/index.ts.
+ */
+function toWebhookContext(req: Request) {
+  return {
+    req: {
+      header: (name: string) => req.headers.get(name) ?? undefined,
+      method: req.method,
+      url: req.url,
+    },
+  }
+}
 
 // ── HMAC verification ─────────────────────────────────────────────────────────
 
@@ -56,9 +78,40 @@ async function verifyHmac(body: string, header: string | null, secret: string): 
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
 
+  const t0 = Date.now()
   const rawBody = await req.text()
   const sigHeader = req.headers.get('linear-signature')
-  const deliveryId = req.headers.get('linear-delivery') ?? 'unknown'
+  // Keep the raw (nullable) delivery id for the audit row and the replay
+  // cache. Collapsing a missing header into 'unknown' before those would make
+  // the FIRST header-less delivery poison the 24h replay bucket and 409 every
+  // header-less delivery after it. 'unknown' stays a log-only placeholder.
+  const deliveryIdRaw = req.headers.get('linear-delivery')
+  const deliveryId = deliveryIdRaw ?? 'unknown'
+
+  const { audit, checkReplay, checkRateLimit } = createWebhookMiddleware('linear')
+  const sourceIp =
+    req.headers.get('CF-Connecting-IP') ??
+    req.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ??
+    null
+
+  const auditRow = await audit(toWebhookContext(req) as never, rawBody, deliveryIdRaw)
+  try {
+    checkRateLimit(sourceIp)
+    await checkReplay(auditRow.id, deliveryIdRaw)
+  } catch (err) {
+    if (err instanceof RateLimitError) {
+      await auditRow.resolve('rejected_rate_limit', 429, Date.now() - t0, err.message)
+      return new Response('Rate limited', { status: 429 })
+    }
+    if (err instanceof ReplayAttackError) {
+      // Linear retried a delivery we already ran. Returning 409 (instead of
+      // silently re-dispatching) is what keeps one agent session from starting
+      // two fix-worker jobs.
+      await auditRow.resolve('rejected_replay', 409, Date.now() - t0, err.message)
+      return new Response('Duplicate delivery', { status: 409 })
+    }
+    throw err
+  }
 
   let payload: {
     action?: string
@@ -69,6 +122,7 @@ Deno.serve(async (req: Request) => {
   try {
     payload = JSON.parse(rawBody)
   } catch {
+    await auditRow.resolve('error', 400, Date.now() - t0, 'Invalid JSON payload')
     return new Response('Bad Request', { status: 400 })
   }
 
@@ -76,12 +130,14 @@ Deno.serve(async (req: Request) => {
 
   // Only handle AgentSessionEvent
   if (payload.type !== 'AgentSessionEvent' && payload.action !== 'created') {
+    await auditRow.resolve('accepted', 200, Date.now() - t0, 'Not an AgentSessionEvent')
     return new Response('OK', { status: 200 })
   }
 
   const agentSessionId = payload.data?.agentSession?.id
   if (!agentSessionId) {
     log.warn('AgentSessionEvent missing agentSession.id', { deliveryId })
+    await auditRow.resolve('accepted', 200, Date.now() - t0, 'Missing agentSession.id')
     return new Response('OK', { status: 200 })
   }
 
@@ -103,6 +159,7 @@ Deno.serve(async (req: Request) => {
 
   if (!projectRows?.length) {
     log.warn('No Linear-connected projects found for agent webhook', { deliveryId })
+    await auditRow.resolve('accepted', 200, Date.now() - t0, 'No Linear-connected projects')
     return new Response('OK', { status: 200 })
   }
 
@@ -128,12 +185,16 @@ Deno.serve(async (req: Request) => {
   // webhook URL could otherwise trigger code-mutating fix-worker dispatches.
   if (!projectId) {
     log.warn('Could not match agent webhook to a project', { deliveryId })
+    // NOT 'accepted': an unauthenticated payload must never claim the
+    // replay-cache slot belonging to the real delivery with this id.
+    await auditRow.resolve('rejected_signature', 200, Date.now() - t0, 'No project matched the signature')
     return new Response('OK', { status: 200 })
   }
 
   actorToken = await getLinearActorToken(db, projectId)
   if (!actorToken) {
     log.warn('No Linear actor token for project', { projectId, deliveryId })
+    await auditRow.resolve('accepted', 200, Date.now() - t0, 'No Linear actor token for project')
     return new Response('OK', { status: 200 })
   }
 
@@ -189,6 +250,15 @@ Deno.serve(async (req: Request) => {
             linearIssueUrl: sessionCtx.issue.url,
             promptContext: sessionCtx.promptContext,
           }),
+          // Don't hold this background task open on the worker booting —
+          // matches invokeFixWorker in api/helpers.ts. An unbounded fetch here
+          // pinned the isolate for as long as fix-worker took to answer.
+          signal: AbortSignal.timeout(2_000),
+        }).catch(() => {
+          // Fire-and-forget, exactly like invokeFixWorker: the worker reports
+          // its own progress back through Linear. Swallowed here rather than
+          // rethrown so a 2s abort on a dispatch that DID land can't fall into
+          // the catch below and tell the user analysis failed.
         })
       }
 
@@ -210,6 +280,12 @@ Deno.serve(async (req: Request) => {
       }
     }
   })())
+
+  // Resolve the audit row BEFORE returning. `checkReplay` only counts rows
+  // already marked 'accepted', so this write is what makes a Linear retry of
+  // this delivery a 409 instead of a second fix-worker dispatch. It runs ahead
+  // of the background task above by design.
+  await auditRow.resolve('accepted', 200, Date.now() - t0)
 
   // Return immediately so Linear receives its 200 within the 10s window
   return new Response('OK', { status: 200 })

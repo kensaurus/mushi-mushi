@@ -10,7 +10,7 @@ import { recordPromptResult, checkPromotionEligibility, promoteCandidate, getPro
 import { startCronRun } from '../_shared/telemetry.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
-import { dispatchPluginEvent } from '../_shared/plugins.ts'
+import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { mapWithConcurrency } from '../_shared/concurrency.ts'
 import { JUDGE_MODEL, JUDGE_FALLBACK } from '../_shared/models.ts'
@@ -372,7 +372,7 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           // D1: surface judge scores to webhook plugins (e.g. low-score
           // alerts to Slack/Linear). Async; failures must not affect batch.
           try {
-            void dispatchPluginEvent(db!, project.id, 'judge.score_recorded', {
+            dispatchPluginEventDetached(db!, project.id, 'judge.score_recorded', {
               report: { id: report.id },
               judge: {
                 model: usedJudgeModel,
