@@ -87,7 +87,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import { checkAutofixBudget } from '../_shared/autofix-budget.ts';
-import { dispatchPluginEvent } from '../_shared/plugins.ts';
+import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
 import { notifyTeamFixEvent } from '../_shared/team-notify.ts';
 import { notifyReportStatusTransition } from '../_shared/report-status-notify.ts';
 
@@ -229,7 +229,22 @@ Deno.serve(
       .select('autofix_agent')
       .eq('project_id', dispatch.project_id)
       .single();
-    const requestedAgent = (requestedSettings?.autofix_agent as string | null) ?? 'claude_code';
+    // Per-dispatch override wins over the project default. The dispatch
+    // route persisted `dispatch_metadata.agent_override` since 20260521 but
+    // no consumer ever read it (2026-08-16 audit P1-1) — every MCP/console
+    // agent selection was silently ignored. 'auto' and legacy 'rest_worker'
+    // normalize onto the runnable set below.
+    const rawOverride = ((dispatch.dispatch_metadata as Record<string, unknown> | null) ?? {})
+      .agent_override;
+    const normalizeAgent = (a: string | null): string | null => {
+      if (!a || a === 'auto') return null;
+      if (a === 'rest_worker') return 'rest_fix_worker';
+      return a;
+    };
+    const requestedAgent =
+      normalizeAgent(typeof rawOverride === 'string' ? rawOverride : null) ??
+      normalizeAgent((requestedSettings?.autofix_agent as string | null) ?? null) ??
+      'claude_code';
 
     // Agents the fix-worker can actually execute today. 'claude_code' is the
     // migration default and maps to the LLM path (Anthropic primary, OpenAI
@@ -282,7 +297,7 @@ Deno.serve(
       .single();
 
     if (attemptErr || !attempt) {
-      await failDispatch(db, dispatch.id, `fix_attempts insert failed: ${attemptErr?.message}`);
+      await failDispatch(db, dispatch.id, `fix_attempts insert failed: ${attemptErr?.message}`, dispatch.report_id);
       return new Response(JSON.stringify({ ok: false, error: attemptErr?.message }), {
         status: 500,
       });
@@ -350,6 +365,7 @@ Deno.serve(
           error: budget.reason,
           finished_at: new Date().toISOString(),
         }).eq('id', dispatch.id);
+        await stampReportAutofixBlocked(db, dispatch.report_id, budget.reason ?? 'Auto-fix budget exceeded');
         await trace.end();
         return new Response(JSON.stringify({ ok: true, skipped: true, reason: budget.reason }), {
           status: 200,
@@ -364,11 +380,20 @@ Deno.serve(
       if (budget.requiresApproval && !dispatchApproved) {
         const approvalReason =
           'Estimated dispatch cost exceeds approval threshold — approve in console before PR creation.';
+        // Close the fix_attempt too — leaving it 'running' orphaned it
+        // forever and the dispatch route's ALREADY_DISPATCHED guard then
+        // blocked every redispatch (2026-08-16 audit P0-2).
+        await completeAttempt(db, fixAttemptId, {
+          status: 'skipped_awaiting_approval',
+          error: approvalReason,
+          files_changed: [],
+        });
         await db.from('fix_dispatch_jobs').update({
           status: 'skipped',
           error: approvalReason,
           finished_at: new Date().toISOString(),
         }).eq('id', dispatch.id);
+        await stampReportAutofixBlocked(db, dispatch.report_id, approvalReason);
         await trace.end();
         return new Response(JSON.stringify({ ok: true, skipped: true, awaiting_approval: true, reason: approvalReason }), {
           status: 200,
@@ -411,13 +436,14 @@ Deno.serve(
             dispatchId: dispatch.id,
             updateErr: skipUpdateErr.message,
           });
-          await failDispatch(db, dispatch.id, `skip persist failed: ${skipUpdateErr.message}`);
+          await failDispatch(db, dispatch.id, `skip persist failed: ${skipUpdateErr.message}`, dispatch.report_id);
           await trace.end();
           return new Response(
             JSON.stringify({ ok: false, error: 'Failed to persist skipped state' }),
             { status: 500, headers: { 'Content-Type': 'application/json' } },
           );
         }
+        await stampReportAutofixBlocked(db, dispatch.report_id, reason);
         await trace.end();
         return new Response(JSON.stringify({ ok: true, skipped: true, reason, fixAttemptId }), {
           status: 200,
@@ -456,6 +482,7 @@ Deno.serve(
             finished_at: new Date().toISOString(),
           })
           .eq('id', dispatch.id);
+        await stampReportAutofixBlocked(db, dispatch.report_id, reason);
         await trace.end();
         return new Response(JSON.stringify({ ok: true, skipped: true, reason, fixAttemptId }), {
           status: 200,
@@ -659,6 +686,7 @@ ${
             finished_at: new Date().toISOString(),
           })
           .eq('id', dispatch.id);
+        await stampReportAutofixBlocked(db, dispatch.report_id, reason);
         await trace.end();
         return new Response(JSON.stringify({ ok: true, skipped: true, reason, fixAttemptId }), {
           status: 200,
@@ -880,6 +908,11 @@ ${
               'No GitHub App installed — fix generated but not pushed. Install the GitHub App in Repo → Connect repo to enable auto-PRs.',
           })
           .eq('id', dispatch.id);
+        await stampReportAutofixBlocked(
+          db,
+          dispatch.report_id,
+          'Fix generated but not pushed — no GitHub App installed. Connect the repo to enable auto-PRs.',
+        );
         await trace.end();
         return new Response(JSON.stringify({ ok: true, fixAttemptId, prUrl: null, blockedSetup: true }), {
           status: 200,
@@ -946,6 +979,9 @@ ${
           fix_branch: prResult.branch,
           fix_pr_url: prResult.url,
           status: 'fixing',
+          // Clear any stale autofix_blocked stamp from a prior skipped/failed
+          // attempt — this attempt made it through.
+          processing_error: null,
         })
         .eq('id', dispatch.report_id);
 
@@ -977,7 +1013,7 @@ ${
       // call site of `fix.proposed` is the manual `PATCH /v1/admin/fixes/:id`
       // endpoint — which the admin UI never invokes — so plugins receive
       // nothing for auto-worker fixes (the 99% path).
-      void dispatchPluginEvent(db, dispatch.project_id, 'fix.proposed', {
+      dispatchPluginEventDetached(db, dispatch.project_id, 'fix.proposed', {
         report: { id: dispatch.report_id },
         fix: {
           id: fixAttemptId,
@@ -1136,13 +1172,13 @@ ${
         })
         .eq('id', fixAttemptId);
 
-      await failDispatch(db, dispatch.id, errMsg);
+      await failDispatch(db, dispatch.id, errMsg, dispatch.report_id);
 
       // Loop-closure: notify plugins so triagers see "agent tried and gave
       // up" in Slack/Jira/Sentry rather than the report sitting silently in
       // 'classified' forever. Same rationale as the success-path
       // fix.proposed dispatch above.
-      void dispatchPluginEvent(db, dispatch.project_id, 'fix.failed', {
+      dispatchPluginEventDetached(db, dispatch.project_id, 'fix.failed', {
         report: { id: dispatch.report_id },
         fix: {
           id: fixAttemptId,
@@ -1456,6 +1492,7 @@ async function failDispatch(
   db: ReturnType<typeof getServiceClient>,
   dispatchId: string,
   error: string,
+  reportId?: string | null,
 ): Promise<void> {
   await db
     .from('fix_dispatch_jobs')
@@ -1465,6 +1502,36 @@ async function failDispatch(
       finished_at: new Date().toISOString(),
     })
     .eq('id', dispatchId);
+  if (reportId) await stampReportAutofixBlocked(db, reportId, error);
+}
+
+/**
+ * Make a blocked/failed auto-fix visible in triage (2026-08-16 audit P0-2).
+ *
+ * Every skip/fail branch used to write only fix_dispatch_jobs /
+ * fix_attempts — never the report — so a dispatched-and-skipped report was
+ * indistinguishable from one nobody touched, and triage_issue recommended
+ * dispatch_fix in an infinite loop. reports.status stays untouched (the
+ * 14-value CHECK has no "blocked" state and widening it ripples through six
+ * surfaces); the structured `processing_error` column carries the reason
+ * instead. Consumers: triage_issue (MCP) and the console report views.
+ * The success path clears it.
+ */
+async function stampReportAutofixBlocked(
+  db: ReturnType<typeof getServiceClient>,
+  reportId: string,
+  reason: string,
+): Promise<void> {
+  const { error } = await db
+    .from('reports')
+    .update({ processing_error: `autofix_blocked: ${reason}`.slice(0, 500) })
+    .eq('id', reportId);
+  if (error) {
+    rootLog.child('fix-worker').warn('Failed to stamp autofix_blocked on report', {
+      reportId,
+      error: error.message,
+    });
+  }
 }
 
 async function completeAttempt(

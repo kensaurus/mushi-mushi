@@ -57,6 +57,8 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
       const body = (await c.req.json().catch(() => ({}))) as {
         reportId?: string;
         projectId?: string;
+        /** MCP servers send the override as `agent`; console sends `agentOverride`. */
+        agent?: string;
         // Spec-traceability (whitepaper §2.10): MCP / A2A callers that
         // already know the inventory Action they want repaired can pass
         // it explicitly. When absent, the fix-worker walks the
@@ -161,12 +163,32 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
         );
       }
 
-      // Validate agentOverride to a known set; unknown values are coerced
-      // to null so the worker falls back to the project-level default.
-      const ALLOWED_AGENTS = ['claude_code', 'codex', 'auto'] as const;
+      // Validate the agent override to a known set; unknown values are
+      // coerced to null so the worker falls back to the project-level
+      // default. Accept BOTH body keys: the MCP servers send `agent`, the
+      // console sends `agentOverride` — reading only the latter silently
+      // dropped every MCP agent selection (2026-08-16 audit P1-1). The set
+      // is the union of runnable ('claude_code', 'rest_worker'/'rest_fix_
+      // worker', 'llm') and orchestrator-only values ('codex', 'mcp') —
+      // fix-worker normalizes/rejects with an actionable skip reason and
+      // now stamps the report, so an unsupported choice is visible instead
+      // of silently swapped.
+      const ALLOWED_AGENTS = [
+        'claude_code',
+        'codex',
+        'auto',
+        'rest_worker',
+        'rest_fix_worker',
+        'llm',
+        'mcp',
+      ] as const;
+      const rawAgent =
+        (typeof body.agentOverride === 'string' && body.agentOverride) ||
+        (typeof body.agent === 'string' && body.agent) ||
+        null;
       const agentOverride =
-        body.agentOverride && ALLOWED_AGENTS.includes(body.agentOverride as typeof ALLOWED_AGENTS[number])
-          ? body.agentOverride
+        rawAgent && ALLOWED_AGENTS.includes(rawAgent as (typeof ALLOWED_AGENTS)[number])
+          ? rawAgent
           : null;
 
       const { data: job, error: insertErr } = await db

@@ -26,7 +26,8 @@ import { createNotification, buildNotificationMessage } from '../../_shared/noti
 import { getBlastRadius } from '../../_shared/knowledge-graph.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
-import { getActivePlugins, dispatchPluginEvent } from '../../_shared/plugins.ts';
+import { getActivePlugins, dispatchPluginEventDetached } from '../../_shared/plugins.ts';
+import { withIdempotency } from '../../_shared/idempotency.ts';
 import { getAvailableTags } from '../../_shared/ontology.ts';
 import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
@@ -624,6 +625,11 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
   });
 
   app.post('/v1/admin/fixes', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+    // withIdempotency: submit_fix_result (MCP) sends a stable derived
+    // Idempotency-Key so a retried call must not insert a second
+    // fix_attempts row — the wrapper was opt-in and this route never opted
+    // in, so the key was silently ignored (2026-08-16 resilience audit C7).
+    return withIdempotency(c, async () => {
     const userId = c.get('userId') as string;
     const body = await c.req.json();
     const db = getServiceClient();
@@ -654,6 +660,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     if (error) return dbError(c, error);
 
     return c.json({ ok: true, data: { fixId: fix!.id } });
+    }); // withIdempotency
   });
 
   // Aggregate KPIs for the Fixes page header — last 30 days.
@@ -1011,22 +1018,64 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     if (projectIds.length === 0)
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
 
-    const { data: fix } = await db
+    const FIX_ATTEMPT_COLUMNS =
+      'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, lines_changed, files_changed, llm_model, started_at, completed_at, created_at, check_run_status, check_run_conclusion, check_run_updated_at, error';
+    let { data: fix } = await db
       .from('fix_attempts')
-      .select(
-        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, lines_changed, files_changed, llm_model, started_at, completed_at, created_at, check_run_status, check_run_conclusion, check_run_updated_at, error',
-      )
+      .select(FIX_ATTEMPT_COLUMNS)
       .eq('id', fixId)
       .in('project_id', projectIds)
-      .single();
-    if (!fix)
-      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
-
-    const { data: dispatch } = await db
-      .from('fix_dispatch_jobs')
-      .select('id, status, created_at, started_at, finished_at, error')
-      .eq('fix_attempt_id', fixId)
       .maybeSingle();
+    // `dispatch_fix` hands MCP clients the dispatch-job id (the fix_attempt
+    // row is created by the worker seconds later), so accept either id here.
+    // A queued job with no attempt yet gets a synthesised one-event timeline
+    // instead of a 404 — polling right after dispatch must never dead-end.
+    let dispatchByJobId: {
+      id: string;
+      status: string;
+      created_at: string;
+      started_at: string | null;
+      finished_at: string | null;
+      error: string | null;
+    } | null = null;
+    if (!fix) {
+      const { data: job } = await db
+        .from('fix_dispatch_jobs')
+        .select('id, fix_attempt_id, project_id, status, created_at, started_at, finished_at, error')
+        .eq('id', fixId)
+        .in('project_id', projectIds)
+        .maybeSingle();
+      if (!job)
+        return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
+      dispatchByJobId = job;
+      if (job.fix_attempt_id) {
+        ({ data: fix } = await db
+          .from('fix_attempts')
+          .select(FIX_ATTEMPT_COLUMNS)
+          .eq('id', job.fix_attempt_id)
+          .maybeSingle());
+      }
+      if (!fix) {
+        const events = [
+          {
+            kind: 'dispatched',
+            at: job.created_at,
+            label: job.status === 'failed' ? 'Dispatch failed' : 'Dispatch queued — worker not started yet',
+            detail: job.error ?? undefined,
+            status: job.status === 'failed' ? 'fail' : 'pending',
+          },
+        ];
+        return c.json({ ok: true, data: { fix: null, dispatch: job, events, source: 'synthesized' } });
+      }
+    }
+
+    const { data: dispatch } = dispatchByJobId
+      ? { data: dispatchByJobId }
+      : await db
+          .from('fix_dispatch_jobs')
+          .select('id, status, created_at, started_at, finished_at, error')
+          .eq('fix_attempt_id', fix.id)
+          .maybeSingle();
 
     type EventKind =
       | 'dispatched'
@@ -1677,7 +1726,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           .eq('id', fix.report_id)
           .in('project_id', projectIds);
         try {
-          void dispatchPluginEvent(db, fix.project_id, 'fix.applied', {
+          dispatchPluginEventDetached(db, fix.project_id, 'fix.applied', {
             report: { id: fix.report_id },
             fix: {
               id: fixId,
@@ -1702,7 +1751,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         .single();
       if (fix) {
         try {
-          void dispatchPluginEvent(db, fix.project_id, 'fix.failed', {
+          dispatchPluginEventDetached(db, fix.project_id, 'fix.failed', {
             report: { id: fix.report_id },
             fix: { id: fixId, agent: fix.agent, error: updates.error ?? fix.error },
           }).catch((e) =>
@@ -1721,7 +1770,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         .single();
       if (fix) {
         try {
-          void dispatchPluginEvent(db, fix.project_id, 'fix.proposed', {
+          dispatchPluginEventDetached(db, fix.project_id, 'fix.proposed', {
             report: { id: fix.report_id },
             fix: {
               id: fixId,

@@ -306,7 +306,10 @@ async function processRepo(
         description: `[Library Modernization] ${f.name} ${f.currentVersion} → ${f.suggestedVersion}\n\n${f.summary}`,
         summary: `Update ${f.name} (${f.severity})`,
         component: f.name,
-        severity: f.severity === 'security' ? 'high' : 'medium',
+        // Only real security findings deserve inbox attention; routine major
+        // bumps at 'medium' drowned actual user bugs (2026-08: an inbox of 8
+        // reports was 8 modernizer nags) — file them as 'low' chores.
+        severity: f.severity === 'security' ? 'high' : 'low',
         status: 'classified',
         confidence: 0.9,
         bug_ontology_tags: ['modernization', f.severity],
