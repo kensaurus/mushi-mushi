@@ -145,8 +145,11 @@ export function ProjectSwitcher() {
   return (
     <div ref={containerRef} className="relative inline-flex min-w-0 max-w-full items-center gap-1">
       <HeaderContextChip
-        kicker="Project"
-        kickerHiddenBelowLg
+        // The favicon already says "project" — the uppercase PROJECT kicker
+        // spent header width that long slugs needed, so it lives in the
+        // tooltip now instead of truncating the name.
+        title={`Project: ${active.project_name}`}
+        aria-label={`Project: ${active.project_name} — switch project`}
         label={
           <span className="inline-flex items-center gap-1.5 min-w-0">
             <ProjectFavicon
