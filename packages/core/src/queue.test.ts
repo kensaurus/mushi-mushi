@@ -395,3 +395,76 @@ describe('offline queue backend consistency', () => {
     expect(await queue.size()).toBe(0);
   });
 });
+
+/**
+ * Broken-WebView IndexedDB shapes (Facebook/Instagram iOS in-app browsers,
+ * TSUMAGOI-28/-29): `open()` fires upgradeneeded with a null result, or the
+ * versionchange transaction is already dead so createObjectStore throws.
+ * The queue must fall back to localStorage without any uncaught throw from
+ * the upgradeneeded callback.
+ */
+describe('offline queue broken IndexedDB fallback', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    try {
+      localStorage.clear();
+    } catch {
+      /* ignore */
+    }
+  });
+
+  type UpgradeRequest = {
+    result: unknown;
+    error: Error | null;
+    onupgradeneeded: null | (() => void);
+    onsuccess: null | (() => void);
+    onerror: null | (() => void);
+  };
+
+  function stubBrokenIndexedDb(makeResult: () => unknown) {
+    vi.stubGlobal('indexedDB', {
+      open: () => {
+        const req: UpgradeRequest = {
+          result: undefined,
+          error: null,
+          onupgradeneeded: null,
+          onsuccess: null,
+          onerror: null,
+        };
+        queueMicrotask(() => {
+          req.result = makeResult();
+          // upgradeneeded runs from IDB machinery — a throw here would be an
+          // uncaught global error, which is exactly the regression under test.
+          req.onupgradeneeded?.();
+          req.onsuccess?.();
+        });
+        return req;
+      },
+    });
+  }
+
+  it('null upgradeneeded result: enqueue lands in localStorage, no throw', async () => {
+    stubBrokenIndexedDb(() => undefined);
+    const queue = createOfflineQueue({ encryptAtRest: false, syncOnReconnect: false });
+    await queue.enqueue(makeReport('webview-1'));
+    const raw = JSON.parse(localStorage.getItem(LS_KEY) ?? '[]') as Array<{ id: string }>;
+    expect(raw.map((r) => r.id)).toContain('webview-1');
+  });
+
+  it('dead versionchange transaction (createObjectStore throws): falls back, no throw', async () => {
+    stubBrokenIndexedDb(() => ({
+      objectStoreNames: { contains: () => false },
+      createObjectStore: () => {
+        throw new DOMException(
+          "Failed to execute 'createObjectStore' on 'IDBDatabase': The database is not running a version change transaction.",
+          'InvalidStateError',
+        );
+      },
+      close: () => {},
+    }));
+    const queue = createOfflineQueue({ encryptAtRest: false, syncOnReconnect: false });
+    await queue.enqueue(makeReport('webview-2'));
+    const raw = JSON.parse(localStorage.getItem(LS_KEY) ?? '[]') as Array<{ id: string }>;
+    expect(raw.map((r) => r.id)).toContain('webview-2');
+  });
+});

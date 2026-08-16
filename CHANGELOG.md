@@ -10,7 +10,7 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ## v1.27.x
 
-Latest tag: `v1.27.0`
+Latest tag: `v1.27.1`
 
 ### Highlights
 
@@ -21,7 +21,7 @@ Latest tag: `v1.27.0`
 
 ### Packages bumped
 
-- `@mushi-mushi/core` → 1.27.0
+- `@mushi-mushi/core` → 1.27.1
 - `@mushi-mushi/web` → 1.27.0
 
 ## v1.26.x

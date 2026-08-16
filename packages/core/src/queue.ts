@@ -131,12 +131,40 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
       request.onupgradeneeded = () => {
-        const db = request.result;
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+        // Broken WebView IndexedDB (Facebook/Instagram in-app browsers on
+        // iOS) can fire upgradeneeded with a null `result`, or with a
+        // versionchange transaction that has already aborted — reading
+        // `objectStoreNames` then throws a TypeError and `createObjectStore`
+        // throws InvalidStateError, both escaping as UNCAUGHT global errors
+        // because this callback runs from IDB machinery, not our promise
+        // chain. Guard + swallow: a failed upgrade surfaces through
+        // onerror/onsuccess below and flips the backend to localStorage.
+        try {
+          const db = request.result;
+          if (!db) return;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+          }
+        } catch {
+          // fall through — handled by onerror / the onsuccess store check
         }
       };
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        const db = request.result;
+        // If the upgrade was skipped/failed, the store may be missing —
+        // using this DB later would throw NotFoundError mid-transaction.
+        if (!db || !db.objectStoreNames.contains(STORE_NAME)) {
+          backendType = 'localstorage';
+          try {
+            db?.close();
+          } catch {
+            // ignore
+          }
+          reject(new Error('queue object store unavailable'));
+          return;
+        }
+        resolve(db);
+      };
       request.onerror = () => {
         backendType = 'localstorage';
         reject(request.error);
