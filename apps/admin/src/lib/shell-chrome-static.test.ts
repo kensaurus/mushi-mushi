@@ -29,8 +29,18 @@ describe('shell chrome static contract', () => {
   it('OrgSwitcher uses HeaderContextChip with responsive density props', () => {
     const org = readFileSync(resolve(root, 'components/OrgSwitcher.tsx'), 'utf8')
     expect(org).toContain('HeaderContextChip')
-    expect(org).toContain('kickerHiddenBelowLg')
+    // Density is now carried by a constant-width icon rather than a kicker
+    // word that had to be hidden below `lg` — strictly narrower at every
+    // breakpoint, so the responsive-hide prop is no longer the mechanism.
+    expect(org).toContain('icon={<IconMembers />}')
     expect(org).toContain('badgeHiddenBelowXl')
+  })
+
+  it('header switchers spend no width on kicker words that force truncation', () => {
+    const project = readFileSync(resolve(root, 'components/ProjectSwitcher.tsx'), 'utf8')
+    // The favicon already conveys "project"; the word belongs in the tooltip.
+    expect(project).not.toContain('kicker="Project"')
+    expect(project).toContain('title={`Project: ${active.project_name}`}')
   })
 
   it('chrome-top-row lives in @layer components so hidden md:flex wins on mobile', () => {
