@@ -27,6 +27,8 @@ import {
 } from '../stdout-guard.js'
 
 const API_ENDPOINT = 'https://api.test.mushimushi.dev'
+// gitleaks:allow -- synthetic fixture; same literal as server.integration.test.ts,
+// never a real credential (every request in this file goes to a stub fetch)
 const API_KEY = 'mushi_test_key_0123456789'
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
 
