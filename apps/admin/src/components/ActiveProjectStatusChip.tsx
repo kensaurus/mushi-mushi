@@ -17,6 +17,7 @@ import { buildTrendTooltip } from '../lib/projectMetaTooltips'
 import { resolveSdkDisplay } from '../lib/sdkVersionCompare'
 import { MetricTooltipContent, Tooltip } from './ui'
 import { CHIP_TONE } from '../lib/chipTone'
+import { HEARTBEAT_HINT, HEARTBEAT_LABEL, heartbeatStateFromKeys } from '../lib/heartbeat'
 
 interface ActiveProjectStatusChipProps {
   snapshot: ProjectSnapshot | null | undefined
@@ -39,7 +40,20 @@ export function ActiveProjectStatusChip({ snapshot, className = '' }: ActiveProj
   const showSdkWarn =
     sdkResolution.kind === 'upgrade-available' || sdkResolution.kind === 'deprecated'
 
-  if (!bottleneck && !trendUp && !showSdkWarn && sdkResolution.kind !== 'catalog-ahead') {
+  // Connectivity is the precondition for every other signal on this rail —
+  // an SDK-version warning is meaningless if no SDK is talking to us at all.
+  // `unknown` means the payload carried no api_keys field, which is not
+  // evidence of disconnection, so we stay silent in that case.
+  const heartbeat = heartbeatStateFromKeys(snapshot.api_keys)
+  const showHeartbeat = heartbeat !== 'unknown'
+
+  if (
+    !bottleneck &&
+    !trendUp &&
+    !showSdkWarn &&
+    sdkResolution.kind !== 'catalog-ahead' &&
+    !showHeartbeat
+  ) {
     return null
   }
 
@@ -52,6 +66,63 @@ export function ActiveProjectStatusChip({ snapshot, className = '' }: ActiveProj
 
   return (
     <span className={`inline-flex items-center gap-0.5 shrink-0 min-w-0 ${className}`.trim()}>
+      {showHeartbeat && (
+        <Tooltip
+          content={
+            <MetricTooltipContent
+              data={{
+                sections: [
+                  {
+                    kind: 'shows',
+                    label: 'SDK heartbeat',
+                    body: HEARTBEAT_LABEL[heartbeat],
+                  },
+                  {
+                    kind: 'takeaway',
+                    label: 'What it means',
+                    body: HEARTBEAT_HINT[heartbeat],
+                  },
+                ],
+                ...(heartbeat === 'fresh'
+                  ? {}
+                  : {
+                      callout: {
+                        tone: 'warn' as const,
+                        text: 'Click to re-check the install snippet and keys.',
+                      },
+                    }),
+              }}
+            />
+          }
+          side="bottom"
+          nowrap={false}
+          portal
+        >
+          {heartbeat === 'fresh' ? (
+            // Connected is the boring, expected case and this chip rides
+            // beside the project switcher on every page — so the healthy
+            // state is a bare dot, not another text pill competing for
+            // attention. Only trouble gets words.
+            <span
+              className="inline-flex h-5 cursor-help items-center px-1"
+              aria-label="SDK connected"
+            >
+              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-ok" />
+            </span>
+          ) : (
+            <Link
+              to={`/connect?project=${encodeURIComponent(snapshot.id)}`}
+              aria-label={`SDK ${HEARTBEAT_LABEL[heartbeat]} — open setup`}
+              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+              className={`inline-flex h-5 max-w-[6.5rem] cursor-pointer items-center truncate rounded-sm px-1 text-2xs font-medium hover:opacity-90 ${
+                heartbeat === 'never' ? CHIP_TONE.neutral : CHIP_TONE.warnSubtle
+              }`}
+            >
+              {HEARTBEAT_LABEL[heartbeat]}
+            </Link>
+          )}
+        </Tooltip>
+      )}
       {bottleneck && snapshot.pdca_bottleneck_label && bottleneckCtx && (
         <Tooltip
           content={

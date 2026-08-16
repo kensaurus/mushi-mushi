@@ -22,6 +22,7 @@ import {
   RelativeTime,
   SegmentedControl,
   DetailRows,
+  Tooltip,
   type DetailRowItem,
 } from '../../ui'
 import {
@@ -35,6 +36,9 @@ import {
   IconChevronRight,
   IconChevronDown,
   IconChevronUp,
+  IconCheck,
+  IconClose,
+  IconTrash,
 } from '../../icons'
 import { Drawer } from '../../Drawer'
 import { TableSkeleton } from '../../skeletons/TableSkeleton'
@@ -1426,7 +1430,17 @@ export function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
               <Btn variant="ghost" size="sm" onClick={() => toggleProvider(p.id, !p.enabled)}>
                 {p.enabled ? 'Disable' : 'Enable'}
               </Btn>
-              <Btn variant="ghost" size="sm" onClick={() => deleteProvider(p.id)}>Remove</Btn>
+              <Tooltip content="Remove provider">
+                <Btn
+                  variant="ghost"
+                  size="sm"
+                  className="px-2"
+                  aria-label={`Remove ${p.provider} provider`}
+                  onClick={() => deleteProvider(p.id)}
+                >
+                  <IconTrash />
+                </Btn>
+              </Tooltip>
             </div>
           )}
         </div>
@@ -1514,8 +1528,32 @@ export function DisputesSection() {
               </div>
               {(d.status === 'open' || d.status === 'under_review') && (
                 <div className="flex gap-1.5 shrink-0">
-                  <Btn variant="ghost" size="sm" loading={resolving === d.id} onClick={() => resolve(d.id, 'approved')}>Approve</Btn>
-                  <Btn variant="ghost" size="sm" loading={resolving === d.id} onClick={() => resolve(d.id, 'denied')}>Deny</Btn>
+                  {/* Icon is suppressed while loading — Btn renders its spinner
+                      in the leading slot and would otherwise show both. */}
+                  <Tooltip content="Approve dispute">
+                    <Btn
+                      variant="ghost"
+                      size="sm"
+                      className="px-2"
+                      aria-label="Approve dispute"
+                      loading={resolving === d.id}
+                      onClick={() => resolve(d.id, 'approved')}
+                    >
+                      {resolving === d.id ? null : <IconCheck />}
+                    </Btn>
+                  </Tooltip>
+                  <Tooltip content="Deny dispute">
+                    <Btn
+                      variant="ghost"
+                      size="sm"
+                      className="px-2"
+                      aria-label="Deny dispute"
+                      loading={resolving === d.id}
+                      onClick={() => resolve(d.id, 'denied')}
+                    >
+                      {resolving === d.id ? null : <IconClose />}
+                    </Btn>
+                  </Tooltip>
                 </div>
               )}
             </div>
@@ -1706,7 +1744,19 @@ export function SettingsTab({ canEdit }: { canEdit: boolean }) {
                 ) : 'Never delivered'}
               </div>
             </div>
-            {canEdit && <Btn variant="ghost" size="sm" onClick={() => deleteWebhook(w.id)}>Remove</Btn>}
+            {canEdit && (
+              <Tooltip content="Remove webhook">
+                <Btn
+                  variant="ghost"
+                  size="sm"
+                  className="px-2"
+                  aria-label={`Remove webhook ${w.url}`}
+                  onClick={() => deleteWebhook(w.id)}
+                >
+                  <IconTrash />
+                </Btn>
+              </Tooltip>
+            )}
           </div>
         ))}
 
@@ -1898,7 +1948,17 @@ export function QuestsTab({ canEdit }: { canEdit: boolean }) {
                 {canEdit && (
                   <div className="flex gap-1.5 shrink-0">
                     <Btn variant="ghost" size="sm" onClick={() => toggleQuest(q)}>{q.enabled ? 'Disable' : 'Enable'}</Btn>
-                    <Btn variant="ghost" size="sm" onClick={() => deleteQuest(q.id)}>Delete</Btn>
+                    <Tooltip content="Delete quest">
+                      <Btn
+                        variant="ghost"
+                        size="sm"
+                        className="px-2"
+                        aria-label={`Delete quest ${q.name}`}
+                        onClick={() => deleteQuest(q.id)}
+                      >
+                        <IconTrash />
+                      </Btn>
+                    </Tooltip>
                   </div>
                 )}
               </div>

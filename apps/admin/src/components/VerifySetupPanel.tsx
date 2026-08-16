@@ -25,9 +25,35 @@ interface VerifySetupPanelProps {
   projectName: string
   adminHost?: string | null
   compact?: boolean
+  /** Render without the panel's own Card chrome, for call sites that already
+   *  sit inside a bordered container. `compact` controls density; this
+   *  controls chrome — they are deliberately independent, because an embedded
+   *  panel still wants its inner rhythm. Without it the panel drew a second
+   *  border/shadow inside its host and the row read as a box in a box. */
+  embedded?: boolean
 }
 
-export function VerifySetupPanel({ projectId, projectName, adminHost, compact = false }: VerifySetupPanelProps) {
+/** Panel root: a real Card when standalone, a bare div when embedded. */
+function PanelShell({
+  embedded,
+  className,
+  children,
+}: {
+  embedded: boolean
+  className: string
+  children: React.ReactNode
+}) {
+  if (embedded) return <div className={className}>{children}</div>
+  return <Card className={className}>{children}</Card>
+}
+
+export function VerifySetupPanel({
+  projectId,
+  projectName,
+  adminHost,
+  compact = false,
+  embedded = false,
+}: VerifySetupPanelProps) {
   const location = useLocation()
   const onCopilotPage = location.pathname.startsWith('/setup-copilot')
   const setup = useSetupStatus(projectId)
@@ -102,14 +128,17 @@ export function VerifySetupPanel({ projectId, projectName, adminHost, compact = 
 
   if (!project && setup.loading) {
     return (
-      <Card className={compact ? 'p-3' : 'p-4'}>
+      <PanelShell embedded={embedded} className={embedded ? '' : compact ? 'p-3' : 'p-4'}>
         <p className="text-xs text-fg-muted">Loading setup status…</p>
-      </Card>
+      </PanelShell>
     )
   }
 
   return (
-    <Card className={`space-y-4 ${compact ? 'p-3' : 'p-5'}`}>
+    <PanelShell
+      embedded={embedded}
+      className={`space-y-4 ${embedded ? '' : compact ? 'p-3' : 'p-5'}`.trim()}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-fg">Verify setup</h3>
@@ -202,6 +231,6 @@ export function VerifySetupPanel({ projectId, projectName, adminHost, compact = 
           </Btn>
         </ContainedBlock>
       </section>
-    </Card>
+    </PanelShell>
   )
 }

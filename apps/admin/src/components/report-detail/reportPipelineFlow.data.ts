@@ -95,15 +95,28 @@ function deriveReportPipelineStatuses(
 
   const submit: FixStageStatus = 'done'
 
+  // `autofix_blocked:` stamps (fix-worker skip/fail paths) live in
+  // processing_error but belong to the DISPATCH stage — without the split
+  // they would paint the classify stage red for a report that classified
+  // fine.
+  const processingError = report.processing_error ?? ''
+  const autofixBlocked = processingError.startsWith('autofix_blocked:')
+
   let classify: FixStageStatus = 'pending'
-  if (report.processing_error) classify = 'failed'
+  if (processingError && !autofixBlocked) classify = 'failed'
   else if (classified) classify = 'done'
   else classify = 'active'
 
   let dispatch: FixStageStatus = 'pending'
   if (live === 'queueing' || live === 'queued' || live === 'running') dispatch = 'active'
-  else if (hasPr || live === 'completed' || status === 'fixing' || status === 'fixed' || fix) dispatch = 'done'
-  else if (live === 'failed' || (fixStatus === 'failed' && !hasPr)) dispatch = 'failed'
+  // Skipped/failed attempts MUST be checked before the done branch: the old
+  // bare `|| fix` marked dispatch green whenever any fix_attempts row
+  // existed — including skipped_* and stuck-running attempts — showing a
+  // completed pipeline for a fix that never ran (2026-08-16 audit P1-5).
+  else if (fixStatus.startsWith('skipped')) dispatch = 'skipped'
+  else if (live === 'failed' || fixStatus === 'failed' || autofixBlocked) dispatch = 'failed'
+  else if (hasPr || live === 'completed' || status === 'fixing' || status === 'fixed' || fixStatus === 'completed')
+    dispatch = 'done'
 
   let pr: FixStageStatus = 'pending'
   if (hasPr) pr = 'done'

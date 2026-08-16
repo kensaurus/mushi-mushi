@@ -30,7 +30,9 @@ import {
   SegmentedControl,
   FreshnessPill,
   RecommendedAction,
+  Tooltip,
 } from '../components/ui'
+import { IconCheck, IconClose } from '../components/icons'
 import {
   ActionPill,
   ActionPillRow,
@@ -499,8 +501,28 @@ function AnomaliesTab({
                 <div className="flex gap-1 justify-end flex-wrap">
                   {a.status === 'open' && (
                     <>
-                      <Btn size="sm" variant="primary" onClick={() => onConfirm(a.id)}>Confirm</Btn>
-                      <Btn size="sm" variant="cancel" onClick={() => onDismiss(a.id)}>Dismiss</Btn>
+                      <Tooltip content="Confirm anomaly">
+                        <Btn
+                          size="sm"
+                          variant="primary"
+                          className="px-2"
+                          aria-label={`Confirm anomaly on ${a.metric_name}`}
+                          onClick={() => onConfirm(a.id)}
+                        >
+                          <IconCheck />
+                        </Btn>
+                      </Tooltip>
+                      <Tooltip content="Dismiss anomaly">
+                        <Btn
+                          size="sm"
+                          variant="cancel"
+                          className="px-2"
+                          aria-label={`Dismiss anomaly on ${a.metric_name}`}
+                          onClick={() => onDismiss(a.id)}
+                        >
+                          <IconClose />
+                        </Btn>
+                      </Tooltip>
                     </>
                   )}
                   {a.auto_report_id && (

@@ -73,7 +73,18 @@ export function buildInboxCards(
               reason: openBacklog > 0 ? `${openBacklog} still open.` : 'All resolved; double-check the rollup.',
               primary: { kind: 'link', to: '/reports?severity=critical', label: 'Open critical queue' },
             }
-          : null,
+          : openBacklog > 0
+            ? {
+                // Stalled non-critical queue used to render an EMPTY inbox
+                // (2026-08-16 audit: 12 reports stuck in 'classified' and the
+                // inbox said nothing) — surface the backlog even without
+                // criticals.
+                tone: 'plan',
+                title: `${openBacklog} report${openBacklog === 1 ? '' : 's'} waiting for triage`,
+                reason: 'No criticals, but the queue is not clear — review, dispatch, or dismiss to keep the loop moving.',
+                primary: { kind: 'link', to: '/reports?status=classified', label: 'Open triage queue' },
+              }
+            : null,
     },
     {
       id: 'judge-check',
