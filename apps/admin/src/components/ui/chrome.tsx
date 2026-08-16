@@ -13,6 +13,13 @@ const TRIGGER_BASE =
 export interface HeaderContextChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Uppercase kicker label, e.g. "Team" or "Project". */
   kicker?: string
+  /**
+   * Leading glyph that replaces the uppercase kicker text. The kicker word
+   * still reaches assistive tech through `title`/`aria-label`, but the header
+   * stops spending ~55px per switcher on the words TEAM and PROJECT — which
+   * is what squeezed long project names into "the-wanting-mi…".
+   */
+  icon?: ReactNode
   /** Primary label (truncated). */
   label: ReactNode
   /** Nested status pill text — uses CHIP_TONE when `badgeTone` is set. */
@@ -32,6 +39,7 @@ export interface HeaderContextChipProps extends ButtonHTMLAttributes<HTMLButtonE
 
 export function HeaderContextChip({
   kicker,
+  icon,
   label,
   badge,
   badgeTone,
@@ -42,6 +50,7 @@ export function HeaderContextChip({
   variant = 'default',
   className = '',
   type = 'button',
+  title,
   ...props
 }: HeaderContextChipProps) {
   const kickerClass = kickerHiddenBelowLg
@@ -49,20 +58,35 @@ export function HeaderContextChip({
     : kickerHiddenSm
       ? ' hidden sm:inline'
       : ''
+  // An icon replaces the kicker word entirely; the word survives in the
+  // tooltip so nothing is lost for a first-time or assistive-tech user.
+  const resolvedTitle =
+    title ?? (kicker && typeof label === 'string' ? `${kicker}: ${label}` : undefined)
   const variantClass =
     variant === 'accent'
       ? 'bg-brand/12 text-brand border border-brand/28 hover:bg-brand-subtle'
       : ''
   return (
-    <button type={type} className={`${TRIGGER_BASE} ${variantClass} ${className}`.trim()} {...props}>
-      {kicker ? (
+    <button
+      type={type}
+      title={resolvedTitle}
+      className={`${TRIGGER_BASE} ${variantClass} ${className}`.trim()}
+      {...props}
+    >
+      {icon ? (
+        <span className="shrink-0 inline-flex items-center text-fg-muted [&>svg]:h-3.5 [&>svg]:w-3.5" aria-hidden>
+          {icon}
+        </span>
+      ) : kicker ? (
         <span
           className={`text-2xs uppercase tracking-wider text-fg-muted shrink-0${kickerClass}`}
         >
           {kicker}
         </span>
       ) : null}
-      <span className="max-w-[5.5rem] sm:max-w-[7rem] lg:max-w-[8rem] xl:max-w-[10rem] min-w-0 truncate font-medium inline-flex items-center gap-1">{label}</span>
+      {/* Wider than before: dropping the kicker word buys ~55px, which goes to
+          the name so real project slugs stop truncating mid-word. */}
+      <span className="max-w-[7rem] sm:max-w-[9rem] lg:max-w-[12rem] xl:max-w-[15rem] min-w-0 truncate font-medium inline-flex items-center gap-1">{label}</span>
       {badge != null && badge !== false ? (
         typeof badge === 'string' || typeof badge === 'number' ? (
           <span
