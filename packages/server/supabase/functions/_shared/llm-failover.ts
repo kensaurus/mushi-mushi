@@ -90,6 +90,17 @@ export class LlmFailoverError extends Error {
 }
 
 /**
+ * True when Stage 1 should degrade to heuristic classification instead of
+ * crashing. Covers exhausted/missing provider pools, hosted-wallet denial,
+ * and raw 401/403 that escaped failover (MUSHI-MUSHI-SERVER-19).
+ */
+export function isStage1LlmUnavailable(err: unknown): boolean {
+  if (err instanceof WalletDeniedError) return true;
+  if (err instanceof LlmFailoverError) return true;
+  return classifyLlmError(err) === 'auth';
+}
+
+/**
  * Classify an error thrown from an LLM SDK call into a key-failure category.
  * Exported for direct unit testing (see llm-failover.test.ts) — the rest of
  * this module depends on Supabase + BYOK key resolution, but classification
