@@ -570,6 +570,12 @@ export function ReportsPage() {
   const recommendation = (() => {
     if (loading || error) return null
     if (total === 0 && !hasFilters) {
+      // When we can diagnose the project, SdkConnectivityEmptyState renders
+      // below with the actual answer ("your SDK hasn't checked in for 8
+      // days") and its own CTA. Emitting this generic card too gave an empty
+      // page three stacked banners that all said "no reports yet" — the
+      // diagnostic strictly dominates, so yield to it.
+      if (setup.activeProject) return null
       return {
         title: 'No reports yet',
         description:
