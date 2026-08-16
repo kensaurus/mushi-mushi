@@ -113,11 +113,15 @@ function McpLane({ client, input, isDemo }: { client: McpClientDef; input: McpBu
         </div>
       ) : (
         <div className="mushi-connect-callout">
-          <strong>Placeholder key:</strong> Replace{' '}
+          <strong>No keys to paste:</strong> the hosted server speaks real OAuth — run your
+          client&apos;s MCP login (e.g.{' '}
+          <code className="rounded bg-[var(--mushi-paper)] px-1 font-mono text-xs">claude mcp login mushi</code>
+          ) and approve in the console; a revocable project key is minted for you. Prefer a static
+          key? Replace{' '}
           <code className="rounded bg-[var(--mushi-paper)] px-1 font-mono text-xs">{PLACEHOLDER_KEY}</code>{' '}
-          with your real key.{' '}
+          with your real key, or{' '}
           <a href={CONSOLE_CONNECT_URL} className="font-medium underline [@media(hover:hover)]:hover:opacity-80">
-            Sign in to auto-fill &amp; one-click install →
+            sign in to auto-fill &amp; one-click install →
           </a>
         </div>
       )}
@@ -205,7 +209,15 @@ function CliLane({ client }: { client: McpClientDef }) {
 }
 
 function SkillsLane({ client }: { client: McpClientDef }) {
-  const skillsCmd = 'npx skills add kensaurus/cursor-kenji'
+  const skillsCmd = 'npx skills add kensaurus/mushi-mushi'
+  // Agent-install prompt (Sentry "Copy Prompt" / Langfuse "Agentic
+  // installation" pattern): mushi's audience works in an AI editor, so the
+  // zero-typing path is a prompt the agent executes, not a command the human
+  // runs.
+  const agentPrompt =
+    'Install the Mushi skills from github.com/kensaurus/mushi-mushi ' +
+    '(`npx skills add kensaurus/mushi-mushi`), then run the mushi-setup skill to wire the ' +
+    'Mushi SDK and MCP server into this app and send a test report to verify the connection.'
 
   return (
     <div className="space-y-4">
@@ -214,7 +226,16 @@ function SkillsLane({ client }: { client: McpClientDef }) {
       </p>
       <div className="space-y-2">
         <p className="text-sm font-medium text-[var(--mushi-ink)]">
-          Install Mushi skills into {client.label}
+          Fastest: paste this prompt into {client.label}
+        </p>
+        <CopyBlock label="" text={agentPrompt} />
+        <p className="text-xs text-[var(--mushi-ink-muted)]">
+          Your agent installs the skills, wires the SDK + MCP, and verifies with a test report — no manual steps.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-[var(--mushi-ink)]">
+          Or install the skills yourself
         </p>
         <CopyBlock label="" text={skillsCmd} />
         <p className="text-xs text-[var(--mushi-ink-muted)]">
