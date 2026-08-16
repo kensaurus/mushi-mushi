@@ -1047,7 +1047,10 @@ export function Layout({ children }: { children: ReactNode }) {
           replaces all sidebar affordances when focus mode is on. */}
       {!focusMode && (
         <aside
-          className={`hidden md:flex flex-shrink-0 min-h-0 border-r border-edge/60 bg-surface-root flex-col motion-safe:transition-[width] motion-safe:duration-base ${sidebarCollapsed ? 'w-12' : 'w-60'}`}
+          // Collapsed rail is w-14 (56px), not w-12: a 24px stage glyph plus
+          // its count badge and the button's own padding did not fit in 48px,
+          // so the badge overhung the rail edge and crowded the glyph.
+          className={`hidden md:flex flex-shrink-0 min-h-0 border-r border-edge/60 bg-surface-root flex-col motion-safe:transition-[width] motion-safe:duration-base ${sidebarCollapsed ? 'w-14' : 'w-60'}`}
           data-collapsed={sidebarCollapsed ? 'true' : 'false'}
         >
           {renderSidebarContent(sidebarCollapsed)}
@@ -1476,27 +1479,32 @@ function SectionRailHeader({ section, expanded, isActiveStage, staleness, onSele
         aria-expanded={expanded}
         aria-current={expanded ? 'true' : undefined}
         aria-label={`${section.title}${expanded ? '' : ' — show navigation'}`}
-        className={`relative nav-link justify-center px-2 py-1.5 mb-0.5 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm ${
+        className={`nav-link justify-center px-1 py-1.5 mb-0.5 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm ${
           expanded
             ? 'bg-surface-overlay text-fg ring-1 ring-brand/40'
             : 'text-fg-muted hover:text-fg-secondary hover:bg-surface-overlay/60'
         } ${isActiveStage && !expanded ? 'ring-1 ring-brand/25' : ''}`}
       >
-        <span
-          className={`inline-flex items-center justify-center w-6 h-6 rounded-sm text-3xs font-bold leading-none ${stageTone}`}
-          aria-hidden="true"
-        >
-          {glyph}
-        </span>
-        {staleness && (
+        {/* Badge anchors to the GLYPH, not the button: anchoring it to the
+            button pushed it into the rail's border and over the glyph itself.
+            The ring separates the count from the glyph underneath it. */}
+        <span className="relative inline-flex shrink-0">
           <span
-            className={`absolute top-0.5 right-0.5 inline-flex items-center justify-center min-w-[0.85rem] px-0.5 h-3.5 rounded-sm text-3xs font-mono font-bold leading-none ${STALENESS_TONE[staleness.tone]}`}
-            aria-label={staleness.label}
-            title={staleness.label}
+            className={`inline-flex items-center justify-center w-6 h-6 rounded-sm text-3xs font-bold leading-none ${stageTone}`}
+            aria-hidden="true"
           >
-            {staleness.count > 99 ? '99+' : staleness.count}
+            {glyph}
           </span>
-        )}
+          {staleness && (
+            <span
+              className={`absolute -top-1 -right-1.5 inline-flex items-center justify-center min-w-[0.85rem] px-0.5 h-3.5 rounded-full ring-1 ring-surface-root text-3xs font-mono font-bold leading-none ${STALENESS_TONE[staleness.tone]}`}
+              aria-label={staleness.label}
+              title={staleness.label}
+            >
+              {staleness.count > 99 ? '99+' : staleness.count}
+            </span>
+          )}
+        </span>
       </button>
     </Tooltip>
   )

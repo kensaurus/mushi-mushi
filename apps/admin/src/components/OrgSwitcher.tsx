@@ -20,6 +20,7 @@ import {
 import { useCreateOrganization } from '../lib/useCreateOrganization'
 import { headerDropdownPanelClass } from '../lib/appChrome'
 import { HeaderContextChip, HeaderContextChipSkeleton } from './ui/chrome'
+import { IconMembers } from './icons'
 
 export interface OrganizationSummary {
   id: string
@@ -203,7 +204,9 @@ export function OrgSwitcher() {
     <div ref={containerRef} className="relative">
       <HeaderContextChip
         kicker="Team"
-        kickerHiddenBelowLg
+        // Icon instead of the uppercase TEAM word — same meaning, ~55px less
+        // header spend, and the word still reaches screen readers via title.
+        icon={<IconMembers />}
         badgeHiddenBelowXl
         label={active.name}
         badge={orgPillLabel(active)}

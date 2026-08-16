@@ -104,7 +104,10 @@ export function ReportsFilterBar({
         <Input
           ref={searchInputRef}
           type="search"
-          placeholder="Search summary or description… (/)"
+          // Was "Search summary or description… (/)" — 38 chars in a w-64
+          // field, so it rendered clipped as "Search summary or des". The
+          // aria-label below still carries the full meaning.
+          placeholder="Search bugs…  (/)"
           value={searchInput}
           onChange={(e) => onSearchInputChange(e.target.value)}
           name="reports-search"

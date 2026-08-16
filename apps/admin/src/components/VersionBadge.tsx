@@ -365,18 +365,22 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
         >
           <span className={SDK_VER}>{__SDK_WEB_VERSION__}</span>
         </span>
-        <span aria-hidden className="hidden lg:inline text-fg-faint/80 text-2xs leading-none">
+        {/* The admin build number is a diagnostic, not a glance-value: it cost
+            ~90px of permanent header width next to the SDK version embedders
+            actually watch. Full detail stays one hover away in the popover
+            ("Running mushimushi v…") and in this button's title. */}
+        <span aria-hidden className="hidden 2xl:inline text-fg-faint/80 text-2xs leading-none">
           ·
         </span>
         <span
           aria-hidden
-          className="hidden lg:inline text-2xs font-semibold uppercase tracking-wider leading-none"
+          className="hidden 2xl:inline text-2xs font-semibold uppercase tracking-wider leading-none"
           title="This admin console (Vite SPA) — not the customer-facing SDK"
         >
           <span className={ADMIN_LABEL}>Admin</span>
         </span>
         <span
-          className="hidden lg:inline font-mono text-2xs leading-none"
+          className="hidden 2xl:inline font-mono text-2xs leading-none"
           title="Admin console build"
         >
           <span className={ADMIN_VER}>{__APP_VERSION__}</span>
