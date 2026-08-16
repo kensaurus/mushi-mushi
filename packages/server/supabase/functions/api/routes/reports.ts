@@ -7,7 +7,7 @@ import { notifyReportStatusTransition } from '../../_shared/report-status-notify
 import { normalizeAdminStatus, toStoredStatus } from '../../_shared/report-status.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { resolveExternalIssue } from '../../_shared/integrations.ts';
-import { dispatchPluginEvent } from '../../_shared/plugins.ts';
+import { dispatchPluginEventDetached } from '../../_shared/plugins.ts';
 import {
   dbError,
   callerProjectIds,
@@ -298,7 +298,11 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         // end_user_id + reporter_token_hash: needed to render reporter
         // display name + verified badge in the list row without an extra
         // round-trip (batch-fetched below).
-        'id, project_id, description, category, severity, summary, title, area_tag, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id',
+        // processing_error: pipeline dead-ends (Stage-2 handoff failure,
+        // quota) and autofix_blocked stamps were invisible in every list
+        // view — you had to open each report to learn the pipeline choked
+        // (2026-08-16 audit P2-3). ~0.5 KB per affected row.
+        'id, project_id, description, category, severity, summary, title, area_tag, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id, processing_error',
         { count: 'exact' },
       )
       .in('project_id', projectIds)
@@ -968,7 +972,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     if (report && updates.status && updates.status !== toStoredStatus(report.status)) {
       const newStatus = updates.status as string;
       try {
-        void dispatchPluginEvent(db, report.project_id, 'report.status_changed', {
+        dispatchPluginEventDetached(db, report.project_id, 'report.status_changed', {
           report: { id: reportId, status: newStatus },
           previousStatus: report.status,
           actor: { kind: 'admin', userId },
@@ -1137,7 +1141,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         const prev = beforeMap.get(id);
         if (!prev || prev.status === newStatus) continue;
         try {
-          void dispatchPluginEvent(db, prev.project_id, 'report.status_changed', {
+          dispatchPluginEventDetached(db, prev.project_id, 'report.status_changed', {
             report: { id, status: newStatus },
             previousStatus: prev.status,
             actor: { kind: 'admin', userId },

@@ -225,9 +225,12 @@ describe('structured tool output (MCP 2025-06-18)', () => {
   })
 
   it('dispatch_fix exposes fixId as structuredContent so downstream tools can chain', async () => {
+    // Fixture mirrors the REAL dispatch response (fix-dispatch.ts returns
+    // dispatchId, not fixId) — the 2026-08 output-validation regression came
+    // from tests inventing a `fixId` field the API never sends.
     fetchStub.enqueue({
       ok: true,
-      data: { fixId: 'fix_abc', status: 'queued' },
+      data: { dispatchId: 'fix_abc', status: 'queued', createdAt: '2026-08-16T00:00:00Z' },
     })
     const res = await client.callTool({
       name: 'dispatch_fix',

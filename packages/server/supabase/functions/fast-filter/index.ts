@@ -16,8 +16,9 @@ import { buildReportGraph, detectRegression } from '../_shared/knowledge-graph.t
 import { log as rootLog } from '../_shared/logger.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import { extractAnthropicCacheUsage, logLlmInvocation } from '../_shared/telemetry.ts'
-import { withSentry } from '../_shared/sentry.ts'
-import { resolveLlmKey } from '../_shared/byok.ts'
+import { reportError, withSentry } from '../_shared/sentry.ts'
+import { isStage1LlmUnavailable, sanitizeLlmError, withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
+import { HEURISTIC_STAGE1_MODEL, heuristicStage1Classification } from '../_shared/stage1-heuristic.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { parseBody, FastFilterBodySchema } from '../_shared/validate.ts'
 import { summarizeReplayEvents } from '../_shared/replay-evidence.ts'
@@ -129,6 +130,9 @@ Rules:
 5. Be concise. Each field should be 1-2 sentences max.`
 
 Deno.serve(withSentry('fast-filter', async (req) => {
+  let failureDb: ReturnType<typeof getServiceClient> | null = null
+  let failureReportId: string | null = null
+  let failureAttempts = 0
   try {
     // SEC-1: `verify_jwt = false` in config.toml for internal pipeline calls
     // (api -> fast-filter -> classify-report). Without this guard the
@@ -148,6 +152,7 @@ Deno.serve(withSentry('fast-filter', async (req) => {
     const log = rootLog.child('fast-filter', { reportId, projectId })
 
     const db = getServiceClient()
+    failureDb = db
 
     const { data: report, error: fetchError } = await db
       .from('reports')
@@ -159,6 +164,8 @@ Deno.serve(withSentry('fast-filter', async (req) => {
     if (fetchError || !report) {
       return new Response(JSON.stringify({ error: 'Report not found' }), { status: 404 })
     }
+    failureReportId = reportId
+    failureAttempts = report.processing_attempts ?? 0
 
     const { data: settings } = await db
       .from('project_settings')
@@ -221,88 +228,109 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     // discarded `experimental_providerMetadata` from the result.
     let cacheCreationInputTokens: number | null = null
     let cacheReadInputTokens: number | null = null
-    const anthropicResolved = await resolveLlmKey(db, projectId, 'anthropic')
-    let keySource: 'byok' | 'env' | null = anthropicResolved?.source ?? null
+    let keySource: 'byok' | 'env' | null = null
+    let usedHeuristic = false
     try {
-      const anthropic = createAnthropic({ apiKey: anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY') })
-      const result = await generateObject({
-        model: anthropic(PRIMARY_MODEL),
-        schema: stage1Schema,
-        messages: [
-          {
-            role: 'system',
-            content: activeSystemPrompt,
-            experimental_providerMetadata: {
-              anthropic: { cacheControl: { type: 'ephemeral' } },
-            },
-          },
-          { role: 'user', content: userPrompt },
-        ],
-      })
+      const { result, usedProvider } = await withAnthropicOrOpenAi(
+        db,
+        projectId,
+        async (key) => {
+          keySource = key.source
+          const anthropic = createAnthropic({ apiKey: key.key })
+          return generateObject({
+            model: anthropic(PRIMARY_MODEL),
+            schema: stage1Schema,
+            messages: [
+              {
+                role: 'system',
+                content: activeSystemPrompt,
+                experimental_providerMetadata: {
+                  anthropic: { cacheControl: { type: 'ephemeral' } },
+                },
+              },
+              { role: 'user', content: userPrompt },
+            ],
+          })
+        },
+        async (key) => {
+          keySource = key.source
+          const openai = createOpenAI({
+            apiKey: key.key,
+            ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
+          })
+          return generateObject({
+            model: openai(FALLBACK_MODEL, { structuredOutputs: false }),
+            schema: stage1Schema,
+            system: activeSystemPrompt,
+            prompt: userPrompt,
+          })
+        },
+      )
       classification = result.object
       tokenUsage = result.usage ?? {}
-      // AI SDK v4 exposes this as `experimental_providerMetadata`; v5 renamed
-      // to `providerMetadata`. Reading both keeps the extraction stable
-      // through the minor-version upgrade path.
-      const pm = (result as { experimental_providerMetadata?: unknown; providerMetadata?: unknown })
-      const cache = extractAnthropicCacheUsage(pm.experimental_providerMetadata ?? pm.providerMetadata)
-      cacheCreationInputTokens = cache.cacheCreationInputTokens
-      cacheReadInputTokens = cache.cacheReadInputTokens
-    } catch (primaryErr) {
-      log.warn('Anthropic Haiku failed, falling back to OpenAI', { err: String(primaryErr) })
-      const openaiResolved = await resolveLlmKey(db, projectId, 'openai')
-      const openaiKey = openaiResolved?.key ?? Deno.env.get('OPENAI_API_KEY')
-      keySource = openaiResolved?.source ?? (openaiKey ? 'env' : keySource)
-      if (!openaiKey) {
-        await logLlmInvocation(db, {
-          projectId, reportId, functionName: 'fast-filter', stage: 'stage1',
-          primaryModel: PRIMARY_MODEL, usedModel: PRIMARY_MODEL,
-          fallbackUsed: false, status: 'error',
-          errorMessage: `Primary failed and no OPENAI_API_KEY: ${String(primaryErr)}`,
-          latencyMs: Date.now() - startTime,
-          promptVersion: promptSelection.promptVersion,
-          langfuseTraceId: trace.id,
-        })
-        throw primaryErr
+      usedModel = usedProvider === 'anthropic' ? PRIMARY_MODEL : FALLBACK_MODEL
+      fallbackUsed = usedProvider === 'openai'
+      fallbackReason = usedProvider === 'openai' ? 'anthropic_pool_exhausted' : null
+      if (usedProvider === 'anthropic') {
+        // AI SDK v4 exposes this as `experimental_providerMetadata`; v5 renamed
+        // to `providerMetadata`. Reading both keeps the extraction stable
+        // through the minor-version upgrade path.
+        const pm = result as { experimental_providerMetadata?: unknown; providerMetadata?: unknown }
+        const cache = extractAnthropicCacheUsage(pm.experimental_providerMetadata ?? pm.providerMetadata)
+        cacheCreationInputTokens = cache.cacheCreationInputTokens
+        cacheReadInputTokens = cache.cacheReadInputTokens
       }
-      usedModel = FALLBACK_MODEL
+    } catch (llmErr) {
+      if (!isStage1LlmUnavailable(llmErr)) {
+        throw llmErr
+      }
+      // Dual-provider 401/exhausted keys must not become "Unhandled error"
+      // (MUSHI-MUSHI-SERVER-19). Heuristic classification lets the report
+      // leave status=new so pipeline-recovery stops retry-storming.
+      usedHeuristic = true
+      usedModel = HEURISTIC_STAGE1_MODEL
       fallbackUsed = true
-      fallbackReason = String(primaryErr).slice(0, 500)
-
-      // OpenAI-compatible base URL (OpenRouter, Together, Fireworks…) is the
-      // V5.3 §2.7 BYOK extension: a single `openai` ref pointed at any
-      // gateway. Falls back to the SDK default (api.openai.com) when unset.
-      const openai = createOpenAI({
-        apiKey: openaiKey,
-        ...(openaiResolved?.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
+      fallbackReason = sanitizeLlmError(llmErr).slice(0, 500)
+      classification = heuristicStage1Classification(scrubbedReport)
+      log.warn('Stage 1 LLM unavailable; using heuristic classification', {
+        err: fallbackReason,
+        sentry: false,
       })
-      const { object, usage } = await generateObject({
-        model: openai(FALLBACK_MODEL, { structuredOutputs: false }),
-        schema: stage1Schema,
-        system: activeSystemPrompt,
-        prompt: userPrompt,
+      reportError(llmErr instanceof Error ? llmErr : new Error(fallbackReason), {
+        tags: { function: 'fast-filter', llm_fallback: 'heuristic' },
+        extra: { reportId, projectId },
       })
-      classification = object
-      tokenUsage = usage ?? {}
+      await logLlmInvocation(db, {
+        projectId, reportId, functionName: 'fast-filter', stage: 'stage1',
+        primaryModel: PRIMARY_MODEL, usedModel,
+        fallbackUsed: true, fallbackReason,
+        status: 'error',
+        errorMessage: fallbackReason,
+        latencyMs: Date.now() - startTime,
+        promptVersion: promptSelection.promptVersion,
+        langfuseTraceId: trace.id,
+      })
     }
 
     const latencyMs = Date.now() - startTime
     llmSpan.end({ model: usedModel, latencyMs, inputTokens: tokenUsage.promptTokens, outputTokens: tokenUsage.completionTokens })
 
-    await logLlmInvocation(db, {
-      projectId, reportId, functionName: 'fast-filter', stage: 'stage1',
-      primaryModel: PRIMARY_MODEL, usedModel,
-      fallbackUsed, fallbackReason,
-      status: 'success',
-      latencyMs,
-      inputTokens: tokenUsage.promptTokens ?? null,
-      outputTokens: tokenUsage.completionTokens ?? null,
-      promptVersion: promptSelection.promptVersion,
-      keySource: keySource ?? 'env',
-      langfuseTraceId: trace.id,
-      cacheCreationInputTokens,
-      cacheReadInputTokens,
-    })
+    if (!usedHeuristic) {
+      await logLlmInvocation(db, {
+        projectId, reportId, functionName: 'fast-filter', stage: 'stage1',
+        primaryModel: PRIMARY_MODEL, usedModel,
+        fallbackUsed, fallbackReason,
+        status: 'success',
+        latencyMs,
+        inputTokens: tokenUsage.promptTokens ?? null,
+        outputTokens: tokenUsage.completionTokens ?? null,
+        promptVersion: promptSelection.promptVersion,
+        keySource: keySource ?? 'env',
+        langfuseTraceId: trace.id,
+        cacheCreationInputTokens,
+        cacheReadInputTokens,
+      })
+    }
 
     const { error: stage1WriteError } = await db.from('reports').update({
       extracted_symptoms: {
@@ -321,6 +349,9 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       severity: classification.severity,
       confidence: classification.confidence,
       processing_attempts: (report.processing_attempts ?? 0) + 1,
+      processing_error: usedHeuristic
+        ? `stage1_llm_unavailable: ${fallbackReason}`
+        : null,
     }).eq('id', reportId)
 
     // Throw loudly on write failure: a silent UPDATE here means we billed the
@@ -373,7 +404,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
         .catch(err => log.error('Reputation award failed', { action: 'element_select', err: String(err) }))
     }
 
-    if (classification.confidence > confidenceThreshold) {
+    if (classification.confidence > confidenceThreshold || usedHeuristic) {
       const summary = `${classification.symptom} — ${classification.actual}`.slice(0, 200)
       await db.from('reports').update({
         status: 'classified',
@@ -596,7 +627,29 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     }), { headers: { 'Content-Type': 'application/json' } })
 
   } catch (err) {
-    rootLog.child('fast-filter').error('Unhandled error', { err: String(err) })
+    const message = sanitizeLlmError(err)
+    // Do not forward this generic string to Sentry.captureMessage — that is
+    // what grouped 1188 events as "Unhandled error" with the real 401 filtered
+    // (MUSHI-MUSHI-SERVER-19). captureException below keeps the true type.
+    rootLog.child('fast-filter').error('Unhandled error', { err: message, sentry: false })
+    reportError(err instanceof Error ? err : new Error(message), {
+      tags: { function: 'fast-filter' },
+    })
+    if (failureDb && failureReportId) {
+      const { error: stampError } = await failureDb
+        .from('reports')
+        .update({
+          processing_error: `stage1_unhandled: ${message.slice(0, 300)}`,
+          processing_attempts: failureAttempts + 1,
+        })
+        .eq('id', failureReportId)
+      if (stampError) {
+        rootLog.child('fast-filter').warn('Failed to stamp stage1_unhandled', {
+          err: stampError.message,
+          sentry: false,
+        })
+      }
+    }
     // Never echo the raw error to the client (js/stack-trace-exposure). The
     // full error is logged above; the caller gets a stable generic body.
     return safeErrorResponse()

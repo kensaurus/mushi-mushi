@@ -294,6 +294,36 @@ describe('cloudfront-mushi-hosted-mcp', () => {
     assert.match(out.body, /smithery\.ai\/servers\/kensaurus\/mushi-mushi/);
   });
 
+  it('302 real-client OAuth authorize to Supabase api authorize with query intact', () => {
+    const out = router(
+      reqWithQs('/mushi-mushi/hosted-mcp/oauth/authorize', {
+        client_id: '26e0c9ab-0346-44a4-a2bf-d0ec2310fd3b',
+        redirect_uri: 'http%3A%2F%2Flocalhost%3A33418%2Fcallback',
+        response_type: 'code',
+        code_challenge: 'EjyELPJXx3kyT5w_Z6TVAoIRpkHBQEJ_yEEBrnE0lcw',
+        code_challenge_method: 'S256',
+        state: 'xyz',
+      }),
+    );
+    assert.equal(out.statusCode, 302);
+    assert.match(
+      out.headers.location.value,
+      /^https:\/\/dxptnwrhwsqckaftyymj\.supabase\.co\/functions\/v1\/api\/v1\/mcp-oauth\/authorize\?/,
+    );
+    assert.match(out.headers.location.value, /redirect_uri=http%3A%2F%2Flocalhost%3A33418%2Fcallback/);
+    assert.match(out.headers.location.value, /code_challenge=EjyELPJXx3kyT5w_Z6TVAoIRpkHBQEJ_yEEBrnE0lcw/);
+    assert.equal(out.headers['cache-control'].value, 'no-store');
+  });
+
+  it('302 authorize with no querystring still reaches api authorize (proper RFC errors)', () => {
+    const out = router(req('/mushi-mushi/hosted-mcp/oauth/authorize', '', 'GET'));
+    assert.equal(out.statusCode, 302);
+    assert.equal(
+      out.headers.location.value,
+      'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/mcp-oauth/authorize',
+    );
+  });
+
   it('302 OAuth authorize to Smithery callback at edge', () => {
     const out = router(
       reqWithQs('/mushi-mushi/hosted-mcp/oauth/authorize', {

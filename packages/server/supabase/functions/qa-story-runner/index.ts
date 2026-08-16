@@ -47,7 +47,7 @@ import { parseBody, QaStoryRunnerBodySchema, type QaStoryRunnerBody } from '../_
 import { startCronRun } from '../_shared/telemetry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { sendBotMessage, sendSlackText, buildQaStoryRunBlocks, sendDiscordNotification } from '../_shared/slack.ts'
-import { dispatchPluginEvent } from '../_shared/plugins.ts'
+import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -1027,7 +1027,7 @@ Deno.serve(
             : null
 
         if (fanoutEvent) {
-          void dispatchPluginEvent(db, pid, fanoutEvent, {
+          dispatchPluginEventDetached(db, pid, fanoutEvent, {
             story_id: story.id,
             story_name: story.name,
             run_id: runId,

@@ -1,19 +1,37 @@
 // ============================================================
 // plugin-dispatch-retry — every minute (pg_cron)
 //
-// Reads `plugin_dispatch_log` rows with status='pending' whose
+// Claims `plugin_dispatch_log` rows with status='pending' whose
 // `next_retry_at` has elapsed and replays them against the original
-// plugin webhook with the same HMAC signing path as the original
-// dispatch. Schedule (exponential backoff): 30s, 2m, 10m, 1h, 6h —
-// after attempt=5 the row is marked permanently 'error' and the
-// installed plugin's last_delivery_status becomes 'error'.
+// plugin webhook through the SAME signing path as the first dispatch
+// (`postSignedWebhook` in _shared/plugins.ts). Schedule (exponential
+// backoff ±20% jitter): 30s, 2m, 10m, 1h, 6h — after attempt=5 the row
+// is marked permanently 'error' and the installed plugin's
+// last_delivery_status becomes 'error'.
 //
-// Idempotency: each retry uses the **same delivery_id** and
-// **same payload_digest** as the original row — receivers that
-// already accepted attempt N will see the dedup key on attempt N+1.
+// Claiming (2026-08-16 audit C1): rows are leased by
+// `claim_plugin_dispatch_retries()` (FOR UPDATE SKIP LOCKED) before any
+// POST goes out. A full tick can take 50 rows / 5 concurrency × 8s = 80s,
+// which overruns the 60s cadence — without the lease, tick N+1 read the
+// rows tick N was still delivering and double-sent every one of them.
+// A worker that dies mid-tick leaves its lease behind; the claim function
+// reclaims those rows after 5 minutes.
 //
-// Limits per run: BATCH_SIZE rows, capped so a backlog can't blow
-// the 60s edge-function ceiling at concurrency CONCURRENCY.
+// Fidelity (2026-08-16 audit C2): the retry replays the EXACT bytes
+// stored in `plugin_dispatch_log.payload` — the original envelope, whose
+// sha256 is `payload_digest` — under the ORIGINAL webhook-id (so the
+// receiver's Standard Webhooks dedupe recognises it) with a FRESH
+// timestamp and signature (receivers reject timestamps outside ±5 min).
+// The old code fabricated a `{ retryOf, attempt }` envelope instead,
+// which matched neither the digest nor the receiver's signature check.
+// Rows logged before migration 20260816120000 have no stored payload and
+// are finalised as 'unrecoverable' rather than sent as a synthetic body.
+//
+// Limits per run: BATCH_SIZE rows at concurrency CONCURRENCY. Note this
+// does NOT fit inside one 60s tick in the worst case (see the 80s figure
+// above) — the lease is what makes the overrun safe: a tick that runs long
+// simply holds its rows, and the next tick claims a disjoint set rather
+// than re-sending them.
 // ============================================================
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
@@ -25,6 +43,7 @@ import { safeErrorResponse } from '../_shared/safe-error.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { startCronRun } from '../_shared/telemetry.ts';
 import { notifyOperator } from '../_shared/operator-notify.ts';
+import { postSignedWebhook } from '../_shared/plugins.ts';
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void;
@@ -48,17 +67,33 @@ const MAX_ATTEMPTS = 5;
  *  the row is finalised as 'error'. */
 const BACKOFF_MS = [30_000, 120_000, 600_000, 3_600_000, 21_600_000];
 
+/** Fraction of the backoff to spread each retry over, ± (2026-08-16 audit H5).
+ *  One receiver outage fails many deliveries within the same second; a fixed
+ *  schedule then re-fires all of them at the same instant, so the receiver is
+ *  hit by the full herd the moment it comes back and fails them again in
+ *  lockstep. ±20% decorrelates the wave without meaningfully changing the
+ *  advertised 30s/2m/10m/1h/6h cadence. */
+const JITTER_RATIO = 0.2;
+
+function withJitter(ms: number): number {
+  const spread = ms * JITTER_RATIO;
+  return Math.round(ms - spread + Math.random() * spread * 2);
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Types
 // ──────────────────────────────────────────────────────────────────────────
 
-interface PendingRow {
+interface ClaimedRow {
   id: number;
   delivery_id: string;
   project_id: string;
   plugin_slug: string;
   event: string;
   attempt: number;
+  /** Exact bytes signed on the first dispatch. NULL on rows logged before
+   *  migration 20260816120000 — those cannot be replayed faithfully. */
+  payload: string | null;
   payload_digest: string;
 }
 
@@ -78,27 +113,28 @@ async function loadSecret(db: SupabaseClient, ref: string): Promise<string | nul
   return typeof data === 'string' ? data : null;
 }
 
-async function signHmac(secret: string, payload: string): Promise<string> {
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
-  return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
 interface RetryOutcome {
-  status: 'ok' | 'error' | 'timeout' | 'skipped';
+  /** 'blocked'       — SSRF guard rejected the webhook URL (terminal).
+   *  'unrecoverable' — no stored payload, replay impossible (terminal). */
+  status: 'ok' | 'error' | 'timeout' | 'skipped' | 'blocked' | 'unrecoverable';
   httpStatus: number | null;
   durationMs: number;
   excerpt: string;
 }
 
-async function retryOne(db: SupabaseClient, row: PendingRow): Promise<RetryOutcome> {
+async function retryOne(db: SupabaseClient, row: ClaimedRow): Promise<RetryOutcome> {
+  // Pre-20260816120000 rows stored only the digest, never the body. Replaying
+  // a fabricated envelope would deliver a payload that matches neither the
+  // digest nor the receiver's signature check, so finalise instead of lying.
+  if (!row.payload) {
+    return {
+      status: 'unrecoverable',
+      httpStatus: null,
+      durationMs: 0,
+      excerpt: 'no_stored_payload',
+    };
+  }
+
   const { data: plugin } = await db
     .from('project_plugins')
     .select('webhook_url, webhook_secret_vault_ref')
@@ -115,56 +151,29 @@ async function retryOne(db: SupabaseClient, row: PendingRow): Promise<RetryOutco
     return { status: 'skipped', httpStatus: null, durationMs: 0, excerpt: 'missing_secret' };
   }
 
-  // Reconstruct the envelope. data is opaque to the worker — the receiver
-  // verifies via X-Mushi-Signature, and dedups via the unchanged
-  // delivery_id and payload_digest.
-  const envelope = {
+  // Replay the ORIGINAL bytes: same webhook-id (receiver-side dedupe still
+  // recognises the delivery it may already have accepted) but a fresh
+  // timestamp + signature, because Standard Webhooks receivers reject
+  // timestamps outside a ±5 minute window and a 6h-backoff retry would
+  // otherwise always fail verification.
+  const result = await postSignedWebhook({
+    url: plugin.webhook_url,
+    secret,
     event: row.event,
-    deliveryId: row.delivery_id,
-    occurredAt: new Date().toISOString(),
     projectId: row.project_id,
     pluginSlug: row.plugin_slug,
-    data: { retryOf: row.delivery_id, attempt: row.attempt + 1 },
+    deliveryId: row.delivery_id,
+    rawBody: row.payload,
+    retryAttempt: row.attempt + 1,
+    timeoutMs: DISPATCH_TIMEOUT_MS,
+  });
+
+  return {
+    status: result.status,
+    httpStatus: result.httpStatus,
+    durationMs: result.durationMs,
+    excerpt: result.excerpt.slice(0, RESPONSE_EXCERPT_MAX),
   };
-  const rawBody = JSON.stringify(envelope);
-  const t = Date.now();
-  const sig = await signHmac(secret, `${t}.${rawBody}`);
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'X-Mushi-Event': row.event,
-    'X-Mushi-Signature': `t=${t},v1=${sig}`,
-    'X-Mushi-Project': row.project_id,
-    'X-Mushi-Plugin': row.plugin_slug,
-    'X-Mushi-Delivery': row.delivery_id,
-    'X-Mushi-Retry-Attempt': String(row.attempt + 1),
-  };
-
-  const start = Date.now();
-  let status: RetryOutcome['status'] = 'error';
-  let httpStatus: number | null = null;
-  let excerpt = '';
-
-  try {
-    const controller = new AbortController();
-    const tm = setTimeout(() => controller.abort(), DISPATCH_TIMEOUT_MS);
-    const res = await fetch(plugin.webhook_url, {
-      method: 'POST',
-      headers,
-      body: rawBody,
-      signal: controller.signal,
-    });
-    clearTimeout(tm);
-    httpStatus = res.status;
-    const text = await res.text().catch(() => '');
-    excerpt = text.slice(0, RESPONSE_EXCERPT_MAX);
-    status = res.ok ? 'ok' : 'error';
-  } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') status = 'timeout';
-    excerpt = String(err).slice(0, RESPONSE_EXCERPT_MAX);
-  }
-
-  return { status, httpStatus, durationMs: Date.now() - start, excerpt };
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -179,23 +188,22 @@ async function handler(req: Request): Promise<Response> {
   const cron = await startCronRun(db, 'plugin-dispatch-retry', 'cron');
 
   try {
-    // ── 1. Pull a batch of pending rows whose retry time has elapsed ───
-    const nowIso = new Date().toISOString();
-    const { data: pending, error: pendingErr } = await db
-      .from('plugin_dispatch_log')
-      .select('id, delivery_id, project_id, plugin_slug, event, attempt, payload_digest')
-      .eq('status', 'pending')
-      .lte('next_retry_at', nowIso)
-      .order('next_retry_at', { ascending: true })
-      .limit(BATCH_SIZE);
-    if (pendingErr) throw new Error(`pending fetch failed: ${pendingErr.message}`);
+    // ── 1. CLAIM a batch of due rows (atomic lease, not a plain read) ──
+    // FOR UPDATE SKIP LOCKED inside the RPC: an overlapping tick gets a
+    // disjoint set instead of re-sending the deliveries this tick is
+    // still working through.
+    const { data: claimed, error: claimErr } = await db.rpc('claim_plugin_dispatch_retries', {
+      p_limit: BATCH_SIZE,
+    });
+    if (claimErr) throw new Error(`claim failed: ${claimErr.message}`);
 
-    const rows = (pending ?? []) as PendingRow[];
+    const rows = (claimed ?? []) as ClaimedRow[];
     plog.info('plugin-dispatch-retry.start', { rows: rows.length });
 
     let succeeded = 0;
     let failed = 0;
     let exhausted = 0;
+    let unrecoverable = 0;
     // Loop-closure: paged at the end of the run so a single dead webhook
     // doesn't spam the operator channel on every retry tick. We collect
     // unique (project, plugin) pairs that exhausted retries this tick
@@ -216,27 +224,43 @@ async function handler(req: Request): Promise<Response> {
 
       for (const r of results) {
         if (r.status !== 'fulfilled') {
+          // Lease is left in place; the row is reclaimed after the 5-minute
+          // stale-lease window rather than being retried immediately.
           plog.warn('retry threw', { error: String(r.reason) });
           continue;
         }
         const { row, outcome } = r.value;
-        const newAttempt = row.attempt + 1;
 
         // ── Decide next status / next_retry_at based on outcome ───────
+        // 'unrecoverable' is terminal and does NOT count an attempt: nothing
+        // was sent, and the plugin is not at fault, so it never pages and
+        // never stamps last_delivery_status.
+        const isUnrecoverable = outcome.status === 'unrecoverable';
+        const newAttempt = isUnrecoverable ? row.attempt : row.attempt + 1;
+
         const isFinalOk = outcome.status === 'ok';
-        const isPermanentFail = outcome.status === 'skipped' || newAttempt >= MAX_ATTEMPTS;
-        const willRetry = !isFinalOk && !isPermanentFail;
-        const nextStatus: 'ok' | 'pending' | 'error' = isFinalOk
+        // 'blocked' = SSRF guard rejected the URL; it will not become safe on
+        // the next tick, so it is terminal like an uninstalled plugin.
+        const isPermanentFail =
+          !isUnrecoverable &&
+          (outcome.status === 'skipped' ||
+            outcome.status === 'blocked' ||
+            newAttempt >= MAX_ATTEMPTS);
+        const willRetry = !isFinalOk && !isPermanentFail && !isUnrecoverable;
+        const nextStatus: 'ok' | 'pending' | 'error' | 'unrecoverable' = isFinalOk
           ? 'ok'
-          : willRetry
-            ? 'pending'
-            : 'error';
+          : isUnrecoverable
+            ? 'unrecoverable'
+            : willRetry
+              ? 'pending'
+              : 'error';
         // BACKOFF_MS is indexed 0..MAX_ATTEMPTS-1, lookup uses newAttempt-1
         // since attempt=1 was the original dispatch and attempt=2 is the
         // first retry.
         const nextRetryAt = willRetry
           ? new Date(
-              Date.now() + BACKOFF_MS[Math.min(newAttempt - 1, BACKOFF_MS.length - 1)],
+              Date.now() +
+                withJitter(BACKOFF_MS[Math.min(newAttempt - 1, BACKOFF_MS.length - 1)]),
             ).toISOString()
           : null;
 
@@ -249,11 +273,24 @@ async function handler(req: Request): Promise<Response> {
             response_excerpt: outcome.excerpt || null,
             duration_ms: outcome.durationMs,
             next_retry_at: nextRetryAt,
+            // Release the lease. Required for the short backoffs: a row still
+            // holding its lease is only reclaimable after 5 minutes, which
+            // would stretch the 30s and 2m hops out to 5m.
+            claimed_at: null,
           })
           .eq('id', row.id);
+        // Leaving the lease set on failure is the safe outcome — the row is
+        // reclaimed in 5 minutes instead of being re-sent on the next tick.
         if (updateErr) plog.warn('row update failed', { id: row.id, error: updateErr.message });
 
-        if (isFinalOk) {
+        if (isUnrecoverable) {
+          unrecoverable++;
+          plog.warn('retry unrecoverable (no stored payload)', {
+            id: row.id,
+            deliveryId: row.delivery_id,
+            pluginSlug: row.plugin_slug,
+          });
+        } else if (isFinalOk) {
           succeeded++;
           // Update the plugin row's last_delivery_at/status — only on
           // success or permanent-fail, never on intermediate retries.
@@ -325,6 +362,7 @@ async function handler(req: Request): Promise<Response> {
         succeeded,
         failed,
         exhausted,
+        unrecoverable,
         exhaustedPairs: exhaustedPairs.size,
       },
     });
@@ -336,6 +374,7 @@ async function handler(req: Request): Promise<Response> {
           succeeded,
           failed,
           exhausted,
+          unrecoverable,
           exhaustedPairs: exhaustedPairs.size,
         },
       }),

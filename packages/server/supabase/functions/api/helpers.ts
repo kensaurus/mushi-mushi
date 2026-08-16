@@ -12,7 +12,7 @@ import { awardPoints, awardPointsForEndUser } from '../_shared/reputation.ts';
 import { resolveEndUser } from '../_shared/end-user-resolver.ts';
 import { verifyEndUserToken } from '../_shared/end-user-identity.ts';
 import { createNotification, buildNotificationMessage } from '../_shared/notifications.ts';
-import { dispatchPluginEvent } from '../_shared/plugins.ts';
+import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
 import { dbError } from './shared.ts';
 import { isUuid } from './migration-progress-helpers.ts';
 import { childTraceparent } from '../_shared/trace.ts';
@@ -715,7 +715,7 @@ export async function ingestReport(
   // deploy gap) that would otherwise escape through the async call chain and
   // surface as a 500 on the ingest endpoint even though the report was saved.
   try {
-    void dispatchPluginEvent(db, projectId, 'report.created', {
+    dispatchPluginEventDetached(db, projectId, 'report.created', {
       report: {
         id: reportId,
         status: 'new',

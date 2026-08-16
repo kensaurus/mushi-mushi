@@ -687,6 +687,18 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       .order('created_at', { ascending: false })
       .limit(500);
 
+    // Triage-queue source: open reports REGARDLESS of age. The windowed
+    // recentReports slice silently dropped anything stuck open longer than
+    // the 14-day window, so the dashboard claimed "All caught up" over a
+    // stalled queue (2026-08-16 audit).
+    const { data: openReports } = await db
+      .from('reports')
+      .select('id, summary, description, status, severity, category, created_at, processing_error')
+      .in('project_id', projectIds)
+      .in('status', ['new', 'queued', 'classified', 'triaged', 'grouped', 'reopened'])
+      .order('created_at', { ascending: false })
+      .limit(10);
+
     // Fix attempts — for the auto-fix pipeline tile
     const { data: recentFixes } = await db
       .from('fix_attempts')
@@ -820,18 +832,9 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         .length,
     };
 
-    // Triage queue — top 5 most recent reports needing attention
-    const triageQueue = (recentReports ?? [])
-      .filter((r) => {
-        const s = String(r.status ?? '');
-        return (
-          s === 'new' ||
-          s === 'queued' ||
-          s === 'classified' ||
-          s === 'triaged' ||
-          s === 'grouped'
-        );
-      })
+    // Triage queue — top 5 open reports needing attention, ANY age (the
+    // openReports query is unwindowed; see its comment above).
+    const triageQueue = (openReports ?? [])
       .slice(0, 5)
       .map((r) => ({
         id: r.id,
@@ -840,6 +843,8 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         category: r.category,
         status: r.status,
         created_at: r.created_at,
+        // Surfaced so the console can show "auto-fix blocked" inline.
+        processing_error: r.processing_error ?? null,
       }));
 
     // Recent activity — last 8 events across reports + fixes

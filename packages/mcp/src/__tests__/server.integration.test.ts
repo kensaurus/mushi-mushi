@@ -246,8 +246,14 @@ describe('tool → REST contract', () => {
     })
   })
 
-  it('dispatch_fix POSTs to /fixes/dispatch and forwards the envelope', async () => {
-    fetchStub.enqueue({ ok: true, data: { fixId: 'fix_123', status: 'queued' } })
+  it('dispatch_fix POSTs to /fixes/dispatch and maps dispatchId → fixId (declared outputSchema)', async () => {
+    // Real API contract (fix-dispatch.ts): { ok, data: { dispatchId, status, createdAt } }.
+    // The 2026-08 regression came from this fixture inventing a `fixId` field
+    // the API never returns — keep it faithful to the server response.
+    fetchStub.enqueue({
+      ok: true,
+      data: { dispatchId: 'fix_123', status: 'queued', createdAt: '2026-08-16T00:00:00Z' },
+    })
     const res = await client.callTool({
       name: 'dispatch_fix',
       arguments: { reportId: '11111111-1111-4111-8111-111111111111', agent: 'claude_code' },

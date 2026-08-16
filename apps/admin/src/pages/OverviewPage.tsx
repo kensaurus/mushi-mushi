@@ -9,7 +9,12 @@
  * Nav: navRegistry 'nav:overview', sectionId 'start'.
  *
  * Must keep working: portfolio fetch, project switch via footer links,
- * loading / error / empty states, critical/warn/ok health tones.
+ * loading / error / empty states, health tones
+ * (critical / not-connected / silent / warn / ok).
+ *
+ * Health tone reads `last_seen_at` (added to the RPC by migration
+ * 20260816130000). Until that migration is applied the field is absent and the
+ * page falls back to the report-count tones — see `healthToneFor`.
  */
 
 import { Link } from 'react-router-dom'
@@ -26,6 +31,7 @@ import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { BarSparkline } from '../components/charts'
 import { relTime } from '../components/dashboard/types'
 import { IconGauge } from '../components/icons'
+import { HEARTBEAT_HINT, heartbeatStateFromTimestamp } from '../lib/heartbeat'
 import { SpringChromeEnter } from '../components/motion/SpringChromeEnter'
 import { useAdminMode } from '../lib/mode'
 
@@ -46,23 +52,75 @@ interface ProjectCard {
   open_reports: number
   critical_reports: number
   last_report_at: string | null
+  /** Freshest SDK heartbeat across the project's live API keys.
+   *
+   *  Tri-state on purpose. `undefined` = the deployed `org_portfolio_summary`
+   *  RPC predates the column (migration 20260816130000 not applied yet), so we
+   *  know nothing and must not claim the project is disconnected. `null` = the
+   *  RPC ran and reports no key has ever authenticated. */
+  last_seen_at?: string | null
   dau_spark: DauPoint[]
 }
 
-type HealthTone = 'critical' | 'warn' | 'ok'
+type HealthTone = 'critical' | 'not-connected' | 'silent' | 'warn' | 'ok'
 
+/**
+ * A project with no heartbeat used to fall through to `ok` and render a green
+ * "Healthy" badge — the never-connected case looked identical to the perfectly
+ * healthy one. Connectivity is now checked before the quiet-and-fine path.
+ *
+ * Critical reports still outrank connectivity: a project with live critical
+ * bugs is the more urgent thing to say, and reports only exist if something
+ * connected at some point anyway.
+ */
 function healthToneFor(card: ProjectCard): HealthTone {
   if (card.critical_reports > 0) return 'critical'
+
+  const heartbeat = heartbeatStateFromTimestamp(card.last_seen_at)
+  if (heartbeat === 'never') return 'not-connected'
+  if (heartbeat === 'dead') return 'silent'
+
   if (card.open_reports > 5) return 'warn'
   return 'ok'
 }
 
-const HEALTH_RANK: Record<HealthTone, number> = { critical: 0, warn: 1, ok: 2 }
+const HEALTH_RANK: Record<HealthTone, number> = {
+  critical: 0,
+  'not-connected': 1,
+  silent: 2,
+  warn: 3,
+  ok: 4,
+}
 
 const HEALTH_BADGE_TONE: Record<HealthTone, BadgeTone> = {
   critical: 'dangerSubtle',
+  'not-connected': 'neutral',
+  silent: 'warnSubtle',
   warn: 'warnSubtle',
   ok: 'okSubtle',
+}
+
+function healthBadgeLabel(card: ProjectCard, tone: HealthTone): string {
+  switch (tone) {
+    case 'critical':
+      return `${card.critical_reports} critical`
+    case 'not-connected':
+      return 'Not connected'
+    case 'silent':
+      return 'Silent'
+    case 'warn':
+      return `${card.open_reports} open`
+    case 'ok':
+      return 'Healthy'
+  }
+}
+
+const HEALTH_BADGE_HINT: Record<HealthTone, string | undefined> = {
+  critical: undefined,
+  'not-connected': HEARTBEAT_HINT.never,
+  silent: HEARTBEAT_HINT.dead,
+  warn: undefined,
+  ok: undefined,
 }
 
 // ─── Page ────────────────────────────────────────────────────────────────────
@@ -247,10 +305,13 @@ function ProjectHealthCard({ card }: { card: ProjectCard }) {
     setActiveProjectIdSnapshot(card.project_id)
   }
 
+  // `not-connected` deliberately keeps the neutral edge — a project created
+  // five minutes ago is not an error, and painting it amber would cry wolf.
+  // The badge carries the state; the border is reserved for real trouble.
   const borderTone =
     healthTone === 'critical'
       ? 'border-danger/40'
-      : healthTone === 'warn'
+      : healthTone === 'warn' || healthTone === 'silent'
         ? 'border-warn/40'
         : ''
 
@@ -274,12 +335,12 @@ function ProjectHealthCard({ card }: { card: ProjectCard }) {
             <p className="mt-0.5 truncate font-mono text-2xs text-fg-faint">{card.slug}</p>
           )}
         </div>
-        <Badge tone={HEALTH_BADGE_TONE[healthTone]} className="relative z-10 shrink-0">
-          {healthTone === 'critical'
-            ? `${card.critical_reports} critical`
-            : healthTone === 'warn'
-              ? `${card.open_reports} open`
-              : 'Healthy'}
+        <Badge
+          tone={HEALTH_BADGE_TONE[healthTone]}
+          title={HEALTH_BADGE_HINT[healthTone]}
+          className="relative z-10 shrink-0"
+        >
+          {healthBadgeLabel(card, healthTone)}
         </Badge>
       </div>
 

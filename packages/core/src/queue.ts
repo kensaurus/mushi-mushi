@@ -57,6 +57,11 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
   let syncCleanup: (() => void) | null = null;
   let flushInterval: ReturnType<typeof setInterval> | null = null;
   let backendType: StorageBackend | null = null;
+  // C5: flush() re-entrancy latch. `inFlight` is the pass currently running;
+  // `followUp` is the single pass queued behind it for callers that arrived
+  // while it was running. See flush() for the full rationale.
+  let inFlight: Promise<{ sent: number; failed: number }> | null = null;
+  let followUp: Promise<{ sent: number; failed: number }> | null = null;
 
   async function wrapForStorage(report: MushiReport): Promise<StoredRow> {
     const queuedAt = new Date().toISOString();
@@ -249,9 +254,16 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
     }
   }
 
+  // Upsert by `id` so this matches the IndexedDB backend, whose `put` against
+  // a `keyPath: 'id'` store replaces an existing row. A bare push let one
+  // report id occupy two localStorage rows; lsUpdateRow only advances the
+  // first, so the duplicate stayed at attempts 0 and re-flushed forever.
   async function lsEnqueue(report: MushiReport): Promise<void> {
     const rows = lsRead();
-    rows.push(await wrapForStorage(report));
+    const row = await wrapForStorage(report);
+    const idx = rows.findIndex((r) => (r as { id: string }).id === report.id);
+    if (idx >= 0) rows[idx] = row;
+    else rows.push(row);
     lsWrite(rows);
   }
 
@@ -314,6 +326,54 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
     }
   }
 
+  // --- Backend resolution (single source of truth) ---
+  //
+  // H24: enqueue and flush each decided independently which store they were
+  // touching. When an IndexedDB call failed, enqueue flipped the session to
+  // localStorage while flush kept the 'indexeddb' value it had captured — so
+  // flush read its rows out of localStorage but issued the matching delete
+  // against IndexedDB. The delete silently no-opped and the row was orphaned
+  // in localStorage until the 24h age sweep. Both paths now go through these
+  // two helpers, which return the backend that actually served the call so a
+  // caller always mutates the store it read from.
+
+  /** Read every queued row, reporting which store served the read. */
+  async function readRows(): Promise<{ backend: StorageBackend; rows: StoredRow[] }> {
+    const backend = detectBackend();
+    if (backend === 'none') return { backend, rows: [] };
+    if (backend === 'indexeddb') {
+      try {
+        return { backend, rows: await idbGetAll() };
+      } catch {
+        backendType = 'localstorage';
+      }
+    }
+    return { backend: 'localstorage', rows: lsRead() };
+  }
+
+  /** Persist a new row, reporting which store accepted it. */
+  async function writeRow(report: MushiReport): Promise<StorageBackend> {
+    const backend = detectBackend();
+    // No storage at all (SSR, a locked-down webview): there is nowhere to put
+    // the row. Bail before the localStorage path, whose every step throws and
+    // is swallowed — including at-rest encryption, which needs IndexedDB for
+    // its key and so warns on each enqueue about falling back to plaintext.
+    if (backend === 'none') {
+      queueLog.debug('Offline queue: no storage backend, dropping report', { id: report.id });
+      return backend;
+    }
+    if (backend === 'indexeddb') {
+      try {
+        await idbEnqueue(report);
+        return backend;
+      } catch {
+        backendType = 'localstorage';
+      }
+    }
+    await lsEnqueue(report);
+    return 'localstorage';
+  }
+
   // --- Unified interface ---
 
   async function enqueue(report: MushiReport): Promise<void> {
@@ -325,21 +385,7 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
       return;
     }
 
-    const backend = detectBackend();
-    if (backend === 'indexeddb') {
-      try {
-        await idbEnqueue(report);
-        return;
-      } catch {
-        // IndexedDB failed, fall through to localStorage
-        backendType = 'localstorage';
-      }
-    }
-
-    if (backend === 'localstorage' || backendType === 'localstorage') {
-      await lsEnqueue(report);
-      return;
-    }
+    await writeRow(report);
   }
 
   function getBackoffDelay(attempt: number): number {
@@ -350,21 +396,11 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  async function flush(client: MushiApiClient): Promise<{ sent: number; failed: number }> {
-    if (!enabled) return { sent: 0, failed: 0 };
-
-    let rows: StoredRow[];
-    const backend = detectBackend();
-
-    if (backend === 'indexeddb') {
-      try {
-        rows = await idbGetAll();
-      } catch {
-        rows = lsRead();
-      }
-    } else {
-      rows = lsRead();
-    }
+  // One delivery pass. Never call this directly — go through flush(), which
+  // serialises passes so two of them can't drain the same rows (C5).
+  async function runFlush(client: MushiApiClient): Promise<{ sent: number; failed: number }> {
+    const { backend, rows: storedRows } = await readRows();
+    let rows = storedRows;
 
     // Backstop: evict any row that has outlived MAX_QUEUE_AGE_MS before we
     // spend a network attempt on it. This sweeps the whole queue (IndexedDB
@@ -405,76 +441,132 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
       if (result.ok) {
         await removeRow(backend, rowId);
         sent++;
+        continue;
+      }
+
+      failed++;
+
+      // A circuit-breaker fast-fail never reached the network, so it must not
+      // be charged against MAX_DELIVERY_ATTEMPTS — that would discard reports
+      // with zero delivery attempts. Now that sustained rate limiting trips
+      // the breaker (H17) this response is common, so the carve-out matters.
+      // Stop the pass too: every remaining row would fast-fail identically,
+      // and walking them only burns backoff sleeps against a known-down
+      // endpoint.
+      if (result.error?.code === 'CIRCUIT_OPEN') {
+        queueLog.debug('Offline queue: circuit open, deferring the rest of the batch', {
+          id: rowId,
+          remaining: batch.length - i,
+        });
+        break;
+      }
+
+      const permanent =
+        result.error?.code === 'HTTP_400' ||
+        result.error?.code === 'HTTP_413' ||
+        result.error?.code === 'HTTP_422' ||
+        result.error?.code === 'INGEST_ERROR' ||
+        result.error?.code === 'VALIDATION_ERROR' ||
+        // A payload that exceeds the size guard will never shrink on its own;
+        // retrying re-serialises the multi-MB body every sync tick and wedges
+        // the queue (it matches neither permanent nor transient otherwise).
+        // SERIALIZE_FAILED (circular ref) is likewise unrecoverable on retry.
+        result.error?.code === 'PAYLOAD_TOO_LARGE' ||
+        result.error?.code === 'SERIALIZE_FAILED' ||
+        (typeof result.error?.message === 'string' &&
+          /invalid payload|description must be at least|validation/i.test(
+            result.error.message,
+          ));
+      const transient =
+        !permanent &&
+        (result.error?.code === 'NETWORK_ERROR' ||
+          result.error?.code === 'HTTP_403' ||
+          result.error?.code === 'HTTP_429' ||
+          result.error?.code === 'HTTP_502' ||
+          result.error?.code === 'HTTP_503' ||
+          result.error?.code === 'HTTP_504' ||
+          (typeof result.error?.code === 'string' && result.error.code.startsWith('HTTP_5')));
+      if (permanent) {
+        await removeRow(backend, rowId);
       } else {
-        const permanent =
-          result.error?.code === 'HTTP_400' ||
-          result.error?.code === 'HTTP_413' ||
-          result.error?.code === 'HTTP_422' ||
-          result.error?.code === 'INGEST_ERROR' ||
-          result.error?.code === 'VALIDATION_ERROR' ||
-          // A payload that exceeds the size guard will never shrink on its own;
-          // retrying re-serialises the multi-MB body every sync tick and wedges
-          // the queue (it matches neither permanent nor transient otherwise).
-          // SERIALIZE_FAILED (circular ref) is likewise unrecoverable on retry.
-          result.error?.code === 'PAYLOAD_TOO_LARGE' ||
-          result.error?.code === 'SERIALIZE_FAILED' ||
-          (typeof result.error?.message === 'string' &&
-            /invalid payload|description must be at least|validation/i.test(
-              result.error.message,
-            ));
-        const transient =
-          !permanent &&
-          (result.error?.code === 'NETWORK_ERROR' ||
-            result.error?.code === 'HTTP_403' ||
-            result.error?.code === 'HTTP_429' ||
-            result.error?.code === 'HTTP_502' ||
-            result.error?.code === 'HTTP_503' ||
-            result.error?.code === 'HTTP_504' ||
-            (typeof result.error?.code === 'string' && result.error.code.startsWith('HTTP_5')));
-        if (permanent) {
+        // Every non-permanent outcome runs the attempt counter — the codes
+        // we recognise as transient and the ones we don't, alike. An
+        // unrecognised code used to match neither branch, so its row kept
+        // its initial attempt count and retried forever, sailing past
+        // MAX_DELIVERY_ATTEMPTS until the 24h age sweep caught it.
+        //
+        // Bump the per-row counter and give up once it crosses the ceiling,
+        // so a report the network keeps rejecting eventually leaves the
+        // queue instead of retrying on every flush + page load.
+        const nextAttempts = rowAttempts(row) + 1;
+        if (nextAttempts >= MAX_DELIVERY_ATTEMPTS) {
           await removeRow(backend, rowId);
-        } else if (transient) {
-          // Bump the per-row attempt counter and give up once it crosses the
-          // ceiling, so a report the network keeps rejecting eventually leaves
-          // the queue instead of retrying forever on every flush + page load.
-          const nextAttempts = rowAttempts(row) + 1;
-          if (nextAttempts >= MAX_DELIVERY_ATTEMPTS) {
-            await removeRow(backend, rowId);
-            queueLog.warn('Offline queue: giving up on report after repeated failures', {
+          queueLog.warn('Offline queue: giving up on report after repeated failures', {
+            id: rowId,
+            attempts: nextAttempts,
+            code: result.error?.code,
+          });
+        } else {
+          (row as { attempts?: number }).attempts = nextAttempts;
+          const persisted = await persistRow(backend, row);
+          if (persisted) {
+            queueLog.debug('Offline queue: delivery failed, will retry', {
               id: rowId,
               attempts: nextAttempts,
               code: result.error?.code,
+              classified: transient ? 'transient' : 'unclassified',
             });
           } else {
-            (row as { attempts?: number }).attempts = nextAttempts;
-            const persisted = await persistRow(backend, row);
-            if (persisted) {
-              queueLog.debug('Offline queue: transient failure, will retry', {
-                id: rowId,
-                attempts: nextAttempts,
-                code: result.error?.code,
-              });
-            } else {
-              // The bumped counter could not be saved (e.g. an IndexedDB write
-              // failure). Leaving the row would re-flush it forever with a
-              // counter that never advances, defeating MAX_DELIVERY_ATTEMPTS —
-              // so drop it now rather than wait 24h for the age sweep.
-              await removeRow(backend, rowId);
-              queueLog.warn('Offline queue: dropping report (attempt counter unpersistable)', {
-                id: rowId,
-                code: result.error?.code,
-              });
-            }
+            // The bumped counter could not be saved (e.g. an IndexedDB write
+            // failure). Leaving the row would re-flush it forever with a
+            // counter that never advances, defeating MAX_DELIVERY_ATTEMPTS —
+            // so drop it now rather than wait 24h for the age sweep.
+            await removeRow(backend, rowId);
+            queueLog.warn('Offline queue: dropping report (attempt counter unpersistable)', {
+              id: rowId,
+              code: result.error?.code,
+            });
           }
         }
-        failed++;
-        if (i < batch.length - 1) {
-          await sleep(getBackoffDelay(i));
-        }
+      }
+
+      if (i < batch.length - 1) {
+        await sleep(getBackoffDelay(i));
       }
     }
 
     return { sent, failed };
+  }
+
+  // C5: flush() is triggered from several places that can overlap — the 30s
+  // auto-sync timer, the `online` listener, the page-visibility handlers in
+  // the web and react-native packages, and the SDK boot path. Two passes that
+  // start before either has deleted its rows read the same batch and submit
+  // every queued report twice. So passes are serialised: the first caller
+  // starts one, and everyone who arrives while it runs shares a single
+  // follow-up pass — enough for reports enqueued mid-flush to go out promptly,
+  // without ever running two passes at once.
+  function flush(client: MushiApiClient): Promise<{ sent: number; failed: number }> {
+    if (!enabled) return Promise.resolve({ sent: 0, failed: 0 });
+
+    if (inFlight) {
+      if (!followUp) {
+        followUp = inFlight
+          // A rejected pass must not sink the follow-up — it has its own run.
+          .catch(() => undefined)
+          .then(() => {
+            followUp = null;
+            return flush(client);
+          });
+      }
+      return followUp;
+    }
+
+    const pass = runFlush(client).finally(() => {
+      if (inFlight === pass) inFlight = null;
+    });
+    inFlight = pass;
+    return pass;
   }
 
   async function size(): Promise<number> {
@@ -483,7 +575,9 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
       try {
         return await idbSize();
       } catch {
-        return lsRead().length;
+        // Same fallback as readRows: an IndexedDB failure moves the session to
+        // localStorage so later reads and writes agree on where rows live.
+        backendType = 'localstorage';
       }
     }
     return lsRead().length;

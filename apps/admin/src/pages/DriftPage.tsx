@@ -29,7 +29,9 @@ import {
   SegmentedControl,
   FreshnessPill,
   RecommendedAction,
+  Tooltip,
 } from '../components/ui'
+import { IconClose, IconEye } from '../components/icons'
 import {
   ContainedBlock,
   InlineProof,
@@ -606,11 +608,34 @@ function FindingsTab({
                 <td className="px-3 py-2 text-xs text-fg-muted"><RelativeTime value={f.created_at} /></td>
                 <td className="px-3 py-2">
                   <div className="flex items-center gap-1 justify-end">
-                    <Btn size="sm" variant="ghost" onClick={() => onOpen(f)}>View</Btn>
+                    <Tooltip content="View finding">
+                      <Btn
+                        size="sm"
+                        variant="ghost"
+                        className="px-2"
+                        aria-label={`View drift finding on ${f.surface}`}
+                        onClick={() => onOpen(f)}
+                      >
+                        <IconEye />
+                      </Btn>
+                    </Tooltip>
+                    {/* Left as text: appears only on critical rows, so it is
+                        not a repeated per-row action and the wording carries
+                        the "promote this into a lesson" idea a glyph would not. */}
                     {f.severity === 'critical' && (
                       <Btn size="sm" variant="ghost" onClick={() => onCreateLesson(f.id)}>→ Lesson</Btn>
                     )}
-                    <Btn size="sm" variant="cancel" onClick={() => onDismiss(f.id)}>Dismiss</Btn>
+                    <Tooltip content="Dismiss finding">
+                      <Btn
+                        size="sm"
+                        variant="cancel"
+                        className="px-2"
+                        aria-label={`Dismiss drift finding on ${f.surface}`}
+                        onClick={() => onDismiss(f.id)}
+                      >
+                        <IconClose />
+                      </Btn>
+                    </Tooltip>
                   </div>
                 </td>
               </tr>

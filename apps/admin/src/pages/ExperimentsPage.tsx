@@ -29,7 +29,9 @@ import {
   SegmentedControl,
   FreshnessPill,
   RecommendedAction,
+  Tooltip,
 } from '../components/ui'
+import { IconEye, IconPause } from '../components/icons'
 import {
   ContainedBlock,
   InlineProof,
@@ -464,8 +466,30 @@ function ExperimentsTab({ experiments, loading, error, onOpen, onLaunch, onStop,
                   {e.status === 'draft' && (e.experiment_variants?.length ?? 0) >= 2 && (
                     <Btn size="sm" variant="primary" onClick={() => onLaunch(e.id)}>Launch</Btn>
                   )}
-                  {e.status === 'running' && <Btn size="sm" variant="ghost" onClick={() => onStop(e.id)}>Stop</Btn>}
-                  <Btn size="sm" variant="ghost" onClick={() => onOpen(e)}>View</Btn>
+                  {e.status === 'running' && (
+                    <Tooltip content="Stop experiment">
+                      <Btn
+                        size="sm"
+                        variant="ghost"
+                        className="px-2"
+                        aria-label={`Stop experiment ${e.name}`}
+                        onClick={() => onStop(e.id)}
+                      >
+                        <IconPause />
+                      </Btn>
+                    </Tooltip>
+                  )}
+                  <Tooltip content="View experiment">
+                    <Btn
+                      size="sm"
+                      variant="ghost"
+                      className="px-2"
+                      aria-label={`View experiment ${e.name}`}
+                      onClick={() => onOpen(e)}
+                    >
+                      <IconEye />
+                    </Btn>
+                  </Tooltip>
                 </div>
               </td>
             </tr>

@@ -34,10 +34,12 @@ import {
   computeProviderCostMicro,
   getModelPrice,
   makeRemoteBackend,
+  setWalletDeadLetterSink,
   WalletDeniedError,
   type Usage,
   type WalletBackend,
 } from './kensaurus-wallet.ts';
+import { reportError } from './sentry.ts';
 
 const log = rootLog.child('hosted-llm-billing');
 
@@ -46,6 +48,33 @@ const EXTERNAL_PROJECT = 'mushi';
 const APP = 'mushi';
 
 export { WalletDeniedError };
+
+// Lost-debit dead letter (2026-08-16 resilience audit C3): a debit that
+// failed after both attempts used to be a console.error and gone — silent
+// revenue loss. Persist it (unique on request_id so the debit RPC's own
+// dedupe makes replay safe) and page via Sentry.
+setWalletDeadLetterSink(async (entry) => {
+  const db = getServiceClient();
+  const { error } = await db.from('wallet_debit_dead_letters').upsert(
+    {
+      request_id: entry.requestId,
+      app: entry.app,
+      feature: entry.feature,
+      model: entry.model,
+      provider_cost_micro: entry.providerCostMicro,
+      error: entry.error.slice(0, 1000),
+      payload: entry.payload,
+    },
+    { onConflict: 'request_id' },
+  );
+  if (error) {
+    log.error('wallet dead-letter persist failed', { requestId: entry.requestId, error: error.message });
+  }
+  reportError(new Error(`wallet debit lost after retry: ${entry.error.slice(0, 200)}`), {
+    tags: { area: 'wallet', feature: entry.feature },
+    extra: { requestId: entry.requestId, providerCostMicro: entry.providerCostMicro, model: entry.model },
+  });
+});
 
 export type HostedLlmBillingMode = 'off' | 'shadow' | 'on';
 

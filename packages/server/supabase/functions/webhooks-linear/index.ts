@@ -15,7 +15,13 @@
  *   - OAuthApp revoked → clears project_settings Linear credentials.
  *
  * Security: every request is verified against the Linear-Signature HMAC-SHA256
- * header using the per-project webhook secret stored in vault.
+ * header using the per-project webhook secret stored in vault, and every
+ * request (accepted or rejected) goes through `_shared/webhook-middleware.ts`
+ * for the audit log, the per-IP rate limit, and the 24h replay cache keyed on
+ * the `Linear-Delivery` header — the same posture as the Sentry / GitHub /
+ * Slack receivers. Linear retries a delivery it considers failed, so without
+ * the replay cache a retried delivery re-ran `resolveExternalIssue` and
+ * re-dispatched the plugin event for every connected project.
  */
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
@@ -23,8 +29,24 @@ import { log as rootLog } from '../_shared/logger.ts'
 import { dereferenceMaybeVault } from '../_shared/integration-probes.ts'
 import { resolveExternalIssue } from '../_shared/integrations.ts'
 import { dispatchPluginEvent } from '../_shared/plugins.ts'
+import { createWebhookMiddleware, ReplayAttackError, RateLimitError } from '../_shared/webhook-middleware.ts'
 
 const log = rootLog.child('webhooks-linear')
+
+/**
+ * Minimal shim so the Hono-shaped `createWebhookMiddleware().audit()` can read
+ * headers/method/url off a raw `Request` — this function uses `Deno.serve`
+ * directly. Mirrors the identical shim in slack-interactions/index.ts.
+ */
+function toWebhookContext(req: Request) {
+  return {
+    req: {
+      header: (name: string) => req.headers.get(name) ?? undefined,
+      method: req.method,
+      url: req.url,
+    },
+  }
+}
 
 // ── HMAC signature verification ───────────────────────────────────────────────
 
@@ -73,16 +95,45 @@ Deno.serve(async (req: Request) => {
     return new Response('Method Not Allowed', { status: 405 })
   }
 
+  const t0 = Date.now()
   const rawBody = await req.text()
   const signatureHeader = req.headers.get('linear-signature')
   const eventType = req.headers.get('linear-event') // e.g. 'Issue', 'OAuthApp'
-  const deliveryId = req.headers.get('linear-delivery') ?? 'unknown'
+  // Keep the raw (nullable) delivery id for the audit row and the replay
+  // cache. Collapsing a missing header into 'unknown' before those would make
+  // the FIRST header-less delivery poison the 24h replay bucket and 409 every
+  // header-less delivery after it. 'unknown' stays a log-only placeholder.
+  const deliveryIdRaw = req.headers.get('linear-delivery')
+  const deliveryId = deliveryIdRaw ?? 'unknown'
+
+  const { audit, checkReplay, checkRateLimit } = createWebhookMiddleware('linear')
+  const sourceIp =
+    req.headers.get('CF-Connecting-IP') ??
+    req.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ??
+    null
+
+  const auditRow = await audit(toWebhookContext(req) as never, rawBody, deliveryIdRaw)
+  try {
+    checkRateLimit(sourceIp)
+    await checkReplay(auditRow.id, deliveryIdRaw)
+  } catch (err) {
+    if (err instanceof RateLimitError) {
+      await auditRow.resolve('rejected_rate_limit', 429, Date.now() - t0, err.message)
+      return new Response('Rate limited', { status: 429 })
+    }
+    if (err instanceof ReplayAttackError) {
+      await auditRow.resolve('rejected_replay', 409, Date.now() - t0, err.message)
+      return new Response('Duplicate delivery', { status: 409 })
+    }
+    throw err
+  }
 
   let payload: Record<string, unknown>
   try {
     payload = JSON.parse(rawBody)
   } catch {
     log.warn('Invalid JSON payload', { deliveryId })
+    await auditRow.resolve('error', 400, Date.now() - t0, 'Invalid JSON payload')
     return new Response('Bad Request', { status: 400 })
   }
 
@@ -133,10 +184,17 @@ Deno.serve(async (req: Request) => {
   if (projectRows.length === 0) {
     log.warn('No project found for Linear webhook', { deliveryId, linearOrgId })
     // Return 200 so Linear doesn't retry — this can happen for stale webhooks.
+    await auditRow.resolve('accepted', 200, Date.now() - t0, 'No project matched the webhook')
     return new Response('OK', { status: 200 })
   }
 
   // ── Process per project ───────────────────────────────────────────────────
+
+  // Counts projects whose signature check passed and whose event we actually
+  // ran. Drives the audit outcome below: a payload no project could
+  // authenticate must NOT be recorded as 'accepted', or a forged request would
+  // claim the replay-cache slot belonging to the real delivery with that id.
+  let verifiedProjects = 0
 
   for (const row of projectRows) {
     const projectId = row.project_id
@@ -159,11 +217,18 @@ Deno.serve(async (req: Request) => {
       continue // Wrong secret or tampered payload — skip this project
     }
 
+    verifiedProjects++
     try {
       await handleEvent(dbAny, projectId, eventType ?? '', payload, deliveryId)
     } catch (err) {
       log.error('Error handling Linear event', { projectId, deliveryId, err: String(err) })
     }
+  }
+
+  if (verifiedProjects === 0) {
+    await auditRow.resolve('rejected_signature', 200, Date.now() - t0, 'No project matched the signature')
+  } else {
+    await auditRow.resolve('accepted', 200, Date.now() - t0)
   }
 
   // Linear expects a 200 response within 5 seconds or it will retry

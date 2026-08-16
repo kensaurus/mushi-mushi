@@ -197,7 +197,10 @@ export function SetupCopilotPage() {
 
           <Section title="1 · Connect credentials">
             <p className="text-xs text-fg-muted mb-3">Save keys locally and wait for the SDK heartbeat.</p>
-            <Card className="p-5 space-y-3">
+            {/* Section already renders a Card — an inner Card here made every
+                step a box inside a box, three frames deep once the tinted
+                ContainedBlock landed. The Section owns the frame now. */}
+            <div className="space-y-3">
               <p className="text-xs text-fg-muted">
                 Paste into your <strong>{env.stackLabel}</strong> repo ({env.envFileHint ?? '.env.local'}):
                 {' '}
@@ -210,7 +213,7 @@ export function SetupCopilotPage() {
               <p className="text-2xs text-fg-muted">
                 Or run <CodeInline>mushi init</CodeInline> / <CodeInline>mushi upgrade</CodeInline> in the consumer repo after installing the snippet.
               </p>
-            </Card>
+            </div>
           </Section>
 
           <Section title="2 · Install snippet">
@@ -221,18 +224,18 @@ export function SetupCopilotPage() {
               </Link>{' '}
               for the live configurator, connection status chip, and copy-paste snippet.
             </p>
-            <Card className="p-4">
-              <Link to={`/onboarding?tab=sdk&project=${projectId}`}>
-                <Btn variant="primary" size="sm">Open SDK install wizard →</Btn>
-              </Link>
-            </Card>
+            {/* A Card around a single button was pure chrome — the Section
+                already frames this step. */}
+            <Link to={`/onboarding?tab=sdk&project=${projectId}`}>
+              <Btn variant="primary" size="sm">Open SDK install wizard →</Btn>
+            </Link>
           </Section>
 
           <Section title="2b · CI &amp; store builds">
             <p className="text-xs text-fg-muted mb-3">
               Reporter SDK keys for TestFlight / Play builds vs Code Health ingest — different secrets.
             </p>
-            <Card className="p-5 space-y-4">
+            <div className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <ContainedBlock tone="ok">
                   <p className="text-xs font-semibold text-fg mb-2">Reporter (in-app feedback band)</p>
@@ -282,7 +285,7 @@ export function SetupCopilotPage() {
                   </p>
                 </ContainedBlock>
               ) : null}
-            </Card>
+            </div>
           </Section>
 
           <Section title="3 · SDK health">

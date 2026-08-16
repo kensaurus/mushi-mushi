@@ -10,9 +10,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
-import { Badge, Btn, Card, CodeValue, ErrorAlert, RelativeTime } from '../ui'
+import { Badge, Btn, Card, CodeValue, ErrorAlert, RelativeTime, Tooltip } from '../ui'
 import { ContainedBlock, SignalChip, ActionPill, ActionPillRow } from '../report-detail/ReportSurface'
-import { IconGit } from '../icons'
+import { IconGit, IconPencil, IconTrash } from '../icons'
 import { CHIP_TONE } from '../../lib/chipTone'
 
 interface ProjectRepo {
@@ -195,8 +195,28 @@ export function ProjectReposCard({ projectId }: Props) {
                 )}
                 {editingId !== repo.id && (
                   <>
-                    <Btn size="sm" variant="ghost" onClick={() => openEdit(repo)}>Edit</Btn>
-                    <Btn size="sm" variant="ghost" onClick={() => void removeRepo(repo.id)}>Remove</Btn>
+                    <Tooltip content="Edit repo">
+                      <Btn
+                        size="sm"
+                        variant="ghost"
+                        className="px-2"
+                        aria-label={`Edit ${repo.repo_url}`}
+                        onClick={() => openEdit(repo)}
+                      >
+                        <IconPencil />
+                      </Btn>
+                    </Tooltip>
+                    <Tooltip content="Remove repo">
+                      <Btn
+                        size="sm"
+                        variant="ghost"
+                        className="px-2"
+                        aria-label={`Remove ${repo.repo_url}`}
+                        onClick={() => void removeRepo(repo.id)}
+                      >
+                        <IconTrash />
+                      </Btn>
+                    </Tooltip>
                   </>
                 )}
               </div>
