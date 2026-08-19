@@ -30,6 +30,8 @@ can execute without additional context.
 
 The "is this drift?" test for any feature you build or surface you write: *"Does this help a solo vibe-coder understand and fix a bug faster, without leaving their editor?"* Yes → it can lead. No, but operators need it → `docs/operators/`, never the hero.
 
+**Decision memory.** Before proposing a change to architecture, dependencies, conventions, positioning, or testing posture, read [`docs/adr/INDEX.md`](./docs/adr/INDEX.md). Do not contradict an Accepted ADR silently — surface it, cite the ADR, and ask. A reversal produces a superseding ADR, by the human, on purpose. New decisions that meet the bar in the index land as an ADR in the same PR.
+
 ---
 
 ## Agent Inventory
