@@ -29,7 +29,7 @@ export function clearActiveProject(): void {
   window.dispatchEvent(new CustomEvent(ACTIVE_PROJECT_EVENT, { detail: { projectId: null } }))
 }
 
-const ACTIVE_PROJECT_EVENT = 'mushi:active-project-change'
+export const ACTIVE_PROJECT_EVENT = 'mushi:active-project-change'
 const SERVER_SNAPSHOT = '__server__'
 
 function readStorage(): string | null {
@@ -76,6 +76,12 @@ export function getActiveProjectIdForApi(): string | null {
 
 export function setActiveProjectIdSnapshot(projectId: string): void {
   if (typeof window === 'undefined') return
+  // Idempotence guard: two writers hydrate this store (ReportDetailPage from
+  // the report row, ProjectSwitcher from the URL). Without this check a
+  // mismatched `?project=` ping-pongs between them — every write fires the
+  // CustomEvent, every event cache-busts every usePageData hook, and the
+  // report page re-render-loops forever (the "page keeps refreshing" bug).
+  if (getActiveProjectIdSnapshot() === projectId) return
   try {
     window.localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, projectId)
   } catch {

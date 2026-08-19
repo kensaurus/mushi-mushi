@@ -126,19 +126,19 @@ export function usePageData<T>(
   // of primitives without worrying about identity churn.
   const depKey = JSON.stringify(deps)
 
-  const lastContext = useRef(`${activeOrgSignal}:${activeProjectSignal}`)
-
   useEffect(() => {
     if (!path || !autoLoad) return
     aborted.current = false
 
-    const contextKey = `${activeOrgSignal}:${activeProjectSignal}`
-    const contextChanged = lastContext.current !== contextKey
-    if (contextChanged) {
-      lastContext.current = contextKey
-      hasLoadedOnce.current = false
-      setData(null)
-    }
+    // Org/project context switches (the signals in this effect's dep array)
+    // deliberately do NOT reset `data` or `hasLoadedOnce`: they refetch with
+    // SWR semantics — stale payload stays visible, `isValidating` flips, and
+    // the response replaces it. Nulling data here made every consumer (header
+    // project chip included) collapse to a skeleton on each active-project
+    // write, which turned one mismatched `?project=` param into a whole-page
+    // flicker loop on report detail. The path-change branch below still
+    // hard-resets — that's the case where showing the previous resource
+    // would actually be wrong.
 
     // Path swap → treat as a true first-paint. Drop the stale resource so
     // the consumer's `if (loading) return <Skeleton />` guard fires
