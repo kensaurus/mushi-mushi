@@ -13,6 +13,14 @@ import { Link, Navigate, type LinkProps } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { Btn } from '../components/ui'
 import {
+  IconAlertTriangle,
+  IconCheck,
+  IconCopy,
+  IconExternalLink,
+  IconGithub,
+  IconSliders,
+} from '../components/icons'
+import {
   MarketingFooter,
   MarketingProvider,
   type MarketingLink,
@@ -370,33 +378,57 @@ function CopyButton({ text }: { text: string }) {
     : state === 'error' ? 'Copy failed'
     : `Copy install command for ${text}`
 
+  // Icon, tone and label move together so each state is distinguishable
+  // without reading the words. The idle glyph is action-shaped (two sheets)
+  // so the swap to a checkmark parses as "that action succeeded"; a terminal
+  // or `$` glyph would not. Success inverts to solid ink — the same
+  // "affirmed" language the nav CTA and the active filter chip already use —
+  // because a tint on warm paper is too quiet to register in a 24-card grid.
+  // `!` on every colour: Btn's `ghost` variant ships `text-fg-secondary` plus a
+  // `hover:bg-surface-overlay hover:text-fg` pair, and those win the cascade
+  // over `text-editorial-*` regardless of the order they appear in the class
+  // string. Unprefixed, the copied pill rendered dark-grey console text on
+  // near-black ink. (PublicHomePage already pins a Btn the same way.)
+  const { icon, tone, body } =
+    state === 'copied'
+      ? {
+          icon: <IconCheck size={12} />,
+          tone: '!border-editorial-ink !bg-editorial-ink !text-editorial-paper hover:!bg-editorial-ink hover:!text-editorial-paper hover:!border-editorial-ink',
+          body: 'Copied',
+        }
+      : state === 'error'
+        ? {
+            icon: <IconAlertTriangle size={12} />,
+            tone: '!border-editorial-vermillion/45 !bg-editorial-vermillion-wash !text-editorial-vermillion hover:!bg-editorial-vermillion-wash hover:!text-editorial-vermillion',
+            body: 'Copy failed',
+          }
+        : {
+            icon: <IconCopy size={12} />,
+            tone: '!border-editorial-rule !bg-editorial-paper-card !text-editorial-ink hover:!border-editorial-vermillion/45 hover:!bg-editorial-vermillion-wash hover:!text-editorial-vermillion',
+            body: 'Copy install',
+          }
+
   return (
-    <Btn
-      type="button"
-      variant="ghost"
-      size="sm"
-      onClick={() => { void handleCopy() }}
-      className="inline-flex items-center gap-1 rounded-full border-editorial-rule bg-editorial-paper px-2.5 py-1 font-mono text-2xs text-editorial-ink-muted hover:border-editorial-vermillion/40 hover:bg-editorial-vermillion/10 hover:text-editorial-vermillion"
-      title={`Copy: ${text}`}
-      aria-label={label}
-    >
-      {state === 'copied' ? (
-        <>
-          <span aria-hidden>✓</span>
-          <span>Copied</span>
-        </>
-      ) : state === 'error' ? (
-        <>
-          <span aria-hidden>!</span>
-          <span>Copy failed</span>
-        </>
-      ) : (
-        <>
-          <span aria-hidden className="opacity-60">$</span>
-          <span>Copy install</span>
-        </>
-      )}
-    </Btn>
+    <>
+      <Btn
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => { void handleCopy() }}
+        leadingIcon={icon}
+        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-2xs ${tone}`}
+        title={`Copy: ${text}`}
+        aria-label={label}
+      >
+        {body}
+      </Btn>
+      {/* The button's accessible name is pinned by aria-label, so a state
+          change never re-announces on its own. This out-of-flow live region
+          is what actually tells a screen-reader user the copy landed. */}
+      <span role="status" aria-live="polite" className="sr-only">
+        {state === 'copied' ? `Copied ${text}` : state === 'error' ? 'Copy failed' : ''}
+      </span>
+    </>
   )
 }
 
@@ -443,14 +475,19 @@ function IntegrationTile({ integration }: { integration: Integration }) {
       {/* Footer actions */}
       <div className="mt-auto flex items-center gap-2">
         <CopyButton text={installCmd} />
+        {/* Deliberately borderless against CopyButton's bordered pill: two
+            actions repeated 24 times down the page need a weight difference,
+            not just different glyphs. Copy is the money action, Docs is the
+            quiet one. Both lead with their icon so the row scans as
+            icon-then-label rather than two identical grey words. */}
         <a
           href={docsHref}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-mono text-2xs text-editorial-ink-muted transition hover:bg-editorial-paper-wash hover:text-editorial-ink"
+          className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-2xs text-editorial-ink-muted transition hover:bg-editorial-paper-wash hover:text-editorial-ink"
         >
+          <IconExternalLink size={12} className="opacity-70" />
           Docs
-          <span aria-hidden className="text-2xs opacity-50">↗</span>
         </a>
       </div>
     </article>
@@ -510,7 +547,14 @@ export function PublicIntegrationsPage() {
 
   return (
     <MarketingProvider value={theme}>
-      <main className="mushi-marketing-surface min-h-screen">
+      {/* `flex-1 min-h-0 overflow-y-auto`, not `min-h-screen`: the app shell
+          (styles/base-and-density.css) makes html/body/#root `overflow:hidden`
+          and expects <main> to be the single scroll owner. This page asked for
+          `min-h-screen` instead, so it overflowed a clipped flex parent with
+          no scroller anywhere — a visitor saw the hero and the first card row
+          and could not reach the other 21 integrations, the SDK call-out, or
+          the footer at any viewport width. */}
+      <main className="mushi-marketing-surface min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-6xl space-y-10 px-6 pb-16 pt-4">
 
           {/* ── Sticky nav (mirrors PublicHomePage) ──────────────────── */}
@@ -599,33 +643,55 @@ export function PublicIntegrationsPage() {
           </section>
 
           {/* ── Filter bar ───────────────────────────────────────────── */}
-          <div
-            role="group"
-            aria-label="Filter integrations by category"
-            className="flex flex-wrap gap-1.5"
-          >
-            {CATEGORIES.map((cat) => (
-              <Btn
-                key={cat}
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setFilter(cat)}
-                aria-pressed={filter === cat}
-                className={`rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.16em] ${
-                  filter === cat
-                    ? 'border-editorial-vermillion/50 bg-editorial-vermillion/10 text-editorial-vermillion'
-                    : 'border-editorial-rule bg-editorial-paper text-editorial-ink-muted hover:border-editorial-ink/20 hover:text-editorial-ink'
-                }`}
-              >
-                {cat}
-                {cat !== 'All' && (
-                  <span className="ml-1.5 opacity-50">
-                    {INTEGRATIONS.filter((i) => i.category === cat).length}
-                  </span>
-                )}
-              </Btn>
-            ))}
+          <div className="space-y-2">
+            {/* The row previously opened straight into pills with no cue that
+                they were interactive. One quiet labelled glyph is cheaper than
+                six category icons — six abstract marks for "Analytics" vs
+                "APM & Telemetry" would need learning, whereas the words
+                already discriminate. It sits on its own line (rather than
+                inline) so it never steals width from the chips and forces an
+                orphan onto a second row. */}
+            <p
+              aria-hidden
+              className="flex items-center gap-1.5 font-mono text-2xs uppercase tracking-[0.16em] text-editorial-ink-faint"
+            >
+              <IconSliders size={12} />
+              Filter by category
+            </p>
+            <div
+              role="group"
+              aria-label="Filter integrations by category"
+              className="flex flex-wrap gap-1.5"
+            >
+              {CATEGORIES.map((cat) => (
+                <Btn
+                  key={cat}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setFilter(cat)}
+                  aria-pressed={filter === cat}
+                  className={`rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.16em] ${
+                    // Solid ink for the active chip rather than a vermillion
+                    // wash: the wash sat only a shade off the paper card, so
+                    // the row read as seven equal pills. Solid inversion is the
+                    // same "you are here" signal the nav's Get started uses.
+                    // `!` for the same reason as CopyButton — Btn's ghost
+                    // variant otherwise paints its console fg over these.
+                    filter === cat
+                      ? '!border-editorial-ink !bg-editorial-ink !text-editorial-paper hover:!bg-editorial-ink hover:!text-editorial-paper hover:!border-editorial-ink'
+                      : '!border-editorial-rule !bg-editorial-paper-card !text-editorial-ink-muted hover:!border-editorial-ink-rule hover:!bg-editorial-paper-sink hover:!text-editorial-ink'
+                  }`}
+                >
+                  {cat}
+                  {cat !== 'All' && (
+                    <span className={filter === cat ? 'ml-1.5 opacity-70' : 'ml-1.5 opacity-50'}>
+                      {INTEGRATIONS.filter((i) => i.category === cat).length}
+                    </span>
+                  )}
+                </Btn>
+              ))}
+            </div>
           </div>
 
           {/* ── Grid ─────────────────────────────────────────────────── */}
@@ -718,16 +784,21 @@ export function PublicIntegrationsPage() {
                 href={`${DOCS_BASE}/integrations/plugin-sdk`}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-full bg-editorial-ink px-4 py-2 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--color-editorial-ink)_82%,var(--color-editorial-vermillion))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
+                className="inline-flex items-center gap-2 rounded-full bg-editorial-ink px-4 py-2 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-editorial-paper shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--color-editorial-ink)_82%,var(--color-editorial-vermillion))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
               >
+                <IconExternalLink size={12} />
                 Read the SDK docs
               </a>
               <a
                 href={`${REPO_BASE}/blob/main/packages/plugin-sdk`}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-full border border-editorial-rule bg-editorial-paper px-4 py-2 font-mono text-2xs uppercase tracking-[0.18em] text-editorial-ink-muted transition hover:border-editorial-ink/30 hover:text-editorial-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
+                className="inline-flex items-center gap-2 rounded-full border border-editorial-rule bg-editorial-paper px-4 py-2 font-mono text-2xs uppercase tracking-[0.18em] text-editorial-ink-muted transition hover:border-editorial-ink/30 hover:text-editorial-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-editorial-vermillion"
               >
+                {/* The one place a brand mark genuinely identifies the
+                    destination — "View on GitHub" and "Read the SDK docs" were
+                    otherwise two same-shaped pills side by side. */}
+                <IconGithub size={12} />
                 View on GitHub
               </a>
             </div>
@@ -758,7 +829,9 @@ function GroupLabel({
         >
           {direction === 'inbound' ? '→' : '←'}
         </span>
-        {direction === 'inbound' ? 'Inbound adapters' : 'Outbound plugins &amp; SDK'}
+        {/* Plain JS string, not JSX text — an HTML entity here renders
+            literally, so this header read "OUTBOUND PLUGINS &AMP; SDK". */}
+        {direction === 'inbound' ? 'Inbound adapters' : 'Outbound plugins & SDK'}
         <span className="ml-2 font-normal opacity-50">{count}</span>
       </p>
       <div
