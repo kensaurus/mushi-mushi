@@ -86,7 +86,7 @@ import { CHIP_TONE } from '../lib/chipTone'
 
 export function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const [searchParams] = useReactSearchParams()
+  const [searchParams, setSearchParams] = useReactSearchParams()
   const activeProjectId = useActiveProjectId()
   const toast = useToast()
   const path = id ? `/v1/admin/reports/${id}` : null
@@ -103,9 +103,17 @@ export function ReportDetailPage() {
   useEffect(() => {
     if (!serverReport?.project_id || !isValidProjectId(serverReport.project_id)) return
     if (serverReport.project_id !== activeProjectId) {
+      // The report is the source of truth for which project we're in. Write it
+      // to BOTH the URL and the store: useActiveProjectId() is URL-first, so a
+      // storage-only write can never converge when `?project=` disagrees with
+      // the report — ProjectSwitcher would keep writing the stale URL value
+      // back and the page re-render-looped (the Slack "Triage" link bug).
       setActiveProjectIdSnapshot(serverReport.project_id)
+      const next = new URLSearchParams(searchParams)
+      next.set('project', serverReport.project_id)
+      setSearchParams(next, { replace: true })
     }
-  }, [serverReport?.project_id, activeProjectId])
+  }, [serverReport?.project_id, activeProjectId, searchParams, setSearchParams])
 
   useEffect(() => {
     if (serverReport) setReport(serverReport)
@@ -458,22 +466,6 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
 
       <ReportDetailHeader report={report} reporterShort={reporterShort} />
 
-      <Section title="Identifiers" className="mb-3">
-        <IdField label="Report ID" value={report.id} full tone="id" />
-        <IdField label="Project ID" value={report.project_id} full tone="id" />
-        {report.session_id ? (
-          <IdField label="Session ID" value={report.session_id} full />
-        ) : null}
-        {report.reporter_token_hash ? (
-          <IdField
-            label="Reporter token hash"
-            value={report.reporter_token_hash}
-            full
-            tooltip="Opaque hash linking this report to a reporter identity — not PII."
-          />
-        ) : null}
-      </Section>
-
       <RegressionChain report={report} className="mb-3" />
 
       {/* The answer first: plain-English diagnosis + paste-ready fix prompt.
@@ -692,6 +684,25 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
       <div className="mt-3">
         <ReportComments reportId={report.id} projectId={report.project_id} />
       </div>
+
+      {/* Identifiers live at the bottom: UUIDs are reference material for
+          support threads, not triage information — leading with them pushed
+          the plain-English diagnosis below the fold (UX-journeys audit F3). */}
+      <Section title="Identifiers" className="mb-3">
+        <IdField label="Report ID" value={report.id} full tone="id" />
+        <IdField label="Project ID" value={report.project_id} full tone="id" />
+        {report.session_id ? (
+          <IdField label="Session ID" value={report.session_id} full />
+        ) : null}
+        {report.reporter_token_hash ? (
+          <IdField
+            label="Reporter token hash"
+            value={report.reporter_token_hash}
+            full
+            tooltip="Opaque hash linking this report to a reporter identity — not PII."
+          />
+        ) : null}
+      </Section>
 
       <ReportRelatedFooter report={report} dispatchState={dispatchState} />
     </div>

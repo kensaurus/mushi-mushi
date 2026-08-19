@@ -49,6 +49,11 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
               {CATEGORY_LABELS[report.category] ?? report.category}
             </Badge>
           )}
+          {(report.custom_metadata as { source?: string } | null)?.source === 'sentry_webhook' && (
+            <Badge className="bg-surface-overlay text-fg-secondary border border-edge-subtle" title="Ingested from a Sentry webhook — errors and user feedback routed into Mushi">
+              via Sentry
+            </Badge>
+          )}
         </div>
         <ContainedBlock tone="info" className="mt-2">
           <h2 className="text-lg font-semibold leading-snug text-balance text-fg wrap-break-word max-w-4xl">

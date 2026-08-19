@@ -79,6 +79,9 @@ export function OrgSwitcher() {
       next.delete(ACTIVE_ORG_QUERY_PARAM)
       setSearchParams(next, { replace: true })
       clearActiveOrg()
+      // Let the effect re-run against the cleaned URL instead of falling
+      // through with the stale `fromUrl` (same shape as ProjectSwitcher).
+      return
     }
     const candidate = (fromUrl && isValidOrgId(fromUrl) ? fromUrl : null) ?? fromStorage
     const known = data.organizations.find((o) => o.id === candidate)

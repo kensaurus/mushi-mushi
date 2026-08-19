@@ -1,4 +1,4 @@
-# North star — the comprehension layer for AI-built apps
+# North star — the bug mediator for AI-built apps
 
 > **Canonical source of truth:** [`/VISION.md`](../../VISION.md) (the constitution).
 > This file is the internal working notes layer: it carries the *shipped vs.
@@ -18,7 +18,7 @@ north-star sentence below.
 
 ## Category
 
-**The comprehension layer for AI-built apps** — the layer that makes a bug
+**The bug mediator for AI-built apps** — the layer that makes a bug
 *understandable*: between *an error happened* and *here's the fix ready to paste*.
 
 Not error monitoring. Not observability. Not a "synthesis layer / integration

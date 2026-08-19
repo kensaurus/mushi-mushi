@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-08-06 · **523** routes.
+> Generated: 2026-08-19 · **524** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 89 |
 | `apiKeyAuth` | 46 |
-| `jwtAuth` | 325 |
+| `jwtAuth` | 326 |
 | `jwtOrApiKey` | 3 |
 | `unknown` | 60 |
 
@@ -146,6 +146,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/admin/integrations/:type` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | GET | `/v1/admin/integrations/claude-code-agent/setup` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | GET | `/v1/admin/integrations/health` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/health.ts` |
+| GET | `/v1/admin/integrations/inbound-deliveries` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | GET | `/v1/admin/integrations/platform` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | PUT | `/v1/admin/integrations/platform/:kind` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | POST | `/v1/admin/integrations/platform/:kind/apply` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |

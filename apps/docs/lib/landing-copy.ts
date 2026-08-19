@@ -12,7 +12,7 @@ export const LANDING_HERO = {
   eyebrow: MUSHI_TAGLINE_V2.category,
   lead:
     'Plain-English explanation of what broke, plus a fix you can paste into Cursor or Claude Code — so a bug costs five minutes, not your whole afternoon.',
-  proofLine: 'Works standalone. Sentry optional. Open source.',
+  proofLine: 'One queue for every bug. Sentry flows in, fixes flow out. Open source.',
 } as const
 
 export const LANDING_HERO_CTAS = [
@@ -75,11 +75,11 @@ export interface LandingFaqItem {
 export const LANDING_FAQ: readonly LandingFaqItem[] = [
   {
     q: 'Is Mushi Mushi a Sentry alternative?',
-    a: 'It can be. Mushi works standalone as an open-source bug reporting and diagnosis tool for AI-built apps, or alongside Sentry — Sentry sees the errors your code throws, Mushi explains what the user experienced and hands you a fix.',
+    a: 'Your call — both are first-class. Sentry tells you what threw. Mushi ingests that — plus the bugs that never throw — explains each one in plain English, and closes the loop with a fix your agent can ship. One queue, one audit trail, with or without Sentry.',
   },
   {
     q: 'Do I need Sentry to use it?',
-    a: 'No. Mushi is standalone by default. If you already run Sentry, an optional bridge links stack traces to Mushi reports.',
+    a: 'No. Mushi is standalone by default. If you already run Sentry, point an issue-alert webhook at Mushi and errors land in the same queue as user reports — deduped, diagnosed in plain English, and resolved back into Sentry when the fix merges.',
   },
   {
     q: 'What does `npx mushi-mushi` do?',
@@ -105,7 +105,7 @@ export const LANDING_MEDIA_INTRO =
 export const LANDING_WHAT_THIS_IS = {
   who: 'Built for solo founders who ship with AI and lose afternoons debugging code they did not fully write.',
   boundary:
-    'Works inside your editor — not another dashboard. Sentry can plug in later; you do not need it to start.',
+    'Works inside your editor — not another dashboard. Sentry, Linear, and Slack plug into the same queue; none of them are required to start.',
 } as const
 
 export const LANDING_WHERE_TO_START_INTRO =
@@ -207,7 +207,7 @@ export const LANDING_COMPARISON_ROWS: readonly LandingComparisonRow[] = [
   {
     label: 'What it sees',
     foil: 'Errors your code throws',
-    mushi: 'Friction your users feel',
+    mushi: 'Everything: user-felt friction, plus the errors Sentry catches — routed into one queue',
   },
   {
     label: 'What lands in your queue',
@@ -227,7 +227,7 @@ export const LANDING_COMPARISON_ROWS: readonly LandingComparisonRow[] = [
   {
     label: 'Closing the loop',
     foil: 'Assign a ticket and remember to update',
-    mushi: 'An optional draft PR you can merge or ignore, once GitHub is connected',
+    mushi: 'A draft PR from your agent; merging it resolves the linked Sentry/Linear issue for you',
   },
   {
     label: 'Reporter attribution',

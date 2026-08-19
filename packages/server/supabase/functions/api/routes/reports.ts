@@ -3,11 +3,9 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
-import { notifyReportStatusTransition } from '../../_shared/report-status-notify.ts';
 import { normalizeAdminStatus, toStoredStatus } from '../../_shared/report-status.ts';
 import { logAudit } from '../../_shared/audit.ts';
-import { resolveExternalIssue } from '../../_shared/integrations.ts';
-import { dispatchPluginEventDetached } from '../../_shared/plugins.ts';
+import { runStatusTransitionSideEffects } from '../../_shared/report-transition.ts';
 import {
   dbError,
   callerProjectIds,
@@ -969,33 +967,17 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // canonical form (resolved is persisted as fixed) so a legacy `resolved`
     // row being canonicalized to `fixed` isn't treated as a real transition —
     // otherwise it would re-award points and re-fire a `fixed` notification.
+    // Side effects live in _shared/report-transition.ts so the Slack card
+    // buttons run the exact same contract.
     if (report && updates.status && updates.status !== toStoredStatus(report.status)) {
-      const newStatus = updates.status as string;
-      try {
-        dispatchPluginEventDetached(db, report.project_id, 'report.status_changed', {
-          report: { id: reportId, status: newStatus },
-          previousStatus: report.status,
-          actor: { kind: 'admin', userId },
-        }).catch((e) =>
-          log.warn('Plugin dispatch failed', { event: 'report.status_changed', err: String(e) }),
-        );
-      } catch (e) {
-        log.warn('Plugin dispatch failed (sync)', { event: 'report.status_changed', err: String(e) });
-      }
-      if (newStatus === 'resolved') {
-        resolveExternalIssue(reportId, report.project_id, db).catch((e: unknown) =>
-          log.error('resolveExternalIssue failed', { reportId, err: String(e) }),
-        );
-      }
-      if (report.reporter_token_hash) {
-        notifyReportStatusTransition(db, {
-          projectId: report.project_id,
-          reportId,
-          reporterTokenHash: report.reporter_token_hash,
-          previousStatus: report.status,
-          newStatus,
-        }).catch((e) => log.error('Notification failed', { reportId, err: String(e) }));
-      }
+      runStatusTransitionSideEffects(db, {
+        reportId,
+        projectId: report.project_id,
+        reporterTokenHash: report.reporter_token_hash ?? null,
+        previousStatus: report.status,
+        newStatus: updates.status as string,
+        actor: { kind: 'admin', id: userId },
+      });
     }
 
     return c.json({ ok: true });
@@ -1140,33 +1122,17 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       for (const id of allowedIds) {
         const prev = beforeMap.get(id);
         if (!prev || prev.status === newStatus) continue;
-        try {
-          dispatchPluginEventDetached(db, prev.project_id, 'report.status_changed', {
-            report: { id, status: newStatus },
-            previousStatus: prev.status,
-            actor: { kind: 'admin', userId },
-          }).catch((e) =>
-            log.warn('Plugin dispatch failed', { event: 'report.status_changed', err: String(e) }),
-          );
-        } catch (e) {
-          log.warn('Plugin dispatch failed (sync)', { event: 'report.status_changed', err: String(e) });
-        }
-        if (newStatus === 'resolved') {
-          resolveExternalIssue(id, prev.project_id, db).catch((e: unknown) =>
-            log.error('resolveExternalIssue failed', { reportId: id, err: String(e) }),
-          );
-        }
-        if (prev.reporter_token_hash) {
-          // Mirror the per-row PATCH path: a single consolidated helper owns
-          // reputation + reporter notification so the two code paths never diverge.
-          notifyReportStatusTransition(db, {
-            projectId: prev.project_id,
-            reportId: id,
-            reporterTokenHash: prev.reporter_token_hash,
-            previousStatus: prev.status,
-            newStatus,
-          }).catch((e) => log.error('Notification failed', { reportId: id, err: String(e) }));
-        }
+        // Single consolidated helper (shared with PATCH and the Slack card
+        // buttons) owns plugin dispatch, external-issue resolution, and
+        // reporter notification so the code paths never diverge.
+        runStatusTransitionSideEffects(db, {
+          reportId: id,
+          projectId: prev.project_id,
+          reporterTokenHash: prev.reporter_token_hash ?? null,
+          previousStatus: prev.status,
+          newStatus,
+          actor: { kind: 'admin', id: userId },
+        });
       }
     }
 

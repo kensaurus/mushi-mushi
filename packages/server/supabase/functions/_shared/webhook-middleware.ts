@@ -83,6 +83,7 @@ interface AuditRowHandle {
     durationMs?: number,
     errorMessage?: string,
   ): Promise<void>
+  setProject(projectId: string): Promise<void>
 }
 
 // Per-source rate limit budget (requests per 60s per source IP). Tuned to
@@ -250,6 +251,7 @@ export function createWebhookMiddleware(source: WebhookSource) {
       return {
         id: crypto.randomUUID(),
         resolve: async () => {},
+        setProject: async () => {},
       }
     }
 
@@ -273,6 +275,18 @@ export function createWebhookMiddleware(source: WebhookSource) {
             error_message: errorMessage ?? null,
           })
           .eq('id', rowId)
+      },
+      /**
+       * Stamp the resolved project onto the audit row once the route knows it
+       * (audit() runs before project resolution by design). Lets the console
+       * show per-project "last inbound delivery" receipts. Best-effort.
+       */
+      async setProject(projectId: string) {
+        await db
+          .from('webhook_audit_log')
+          .update({ project_id: projectId })
+          .eq('id', rowId)
+          .then(() => {}, () => {})
       },
     }
   }

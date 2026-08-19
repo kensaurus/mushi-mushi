@@ -4,9 +4,36 @@ title: Sentry
 
 # Sentry plugin
 
-Mirrors critical Mushi reports into Sentry and resolves linked Sentry issues when a fix merges.
+Two-way Sentry integration: Sentry errors flow **into** Mushi's queue, and Mushi
+fixes flow **back** — merging a fix resolves the linked Sentry issue, resolving
+in Sentry resolves the linked report. The outbound plugin below also mirrors
+critical Mushi reports into Sentry.
 
-## Setup
+## Route Sentry errors into Mushi (inbound)
+
+No plugin needed — this is built into the hosted API:
+
+1. In the Mushi console: **Integrations → Sentry** — set a **Webhook secret**
+   and copy the **Receive URL** shown on the card
+   (`<api>/v1/webhooks/sentry?projectId=<your-project-id>`).
+2. In Sentry: **Alerts → Create Alert Rule** (issue alert) → add a
+   **webhook** action pointed at the receive URL, and set the same secret on
+   the webhook (HMAC-SHA256, `X-Sentry-Hook-Signature`).
+3. Fire a test alert. The error lands in **Reports** with a `via Sentry` badge,
+   a plain-English diagnosis, and a dispatchable fix.
+
+Behavior:
+
+- **Deduped per Sentry issue** — repeat alerts land on the same report.
+- **Regressions reopen** — an alert for an already-fixed report flips it to
+  `reopened` and bumps the regression counter instead of filing a duplicate.
+- **Resolves both ways** — `fix.applied` in Mushi resolves the Sentry issue;
+  `action: resolved` from Sentry resolves the linked Mushi report.
+- Your Sentry **alert rules are the noise filter**: only alerts you route at
+  the webhook are ingested. Sentry User Feedback submissions are also ingested
+  on the same endpoint.
+
+## Setup (outbound plugin)
 
 1. In Mushi: **Marketplace → Sentry → Install**.
 2. Paste your Sentry auth token and org/project slugs.

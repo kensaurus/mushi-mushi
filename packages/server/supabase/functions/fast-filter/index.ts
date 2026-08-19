@@ -462,12 +462,19 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
               // Stage 2's (classify-report) job, so the Stage 1 classification
               // schema has no `component` field. Always null here.
               component: null,
+              projectId,
+              sentryIssueUrl: report.sentry_issue_url ?? null,
+              appVersion: report.app_version ?? null,
+              sdkPackage: report.sdk_package ?? null,
+              sdkVersion: report.sdk_version ?? null,
               githubAppInstalled: hasGithubApp,
               autofixEnabled: psRes.data?.autofix_enabled ?? false,
             },
             {
               channelId: settings?.slack_channel_id ?? undefined,
               webhookUrl: settings?.slack_webhook_url ?? undefined,
+              db,
+              projectId,
             },
           ).then((slackTs) => {
             if (slackTs) {
