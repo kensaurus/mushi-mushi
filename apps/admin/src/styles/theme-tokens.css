@@ -295,7 +295,8 @@
      syntax, so a white-label brand override or theme swap cascades through
      automatically and nothing hard-codes the amber hue. --shadow-* names
      auto-generate `shadow-*` Tailwind utilities; --gradient-* are consumed
-     via arbitrary values (bg-[var(--gradient-brand)]). */
+     via the typed custom-property form (bg-(image:--gradient-brand)) — the
+     square-bracket form compiles to background-color and is dropped. */
   --gradient-brand: linear-gradient(160deg, var(--color-brand-hover) 0%, var(--color-brand) 100%);
   --gradient-brand-strong: linear-gradient(160deg, var(--color-brand) 0%, var(--color-brand-subtle) 100%);
   --gradient-danger: linear-gradient(160deg, var(--color-danger) 0%, oklch(from var(--color-danger) 0.5 c h) 100%);
