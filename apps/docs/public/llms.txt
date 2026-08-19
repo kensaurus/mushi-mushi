@@ -1,6 +1,6 @@
 # Mushi Mushi
 
-> Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor. Open source. Sentry optional.
+> Every bug in one queue — user reports, Sentry errors, Slack, coding agents. Plain-English diagnosis + a ready fix, in your editor. Open source.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
 Product home: https://kensaur.us/mushi-mushi

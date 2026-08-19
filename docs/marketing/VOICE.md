@@ -10,7 +10,7 @@ should use v2 hero.
 |------|------|--------|
 | Hero | *"Your AI wrote it. Mushi tells you why it broke."* | README headers, landing H1, docs landing |
 | Sub-hero | *"Plain-English diagnosis + a paste-ready fix, right inside Cursor."* | Lead paragraphs under hero |
-| Category | *"The comprehension layer for AI-built apps"* | Eyebrow, npm, llms.txt |
+| Category | *"The bug mediator for AI-built apps"* | Eyebrow, npm, llms.txt |
 | Micro CTA | *"Know why. Fix fast."* | og:description, slide headers |
 | Mark | *"虫虫"* | Logo-adjacent, footer whisper |
 
@@ -89,6 +89,11 @@ could live next to those three sentences, rewrite it.
 
 - "Mushi-chan caught…", "Mushi-chan noticed…", "Mushi-chan got confused by…"
 - "user-felt bug", "user-friction", "the kind Sentry can't see"
+- The one canonical Sentry answer (never improvise a different one, never say
+  "not a replacement" or "companion"): *"Sentry tells you what threw. Mushi
+  ingests that — plus the bugs that never throw — explains each one in plain
+  English, and closes the loop with a fix your agent can ship. One queue, with
+  or without Sentry."*
 - "shake to report", "quiet little widget", "tucked into the corner"
 - "classified", "deduped", "judged", "dispatched a fix"
 - "a small 🐛", "a cheeky one", "a sleepy one"

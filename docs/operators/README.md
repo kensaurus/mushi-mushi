@@ -46,10 +46,12 @@ retest list in the deployment change log.
 
 ## Operator-grade plumbing
 
-Mushi is the _intermediary_. We deliberately avoid replicating Sentry / Datadog /
-Firebase — instead we ship the boring-but-essential standards that let those
-tools talk to each other through one console, with one audit trail, and one
-consistent agent-facing API.
+Mushi is the _mediator_ — this is now the front-door story (VISION.md §1.5),
+not an operators-only footnote. We deliberately avoid replicating Sentry /
+Datadog / Firebase — instead we ship the boring-but-essential standards that
+let those tools talk to each other through one console, with one audit trail,
+and one consistent agent-facing API. This page carries the operator-depth of
+that story: the standards, the plumbing, and the enterprise controls.
 
 | Standard                                                                          | Where it shows up                                                                                                                                                           | Why you care                                                                                                                                                       |
 | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

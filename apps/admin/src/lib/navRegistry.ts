@@ -209,8 +209,8 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     sectionId: 'start',
     iconKey: 'connect',
     beginner: true,
-    paletteDescription: 'Connect GitHub, install SDK + MCP, and create upgrade PRs.',
-    paletteKeywords: ['connect', 'install', 'sdk', 'upgrade', 'update', 'mcp', 'cursor', 'npm', 'package'],
+    paletteDescription: 'Wire up your editor and app: SDK install, MCP for Cursor/Claude, upgrade PRs.',
+    paletteKeywords: ['install', 'sdk', 'upgrade', 'update', 'mcp', 'cursor', 'npm', 'package', 'editor'],
     paletteGroup: 'Start',
   },
   {
@@ -591,8 +591,8 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     pdcaStage: 'act',
     iconKey: 'integrations',
     beginner: true,
-    paletteDescription: 'Connect Slack, Discord, GitHub, Sentry, Stripe, and more.',
-    paletteKeywords: ['slack', 'discord', 'github', 'sentry', 'stripe', 'webhook', 'connect', 'plug'],
+    paletteDescription: 'Connect services: Slack, Sentry, GitHub, Linear, Discord — tokens, webhooks, health.',
+    paletteKeywords: ['slack', 'discord', 'github', 'sentry', 'linear', 'stripe', 'webhook', 'connect', 'plug', 'integrations', 'services'],
     paletteGroup: 'Act',
   },
   {

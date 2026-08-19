@@ -82,14 +82,14 @@ export const MUSHI_TAGLINE_V2 = {
    * byte identical across surfaces (the consistency check enforces it).
    */
   oneLiner:
-    'Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor. Open source. Sentry optional.',
+    'Every bug in one queue — user reports, Sentry errors, Slack, coding agents. Plain-English diagnosis + a ready fix, in your editor. Open source.',
   /** Hero — README headers, landing H1, docs landing. */
   hero: 'Your AI wrote it. Mushi tells you why it broke.',
   /** Lead paragraph directly under hero. */
   subHero:
-    'Plain-English diagnosis + a ready-to-apply fix, right inside Cursor and Claude Code — so a bug costs you five minutes, not your whole afternoon.',
+    'One queue between your users, your monitoring, and your coding agents — every bug lands with a plain-English diagnosis and a ready-to-apply fix, right inside Cursor and Claude Code.',
   /** Eyebrow, npm category line, llms.txt. The category we own (VISION.md §1.5). */
-  category: 'The comprehension layer for AI-built apps',
+  category: 'The bug mediator for AI-built apps',
   /** og:description, slide headers. */
   micro: 'Know why. Fix fast.',
   mark: '虫虫',

@@ -1,7 +1,7 @@
 {
   "name": "mushi-mushi",
   "private": true,
-  "description": "Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor. Open source. Sentry optional.",
+  "description": "Every bug in one queue — user reports, Sentry errors, Slack, coding agents. Plain-English diagnosis + a ready fix, in your editor. Open source.",
   "license": "MIT",
   "homepage": "https://kensaur.us/mushi-mushi",
   "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
