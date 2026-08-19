@@ -148,7 +148,9 @@ export async function notifyTeamFixEvent(
     const projectName = (project as { name?: string | null } | null)?.name ?? 'project'
     const summary = r?.summary?.trim() || `report ${reportId.slice(0, 8)}…`
     const adminBase = Deno.env.get('ADMIN_BASE_URL')?.replace(/\/$/, '') ?? null
-    const reportUrl = adminBase ? `${adminBase}/reports/${encodeURIComponent(reportId)}` : null
+    const reportUrl = adminBase
+      ? `${adminBase}/reports/${encodeURIComponent(reportId)}?project=${encodeURIComponent(projectId)}`
+      : null
     const text = eventText(event, summary, details, reportUrl)
 
     const tasks: Promise<unknown>[] = []
