@@ -7,7 +7,9 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Card, Btn, Badge, Input, RelativeTime, ResultChip, Tooltip, ErrorAlert } from '../ui'
+import { Card, Btn, Badge, Input, RelativeTime, ResultChip, Tooltip, ErrorAlert, CopyButton } from '../ui'
+import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
+import { useActiveProjectId } from '../ProjectSwitcher'
 import { ConfigHelp } from '../ConfigHelp'
 import { resolveValidator } from '../../lib/validators'
 import { isStale } from '../../lib/staleness'
@@ -21,6 +23,7 @@ import { IntegrationSetupGuide } from './IntegrationSetupGuide'
 import { IntegrationCredentialChips } from './IntegrationCredentialChips'
 import { PLATFORM_STATUS_MAP, type FieldSource, type HealthRow, type PlatformDef } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { usePageData } from '../../lib/usePageData'
 
 /**
  * Triggers a one-shot success-pulse signal when the latest probe transitions
@@ -33,6 +36,50 @@ import { CHIP_TONE } from '../../lib/chipTone'
  * of ok probes refreshes the visual feedback so users hammering "Test"
  * still see something happen each click.
  */
+/**
+ * Copyable inbound receive-URL for integrations that push INTO Mushi
+ * (Sentry issue alerts / user feedback). Substitutes the active project id
+ * so the user pastes a working URL, not a template.
+ */
+function WebhookReceiveUrl({ path, source }: { path: string; source: string }) {
+  const projectId = useActiveProjectId()
+  const url = `${RESOLVED_EXTERNAL_API_URL}${path.replace('{projectId}', projectId ?? '<project-id>')}`
+  // Round-trip receipt: the newest inbound delivery for this source proves the
+  // vendor-side webhook actually reaches us — "configured" is a claim, a
+  // delivery timestamp is evidence.
+  const deliveries = usePageData<{ deliveries: Array<{ outcome: string; created_at: string; error_message: string | null }> }>(
+    `/v1/admin/integrations/inbound-deliveries?source=${encodeURIComponent(source)}`,
+  )
+  const latest = deliveries.data?.deliveries?.[0]
+  return (
+    <div className="mt-1.5 space-y-1 min-w-0">
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="text-2xs text-fg-faint shrink-0">Receive URL</span>
+        <code className="text-2xs font-mono text-fg-secondary truncate bg-surface-hover rounded px-1.5 py-0.5 min-w-0">
+          {url}
+        </code>
+        <CopyButton value={url} label="Copy webhook URL" />
+      </div>
+      <div className="text-2xs text-fg-faint pl-0.5">
+        {latest ? (
+          <>
+            Last inbound delivery:{' '}
+            <span className={latest.outcome === 'accepted' ? 'text-ok' : 'text-danger'}>
+              {latest.outcome}
+            </span>{' '}
+            · <RelativeTime value={latest.created_at} />
+            {latest.outcome !== 'accepted' && latest.error_message ? (
+              <span className="text-fg-faint"> — {latest.error_message.slice(0, 80)}</span>
+            ) : null}
+          </>
+        ) : (
+          'No inbound deliveries yet — fire a test alert from the vendor to prove the round trip.'
+        )}
+      </div>
+    </div>
+  )
+}
+
 function useSuccessPulse(probe: HealthRow | undefined): string {
   const [pulsing, setPulsing] = useState(false)
   const lastSeenAt = useRef<string | null>(null)
@@ -259,6 +306,8 @@ export function PlatformIntegrationCard({
             {requiredOk && !isEditing && (
               <IntegrationCredentialChips fields={def.fields} config={config} />
             )}
+
+            {def.webhookPath && <WebhookReceiveUrl path={def.webhookPath} source={def.kind} />}
 
             {!requiredOk && def.setupSteps && def.setupSteps.length > 0 && (
               <IntegrationSetupGuide

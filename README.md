@@ -29,7 +29,7 @@ npx mushi-mushi
 
 <sub>Node ≥22 · [CI](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml) · SDK MIT · [enterprise](./packages/server/ee/README.md) · [Smithery](https://smithery.ai/servers/kensaurus/mushi-mushi)</sub>
 
-[Vision](./VISION.md) · [Quick start](#60-second-proof) · [Connect your editor](https://kensaur.us/mushi-mushi/docs/connect) · [Self-host](#self-host-in-under-5-minutes) · [Sentry enrichment](#sentry-enrichment) · [Packages](#framework-coverage) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Live demo](https://kensaur.us/mushi-mushi/admin/) · [Operators / platform](./docs/operators/) · [Roadmap](https://kensaur.us/mushi-mushi/docs/roadmap)
+[Vision](./VISION.md) · [Quick start](#60-second-proof) · [Connect your editor](https://kensaur.us/mushi-mushi/docs/connect) · [Self-host](#self-host-in-under-5-minutes) · [Why not just Sentry?](#why-not-just-sentry) · [Packages](#framework-coverage) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Live demo](https://kensaur.us/mushi-mushi/admin/) · [Operators / platform](./docs/operators/) · [Roadmap](https://kensaur.us/mushi-mushi/docs/roadmap)
 
 <a href="https://kensaur.us/mushi-mushi/admin/reports" title="Open a classified report in the live demo">
   <img alt="Report detail — plain-English root cause, confidence chip, paste-ready Cursor fix prompt, and PDCA receipt strip." src="./docs/screenshots/report-detail-dark.png" width="100%" />
@@ -145,11 +145,28 @@ docker compose up -d
 
 ---
 
-## Sentry enrichment
+## Why not just Sentry?
 
-Mushi works standalone. If you already run Sentry, Mushi enriches it: Sentry owns "errors your code throws"; Mushi owns the bugs that *don't* throw (dead buttons, 12-second screens, layouts that break on one phone) and the **plain-English diagnosis + fix** Sentry's $80/mo Seer tier reserves for bigger teams.
+The question every team asks, answered once:
 
-Inbound adapters forward Sentry (and Datadog, Bugsnag, Rollbar, Crashlytics, New Relic, Honeycomb, Grafana Loki, CloudWatch, Opsgenie, Firebase) alerts into Mushi for deeper fix context; outbound plugins send Mushi's verdicts back so a Sentry issue auto-resolves the moment Mushi merges its fix. The full enrichment / synthesis story lives in [`docs/operators/`](./docs/operators/#where-mushi-fits) — it's the upgrade path, never the front door.
+> **Sentry tells you what threw. Mushi ingests that — plus the bugs that never
+> throw — explains each one in plain English, and closes the loop with a fix
+> your agent can ship. One queue, one audit trail, with or without Sentry.**
+
+Mushi works standalone. If you already run Sentry, point a Sentry issue-alert
+webhook at `/v1/webhooks/sentry?projectId=<your-project>` and errors land in the
+same queue as user reports — deduped per Sentry issue, triaged in plain English,
+fix-dispatchable from the console, Slack, or your editor. The loop closes both
+ways: merging a Mushi fix resolves the linked Sentry issue, and resolving in
+Sentry resolves the linked report. A repeat alert on a fixed report reopens it
+as a regression instead of filing a duplicate.
+
+Beyond Sentry, inbound adapters translate Datadog, Bugsnag, Rollbar,
+Crashlytics, New Relic, Honeycomb, Grafana Loki, CloudWatch, Opsgenie, and
+Firebase alerts into the same queue; outbound plugins keep Linear, Jira, GitHub
+Issues, Slack, Discord, Teams, and PagerDuty in sync. Nothing gets ripped out —
+Mushi is the mediator between what you already run. Operator-depth (SSO,
+retention, region routing): [`docs/operators/`](./docs/operators/#where-mushi-fits).
 
 | | Mushi | Sentry | Langfuse |
 | --- | --- | --- | --- |
@@ -251,7 +268,7 @@ npx skills add kensaurus/mushi-mushi
 
 Then: `/mushi-setup` (guided SDK install + MCP wiring), `/mushi-debug` (diagnose ingest / MCP / pipeline failures), `/mushi-health` (pass/fail check across CLI, API, edge functions, BYOK keys), `/mushi-integration` (two-way loop, fix dispatch, lessons). The admin **Connect & Update** page (`/connect`) mirrors the same flows with one-click **Add to Cursor** deeplinks.
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~370K TS lines · 1,763 source files · 44 workspace / 36 npm packages · 55 edge functions · 336 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~371K TS lines · 1,765 source files · 44 workspace / 36 npm packages · 55 edge functions · 336 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ---
 

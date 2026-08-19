@@ -503,9 +503,14 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       return c.json({ ok: false, error: { code: 'BAD_JSON', message: 'Invalid JSON body' } }, 400);
     }
 
-    const projectId = (payload?.data as Record<string, unknown>)?.project
-      ? undefined
-      : c.req.header('X-Mushi-Project');
+    // Sentry's webhook UI can't add custom headers, so accept the project id
+    // as a query param too (same convention as /v1/webhooks/sentry/seer):
+    //   <api>/v1/webhooks/sentry?projectId=<mushi-project-id>
+    const projectId =
+      c.req.query('projectId') ??
+      ((payload?.data as Record<string, unknown>)?.project
+        ? undefined
+        : c.req.header('X-Mushi-Project'));
 
     if (!projectId) {
       await auditRow.resolve('error', 400, Date.now() - t0, 'Cannot determine project');
@@ -513,6 +518,9 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     }
 
     const db = getServiceClient();
+    // Stamp the audit row so the console's Sentry card can show a per-project
+    // "last inbound delivery" receipt (proves the round trip end-to-end).
+    void auditRow.setProject(projectId).catch(() => {});
 
     const { data: settings } = await db
       .from('project_settings')
@@ -562,7 +570,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     }
 
     const action = payload?.action;
-    const pd = payload?.data as { feedback?: Record<string, unknown>; issue?: Record<string, unknown>; seer_analysis?: unknown } | undefined;
+    const pd = payload?.data as { feedback?: Record<string, unknown>; issue?: Record<string, unknown>; event?: Record<string, unknown>; seer_analysis?: unknown } | undefined;
     if (action === 'created' && pd?.feedback) {
       const feedback = pd.feedback;
       const reportId = crypto.randomUUID();
@@ -600,6 +608,37 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       triggerClassification(reportId, projectId);
       await auditRow.resolve('accepted', 200, Date.now() - t0);
       return c.json({ ok: true, data: { reportId } });
+    }
+
+    // ── Sentry error ingest (one-stop mediator) ───────────────────────────
+    // event_alert resource: an issue-alert rule fired — data.event carries
+    // the full error event. issue resource: data.issue carries the grouped
+    // summary. Both become first-class Mushi reports (deduped per Sentry
+    // issue via report_external_issues); a Sentry-side resolve closes the
+    // linked report. The customer's own Sentry alert rules are the noise
+    // filter — only alerts they routed at this webhook arrive here.
+    if ((action === 'triggered' && pd?.event) || (action === 'created' && pd?.issue)) {
+      const { ingestSentryError } = await import('../../_shared/sentry-ingest.ts');
+      try {
+        const result = await ingestSentryError(db, {
+          projectId,
+          event: (pd?.event ?? null) as never,
+          issue: (pd?.issue ?? null) as never,
+          triggerClassification,
+        });
+        await auditRow.resolve('accepted', 200, Date.now() - t0);
+        return c.json({ ok: true, data: { action: result.outcome, reportId: result.reportId ?? null } });
+      } catch (err) {
+        await auditRow.resolve('error', 500, Date.now() - t0, String(err).slice(0, 300));
+        return c.json({ ok: false, error: { code: 'INGEST_FAILED', message: 'Sentry ingest failed' } }, 500);
+      }
+    }
+
+    if (action === 'resolved' && pd?.issue?.id != null) {
+      const { resolveReportFromSentry } = await import('../../_shared/sentry-ingest.ts');
+      const result = await resolveReportFromSentry(db, projectId, String(pd.issue.id));
+      await auditRow.resolve('accepted', 200, Date.now() - t0);
+      return c.json({ ok: true, data: { action: result.outcome, reportId: result.reportId ?? null } });
     }
 
     await auditRow.resolve('accepted', 200, Date.now() - t0);

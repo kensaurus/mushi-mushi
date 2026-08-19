@@ -36,7 +36,8 @@ import { withSentry, reportMessage } from '../_shared/sentry.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { getServiceClient } from '../_shared/db.ts'
 import { dispatchFixForReport } from '../_shared/dispatch.ts'
-import { sendBotMessage } from '../_shared/slack.ts'
+import { sendBotMessage, updateReportMessage } from '../_shared/slack.ts'
+import { applyReportStatusTransition } from '../_shared/report-transition.ts'
 import { createWebhookMiddleware, ReplayAttackError, RateLimitError } from '../_shared/webhook-middleware.ts'
 
 const log = rootLog.child('slack-interactions')
@@ -202,6 +203,35 @@ Deno.serve(
       return ephemeral(':hourglass_flowing_sand: Queuing AI improvement…')
     }
 
+    // ── Report: resolve_report / dismiss_report ──────────────────────────────
+    // Routine triage calls straight from the card. Shares the console PATCH
+    // route's side-effect contract via _shared/report-transition.ts — plugin
+    // event, external-issue resolution, reporter notification.
+    if (actionKind === 'resolve_report' || actionKind === 'dismiss_report') {
+      const targetReportId = actionValue || action.value
+      if (!targetReportId) {
+        await auditRow.resolve('accepted', 200, Date.now() - t0, 'Missing report ID')
+        return ephemeral('Missing report ID.')
+      }
+      const requestedStatus = actionKind === 'resolve_report' ? 'resolved' : 'dismissed'
+      const bgWork = finishStatusTransition({
+        db,
+        reportId: targetReportId,
+        requestedStatus,
+        slackUser,
+        responseUrl,
+        channelId: payload.channel?.id,
+        originalMessage: payload.message,
+      }).catch((err) => log.error(`${actionKind} failed`, { err: String(err) }))
+      waitUntil(bgWork)
+      await auditRow.resolve('accepted', 200, Date.now() - t0)
+      return ephemeral(
+        actionKind === 'resolve_report'
+          ? ':hourglass_flowing_sand: Resolving…'
+          : ':hourglass_flowing_sand: Dismissing…',
+      )
+    }
+
     // ── Report: dispatch_fix ─────────────────────────────────────────────────
     if (actionKind !== 'dispatch_fix' || !actionValue) {
       // Link-only buttons like `open_report:<id>` / `open_qa_run:<id>` don't round-trip here.
@@ -312,6 +342,14 @@ interface SlackInteractionPayload {
   response_url?: string
   user?: { id?: string }
   actions?: Array<{ action_id?: string; value?: string }>
+  /** Channel + original message — Slack includes both on block_actions, which
+   *  lets us rewrite the card in place without the channels:history scope. */
+  channel?: { id?: string }
+  message?: {
+    ts?: string
+    blocks?: unknown[]
+    attachments?: Array<{ color?: string; blocks?: unknown[] }>
+  }
 }
 
 async function finishDispatch(input: {
@@ -338,6 +376,8 @@ async function finishDispatch(input: {
     await sendBotMessage({
       text: threadText,
       threadTs: input.slackThreadTs,
+      db: getServiceClient(),
+      projectId: input.projectId,
     }).catch((err) => log.error('Threaded reply failed', { err: String(err) }))
   }
 
@@ -355,6 +395,123 @@ async function finishDispatch(input: {
         text: `:x: Could not dispatch — ${result.message ?? result.code ?? 'unknown error'}.`,
       }
 
+  await fetch(input.responseUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch((err) => log.error('response_url POST failed', { err: String(err) }))
+}
+
+/** Swap the card's action row for an outcome line so channel state tracks
+ *  reality — a resolved report must not keep offering Resolve/Dispatch. */
+function blocksWithOutcome(blocks: unknown[], outcomeText: string): unknown[] {
+  const out: unknown[] = []
+  let swapped = false
+  for (const block of blocks) {
+    const b = block as { type?: string; block_id?: string }
+    if (!swapped && b.type === 'actions' && String(b.block_id ?? '').startsWith('mushi_report_')) {
+      out.push({ type: 'context', elements: [{ type: 'mrkdwn', text: outcomeText }] })
+      swapped = true
+      continue
+    }
+    out.push(block)
+  }
+  return swapped ? out : [...blocks, { type: 'context', elements: [{ type: 'mrkdwn', text: outcomeText }] }]
+}
+
+async function finishStatusTransition(input: {
+  db: SupabaseClient
+  reportId: string
+  requestedStatus: 'resolved' | 'dismissed'
+  slackUser: string
+  responseUrl?: string
+  channelId?: string
+  originalMessage?: {
+    ts?: string
+    blocks?: unknown[]
+    attachments?: Array<{ color?: string; blocks?: unknown[] }>
+  }
+}): Promise<void> {
+  const { data: report } = await input.db
+    .from('reports')
+    .select('id, project_id, slack_message_ts')
+    .eq('id', input.reportId)
+    .single()
+
+  if (!report) {
+    if (input.responseUrl) {
+      await fetch(input.responseUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          response_type: 'ephemeral',
+          replace_original: false,
+          text: ':x: That report no longer exists.',
+        }),
+      }).catch((err) => log.error('response_url POST failed', { err: String(err) }))
+    }
+    return
+  }
+
+  const result = await applyReportStatusTransition(input.db, {
+    reportId: input.reportId,
+    requestedStatus: input.requestedStatus,
+    actor: { kind: 'slack', id: input.slackUser },
+  })
+
+  const verb = input.requestedStatus === 'resolved' ? 'Resolved' : 'Dismissed'
+  const emoji = input.requestedStatus === 'resolved' ? ':white_check_mark:' : ':wastebasket:'
+
+  // Rewrite the card in place: action row → outcome line. Uses the message
+  // blocks Slack included in the interaction payload, so no history scope
+  // is needed. Best-effort — the threaded note below is the audit record.
+  const cardTs = input.originalMessage?.ts
+  if (result.ok && cardTs && input.channelId) {
+    const outcomeText = `${emoji} *${verb}* by <@${input.slackUser}> · ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC`
+    const msg = input.originalMessage!
+    const updated: { attachments?: unknown[]; blocks?: unknown[] } = {}
+    if (msg.attachments?.length) {
+      updated.attachments = msg.attachments.map((att) =>
+        att?.blocks?.length ? { ...att, blocks: blocksWithOutcome(att.blocks, outcomeText) } : att,
+      )
+    } else if (msg.blocks?.length) {
+      updated.blocks = blocksWithOutcome(msg.blocks, outcomeText)
+    }
+    if (updated.attachments || updated.blocks) {
+      await updateReportMessage({
+        channel: input.channelId,
+        ts: cardTs,
+        attachments: updated.attachments,
+        blocks: updated.blocks,
+        text: `${verb} by ${input.slackUser}`,
+        db: input.db,
+        projectId: report.project_id,
+      }).catch((err) => log.error('Card update failed', { err: String(err) }))
+    }
+  }
+
+  // Threaded audit note so channel history shows who acted and when.
+  if (result.ok && report.slack_message_ts) {
+    await sendBotMessage({
+      text: `${emoji} ${verb} by <@${input.slackUser}> from Slack.`,
+      threadTs: report.slack_message_ts,
+      db: input.db,
+      projectId: report.project_id,
+    }).catch((err) => log.error('Threaded reply failed', { err: String(err) }))
+  }
+
+  if (!input.responseUrl) return
+  const body = result.ok
+    ? {
+        response_type: 'ephemeral',
+        replace_original: false,
+        text: `${emoji} ${verb}. The reporter has been notified.`,
+      }
+    : {
+        response_type: 'ephemeral',
+        replace_original: false,
+        text: `:x: Could not update — ${result.message}.`,
+      }
   await fetch(input.responseUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

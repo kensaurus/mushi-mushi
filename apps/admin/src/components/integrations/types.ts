@@ -122,6 +122,12 @@ export interface PlatformDef {
    * When set, the card renders a blocking banner with a link to the dependency.
    */
   dependsOn?: Kind
+  /**
+   * Inbound webhook path on the hosted API, with `{projectId}` substituted at
+   * render time. When set, the card shows a copyable receive-URL so the user
+   * can paste it straight into the vendor's webhook settings.
+   */
+  webhookPath?: string
 }
 
 export interface RoutingProviderDef {
@@ -228,19 +234,23 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Grant at least project:read and event:read scopes.',
       'Copy the org slug from your Sentry URL: sentry.io/organizations/{org-slug}/.',
       'Paste org slug + token below, then Save → Test connection.',
+      'To route errors INTO Mushi: Sentry → Alerts → create an issue-alert rule with a webhook action pointed at the receive URL below, and set the same webhook secret in both places.',
     ],
-    whyItMatters: 'Pulls Seer root-cause analysis into your reports and lets the LLM cross-reference production errors with user feedback. Wire the webhook to mirror Sentry user feedback into Mushi.',
+    whyItMatters: 'Sentry errors become Mushi reports: an alert firing lands in your queue with plain-English triage and a dispatchable fix, deduped per Sentry issue, and the loop closes both ways — Mushi fix → Sentry resolve, Sentry resolve → Mushi resolved. Seer analysis and event context enrich classification.',
     capabilitiesOnceConnected: [
+      'Sentry issue alerts land in the report queue as triaged, fix-ready reports (deduped per issue; regressions reopen instead of duplicating)',
       'Auto-attach matching Sentry events (stack trace + breadcrumbs) to each report',
       'Include Seer root-cause hints in the classifier prompt',
       'Mirror Sentry user-feedback submissions into the report queue',
+      'Two-way resolve: merging a Mushi fix resolves the Sentry issue, and resolving in Sentry resolves the linked report',
     ],
+    webhookPath: '/v1/webhooks/sentry?projectId={projectId}',
     fields: [
       { name: 'sentry_org_slug', label: 'Org slug', placeholder: 'my-company', help: 'The segment after sentry.io/organizations/ in your Sentry URL.', required: true, helpId: 'integrations.sentry.org_slug', validator: 'slug' },
       { name: 'sentry_project_slug', label: 'Project slug', placeholder: 'web-app', help: 'Optional — narrows event search to one project (faster enrichment).', helpId: 'integrations.sentry.project_slug', validator: 'slug' },
       { name: 'sentry_auth_token_ref', label: 'Auth token', placeholder: 'sntrys_… or sntryu_… (or vault://id)', type: 'password', help: 'User auth token with project:read + event:read. Create at sentry.io/settings/account/api/auth-tokens/.', required: true, helpId: 'integrations.sentry.auth_token', validator: 'token' },
       { name: 'sentry_dsn', label: 'DSN (optional)', placeholder: 'https://abc@o0.ingest.sentry.io/0', help: 'DSN for the SDK to send events. Only needed if you want Mushi reports forwarded as Sentry events.', helpId: 'settings.general.sentry_dsn', validator: 'sentryDsn' },
-      { name: 'sentry_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'HMAC secret. Configure the same value in Sentry → Settings → Webhooks for inbound user-feedback mirroring.', helpId: 'settings.general.sentry_webhook_secret', validator: 'token' },
+      { name: 'sentry_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'HMAC secret. Set the same value on the Sentry webhook (alert rules and user feedback) that targets the receive URL shown on this card.', helpId: 'settings.general.sentry_webhook_secret', validator: 'token' },
     ],
   },
   {

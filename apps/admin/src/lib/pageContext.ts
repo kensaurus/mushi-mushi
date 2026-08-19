@@ -36,7 +36,7 @@
  *          context never leaks onto `/fixes` if a page forgets to clean up.
  */
 
-import { useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 
 /** Declarative action the page contributes. Consumers render these inline
  *  (e.g. command palette at the top, or Ask Mushi as a quick button). */
@@ -109,6 +109,12 @@ export interface PageMentionable {
 type Listener = () => void
 
 let currentContext: PageContext | null = null
+/** Identity of the hook instance that currently owns `currentContext`.
+ *  Lets us silently refresh action closures on re-render (the ctx object is
+ *  new every render) while still clearing the registry on the owner's
+ *  unmount — an object-identity compare breaks the moment we forward a
+ *  fresh closure. */
+let currentOwner: symbol | null = null
 const listeners = new Set<Listener>()
 
 function emit() {
@@ -143,19 +149,35 @@ export function usePublishPageContext(ctx: PageContext | null): void {
 
   // We deliberately depend on the serialised key (not `ctx` itself) so
   // pages that recompute their context object on every render don't
-  // thrash the registry. `ctx` is captured fresh via closure each render,
-  // so the latest action closures are still forwarded once `stableKey`
-  // changes.
+  // thrash the registry. Having `ctx` in the dep array defeated that: the
+  // object is new every render, so this effect fired emit() twice per
+  // render (cleanup + setup) and re-rendered Layout, CommandPalette, and
+  // AskMushiSidebar on every keystroke of the publishing page. The latest
+  // action closures are instead forwarded silently below.
+  const ownerRef = useRef<symbol | null>(null)
+  if (ownerRef.current === null) ownerRef.current = Symbol('pageContextOwner')
+  const ctxRef = useRef(ctx)
+
+  // Silent closure refresh, every render: snapshot readers pick up the
+  // newest action closures on their next read — no emit, no re-renders.
   useEffect(() => {
-    currentContext = ctx
+    ctxRef.current = ctx
+    if (currentOwner === ownerRef.current) currentContext = ctx
+  })
+
+  useEffect(() => {
+    const owner = ownerRef.current
+    currentOwner = owner
+    currentContext = ctxRef.current
     emit()
     return () => {
-      if (currentContext === ctx) {
+      if (currentOwner === owner) {
+        currentOwner = null
         currentContext = null
         emit()
       }
     }
-  }, [stableKey, ctx])
+  }, [stableKey])
 }
 
 /** Read the current page context. Returns null when no page has
