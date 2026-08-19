@@ -248,6 +248,184 @@
 }
 
 /* ---------------------------------------------------------------------------
+   COLLAPSED ICON RAIL
+   ---------------------------------------------------------------------------
+   The rail deliberately does NOT reuse `.nav-link` with padding overrides.
+   `.nav-link` above is *unlayered* plain CSS while Tailwind's `px-*` / `py-*`
+   utilities live in `@layer utilities` — unlayered always wins the cascade, so
+   the old compact branch's `justify-center px-2 py-2` never re-padded anything
+   and the rail inherited the full sidebar's cramped 0.4rem/0.5rem rhythm at
+   half the width. That is the "squeezed" report.
+
+   The rail owns its geometry here instead, which also leaves `.nav-link`
+   untouched for the expanded sidebar and the mobile drawer.
+
+   Geometry: 44x44 hit area (WCAG 2.5.5 Target Size) centred in a 64px rail,
+   leaving 10px gutters so a row never crowds the rail border.
+--------------------------------------------------------------------------- */
+
+.nav-rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  /* Explicit so the tile stays a uniform 44px square even when a consumer
+     composes it onto <Btn>, which brings its own `px-2 py-1` utilities. */
+  padding: 0;
+  margin-inline: auto;
+  border-radius: var(--radius-md);
+  color: var(--color-fg-muted);
+  /* transform/opacity only — see docs/MOTION.md */
+  transition: opacity var(--duration-fast) var(--ease-stamp),
+    transform var(--duration-fast) var(--ease-stamp);
+  user-select: none;
+}
+
+.nav-rail-item:hover {
+  color: var(--color-fg);
+  background-color: var(--color-nav-hover-bg);
+}
+
+.nav-rail-item:active {
+  transform: scale(0.96);
+}
+
+.nav-rail-item:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: -2px;
+}
+
+/* Icons carry the entire meaning in a rail, so they sit at full strength
+   rather than the 0.5 opacity `.nav-link-icon` uses next to a text label. */
+.nav-rail-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  opacity: 0.8;
+  transition: opacity var(--duration-fast) var(--ease-out-expo);
+}
+
+.nav-rail-item:hover .nav-rail-icon {
+  opacity: 1;
+}
+
+/* Active route — filled well plus a left accent stub.
+   The stub is INSET inside the 44px tile rather than hung off its left edge:
+   AnimatedDisclosure wraps the item list in `overflow: hidden`, so anything
+   drawn outside the tile's own box gets clipped. The 13px of clearance either
+   side of the 18px icon leaves plenty of room for it. */
+.nav-rail-item[aria-current='page'] {
+  color: var(--color-fg);
+  background-color: var(--color-nav-active-bg);
+}
+
+.nav-rail-item[aria-current='page'] .nav-rail-icon {
+  opacity: 1;
+  color: var(--color-brand);
+}
+
+.nav-rail-item[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  left: 0.1875rem;
+  top: 50%;
+  height: 1.25rem;
+  width: 3px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: var(--color-nav-active-border);
+}
+
+/* Glyph wrapper — purely a centring box. Deliberately NOT `position:
+   relative`: the badge below anchors to the 44px tile instead.
+   History: an earlier rail anchored the badge to the glyph because anchoring
+   to the *button* pushed the pill past the rail border — but that button was
+   only ~28px wide. At 44px there is room to inset the badge into the tile
+   corner, which both keeps it inside the disclosure's `overflow: hidden` and
+   stops a 2–3 character count from sitting on top of an 18px glyph. */
+.nav-rail-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Count / status pill, inset into the tile's top-right corner.
+   `min-width` + horizontal padding lets "12" and "99+" grow leftward instead
+   of clipping; the ring cuts the pill away from the glyph it overlaps. */
+.nav-rail-badge {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0.9375rem;
+  height: 0.9375rem;
+  padding-inline: 0.125rem;
+  border-radius: 999px;
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* Wrapper for badges that own their own markup (IntegrationHealthDot fetches
+   its own status). `display: block` keeps it a non-flex container, which is
+   what neutralises the child's `ml-auto` — that utility only bites inside the
+   flex row the expanded sidebar uses. */
+.nav-rail-badge-slot {
+  position: absolute;
+  top: 0.4375rem;
+  right: 0.4375rem;
+  display: block;
+  line-height: 0;
+  pointer-events: none;
+}
+
+/* Status-only variant (no number) — a 7px dot rather than an empty pill. */
+.nav-rail-badge--dot {
+  min-width: 0.4375rem;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  padding-inline: 0;
+  top: 0.4375rem;
+  right: 0.4375rem;
+}
+
+/* Section glyph (P / D / C / A / S / W) in the rail's accordion picker. */
+.nav-rail-stamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Group rhythm — a hairline plus real vertical air between PDCA sections, so
+   the rail reads as four labelled groups rather than one undifferentiated
+   column of glyphs. */
+.nav-rail-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.nav-rail-group + .nav-rail-group {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-edge-subtle);
+}
+
+
+/* ---------------------------------------------------------------------------
    CARD DEPTH
 --------------------------------------------------------------------------- */
 

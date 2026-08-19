@@ -73,6 +73,10 @@ export interface BuiltNavItem {
   label: string
   path: string
   icon: ComponentType<{ className?: string }>
+  /** Plain-English one-liner from the registry — the collapsed rail's hover
+   *  flyout shows it under the label so an icon-only rail still explains
+   *  itself. Required on every registry entry, so never empty. */
+  description: string
   quickstartLabel?: string
   beginner?: boolean
   checkBeginnerCore?: boolean
@@ -153,6 +157,7 @@ function entryToNavItem(entry: NavRegistryEntry): BuiltNavItem {
     label: entry.label,
     path: entry.path,
     icon: ICON_MAP[entry.iconKey],
+    description: entry.paletteDescription,
     quickstartLabel: entry.quickstartLabel,
     beginner: entry.beginner,
     checkBeginnerCore: entry.checkBeginnerCore,

@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { usePageData } from '../lib/usePageData';
 import { Tooltip } from './ui';
+import { NavRailFlyout } from './sidebar/NavRailFlyout';
 import { CHIP_TONE } from '../lib/chipTone';
 
 interface PrivacyStatus {
@@ -61,12 +62,29 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
       : 'At least one pipeline is using the Mushi platform API key. Configure BYOK in Settings to keep your data in your own LLM account. Click for details.';
 
   if (compact) {
+    // Rail variant: same 44px `.nav-rail-item` hit area as every other rail
+    // control, and the same title/description/status flyout — a bare coloured
+    // dot with no label is exactly the kind of thing an icon rail must explain
+    // on hover.
     return (
-      <Tooltip content={tooltipContent} side="right" portal>
+      <Tooltip
+        side="right"
+        portal
+        content={
+          <NavRailFlyout
+            title="Privacy posture"
+            description={tooltipContent}
+            status={{
+              tone: error ? 'danger' : isByok ? 'ok' : 'warn',
+              label: labelLong,
+            }}
+          />
+        }
+      >
         <Link
           to="/settings?tab=byok"
-          className="flex items-center justify-center p-2 rounded-sm hover:bg-surface-raised transition-opacity"
-          aria-label={label}
+          className="nav-rail-item"
+          aria-label={`Privacy posture: ${label}`}
         >
           <span className={`inline-block w-2 h-2 rounded-full ${dotClass}`} />
         </Link>

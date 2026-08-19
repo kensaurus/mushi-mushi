@@ -157,6 +157,7 @@ export const NAV_SECTION_META: Record<
 > = {
   start: {
     title: 'Start here',
+    hint: 'Setup, the dashboard, and your action inbox — where you land each day.',
     defaultCollapsed: true,
   },
   plan: {

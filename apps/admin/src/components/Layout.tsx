@@ -13,7 +13,9 @@ import {
   IconSignOut, IconHealth, IconBell, IconEye, IconChevronRight,
 } from './icons'
 import { useNavCounts, toneForBacklog } from '../lib/useNavCounts'
-import { renderNavBadge } from '../lib/navBadges'
+import { renderNavBadge, resolveNavBadge } from '../lib/navBadges'
+import { NavRailFlyout } from './sidebar/NavRailFlyout'
+import { NavRailLink, railBadgeText, railDescriptionId } from './sidebar/NavRailLink'
 import { workspaceSectionAttention } from '../lib/workspaceNavMeta'
 import { checkSectionAttention, actSectionAttention, doSectionAttention, startSectionAttention, planSectionAttention, workspaceSlicesAttention } from '../lib/extendedNavMeta'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
@@ -833,33 +835,45 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const CHECK_SUB_GROUP_ORDER = ['quality-gates', 'system-health', 'release-intel'] as const
 
-  function renderNavLink(item: NavItem, compact: boolean) {
+  function renderFullNavLink(item: NavItem) {
     const { label, path, icon: Icon, requiresFeature } = item
     const active = isActive(pathname, path)
     const gated = !!requiresFeature && !has(requiresFeature) && !isSuperAdmin
-    const link = (
+    return (
       <Link
-        key={compact ? undefined : path}
+        key={path}
         to={path}
         onClick={() => setMobileOpen(false)}
         aria-current={active ? 'page' : undefined}
-        aria-label={compact ? label : undefined}
-        className={`nav-link ${compact ? 'justify-center px-2 py-2' : ''} ${gated ? 'opacity-80' : ''}`}
+        className={`nav-link ${gated ? 'opacity-80' : ''}`}
       >
         <Icon className="nav-link-icon" />
-        {!compact && <span>{label}</span>}
-        {!compact && gated && requiresFeature && (
-          <UpgradePill flag={requiresFeature} className="ml-auto" />
-        )}
+        <span>{label}</span>
+        {gated && requiresFeature && <UpgradePill flag={requiresFeature} className="ml-auto" />}
         {renderNavBadge(path, navCounts, { criticalReports30d })}
       </Link>
     )
-    if (!compact) return link
+  }
+
+  function renderRailLink(item: NavItem) {
+    const { label, path, icon, description, requiresFeature } = item
     return (
-      <Tooltip key={path} content={label} side="right" portal>
-        {link}
-      </Tooltip>
+      <NavRailLink
+        key={path}
+        to={path}
+        label={label}
+        description={description}
+        icon={icon}
+        active={isActive(pathname, path)}
+        gated={!!requiresFeature && !has(requiresFeature) && !isSuperAdmin}
+        badge={resolveNavBadge(path, navCounts, { criticalReports30d })}
+        onNavigate={() => setMobileOpen(false)}
+      />
     )
+  }
+
+  function renderNavLink(item: NavItem, compact: boolean) {
+    return compact ? renderRailLink(item) : renderFullNavLink(item)
   }
 
   // `compact` collapses the sidebar to an icon rail (~48px wide) — same
@@ -885,7 +899,7 @@ export function Layout({ children }: { children: ReactNode }) {
           )}
         </div>
         {compact ? (
-          <div className="px-2 pb-2">
+          <div className="px-2.5 pb-2.5">
             <SidebarBrandToggles compact mode={mode} onSelectMode={setMode} />
           </div>
         ) : (
@@ -911,7 +925,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* Navigation — ghost scrollbar at rest; thin bar on hover/focus only. */}
       <div className="sidebar-rail-nav-wrap relative flex min-h-0 flex-1 flex-col">
-      <nav aria-label="Main navigation" className={`min-h-0 flex-1 overflow-y-auto py-2 ${compact ? 'px-1' : 'px-2'}`}>
+      <nav aria-label="Main navigation" className={`min-h-0 flex-1 overflow-y-auto ${compact ? 'px-2.5 py-2.5' : 'py-2 px-2'}`}>
         {visibleNav.map((section, sectionIdx) => {
           const stageId = SECTION_TO_STAGE[section.id]
           const isActiveStage = stageId !== undefined && stageId === activeStage
@@ -924,7 +938,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <div
               key={section.id}
               id={`nav-section-${section.id}`}
-              className={compact ? 'first:mt-0 mt-1 first:pt-0 pt-1 first:border-t-0 border-t border-edge-subtle/60' : sectionIdx > 0 ? 'border-t border-edge/20 pt-1.5 mt-0.5' : ''}
+              className={compact ? 'nav-rail-group' : sectionIdx > 0 ? 'border-t border-edge/20 pt-1.5 mt-0.5' : ''}
             >
               {compact ? (
                 <SectionRailHeader
@@ -946,7 +960,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <AnimatedDisclosure open={isExpanded} contentKey={section.id}>
                 <NavSectionStagger
                   animate={!compact}
-                  className={compact ? 'space-y-0.5 flex flex-col items-stretch' : 'space-y-0.5'}
+                  className={compact ? 'flex flex-col gap-1' : 'space-y-0.5'}
                 >
                   {section.id === 'quick' && !compact
                     ? renderQuickSubGroups(section.items, (item) => renderNavLink(item, compact))
@@ -986,8 +1000,12 @@ export function Layout({ children }: { children: ReactNode }) {
       </nav>
       </div>
 
-      {/* User footer — density, theme, focus in one micro row; identity card below. */}
-      <div className={`${compact ? 'px-1 py-2 space-y-2' : 'px-3 py-2.5 space-y-2'} border-t border-edge/60`}>
+      {/* User footer — density, theme, focus in one micro row; identity card
+          below. In the rail this is the utility cluster, and it gets a full
+          `border-edge` rule (not the /60 hairline the nav groups use) so
+          "account + app chrome" reads as a different class of thing from the
+          PDCA navigation above it. */}
+      <div className={`${compact ? 'flex flex-col gap-1 px-2.5 py-2.5 border-t border-edge' : 'px-3 py-2.5 space-y-2 border-t border-edge/60'}`}>
         <PrivacyPostureBadge compact={compact} />
         {!compact && (
           <SidebarFooterControls
@@ -996,32 +1014,57 @@ export function Layout({ children }: { children: ReactNode }) {
           />
         )}
         {compact && (
-          <Tooltip content={focusMode ? 'Exit focus mode' : 'Focus mode'} side="right" portal>
+          <Tooltip
+            side="right"
+            portal
+            content={
+              <NavRailFlyout
+                title={focusMode ? 'Exit focus mode' : 'Focus mode'}
+                description="Hides the sidebar and header so only the page content is left."
+                hint="Cmd/Ctrl + . toggles it, Esc exits"
+              />
+            }
+          >
             <Btn
               type="button"
               variant="ghost"
               size="sm"
               onClick={() => setFocusMode((value) => !value)}
-              className="nav-link justify-center px-2 py-2 h-auto w-full border-0"
+              // ring-0: `.nav-rail-item` already draws an inset focus outline;
+              // Btn's own offset ring would double it up on the rail.
+              className="nav-rail-item border-0 focus-visible:ring-0"
               aria-pressed={focusMode}
               aria-label={focusMode ? 'Exit focus mode' : 'Focus mode'}
             >
-              <IconEye className="nav-link-icon" />
+              <IconEye className="nav-rail-icon" />
             </Btn>
           </Tooltip>
         )}
         {!compact && <SidebarUserCard user={user} signOut={signOut} />}
         {compact && (
-          <Tooltip content={`Sign out (${user?.email ?? ''})`} side="right" portal>
+          <Tooltip
+            side="right"
+            portal
+            content={
+              <NavRailFlyout
+                title="Sign out"
+                description={
+                  user?.email
+                    ? `Ends this session for ${user.email}.`
+                    : 'Ends this session on this device.'
+                }
+              />
+            }
+          >
             <Btn
               type="button"
               variant="ghost"
               size="sm"
               onClick={signOut}
-              className="nav-link justify-center px-2 py-2 h-auto w-full border-0 text-rose hover:text-rose hover:bg-rose-muted/40"
+              className="nav-rail-item border-0 focus-visible:ring-0 text-rose hover:text-rose hover:bg-rose-muted/40"
               aria-label="Sign out"
             >
-              <IconSignOut className="nav-link-icon" />
+              <IconSignOut className="nav-rail-icon" />
             </Btn>
           </Tooltip>
         )}
@@ -1047,10 +1090,11 @@ export function Layout({ children }: { children: ReactNode }) {
           replaces all sidebar affordances when focus mode is on. */}
       {!focusMode && (
         <aside
-          // Collapsed rail is w-14 (56px), not w-12: a 24px stage glyph plus
-          // its count badge and the button's own padding did not fit in 48px,
-          // so the badge overhung the rail edge and crowded the glyph.
-          className={`hidden md:flex flex-shrink-0 min-h-0 border-r border-edge/60 bg-surface-root flex-col motion-safe:transition-[width] motion-safe:duration-base ${sidebarCollapsed ? 'w-14' : 'w-60'}`}
+          // Collapsed rail is w-16 (64px): a 44px hit area (WCAG 2.5.5) plus
+          // 10px gutters either side. At the old w-14 the row cleared the rail
+          // border by 6px, which is what made an otherwise fine icon column
+          // read as squeezed against the edge.
+          className={`hidden md:flex flex-shrink-0 min-h-0 border-r border-edge/60 bg-surface-root flex-col motion-safe:transition-[width] motion-safe:duration-base ${sidebarCollapsed ? 'w-16' : 'w-60'}`}
           data-collapsed={sidebarCollapsed ? 'true' : 'false'}
         >
           {renderSidebarContent(sidebarCollapsed)}
@@ -1061,14 +1105,28 @@ export function Layout({ children }: { children: ReactNode }) {
               Tooltip instead of a native `title` so it reads as a real
               button and matches every other collapsed-rail control. The
               `[` hotkey mirrors Linear's. */}
-          <Tooltip content={sidebarCollapsed ? 'Expand sidebar  ·  [' : 'Collapse to icon rail  ·  ['} side="right" portal>
+          <Tooltip
+            side="right"
+            portal
+            content={
+              sidebarCollapsed ? (
+                <NavRailFlyout
+                  title="Expand sidebar"
+                  description="Brings back the full nav with section names and labels."
+                  hint="Press [ to toggle"
+                />
+              ) : (
+                'Collapse to icon rail  ·  ['
+              )
+            }
+          >
             {/* mushi-ui: chrome icon button — Btn variant TBD (collapse row uses nav-link density + chevron label) */}
             <button
               type="button"
               onClick={() => setSidebarCollapsed((value) => !value)}
               aria-pressed={sidebarCollapsed}
               aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              className={`group flex items-center gap-2 border-t border-edge/60 px-3 py-1.5 text-2xs text-fg-faint hover:text-fg-muted hover:bg-surface-overlay/40 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}
+              className={`group flex w-full items-center gap-2 border-t border-edge/60 text-2xs text-fg-faint hover:text-fg-muted hover:bg-surface-overlay/40 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset ${sidebarCollapsed ? 'h-11 justify-center px-2.5' : 'justify-between px-3 py-1.5'}`}
             >
               <IconChevronRight
                 className={`h-3.5 w-3.5 shrink-0 motion-safe:transition-transform ${sidebarCollapsed ? '' : 'rotate-180'}`}
@@ -1467,11 +1525,32 @@ interface SectionRailHeaderProps {
   onSelect: () => void
 }
 
+/**
+ * Rail section picker (P / D / C / A / S / W). Shares `.nav-rail-item`
+ * geometry with the item rows so the whole rail sits on one 44px rhythm, and
+ * shares the flyout so a section explains itself in the same shape an item
+ * does — the section `hint` copy already reads as plain English.
+ */
 function SectionRailHeader({ section, expanded, isActiveStage, staleness, onSelect }: SectionRailHeaderProps) {
   const glyph = railSectionGlyph(section)
-  const stageTone = section.stage ? STAGE_TONE[section.stage] : 'bg-surface-overlay text-fg-secondary border border-edge-subtle'
+  const stageTone = section.stage
+    ? STAGE_TONE[section.stage]
+    : 'bg-surface-overlay text-fg-secondary border border-edge-subtle'
+  const descId = railDescriptionId(`section-${section.id}`)
   return (
-    <Tooltip content={section.hint ?? section.title} side="right" portal>
+    <Tooltip
+      side="right"
+      portal
+      content={
+        <NavRailFlyout
+          title={section.title}
+          description={section.hint}
+          status={staleness ? { tone: staleness.tone, label: staleness.label } : null}
+          kicker={section.stage ? { label: section.stage, className: stageTone } : null}
+          hint={expanded ? undefined : 'Opens this group in the full sidebar'}
+        />
+      }
+    >
       {/* mushi-ui: chrome icon button — Btn variant TBD (PDCA rail glyph + staleness badge layout) */}
       <button
         type="button"
@@ -1479,31 +1558,34 @@ function SectionRailHeader({ section, expanded, isActiveStage, staleness, onSele
         aria-expanded={expanded}
         aria-current={expanded ? 'true' : undefined}
         aria-label={`${section.title}${expanded ? '' : ' — show navigation'}`}
-        className={`nav-link justify-center px-1 py-1.5 mb-0.5 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm ${
+        aria-describedby={descId}
+        className={`nav-rail-item ${
           expanded
             ? 'bg-surface-overlay text-fg ring-1 ring-brand/40'
-            : 'text-fg-muted hover:text-fg-secondary hover:bg-surface-overlay/60'
-        } ${isActiveStage && !expanded ? 'ring-1 ring-brand/25' : ''}`}
+            : isActiveStage
+              ? 'ring-1 ring-brand/25'
+              : ''
+        }`}
       >
         {/* Badge anchors to the GLYPH, not the button: anchoring it to the
             button pushed it into the rail's border and over the glyph itself.
             The ring separates the count from the glyph underneath it. */}
-        <span className="relative inline-flex shrink-0">
-          <span
-            className={`inline-flex items-center justify-center w-6 h-6 rounded-sm text-3xs font-bold leading-none ${stageTone}`}
-            aria-hidden="true"
-          >
+        <span className="nav-rail-glyph">
+          <span className={`nav-rail-stamp ${stageTone}`} aria-hidden="true">
             {glyph}
           </span>
           {staleness && (
             <span
-              className={`absolute -top-1 -right-1.5 inline-flex items-center justify-center min-w-[0.85rem] px-0.5 h-3.5 rounded-full ring-1 ring-surface-root text-3xs font-mono font-bold leading-none ${STALENESS_TONE[staleness.tone]}`}
-              aria-label={staleness.label}
-              title={staleness.label}
+              aria-hidden="true"
+              className={`nav-rail-badge ring-1 ring-surface-root ${STALENESS_TONE[staleness.tone]}`}
             >
-              {staleness.count > 99 ? '99+' : staleness.count}
+              {railBadgeText(staleness.count)}
             </span>
           )}
+        </span>
+        <span id={descId} className="sr-only">
+          {section.hint}
+          {staleness ? ` — ${staleness.label}` : ''}
         </span>
       </button>
     </Tooltip>
