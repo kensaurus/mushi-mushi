@@ -547,7 +547,14 @@ export function PublicIntegrationsPage() {
 
   return (
     <MarketingProvider value={theme}>
-      <main className="mushi-marketing-surface min-h-screen">
+      {/* `flex-1 min-h-0 overflow-y-auto`, not `min-h-screen`: the app shell
+          (styles/base-and-density.css) makes html/body/#root `overflow:hidden`
+          and expects <main> to be the single scroll owner. This page asked for
+          `min-h-screen` instead, so it overflowed a clipped flex parent with
+          no scroller anywhere — a visitor saw the hero and the first card row
+          and could not reach the other 21 integrations, the SDK call-out, or
+          the footer at any viewport width. */}
+      <main className="mushi-marketing-surface min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-6xl space-y-10 px-6 pb-16 pt-4">
 
           {/* ── Sticky nav (mirrors PublicHomePage) ──────────────────── */}
@@ -822,7 +829,9 @@ function GroupLabel({
         >
           {direction === 'inbound' ? '→' : '←'}
         </span>
-        {direction === 'inbound' ? 'Inbound adapters' : 'Outbound plugins &amp; SDK'}
+        {/* Plain JS string, not JSX text — an HTML entity here renders
+            literally, so this header read "OUTBOUND PLUGINS &AMP; SDK". */}
+        {direction === 'inbound' ? 'Inbound adapters' : 'Outbound plugins & SDK'}
         <span className="ml-2 font-normal opacity-50">{count}</span>
       </p>
       <div
