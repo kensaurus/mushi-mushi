@@ -39,13 +39,38 @@ const SKIP_DIRS = new Set([
 ])
 const EXTS = /\.(tsx?|jsx?|css|mdx?)$/
 
-// `bg-[var(--<anything>gradient<anything>)]` — the broken form. We only flag
-// custom properties whose name mentions a gradient, so a genuine colour
-// variable (`bg-[var(--color-brand)]`, which IS a valid background-color)
-// stays allowed.
-const BROKEN = /bg-\[var\(--[a-z0-9-]*gradient[a-z0-9-]*\)\]/gi
+// `<prop>-[var(--<anything>gradient<anything>...)]` — the broken form.
+//
+// We only flag custom properties whose NAME mentions a gradient, so a genuine
+// colour variable (`bg-[var(--color-brand)]`, a valid background-color) stays
+// allowed. Covers `bg-`, `border-`, and `from-/via-/to-`, and tolerates a
+// fallback value (`var(--gradient-x, red)`), which an earlier version missed.
+//
+// This is a source-level heuristic and cannot see a gradient token that isn't
+// named `*gradient*`. The airtight check is on compiled output — see
+// `assertNoGradientBackgroundColor` below, which runs when a built stylesheet
+// is present.
+const BROKEN = /(?:bg|border|from|via|to)-\[var\(\s*--[a-z0-9-]*gradient[a-z0-9-]*[^)]*\)\]/gi
 
-function walk(dir, out = []) {
+/**
+ * Compiled-output check: after a build, ANY `background-color:var(--*gradient*)`
+ * in the emitted CSS is the bug, whatever syntax produced it. Skipped silently
+ * when no build output exists, so the script stays useful pre-build.
+ */
+function assertNoGradientBackgroundColor() {
+  const hits = []
+  for (const root of SEARCH_ROOTS) {
+    for (const file of walk(root, [], /\.css$/)) {
+      if (!/[\\/](?:dist|out|\.next)[\\/]/.test(file)) continue
+      const css = readFileSync(file, 'utf8')
+      const rx = /background-color:\s*var\(\s*--[a-z0-9-]*gradient/gi
+      if (rx.test(css)) hits.push(relative(ROOT, file))
+    }
+  }
+  return hits
+}
+
+function walk(dir, out = [], match = EXTS) {
   let entries
   try {
     entries = readdirSync(dir)
@@ -61,8 +86,8 @@ function walk(dir, out = []) {
     } catch {
       continue
     }
-    if (st.isDirectory()) walk(full, out)
-    else if (EXTS.test(entry)) out.push(full)
+    if (st.isDirectory()) walk(full, out, match)
+    else if (match.test(entry)) out.push(full)
   }
   return out
 }
@@ -73,8 +98,14 @@ for (const root of SEARCH_ROOTS) {
     const src = readFileSync(file, 'utf8')
     const lines = src.split('\n')
     lines.forEach((line, i) => {
-      // Allow the explanatory prose in comments that documents the trap.
-      const isComment = /^\s*(\/\/|\*|\/\*)/.test(line)
+      // Skip explanatory prose: line-leading JS/CSS comments, and any line
+      // that closes a block comment or sits in Markdown/MDX (where this trap
+      // is documented). Without the trailing-comment case, a `/* ... */`
+      // annotation in CSS would fail the build for describing the bug.
+      const isComment =
+        /^\s*(\/\/|\*|\/\*)/.test(line) ||
+        /\*\//.test(line) ||
+        /\.mdx?$/.test(file)
       BROKEN.lastIndex = 0
       const hit = BROKEN.exec(line)
       if (hit && !isComment) {
@@ -86,6 +117,11 @@ for (const root of SEARCH_ROOTS) {
       }
     })
   }
+}
+
+const compiledHits = assertNoGradientBackgroundColor()
+for (const f of compiledHits) {
+  failures.push({ file: f, line: 0, text: 'background-color:var(--*gradient*) in compiled CSS' })
 }
 
 if (failures.length === 0) {

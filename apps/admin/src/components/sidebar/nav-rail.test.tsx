@@ -21,6 +21,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { NavRailLink, railBadgeText, railDescriptionId } from './NavRailLink'
 import { NavRailFlyout } from './NavRailFlyout'
 import { navBadgeStatus, resolveNavBadge, type NavBadgeSpec } from '../../lib/navBadges'
+import { NAV_REGISTRY } from '../../lib/navRegistry'
 import { EMPTY_NAV_STAT_SLICES } from '../../lib/extendedNavMeta'
 import type { NavCounts } from '../../lib/useNavCounts'
 
@@ -173,7 +174,11 @@ describe('rail badge rendering', () => {
 })
 
 describe('railDescriptionId', () => {
-  it('produces a stable, collision-free id from a path', () => {
+  // The slug is lossy by construction — `/a/b`, `/a-b`, and `/a?b` all
+  // collapse to the same id. That is acceptable because the input is the
+  // fixed NAV_REGISTRY path set, which is asserted collision-free below;
+  // it is NOT a general-purpose unique-id function.
+  it('produces a stable id from a path', () => {
     expect(railDescriptionId('/reports')).toBe('rail-desc-reports')
     expect(railDescriptionId('/organization/members')).toBe('rail-desc-organization-members')
     expect(railDescriptionId('/integrations/config')).toBe('rail-desc-integrations-config')
@@ -182,6 +187,18 @@ describe('railDescriptionId', () => {
     expect(railDescriptionId('/')).toBe('rail-desc-root')
   })
 })
+
+  // The comment above claims the real registry is collision-free. Assert it,
+  // rather than leaving that as a promise: a future path that slugifies onto
+  // an existing one would give two rail items the same aria-describedby
+  // target, and the wrong description would be announced.
+  it('yields a unique id for every path in the real nav registry', () => {
+    const paths = NAV_REGISTRY.map((entry) => entry.path)
+    const ids = paths.map(railDescriptionId)
+    const dupes = ids.filter((id, i) => ids.indexOf(id) !== i)
+    expect(dupes).toEqual([])
+    expect(ids).toHaveLength(paths.length)
+  })
 
 describe('NavRailFlyout', () => {
   it('renders title, description, live status, and hint', () => {

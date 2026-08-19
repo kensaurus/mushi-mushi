@@ -297,6 +297,26 @@
   outline-offset: -2px;
 }
 
+/* Rail controls rendered as <Btn> (focus mode, sign out) carry Btn's own
+   offset focus ring from @layer utilities. `focus-visible:ring-0` does NOT
+   cancel it — Tailwind emits `ring-0` before `ring-2` at equal specificity,
+   so `ring-2` wins. This rule is unlayered, so it beats both. */
+.nav-rail-item--btn:focus-visible {
+  --tw-ring-shadow: 0 0 rgb(0 0 0 / 0);
+  box-shadow: none;
+}
+
+/* Destructive rail control (sign out). Unlayered, matching `.nav-rail-item`
+   itself — a `text-rose` utility would lose to it. */
+.nav-rail-item--danger {
+  color: var(--color-danger);
+}
+
+.nav-rail-item--danger:hover {
+  color: var(--color-danger);
+  background-color: var(--color-danger-muted);
+}
+
 /* Icons carry the entire meaning in a rail, so they sit at full strength
    rather than the 0.5 opacity `.nav-link-icon` uses next to a text label. */
 .nav-rail-icon {

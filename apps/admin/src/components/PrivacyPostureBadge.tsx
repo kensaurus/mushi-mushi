@@ -55,11 +55,17 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
       ? CHIP_TONE.okSubtle
       : CHIP_TONE.warnSubtle;
 
-  const tooltipContent = error
+  // Base explanation, free of any click affordance — the two variants do
+  // different things on click (the expanded badge opens a popover, the rail
+  // item navigates to Settings), so each appends its own call to action.
+  const postureExplanation = error
     ? 'Could not load privacy posture. Open BYOK settings or retry.'
     : isByok
       ? 'All LLM calls run under your own API key — your data never transits the Mushi platform account.'
-      : 'At least one pipeline is using the Mushi platform API key. Configure BYOK in Settings to keep your data in your own LLM account. Click for details.';
+      : 'At least one pipeline is using the Mushi platform API key. Configure BYOK in Settings to keep your data in your own LLM account.';
+
+  const tooltipContent =
+    error || isByok ? postureExplanation : `${postureExplanation} Click for details.`;
 
   if (compact) {
     // Rail variant: same 44px `.nav-rail-item` hit area as every other rail
@@ -73,7 +79,11 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
         content={
           <NavRailFlyout
             title="Privacy posture"
-            description={tooltipContent}
+            description={
+              error
+                ? postureExplanation
+                : `${postureExplanation} Opens BYOK settings.`
+            }
             status={{
               tone: error ? 'danger' : isByok ? 'ok' : 'warn',
               label: labelLong,

@@ -151,7 +151,11 @@ export const NAV_SECTION_META: Record<
   {
     title: string
     stage?: 'P' | 'D' | 'C' | 'A'
-    hint?: string
+    /** Required: the collapsed rail has no room for a section label, so this
+     *  is the only explanation a user gets. A missing hint yields a
+     *  title-only flyout and an empty aria-describedby target — the exact
+     *  contract nav-rail.test.tsx exists to hold. */
+    hint: string
     defaultCollapsed?: boolean
   }
 > = {

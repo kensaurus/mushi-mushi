@@ -506,14 +506,18 @@ main :not(pre) > code {
   border-color: rgba(242, 235, 221, 0.08);
 }
 
-/* Each pillar shares ONE row track set with its siblings, so the glyph, step
- * label, name, and body all sit on the same four baselines across the row.
- * Previously each card was an independent auto-height grid, so a two-word
- * name and a one-word name pushed their body copy to different heights and
- * the four titles landed at four different vertical positions — the row read
- * as ragged rather than as one sequence. `grid-template-rows` with `auto` for
- * the three fixed-height elements and `1fr` for the prose gives every card
- * identical structure and lets the descriptions bottom-align. */
+/* Four explicit row tracks per card. These are independent grids — CSS cannot
+ * share tracks across siblings without `subgrid` — but because the glyph and
+ * step label are fixed-height, every card resolves the first three tracks
+ * identically and the names land on a common baseline. `1fr` on the prose
+ * track plus `height: 100%` squares the bottom edges.
+ *
+ * Previously each card was an auto-row grid, so a one-word name and a
+ * two-word name pushed their body copy to different offsets and the row read
+ * as ragged. NOTE the residual risk this does not solve: if a `__name` ever
+ * wraps to two lines (i18n, larger base font, or the container at its
+ * `minmax(13rem, …)` floor) the prose baselines diverge again. Reach for
+ * `grid-template-rows: subgrid` on the item if that day comes. */
 .docs-pillar {
   display: grid;
   grid-template-rows: auto auto auto 1fr;
@@ -1512,13 +1516,15 @@ html:has(.landing-cinematic-hero) {
   }
 }
 
-/* Four fixed row tracks — glyph, step, name, prose — shared by every card in
- * the row. Previously each card was an independent auto-height grid, so a
- * one-word name and a two-word name pushed their body copy to different
- * heights and the four titles landed at four different vertical positions.
- * The row read as ragged rather than as one sequence. `1fr` on the last track
- * lets the prose fill whatever height the tallest card needs while the three
- * elements above it stay locked to a shared baseline. */
+/* Four explicit row tracks — glyph, step, name, prose. Each card is its own
+ * grid (sharing tracks across siblings needs `subgrid`), but the glyph and
+ * step label are fixed-height, so all four cards resolve the upper tracks
+ * identically and the names align. `1fr` on the prose track lets it absorb
+ * the height difference; `height: 100%` squares the bottom edges.
+ *
+ * Previously these were auto rows and the four titles sat at four different
+ * heights. Residual risk: a `__name` that wraps to two lines re-introduces
+ * the divergence — use `subgrid` if that happens. */
 .landing-diagnosis-card {
   border: 1px solid var(--mushi-rule);
   border-radius: 0.5rem;

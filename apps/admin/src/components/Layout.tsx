@@ -1030,9 +1030,12 @@ export function Layout({ children }: { children: ReactNode }) {
               variant="ghost"
               size="sm"
               onClick={() => setFocusMode((value) => !value)}
-              // ring-0: `.nav-rail-item` already draws an inset focus outline;
-              // Btn's own offset ring would double it up on the rail.
-              className="nav-rail-item border-0 focus-visible:ring-0"
+              // `.nav-rail-item` draws its own inset focus outline; the
+              // `nav-rail-item--btn` hook suppresses Btn's offset ring so the
+              // two don't stack. Done in CSS rather than with
+              // `focus-visible:ring-0`, which is emitted BEFORE `ring-2` in
+              // @layer utilities at equal specificity and therefore loses.
+              className="nav-rail-item nav-rail-item--btn border-0"
               aria-pressed={focusMode}
               aria-label={focusMode ? 'Exit focus mode' : 'Focus mode'}
             >
@@ -1061,7 +1064,10 @@ export function Layout({ children }: { children: ReactNode }) {
               variant="ghost"
               size="sm"
               onClick={signOut}
-              className="nav-rail-item border-0 focus-visible:ring-0 text-rose hover:text-rose hover:bg-rose-muted/40"
+              // Colour comes from `.nav-rail-item--danger`; the utility form
+              // (`text-rose hover:*`) sits in @layer utilities and loses to
+              // unlayered `.nav-rail-item`, so it was dead code.
+              className="nav-rail-item nav-rail-item--btn nav-rail-item--danger border-0"
               aria-label="Sign out"
             >
               <IconSignOut className="nav-rail-icon" />
