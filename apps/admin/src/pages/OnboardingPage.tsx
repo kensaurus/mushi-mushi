@@ -54,6 +54,7 @@ import {
 } from '../lib/statTooltips/onboarding'
 import { onboardingLinks } from '../lib/statCardLinks'
 import { restartFirstRunTour } from '../components/FirstRunTour'
+import { openSetupGuide } from '../lib/setupGuidePrefs'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { OnboardingActivationLanes } from '../components/onboarding/OnboardingActivationLanes'
 import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
@@ -1147,6 +1148,18 @@ export function OnboardingPage() {
           className="border-0 bg-transparent shadow-none hover:bg-transparent px-0 py-0 text-2xs text-fg-faint hover:text-fg-muted"
         >
           Restart tour
+        </Btn>
+        <span className="text-2xs text-fg-faint" aria-hidden="true">·</span>
+        {/* Re-entry point for a setup guide the user dismissed. The dock is
+            the only setup surface that follows you off this page, so hiding
+            it has to be reversible from somewhere stable. */}
+        <Btn
+          variant="ghost"
+          size="sm"
+          onClick={() => openSetupGuide()}
+          className="border-0 bg-transparent shadow-none hover:bg-transparent px-0 py-0 text-2xs text-fg-faint hover:text-fg-muted"
+        >
+          Show setup guide
         </Btn>
       </p>
       ) : null}

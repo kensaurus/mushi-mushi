@@ -36,6 +36,7 @@ import { DavChromeCoachmark } from './DavChromeCoachmark'
 import { GlobalStatusStrip } from './GlobalStatusStrip'
 import { ChromeBreadcrumb } from './ChromeBreadcrumb'
 import { FirstRunTour } from './FirstRunTour'
+import { SetupGuide } from './setup-guide/SetupGuide'
 import { CommandPalette } from './CommandPalette'
 import { SearchButton } from './SearchButton'
 import { HotkeysModal } from './HotkeysModal'
@@ -1314,6 +1315,10 @@ export function Layout({ children }: { children: ReactNode }) {
         </PageHelpProvider>
       </div>
       <FirstRunTour />
+      {/* Docked setup checklist. Self-contained (reads its own hooks,
+          like FirstRunTour) and route-aware, so it needs no props and
+          survives refactors of this file. */}
+      <SetupGuide />
       <CommandPalette />
       <HotkeysModal open={hotkeysOpen} onClose={() => setHotkeysOpen(false)} />
       <ActivityDrawer
