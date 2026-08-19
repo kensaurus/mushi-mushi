@@ -2,24 +2,85 @@
 title: Slack app
 ---
 
+import { Callout } from 'nextra/components'
+
 # Slack app plugin
 
-Posts classified reports and fix updates to your team channel. Supports Block Kit messages and the `/mushi` slash command for inline triage.
+Triage a bug from the channel it lands in. Mushi posts each classified report
+as a Block Kit card carrying the plain-English title, root cause, and evidence
+counts — and the card's buttons let you dispatch a fix, resolve, or dismiss
+without opening the console.
+
+**Why it exists** — the fastest triage is the one that doesn't need a second
+tab.
+
+**Who it's for** — teams whose bugs already get discussed in Slack.
 
 ## Setup
 
-1. Create a Slack app with bot scopes for your workspace.
-2. In Mushi: **Marketplace → Slack → Install** and paste the bot token + signing secret.
-3. Pick the channel for report notifications and optional thread replies on QA failures.
+1. Create a Slack app with bot scopes in your workspace.
+2. In Mushi: **Marketplace → Slack → Install**, then paste the bot token +
+   signing secret.
+3. Pick the channel for report notifications, and optional thread replies on
+   QA failures.
+4. Point Slack's **Interactivity → Request URL** at
+   `<functions-url>/slack-interactions` so the card buttons work.
+
+## What's on the card
+
+| Element | What it tells you |
+| --- | --- |
+| Header | Severity, category, project — plus `(N×)` when the bug is a repeat |
+| Title | The plain-language headline ("Checkout button does nothing"), with the technical summary beneath it |
+| 🔍 line | Likely root cause from Stage 2 |
+| Context row | Area · component · confidence · reporter · environment · page · release |
+| Evidence row | Console errors, failed requests, repro-step count, screenshot, SDK version |
+| Footer | Report id and session id |
+
+Rows only render when there's something to show, so a thin report stays a
+small card.
+
+## Acting from the channel
+
+| Button | What happens |
+| --- | --- |
+| **Triage →** | Opens the report in the console, scoped to the right project |
+| **Dispatch fix** | Runs the fix agent and opens a draft PR. Swaps to *Install GitHub App* / *Enable Autofix* when the prerequisites are missing |
+| **Resolve ✓** | Marks the report resolved and notifies the reporter |
+| **Dismiss** | Marks it dismissed (noise, duplicate, won't fix), behind a confirm dialog |
+
+Resolve and Dismiss run the same transition contract as the console — plugin
+event, linked-issue resolution, and reporter notification — so acting from
+Slack and acting from the web app can't drift apart.
+
+After an action the card rewrites itself in place: the button row is replaced
+with an outcome line naming who acted and when, and a threaded reply records
+it in channel history.
+
+<Callout type="info">
+  **Assign is deliberately absent.** Reports have no assignee column, so an
+  "Assign" button would be a UI with nothing behind it.
+</Callout>
 
 ## Package
 
 [`@mushi-mushi/plugin-slack-app`](https://www.npmjs.com/package/@mushi-mushi/plugin-slack-app)
 
+The `/mushi` slash command (`list`, `open <id>`, `resolve <id>`) ships in this
+package for hosts that mount it themselves.
+
 ## Events
 
 | Event | Action |
 | --- | --- |
-| `report.created` / `report.classified` | Post Block Kit summary to channel |
-| `fix.pr_opened` | Thread with PR link |
+| `report.created` / `report.classified` | Post the Block Kit card to the channel |
+| `fix.pr_opened` | Thread with the PR link |
 | `qa_story.failed` / `qa_story.recovered` | Transition-aware threaded updates |
+
+## Troubleshooting
+
+| Symptom | Cause |
+| --- | --- |
+| Buttons do nothing | Interactivity Request URL not set, or the signing secret doesn't match |
+| Cards post but Triage 404s | `ADMIN_BASE_URL` unset on the server — the deep link can't be built |
+| No cards at all | No bot token for the project, and no `slack_webhook_url` fallback configured |

@@ -174,10 +174,19 @@ const BTN_SIZES = {
 // from the semantic brand/danger/ok oklch tokens — so white-label overrides
 // and light/dark theme swaps cascade through automatically.
 const BTN_VARIANTS = {
+  // `bg-(image:--var)`, NOT `bg-[var(--var)]`. In Tailwind v4 the square-
+  // bracket form is typed as a *color* and compiles to `background-color:
+  // var(--gradient-brand)` — an invalid color, so the declaration is dropped
+  // and the button paints nothing. That left the primary CTA (Sign in, Save,
+  // Dispatch fix) as near-white text on the bare page. The parenthesis form
+  // with an `image:` hint is the documented way to feed a gradient custom
+  // property to a background utility, and compiles to `background-image`.
+  // Keep `bg-brand` underneath so the button still has a solid, legible fill
+  // if the gradient token is ever missing.
   primary:
-    'bg-[var(--gradient-brand)] text-brand-fg shadow-card hover:shadow-brand-glow hover:-translate-y-px',
+    'bg-brand bg-(image:--gradient-brand) text-brand-fg shadow-card hover:shadow-brand-glow hover:-translate-y-px',
   accent:
-    'bg-[var(--gradient-accent)] text-fg-on-accent shadow-card hover:shadow-accent-glow hover:-translate-y-px',
+    'bg-accent bg-(image:--gradient-accent) text-fg-on-accent shadow-card hover:shadow-accent-glow hover:-translate-y-px',
   ghost:
     'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg hover:border-brand/40 hover:shadow-brand-glow-sm hover:-translate-y-px',
   cancel:

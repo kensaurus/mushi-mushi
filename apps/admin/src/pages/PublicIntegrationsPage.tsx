@@ -63,6 +63,19 @@ type Category =
 
 interface Integration {
   name: string
+  /**
+   * Simple Icons slug for the brand mark, bundled at
+   * `public/brand/platforms/<mark>.svg`. Omit for first-party entries
+   * (Plugin SDK) and for brands with no CC0 mark (Honeycomb) — those render
+   * the Mushi mark rather than a letter block.
+   *
+   * Bundled rather than fetched: the admin CSP allows `https://www.google.com`
+   * but the favicon endpoint 301s to `t{0..3}.gstatic.com`, which CSP
+   * re-checks and blocks — so the CDN approach silently rendered nothing but
+   * fallbacks in production. Local assets also keep visitor IPs off a third
+   * party on a public, unauthenticated marketing page.
+   */
+  mark?: string
   pkg: string
   direction: 'inbound' | 'outbound' | 'sdk'
   category: Exclude<Category, 'All'>
@@ -73,6 +86,7 @@ const INTEGRATIONS: Integration[] = [
   // ── Inbound adapters ──────────────────────────────────────────────────
   {
     name: 'Datadog',
+    mark: 'datadog',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
@@ -80,6 +94,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'New Relic',
+    mark: 'newrelic',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
@@ -94,6 +109,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Grafana Loki',
+    mark: 'grafana',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
@@ -101,6 +117,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'CloudWatch',
+    mark: 'amazonwebservices',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
@@ -108,6 +125,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Sentry',
+    mark: 'sentry',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Error Monitoring',
@@ -115,6 +133,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Bugsnag',
+    mark: 'bugsnag',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Error Monitoring',
@@ -122,6 +141,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Rollbar',
+    mark: 'rollbar',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Error Monitoring',
@@ -129,6 +149,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Crashlytics',
+    mark: 'firebase',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Mobile',
@@ -136,6 +157,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Firebase Analytics',
+    mark: 'firebase',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Analytics',
@@ -143,6 +165,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'OpsGenie',
+    mark: 'opsgenie',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Project Management',
@@ -151,6 +174,7 @@ const INTEGRATIONS: Integration[] = [
   // ── Outbound plugins ──────────────────────────────────────────────────
   {
     name: 'Sentry',
+    mark: 'sentry',
     pkg: '@mushi-mushi/plugin-sentry',
     direction: 'outbound',
     category: 'Error Monitoring',
@@ -158,6 +182,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Bugsnag',
+    mark: 'bugsnag',
     pkg: '@mushi-mushi/plugin-bugsnag',
     direction: 'outbound',
     category: 'Error Monitoring',
@@ -165,6 +190,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Rollbar',
+    mark: 'rollbar',
     pkg: '@mushi-mushi/plugin-rollbar',
     direction: 'outbound',
     category: 'Error Monitoring',
@@ -172,6 +198,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Crashlytics',
+    mark: 'firebase',
     pkg: '@mushi-mushi/plugin-crashlytics',
     direction: 'outbound',
     category: 'Mobile',
@@ -179,6 +206,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Slack',
+    mark: 'slack',
     pkg: '@mushi-mushi/plugin-slack-app',
     direction: 'outbound',
     category: 'Chat & Notifications',
@@ -186,6 +214,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Discord',
+    mark: 'discord',
     pkg: '@mushi-mushi/plugin-discord',
     direction: 'outbound',
     category: 'Chat & Notifications',
@@ -193,6 +222,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'MS Teams',
+    mark: 'microsoftteams',
     pkg: '@mushi-mushi/plugin-msteams',
     direction: 'outbound',
     category: 'Chat & Notifications',
@@ -200,6 +230,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Jira',
+    mark: 'jira',
     pkg: '@mushi-mushi/plugin-jira',
     direction: 'outbound',
     category: 'Project Management',
@@ -207,6 +238,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Linear',
+    mark: 'linear',
     pkg: '@mushi-mushi/plugin-linear',
     direction: 'outbound',
     category: 'Project Management',
@@ -214,6 +246,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'PagerDuty',
+    mark: 'pagerduty',
     pkg: '@mushi-mushi/plugin-pagerduty',
     direction: 'outbound',
     category: 'Project Management',
@@ -221,6 +254,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'GitHub Issues',
+    mark: 'github',
     pkg: '@mushi-mushi/plugin-github-issues',
     direction: 'outbound',
     category: 'Project Management',
@@ -228,6 +262,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Zapier',
+    mark: 'zapier',
     pkg: '@mushi-mushi/plugin-zapier',
     direction: 'outbound',
     category: 'Project Management',
@@ -254,8 +289,51 @@ const CATEGORIES: Category[] = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
-function letterIcon(name: string): string {
-  return name.charAt(0).toUpperCase()
+/**
+ * Real brand logo for an integration, from the same favicon CDN the console's
+ * `ServiceFavicon` already uses. Previously this page rendered a coloured
+ * square containing the service's first letter — so Datadog was a red "D",
+ * Sentry a red "S", Bugsnag a red "B". Twenty-three identical squares reads as
+ * placeholder art and made a page whose entire job is to prove "we really do
+ * integrate with these" look mocked-up.
+ *
+ * Falls back to the Mushi mark (never a letter) when a logo can't load or the
+ * entry is first-party, so an offline viewer sees a deliberate brand element
+ * rather than a broken image.
+ */
+function IntegrationLogo({ mark }: { name: string; mark?: string }) {
+  const url = mark ? `/brand/platforms/${mark}.svg` : null
+
+  return (
+    <div
+      aria-hidden
+      className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg border border-editorial-rule bg-editorial-paper shadow-[inset_0_-2px_0_rgba(0,0,0,0.06)]"
+    >
+      {url ? (
+        // Masked rather than <img> so the monochrome CC0 mark inherits the
+        // editorial ink colour and sits coherently with the rest of the page.
+        <span
+          className="bg-editorial-ink"
+          style={{
+            width: 20,
+            height: 20,
+            WebkitMaskImage: `url(${url})`,
+            maskImage: `url(${url})`,
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat',
+            WebkitMaskSize: 'contain',
+            maskSize: 'contain',
+            WebkitMaskPosition: 'center',
+            maskPosition: 'center',
+          }}
+        />
+      ) : (
+        <span className="font-serif text-sm font-semibold leading-none text-editorial-vermillion">
+          虫
+        </span>
+      )}
+    </div>
+  )
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────
@@ -333,19 +411,7 @@ function IntegrationTile({ integration }: { integration: Integration }) {
       {/* Header row */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          {/* Colored letter icon */}
-          <div
-            aria-hidden
-            className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg font-serif text-sm font-semibold shadow-[inset_0_-2px_0_rgba(0,0,0,0.15)] ${
-              isInbound
-                ? 'bg-editorial-vermillion text-editorial-paper'
-                : isSdk
-                  ? 'bg-editorial-ink text-editorial-paper'
-                  : 'bg-[color-mix(in_oklch,var(--color-editorial-ink)_85%,white)] text-editorial-paper'
-            }`}
-          >
-            {letterIcon(integration.name)}
-          </div>
+          <IntegrationLogo name={integration.name} mark={integration.mark} />
           <div>
             <p className="font-medium leading-none text-editorial-ink">
               {integration.name}

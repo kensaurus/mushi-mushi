@@ -6,6 +6,7 @@
 import { motion, useReducedMotion } from 'motion/react'
 import { LANDING_PILLARS } from '@/lib/landing-copy'
 import { LandingStagger, LandingStaggerItem } from './landing-stagger'
+import { PillarGlyph } from '../PillarGlyph'
 
 export function DiagnosisScrollStage() {
   const reduced = useReducedMotion()
@@ -41,6 +42,9 @@ export function DiagnosisScrollStage() {
       <div className="landing-diagnosis-track">
         {LANDING_PILLARS.map((pillar) => (
           <LandingStaggerItem key={pillar.name} className="landing-diagnosis-card">
+            <span className="landing-diagnosis-glyph" aria-hidden="true">
+              <PillarGlyph glyph={pillar.glyph} />
+            </span>
             <span className="landing-diagnosis-step">{pillar.step}</span>
             <h3 className="landing-diagnosis-name">{pillar.name}</h3>
             <p className="landing-diagnosis-role">{pillar.role}</p>
