@@ -67,6 +67,10 @@ export function ProjectSwitcher() {
       next.delete(ACTIVE_PROJECT_QUERY_PARAM)
       setSearchParams(next, { replace: true })
       clearActiveProject()
+      // Stop here: the effect re-runs with the cleaned URL. Falling through
+      // would issue a second, conflicting setSearchParams against the stale
+      // `fromUrl` in the same tick, silently losing this cleanup write.
+      return
     }
     const candidate =
       (fromUrl && isValidProjectId(fromUrl) ? fromUrl : null) ?? fromStorage
@@ -82,6 +86,12 @@ export function ProjectSwitcher() {
       }
       return
     }
+    // A valid project id in the URL that this list doesn't contain is a deep
+    // link (another org's project, or a stale pin): leave it alone. Pages that
+    // resolve their own project (report detail) rewrite the param themselves —
+    // overriding it to the first owned project here would fight that rewrite
+    // and flicker the address bar in a loop.
+    if (fromUrl && isValidProjectId(fromUrl)) return
     // No valid candidate — fall back to first owned project.
     const fallbackId = projects[0].project_id
     setActiveProjectIdSnapshot(fallbackId)

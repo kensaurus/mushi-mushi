@@ -151,7 +151,7 @@ narrow commercial enterprise edition). 🐛
 
 - Lead with agreement whenever you can ("You're right that X — here's what I chose…")
 - Never use "we" if you're solo. Just "I".
-- If someone compares to Sentry — *agree*, clarify companion, don't argue.
+- If someone compares to Sentry — agree, then give the canonical answer: "Sentry tells you what threw. Mushi ingests that — plus the bugs that never throw — explains each one in plain English, and closes the loop with a fix your agent can ship. One queue, with or without Sentry." Never say "not a replacement" — instead-of or alongside is their call.
 - If someone asks about LLM cost — show the real `/health` page numbers.
 - Stay for 6 hours at minimum. HN rewards presence.
 
@@ -176,8 +176,7 @@ OSS, MIT-licensed SDKs for React / Vue / Svelte / Angular / React Native /
 Capacitor / vanilla JS. Live demo at kensaur.us/mushi-mushi if you want to poke
 around without installing anything.
 
-Not a Sentry competitor — designed as a companion (it stream-links to Sentry
-breadcrumbs). Repo: github.com/kensaurus/mushi-mushi. Happy to take hate.
+Runs with or without Sentry — Sentry alerts can route straight into Mushi's queue, and merged fixes resolve the linked Sentry issue. Repo: github.com/kensaurus/mushi-mushi. Happy to take hate.
 ```
 
 ### r/reactjs — "drop-in for React"
@@ -390,8 +389,8 @@ Those are user-felt bugs. Your monitoring can't see them. Users just leave.
 
 So: Mushi Mushi (虫虫). A 14 KB shake-to-report SDK, a 2-stage LLM pipeline
 (Haiku fast-filter → Sonnet with vision + RAG) that classifies and dedupes, and
-an optional agentic auto-fix that opens draft GitHub PRs for review. Designed
-as a companion to Sentry, not a replacement.
+an optional agentic auto-fix that opens draft GitHub PRs for review. Works with
+or without Sentry — errors route into the same queue as user reports.
 
 OSS, MIT on the SDKs, AGPLv3 on the server (open-core, with a small commercial enterprise edition).
 Live demo with seeded bugs — no signup, one click:
@@ -471,7 +470,7 @@ Launch on the Wednesday of launch week, 12:01am PT.
 
 ### Tagline (≤ 60 chars)
 
-> Bug reports that fix themselves — Sentry's missing companion.
+> Every bug, one queue, fixes included — with or without Sentry.
 
 ### Description
 
@@ -485,7 +484,7 @@ GitHub repo.
 
 • MIT-licensed SDKs, AGPLv3 server (open-core)
 • Self-host with one docker-compose, or use the hosted tier
-• Works alongside Sentry, Datadog, New Relic (not a replacement)
+• One queue for everything: Sentry / Datadog / New Relic alerts route in, fixes route back out
 • MCP server so Cursor / Claude Code / Codex can triage from the agent
 
 Live demo (no signup): kensaur.us/mushi-mushi
@@ -549,7 +548,7 @@ Console.dev, This Week in Rust (for the `launcher`), The Overflow, Hacker Newsle
 Personalise the greeting; keep the rest.
 
 ```
-Subject: Might fit the tools section — a Sentry companion for user-felt bugs
+Subject: Might fit the tools section — one bug queue for user-felt bugs + Sentry errors
 
 Hi {{name}},
 
@@ -565,7 +564,7 @@ sponsorship — just a line if you think it's interesting.
 
 The short version, pickable:
 > **Mushi Mushi** — shake-to-report widget + LLM classifier + optional auto-fix
-> PR. OSS, MIT on the SDKs. Designed as a companion to Sentry, not a replacement.
+> PR. OSS, MIT on the SDKs. Works with or without Sentry — alerts route into the same queue.
 > Live demo: https://kensaur.us/mushi-mushi — Repo: https://github.com/kensaurus/mushi-mushi
 
 Thanks for reading. 🐛

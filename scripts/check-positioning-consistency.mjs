@@ -114,7 +114,7 @@ for (const f of ['VISION.md', 'AGENTS.md', 'README.md']) {
 //    into the agent constitution.
 const WILL_NOTS = [
   'will not require a monitoring stack',
-  'will not lead with the integration-hub',
+  'will not make you rip anything out',
   'will not let the surfaces diverge',
 ]
 for (const w of WILL_NOTS) {

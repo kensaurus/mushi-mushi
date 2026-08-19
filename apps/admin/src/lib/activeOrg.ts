@@ -52,6 +52,10 @@ export function getActiveOrgIdSnapshot(): string | null {
 
 export function setActiveOrgIdSnapshot(orgId: string): void {
   if (typeof window === 'undefined') return
+  // Same idempotence guard as setActiveProjectIdSnapshot: redundant writes
+  // must not fire the event, or every usePageData hook cache-busts for a
+  // no-op change (see the report-detail refresh-loop bug).
+  if (getActiveOrgIdSnapshot() === orgId) return
   try {
     window.localStorage.setItem(ACTIVE_ORG_STORAGE_KEY, orgId)
   } catch {

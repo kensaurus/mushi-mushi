@@ -250,6 +250,8 @@ export interface TriageNotice {
   /** Resolved component, when Stage 2 identified one. */
   component?: string | null
   reportId: string
+  /** Project UUID — scopes the console deep link (`?project=`). */
+  projectId?: string | null
   /**
    * Raw user identifier — pseudonymised here before it reaches Discord.
    * Pass `end_user_id`, `reporter_user_id`, or `reporter_token_hash`.
@@ -262,9 +264,11 @@ export interface TriageNotice {
 }
 
 /** Deep link into the console for this report, when ADMIN_BASE_URL is set. */
-function reportUrl(reportId: string): string | null {
+function reportUrl(reportId: string, projectId?: string | null): string | null {
   const adminBase = env('ADMIN_BASE_URL').replace(/\/$/, '')
-  return adminBase ? `${adminBase}/reports/${encodeURIComponent(reportId)}` : null
+  if (!adminBase) return null
+  const url = `${adminBase}/reports/${encodeURIComponent(reportId)}`
+  return projectId ? `${url}?project=${encodeURIComponent(projectId)}` : url
 }
 
 /** Collapse a multi-line summary to its first meaningful line. */
@@ -304,7 +308,7 @@ export async function notifyTriage(notice: TriageNotice): Promise<boolean> {
     }
     if (meta.length) parts.push(meta.join(' · '))
 
-    const url = reportUrl(notice.reportId)
+    const url = reportUrl(notice.reportId, notice.projectId)
     parts.push(url ?? `report id: \`${notice.reportId}\``)
 
     return await postTriageNotice(parts.join('\n'))

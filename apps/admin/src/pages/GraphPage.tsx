@@ -51,7 +51,7 @@ import {
 import { GraphSidePanel } from '../components/graph/GraphSidePanel'
 import { GraphStoryboard } from '../components/graph/GraphStoryboard'
 import { GraphTableView } from '../components/graph/GraphTableView'
-import { layoutNodes } from '../components/graph/graphLayout'
+import { estimateNodeSize, layoutNodes } from '../components/graph/graphLayout'
 import {
   EDGE_LABELS,
   EDGE_TYPES,
@@ -299,11 +299,17 @@ export function GraphPage() {
       const pos = positions.get(n.id) ?? { x: 0, y: 0 }
       const inBlast = blastRadiusIds.has(n.id)
       const isSelected = selectedNode?.id === n.id
+      // Same estimate the layout separates chips by — handing it to React
+      // Flow as initialWidth/initialHeight keeps the first fitView honest
+      // (before DOM measurement) without forcing the chip's rendered size.
+      const est = estimateNodeSize(n)
       return {
         id: n.id,
         position: pos,
         data: { node: n, inBlast, isSelected },
         type: 'default',
+        initialWidth: est.width,
+        initialHeight: est.height,
         // Use a simple HTML render via `data.label` (reactflow renders it inside
         // its own wrapper); we hide the default styling and supply our own chip.
         label: n.label,
@@ -311,7 +317,6 @@ export function GraphPage() {
           background: 'transparent',
           border: 'none',
           padding: 0,
-          width: 'auto',
           opacity: blastRadius.length > 0 && !inBlast && !isSelected ? 0.35 : 1,
         },
       } as unknown as Node

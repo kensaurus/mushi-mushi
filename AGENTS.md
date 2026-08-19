@@ -18,14 +18,14 @@ can execute without additional context.
 
 **North star.** Your AI shipped it. Mushi tells you why it broke — in plain English, in your editor, with the fix ready to go — so a bug costs you five minutes instead of your whole afternoon.
 
-**Category we own.** The comprehension layer for AI-built apps. (Not "error monitoring", not "observability", not "synthesis layer / integration hub" — those are the drift.)
+**Category we own.** The bug mediator for AI-built apps — one queue between your users, your monitoring (Sentry/Crashlytics/Rollbar), your tracker (Linear/Jira/GitHub), your chat (Slack/Discord/Teams), and your coding agents, where every bug gets a plain-English diagnosis and a ready fix. (Not "error monitoring", not "observability" — those are someone else's ops-coded words.)
 
 **Primary buyer.** The solo / indie **vibe coder** who builds fast with AI (Cursor, Claude Code, Lovable, Bolt), ships to real users, then loses afternoons when something breaks because they don't fully grasp the generated code. Small teams and agencies are secondary; the enterprise SRE running Sentry + Datadog + Firebase is explicitly *not* who we lead with.
 
 **The three things we will not do** (drift tripwires):
 
-1. **We will not require a monitoring stack to get value.** Standalone-first, always — never assume the reader already runs Sentry + Datadog + Firebase.
-2. **We will not lead with the integration-hub / enterprise-plumbing story.** It can live in `docs/operators/`; it never leads.
+1. **We will not require a monitoring stack to get value.** Standalone-first, always — every inbound integration is an optional on-ramp, never a prerequisite.
+2. **We will not make you rip anything out.** Sentry, Linear, Slack, your agents all stay — Mushi mediates between them. Enterprise plumbing (SSO, region routing, Helm) still lives in `docs/operators/` and never leads.
 3. **We will not let the surfaces diverge.** The tagline, the north-star sentence, and the buyer stay identical across npm, repo, landing, and this file.
 
 The "is this drift?" test for any feature you build or surface you write: *"Does this help a solo vibe-coder understand and fix a bug faster, without leaving their editor?"* Yes → it can lead. No, but operators need it → `docs/operators/`, never the hero.

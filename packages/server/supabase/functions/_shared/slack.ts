@@ -50,6 +50,9 @@ export interface SlackReportPayload {
   reporterToken: string
   pageUrl: string
   reportId: string
+  /** Project UUID — scopes the Triage deep link (`?project=`) and resolves
+   *  the per-project vaulted bot token. */
+  projectId?: string | null
   /** Optional fields for richer messages (added in production-hardening pass) */
   screenshotUrl?: string | null
   /** Human-readable display name from end_users.display_name */
@@ -67,6 +70,23 @@ export interface SlackReportPayload {
   githubAppInstalled?: boolean
   /** Is autofix enabled? */
   autofixEnabled?: boolean
+  /** Stage-2 plain-language headline ("Checkout button does nothing"). */
+  title?: string | null
+  /** Coarse product-area tag from Stage 2 ("Checkout", "Auth", …). */
+  area?: string | null
+  /** One-line likely root cause from Stage 2. */
+  rootCause?: string | null
+  /** Reporter's app version + SDK provenance. */
+  appVersion?: string | null
+  sdkPackage?: string | null
+  sdkVersion?: string | null
+  /** Release/environment from the linked Sentry event, when present. */
+  sentryRelease?: string | null
+  sentryEnvironment?: string | null
+  /** Evidence volume — chips render only when > 0. */
+  consoleErrorCount?: number
+  failedRequestCount?: number
+  reproStepsCount?: number
 }
 
 interface SlackTextPayload {
@@ -166,7 +186,10 @@ export function buildReportFallbackText(payload: SlackReportPayload): string {
 function buildMetaContextLine(payload: SlackReportPayload): string {
   const parts: string[] = []
 
-  if (payload.component) {
+  if (payload.area) {
+    parts.push(`:round_pushpin: ${payload.area}`)
+  }
+  if (payload.component && payload.component !== payload.area) {
     parts.push(`:file_folder: ${payload.component}`)
   }
   if (payload.confidence != null) {
@@ -184,8 +207,36 @@ function buildMetaContextLine(payload: SlackReportPayload): string {
   if (payload.sentryIssueUrl) {
     parts.push(`:rotating_light: <${payload.sentryIssueUrl}|Sentry>`)
   }
+  const release = payload.sentryRelease ?? payload.appVersion
+  if (release) {
+    parts.push(`:package: ${truncate(release, 24)}`)
+  }
 
   return parts.join('  ·  ')
+}
+
+/** Evidence-volume chips: what the triager will find when they open the
+ *  report. Only chips with signal render; returns null when there are none
+ *  so the card doesn't grow an empty row. */
+function buildEvidenceContextLine(payload: SlackReportPayload): string | null {
+  const parts: string[] = []
+  if (payload.consoleErrorCount && payload.consoleErrorCount > 0) {
+    parts.push(`:x: ${payload.consoleErrorCount} console error${payload.consoleErrorCount === 1 ? '' : 's'}`)
+  }
+  if (payload.failedRequestCount && payload.failedRequestCount > 0) {
+    parts.push(`:no_entry: ${payload.failedRequestCount} failed request${payload.failedRequestCount === 1 ? '' : 's'}`)
+  }
+  if (payload.reproStepsCount && payload.reproStepsCount > 0) {
+    parts.push(`:footprints: ${payload.reproStepsCount}-step repro`)
+  }
+  if (payload.screenshotUrl) {
+    parts.push(':camera_with_flash: screenshot')
+  }
+  if (payload.sdkPackage) {
+    const sdk = payload.sdkVersion ? `${payload.sdkPackage}@${payload.sdkVersion}` : payload.sdkPackage
+    parts.push(`:electric_plug: ${truncate(sdk, 40)}`)
+  }
+  return parts.length > 0 ? parts.join('  ·  ') : null
 }
 
 /** Wrap blocks in a colored attachment for the severity sidebar stripe. */
@@ -199,9 +250,18 @@ export function wrapReportAttachment(
   }]
 }
 
+/** Admin deep link for a report; carries `?project=` so the console opens in
+ *  the right project context instead of the viewer's last-pinned one. */
+export function buildReportDeepLink(reportId: string, projectId?: string | null): string | null {
+  const base = adminBaseUrl()
+  if (!base) return null
+  const url = `${base}/reports/${encodeURIComponent(reportId)}`
+  return projectId ? `${url}?project=${encodeURIComponent(projectId)}` : url
+}
+
 export function buildReportBlocks(payload: SlackReportPayload): unknown[] {
   const base = adminBaseUrl()
-  const reportUrl = base ? `${base}/reports/${encodeURIComponent(payload.reportId)}` : null
+  const reportUrl = buildReportDeepLink(payload.reportId, payload.projectId)
   const severityBadge = SEVERITY_EMOJI[payload.severity] ?? '\u{26AA}'
   const sevLabel = titleCaseSeverity(payload.severity)
   const canDispatch = payload.githubAppInstalled !== false && payload.autofixEnabled !== false
@@ -223,15 +283,26 @@ export function buildReportBlocks(payload: SlackReportPayload): unknown[] {
     },
   ]
 
-  // Summary — once, bold (header + fallback already carry severity/project)
+  // Headline — the Stage-2 plain-language title when we have one (what a
+  // human said broke), with the technical summary as the second line for the
+  // engineer scanning the channel. Falls back to summary-only.
+  const title = payload.title?.trim()
+  const summary = payload.summary?.trim()
+  const lines: string[] = []
+  if (title) {
+    lines.push(`*${truncate(title, 150)}*`)
+    if (summary && summary !== title) lines.push(truncate(summary, 200))
+  } else if (summary) {
+    lines.push(`*${truncate(summary, 200)}*`)
+  } else {
+    lines.push('_No summary provided_')
+  }
+  if (payload.rootCause?.trim()) {
+    lines.push(`:mag: ${truncate(payload.rootCause.trim(), 220)}`)
+  }
   const summaryBlock: Record<string, unknown> = {
     type: 'section',
-    text: {
-      type: 'mrkdwn',
-      text: payload.summary?.trim()
-        ? `*${payload.summary.trim()}*`
-        : '_No summary provided_',
-    },
+    text: { type: 'mrkdwn', text: lines.join('\n') },
   }
   if (payload.screenshotUrl) {
     summaryBlock.accessory = {
@@ -247,6 +318,15 @@ export function buildReportBlocks(payload: SlackReportPayload): unknown[] {
     type: 'context',
     elements: [{ type: 'mrkdwn', text: buildMetaContextLine(payload) }],
   })
+
+  // Evidence row — what the triager will find when they click through.
+  const evidenceLine = buildEvidenceContextLine(payload)
+  if (evidenceLine) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: evidenceLine }],
+    })
+  }
 
   // CTAs: Triage always; Dispatch or Setup as second button
   if (reportUrl) {
@@ -290,6 +370,31 @@ export function buildReportBlocks(payload: SlackReportPayload): unknown[] {
         action_id: `setup_autofix:${payload.reportId}`,
       })
     }
+
+    // Routine calls straight from the channel — no console round-trip.
+    // Handled by the slack-interactions edge function via the shared
+    // report-transition contract (same side effects as the console PATCH).
+    actionElements.push({
+      type: 'button',
+      text: { type: 'plain_text', text: 'Resolve ✓', emoji: true },
+      action_id: `resolve_report:${payload.reportId}`,
+      value: payload.reportId,
+    })
+    actionElements.push({
+      type: 'button',
+      text: { type: 'plain_text', text: 'Dismiss', emoji: true },
+      action_id: `dismiss_report:${payload.reportId}`,
+      value: payload.reportId,
+      confirm: {
+        title: { type: 'plain_text', text: 'Dismiss this report?' },
+        text: {
+          type: 'mrkdwn',
+          text: 'Marks the report dismissed (noise / duplicate / won’t fix). The reporter is notified.',
+        },
+        confirm: { type: 'plain_text', text: 'Dismiss' },
+        deny: { type: 'plain_text', text: 'Cancel' },
+      },
+    })
 
     blocks.push({
       type: 'actions',
@@ -614,26 +719,103 @@ export async function sendBotMessage(opts: BotMessageOptions): Promise<BotMessag
  */
 export async function sendReportNotification(
   payload: SlackReportPayload,
-  opts: { channelId?: string; webhookUrl?: string },
+  opts: {
+    channelId?: string
+    webhookUrl?: string
+    /** Supabase client + projectId enable the per-project vaulted bot token
+     *  (project_settings.slack_bot_token_ref). Without them only the global
+     *  SLACK_BOT_TOKEN works and per-project Slack workspaces silently fall
+     *  back to the webhook path. */
+    db?: unknown
+    projectId?: string
+  },
 ): Promise<string | null> {
   const blocks = buildReportBlocks(payload)
   const fallback = buildReportFallbackText(payload)
   const attachments = wrapReportAttachment(payload, blocks)
 
-  const botToken = Deno.env.get('SLACK_BOT_TOKEN')
-  if (botToken) {
+  // Try the bot path first: sendBotMessage resolves explicit token → per-
+  // project vault → SLACK_BOT_TOKEN env, so a project-scoped OAuth install
+  // works even when the global env token is absent.
+  const canTryBot = Boolean(
+    Deno.env.get('SLACK_BOT_TOKEN') || (opts.db && (opts.projectId ?? payload.projectId)),
+  )
+  if (canTryBot) {
     const result = await sendBotMessage({
       channel: opts.channelId ?? undefined,
       attachments,
       text: fallback,
+      db: opts.db,
+      projectId: opts.projectId ?? payload.projectId ?? undefined,
     })
-    return result.ts
+    if (result.ok) return result.ts
+    // Bot resolution failed (no token in vault/env) — fall through to webhook.
   }
   // Legacy webhook fallback
   if (opts.webhookUrl) {
     await postToSlack(opts.webhookUrl, { text: fallback, attachments })
   }
   return null
+}
+
+/**
+ * Rewrite an already-posted report card in place (`chat.update`) so channel
+ * state tracks reality: after Resolve/Dismiss/Dispatch the card shows the
+ * outcome instead of offering the same buttons forever.
+ */
+export async function updateReportMessage(opts: {
+  channel?: string
+  ts: string
+  attachments?: unknown[]
+  blocks?: unknown[]
+  text: string
+  db?: unknown
+  projectId?: string
+  token?: string
+}): Promise<{ ok: boolean; error?: string }> {
+  let token = opts.token ?? null
+  if (!token && opts.db && opts.projectId) {
+    try {
+      const { data: ps } = await (opts.db as { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: unknown }> } } } })
+        .from('project_settings')
+        .select('slack_bot_token_ref')
+        .eq('project_id', opts.projectId)
+        .maybeSingle()
+      const ref = (ps as Record<string, unknown> | null)?.slack_bot_token_ref as string | null
+      if (ref) {
+        const { data: secret } = await (opts.db as { rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown }> })
+          .rpc('vault_get_secret', { secret_id: ref })
+        if (typeof secret === 'string') token = secret
+      }
+    } catch { /* fall through to env */ }
+  }
+  if (!token) token = Deno.env.get('SLACK_BOT_TOKEN') ?? null
+  const channel = opts.channel ?? Deno.env.get('SLACK_CHANNEL_ID')
+  if (!token || !channel) return { ok: false, error: token ? 'no_channel' : 'no_bot_token' }
+
+  const body: Record<string, unknown> = { channel, ts: opts.ts, text: opts.text }
+  if (opts.attachments?.length) body.attachments = opts.attachments
+  else if (opts.blocks?.length) body.blocks = opts.blocks
+
+  try {
+    const res = await fetchWithTimeout('https://slack.com/api/chat.update', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    })
+    const json = await res.json() as { ok: boolean; error?: string }
+    if (!json.ok) {
+      slackLog.error('chat.update failed', { slackError: json.error })
+      return { ok: false, error: json.error }
+    }
+    return { ok: true }
+  } catch (err) {
+    slackLog.error('chat.update exception', { err: String(err) })
+    return { ok: false, error: String(err) }
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

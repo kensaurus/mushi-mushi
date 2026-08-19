@@ -76,24 +76,81 @@ describe('buildReportBlocks', () => {
     expect(meta).toContain('financial-reports')
   })
 
-  it('shows Triage and Install GitHub App when dispatch unavailable', () => {
+  it('shows Triage / Install GitHub App / Resolve / Dismiss when dispatch unavailable', () => {
     const blocks = slack.buildReportBlocks(SAMPLE)
     const actions = (blocks[3] as { elements: Array<{ text: { text: string }; style?: string }> }).elements
-    expect(actions).toHaveLength(2)
-    expect(actions[0].text.text).toBe('Triage →')
+    expect(actions.map((a) => a.text.text)).toEqual([
+      'Triage →',
+      'Install GitHub App',
+      'Resolve ✓',
+      'Dismiss',
+    ])
     expect(actions[0].style).toBe('primary')
-    expect(actions[1].text.text).toBe('Install GitHub App')
   })
 
-  it('shows Triage and Dispatch fix when configured', () => {
+  it('shows Dispatch fix plus Resolve/Dismiss when configured', () => {
     const blocks = slack.buildReportBlocks({
       ...SAMPLE,
       githubAppInstalled: true,
       autofixEnabled: true,
     })
-    const actions = (blocks[3] as { elements: Array<{ text: { text: string } }> }).elements
-    expect(actions).toHaveLength(2)
-    expect(actions[1].text.text).toBe('Dispatch fix')
+    const actions = (blocks[3] as { elements: Array<{ text: { text: string }; action_id?: string }> }).elements
+    expect(actions.map((a) => a.text.text)).toEqual([
+      'Triage →',
+      'Dispatch fix',
+      'Resolve ✓',
+      'Dismiss',
+    ])
+    expect(actions[2].action_id).toBe(`resolve_report:${SAMPLE.reportId}`)
+    expect(actions[3].action_id).toBe(`dismiss_report:${SAMPLE.reportId}`)
+  })
+
+  it('scopes the Triage deep link to the project when projectId is present', () => {
+    const blocks = slack.buildReportBlocks({ ...SAMPLE, projectId: 'proj-uuid-1234' })
+    const actions = (blocks[3] as { elements: Array<{ url?: string }> }).elements
+    expect(actions[0].url).toBe(
+      `https://kensaur.us/mushi-mushi/admin/reports/${SAMPLE.reportId}?project=proj-uuid-1234`,
+    )
+  })
+
+  it('leads with the plain-language title and keeps the technical summary as the second line', () => {
+    const blocks = slack.buildReportBlocks({
+      ...SAMPLE,
+      title: 'Profit & loss tab crashes when opened',
+      rootCause: 'currentPath is referenced before initialization in the tab handler',
+    })
+    const section = (blocks[1] as { text: { text: string } }).text.text
+    const [first, second, third] = section.split('\n')
+    expect(first).toBe('*Profit & loss tab crashes when opened*')
+    expect(second).toContain('ReferenceError: currentPath')
+    expect(third).toContain(':mag: currentPath is referenced before initialization')
+  })
+
+  it('adds an evidence context row only when there is evidence', () => {
+    const bare = slack.buildReportBlocks(SAMPLE)
+    expect(blockTypes(bare)).toEqual(['header', 'section', 'context', 'actions', 'context'])
+
+    const rich = slack.buildReportBlocks({
+      ...SAMPLE,
+      consoleErrorCount: 3,
+      failedRequestCount: 1,
+      reproStepsCount: 4,
+      sdkPackage: '@mushi-mushi/react',
+      sdkVersion: '2.1.0',
+    })
+    expect(blockTypes(rich)).toEqual(['header', 'section', 'context', 'context', 'actions', 'context'])
+    const evidence = (rich[3] as { elements: Array<{ text: string }> }).elements[0].text
+    expect(evidence).toContain(':x: 3 console errors')
+    expect(evidence).toContain(':no_entry: 1 failed request')
+    expect(evidence).toContain(':footprints: 4-step repro')
+    expect(evidence).toContain('@mushi-mushi/react@2.1.0')
+  })
+
+  it('renders the area chip ahead of the component', () => {
+    const blocks = slack.buildReportBlocks({ ...SAMPLE, area: 'Reports' })
+    const meta = (blocks[2] as { elements: Array<{ text: string }> }).elements[0].text
+    expect(meta.indexOf(':round_pushpin: Reports')).toBeGreaterThanOrEqual(0)
+    expect(meta.indexOf(':round_pushpin:')).toBeLessThan(meta.indexOf(':file_folder:'))
   })
 })
 

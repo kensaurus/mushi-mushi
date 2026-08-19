@@ -32,6 +32,8 @@ export interface TeamsPayload {
   summary?: string
   component?: string
   reportId: string
+  /** Project UUID — scopes the console deep link (`?project=`). */
+  projectId?: string | null
   reportUrl?: string
 }
 
@@ -49,7 +51,11 @@ export async function sendTeamsNotification(
   const adminBase = Deno.env.get('ADMIN_BASE_URL')?.replace(/\/$/, '') ?? null
   const reportUrl =
     payload.reportUrl ??
-    (adminBase ? `${adminBase}/reports/${encodeURIComponent(payload.reportId)}` : null)
+    (adminBase
+      ? `${adminBase}/reports/${encodeURIComponent(payload.reportId)}${
+          payload.projectId ? `?project=${encodeURIComponent(payload.projectId)}` : ''
+        }`
+      : null)
 
   const color = SEVERITY_COLORS[payload.severity ?? 'low'] ?? '7C3AED'
 

@@ -8,23 +8,27 @@ import { LANDING_COMPARISON_ROWS } from '@/lib/landing-copy'
 
 # An open-source Sentry alternative built for AI-written code
 
-Sentry answers "what did the code throw?" Mushi Mushi answers "what did the
-user hit, why did it happen, and what's the fix?" If your app was largely
-written by Cursor, Claude Code, or another agent, the second question is the
-one you actually need answered — you didn't write the code, so a raw stack
-trace costs you an afternoon of archaeology.
+Sentry tells you what threw. Mushi ingests that — plus the bugs that never
+throw — explains each one in plain English, and closes the loop with a fix
+your agent can ship. One queue, one audit trail, with or without Sentry. If
+your app was largely written by Cursor, Claude Code, or another agent, that's
+the answer you actually need — you didn't write the code, so a raw stack trace
+costs you an afternoon of archaeology.
 
 Mushi is open source (MIT SDKs, AGPLv3 server), works standalone, and turns a
-user's bug report into a plain-English diagnosis with a fix you can paste into
-your editor.
+user's bug report — or a Sentry error alert — into a plain-English diagnosis
+with a fix you can paste into your editor.
 
-## When Mushi replaces Sentry — and when it doesn't
+## Instead of Sentry, or alongside it — your call
 
-You can run Mushi **instead of** Sentry if what you care about is
-user-reported friction: broken buttons, dead flows, confusing states. You
-should run Mushi **alongside** Sentry if you also want crash-level telemetry —
-an optional bridge links Sentry stack traces to Mushi reports so each side
-keeps its job.
+Run Mushi **instead of** Sentry if user-felt friction is what you care about:
+broken buttons, dead flows, confusing states, plus the thrown errors the SDK
+captures along the way. Run Mushi **alongside** Sentry to keep crash-level
+telemetry, performance tracing, and release health where they are — and point
+a Sentry issue-alert webhook at Mushi so every error still lands in the one
+queue, deduped and diagnosed, with the fix resolving the Sentry issue when it
+merges ([3-step setup](/plugins/sentry)). Both paths are first-class; neither
+asks you to rip anything out.
 
 ## Side by side
 
