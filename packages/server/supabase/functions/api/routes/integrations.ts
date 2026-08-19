@@ -137,6 +137,30 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     return c.json({ ok: true });
   });
 
+  // Per-project inbound webhook receipts — powers the "last inbound delivery"
+  // proof line on integration cards (Sentry today). Answers "did my alert
+  // actually arrive?" without leaving the console.
+  app.get('/v1/admin/integrations/inbound-deliveries', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const source = c.req.query('source') ?? 'sentry';
+    if (!/^[a-z_]{2,32}$/.test(source)) {
+      return c.json({ ok: false, error: { code: 'BAD_SOURCE', message: 'Invalid source' } }, 400);
+    }
+    const projectIds = await callerProjectIds(c, db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: { deliveries: [] } });
+    }
+    const { data } = await db
+      .from('webhook_audit_log')
+      .select('outcome, response_status, error_message, created_at, project_id')
+      .eq('webhook_source', source)
+      .in('project_id', projectIds)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    return c.json({ ok: true, data: { deliveries: data ?? [] } });
+  });
+
   app.get('/v1/admin/integrations/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();

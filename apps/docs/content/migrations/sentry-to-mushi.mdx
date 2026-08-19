@@ -14,10 +14,17 @@ paste-ready fix you can hand to your editor's agent via MCP.
 import { Callout } from 'nextra/components'
 
 <Callout type="info">
-  **Two ways to run Mushi with Sentry:**
-  1. **Enrich** — keep Sentry as-is; Mushi captures user bug reports and links
+  **Three ways to run Mushi with Sentry:**
+  1. **Route errors in (recommended)** — point a Sentry issue-alert webhook at
+     `<api>/v1/webhooks/sentry?projectId=<your-project>` and Sentry errors land
+     in the same Mushi queue as user reports: deduped per issue, diagnosed in
+     plain English, fix-dispatchable. Merging the fix resolves the Sentry issue;
+     resolving in Sentry resolves the report; a repeat alert on a fixed report
+     reopens it as a regression. See [the Sentry plugin page](/plugins/sentry)
+     for the 3-step setup.
+  2. **Enrich** — keep Sentry as-is; Mushi captures user bug reports and links
      each one to the matching Sentry event via `@mushi-mushi/plugin-sentry`.
-  2. **Standalone** — use Mushi on its own for capture + diagnosis + fix. You
+  3. **Standalone** — use Mushi on its own for capture + diagnosis + fix. You
      can add Sentry later (or never); nothing in Mushi assumes it.
 </Callout>
 
