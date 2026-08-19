@@ -58,7 +58,17 @@ export function exploreGridLayout(
 
   let xCursor = 0
 
-  for (const layer of LAYER_ORDER) {
+  // Iterate the union of the canonical order and whatever layers actually
+  // arrived: a backend layer value outside LAYER_ORDER previously fell out
+  // of this loop entirely, leaving its nodes position-less — the consumer's
+  // `positions.get(id) ?? { x: 0, y: 0 }` fallback then stacked all of them
+  // at the exact origin.
+  const layersToPlace = [
+    ...LAYER_ORDER,
+    ...[...byLayer.keys()].filter((l) => !(LAYER_ORDER as readonly string[]).includes(l)),
+  ]
+
+  for (const layer of layersToPlace) {
     const group = byLayer.get(layer)
     if (!group || group.length === 0) continue
 
