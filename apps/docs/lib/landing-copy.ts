@@ -148,6 +148,20 @@ export const LANDING_QUICKSTART_INTRO =
 export interface LandingPlatformCard {
   title: string
   icon: string
+  /**
+   * Real product logo for the card, from the CC0 Simple Icons CDN
+   * (https://cdn.simpleicons.org). Every card previously rendered the same
+   * generic Mushi mark, so four visually identical tiles claimed to be four
+   * different platforms — the tell that a page is mocked up rather than
+   * shipped. `icon` stays as the fallback when a slug is absent or the CDN
+   * is unreachable.
+   *
+   * Brand marks are used nominatively, to identify the platform each
+   * quickstart genuinely supports.
+   */
+  iconSlug?: string
+  /** Brand hex (no `#`) so the mark keeps its own identity on the card. */
+  iconColor?: string
   href: string
   cmd: string
   desc: string
@@ -175,6 +189,8 @@ export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
   {
     title: 'MCP server',
     icon: LANDING_BRAND_MARK,
+    iconSlug: 'anthropic',
+    iconColor: 'D97757',
     href: '/quickstart/mcp',
     cmd: 'npx mushi-mushi setup --ide cursor',
     desc: 'Ask your editor what broke — fix briefs from Claude, Cursor, or Codex. No second LLM key.',
@@ -183,6 +199,8 @@ export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
   {
     title: 'React',
     icon: LANDING_BRAND_MARK,
+    iconSlug: 'react',
+    iconColor: '61DAFB',
     href: '/quickstart/react',
     cmd: 'npx mushi-mushi',
     desc: 'Wizard installs the SDK, writes env vars, optional test report.',
@@ -190,6 +208,8 @@ export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
   {
     title: 'iOS · Android · Flutter',
     icon: LANDING_BRAND_MARK,
+    iconSlug: 'flutter',
+    iconColor: '02569B',
     href: '/quickstart/mobile',
     cmd: 'npx mushi-mushi',
     desc: 'Native shake, offline queue, and a Sentry bridge already wired up.',
@@ -250,27 +270,38 @@ export interface LandingPillar {
   step: string
   name: string
   role: string
+  /**
+   * Which glyph `<Pillars>` draws above the step. The four cards previously
+   * carried no graphic at all, so the loop's most important explanation was
+   * four indistinguishable text blocks. Keyed rather than inlined so the copy
+   * module stays free of markup.
+   */
+  glyph: 'report' | 'diagnose' | 'group' | 'ship'
 }
 
 export const LANDING_PILLARS: readonly LandingPillar[] = [
   {
     step: 'Step 1',
     name: 'User reports',
+    glyph: 'report',
     role: 'On glot.it, a learner shakes the phone instead of emailing support. Mushi keeps the screen and what they were doing.',
   },
   {
     step: 'Step 2',
     name: 'Plain read',
+    glyph: 'diagnose',
     role: 'Severity and cause in English you already use — not a raw stack trace.',
   },
   {
     step: 'Step 3',
     name: 'One row',
+    glyph: 'group',
     role: 'Twenty reports about the same broken checkout button collapse to one issue.',
   },
   {
     step: 'Step 4',
     name: 'Draft PR',
+    glyph: 'ship',
     role: 'Optional: an agent opens a PR on your repo. You merge, edit, or ignore it.',
   },
 ] as const

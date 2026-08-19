@@ -506,13 +506,44 @@ main :not(pre) > code {
   border-color: rgba(242, 235, 221, 0.08);
 }
 
+/* Each pillar shares ONE row track set with its siblings, so the glyph, step
+ * label, name, and body all sit on the same four baselines across the row.
+ * Previously each card was an independent auto-height grid, so a two-word
+ * name and a one-word name pushed their body copy to different heights and
+ * the four titles landed at four different vertical positions — the row read
+ * as ragged rather than as one sequence. `grid-template-rows` with `auto` for
+ * the three fixed-height elements and `1fr` for the prose gives every card
+ * identical structure and lets the descriptions bottom-align. */
 .docs-pillar {
   display: grid;
-  gap: 0.45rem;
+  grid-template-rows: auto auto auto 1fr;
+  gap: 0.4rem;
   padding: 0;
   margin: 0 !important;
   position: relative;
   list-style: none;
+}
+
+/* Glyph sits in a quiet tonal chip so the mark reads as intentional
+ * iconography rather than a stray drawing. Vermillion at reduced strength
+ * keeps the accent budget on the step labels. */
+.docs-pillar__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin-bottom: 0.35rem;
+  border-radius: 0.625rem;
+  color: var(--mushi-vermillion);
+  background: color-mix(in oklch, var(--mushi-vermillion) 8%, transparent);
+  border: 1px solid color-mix(in oklch, var(--mushi-vermillion) 18%, transparent);
+}
+
+.dark .docs-pillar__glyph {
+  color: var(--mushi-dark-vermillion, var(--mushi-vermillion));
+  background: color-mix(in oklch, var(--mushi-vermillion) 14%, transparent);
+  border-color: color-mix(in oklch, var(--mushi-vermillion) 26%, transparent);
 }
 
 .docs-pillar::marker,
@@ -557,9 +588,12 @@ main :not(pre) > code {
  * so we hide it via the auto-fit grid spec by checking siblings. */
 .docs-pillar__connector {
   position: absolute;
-  top: calc(0.65rem / 2);
-  right: -0.85rem;
-  width: 0.5rem;
+  /* Centre of the 2.25rem glyph chip — the connector now links the marks
+   * themselves, so the row reads as one flow rather than a line floating
+   * above unrelated text. */
+  top: 1.125rem;
+  right: -1.1rem;
+  width: 0.9rem;
   height: 1px;
   background: color-mix(in oklch, var(--mushi-vermillion) 50%, transparent);
   opacity: 0;
@@ -1478,17 +1512,49 @@ html:has(.landing-cinematic-hero) {
   }
 }
 
+/* Four fixed row tracks — glyph, step, name, prose — shared by every card in
+ * the row. Previously each card was an independent auto-height grid, so a
+ * one-word name and a two-word name pushed their body copy to different
+ * heights and the four titles landed at four different vertical positions.
+ * The row read as ragged rather than as one sequence. `1fr` on the last track
+ * lets the prose fill whatever height the tallest card needs while the three
+ * elements above it stay locked to a shared baseline. */
 .landing-diagnosis-card {
   border: 1px solid var(--mushi-rule);
   border-radius: 0.5rem;
   padding: 1.15rem 1.2rem 1.25rem;
   background: color-mix(in oklch, var(--mushi-paper) 92%, white);
   display: grid;
+  grid-template-rows: auto auto auto 1fr;
   gap: 0.45rem;
+  /* Stretch every card to the tallest sibling so the bottom edges line up
+   * too — otherwise the shorter cards float and the row looks unfinished. */
+  height: 100%;
 }
 
 .dark .landing-diagnosis-card {
   background: color-mix(in oklch, var(--mushi-dark-paper) 88%, black);
+}
+
+/* The stage mark. A quiet vermillion-tinted chip keeps the accent budget on
+ * the step labels while giving each card a distinct, scannable identity — the
+ * cards previously carried no graphic at all. */
+.landing-diagnosis-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.375rem;
+  height: 2.375rem;
+  margin-bottom: 0.3rem;
+  border-radius: 0.65rem;
+  color: var(--mushi-vermillion);
+  background: color-mix(in oklch, var(--mushi-vermillion) 8%, transparent);
+  border: 1px solid color-mix(in oklch, var(--mushi-vermillion) 18%, transparent);
+}
+
+.dark .landing-diagnosis-glyph {
+  background: color-mix(in oklch, var(--mushi-vermillion) 15%, transparent);
+  border-color: color-mix(in oklch, var(--mushi-vermillion) 28%, transparent);
 }
 
 .landing-diagnosis-step {

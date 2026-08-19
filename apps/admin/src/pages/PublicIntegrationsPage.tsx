@@ -63,6 +63,9 @@ type Category =
 
 interface Integration {
   name: string
+  /** Real brand domain for the favicon CDN. Omit for first-party entries
+   *  (Plugin SDK), which render the Mushi mark instead of a letter block. */
+  domain?: string
   pkg: string
   direction: 'inbound' | 'outbound' | 'sdk'
   category: Exclude<Category, 'All'>
@@ -73,6 +76,7 @@ const INTEGRATIONS: Integration[] = [
   // ── Inbound adapters ──────────────────────────────────────────────────
   {
     name: 'Datadog',
+    domain: 'datadoghq.com',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
@@ -80,6 +84,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'New Relic',
+    domain: 'newrelic.com',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
@@ -87,6 +92,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Honeycomb',
+    domain: 'honeycomb.io',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
@@ -94,6 +100,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Grafana Loki',
+    domain: 'grafana.com',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
@@ -101,6 +108,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'CloudWatch',
+    domain: 'aws.amazon.com',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
@@ -108,6 +116,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Sentry',
+    domain: 'sentry.io',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Error Monitoring',
@@ -115,6 +124,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Bugsnag',
+    domain: 'bugsnag.com',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Error Monitoring',
@@ -122,6 +132,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Rollbar',
+    domain: 'rollbar.com',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Error Monitoring',
@@ -129,6 +140,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Crashlytics',
+    domain: 'firebase.google.com',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Mobile',
@@ -136,6 +148,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Firebase Analytics',
+    domain: 'firebase.google.com',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Analytics',
@@ -143,6 +156,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'OpsGenie',
+    domain: 'atlassian.com',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Project Management',
@@ -151,6 +165,7 @@ const INTEGRATIONS: Integration[] = [
   // ── Outbound plugins ──────────────────────────────────────────────────
   {
     name: 'Sentry',
+    domain: 'sentry.io',
     pkg: '@mushi-mushi/plugin-sentry',
     direction: 'outbound',
     category: 'Error Monitoring',
@@ -158,6 +173,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Bugsnag',
+    domain: 'bugsnag.com',
     pkg: '@mushi-mushi/plugin-bugsnag',
     direction: 'outbound',
     category: 'Error Monitoring',
@@ -165,6 +181,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Rollbar',
+    domain: 'rollbar.com',
     pkg: '@mushi-mushi/plugin-rollbar',
     direction: 'outbound',
     category: 'Error Monitoring',
@@ -172,6 +189,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Crashlytics',
+    domain: 'firebase.google.com',
     pkg: '@mushi-mushi/plugin-crashlytics',
     direction: 'outbound',
     category: 'Mobile',
@@ -179,6 +197,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Slack',
+    domain: 'slack.com',
     pkg: '@mushi-mushi/plugin-slack-app',
     direction: 'outbound',
     category: 'Chat & Notifications',
@@ -186,6 +205,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Discord',
+    domain: 'discord.com',
     pkg: '@mushi-mushi/plugin-discord',
     direction: 'outbound',
     category: 'Chat & Notifications',
@@ -193,6 +213,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'MS Teams',
+    domain: 'microsoft.com',
     pkg: '@mushi-mushi/plugin-msteams',
     direction: 'outbound',
     category: 'Chat & Notifications',
@@ -200,6 +221,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Jira',
+    domain: 'atlassian.com',
     pkg: '@mushi-mushi/plugin-jira',
     direction: 'outbound',
     category: 'Project Management',
@@ -207,6 +229,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Linear',
+    domain: 'linear.app',
     pkg: '@mushi-mushi/plugin-linear',
     direction: 'outbound',
     category: 'Project Management',
@@ -214,6 +237,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'PagerDuty',
+    domain: 'pagerduty.com',
     pkg: '@mushi-mushi/plugin-pagerduty',
     direction: 'outbound',
     category: 'Project Management',
@@ -221,6 +245,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'GitHub Issues',
+    domain: 'github.com',
     pkg: '@mushi-mushi/plugin-github-issues',
     direction: 'outbound',
     category: 'Project Management',
@@ -228,6 +253,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Zapier',
+    domain: 'zapier.com',
     pkg: '@mushi-mushi/plugin-zapier',
     direction: 'outbound',
     category: 'Project Management',
@@ -254,8 +280,47 @@ const CATEGORIES: Category[] = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
-function letterIcon(name: string): string {
-  return name.charAt(0).toUpperCase()
+/**
+ * Real brand logo for an integration, from the same favicon CDN the console's
+ * `ServiceFavicon` already uses. Previously this page rendered a coloured
+ * square containing the service's first letter — so Datadog was a red "D",
+ * Sentry a red "S", Bugsnag a red "B". Twenty-three identical squares reads as
+ * placeholder art and made a page whose entire job is to prove "we really do
+ * integrate with these" look mocked-up.
+ *
+ * Falls back to the Mushi mark (never a letter) when a logo can't load or the
+ * entry is first-party, so an offline viewer sees a deliberate brand element
+ * rather than a broken image.
+ */
+function IntegrationLogo({ name, domain }: { name: string; domain?: string }) {
+  const [failed, setFailed] = useState(false)
+  const showLogo = Boolean(domain) && !failed
+
+  return (
+    <div
+      aria-hidden
+      className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg border border-editorial-rule bg-editorial-paper shadow-[inset_0_-2px_0_rgba(0,0,0,0.06)]"
+    >
+      {showLogo ? (
+        <img
+          src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`}
+          width={22}
+          height={22}
+          alt=""
+          loading="lazy"
+          draggable={false}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span
+          className="font-serif text-sm font-semibold leading-none text-editorial-vermillion"
+          title={name}
+        >
+          虫
+        </span>
+      )}
+    </div>
+  )
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────
@@ -333,19 +398,7 @@ function IntegrationTile({ integration }: { integration: Integration }) {
       {/* Header row */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          {/* Colored letter icon */}
-          <div
-            aria-hidden
-            className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg font-serif text-sm font-semibold shadow-[inset_0_-2px_0_rgba(0,0,0,0.15)] ${
-              isInbound
-                ? 'bg-editorial-vermillion text-editorial-paper'
-                : isSdk
-                  ? 'bg-editorial-ink text-editorial-paper'
-                  : 'bg-[color-mix(in_oklch,var(--color-editorial-ink)_85%,white)] text-editorial-paper'
-            }`}
-          >
-            {letterIcon(integration.name)}
-          </div>
+          <IntegrationLogo name={integration.name} domain={integration.domain} />
           <div>
             <p className="font-medium leading-none text-editorial-ink">
               {integration.name}
