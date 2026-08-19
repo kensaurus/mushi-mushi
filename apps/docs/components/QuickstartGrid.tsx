@@ -1,9 +1,8 @@
 /** Platform quickstart cards for the landing "Try it" section. */
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
-import { LANDING_QUICKSTART_PLATFORMS, type LandingPlatformCard } from '@/lib/landing-copy'
+import { LANDING_QUICKSTART_PLATFORMS, MUSHI_DOCS_BASE, type LandingPlatformCard } from '@/lib/landing-copy'
 
 interface QuickstartGridProps {
   platforms?: readonly LandingPlatformCard[]
@@ -14,40 +13,47 @@ interface QuickstartGridProps {
  *
  * Every card used to render the same brand mark, so the React, MCP and mobile
  * tiles were visually identical — the page asserted "we support your stack"
- * while showing no evidence of it. Logos come from the CC0 Simple Icons CDN
- * and are used nominatively to identify each supported platform.
+ * while showing no evidence of it.
+ *
+ * Served from `public/brand/platforms/`, never a CDN. The docs CSP is
+ * `img-src 'self' data: blob: https://*.supabase.co`, so a third-party image
+ * host is blocked outright — and because the failure mode is a silent
+ * per-image fallback, it would have quietly restored the identical-tiles
+ * state it was meant to fix. Rendered as a CSS mask so the single-path CC0
+ * mark takes its brand colour without shipping a second coloured copy.
  */
 function PlatformIcon({ platform }: { platform: LandingPlatformCard }) {
-  const [failed, setFailed] = useState(false)
-  const slug = platform.iconSlug
+  const { iconSlug, iconColor, icon } = platform
 
-  if (slug && !failed) {
-    const color = platform.iconColor ? `/${platform.iconColor}` : ''
+  if (iconSlug) {
+    const url = `${MUSHI_DOCS_BASE}/brand/platforms/${iconSlug}.svg`
     return (
-      <img
-        src={`https://cdn.simpleicons.org/${slug}${color}`}
-        alt=""
-        width={20}
-        height={20}
-        loading="lazy"
+      <span
         className="docs-quickstart-card__icon-img"
-        onError={() => setFailed(true)}
+        style={{
+          display: 'inline-block',
+          width: 20,
+          height: 20,
+          backgroundColor: iconColor ?? 'currentColor',
+          WebkitMaskImage: `url(${url})`,
+          maskImage: `url(${url})`,
+          WebkitMaskRepeat: 'no-repeat',
+          maskRepeat: 'no-repeat',
+          WebkitMaskSize: 'contain',
+          maskSize: 'contain',
+          WebkitMaskPosition: 'center',
+          maskPosition: 'center',
+        }}
       />
     )
   }
 
-  if (platform.icon.startsWith('/') || platform.icon.startsWith('http')) {
+  if (icon.startsWith('/') || icon.startsWith('http')) {
     return (
-      <img
-        src={platform.icon}
-        alt=""
-        width={20}
-        height={20}
-        className="docs-quickstart-card__icon-img"
-      />
+      <img src={icon} alt="" width={20} height={20} className="docs-quickstart-card__icon-img" />
     )
   }
-  return <>{platform.icon}</>
+  return <>{icon}</>
 }
 
 export function QuickstartGrid({ platforms = LANDING_QUICKSTART_PLATFORMS }: QuickstartGridProps) {

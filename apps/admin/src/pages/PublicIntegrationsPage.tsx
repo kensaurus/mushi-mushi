@@ -63,9 +63,19 @@ type Category =
 
 interface Integration {
   name: string
-  /** Real brand domain for the favicon CDN. Omit for first-party entries
-   *  (Plugin SDK), which render the Mushi mark instead of a letter block. */
-  domain?: string
+  /**
+   * Simple Icons slug for the brand mark, bundled at
+   * `public/brand/platforms/<mark>.svg`. Omit for first-party entries
+   * (Plugin SDK) and for brands with no CC0 mark (Honeycomb) — those render
+   * the Mushi mark rather than a letter block.
+   *
+   * Bundled rather than fetched: the admin CSP allows `https://www.google.com`
+   * but the favicon endpoint 301s to `t{0..3}.gstatic.com`, which CSP
+   * re-checks and blocks — so the CDN approach silently rendered nothing but
+   * fallbacks in production. Local assets also keep visitor IPs off a third
+   * party on a public, unauthenticated marketing page.
+   */
+  mark?: string
   pkg: string
   direction: 'inbound' | 'outbound' | 'sdk'
   category: Exclude<Category, 'All'>
@@ -76,7 +86,7 @@ const INTEGRATIONS: Integration[] = [
   // ── Inbound adapters ──────────────────────────────────────────────────
   {
     name: 'Datadog',
-    domain: 'datadoghq.com',
+    mark: 'datadog',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
@@ -84,7 +94,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'New Relic',
-    domain: 'newrelic.com',
+    mark: 'newrelic',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
@@ -92,7 +102,6 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Honeycomb',
-    domain: 'honeycomb.io',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
@@ -100,7 +109,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Grafana Loki',
-    domain: 'grafana.com',
+    mark: 'grafana',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
@@ -108,7 +117,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'CloudWatch',
-    domain: 'aws.amazon.com',
+    mark: 'amazonwebservices',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
@@ -116,7 +125,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Sentry',
-    domain: 'sentry.io',
+    mark: 'sentry',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Error Monitoring',
@@ -124,7 +133,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Bugsnag',
-    domain: 'bugsnag.com',
+    mark: 'bugsnag',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Error Monitoring',
@@ -132,7 +141,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Rollbar',
-    domain: 'rollbar.com',
+    mark: 'rollbar',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Error Monitoring',
@@ -140,7 +149,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Crashlytics',
-    domain: 'firebase.google.com',
+    mark: 'firebase',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Mobile',
@@ -148,7 +157,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Firebase Analytics',
-    domain: 'firebase.google.com',
+    mark: 'firebase',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Analytics',
@@ -156,7 +165,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'OpsGenie',
-    domain: 'atlassian.com',
+    mark: 'opsgenie',
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Project Management',
@@ -165,7 +174,7 @@ const INTEGRATIONS: Integration[] = [
   // ── Outbound plugins ──────────────────────────────────────────────────
   {
     name: 'Sentry',
-    domain: 'sentry.io',
+    mark: 'sentry',
     pkg: '@mushi-mushi/plugin-sentry',
     direction: 'outbound',
     category: 'Error Monitoring',
@@ -173,7 +182,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Bugsnag',
-    domain: 'bugsnag.com',
+    mark: 'bugsnag',
     pkg: '@mushi-mushi/plugin-bugsnag',
     direction: 'outbound',
     category: 'Error Monitoring',
@@ -181,7 +190,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Rollbar',
-    domain: 'rollbar.com',
+    mark: 'rollbar',
     pkg: '@mushi-mushi/plugin-rollbar',
     direction: 'outbound',
     category: 'Error Monitoring',
@@ -189,7 +198,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Crashlytics',
-    domain: 'firebase.google.com',
+    mark: 'firebase',
     pkg: '@mushi-mushi/plugin-crashlytics',
     direction: 'outbound',
     category: 'Mobile',
@@ -197,7 +206,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Slack',
-    domain: 'slack.com',
+    mark: 'slack',
     pkg: '@mushi-mushi/plugin-slack-app',
     direction: 'outbound',
     category: 'Chat & Notifications',
@@ -205,7 +214,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Discord',
-    domain: 'discord.com',
+    mark: 'discord',
     pkg: '@mushi-mushi/plugin-discord',
     direction: 'outbound',
     category: 'Chat & Notifications',
@@ -213,7 +222,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'MS Teams',
-    domain: 'microsoft.com',
+    mark: 'microsoftteams',
     pkg: '@mushi-mushi/plugin-msteams',
     direction: 'outbound',
     category: 'Chat & Notifications',
@@ -221,7 +230,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Jira',
-    domain: 'atlassian.com',
+    mark: 'jira',
     pkg: '@mushi-mushi/plugin-jira',
     direction: 'outbound',
     category: 'Project Management',
@@ -229,7 +238,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Linear',
-    domain: 'linear.app',
+    mark: 'linear',
     pkg: '@mushi-mushi/plugin-linear',
     direction: 'outbound',
     category: 'Project Management',
@@ -237,7 +246,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'PagerDuty',
-    domain: 'pagerduty.com',
+    mark: 'pagerduty',
     pkg: '@mushi-mushi/plugin-pagerduty',
     direction: 'outbound',
     category: 'Project Management',
@@ -245,7 +254,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'GitHub Issues',
-    domain: 'github.com',
+    mark: 'github',
     pkg: '@mushi-mushi/plugin-github-issues',
     direction: 'outbound',
     category: 'Project Management',
@@ -253,7 +262,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Zapier',
-    domain: 'zapier.com',
+    mark: 'zapier',
     pkg: '@mushi-mushi/plugin-zapier',
     direction: 'outbound',
     category: 'Project Management',
@@ -292,30 +301,34 @@ const CATEGORIES: Category[] = [
  * entry is first-party, so an offline viewer sees a deliberate brand element
  * rather than a broken image.
  */
-function IntegrationLogo({ name, domain }: { name: string; domain?: string }) {
-  const [failed, setFailed] = useState(false)
-  const showLogo = Boolean(domain) && !failed
+function IntegrationLogo({ mark }: { name: string; mark?: string }) {
+  const url = mark ? `/brand/platforms/${mark}.svg` : null
 
   return (
     <div
       aria-hidden
       className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg border border-editorial-rule bg-editorial-paper shadow-[inset_0_-2px_0_rgba(0,0,0,0.06)]"
     >
-      {showLogo ? (
-        <img
-          src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`}
-          width={22}
-          height={22}
-          alt=""
-          loading="lazy"
-          draggable={false}
-          onError={() => setFailed(true)}
+      {url ? (
+        // Masked rather than <img> so the monochrome CC0 mark inherits the
+        // editorial ink colour and sits coherently with the rest of the page.
+        <span
+          className="bg-editorial-ink"
+          style={{
+            width: 20,
+            height: 20,
+            WebkitMaskImage: `url(${url})`,
+            maskImage: `url(${url})`,
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat',
+            WebkitMaskSize: 'contain',
+            maskSize: 'contain',
+            WebkitMaskPosition: 'center',
+            maskPosition: 'center',
+          }}
         />
       ) : (
-        <span
-          className="font-serif text-sm font-semibold leading-none text-editorial-vermillion"
-          title={name}
-        >
+        <span className="font-serif text-sm font-semibold leading-none text-editorial-vermillion">
           虫
         </span>
       )}
@@ -398,7 +411,7 @@ function IntegrationTile({ integration }: { integration: Integration }) {
       {/* Header row */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <IntegrationLogo name={integration.name} domain={integration.domain} />
+          <IntegrationLogo name={integration.name} mark={integration.mark} />
           <div>
             <p className="font-medium leading-none text-editorial-ink">
               {integration.name}

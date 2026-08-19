@@ -149,18 +149,20 @@ export interface LandingPlatformCard {
   title: string
   icon: string
   /**
-   * Real product logo for the card, from the CC0 Simple Icons CDN
-   * (https://cdn.simpleicons.org). Every card previously rendered the same
-   * generic Mushi mark, so four visually identical tiles claimed to be four
-   * different platforms — the tell that a page is mocked up rather than
-   * shipped. `icon` stays as the fallback when a slug is absent or the CDN
-   * is unreachable.
+   * Real product logo, served from `public/brand/platforms/<slug>.svg`.
+   * Every card previously rendered the same generic Mushi mark, so four
+   * visually identical tiles claimed to be four different platforms — the
+   * tell that a page is mocked up rather than shipped.
    *
-   * Brand marks are used nominatively, to identify the platform each
-   * quickstart genuinely supports.
+   * Bundled rather than fetched from a CDN: the docs CSP is
+   * `img-src 'self' data: blob: https://*.supabase.co`, so any third-party
+   * image host is blocked outright and would silently fall back to the very
+   * state this replaces. Local assets also keep visitor IPs off a third
+   * party on a public marketing page. Marks are CC0 (Simple Icons), used
+   * nominatively to identify the platform each quickstart supports.
    */
   iconSlug?: string
-  /** Brand hex (no `#`) so the mark keeps its own identity on the card. */
+  /** Brand hex (with `#`) — the mark is masked to keep its own identity. */
   iconColor?: string
   href: string
   cmd: string
@@ -177,6 +179,10 @@ export interface LandingPlatformCard {
 const DOCS_BASE = (process.env.NEXT_PUBLIC_MUSHI_BASE_PATH ?? '').replace(/\/+$/, '')
 export const LANDING_BRAND_MARK = `${DOCS_BASE}/brand/logo-mark.svg`
 
+/** Base path for assets under `apps/docs/public`. Exported so components can
+ *  build self-hosted asset URLs without re-deriving the static-export prefix. */
+export const MUSHI_DOCS_BASE = DOCS_BASE
+
 export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
   {
     title: 'Incident loop',
@@ -190,7 +196,7 @@ export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
     title: 'MCP server',
     icon: LANDING_BRAND_MARK,
     iconSlug: 'anthropic',
-    iconColor: 'D97757',
+    iconColor: '#D97757',
     href: '/quickstart/mcp',
     cmd: 'npx mushi-mushi setup --ide cursor',
     desc: 'Ask your editor what broke — fix briefs from Claude, Cursor, or Codex. No second LLM key.',
@@ -200,7 +206,7 @@ export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
     title: 'React',
     icon: LANDING_BRAND_MARK,
     iconSlug: 'react',
-    iconColor: '61DAFB',
+    iconColor: '#61DAFB',
     href: '/quickstart/react',
     cmd: 'npx mushi-mushi',
     desc: 'Wizard installs the SDK, writes env vars, optional test report.',
@@ -209,7 +215,7 @@ export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
     title: 'iOS · Android · Flutter',
     icon: LANDING_BRAND_MARK,
     iconSlug: 'flutter',
-    iconColor: '02569B',
+    iconColor: '#02569B',
     href: '/quickstart/mobile',
     cmd: 'npx mushi-mushi',
     desc: 'Native shake, offline queue, and a Sentry bridge already wired up.',
