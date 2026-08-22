@@ -29,6 +29,10 @@ export interface MushiLocale {
     };
     categories: Record<MushiReportCategory, string>;
     categoryDescriptions: Record<MushiReportCategory, string>;
+    /** Progressive-disclosure toggle under the primary category card. */
+    moreCategoriesLabel: string;
+    /** Hidden-category count on the toggle; `{n}` placeholder. */
+    moreCategoriesCount: string;
   };
   step2: {
     heading: string;
@@ -160,6 +164,20 @@ export interface MushiLocale {
     featureRequest: {
       label: string;
       description: string;
+    };
+    /** Beta-mode strip on the category step. */
+    betaStrip: {
+      /** Default status line when the host sets no message; `{appName}` placeholder. */
+      defaultMessage: string;
+      /** Where reports land; `{email}` placeholder. */
+      contactHint: string;
+      /** aria-label for the strip. */
+      ariaLabel: string;
+    };
+    /** Collapsible changelog row (beta mode). */
+    changelog: {
+      /** `{version}` placeholder. */
+      whatsNew: string;
     };
     poweredBy: string;
   };
