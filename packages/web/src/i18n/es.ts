@@ -39,6 +39,8 @@ export const es: MushiLocale = {
       confusing: 'Difícil de entender o navegar',
       other: 'Otro problema',
     },
+    moreCategoriesLabel: 'Más tipos de problemas',
+    moreCategoriesCount: '{n} más',
   },
   step2: {
     heading: '¿Qué pasó?',
@@ -174,6 +176,14 @@ export const es: MushiLocale = {
     featureRequest: {
       label: 'Solicitud de función',
       description: 'Sugerir un cambio',
+    },
+    betaStrip: {
+      defaultMessage: '{appName} está en desarrollo temprano',
+      contactHint: 'Los reportes van a {email} · revisados por el equipo',
+      ariaLabel: 'Estado beta',
+    },
+    changelog: {
+      whatsNew: 'Novedades de {version}',
     },
     poweredBy: 'Con tecnología de Mushi v{version}',
   },

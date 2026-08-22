@@ -39,6 +39,8 @@ export const ja: MushiLocale = {
       confusing: '理解しにくい、操作がわかりにくい',
       other: 'その他の問題',
     },
+    moreCategoriesLabel: 'その他の問題の種類',
+    moreCategoriesCount: '他{n}件',
   },
   step2: {
     heading: '何が起きましたか？',
@@ -174,6 +176,14 @@ export const ja: MushiLocale = {
     featureRequest: {
       label: '機能リクエスト',
       description: '変更を提案',
+    },
+    betaStrip: {
+      defaultMessage: '{appName}は開発初期段階です',
+      contactHint: 'レポートは {email} に届き、チームが確認します',
+      ariaLabel: 'ベータ版のお知らせ',
+    },
+    changelog: {
+      whatsNew: '{version} の新機能',
     },
     poweredBy: 'Mushi v{version}',
   },
