@@ -427,8 +427,8 @@ export function renderCategoryStep(ctx: WidgetRenderCtx): string {
       ? ctx.showAllCategories
         ? `<div class="mushi-categories-expanded">${secondaryCategories}</div>`
         : `<button type="button" class="mushi-more-toggle" data-action="show-all-categories">
-             <span class="mushi-more-toggle-text">More issue types</span>
-             <span class="mushi-more-toggle-count">${secondaryEntries.length} more</span>
+             <span class="mushi-more-toggle-text">${escapeHtml(t.step1.moreCategoriesLabel)}</span>
+             <span class="mushi-more-toggle-count">${escapeHtml(t.step1.moreCategoriesCount.replace('{n}', String(secondaryEntries.length)))}</span>
              <span class="mushi-more-toggle-arrow" aria-hidden="true">\u2192</span>
            </button>`
       : '';
@@ -476,9 +476,10 @@ export function renderBetaChangelog(ctx: WidgetRenderCtx): string {
     if (!entries?.length) return '';
     const latest = entries[0];
     const items = latest.items.map((item) => `<li>\u2022 ${escapeHtml(item)}</li>`).join('');
-    const label = latest.date
-      ? `What\u2019s new in ${escapeHtml(latest.version)} \u00B7 ${escapeHtml(latest.date)}`
-      : `What\u2019s new in ${escapeHtml(latest.version)}`;
+    const whatsNew = escapeHtml(
+      ctx.locale.flows.changelog.whatsNew.replace('{version}', latest.version),
+    );
+    const label = latest.date ? `${whatsNew} \u00B7 ${escapeHtml(latest.date)}` : whatsNew;
     return `
       <details class="mushi-changelog">
         <summary class="mushi-changelog-summary">${label}</summary>
@@ -494,20 +495,23 @@ export function renderBetaChangelog(ctx: WidgetRenderCtx): string {
    */
 export function renderBetaStrip(ctx: WidgetRenderCtx): string {
     const beta = ctx.config.betaMode!;
+    const strip = ctx.locale.flows.betaStrip;
     const appName = escapeHtml(beta.appName ?? 'This app');
+    // Host-supplied `message` wins verbatim; the default follows the widget
+    // locale so a ja/es/th widget no longer shows an English beta banner.
     const message = beta.message
       ? escapeHtml(beta.message)
-      : `${appName} is in early development`;
+      : escapeHtml(strip.defaultMessage).replace('{appName}', appName);
     const email = beta.contactEmail ? escapeHtml(beta.contactEmail) : null;
     const perks = beta.perks ?? [];
 
     return `
-      <div class="mushi-beta-strip" role="note" aria-label="Beta status">
+      <div class="mushi-beta-strip" role="note" aria-label="${escapeHtml(strip.ariaLabel)}">
         <div class="mushi-beta-strip-row">
           <span class="mushi-beta-tag" aria-hidden="true">BETA</span>
           <span class="mushi-beta-msg">${message}</span>
         </div>
-        ${email ? `<div class="mushi-beta-contact-hint">Reports go to ${email} · reviewed by the team</div>` : ''}
+        ${email ? `<div class="mushi-beta-contact-hint">${escapeHtml(strip.contactHint).replace('{email}', email)}</div>` : ''}
         ${perks.length > 0 ? `
           <ul class="mushi-beta-perks" aria-label="Beta tester perks">
             ${perks.map((p) => `<li>\u2713 ${escapeHtml(p)}</li>`).join('')}
