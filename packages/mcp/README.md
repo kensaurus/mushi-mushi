@@ -212,6 +212,7 @@ The endpoint accepts JSON-RPC 2.0 over POST (returns `application/json` or `text
 | `get_blast_radius` | Graph traversal showing other components a bug group touches |
 | `get_knowledge_graph` | Traverse the knowledge graph from a seed component or page |
 | `diagnose_setup` | Setup health in one call: `mode=full` (default) runs ingest + dispatch preflight, `mode=ingest` / `mode=dispatch` narrow it. Returns the single best next action. Run first when a user says setup is broken |
+| `check_sdk_version` | Compare a published `@mushi-mushi/*` pin to `GET /v1/sdk/latest-version`. Returns `{ package, current, latest, outdated }` and, when outdated, Sentry-style `suggestedActions` (max 1). Does not bump the pin. |
 | `activation_status` | Unified activation posture for the active project: required steps, SDK heartbeat, dispatch preflight, and the next best action |
 | `get_report_timeline` | Ordered report timeline: the reporter/admin comment thread (including verify/reopen signals) plus fix, QA, and status lanes. Use when triaging whether an end user still sees a bug as unfixed |
 | `list_projects` | Discover all Mushi projects accessible to this API key. Returns project id, name, and created date |
@@ -479,6 +480,22 @@ Both are complementary; use Sentry for exception noise, Mushi for "the user says
 ## License
 
 MIT
+
+## More from KENSAURUS
+
+| | App | What it is |
+|---|---|---|
+| <img src="https://kensaur.us/glot-it/icon-512.png" width="28" height="28" alt=""> | [Glot It](https://kensaur.us/glot-it/?utm_source=github&utm_medium=readme) | Learn Thai — bite-size lessons, smart flashcards, and an AI tutor |
+| <img src="https://kensaur.us/yen-yen/icon.svg" width="28" height="28" alt=""> | [yen-yen](https://kensaur.us/yen-yen/?utm_source=github&utm_medium=readme) | Where did the money go? Now you'll know. A kakeibo for households |
+| <img src="https://kensaur.us/the-wanting-mind/pwa-512x512.png" width="28" height="28" alt=""> | [The Wanting Mind](https://kensaur.us/the-wanting-mind/?utm_source=github&utm_medium=readme) | How the Battle Between Extraction and Generation Is Reshaping Our World — a 147,000-word interactive webbook with 268 concepts, 242 citations, and original illustrations |
+| <img src="https://kensaur.us/help-her-take-photo/assets/apple-touch-icon.png" width="28" height="28" alt=""> | [Help Her Take Photo](https://kensaur.us/help-her-take-photo/?utm_source=github&utm_medium=readme) | Pair phones, direct the pose, nail the photo |
+| <img src="https://talk.kensaur.us/pwa-192.png" width="28" height="28" alt=""> | [How to Talk to Girls](https://talk.kensaur.us/?utm_source=github&utm_medium=readme) | BYOK Claude practice coach for sticky chats |
+| <img src="https://solo-boss.kensaur.us/apple-touch-icon.png" width="28" height="28" alt=""> | [一人社長 Solo Boss](https://solo-boss.kensaur.us/?utm_source=github&utm_medium=readme) | Bookkeeping and tax-filing co-pilot for one-person companies in Japan |
+| <img src="https://tsumagoi.kensaur.us/apple-touch-icon.png" width="28" height="28" alt=""> | [Tsumagoi Work&Camp 嬬恋牧場](https://tsumagoi.kensaur.us/?utm_source=github&utm_medium=readme) | Coworking camp at 1,444 m — [Instagram](https://www.instagram.com/tsumagoicamp/) · [Facebook](https://www.facebook.com/profile.php?id=61592113053042) · [Maps](https://maps.app.goo.gl/JCNnTfsdQVHCS1FA7) |
+| <img src="https://github.com/kensaurus.png" width="28" height="28" alt=""> | [cursor-kenji](https://github.com/kensaurus/cursor-kenji) | Ready-made playbooks for your AI coding editor |
+| <img src="https://kensaur.us/favicon.svg" width="28" height="28" alt=""> | [KENSAURUS](https://kensaur.us/?view=portfolio&utm_source=github&utm_medium=readme) | Everything else built under the same roof |
+
+All apps live under [kensaur.us](https://kensaur.us).
 
 
 <!-- mushi-readme-stats-footer -->

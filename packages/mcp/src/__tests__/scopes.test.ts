@@ -245,4 +245,50 @@ describe('structured tool output (MCP 2025-06-18)', () => {
     expect(recent?.outputSchema).toBeTruthy()
     expect(recent?.outputSchema).toMatchObject({ type: 'object' })
   })
+
+  it('check_sdk_version hits /v1/sdk/latest-version and returns structured freshness', async () => {
+    fetchStub.enqueue({
+      ok: true,
+      data: { package: '@mushi-mushi/web', latest: '1.27.2' },
+    })
+    const res = await client.callTool({
+      name: 'check_sdk_version',
+      arguments: { package: '@mushi-mushi/web', current: '1.27.0' },
+    })
+    expect(fetchStub.calls[0]?.url).toContain('/v1/sdk/latest-version?package=%40mushi-mushi%2Fweb')
+    expect(res.structuredContent).toEqual({
+      package: '@mushi-mushi/web',
+      latest: '1.27.2',
+      current: '1.27.0',
+      outdated: true,
+      suggestedActions: [
+        {
+          type: 'tool_call',
+          toolName: 'search_mushi_docs',
+          arguments: { query: '@mushi-mushi/web upgrade mushi-sdk-upgrade' },
+          reason:
+            'Read current upgrade notes, then apply the mushi-sdk-upgrade skill. This tool does not bump the pin.',
+        },
+      ],
+    })
+    const listed = (await client.listTools()).tools.find(t => t.name === 'check_sdk_version')
+    expect(listed?.annotations?.readOnlyHint).toBe(true)
+  })
+
+  it('check_sdk_version omits suggestedActions when the pin matches latest', async () => {
+    fetchStub.enqueue({
+      ok: true,
+      data: { package: '@mushi-mushi/web', latest: '1.27.2' },
+    })
+    const res = await client.callTool({
+      name: 'check_sdk_version',
+      arguments: { package: '@mushi-mushi/web', current: '1.27.2' },
+    })
+    expect(res.structuredContent).toEqual({
+      package: '@mushi-mushi/web',
+      latest: '1.27.2',
+      current: '1.27.2',
+      outdated: false,
+    })
+  })
 })

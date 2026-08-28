@@ -69,6 +69,10 @@ export type {
 export {
   createApiClient,
   buildSdkIngestHeaders,
+  resolveRequestBaseUrl,
+  getBackoffDelay,
+  parseRetryAfter,
+  flushLastOutboundOnUnload,
   DEFAULT_API_ENDPOINT,
   DEFAULT_TIMEOUT,
   DEFAULT_MAX_RETRIES,
@@ -81,6 +85,22 @@ export {
   type ApiClientOptions,
   type MushiInternalRequestKind,
 } from './api-client';
+export {
+  shouldDropCapturedError,
+  matchesErrorFilter,
+  type MushiErrorFilter,
+} from './error-filters';
+export {
+  sendOnUnload,
+  markPageUnloading,
+  isPageUnloading,
+  isMushiBeaconEnvelope,
+  buildBeaconEnvelope,
+  extractTunnelPath,
+  isSameOriginOrRelative,
+  MUSHI_BEACON_MAX_BYTES,
+  type MushiBeaconEnvelope,
+} from './unload-transport';
 export { resolveRegionEndpoint, REGION_ENDPOINTS, type MushiRegion } from './region';
 export {
   resolveEnvConfig,
