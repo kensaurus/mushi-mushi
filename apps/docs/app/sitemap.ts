@@ -6,14 +6,26 @@ import { DOCS_SITE, PRODUCT_ROOT } from '../lib/structured-data'
 // Canonical docs origin — matches `metadataBase` + openGraph in app/layout.tsx.
 const SITE = DOCS_SITE
 
-/** Walk Nextra's nested page map and collect every concrete page route. */
+/**
+ * Walk Nextra’s nested page map and collect every route that is a real PAGE.
+ *
+ * A folder appears in the page map with a `route` whether or not it has an
+ * index page, so adding every route emitted `/integrations` — a directory
+ * holding only `_meta.ts` and `cursor.mdx` — and the sitemap advertised a URL
+ * that 404s. Checked against production: every content folder carrying an
+ * `index.mdx` returns 200 and `integrations`, the only one without, is the
+ * single 404. So a folder counts only when it has an index child.
+ */
 function collectRoutes(items: PageMapItem[], acc: Set<string>): void {
   for (const item of items) {
-    if ('route' in item && item.route.startsWith('/') && !item.route.includes('#')) {
+    const children = 'children' in item && Array.isArray(item.children) ? item.children : null
+    // A leaf is always a page. A folder is one only if it has an index child.
+    const isPage = !children || children.some((c) => 'name' in c && c.name === 'index')
+    if (isPage && 'route' in item && item.route.startsWith('/') && !item.route.includes('#')) {
       acc.add(item.route)
     }
-    if ('children' in item && Array.isArray(item.children)) {
-      collectRoutes(item.children, acc)
+    if (children) {
+      collectRoutes(children, acc)
     }
   }
 }
