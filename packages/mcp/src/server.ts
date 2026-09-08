@@ -1271,6 +1271,73 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
+    'check_sdk_version',
+    {
+      title: titleOf('check_sdk_version'),
+      description: descOf('check_sdk_version'),
+      annotations: annotationsFor('check_sdk_version'),
+      inputSchema: {
+        package: z
+          .string()
+          .optional()
+          .describe(
+            'npm package name (default @mushi-mushi/web). Examples: @mushi-mushi/web, @mushi-mushi/node, @mushi-mushi/core.',
+          ),
+        current: z
+          .string()
+          .optional()
+          .describe('Installed version from package.json, if known (e.g. 1.27.0).'),
+      },
+      outputSchema: {
+        package: z.string(),
+        latest: z.string().optional(),
+        current: z.string().optional(),
+        outdated: z.boolean().optional(),
+        suggestedActions: z
+          .array(
+            z.object({
+              type: z.literal('tool_call'),
+              toolName: z.string(),
+              arguments: z.record(z.string(), z.unknown()),
+              reason: z.string(),
+            }),
+          )
+          .optional(),
+      },
+    },
+    async (args) => {
+      // Catalog payload only — no user-authored text, so jsonResult (not wrappedJsonResult).
+      const pkg = args.package?.trim() || '@mushi-mushi/web';
+      const query = new URLSearchParams({ package: pkg }).toString();
+      const data = await apiCall<{ version?: string; latest?: string; package?: string }>(
+        `/v1/sdk/latest-version?${query}`,
+      );
+      const latest = data.latest ?? data.version;
+      const current = args.current;
+      const outdated = current && latest ? current !== latest : undefined;
+      return jsonResult({
+        package: data.package ?? pkg,
+        latest,
+        current,
+        outdated,
+        ...(outdated
+          ? {
+              suggestedActions: [
+                {
+                  type: 'tool_call' as const,
+                  toolName: 'search_mushi_docs',
+                  arguments: { query: `${pkg} upgrade mushi-sdk-upgrade` },
+                  reason:
+                    'Read current upgrade notes, then apply the mushi-sdk-upgrade skill. This tool does not bump the pin.',
+                },
+              ],
+            }
+          : {}),
+      });
+    },
+  );
+
+  server.registerTool(
     'search_mushi_docs',
     {
       title: titleOf('search_mushi_docs'),

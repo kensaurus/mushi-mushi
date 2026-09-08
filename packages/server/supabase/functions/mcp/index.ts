@@ -803,6 +803,78 @@ const BASE_TOOLS: Record<string, ToolDef> = {
     },
   },
 
+  check_sdk_version: {
+    scope: 'mcp:read',
+    description:
+      'Compare a published @mushi-mushi/* package version against the catalog (GET /v1/sdk/latest-version). Returns { package, current, latest, outdated } and, when outdated, suggestedActions (Sentry-style, max 1) pointing at search_mushi_docs plus the mushi-sdk-upgrade skill. Read-only. Use when Dependabot or mushi upgrade --check reports a drift, or before dispatching a fix that assumes a current SDK. Does not bump the pin — that stays a human/Dependabot change.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        package: {
+          type: 'string',
+          description: 'npm package name (default @mushi-mushi/web).',
+        },
+        current: {
+          type: 'string',
+          description: 'Installed version from package.json, if known.',
+        },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        package: { type: 'string' },
+        latest: { type: 'string' },
+        current: { type: 'string' },
+        outdated: { type: 'boolean' },
+        suggestedActions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', const: 'tool_call' },
+              toolName: { type: 'string' },
+              arguments: { type: 'object' },
+              reason: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (args) => {
+      const pkg = typeof args.package === 'string' && args.package.trim()
+        ? args.package.trim()
+        : '@mushi-mushi/web'
+      const query = new URLSearchParams({ package: pkg }).toString()
+      const data = await apiCall<{ version?: string; latest?: string; package?: string }>(
+        `/v1/sdk/latest-version?${query}`,
+      )
+      const latest = data.latest ?? data.version
+      const current = typeof args.current === 'string' ? args.current : undefined
+      const outdated = current && latest ? current !== latest : undefined
+      return {
+        package: data.package ?? pkg,
+        latest,
+        current,
+        outdated,
+        ...(outdated
+          ? {
+              suggestedActions: [
+                {
+                  type: 'tool_call',
+                  toolName: 'search_mushi_docs',
+                  arguments: { query: `${pkg} upgrade mushi-sdk-upgrade` },
+                  reason:
+                    'Read current upgrade notes, then apply the mushi-sdk-upgrade skill. This tool does not bump the pin.',
+                },
+              ],
+            }
+          : {}),
+      }
+    },
+  },
+
   search_mushi_docs: {
     scope: 'mcp:read',
     description:
@@ -1257,7 +1329,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
         },
         setup: {
           label: 'Set up Mushi',
-          tools: ['diagnose_setup', 'activation_status', 'get_backend_health', 'list_byok_keys', 'add_byok_key', 'test_byok_key', 'remove_byok_key'],
+          tools: ['diagnose_setup', 'check_sdk_version', 'activation_status', 'get_backend_health', 'list_byok_keys', 'add_byok_key', 'test_byok_key', 'remove_byok_key'],
           hint: 'Call diagnose_setup first — it diagnoses setup gaps and returns the next action to take.',
         },
         qa: {

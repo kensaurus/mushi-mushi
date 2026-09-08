@@ -30,6 +30,28 @@ Mushi.init({
 
 That's the whole integration. A floating 🐛 launcher appears; a report is one click away.
 
+### Same-origin tunnel (ad blockers)
+
+Point ingest at a first-party proxy — the same pattern as Sentry `tunnel`.
+Host APIs must allowlist host + project + `/v1/` (empty project list → 503).
+
+```typescript
+Mushi.init({
+  projectId: '00000000-0000-0000-0000-000000000000',
+  apiKey: 'mushi_xxx',
+  tunnel: '/api/mushi-tunnel',
+  // Published SDKs that ignore `tunnel` still honor apiEndpoint:
+  apiEndpoint: '/api/mushi-tunnel',
+  ignoreErrors: ['ResizeObserver loop', /^Script error\.?$/],
+  denyUrls: [/chrome-extension:/i],
+  replaysOnErrorSampleRate: 0,
+});
+```
+
+`ignoreErrors` / `denyUrls` apply to **automatic** captures only. User widget
+feedback always sends. Pagehide uses `fetch({ keepalive: true })`, then a
+same-origin `sendBeacon` envelope the tunnel unwraps.
+
 ## Runtime config
 
 With `runtimeConfig: 'auto'` (default), the SDK fetches console settings from

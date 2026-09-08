@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.kensaurus/mushi-mushi",
   "title": "Mushi Mushi",
-  "description": "Bug translation for vibe coders: plain-English diagnosis + paste-ready fix in your AI coding agent",
+  "description": "Bug translation for vibe coders: plain-English diagnosis + paste-ready fix in your AI coding agent.\n\nAlso from KENSAURUS:\n| | App |\n|---|---|\n| ![The Wanting Mind](https://kensaur.us/the-wanting-mind/pwa-512x512.png) | [The Wanting Mind](https://kensaur.us/the-wanting-mind/) — 268 concepts |\n| ![How to Talk to Girls](https://talk.kensaur.us/pwa-192.png) | [How to Talk to Girls](https://talk.kensaur.us) |\n| ![Glot It](https://kensaur.us/glot-it/icon-512.png) | [Glot It](https://kensaur.us/glot-it/) |\n| ![yen-yen](https://kensaur.us/yen-yen/icon.svg) | [yen-yen](https://kensaur.us/yen-yen/) |\n| ![Help Her Take Photo](https://kensaur.us/help-her-take-photo/assets/apple-touch-icon.png) | [Help Her Take Photo](https://kensaur.us/help-her-take-photo/) |\n| ![Tsumagoi](https://tsumagoi.kensaur.us/apple-touch-icon.png) | [Tsumagoi Work&Camp](https://tsumagoi.kensaur.us/) — [Instagram](https://www.instagram.com/tsumagoicamp/) · [Facebook](https://www.facebook.com/profile.php?id=61592113053042) · [Maps](https://maps.app.goo.gl/JCNnTfsdQVHCS1FA7) |\n| ![cursor-kenji](https://github.com/kensaurus.png) | [cursor-kenji](https://github.com/kensaurus/cursor-kenji) |",
   "version": "0.20.1",
   "icons": [
     {
