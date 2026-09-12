@@ -49,6 +49,7 @@
     "check:changeset-orphans": "node scripts/check-changeset-orphans.mjs",
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
     "check:catalog-count": "node scripts/check-catalog-count.mjs",
+    "check:server-json": "node scripts/sync-server-json-version.mjs --check",
     "check:design-tokens": "node scripts/check-design-tokens.mjs",
     "check:gradient-utilities": "node scripts/check-gradient-utilities.mjs",
     "check:token-parity": "node scripts/check-token-parity.mjs",

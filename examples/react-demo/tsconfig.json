@@ -1,11 +1,17 @@
 {
-  "extends": "../../tooling/tsconfig/react.json",
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "_comment": "Deliberately self-contained — do NOT extend ../../tooling/tsconfig. CI copies this directory out of the workspace (cp -r examples/react-demo \"$RUNNER_TEMP/standalone-demo\") and builds it against the PUBLISHED npm packages, so any workspace-relative path fails to resolve. Keep the options below inlined and in sync with tooling/tsconfig/react.json by hand.",
   "compilerOptions": {
-    "types": [
-      "vite/client"
-    ]
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["vite/client"]
   },
-  "include": [
-    "src"
-  ]
+  "include": ["src"]
 }

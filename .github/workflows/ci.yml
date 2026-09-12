@@ -222,6 +222,13 @@ jobs:
       - name: Check MCP catalog count
         run: pnpm check:catalog-count
 
+      - name: Check MCP registry manifest
+        # packages/mcp/server.json must match packages/mcp/package.json's version
+        # AND satisfy the registry schema. `description` has maxLength 100 and is
+        # the field the registry indexes for search; it reached 1166 characters
+        # once, which mcp-publisher rejects at release time with no local signal.
+        run: pnpm check:server-json
+
       - name: Check Helm migration mirror
         # deploy/helm/migrations must mirror packages/server/supabase/migrations;
         # run `pnpm sync:helm-migrations` and commit when this fails.
