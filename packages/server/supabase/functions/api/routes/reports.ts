@@ -272,6 +272,12 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     const traceParam = c.req.query('trace')?.trim().slice(0, 80);
     const releaseParam = c.req.query('release')?.trim().slice(0, 200);
     const sentryEnvParam = c.req.query('sentryEnv')?.trim().slice(0, 80);
+    // 2026-08-22 per-user / per-session browsing: `session` scopes the list to
+    // one SDK session (all reports from a single visit); `end_user` scopes to
+    // one identified end user across devices/sessions (reports.end_user_id FK,
+    // set by resolveEndUser at ingest). Both are length-capped opaque ids.
+    const sessionParam = c.req.query('session')?.trim().slice(0, 80);
+    const endUserParam = c.req.query('end_user')?.trim().slice(0, 80);
     const limit = Math.min(Number(c.req.query('limit')) || 50, 200);
     const offset = Number(c.req.query('offset')) || 0;
     const sortField = c.req.query('sort') ?? 'created_at';
@@ -354,6 +360,8 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     if (traceParam) query = query.eq('sentry_trace_id', traceParam);
     if (releaseParam) query = query.eq('sentry_release', releaseParam);
     if (sentryEnvParam) query = query.eq('sentry_environment', sentryEnvParam);
+    if (sessionParam) query = query.eq('session_id', sessionParam);
+    if (endUserParam) query = query.eq('end_user_id', endUserParam);
 
     const { data: reports, count, error } = await query;
     if (error) return dbError(c, error);

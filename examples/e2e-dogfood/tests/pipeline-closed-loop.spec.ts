@@ -51,7 +51,7 @@ test.describe('Pipeline closed loop (ingest → admin detail)', () => {
     const ingestKey = loadEnvKey(
       'C:/Users/kensa/Documents/GitHub/yen-yen/.env',
       'EXPO_PUBLIC_MUSHI_API_KEY',
-    )
+    ) ?? ''
     test.skip(!ingestKey, 'yen-yen EXPO_PUBLIC_MUSHI_API_KEY not in .env')
 
     const reporterToken = `mushi_e2e_${Date.now()}`

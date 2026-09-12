@@ -24,12 +24,43 @@ npm i @mushi-mushi/plugin-slack-app
 
 1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create from
    manifest**.
-2. Paste the contents of [`manifest.json`](./manifest.json).
-3. Set the **Request URL** for slash commands + interactivity to
-   `https://<your-host>/slack/command`.
-4. Set the **Redirect URL** for OAuth to
-   `https://<your-host>/slack/oauth/callback`.
-5. Copy the signing secret + client ID / secret into env vars.
+2. Paste the contents of [`manifest.json`](./manifest.json). It targets the
+   hosted Mushi backend; self-hosters replace the
+   `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1` prefix with their
+   own functions host:
+   - slash command `/mushi` → `<functions>/api/v1/webhooks/slack/commands`
+   - Events API → `<functions>/api/v1/webhooks/slack/events`
+     (Slack sends a one-time `url_verification` challenge; the route
+     answers it, so save the manifest with the backend already deployed)
+   - Interactivity → `<functions>/slack-interactions`
+   - OAuth redirect → `<functions>/api/v1/webhooks/slack/oauth-callback`
+   (Running this package standalone instead? Point everything at
+   `https://<your-host>/slack/command` and `/slack/oauth/callback`.)
+3. Copy the signing secret + client ID / secret into the backend secrets
+   (`SLACK_SIGNING_SECRET`, `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`).
+4. Install to the workspace from the Mushi console (**Integrations → Slack →
+   Add to Slack**) so the bot token is vaulted per project, then invite the
+   bot to the channels where clips will be dropped.
+
+### Scopes and events (why each one is in the manifest)
+
+| Scope / event | Used for |
+| --- | --- |
+| `commands` | `/mushi` slash command |
+| `chat:write`, `chat:write.public` | Report cards, threaded replies, voice transcript cards |
+| `channels:read` | Channel picker in the console |
+| `channels:history`, `groups:history`, `im:history` | Receive `message` events (audio clips arrive as `message` events with `files[]`) in public / private channels and DMs |
+| `files:read` | `files.info` + downloading the clip (`url_private_download` / `aac`) for transcription |
+| `im:read`, `im:write` | Open a DM with the invoking user |
+| `users:read`, `users:read.email` | Map Slack users to console members |
+| `message.channels`, `message.groups`, `message.im` | Voice clips shared in channels / private channels / DMs |
+| `file_shared` | Second signal for a shared clip (deduped on the file id) |
+| `app_mention`, `app_home_opened` | Existing mention + App Home behaviour |
+
+Voice clips are never transcribed by Slack's own `transcription` object;
+the backend downloads the audio and runs its own speech-to-text, then posts
+the verbatim transcript with **Confirm / Cancel** buttons before anything is
+dispatched.
 
 ## Quick start — Hono server
 
@@ -85,7 +116,8 @@ app.get('/slack/install', (c) => {
 
 | Subcommand           | Effect                                                 |
 | -------------------- | ------------------------------------------------------ |
-| `/mushi list`        | 5 most recent reports for the installing team.         |
+| `/mushi voice <text>`| Dictate a request (hosted backend only): transcript is read back with Confirm / Cancel buttons before dispatch. |
+| `/mushi list`        | Most recent open reports (5 standalone, 10 on the hosted backend). |
 | `/mushi open <id>`   | Show classification + summary for one report.          |
 | `/mushi resolve <id>`| Transition a report to `fixed`.                        |
 | `/mushi help`        | Print the command reference.                           |
@@ -111,4 +143,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 55 edge functions · 337 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 58 edge functions · 347 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

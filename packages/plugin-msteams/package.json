@@ -21,6 +21,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "lint": "eslint src/",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -28,7 +29,9 @@
     "@mushi-mushi/plugin-sdk": "workspace:^"
   },
   "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
     "@types/node": "^22.20.0",
+    "eslint": "^10.6.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"

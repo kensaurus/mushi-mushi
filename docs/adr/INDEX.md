@@ -19,6 +19,14 @@ purpose.
 | [0004](0004-lead-with-the-bug-mediator-category.md) | Lead with "the bug mediator for AI-built apps" | Accepted | One queue between users, monitoring, trackers, chat, and coding agents |
 | [0005](0005-treat-the-local-dev-backend-as-production.md) | Treat the local dev backend as production | Accepted | `pnpm dev` proxies to the live project — browser testing is read-only by default |
 | [0006](0006-never-hand-authenticated-sessions-to-peer-agents.md) | Never hand authenticated sessions to peer agents | Accepted | No `state-save`, profile path, or credential env-var names to another agent |
+| [0007](0007-knip-is-the-dead-code-gate.md) | Knip is the dead-code gate, ratcheted inside the build job | Accepted | knip@6 twice in `build` with pinned --max-issues; Deno excluded by project negation; public barrels tagged `@public` |
+| [0008](0008-keep-the-hosted-mcp-server-hand-rolled.md) | Keep the hosted MCP server hand-rolled; add the 2026-07-28 era in place | Accepted | Dual-era handler; no SDK in the edge bundle; npm `packages/mcp` moves to SDK v2 |
+| [0009](0009-a2a-1-0-wire-format-with-0-3-aliases.md) | Speak the A2A 1.0 wire format, keep 0.3 names as aliases | Accepted | `taskPushNotificationConfig`, StreamResponse callbacks, `agent-card.json`, old paths aliased |
+| [0010](0010-voice-intake-openai-stt-under-byok-with-a-narrow-scope.md) | Voice intake: OpenAI STT under BYOK, narrow `voice:write` scope, audio deleted after transcription | Accepted | gpt-transcribe then gpt-4o-mini-transcribe; no Groq; verbatim confirmation; privileged verbs refused |
+| [0011](0011-telegram-bot-is-the-android-voice-inbox.md) | A Telegram bot is the Android voice inbox | Accepted | No public Assistant/Gemini path; per-project bot + secret-token webhook + chat binding |
+| [0012](0012-web-push-via-pushforge-with-an-endpoint-allowlist.md) | Web Push on Web Crypto behind an endpoint allowlist | Accepted, library choice reversed | `@pushforge/builder` emits pre-standard `aesgcm`, not RFC 8291 `aes128gcm`, so RFC 8291/8292 are implemented directly; fcm / mozilla / apple / wns hosts only; VAPID as edge secrets |
+| [0013](0013-cloud-coding-agents-run-through-edge-adapters.md) | Cloud coding agents dispatch through edge adapters; `packages/agents` archived | Accepted | Cursor v1 + v0 webhook + poller, GitHub Agent Tasks, Anthropic stub; unknown agent = 400 |
+| [0014](0014-mcp-npm-package-runs-on-sdk-v2.md) | The published MCP package runs on SDK v2; the hosted server stays hand-rolled | Accepted | Splits the decision from 0008 — no bundle cap on npm; `serveStdio` is what serves 2026-07-28; unknown tool now `-32602` |
 
 ## Conventions
 

@@ -62,6 +62,10 @@ import { registerSdkUpgradeRoutes } from './routes/sdk-upgrade.ts';
 import { registerBootstrapRoutes } from './routes/bootstrap.ts';
 import { registerIdentitySecretRoutes } from './routes/identity-secret.ts';
 import { registerSessionRoutes } from './routes/sessions.ts';
+import { registerSlackEventsRoutes } from './routes/slack-events.ts';
+import { registerTelegramAdminRoutes } from './routes/telegram-admin.ts';
+import { registerIntakeVoiceRoutes } from './routes/intake-voice.ts';
+import { registerPushRoutes } from './routes/push.ts';
 
 ensureSentry('api');
 
@@ -590,6 +594,10 @@ registerSdkUpgradeRoutes(app);
 registerBootstrapRoutes(app);
 registerIdentitySecretRoutes(app);
 registerSessionRoutes(app);
+registerSlackEventsRoutes(app);
+registerTelegramAdminRoutes(app);
+registerIntakeVoiceRoutes(app);
+registerPushRoutes(app);
 
 registerA2ATaskRoutes(app);
 

@@ -67,6 +67,10 @@ Also deploy **`mcp`** if you use the hosted MCP transport:
 
 ```bash
 npx supabase functions deploy mcp --no-verify-jwt
+# Voice loop + cloud agents (2026-09-12): all authenticate inside the handler
+npx supabase functions deploy telegram-webhook --no-verify-jwt
+npx supabase functions deploy cursor-webhook --no-verify-jwt
+npx supabase functions deploy agent-status-poll --no-verify-jwt
 ```
 
 Deploy every directory under `packages/server/supabase/functions/` except `_shared`, or mirror [`.github/workflows/deploy-edge-functions.yml`](.github/workflows/deploy-edge-functions.yml). Run `pnpm docs-stats` for the current function count.
@@ -104,6 +108,15 @@ npx supabase functions deploy experiment-analyzer --no-verify-jwt
 # Phase 6 — Anomaly detection
 npx supabase functions deploy anomaly-detector --no-verify-jwt
 ```
+
+#### Voice intake, Telegram and cloud agents
+
+- `POST /v1/intake/voice` (in `api`) takes a project API key with the `voice:write` scope; enable `voice_intake_enabled` per project in the console first. Transcription uses the project's OpenAI key (`gpt-transcribe`, then `gpt-4o-mini-transcribe`); audio is deleted after transcription unless `voice_audio_retention_days` is set.
+- Telegram: create a bot with @BotFather, paste the token in the project's Voice intake settings (stored as a vault reference), call `POST /v1/admin/telegram/setup` (registers the webhook at `<SUPABASE_URL>/functions/v1/telegram-webhook?project=<id>` with a secret token), mint a bind code with `POST /v1/admin/telegram/bind-code`, then send `/start <code>` to the bot.
+- Slack: re-install the app from `packages/plugin-slack-app/manifest.json` (new scopes `files:read`, `commands`, history events) after deploying `api`; Slack verifies the Events URL on save.
+- Cursor Cloud: `autofix_agent = 'cursor_cloud'` or `mushi fix --agent cursor_cloud`; uses the v1 API with the project's Cursor key. Completion is polled by `agent-status-poll` (cron `5-55/5`); set `CURSOR_USE_V0_WEBHOOK=1` to use the v0 callback into `cursor-webhook` instead (secret derived from `MUSHI_INTERNAL_CALLER_SECRET`).
+- GitHub cloud agent: `autofix_agent = 'github_cloud_agent'`; needs a user-to-server token (fine-grained PAT with "Agent tasks" read+write plus Contents and Pull requests, or a GitHub App user token) stored as `project_settings.github_user_token_ref` or `GITHUB_TOKEN`, and a Copilot plan with the coding-agent policy enabled. Installation tokens are rejected by GitHub.
+- Web Push: set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (mailto:) as edge secrets; the installed console PWA subscribes devices.
 
 #### Required secrets for closed-loop functions
 

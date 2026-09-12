@@ -15,20 +15,27 @@ export type ParseResult<T> =
   | { ok: true; envelope: T }
   | { ok: false; reason: string }
 
-const KNOWN_EVENTS = new Set<MushiEventName>([
+export const KNOWN_EVENTS: ReadonlySet<MushiEventName> = new Set<MushiEventName>([
   'report.created',
   'report.classified',
   'report.status_changed',
   'report.commented',
   'report.dedup_grouped',
+  'fix.requested',
   'fix.proposed',
   'fix.applied',
   'fix.failed',
+  // QA Coverage (story monitoring)
+  'qa_story.failed',
+  'qa_story.passed',
+  'qa_story.recovered',
   'judge.score_recorded',
   'sla.breached',
   // Skill-driven triage pipelines
   'skill_pipeline.step.dispatched',
-  // Rewards program (P1+)
+  // Linear issue sync
+  'linear.issue.updated',
+  // Rewards program (P1+) — delivered via reward host webhooks, see types.ts
   'reward.points_awarded',
   'reward.tier_changed',
   'reward.payout_requested',

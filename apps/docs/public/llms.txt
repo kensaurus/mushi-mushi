@@ -112,6 +112,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Runtime config](https://kensaur.us/mushi-mushi/docs/concepts/runtime-config)
 - [Where the report button lives](https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes)
 - [Cursor integration](https://kensaur.us/mushi-mushi/docs/integrations/cursor)
+- [Voice intake](https://kensaur.us/mushi-mushi/docs/integrations/voice-intake)
 - [Launch Week](https://kensaur.us/mushi-mushi/docs/launch-week)
 - [Migration guides](https://kensaur.us/mushi-mushi/docs/migrations)
 - [BugHerd → Mushi](https://kensaur.us/mushi-mushi/docs/migrations/bugherd-to-mushi)

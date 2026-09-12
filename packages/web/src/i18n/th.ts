@@ -39,6 +39,8 @@ export const th: MushiLocale = {
       confusing: 'เข้าใจยากหรือนำทางยาก',
       other: 'อย่างอื่น',
     },
+    moreCategoriesLabel: 'ประเภทปัญหาอื่น ๆ',
+    moreCategoriesCount: 'อีก {n} รายการ',
   },
   step2: {
     heading: 'เกิดอะไรขึ้น?',
@@ -174,6 +176,14 @@ export const th: MushiLocale = {
     featureRequest: {
       label: 'ขอฟีเจอร์',
       description: 'เสนอการเปลี่ยนแปลง',
+    },
+    betaStrip: {
+      defaultMessage: '{appName} อยู่ระหว่างการพัฒนาช่วงต้น',
+      contactHint: 'รายงานจะส่งไปที่ {email} · ทีมงานตรวจสอบทุกฉบับ',
+      ariaLabel: 'สถานะเบต้า',
+    },
+    changelog: {
+      whatsNew: 'มีอะไรใหม่ใน {version}',
     },
     poweredBy: 'Powered by Mushi v{version}',
   },

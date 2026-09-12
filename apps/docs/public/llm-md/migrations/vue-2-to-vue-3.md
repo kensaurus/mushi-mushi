@@ -40,50 +40,7 @@ brings you onto the adapter.
 |-------------------------------|--------------------------------------------------|
 | `Mushi.init({ projectId, apiKey })` in main.js | Same `Mushi.init(...)` PLUS `app.use(MushiPlugin, { projectId, apiKey })` |
 | Manually attach `Vue.config.errorHandler = ...` to forward to Mushi | The adapter wires Vue 3's `app.config.errorHandler` automatically |
-| Reach into `Mushi` directly from any component | Use `useMushi()` composable inside `` |
-
-## Migration checklist
-
-{`# Vue 3 ships a compat build that runs Vue 2 code with deprecation warnings:
-npm install vue@^3
-# Then in your build config, alias 'vue' to '@vue/compat'
-# This lets you migrate incrementally without flag-day risk`} },
-    { id: 'fix-warnings', label: 'Fix every Vue 2-style deprecation warning', content: <>Each warning links to its migration page. Common ones: filters removed, $on/$off/$once removed, functional: true removed. Work through them all before removing the compat alias.</> },
-    { id: 'remove-compat', label: 'Remove @vue/compat alias once warnings are zero', content: <>Now you're on real Vue 3.</> },
-    { id: 'router', label: 'Upgrade Vue Router 3 → 4', content: {`npm install vue-router@^4
-
-// router.js
-- import VueRouter from 'vue-router'
-- Vue.use(VueRouter)
-- export default new VueRouter({ routes })
-+ import { createRouter, createWebHistory } from 'vue-router'
-+ export default createRouter({ history: createWebHistory(), routes })`} },
-    { id: 'state', label: 'Decide: Vuex 4 or Pinia', content: <>Vuex 4 is a Vue-3-compatible drop-in. Pinia is the new recommended state library — better TS, smaller, simpler. If you're touching state code anyway, Pinia is worth the switch.</> },
-    { id: 'install-mushi-adapter', label: 'Install the Mushi Vue adapter', content: {`npm install @mushi-mushi/vue @mushi-mushi/web`} },
-    { id: 'wire-mushi', label: 'Replace direct Mushi.init usage with the adapter', content: {`// main.ts
-
-const credentials = {
-  projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
-  apiKey:    import.meta.env.VITE_MUSHI_API_KEY,
-}
-
-const app = createApp(App)
-
-// 1. Vue plugin: wires useMushi() composable + Vue 3 errorHandler
-app.use(MushiPlugin, credentials)
-
-// 2. Web SDK: actually mounts the floating widget + capture pipeline
-Mushi.init(credentials)
-
-app.mount('#app')`} },
-    { id: 'use-composable', label: 'Migrate components to useMushi()', content: {`
-
-const mushi = useMushi()
-
-async function reportIssue() {
-  await mushi.submitReport({ description: 'Issue from Vue component' })
-}
-`} },
+| Reach into `Mushi` directly from any component | Use `useMushi()` composable inside ``} },
     { id: 'remove-vue2-mushi', label: 'Remove any Vue-2-era Mushi error-handler shims', content: <>If you previously did Vue.config.errorHandler = (err) =&gt; Mushi.captureException(err), delete it. The adapter installs its own app.config.errorHandler that calls Mushi automatically.</> },
     { id: 'verify', label: 'Smoke-test: throw an error, verify it lands as a Mushi report', content: <>Throw inside a Vue lifecycle hook. The adapter forwards it to Mushi as a report tagged with source: vue. Confirm it appears in the admin console.</> },
   ]}

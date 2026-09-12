@@ -8,8 +8,11 @@
 //
 // On quest completion:
 //   - Inserts bonus points into end_user_activity.
-//   - Fires dispatchPluginEvent('reward.quest_completed').
-//   - Dispatches host webhook if configured.
+//   - Delivers a `reward.quest_completed` host webhook via
+//     dispatchRewardWebhook (_shared/reward-webhooks.ts) when the project
+//     has one configured. Reward events never travel the marketplace
+//     plugin bus (dispatchPluginEvent) — see the note on MushiEventName in
+//     _shared/plugins.ts.
 // ============================================================
 
 import { getServiceClient } from './db.ts'

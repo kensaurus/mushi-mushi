@@ -90,6 +90,14 @@ import { checkAutofixBudget } from '../_shared/autofix-budget.ts';
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
 import { notifyTeamFixEvent } from '../_shared/team-notify.ts';
 import { notifyReportStatusTransition } from '../_shared/report-status-notify.ts';
+import {
+  applyCloudAgentOutcome,
+  buildCloudAgentPrompt,
+  cloudAgentBranchName,
+  getCloudAgentAdapter,
+  isDispatchableCloudAgent,
+  recordCloudAgentDispatched,
+} from '../_shared/agent-adapters.ts';
 
 // ----------------------------------------------------------------------------
 // Structured fix output lives in `_shared/fix-schema.ts` so the regression
@@ -250,10 +258,18 @@ Deno.serve(
     // migration default and maps to the LLM path (Anthropic primary, OpenAI
     // fallback) — the MCP-hosted Claude Code shell lives in @mushi-mushi/agents
     // and isn't reachable from Deno edge yet. 'rest_fix_worker' is the
-    // explicit opt-in for this same path. Anything else is the Node-only
-    // orchestrator territory and must be rejected rather than silently
-    // falling through.
-    const SUPPORTED_AGENTS = new Set(['claude_code', 'rest_fix_worker', 'llm']);
+    // explicit opt-in for this same path. 'cursor_cloud' and
+    // 'github_cloud_agent' hand the report to a vendor-hosted repo agent via
+    // _shared/agent-adapters.ts (step 2b below) and finish asynchronously.
+    // Anything else is the Node-only orchestrator territory and must be
+    // rejected rather than silently falling through.
+    const SUPPORTED_AGENTS = new Set([
+      'claude_code',
+      'rest_fix_worker',
+      'llm',
+      'cursor_cloud',
+      'github_cloud_agent',
+    ]);
 
     // Spec-traceability (whitepaper §2.10): recover the inventory anchor.
     // classify-report writes a `reports_against` graph edge from the report
@@ -335,7 +351,8 @@ Deno.serve(
           .select(
             'project_id, autofix_agent, autofix_max_lines, sandbox_provider, ' +
               'github_repo_url, codebase_repo_url, fix_branch_template, ' +
-              'autofix_max_spend_usd, autofix_max_dispatches_per_day, autofix_approval_cost_threshold_usd',
+              'autofix_max_spend_usd, autofix_max_dispatches_per_day, autofix_approval_cost_threshold_usd, ' +
+              'cursor_default_model',
           )
           .eq('project_id', dispatch.project_id)
           .single(),
@@ -399,6 +416,31 @@ Deno.serve(
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
+      }
+
+      // ---- 2b. Cloud agent hand-off (cursor_cloud / github_cloud_agent) ------
+      // Repo-level agents run in the vendor's sandbox against the full
+      // checkout, so the local sandbox policy, the RAG context floor and the
+      // structured-output LLM call below do not apply. We build the SAME user
+      // prompt the LLM path gets (report, inventory anchor, whatever RAG
+      // context exists), hand it to the adapter, stamp the vendor ids on the
+      // attempt and return. The dispatch row stays 'running' — the sweeper
+      // only re-queues 'queued' rows — until cursor-webhook,
+      // agent-status-poll or webhooks-github-indexer closes it through
+      // applyCloudAgentOutcome. Failures throw into the catch below, which
+      // already fails the attempt + job and notifies the team.
+      if (isDispatchableCloudAgent(requestedAgent)) {
+        const cloudResponse = await dispatchToCloudAgent(db, log, {
+          dispatch,
+          settings,
+          report,
+          requestedAgent,
+          fixAttemptId,
+          inventoryAnchor,
+          trace,
+        });
+        await trace.end();
+        return cloudResponse;
       }
 
       // Agent pre-flight: fix-worker can only run the LLM path today. Any
@@ -1270,6 +1312,14 @@ function categorizeFailure(err: unknown, msg: string): string {
   // Sandbox lifecycle — these can come from agents/sandbox or claude code adapters.
   if (m.includes('sandbox') && m.includes('timeout')) return 'sandbox_timeout';
   if (m.includes('sandbox')) return 'sandbox_error';
+  // Cursor Cloud (agent-adapters.ts / cursor-cloud.ts). CursorApiError
+  // messages start with "Cursor API <status> <code>:"; the key-missing
+  // pre-flight says "Cursor API key not configured".
+  if (m.includes('cursor api') || m.includes('cursor run') || m.includes('cursor agent')) {
+    if (m.includes('invalid_model') || m.includes('invalid model')) return 'cursor_invalid_model';
+    if (m.includes('validation_error')) return 'cursor_validation_error';
+    return 'cursor_api_error';
+  }
   // GitHub REST surface — every PR-creation path goes through Octokit and
   // throws a `Request failed with status code 4xx` Error.
   if (m.includes('github') || m.includes('octokit') || m.includes('pull_request')) {
@@ -1486,6 +1536,238 @@ async function markCrossRepoSpan(
     siblingCount: siblings.length,
     primaryRepoId: primaryRepoRow?.id ?? null,
   });
+}
+
+interface CloudDispatchContext {
+  dispatch: {
+    id: string;
+    project_id: string;
+    report_id: string;
+    dispatch_metadata: unknown;
+  };
+  settings: Record<string, unknown> | null;
+  report: Record<string, unknown>;
+  requestedAgent: 'cursor_cloud' | 'github_cloud_agent';
+  fixAttemptId: string;
+  inventoryAnchor: InventoryAnchor | null;
+  trace: ReturnType<typeof createTrace>;
+}
+
+/**
+ * Step 2b: hand the report to a vendor-hosted repo agent (Cursor Cloud v1 or
+ * GitHub Copilot Agent Tasks) through `_shared/agent-adapters.ts` and return
+ * immediately. Writes, in order:
+ *   1. fix_attempts.branch_name (BEFORE the vendor call, so a pull_request
+ *      webhook that beats our own bookkeeping can still be matched by head
+ *      ref in webhooks-github-indexer);
+ *   2. the vendor ids (cursor_agent_id / cursor_run_id or github_task_id /
+ *      github_task_url) + external_agent_ref on the attempt, status 'running';
+ *   3. a `dispatched` fix_events breadcrumb;
+ *   4. the `fix.requested` plugin event (carries externalAgentId so the Cursor
+ *      marketplace plugin does not start a second agent);
+ *   5. the team 'fix_dispatched' card for dispatches that did NOT come through
+ *      dispatchFixForReport (those already posted one).
+ * Any thrown error lands in the caller's catch, which fails the attempt +
+ * job, stamps the report and notifies — same as the LLM path.
+ */
+async function dispatchToCloudAgent(
+  db: ReturnType<typeof getServiceClient>,
+  log: Logger,
+  ctx: CloudDispatchContext,
+): Promise<Response> {
+  const { dispatch, settings, report, requestedAgent, fixAttemptId, inventoryAnchor, trace } = ctx;
+  const dispatchMeta = (dispatch.dispatch_metadata as Record<string, unknown> | null) ?? {};
+  const targetRepoId = typeof dispatchMeta.target_repo_id === 'string' ? dispatchMeta.target_repo_id : null;
+  const repo = await resolveRepo(db, dispatch.project_id, settings, targetRepoId);
+  if (!repo) {
+    throw new Error(
+      'No GitHub repo configured for this project. Set Settings → Integrations → GitHub repo.',
+    );
+  }
+
+  // RAG is a hint for a repo-level agent, never a gate — it has the whole
+  // checkout. Best-effort, and an indexing failure must not block dispatch.
+  let codeContext = '';
+  try {
+    const ragSpan = trace.span('context.rag');
+    const ragResult = await getRelevantCodeWithReason(db, dispatch.project_id, {
+      symptom:
+        (report.summary as string | undefined) ??
+        (report.description as string | undefined)?.slice(0, 200) ??
+        '',
+      action: (report.user_intent as string | undefined) ?? '',
+      component: (report.component as string | undefined) ?? '',
+    });
+    codeContext = formatCodeContext(ragResult.files);
+    ragSpan.end({ fileCount: ragResult.files.length, reason: ragResult.reason });
+  } catch (err) {
+    log.warn('RAG context unavailable for cloud agent (non-fatal)', {
+      reportId: dispatch.report_id,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  const branchName = cloudAgentBranchName(
+    requestedAgent,
+    dispatch.report_id,
+    (report.category as string | null | undefined) ?? null,
+  );
+  const basePrompt = buildUserPrompt(report, settings, codeContext, repo, [], inventoryAnchor, '');
+  const prompt = buildCloudAgentPrompt(basePrompt, {
+    reportId: dispatch.report_id,
+    repoOwner: repo.owner,
+    repoName: repo.repo,
+    baseRef: repo.defaultBranch,
+    branchName,
+    kind: requestedAgent,
+  });
+  const repoUrl = `https://github.com/${repo.owner}/${repo.repo}`;
+  const model =
+    requestedAgent === 'cursor_cloud' && typeof settings?.cursor_default_model === 'string'
+      ? settings.cursor_default_model
+      : undefined;
+  const now = new Date().toISOString();
+
+  await db
+    .from('fix_attempts')
+    .update({ branch_name: branchName, started_at: now })
+    .eq('id', fixAttemptId);
+
+  const adapter = getCloudAgentAdapter(requestedAgent);
+  const dispatchSpan = trace.span('cloud.dispatch');
+  const result = await adapter.dispatch({
+    db,
+    projectId: dispatch.project_id,
+    reportId: dispatch.report_id,
+    dispatchId: dispatch.id,
+    attemptId: fixAttemptId,
+    repoUrl,
+    baseRef: repo.defaultBranch,
+    prompt,
+    branchName,
+    model,
+    name: `Mushi fix ${dispatch.report_id.slice(0, 8)}`,
+  });
+  dispatchSpan.end({
+    agent: requestedAgent,
+    externalAgentId: result.externalAgentId,
+    externalRunId: result.externalRunId ?? null,
+  });
+
+  const attemptUpdate: Record<string, unknown> = {
+    status: 'running',
+    branch_name: branchName,
+    external_agent_ref: {
+      ...(result.ref ?? {}),
+      kind: requestedAgent,
+      external_agent_id: result.externalAgentId,
+      external_run_id: result.externalRunId ?? null,
+      status_url: result.statusUrl ?? null,
+      branch_name: branchName,
+      dispatched_at: now,
+    },
+  };
+  if (requestedAgent === 'cursor_cloud') {
+    attemptUpdate.cursor_agent_id = result.externalAgentId;
+    if (result.externalRunId) attemptUpdate.cursor_run_id = result.externalRunId;
+  } else {
+    attemptUpdate.github_task_id = result.externalAgentId;
+    attemptUpdate.github_task_url = result.statusUrl ?? null;
+  }
+  const { error: attemptUpdateErr } = await db
+    .from('fix_attempts')
+    .update(attemptUpdate)
+    .eq('id', fixAttemptId);
+  if (attemptUpdateErr) {
+    // The vendor agent is already running; losing its id would orphan it.
+    throw new Error(`Cloud agent dispatched (${result.externalAgentId}) but fix_attempts update failed: ${attemptUpdateErr.message}`);
+  }
+
+  // Keep the job 'running' (sweeper-safe) and expose the vendor pointer to
+  // the console / A2A GET without a join.
+  await db
+    .from('fix_dispatch_jobs')
+    .update({
+      dispatch_metadata: {
+        ...dispatchMeta,
+        cloud_agent: {
+          kind: requestedAgent,
+          externalAgentId: result.externalAgentId,
+          externalRunId: result.externalRunId ?? null,
+          statusUrl: result.statusUrl ?? null,
+          branchName,
+        },
+      },
+    })
+    .eq('id', dispatch.id);
+
+  const target = {
+    attemptId: fixAttemptId,
+    projectId: dispatch.project_id,
+    reportId: dispatch.report_id,
+    agent: requestedAgent,
+  };
+  await recordCloudAgentDispatched(db, target, result);
+
+  dispatchPluginEventDetached(db, dispatch.project_id, 'fix.requested', {
+    report: {
+      id: dispatch.report_id,
+      status: typeof report.status === 'string' ? report.status : 'classified',
+    },
+    fix: {
+      id: fixAttemptId,
+      status: 'requested',
+      agent: requestedAgent,
+      externalAgentId: result.externalAgentId,
+      externalRunId: result.externalRunId ?? null,
+      statusUrl: result.statusUrl ?? null,
+      branch: branchName,
+      pullRequestUrl: result.prUrl ?? undefined,
+    },
+    reportId: dispatch.report_id,
+    dispatchId: dispatch.id,
+    attemptId: fixAttemptId,
+    agent: requestedAgent,
+    externalAgentId: result.externalAgentId,
+    prUrl: result.prUrl ?? null,
+  }).catch((e) => log.warn('Plugin dispatch failed', { event: 'fix.requested', err: String(e) }));
+
+  if (typeof dispatchMeta.source !== 'string') {
+    void notifyTeamFixEvent(db, dispatch.project_id, dispatch.report_id, 'fix_dispatched', {
+      branch: branchName,
+    }).catch((e) =>
+      log.warn('Team fix notification failed', { event: 'fix_dispatched', err: String(e) }),
+    );
+  }
+
+  // Rare: the vendor already reports a PR (an agent_id_conflict reuse of a
+  // run that finished between invokes). Close the loop right away.
+  if (result.prUrl) {
+    await applyCloudAgentOutcome(db, target, { kind: 'pr_opened', prUrl: result.prUrl, branch: branchName });
+  }
+
+  log.info('cloud.dispatched', {
+    dispatchId: dispatch.id,
+    fixAttemptId,
+    agent: requestedAgent,
+    externalAgentId: result.externalAgentId,
+    externalRunId: result.externalRunId ?? null,
+    branchName,
+  });
+
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      dispatched: true,
+      agent: requestedAgent,
+      fixAttemptId,
+      externalAgentId: result.externalAgentId,
+      externalRunId: result.externalRunId ?? null,
+      statusUrl: result.statusUrl ?? null,
+      prUrl: result.prUrl ?? null,
+    }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  );
 }
 
 async function failDispatch(

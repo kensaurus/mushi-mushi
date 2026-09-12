@@ -78,6 +78,7 @@ export type NavIconKey =
   | 'user'
   | 'activity'
   | 'overview'
+  | 'mic'
 
 export interface NavRegistryEntry {
   id: string
@@ -384,6 +385,17 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     iconKey: 'git',
     paletteDescription: 'Every auto-fix branch and PR across the connected GitHub repo, with CI status.',
     paletteKeywords: ['repo', 'repository', 'branch', 'branches', 'git', 'github', 'pr', 'pull request', 'ci', 'checks', 'merge', 'activity'],
+    paletteGroup: 'Do',
+  },
+  {
+    id: 'nav:voice',
+    path: '/voice',
+    label: 'Voice',
+    sectionId: 'do',
+    pdcaStage: 'do',
+    iconKey: 'mic',
+    paletteDescription: 'Talk a bug or a fix request from your phone; confirm the transcript; the draft PR comes back as a push.',
+    paletteKeywords: ['voice', 'mic', 'microphone', 'record', 'dictate', 'phone', 'audio', 'telegram', 'push', 'notify', 'pwa'],
     paletteGroup: 'Do',
   },
   {

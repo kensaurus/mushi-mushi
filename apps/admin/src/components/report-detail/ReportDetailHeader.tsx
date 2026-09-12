@@ -73,7 +73,19 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
           </MetaChip>
           <MetaChip
             label="Reporter"
-            to={`/reports?reporter=${encodeURIComponent(report.reporter_token_hash)}`}
+            title={
+              report.end_user_id
+                ? 'All reports from this user (across sessions and devices)'
+                : 'All reports from this reporter token (one browser/device)'
+            }
+            // Identified users filter by the durable end_users FK (stable
+            // across devices); anonymous reporters fall back to the
+            // per-device token hash.
+            to={
+              report.end_user_id
+                ? `/reports?end_user=${encodeURIComponent(report.end_user_id)}`
+                : `/reports?reporter=${encodeURIComponent(report.reporter_token_hash)}`
+            }
           >
             {report.reporter_identity?.display_name ?? report.reporter_display_name ? (
               <span className="max-w-48 truncate">
@@ -93,8 +105,13 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
             <span className="text-fg-faint">· view all</span>
           </MetaChip>
           {report.session_id && (
-            <MetaChip label="Session" title={report.session_id}>
+            <MetaChip
+              label="Session"
+              title={`All reports from session ${report.session_id}`}
+              to={`/reports?session=${encodeURIComponent(report.session_id)}`}
+            >
               <span className="font-mono">{report.session_id.slice(0, 8)}</span>
+              <span className="text-fg-faint">· view all</span>
             </MetaChip>
           )}
           {pageRoute && (

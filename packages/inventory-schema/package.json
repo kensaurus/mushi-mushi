@@ -60,6 +60,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "clean": "rm -rf dist .turbo",
+    "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -68,7 +69,9 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
+    "eslint": "^10.6.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"

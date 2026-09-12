@@ -318,3 +318,21 @@ verify_jwt = false
 # verification.
 [functions.webhooks-linear-agent]
 verify_jwt = false
+
+# telegram-webhook receives Telegram Bot API updates (voice notes, /start
+# bindings, inline-keyboard confirmations) from Telegram's servers — no
+# Supabase JWT. Auth inside via the X-Telegram-Bot-Api-Secret-Token header
+# (sha256 compared against project_settings.telegram_webhook_secret_hash).
+[functions.telegram-webhook]
+verify_jwt = false
+
+# cursor-webhook receives Cursor Cloud Agent v0 statusChange callbacks — no
+# Supabase JWT. Auth inside via X-Webhook-Signature (sha256= HMAC over the raw
+# body with the per-project secret derived from MUSHI_INTERNAL_CALLER_SECRET).
+[functions.cursor-webhook]
+verify_jwt = false
+
+# agent-status-poll is invoked by pg_cron (mushi-agent-status-poll, 5-55/5)
+# through the internal caller token; requireServiceRoleAuth inside.
+[functions.agent-status-poll]
+verify_jwt = false

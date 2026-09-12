@@ -48,7 +48,13 @@ describe('MushiNodeClient.captureReport', () => {
     expect(body['projectId']).toBe('proj-test')
     expect(body['category']).toBe('bug')
     expect(body['description']).toBe('Something went wrong')
-    expect((init.headers as Record<string, string>)['X-Mushi-Api-Key']).toBe('test-key')
+    expect(body['sdkPackage']).toBe('@mushi-mushi/node')
+    expect(body['sdkVersion']).toMatch(/^\d+\.\d+\.\d+/)
+    const headers = init.headers as Record<string, string>
+    expect(headers['X-Mushi-Api-Key']).toBe('test-key')
+    expect(headers['X-Mushi-SDK-Package']).toBe('@mushi-mushi/node')
+    expect(headers['X-Mushi-SDK-Version']).toBe(body['sdkVersion'])
+    expect(headers['User-Agent']).toBe(`@mushi-mushi/node/${body['sdkVersion']}`)
   })
 
   it('captureException wraps an Error and marks severity critical', async () => {
@@ -79,16 +85,46 @@ describe('MushiNodeClient.captureReport', () => {
 
   it('returns ok:false and does not throw on network error', async () => {
     fetchSpy.mockRejectedValue(new TypeError('network failure'))
-    const client = new MushiNodeClient(BASE_OPTIONS)
+    const client = new MushiNodeClient({ ...BASE_OPTIONS, maxRetries: 0 })
     const result = await client.captureReport({ description: 'test' })
     expect(result.ok).toBe(false)
   })
 
   it('returns ok:false and does not throw on HTTP 500', async () => {
-    fetchSpy.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) })
-    const client = new MushiNodeClient(BASE_OPTIONS)
+    fetchSpy.mockResolvedValue({ ok: false, status: 500, headers: { get: () => null }, json: async () => ({}) })
+    const client = new MushiNodeClient({ ...BASE_OPTIONS, maxRetries: 0 })
     const result = await client.captureReport({ description: 'test' })
     expect(result.ok).toBe(false)
+  })
+
+  it('retries a 500 then succeeds', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    fetchSpy
+      .mockResolvedValueOnce({ ok: false, status: 500, headers: { get: () => null }, json: async () => ({}) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { reportId: 'r-retry' } }),
+      })
+    const client = new MushiNodeClient({ ...BASE_OPTIONS, maxRetries: 1 })
+    const result = await client.captureReport({ description: 'retry me' })
+    expect(result.ok).toBe(true)
+    expect(result.reportId).toBe('r-retry')
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+    vi.useRealTimers()
+  })
+
+  it('trips the circuit after consecutive unreachable failures', async () => {
+    fetchSpy.mockResolvedValue({ ok: false, status: 503, headers: { get: () => null }, json: async () => ({}) })
+    const client = new MushiNodeClient({
+      ...BASE_OPTIONS,
+      maxRetries: 0,
+      circuitBreaker: { enabled: true, threshold: 2, cooldownMs: 30_000 },
+    })
+    expect((await client.captureReport({ description: 'a' })).ok).toBe(false)
+    expect((await client.captureReport({ description: 'b' })).ok).toBe(false)
+    const before = fetchSpy.mock.calls.length
+    expect((await client.captureReport({ description: 'c' })).ok).toBe(false)
+    expect(fetchSpy.mock.calls.length).toBe(before)
   })
 })
 

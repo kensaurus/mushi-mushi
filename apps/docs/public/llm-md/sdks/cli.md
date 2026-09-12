@@ -69,9 +69,19 @@ Console URL resolution: `MUSHI_CONSOLE_URL` → saved config → localhost `:646
 mushi doctor                  # local: config, endpoint, SDK install
 mushi doctor --server         # + 4 dispatch checks (GitHub, codebase, Anthropic, autofix)
 mushi doctor --ingest         # + SDK heartbeat / first-report ingest steps
+mushi doctor --host-app       # + host wiring: env vars, MCP config, hash-router capture
 mushi doctor --qa-stories     # + QA story setup warnings (needs --server credentials)
+mushi doctor --full           # run every check category in one pass
 mushi doctor --json           # machine-readable; exits 1 if any check fails
 ```
+
+`--host-app` (also included in `--full`) scans your source for hash-routed SPAs
+— `HashRouter`, `createHashRouter`, `location.hash`, `hashchange` — and, when it
+finds them, advises adding `/#/`-prefixed `discoverInventory.routeTemplates` to
+your `Mushi.init()` so parametric hash routes group in the Inventory instead of
+inflating it one row per slug. It's advisory only (never fails the run) and
+stays silent when no hash routing is present. See
+[Hash-routed SPAs](/sdks/web#hash-routed-spas-eg-react-router-hashrouter-backbone-legacy-apps).
 
 ### `mushi nudge`
 

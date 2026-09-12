@@ -41,7 +41,11 @@ Your AI wrote it. Mushi tells you why it broke.</>}
 
 {LANDING_QUICKSTART_INTRO}
 
-## Where Sentry stops, this picks up.
+## One queue. Sentry flows in, fixes flow out.
+
+Sentry tells you what threw. Mushi ingests that — plus the bugs that never
+throw — explains each one in plain English, and closes the loop with a fix your
+agent can ship. With or without Sentry.
 
   
 

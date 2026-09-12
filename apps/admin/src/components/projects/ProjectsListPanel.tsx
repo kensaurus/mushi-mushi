@@ -79,6 +79,8 @@ export interface ProjectsListPanelProps {
   revealedKeys: Record<string, { key: string; scopes: string[] }>
   sdkOpenOverride: Record<string, boolean>
   keyScopePreset: Record<string, ScopePresetId>
+  /** Preset shown when the user has not picked one for a row (deep-linkable via ?keyScope=). */
+  defaultKeyScopePreset?: ScopePresetId
   renamingId: string | null
   renameDraft: string
   renamingProject: boolean
@@ -108,6 +110,7 @@ export function ProjectsListPanel({
   revealedKeys,
   sdkOpenOverride,
   keyScopePreset,
+  defaultKeyScopePreset = 'sdk',
   renamingId,
   renameDraft,
   renamingProject,
@@ -330,13 +333,13 @@ export function ProjectsListPanel({
                   id={`key-scope-${project.id}`}
                   data-testid={`key-scope-${project.id}`}
                   className="text-2xs bg-surface-raised border border-edge rounded-sm px-2 py-1 text-fg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
-                  value={keyScopePreset[project.id] ?? 'sdk'}
+                  value={keyScopePreset[project.id] ?? defaultKeyScopePreset}
                   onChange={(e) =>
                     onKeyScopePresetChange(project.id, e.target.value as ScopePresetId)
                   }
                   disabled={isBusy}
                   title={
-                    SCOPE_PRESETS.find((p) => p.id === (keyScopePreset[project.id] ?? 'sdk'))
+                    SCOPE_PRESETS.find((p) => p.id === (keyScopePreset[project.id] ?? defaultKeyScopePreset))
                       ?.hint
                   }
                 >

@@ -1,8 +1,10 @@
 /**
  * FILE: packages/server/supabase/functions/mcp/index.ts
  *
- * MCP (Model Context Protocol) Streamable HTTP transport — 2025-03-26 spec.
- * https://modelcontextprotocol.io/specification/2025-03-26/basic/transports
+ * MCP (Model Context Protocol) Streamable HTTP transport — dual era.
+ *   Legacy : 2024-11-05 · 2025-03-26 · 2025-06-18 · 2025-11-25
+ *   Modern : 2026-07-28 (current)
+ * https://modelcontextprotocol.io/specification/2026-07-28/basic/transports
  *
  * Why this file exists
  * ────────────────────
@@ -16,39 +18,72 @@
  *
  * What it implements
  * ──────────────────
- * The Streamable HTTP transport is a SINGLE endpoint that handles three
- * verbs:
+ * One endpoint, hand-rolled JSON-RPC (no SDK in the edge bundle — see
+ * "Tool implementation strategy"). The era of every request is decided by
+ * the `MCP-Protocol-Version` header (rules in `_shared/mcp-protocol.ts`).
  *
- *   POST /functions/v1/mcp
- *     Body: a JSON-RPC 2.0 request (or notification).
- *     Headers: Accept: application/json, text/event-stream
- *     Response:
- *       - For requests with a result: Content-Type: application/json
- *         and the JSON-RPC response in the body.
- *       - For requests that need to stream multiple messages (currently
- *         only `tools/call` with progress notifications): Content-Type:
- *         text/event-stream; one frame per JSON-RPC message.
- *       - For notifications: 202 Accepted, empty body.
+ *   LEGACY  (header absent ⇒ assumed 2025-03-26, or one of the four values)
+ *     POST   `initialize` negotiates the version (the client's version when
+ *            we support it, else the newest legacy one). Then
+ *            notifications/initialized, ping, tools/list|call,
+ *            resources/list|read|subscribe|unsubscribe, prompts/list|get.
+ *            JSON-RPC batch arrays are accepted ONLY for 2024-11-05 and
+ *            2025-03-26 (batching was removed in 2025-06-18) ⇒ 400/-32600
+ *            for newer versions. An unknown header value ⇒ 400/-32022 with
+ *            the supported list in error.data. Responses are plain JSON.
+ *     GET    with `Accept: text/event-stream` ⇒ authenticated heartbeat SSE
+ *            stream that pushes notifications/resources/updated for
+ *            inventory://current. Without it ⇒ RFC 9728 protected-resource
+ *            metadata (plus the well-known OAuth / server-card documents).
+ *     DELETE ⇒ 200 no-op. The server is stateless: it NEVER issues or reads
+ *            `Mcp-Session-Id`, so there is no session to terminate.
  *
- *   GET /functions/v1/mcp
- *     Headers: Accept: text/event-stream
- *     Response: an SSE stream the server may push notifications down. We
- *     emit only heartbeats today; future ticket adds notifications/list
- *     and resource subscriptions.
+ *   MODERN  (header = 2026-07-28)
+ *     POST   No initialize (⇒ -32601). Every request carries
+ *            params._meta["io.modelcontextprotocol/protocolVersion" |
+ *            "clientCapabilities" | "clientInfo"]; the version MUST equal
+ *            the header, `Mcp-Method` MUST equal the JSON-RPC method and,
+ *            for tools/call / resources/read / prompts/get, `Mcp-Name` MUST
+ *            equal params.name / params.uri — any mismatch ⇒ 400/-32020.
+ *            Methods: server/discover (works with no prior state),
+ *            tools/list|call, resources/list|read|templates/list,
+ *            prompts/list|get, and — only when the client declared
+ *            io.modelcontextprotocol/tasks — tasks/get|update|cancel
+ *            (-32021 otherwise). ping, logging/setLevel, resources/subscribe
+ *            and the removed notifications ⇒ -32601. Batches ⇒ 400/-32600.
+ *            Every result carries resultType ("complete" | "input_required" |
+ *            "task") and _meta["io.modelcontextprotocol/serverInfo"]; the
+ *            list results and resources/read carry ttlMs + cacheScope.
+ *            _meta.traceparent / tracestate / baggage (SEP-414) continue the
+ *            caller's trace in Sentry and are forwarded to the api function.
+ *     GET / DELETE ⇒ 405. No SSE, no resumability, no session id.
  *
- *   DELETE /functions/v1/mcp
- *     Terminates a session. Mushi is stateless across requests so this
- *     is a no-op that returns 200 — kept for spec compliance.
+ * Tasks + MRTR (`_shared/mcp-tasks.ts`, `_shared/mcp-mrtr.ts`)
+ * ──────────────────────────────────────────────────────────────
+ * - `dispatch_fix` for a tasks-declaring 2026-07-28 client returns
+ *   { resultType: "task", taskId: <fix_dispatch_jobs.id>, status: "working" }
+ *   once the job row exists; tasks/get maps the job's status column onto
+ *   the task and carries the CallToolResult when it completes.
+ * - A report whose voice_intake_sessions row is `awaiting_confirm` is gated:
+ *   tasks clients get a task in input_required (taskId = the session id
+ *   until the job exists); other 2026-07-28 clients get
+ *   { resultType: "input_required", inputRequests.confirm, requestState }
+ *   and retry with inputResponses.confirm plus the echoed requestState (an
+ *   HMAC-signed, 10-minute, single-use envelope). Accept ⇒ session
+ *   confirmed + normal dispatch; decline ⇒ session cancelled + isError.
+ *   Legacy clients get an isError result explaining the pending
+ *   confirmation (they have no MRTR / tasks to answer with).
  *
- * What it does NOT implement (yet)
- * ────────────────────────────────
- * - Resumable streams via `Last-Event-ID` (we have nothing to resume).
- * - Long-lived sessions across requests via `mcp-session-id`. We accept
- *   the header for forward compat and echo it back, but every request is
- *   independent right now.
- * - Per-tool streaming progress. The existing JSON-RPC catalog returns a
- *   single result; the SSE path is wired but dormant until a tool needs
- *   to stream (e.g. `dispatch_fix` with live PDCA updates).
+ * What it does NOT implement
+ * ──────────────────────────
+ * - Sessions (`Mcp-Session-Id`) — stateless by design, in both eras.
+ * - Resumable streams (`Last-Event-ID`) — nothing to resume; 2026-07-28
+ *   removed resumability anyway.
+ * - `subscriptions/listen` (2026-07-28) — per-project catalogs never change
+ *   at runtime, so there is nothing to push; legacy clients keep the GET
+ *   stream for inventory://current.
+ * - Server→client requests over the POST response (sampling, roots,
+ *   elicitation/create as a server request). MRTR is the elicitation path.
  *
  * Tool implementation strategy
  * ────────────────────────────
@@ -69,7 +104,7 @@
  */
 
 import { PUBLIC_CORS_HEADERS } from '../_shared/cors.ts'
-import { withSentry } from '../_shared/sentry.ts'
+import { withSentry, Sentry } from '../_shared/sentry.ts'
 import { propagateRequestId } from '../_shared/internal-headers.ts'
 import { recordMcpToolInvocation } from '../_shared/mcp-tool-audit.ts'
 import { claimMcpToolCallRateLimit, buildRateLimitHeaders } from '../_shared/mcp-rate-limit.ts'
@@ -95,21 +130,72 @@ import {
 } from '../_shared/mcp-oauth-smithery-stub.ts'
 import { readOAuthParams } from '../_shared/mcp-oauth-helpers.ts'
 import { callLinearMcpTool } from '../_shared/linear-mcp-client.ts'
-import { getServiceClient as getLinearServiceClient } from '../_shared/db.ts'
+import { getServiceClient, getServiceClient as getLinearServiceClient } from '../_shared/db.ts'
+import { attachTraceparent, childTraceparent } from '../_shared/trace.ts'
+import {
+  ERR_MISSING_CLIENT_CAPABILITY,
+  LEGACY_DEFAULT_PROTOCOL_VERSION,
+  MODERN_REMOVED_METHODS,
+  RESOURCE_READ_TTL_MS,
+  TASKS_EXTENSION_ID,
+  TOOL_LIST_TTL_MS,
+  batchAllowed,
+  batchRejectedError,
+  buildServerDiscoverResult,
+  cacheable,
+  negotiateLegacyVersion,
+  readModernMeta,
+  readTraceMeta,
+  resolveProtocolEra,
+  sentryTraceFromTraceparent,
+  sortByName,
+  validateModernRequest,
+  withModernResultEnvelope,
+  type McpProtocolError,
+  type ModernRequestMeta,
+  type ProtocolEra,
+} from '../_shared/mcp-protocol.ts'
+import {
+  createRequestStateCodec,
+  resolveRequestStateSecret,
+  type RequestStateCodec,
+} from '../_shared/mcp-mrtr.ts'
+import {
+  McpTaskError,
+  createSupabaseTaskStore,
+  createTaskResultForJob,
+  evaluateVoiceGate,
+  handleTasksCancel,
+  handleTasksGet,
+  handleTasksUpdate,
+  legacyVoiceGateResult,
+  type CallToolResult,
+  type McpTaskStore,
+  type TaskHandlerDeps,
+  type VoiceGatePayload,
+} from '../_shared/mcp-tasks.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
   env: { get(name: string): string | undefined }
 }
 
-// MCP protocol versions we negotiate. Order matters — we offer the
-// newest first; clients that don't recognise it fall back through the
-// list. 2025-03-26 introduced Streamable HTTP; 2024-11-05 was the prior
-// HTTP+SSE shape. We accept the older one for clients that haven't
-// upgraded yet (e.g. Claude Desktop on a stale build).
-const SUPPORTED_PROTOCOL_VERSIONS = ['2025-03-26', '2024-11-05'] as const
+// The protocol ladder (2024-11-05 … 2025-11-25 legacy, 2026-07-28 modern)
+// and every header / batch / envelope rule live in _shared/mcp-protocol.ts
+// so they can be unit-tested without the edge runtime.
+const LEGACY_DEFAULT_ERA: ProtocolEra = {
+  era: 'legacy',
+  version: LEGACY_DEFAULT_PROTOCOL_VERSION,
+  headerPresent: false,
+}
 
 const SERVER_INFO = SERVER_INFO_EXTENDED
+
+const SERVER_INSTRUCTIONS =
+  'Mushi Mushi MCP server. Read-only by default; mutations require an API key with `mcp:write` scope. ' +
+  'Spec-traceability (whitepaper §2.10): pass `inventoryActionNodeId` to `dispatch_fix` when you know the ' +
+  'action you want repaired so the agent has the contract verbatim in-prompt. ' +
+  'Subscribe to `inventory://current` to get pushed updates whenever the inventory snapshot changes.'
 
 interface JsonRpcRequest {
   jsonrpc: '2.0'
@@ -442,6 +528,12 @@ const BASE_TOOLS: Record<string, ToolDef> = {
         // Spec-traceability: callers that already know the inventory
         // Action they want repaired can pass it directly.
         inventoryActionNodeId: { type: 'string' },
+        agent: {
+          type: 'string',
+          enum: ['claude_code', 'codex', 'auto', 'rest_fix_worker', 'llm', 'mcp', 'cursor_cloud', 'github_cloud_agent'],
+          description:
+            'Which agent runs the fix. Omit for the project default (auto). Forwarded to POST /v1/admin/fixes/dispatch as `agent`.',
+        },
       },
     },
     outputSchema: {
@@ -477,6 +569,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
           ...(typeof args.inventoryActionNodeId === 'string'
             ? { inventoryActionNodeId: args.inventoryActionNodeId }
             : {}),
+          ...(typeof args.agent === 'string' && args.agent ? { agent: args.agent } : {}),
         }),
       })
       // REST returns { dispatchId, status } — map to the declared { fixId, … }
@@ -799,6 +892,78 @@ const BASE_TOOLS: Record<string, ToolDef> = {
         },
         ingest,
         dispatch: resolvedId ? dispatchPayload : null,
+      }
+    },
+  },
+
+  check_sdk_version: {
+    scope: 'mcp:read',
+    description:
+      'Compare a published @mushi-mushi/* package version against the catalog (GET /v1/sdk/latest-version). Returns { package, current, latest, outdated } and, when outdated, suggestedActions (Sentry-style, max 1) pointing at search_mushi_docs plus the mushi-sdk-upgrade skill. Read-only. Use when Dependabot or mushi upgrade --check reports a drift, or before dispatching a fix that assumes a current SDK. Does not bump the pin — that stays a human/Dependabot change.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        package: {
+          type: 'string',
+          description: 'npm package name (default @mushi-mushi/web).',
+        },
+        current: {
+          type: 'string',
+          description: 'Installed version from package.json, if known.',
+        },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        package: { type: 'string' },
+        latest: { type: 'string' },
+        current: { type: 'string' },
+        outdated: { type: 'boolean' },
+        suggestedActions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', const: 'tool_call' },
+              toolName: { type: 'string' },
+              arguments: { type: 'object' },
+              reason: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (args) => {
+      const pkg = typeof args.package === 'string' && args.package.trim()
+        ? args.package.trim()
+        : '@mushi-mushi/web'
+      const query = new URLSearchParams({ package: pkg }).toString()
+      const data = await apiCall<{ version?: string; latest?: string; package?: string }>(
+        `/v1/sdk/latest-version?${query}`,
+      )
+      const latest = data.latest ?? data.version
+      const current = typeof args.current === 'string' ? args.current : undefined
+      const outdated = current && latest ? current !== latest : undefined
+      return {
+        package: data.package ?? pkg,
+        latest,
+        current,
+        outdated,
+        ...(outdated
+          ? {
+              suggestedActions: [
+                {
+                  type: 'tool_call',
+                  toolName: 'search_mushi_docs',
+                  arguments: { query: `${pkg} upgrade mushi-sdk-upgrade` },
+                  reason:
+                    'Read current upgrade notes, then apply the mushi-sdk-upgrade skill. This tool does not bump the pin.',
+                },
+              ],
+            }
+          : {}),
       }
     },
   },
@@ -1257,7 +1422,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
         },
         setup: {
           label: 'Set up Mushi',
-          tools: ['diagnose_setup', 'activation_status', 'get_backend_health', 'list_byok_keys', 'add_byok_key', 'test_byok_key', 'remove_byok_key'],
+          tools: ['diagnose_setup', 'check_sdk_version', 'activation_status', 'get_backend_health', 'list_byok_keys', 'add_byok_key', 'test_byok_key', 'remove_byok_key'],
           hint: 'Call diagnose_setup first — it diagnoses setup gaps and returns the next action to take.',
         },
         qa: {
@@ -1439,6 +1604,10 @@ interface CallContext {
   requestId: string
   apiKeyId?: string
   ownerUserId?: string
+  /** Which spec era this request negotiated (from the MCP-Protocol-Version header). */
+  era: ProtocolEra
+  /** 2026-07-28 per-request `_meta` (client capabilities, trace context). Absent for legacy. */
+  meta?: ModernRequestMeta
 }
 
 function effectiveScope(ctx: CallContext): 'mcp:read' | 'mcp:write' | null {
@@ -1448,6 +1617,8 @@ function effectiveScope(ctx: CallContext): 'mcp:read' | 'mcp:write' | null {
 }
 
 async function dispatchRpc(req: JsonRpcRequest, ctx: CallContext): Promise<JsonRpcSuccess | JsonRpcError | null> {
+  if (ctx.era.era === 'modern') return dispatchModernRpc(req, ctx)
+
   const id = req.id ?? null
 
   // Notifications: id is absent. Per JSON-RPC, we MUST NOT respond.
@@ -1509,10 +1680,81 @@ async function dispatchRpc(req: JsonRpcRequest, ctx: CallContext): Promise<JsonR
   }
 }
 
+/**
+ * 2026-07-28 dispatcher. No handshake: every request is self-describing
+ * (`params._meta`), `server/discover` replaces `initialize`, every result is
+ * enveloped with `resultType` + server identity, and list results are
+ * cacheable (ttlMs + cacheScope). Header/body consistency was already
+ * enforced by `validateModernRequest` in the HTTP layer.
+ */
+async function dispatchModernRpc(req: JsonRpcRequest, ctx: CallContext): Promise<JsonRpcSuccess | JsonRpcError | null> {
+  const id = req.id ?? null
+  const isNotification = req.id === undefined
+  const params = req.params ?? {}
+
+  try {
+    let result: unknown
+    switch (req.method) {
+      case 'server/discover':
+        result = buildServerDiscoverResult({ serverInfo: SERVER_INFO, instructions: SERVER_INSTRUCTIONS })
+        break
+      case 'tools/list':
+        // The write-capable catalog differs per principal (scope filter), so
+        // only the read-only variant is safe for a shared cache.
+        result = cacheable(
+          handleToolsList(ctx),
+          TOOL_LIST_TTL_MS,
+          effectiveScope(ctx) === 'mcp:write' ? 'private' : 'public',
+        )
+        break
+      case 'tools/call':
+        result = await handleToolsCall(params, ctx)
+        break
+      case 'resources/list':
+        result = cacheable(handleResourcesList(), TOOL_LIST_TTL_MS, 'public')
+        break
+      case 'resources/templates/list':
+        result = cacheable({ resourceTemplates: [] }, TOOL_LIST_TTL_MS, 'public')
+        break
+      case 'resources/read':
+        result = cacheable(await handleResourcesRead(params, ctx), RESOURCE_READ_TTL_MS, 'private')
+        break
+      case 'prompts/list':
+        result = cacheable(handlePromptsList(), TOOL_LIST_TTL_MS, 'public')
+        break
+      case 'prompts/get':
+        result = handlePromptsGet(params)
+        break
+      case 'tasks/get':
+      case 'tasks/update':
+      case 'tasks/cancel':
+        result = await handleTasksMethod(req.method, params, ctx)
+        break
+      default: {
+        if (isNotification) return null
+        const message = MODERN_REMOVED_METHODS.has(req.method)
+          ? `Method ${req.method} was removed in MCP 2026-07-28 (use server/discover; no handshake, no ping)`
+          : `Method not found: ${req.method}`
+        return { jsonrpc: '2.0', id, error: { code: ERR_METHOD_NOT_FOUND, message } }
+      }
+    }
+    if (isNotification) return null
+    return { jsonrpc: '2.0', id, result: withModernResultEnvelope(result, SERVER_INFO) }
+  } catch (err) {
+    if (isNotification) return null
+    if (err instanceof McpError || err instanceof McpTaskError) {
+      return { jsonrpc: '2.0', id, error: { code: err.code, message: err.message, data: err.data } }
+    }
+    const message = err instanceof Error ? err.message : String(err)
+    return { jsonrpc: '2.0', id, error: { code: ERR_INTERNAL, message } }
+  }
+}
+
 function handleInitialize(params: Record<string, unknown>): unknown {
-  const clientWanted = typeof params.protocolVersion === 'string' ? params.protocolVersion : ''
-  const negotiated =
-    SUPPORTED_PROTOCOL_VERSIONS.find((v) => v === clientWanted) ?? SUPPORTED_PROTOCOL_VERSIONS[0]
+  // Legacy handshake only (2024-11-05 … 2025-11-25). Answer with the client's
+  // version when we support it, else the newest legacy version we do; a
+  // missing protocolVersion keeps the historic 2025-03-26 default.
+  const negotiated = negotiateLegacyVersion(params.protocolVersion)
   return {
     protocolVersion: negotiated,
     capabilities: {
@@ -1521,11 +1763,99 @@ function handleInitialize(params: Record<string, unknown>): unknown {
       prompts: { listChanged: false },
     },
     serverInfo: SERVER_INFO,
-    instructions:
-      'Mushi Mushi MCP server. Read-only by default; mutations require an API key with `mcp:write` scope. ' +
-      'Spec-traceability (whitepaper §2.10): pass `inventoryActionNodeId` to `dispatch_fix` when you know the ' +
-      'action you want repaired so the agent has the contract verbatim in-prompt. ' +
-      'Subscribe to `inventory://current` to get pushed updates whenever the inventory snapshot changes.',
+    instructions: SERVER_INSTRUCTIONS,
+  }
+}
+
+// ── Tasks extension + voice confirmation gate ───────────────────────────────
+
+function taskStoreFor(ctx: CallContext): McpTaskStore {
+  return createSupabaseTaskStore({
+    db: getServiceClient(),
+    projectIdHint: ctx.projectIdHint,
+    ownerUserId: ctx.ownerUserId,
+  })
+}
+
+let voiceGateCodecCache: RequestStateCodec<VoiceGatePayload> | null | undefined
+
+/** HMAC codec for MRTR `requestState`; null when no signing secret is configured. */
+function voiceGateCodec(): RequestStateCodec<VoiceGatePayload> | null {
+  if (voiceGateCodecCache !== undefined) return voiceGateCodecCache
+  const secret = resolveRequestStateSecret(Deno.env)
+  voiceGateCodecCache = secret ? createRequestStateCodec<VoiceGatePayload>({ secret }) : null
+  return voiceGateCodecCache
+}
+
+function isDispatchFixTool(name: string): boolean {
+  return name === 'dispatch_fix' || DEPRECATED_TOOL_ALIASES[name] === 'dispatch_fix'
+}
+
+/**
+ * Voice confirmation gate for `dispatch_fix`. Returns a result to send
+ * instead of dispatching (input_required / task / isError), or null when
+ * the dispatch may proceed. Throws McpError for an invalid requestState.
+ */
+async function applyVoiceGate(
+  args: Record<string, unknown>,
+  params: Record<string, unknown>,
+  ctx: CallContext,
+): Promise<Record<string, unknown> | null> {
+  const reportId = typeof args.reportId === 'string' && args.reportId ? args.reportId : null
+  const projectId = (typeof args.projectId === 'string' && args.projectId ? args.projectId : undefined) ?? ctx.projectIdHint
+  // Missing ids: let the tool handler raise its own INVALID_PARAMS.
+  if (!reportId || !projectId) return null
+  const store = taskStoreFor(ctx)
+  const session = await store.findAwaitingVoiceSession(projectId, reportId)
+  if (!session) return null
+  if (ctx.era.era !== 'modern') return legacyVoiceGateResult(session, reportId)
+  const codec = voiceGateCodec()
+  if (!codec) throw new McpError(ERR_INTERNAL, 'Server not configured for confirmation requests (no signing secret)')
+  const outcome = await evaluateVoiceGate({
+    session,
+    projectId,
+    reportId,
+    params,
+    codec,
+    store,
+    taskClient: !!ctx.meta?.declaresTasks,
+  })
+  switch (outcome.kind) {
+    case 'proceed':
+      return null
+    case 'respond':
+    case 'declined':
+      return outcome.result
+    case 'error':
+      throw new McpError(outcome.code, outcome.message, outcome.data)
+  }
+}
+
+async function handleTasksMethod(
+  method: 'tasks/get' | 'tasks/update' | 'tasks/cancel',
+  params: Record<string, unknown>,
+  ctx: CallContext,
+): Promise<unknown> {
+  if (!ctx.meta?.declaresTasks) {
+    throw new McpError(
+      ERR_MISSING_CLIENT_CAPABILITY,
+      `${method} requires the client to declare the ${TASKS_EXTENSION_ID} extension in _meta clientCapabilities.extensions`,
+      { extension: TASKS_EXTENSION_ID },
+    )
+  }
+  if (!effectiveScope(ctx)) throw new McpError(ERR_INVALID_REQUEST, 'caller has no scope')
+  const deps: TaskHandlerDeps = {
+    store: taskStoreFor(ctx),
+    dispatch: (session) =>
+      invokeToolAsResult('dispatch_fix', { reportId: session.report_id ?? '', projectId: session.project_id }, ctx),
+  }
+  switch (method) {
+    case 'tasks/get':
+      return await handleTasksGet(deps, params)
+    case 'tasks/update':
+      return await handleTasksUpdate(deps, params)
+    case 'tasks/cancel':
+      return await handleTasksCancel(deps, params)
   }
 }
 
@@ -1536,20 +1866,21 @@ function handleInitialize(params: Record<string, unknown>): unknown {
  * INSUFFICIENT_SCOPE round-trip for every LLM that picks the tool
  * blind. Includes `outputSchema` when defined (MCP 2025-06-18).
  */
-function handleToolsList(ctx: CallContext): unknown {
+function handleToolsList(ctx: CallContext): { tools: Array<Record<string, unknown> & { name: string }> } {
   const scope = effectiveScope(ctx)
-  return {
-    tools: Object.entries(TOOLS)
-      .filter(([, def]) => isToolGrantedToScope(def.scope, scope))
-      .filter(([name]) => toolMatchesFeatures(name, ctx.features))
-      .map(([name, def]) => ({
-        name,
-        description: def.description,
-        inputSchema: def.inputSchema,
-        ...(def.outputSchema ? { outputSchema: def.outputSchema } : {}),
-        annotations: def.annotations,
-      })),
-  }
+  const tools = Object.entries(TOOLS)
+    .filter(([, def]) => isToolGrantedToScope(def.scope, scope))
+    .filter(([name]) => toolMatchesFeatures(name, ctx.features))
+    .map(([name, def]) => ({
+      name,
+      description: def.description,
+      inputSchema: def.inputSchema,
+      ...(def.outputSchema ? { outputSchema: def.outputSchema } : {}),
+      annotations: def.annotations,
+    }))
+  // 2026-07-28: tools/list SHOULD be deterministic so cacheable results
+  // compare equal across isolates. Legacy keeps registration order.
+  return { tools: ctx.era.era === 'modern' ? sortByName(tools) : tools }
 }
 
 function isToolGrantedToScope(
@@ -1624,6 +1955,41 @@ async function handleToolsCall(
     })
   }
 
+  // Voice confirmation gate (see header): a report awaiting confirmation is
+  // never dispatched silently. Runs outside the try below so an invalid
+  // requestState surfaces as a JSON-RPC error (-32602), not a tool error.
+  if (isDispatchFixTool(name)) {
+    const gated = await applyVoiceGate(args, params, ctx)
+    if (gated) {
+      recordOutcome(gated.isError ? 'error' : 'ok', gated.isError ? 'VOICE_CONFIRM' : undefined)
+      return gated
+    }
+  }
+
+  const result = await invokeToolAsResult(name, args, ctx, recordOutcome)
+
+  // Tasks extension: a client that declared io.modelcontextprotocol/tasks
+  // gets the dispatch back as a task once the fix_dispatch_jobs row exists.
+  if (isDispatchFixTool(name) && ctx.meta?.declaresTasks && !result.isError) {
+    const fixId = typeof result.structuredContent?.fixId === 'string' ? result.structuredContent.fixId : null
+    const job = fixId ? await taskStoreFor(ctx).getJob(fixId) : null
+    if (job) return createTaskResultForJob(job)
+  }
+  return result
+}
+
+/**
+ * Run a tool handler and shape its outcome as a CallToolResult. Shared by
+ * the direct `tools/call` path and the tasks/update confirmation path.
+ */
+async function invokeToolAsResult(
+  name: string,
+  args: Record<string, unknown>,
+  ctx: CallContext,
+  recordOutcome: (status: 'ok' | 'error', errorCode?: string) => void = () => {},
+): Promise<CallToolResult> {
+  const def = TOOLS[name]
+  if (!def) throw new McpError(ERR_METHOD_NOT_FOUND, `tool not found: ${name}`)
   try {
     const data = await def.handler(args, { authHeaders: ctx.authHeaders, projectIdHint: ctx.projectIdHint })
     recordOutcome('ok')
@@ -1647,11 +2013,11 @@ async function handleToolsCall(
     const text = UNTRUSTED_TOOLS.has(name)
       ? wrapUntrustedJson(data, name as string)
       : JSON.stringify(data, null, 2)
-    const result: Record<string, unknown> = {
+    const result: CallToolResult = {
       content: [{ type: 'text', text }],
     }
     if (includeStructured) {
-      result.structuredContent = data
+      result.structuredContent = data as Record<string, unknown>
     }
     return result
   } catch (err) {
@@ -1686,7 +2052,7 @@ async function handleToolsCall(
   }
 }
 
-function handleResourcesList(): unknown {
+function handleResourcesList(): Record<string, unknown> {
   return {
     resources: [
       { uri: 'project://dashboard', name: 'project_dashboard', description: 'PDCA snapshot', mimeType: 'application/json' },
@@ -1706,7 +2072,7 @@ function handleResourcesList(): unknown {
   }
 }
 
-async function handleResourcesRead(params: Record<string, unknown>, ctx: CallContext): Promise<unknown> {
+async function handleResourcesRead(params: Record<string, unknown>, ctx: CallContext): Promise<Record<string, unknown>> {
   const uri = params.uri
   if (typeof uri !== 'string') throw new McpError(ERR_INVALID_PARAMS, 'resources/read requires a string `uri`')
   const path =
@@ -1726,7 +2092,7 @@ async function handleResourcesRead(params: Record<string, unknown>, ctx: CallCon
   }
 }
 
-function handlePromptsList(): unknown {
+function handlePromptsList(): Record<string, unknown> {
   return {
     prompts: [
       {
@@ -1778,7 +2144,7 @@ function handlePromptsGet(params: Record<string, unknown>): unknown {
 
 async function apiCall<T = unknown>(
   path: string,
-  init: RequestInit & { headers: Record<string, string> },
+  init: RequestInit & { headers: Record<string, string> } = { headers: {} },
 ): Promise<T> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   if (!supabaseUrl) throw new McpError(ERR_INTERNAL, 'SUPABASE_URL not configured')
@@ -1861,7 +2227,12 @@ for (const [oldName, newName] of Object.entries(DEPRECATED_TOOL_ALIASES)) {
 // header is present so we can refuse unauth at the MCP edge).
 // ----------------------------------------------------------------------------
 
-async function resolveAuth(req: Request, requestId: string): Promise<CallContext> {
+async function resolveAuth(
+  req: Request,
+  requestId: string,
+  era: ProtocolEra = LEGACY_DEFAULT_ERA,
+  meta?: ModernRequestMeta,
+): Promise<CallContext> {
   const url = new URL(req.url)
   const readOnlyMode = url.searchParams.get('read_only') === '1'
   const features = parseFeaturesParam(url.searchParams.get('features'))
@@ -1928,6 +2299,8 @@ async function resolveAuth(req: Request, requestId: string): Promise<CallContext
       requestId,
       apiKeyId: row.id,
       ownerUserId: row.owner_user_id ?? undefined,
+      era,
+      meta,
     }
   }
 
@@ -1976,6 +2349,8 @@ async function resolveAuth(req: Request, requestId: string): Promise<CallContext
       features,
       requestId,
       ownerUserId: user.id,
+      era,
+      meta,
     }
   }
 
@@ -2032,6 +2407,7 @@ function smitheryScannerContext(requestId: string): CallContext {
     readOnlyMode: true,
     features: 'all',
     requestId,
+    era: LEGACY_DEFAULT_ERA,
   }
 }
 
@@ -2235,6 +2611,8 @@ async function handler(req: Request): Promise<Response> {
         ...CORS_HEADERS,
       }, req.method)
     }
+    // 2026-07-28 clients never GET the endpoint: no SSE stream, no session.
+    if (isModernRequest(req)) return modernMethodNotAllowed()
     const accept = req.headers.get('Accept') ?? ''
     if (!accept.includes('text/event-stream')) {
       // RFC 9728: OAuth clients (Smithery setup) GET the resource URL and expect
@@ -2344,7 +2722,10 @@ async function handler(req: Request): Promise<Response> {
   }
 
   if (req.method === 'DELETE') {
-    // Sessions are stateless today — accept the close request and ack.
+    // 2026-07-28 removed Mcp-Session-Id, so there is nothing to DELETE.
+    if (isModernRequest(req)) return modernMethodNotAllowed()
+    // Legacy: we never issued a session id either — ack the close request
+    // as a no-op (historic behaviour, kept for old clients).
     return new Response(null, { status: 200, headers: CORS_HEADERS })
   }
 
@@ -2405,13 +2786,38 @@ async function handler(req: Request): Promise<Response> {
     return jsonRpcResponse({ jsonrpc: '2.0', id: null, error: { code: ERR_PARSE, message: 'Invalid JSON' } })
   }
 
+  // Era: decided by the MCP-Protocol-Version header. Unknown ⇒ 400/-32022.
+  const eraResult = resolveProtocolEra(req.headers.get('MCP-Protocol-Version'))
+  if (!eraResult.ok) return protocolErrorResponse(eraResult.error, rpcIdOf(payload))
+  const era = eraResult.era
+
   const scannerResponse = await trySmitheryScannerPost(req, payload)
   if (scannerResponse) return scannerResponse
+
+  // JSON-RPC batching exists only in 2024-11-05 / 2025-03-26.
+  if (Array.isArray(payload) && !batchAllowed(era)) {
+    return protocolErrorResponse(batchRejectedError(era), null)
+  }
+
+  // 2026-07-28: header ⇄ body consistency before anything else (400/-32020).
+  let meta: ModernRequestMeta | undefined
+  if (era.era === 'modern') {
+    const probe = payload as JsonRpcRequest
+    if (!probe || typeof probe !== 'object' || probe.jsonrpc !== '2.0' || typeof probe.method !== 'string') {
+      return protocolErrorResponse(
+        { code: ERR_INVALID_REQUEST, message: 'Not a JSON-RPC 2.0 request', httpStatus: 400 },
+        rpcIdOf(payload),
+      )
+    }
+    const fault = validateModernRequest(req.headers, probe, era.version)
+    if (fault) return protocolErrorResponse(fault, probe.id ?? null)
+    meta = readModernMeta(probe.params)
+  }
 
   const requestId = req.headers.get('x-request-id')?.trim() || crypto.randomUUID().slice(0, 12)
   let ctx: CallContext
   try {
-    ctx = await resolveAuth(req, requestId)
+    ctx = await resolveAuth(req, requestId, era, meta)
   } catch (err) {
     const e = err as McpError
     return unauthorizedJsonRpc(req, e.message, e.code)
@@ -2444,7 +2850,14 @@ async function handler(req: Request): Promise<Response> {
   // even when the tool call itself takes many milliseconds.
   const windowStartSec = Math.floor(Date.now() / 1000 / 60) * 60
 
-  const response = await dispatchRpc(rpc, ctx)
+  // SEP-414: continue the caller's W3C trace instead of minting a new one.
+  const trace = readTraceMeta(rpc.params)
+  if (trace.traceparent) {
+    ctx.authHeaders = attachTraceparent(ctx.authHeaders, childTraceparent(trace.traceparent))
+    if (trace.tracestate) ctx.authHeaders['tracestate'] = trace.tracestate
+    if (trace.baggage) ctx.authHeaders['baggage'] = trace.baggage
+  }
+  const response = await continueSentryTrace(trace, () => dispatchRpc(rpc, ctx))
   if (!response) {
     // Notification — no response.
     return new Response(null, { status: 202, headers: CORS_HEADERS })
@@ -2471,6 +2884,67 @@ function jsonRpcResponse(body: unknown, extraHeaders: Record<string, string> = {
     status: 200,
     headers: { 'Content-Type': 'application/json', ...extraHeaders, ...CORS_HEADERS },
   })
+}
+
+/** Best-effort JSON-RPC id of an unvalidated payload (for error envelopes). */
+function rpcIdOf(payload: unknown): string | number | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+  const id = (payload as { id?: unknown }).id
+  return typeof id === 'string' || typeof id === 'number' ? id : null
+}
+
+/** Transport-level fault (bad version / header mismatch / batch): HTTP 4xx + JSON-RPC error. */
+function protocolErrorResponse(err: McpProtocolError, id: string | number | null): Response {
+  return new Response(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id,
+      error: { code: err.code, message: err.message, ...(err.data !== undefined ? { data: err.data } : {}) },
+    }),
+    { status: err.httpStatus, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
+  )
+}
+
+function isModernRequest(req: Request): boolean {
+  const era = resolveProtocolEra(req.headers.get('MCP-Protocol-Version'))
+  return era.ok && era.era.era === 'modern'
+}
+
+const MODERN_ALLOWED_METHODS = 'POST, OPTIONS'
+
+function modernMethodNotAllowed(): Response {
+  return new Response(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id: null,
+      error: {
+        code: ERR_INVALID_REQUEST,
+        message: `MCP 2026-07-28 uses POST only (no SSE stream, no session to delete). Allowed: ${MODERN_ALLOWED_METHODS}`,
+      },
+    }),
+    {
+      status: 405,
+      headers: { 'Content-Type': 'application/json', Allow: MODERN_ALLOWED_METHODS, ...CORS_HEADERS },
+    },
+  )
+}
+
+/**
+ * Continue an inbound W3C trace in Sentry (`_meta.traceparent`, SEP-414) so
+ * the caller's APM sees one trace across agent → hosted MCP → api function.
+ * No-ops when there is no usable traceparent or Sentry is not initialised.
+ */
+function continueSentryTrace<T>(
+  trace: { traceparent: string | null; baggage: string | null },
+  fn: () => Promise<T>,
+): Promise<T> {
+  const sentryTrace = trace.traceparent ? sentryTraceFromTraceparent(trace.traceparent) : null
+  if (!sentryTrace) return fn()
+  try {
+    return Sentry.continueTrace({ sentryTrace, baggage: trace.baggage ?? undefined }, fn)
+  } catch {
+    return fn()
+  }
 }
 
 if (typeof Deno !== 'undefined') {

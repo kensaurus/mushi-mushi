@@ -24,6 +24,11 @@ import { finalizeFixMerge } from '../_shared/fix-merge.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
 import { envInt } from '../_shared/env-int.ts';
 import { createWebhookMiddleware, ReplayAttackError, RateLimitError } from '../_shared/webhook-middleware.ts';
+import {
+  DISPATCHABLE_CLOUD_AGENTS,
+  applyCloudAgentOutcome,
+  parseCloudAgentBranchRef,
+} from '../_shared/agent-adapters.ts';
 
 ensureSentry('webhooks-github-indexer');
 
@@ -230,6 +235,45 @@ async function emitFixEvent(
  * webhook so the graph can show the full lifecycle (draft -> open -> merged).
  * Merges still fall through to the billing-specific handler below.
  */
+/**
+ * Cloud-agent fallback for `pull_request` webhooks whose PR is not yet on any
+ * `fix_attempts.pr_url`: Cursor Cloud / GitHub cloud-agent PRs are opened by
+ * the VENDOR, so the first `pull_request.opened` delivery usually beats the
+ * poller. Match the head ref against `fix_attempts.branch_name` (the branch
+ * the fix-worker asked for, or the head_ref the poller learned) and then
+ * against the `MUSHI-<report uuid>-<cursor-cloud|github-agent>` pattern that
+ * generateCursorCloudBranchName produces. Only attempts that still have no
+ * PR and belong to a cloud agent qualify.
+ */
+async function matchCloudAttemptByHeadRef(
+  db: ReturnType<typeof getDb>,
+  headRef: string,
+): Promise<{ id: string; project_id: string; report_id: string; agent: string } | null> {
+  const cloudKinds = [...DISPATCHABLE_CLOUD_AGENTS];
+  const { data: byBranch } = await db
+    .from('fix_attempts')
+    .select('id, project_id, report_id, agent')
+    .eq('branch_name', headRef)
+    .is('pr_url', null)
+    .in('agent', cloudKinds)
+    .order('started_at', { ascending: false })
+    .limit(1);
+  if (byBranch && byBranch.length > 0) return byBranch[0];
+
+  const parsed = parseCloudAgentBranchRef(headRef);
+  if (!parsed) return null;
+  const { data: byReport } = await db
+    .from('fix_attempts')
+    .select('id, project_id, report_id, agent')
+    .eq('report_id', parsed.reportId)
+    .is('pr_url', null)
+    .in('agent', cloudKinds)
+    .in('status', ['running', 'queued'])
+    .order('started_at', { ascending: false })
+    .limit(1);
+  return byReport && byReport.length > 0 ? byReport[0] : null;
+}
+
 async function handlePullRequestState(
   payload: {
     action?: string;
@@ -240,6 +284,7 @@ async function handlePullRequestState(
       draft?: boolean;
       state?: string;
       delivery_id?: string;
+      head?: { ref?: string };
     };
     repository?: { full_name?: string };
   },
@@ -250,16 +295,58 @@ async function handlePullRequestState(
     return new Response(JSON.stringify({ ok: true, ignored: 'no_pr_url' }), { status: 202 });
 
   const db = getDb();
-  const { data: attempt } = await db
+  let { data: attempt } = await db
     .from('fix_attempts')
     .select('id, project_id, pr_state')
     .eq('pr_url', prUrl)
     .maybeSingle();
   if (!attempt) {
-    return new Response(
-      JSON.stringify({ ok: true, ignored: 'pr_not_a_mushi_fix', pr_url: prUrl }),
-      { status: 202, headers: { 'Content-Type': 'application/json' } },
+    // Cloud-agent fallback: match by head ref while pr_url is still NULL.
+    // applyCloudAgentOutcome guards on pr_url IS NULL at write time, so a
+    // poller tick / v0 webhook racing this delivery still yields exactly one
+    // PR write and one 'fix_pr_opened' notification.
+    const headRef = payload.pull_request?.head?.ref ?? null;
+    const isOpening =
+      payload.action === 'opened' || payload.action === 'reopened' || payload.action === 'ready_for_review';
+    const cloudAttempt = headRef && isOpening ? await matchCloudAttemptByHeadRef(db, headRef) : null;
+    if (!cloudAttempt) {
+      return new Response(
+        JSON.stringify({ ok: true, ignored: 'pr_not_a_mushi_fix', pr_url: prUrl }),
+        { status: 202, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+    const applied = await applyCloudAgentOutcome(
+      db,
+      {
+        attemptId: cloudAttempt.id,
+        projectId: cloudAttempt.project_id,
+        reportId: cloudAttempt.report_id,
+        agent: cloudAttempt.agent,
+      },
+      { kind: 'pr_opened', prUrl, branch: headRef },
     );
+    log.info('cloud-agent PR matched by head ref', {
+      fixAttemptId: cloudAttempt.id,
+      agent: cloudAttempt.agent,
+      headRef,
+      prUrl,
+      applied: applied.applied,
+      reason: applied.reason ?? null,
+    });
+    // Re-read by pr_url so the pr_state bookkeeping below runs on the row
+    // that now owns this PR (ours, or the one that won the race).
+    const reread = await db
+      .from('fix_attempts')
+      .select('id, project_id, pr_state')
+      .eq('pr_url', prUrl)
+      .maybeSingle();
+    attempt = reread.data;
+    if (!attempt) {
+      return new Response(
+        JSON.stringify({ ok: true, matched_by: 'head_ref', applied: applied.applied, reason: applied.reason ?? null }),
+        { status: 202, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
   }
 
   // Derive the new lifecycle state.
@@ -1100,6 +1187,7 @@ app.post('/webhooks-github-indexer', async (c) => {
         number?: number;
         draft?: boolean;
         state?: string;
+        head?: { ref?: string };
       };
       repository?: { full_name?: string };
     };

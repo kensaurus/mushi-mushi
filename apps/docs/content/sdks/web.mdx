@@ -31,9 +31,11 @@ See [Quickstart → Vanilla JS](/quickstart/web) for setup. Notable extras:
 - **`runtimeConfig: 'auto'`** — fetches console settings from `GET /v1/sdk/config`
   and merges them over host init. Host-wired banner and capture flags win over
   console defaults. See [Runtime config](/concepts/runtime-config).
-- **`onProactiveTrigger(({ context }) => …)`** — fires when the SDK detects
-  user friction (rage clicks, repeated navigation, console errors during
-  the same interaction). Use it to surface the report widget contextually.
+- **`proactive: { rageClick, errorBoundary, longTask, apiCascade, pageDwell, firstSession, cooldown }`** —
+  friction detectors that open the reporter contextually (rage clicks, error
+  boundaries, long tasks, API cascades, page dwell, first session). Subscribe
+  with `mushi.on('proactive:triggered', ({ data }) => …)` (`proactive:dismissed`
+  fires on close) and cap frequency with `cooldown`.
 - **`beforeSend((report) => report | null)`** — last-mile transform after
   built-in PII scrub. Return `null` to drop the report client-side. Prefer
   this over the deprecated `beforeSendFeedback` (feedback-only).

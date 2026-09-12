@@ -8,6 +8,7 @@
   "main": "src/index.ts",
   "scripts": {
     "verify": "tsx src/run.ts",
+    "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "echo 'no tests yet'",
     "build": "echo 'verify: no build step — runs via tsx'"
@@ -19,8 +20,10 @@
     "pngjs": "^7.0.0"
   },
   "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
     "@types/node": "^22.20.0",
     "@types/pngjs": "^6.0.5",
+    "eslint": "^10.6.0",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   },

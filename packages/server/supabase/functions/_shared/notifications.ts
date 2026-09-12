@@ -1,6 +1,7 @@
 import { fetchWithTimeout } from './http.ts'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
+import { getVapidConfig, sendWebPushToSubscription } from './web-push.ts'
 
 const notifLog = log.child('notifications')
 
@@ -231,21 +232,78 @@ async function sendEmailNotification(
   }
 }
 
+interface ReporterPushRow {
+  id: string
+  endpoint: string
+  p256dh: string
+  auth: string
+}
+
+/**
+ * Real Web Push over `reporter_push_subscriptions` (RFC 8030/8291/8292 via
+ * `_shared/web-push.ts`). Every stored endpoint is re-checked against the push
+ * service allow-list before any fetch, so a stored URL can never become an
+ * SSRF target. Dead subscriptions (404/410) are deleted as a side effect.
+ *
+ * Result contract for the delivery ledger:
+ *   - `ok: true`                      at least one device accepted the message
+ *   - `error: 'push_not_configured'`  VAPID secrets unset          → skipped
+ *   - `error: 'no_push_subscription'` reporter never subscribed    → skipped
+ *   - any other error                 every device refused          → failed
+ */
 async function sendPushNotification(
-  _db: SupabaseClient,
-  _projectId: string,
-  _reporterTokenHash: string,
-  _message: string,
+  db: SupabaseClient,
+  projectId: string,
+  reporterTokenHash: string,
+  message: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  // Honest stub. Real Web Push requires (1) VAPID JWT signing (RFC 8292),
-  // (2) RFC 8291 `aes128gcm` payload encryption against each subscription's
-  // p256dh/auth keys, (3) a client-side `PushManager.subscribe` path in the SDK
-  // (not yet wired — `reporter_push_subscriptions` has no producer), and
-  // (4) SSRF-safe validation of the stored push endpoint before any fetch.
-  // Until those land, never POST to a client-supplied endpoint: an unsigned,
-  // unencrypted body is rejected by every push service AND fetching an arbitrary
-  // stored URL is an SSRF vector. Email remains the live delivery channel.
-  return { ok: false, error: 'push_not_configured' }
+  if (!getVapidConfig()) return { ok: false, error: 'push_not_configured' }
+
+  const { data, error } = await db
+    .from('reporter_push_subscriptions')
+    .select('id, endpoint, p256dh, auth')
+    .eq('project_id', projectId)
+    .eq('reporter_token_hash', reporterTokenHash)
+  if (error) {
+    notifLog.error('push_subscriptions_load_failed', { error: error.message })
+    return { ok: false, error: `db: ${error.message}` }
+  }
+  const rows = (data ?? []) as ReporterPushRow[]
+  if (rows.length === 0) return { ok: false, error: 'no_push_subscription' }
+
+  let sent = 0
+  const errors: string[] = []
+  for (const row of rows) {
+    const result = await sendWebPushToSubscription(
+      { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },
+      { title: 'Mushi Mushi', body: message, tag: `reporter-${reporterTokenHash.slice(0, 12)}` },
+    )
+    if (result.ok) {
+      sent++
+      await db
+        .from('reporter_push_subscriptions')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', row.id)
+      continue
+    }
+    errors.push(result.error)
+    if (result.gone) {
+      notifLog.info('push_subscription_gone', { id: row.id, status: result.status })
+      await db.from('reporter_push_subscriptions').delete().eq('id', row.id)
+    } else {
+      notifLog.warn('push_delivery_failed', { id: row.id, status: result.status, error: result.error })
+    }
+  }
+
+  if (sent > 0) return { ok: true }
+  return { ok: false, error: errors[0] ?? 'push_failed' }
+}
+
+/** Ledger status for a push result — see `sendPushNotification` contract. */
+function pushDeliveryStatus(result: { ok: boolean; error?: string }): 'sent' | 'failed' | 'skipped' {
+  if (result.ok) return 'sent'
+  if (result.error === 'push_not_configured' || result.error === 'no_push_subscription') return 'skipped'
+  return 'failed'
 }
 
 /**
@@ -306,12 +364,7 @@ export async function createNotification(
 
     if (channel === 'push') {
       const result = await sendPushNotification(db, projectId, reporterTokenHash, message)
-      await markDelivery(
-        db,
-        deliveryId,
-        result.ok ? 'sent' : 'skipped',
-        result.error,
-      )
+      await markDelivery(db, deliveryId, pushDeliveryStatus(result), result.error)
     }
   }
 }

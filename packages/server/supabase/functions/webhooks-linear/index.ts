@@ -269,7 +269,7 @@ async function handleEvent(db: any, projectId: string, eventType: string, payloa
   const stateType = (issueData.state as Record<string, unknown> | undefined)?.type as string | undefined
 
   // Dispatch plugin event for all issue changes (so plugin-sdk subscribers can react)
-  await dispatchPluginEvent(db, projectId, 'linear.issue.updated' as never, {
+  await dispatchPluginEvent(db, projectId, 'linear.issue.updated', {
     linearIssueIdentifier: identifier,
     action,
     stateType,

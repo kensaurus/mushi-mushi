@@ -224,11 +224,6 @@ async function runQaStoryImprover(
   )
 }
 
-// notifyA2A was removed: the a2a-push-notify function expects a Standard-Webhooks
-// TaskId UUID which PDCA runs don't have. PDCA completion is surfaced via the
-// direct Slack notification below and the plugin fan-out path.
-function _unused_notifyA2A(_db: unknown, _event: string, _payload: unknown) { /* no-op */ }
-
 Deno.serve(
   withSentry(async (req: Request) => {
     if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })

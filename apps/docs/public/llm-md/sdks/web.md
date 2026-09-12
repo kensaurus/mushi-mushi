@@ -22,12 +22,20 @@ shake-to-report widget in a Shadow DOM so your CSS never leaks in or out.
 
 See [Quickstart → Vanilla JS](/quickstart/web) for setup. Notable extras:
 
+- **XHR + fetch network capture** — the SDK patches both `XMLHttpRequest` and
+  `window.fetch` globally at `init()`. Every network request (including legacy
+  jQuery/axios XHR calls) is captured as a `MushiNetworkEntry` and appears in
+  the Network breadcrumbs tab. Calling `destroy()` removes the patches; if
+  another APM tool (Sentry, Datadog) has since wrapped the same globals, the
+  SDK detects the unsafe state and leaves the native references alone.
 - **`runtimeConfig: 'auto'`** — fetches console settings from `GET /v1/sdk/config`
   and merges them over host init. Host-wired banner and capture flags win over
   console defaults. See [Runtime config](/concepts/runtime-config).
-- **`onProactiveTrigger(({ context }) => …)`** — fires when the SDK detects
-  user friction (rage clicks, repeated navigation, console errors during
-  the same interaction). Use it to surface the report widget contextually.
+- **`proactive: { rageClick, errorBoundary, longTask, apiCascade, pageDwell, firstSession, cooldown }`** —
+  friction detectors that open the reporter contextually (rage clicks, error
+  boundaries, long tasks, API cascades, page dwell, first session). Subscribe
+  with `mushi.on('proactive:triggered', ({ data }) => …)` (`proactive:dismissed`
+  fires on close) and cap frequency with `cooldown`.
 - **`beforeSend((report) => report | null)`** — last-mile transform after
   built-in PII scrub. Return `null` to drop the report client-side. Prefer
   this over the deprecated `beforeSendFeedback` (feedback-only).
@@ -260,3 +268,44 @@ function MyReports() {
 
 `useMushi()` returns no-op fallbacks (`() => Promise.resolve([])`) before the
 SDK finishes initialising, so you never need to null-check the instance.
+
+---
+
+## Hash-routed SPAs (e.g. React Router ``, Backbone, legacy apps)
+
+Hash-routed SPAs navigate via `location.hash` changes (`#/login`, `#/article/my-post`).
+The Mushi web SDK subscribes to `hashchange` automatically — every navigation is
+captured as a timeline entry. To group parametric routes in the **Inventory**,
+supply `/#/`-prefixed route templates:
+
+```typescript
+Mushi.init({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey: 'YOUR_API_KEY',
+  capture: {
+    discoverInventory: {
+      enabled: true,
+      routeTemplates: [
+        '/#/article/[slug]',   // matches #/article/my-post → /#/article/[slug]
+        '/#/profile/[username]',
+      ],
+    },
+  },
+})
+```
+
+**Why the `/#/` prefix?** Hash fragments are not part of the pathname.
+When a hash route is present Mushi stores `'/#' + hashPath` (the pathname is
+dropped); otherwise it stores the plain pathname. History-based routes
+(`/article/[slug]`) and hash routes (`/#/article/[slug]`) therefore stay
+distinct in the Inventory and can be monitored independently.
+
+**Filter params** (e.g. `#/?tag=elixir&offset=10`) are stripped before the route
+template is matched — only the path segment after `#/` is matched.
+
+**Without templates**, every unique hash path becomes its own Inventory row.
+For slug-heavy apps (articles, profiles, products) this inflates the Inventory;
+route templates collapse them to a manageable list.
+
+**`mushi doctor --host-app`** detects hash-router usage in your source files and
+warns when `/#/` route templates are missing from your Mushi init call.

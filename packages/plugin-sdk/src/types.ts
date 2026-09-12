@@ -11,17 +11,27 @@ export type MushiEventName =
   | 'report.status_changed'
   | 'report.commented'
   | 'report.dedup_grouped'
+  /** Emitted when the fix-worker hands a report to a cloud agent (Cursor Cloud /
+   *  GitHub cloud agent). `data.fix.externalAgentId` is set when the agent is
+   *  already running — do not start another one on this event. */
   | 'fix.requested'
   | 'fix.proposed'
   | 'fix.applied'
   | 'fix.failed'
   | 'qa_story.failed'
+  /** Reserved: the server does not emit `qa_story.passed` today (it emits
+   *  `qa_story.recovered` when a failing story passes again). */
   | 'qa_story.passed'
+  | 'qa_story.recovered'
   | 'judge.score_recorded'
   | 'sla.breached'
   // Skill-driven triage pipelines
   | 'skill_pipeline.step.dispatched'
-  // Rewards program (P1+)
+  // Linear issue sync (every Issue create/update seen by webhooks-linear)
+  | 'linear.issue.updated'
+  // Rewards program (P1+). NOTE: these are delivered through the project's
+  // Rewards host webhook (reward-webhooks), NOT the marketplace plugin bus —
+  // a plugin subscribed to them receives nothing.
   | 'reward.points_awarded'
   | 'reward.tier_changed'
   | 'reward.payout_requested'

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
+/** @public */
 export type {
   MushiConfig,
   MushiPreset,
@@ -66,9 +67,14 @@ export type {
   MushiAssistantReply,
 } from './types';
 
+/** @public */
 export {
   createApiClient,
   buildSdkIngestHeaders,
+  resolveRequestBaseUrl,
+  getBackoffDelay,
+  parseRetryAfter,
+  flushLastOutboundOnUnload,
   DEFAULT_API_ENDPOINT,
   DEFAULT_TIMEOUT,
   DEFAULT_MAX_RETRIES,
@@ -81,7 +87,27 @@ export {
   type ApiClientOptions,
   type MushiInternalRequestKind,
 } from './api-client';
+/** @public */
+export {
+  shouldDropCapturedError,
+  matchesErrorFilter,
+  type MushiErrorFilter,
+} from './error-filters';
+/** @public */
+export {
+  sendOnUnload,
+  markPageUnloading,
+  isPageUnloading,
+  isMushiBeaconEnvelope,
+  buildBeaconEnvelope,
+  extractTunnelPath,
+  isSameOriginOrRelative,
+  MUSHI_BEACON_MAX_BYTES,
+  type MushiBeaconEnvelope,
+} from './unload-transport';
+/** @public */
 export { resolveRegionEndpoint, REGION_ENDPOINTS, type MushiRegion } from './region';
+/** @public */
 export {
   resolveEnvConfig,
   diagnoseEnvConfig,
@@ -89,15 +115,25 @@ export {
   type EnvConfigDiagnostics,
   type EnvNearMiss,
 } from './env-config';
+/** @public */
 export { expandPreset, validateConfig } from './presets';
+/** @public */
 export { createPreFilter, type PreFilterResult } from './pre-filter';
+/** @public */
 export { createOfflineQueue, type OfflineQueue } from './queue';
+/** @public */
 export { captureEnvironment } from './environment';
+/** @public */
 export { getReporterToken } from './reporter-token';
+/** @public */
 export { sha256Hex, hmacSha256Hex } from './digest';
+/** @public */
 export { newUuid } from './uuid';
+/** @public */
 export { getDeviceFingerprintHash } from './fingerprint';
+/** @public */
 export { getSessionId } from './session';
+/** @public */
 export {
   initSessionTracker,
   trackPageView,
@@ -105,13 +141,17 @@ export {
   destroySessionTracker,
   type SessionTrackerOptions,
 } from './session-tracker';
+/** @public */
 export { createRateLimiter, type RateLimiter, type RateLimiterConfig } from './rate-limiter';
+/** @public */
 export { createPiiScrubber, scrubPii, scrubUrl, type PiiScrubberConfig } from './pii-scrubber';
+/** @public */
 export {
   createBreadcrumbBuffer,
   type BreadcrumbBuffer,
   type BreadcrumbBufferOptions,
 } from './breadcrumbs';
+/** @public */
 export {
   checkReportPayloadSize,
   estimateJsonBytes,
@@ -120,10 +160,12 @@ export {
   MAX_SCREENSHOT_DATA_URL_BYTES,
   type PayloadGuardResult,
 } from './payload-guard';
+/** @public */
 export {
   normaliseThrown,
   type NormalisedException,
 } from './exception-normaliser';
+/** @public */
 export {
   createLogger,
   noopLogger,
@@ -133,6 +175,7 @@ export {
   type LoggerOptions,
   type LogEntry,
 } from './logger';
+/** @public */
 export {
   MUSHI_COLORS_LIGHT,
   MUSHI_COLORS_DARK,
@@ -164,12 +207,14 @@ export {
   type MushiColorPalette,
   type MushiTokenSnapshot,
 } from './design-tokens';
+/** @public */
 export {
   buildIdentityClaims,
   parseIdentityToken,
   MUSHI_IDENTITY_TOKEN_PREFIX,
   type MushiIdentityClaims,
 } from './identity';
+/** @public */
 export {
   faviconUrlCandidates,
   originToDomain,

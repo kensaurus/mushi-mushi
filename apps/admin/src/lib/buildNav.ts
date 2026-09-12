@@ -16,6 +16,7 @@ import {
 } from './navRegistry'
 import {
   IconDashboard,
+  IconMic,
   IconReports,
   IconStory,
   IconGraph,
@@ -150,6 +151,7 @@ const ICON_MAP: Record<NavIconKey, ComponentType<{ className?: string }>> = {
   user: IconUser,
   activity: IconHealth,
   overview: IconGauge,
+  mic: IconMic,
 }
 
 function entryToNavItem(entry: NavRegistryEntry): BuiltNavItem {

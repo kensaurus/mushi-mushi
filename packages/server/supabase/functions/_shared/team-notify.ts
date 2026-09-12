@@ -21,6 +21,7 @@ import { log } from './logger.ts'
 import { sendBotMessage, sendSlackText } from './slack.ts'
 import { sendDiscordNotification } from './discord.ts'
 import { sendTeamsNotification } from './teams.ts'
+import { notifyVoiceSessionsForReport } from './voice-return.ts'
 
 const teamNotifyLog = log.child('team-notify')
 
@@ -92,8 +93,11 @@ function toPlainText(slackText: string): string {
 
 /**
  * Post a fix-lifecycle update to every team channel the project has
- * configured. Threads onto the report's original Slack card when the bot
- * path stored a `slack_message_ts`.
+ * configured, then reply to any voice session that requested this fix
+ * (Slack thread / Telegram chat / web push — `_shared/voice-return.ts`).
+ * Threads onto the report's original Slack card when the bot path stored a
+ * `slack_message_ts`. Both halves are fail-soft; the voice reply runs even
+ * when the project has no team channel at all.
  */
 export async function notifyTeamFixEvent(
   db: SupabaseClient,
@@ -101,6 +105,29 @@ export async function notifyTeamFixEvent(
   reportId: string,
   event: TeamFixEvent,
   details: TeamFixDetails = {},
+): Promise<void> {
+  await notifyTeamChannels(db, projectId, reportId, event, details)
+  try {
+    await notifyVoiceSessionsForReport(db, projectId, reportId, event, {
+      prUrl: details.prUrl ?? undefined,
+      error: details.error ?? undefined,
+    })
+  } catch (err) {
+    teamNotifyLog.warn('voice return notification failed', {
+      projectId,
+      reportId,
+      event,
+      err: String(err),
+    })
+  }
+}
+
+async function notifyTeamChannels(
+  db: SupabaseClient,
+  projectId: string,
+  reportId: string,
+  event: TeamFixEvent,
+  details: TeamFixDetails,
 ): Promise<void> {
   try {
     const [{ data: settings }, { data: report }, { data: project }] = await Promise.all([
