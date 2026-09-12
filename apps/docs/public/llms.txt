@@ -86,6 +86,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Storage](https://kensaur.us/mushi-mushi/docs/admin/storage)
 - [Teams and Members](https://kensaur.us/mushi-mushi/docs/admin/teams)
 - [Users](https://kensaur.us/mushi-mushi/docs/admin/users)
+- [Voice intake](https://kensaur.us/mushi-mushi/docs/admin/voice)
 - [Blog](https://kensaur.us/mushi-mushi/docs/blog)
 - [Mushi goes AGPLv3 — the honest open source story](https://kensaur.us/mushi-mushi/docs/blog/agplv3-relicense)
 - [Launch Week 1 — five features, five days](https://kensaur.us/mushi-mushi/docs/blog/launch-week-1)
