@@ -226,12 +226,34 @@ export function summarise(endpoint: string): PushSubscriptionSummary {
   return { endpoint, host }
 }
 
-/** Human label for the push service behind an endpoint host. */
+/**
+ * Human label for the push service behind an endpoint host.
+ *
+ * Suffixes carry a leading dot and are matched on a label boundary, mirroring
+ * the server-side SSRF allow-list in `_shared/web-push.ts`. A bare
+ * `endsWith('push.apple.com')` also matches `evilpush.apple.com`, which is
+ * only a mislabel here (this function decides display text, not access) but
+ * is the wrong habit to leave in the tree next to a real allow-list — and
+ * CodeQL flags it as `js/incomplete-url-substring-sanitization`.
+ */
+const PUSH_SERVICE_LABELS: ReadonlyArray<readonly [suffix: string, label: string]> = [
+  ['.push.apple.com', 'Apple'],
+  ['.push.services.mozilla.com', 'Mozilla (Firefox)'],
+  ['.notify.windows.com', 'Microsoft (Edge)'],
+]
+
+const PUSH_SERVICE_EXACT: Readonly<Record<string, string>> = {
+  'fcm.googleapis.com': 'Google (Chrome / Android)',
+}
+
 export function pushServiceLabel(host: string): string {
-  if (host.endsWith('push.apple.com')) return 'Apple'
-  if (host === 'fcm.googleapis.com') return 'Google (Chrome / Android)'
-  if (host.endsWith('push.services.mozilla.com')) return 'Mozilla (Firefox)'
-  if (host.endsWith('notify.windows.com')) return 'Microsoft (Edge)'
+  const h = host.toLowerCase()
+  const exact = PUSH_SERVICE_EXACT[h]
+  if (exact) return exact
+  for (const [suffix, label] of PUSH_SERVICE_LABELS) {
+    // `length >` rejects the bare suffix-without-a-subdomain case too.
+    if (h.endsWith(suffix) && h.length > suffix.length) return label
+  }
   return host
 }
 

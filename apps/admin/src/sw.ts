@@ -256,6 +256,18 @@ self.addEventListener('notificationclick', (event) => {
 // claims clients on activate (see above). A page that wants to force the
 // swap can still post SKIP_WAITING.
 self.addEventListener('message', (event) => {
+  // Only act on messages from our own pages. A service worker's message port
+  // is reachable from any client it controls, so the sender is checked before
+  // the payload is trusted (CodeQL js/missing-origin-check). `event.source` is
+  // the Client that posted; its url carries the origin.
+  const source = event.source as Client | null
+  if (!source || typeof source.url !== 'string') return
+  try {
+    if (new URL(source.url).origin !== self.location.origin) return
+  } catch {
+    return
+  }
+
   if (event.data && (event.data as { type?: string }).type === 'SKIP_WAITING') {
     void self.skipWaiting()
   }

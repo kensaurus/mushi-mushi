@@ -88,6 +88,19 @@ describe('pushServiceLabel / summarise', () => {
     expect(pushServiceLabel('db5p.notify.windows.com')).toMatch(/Microsoft/)
     expect(pushServiceLabel('other.example')).toBe('other.example')
   })
+  it('does not label a look-alike host as a real push service', () => {
+    // A bare endsWith('push.apple.com') matches all of these. The suffixes
+    // carry a leading dot and require a label boundary, mirroring the
+    // server-side SSRF allow-list in _shared/web-push.ts.
+    expect(pushServiceLabel('evilpush.apple.com')).toBe('evilpush.apple.com')
+    expect(pushServiceLabel('push.apple.com.attacker.test')).toBe('push.apple.com.attacker.test')
+    expect(pushServiceLabel('notpush.services.mozilla.com')).toBe('notpush.services.mozilla.com')
+    expect(pushServiceLabel('xnotify.windows.com')).toBe('xnotify.windows.com')
+    // The bare suffix with no subdomain is not a real endpoint host either.
+    expect(pushServiceLabel('push.apple.com')).toBe('push.apple.com')
+    // Casing must not be a bypass.
+    expect(pushServiceLabel('WEB.PUSH.APPLE.COM')).toBe('Apple')
+  })
   it('summarises an endpoint down to its host', () => {
     expect(summarise('https://web.push.apple.com/QWERTY')).toEqual({ endpoint: 'https://web.push.apple.com/QWERTY', host: 'web.push.apple.com' })
     expect(summarise('not a url').host).toBe('not a url')
