@@ -164,9 +164,9 @@
       "@xmldom/xmldom": ">=0.9.12",
       "sharp": ">=0.35.4",
       "js-yaml@3": ">=3.15.2",
-      "undici": "^6.27.0",
       "postcss": "^8.5.18",
-      "read-yaml-file>js-yaml": "^4.3.2"
+      "read-yaml-file>js-yaml": "^4.3.2",
+      "@connectrpc/connect-node>undici": "^6.27.0"
     }
   }
 }
