@@ -540,8 +540,54 @@ spec-conformance matrix, and burndown live in
       JWT pattern catches Conduit's non-Bearer scheme).
 - Verified: core 192 tests, web 225 tests, typecheck 47/47 green.
 
-### Phase 2 — Conduit fixture matrix + dogfood harness `PLANNED`
+### Phase 2 — Conduit fixture matrix + dogfood harness `COMPLETE` (except CI gate, 2026-09-12 audit)
+- [x] Vendored `examples/realworld/` + `conduit-journey.spec.ts` + `pnpm e2e:realworld` shipped in `76ec9325` (#340).
+- [ ] `MUSHI_REALWORLD=1` CI job never landed (no workflow references it) — tracked under Plan 017 P0.
 Vendored `examples/realworld/` (express backend + react-vite + hash-router
 frontends), non-interactive `mushi init` wiring, `conduit-journey.spec.ts`
 capture→ingest assertions, MCP fix-loop dogfood step, `MUSHI_REALWORLD=1`
 CI gate + `pnpm e2e:realworld`.
+
+---
+
+## Plan 017 — Dead Code, MCP 2026-07-28 Attunement, Voice Loop (2026-09-12) `BUILT — UNCOMMITTED`
+
+### Goal
+Turn the dead-code register into wired features, move the hosted MCP server to
+the published 2026-07-28 revision (dual-era), and ship the phone-voice to
+cloud-agent to draft-PR loop. Full audited plan, corrections ledger, decisions
+and sequencing live in
+[dead-code-voice-agent-loop.md](./dead-code-voice-agent-loop.md); decisions are
+recorded as ADRs 0007–0014. The unreachable-feature register is
+[plan-dead-code.md](./plan-dead-code.md); the running evidence log, including
+seven bugs found only by testing against production, is
+[plan-017-verification.md](./plan-017-verification.md).
+
+### Deliverables
+- [x] A: knip@6 config + baselines + CI ratchets (748 production / 587 default, measured after every workstream landed); tsconfig/lint enforcement gaps closed (24 tsconfigs re-based, 12 packages gained lint); tool-count drift fixed at 73 and gated; unreachable-feature register written
+- [x] B: hosted MCP dual-era (2024-11-05 … 2026-07-28) with `server/discover`, MRTR, tasks extension, verified live by 13 probes; `packages/mcp` on SDK v2 (ADR 0014)
+- [x] C: `POST /v1/intake/voice` + `voice:write` scope + STT + hardening; Slack events/commands, Telegram webhook, admin PWA (share_target, tap-to-talk, Web Push); Cursor v1 first-class + webhook + poller; GitHub Agent Tasks adapter; Linear-agent fix; A2A 1.0 wire format
+- [x] D: AgentInspect reply ([agentinspect-reply-2026-09-12.md](./agentinspect-reply-2026-09-12.md))
+- [x] Nine migrations applied to `dxptnwrhwsqckaftyymj` with the ledger reconciled to the on-disk filenames; edge functions deployed; prod verified end to end
+- [ ] **Not done — needs an owner:** nothing committed or pushed; no baseline was taken on clean master; `deadcode-execute` beyond three safe deletions is debt against the ratchet, not a bulk delete; no live cloud-agent dispatch (it would open a PR on this repository); the admin console is not deployed (CI ships it from master and the tree carries unreviewed work); the `001000` Sentry-source backfill is recorded as applied but was never run against production data; and `20260828100000_sdk_upgrade_jobs_stuck_reaper.sql` (another workstream's, untracked) is on disk but unapplied
+
+### Gates at hand-off
+`typecheck` 52/52 · `lint` 49/49 · `build` 44/44 · `check:drift` pass ·
+`check:design` pass · knip 748/587 pass · `changelog:check` pass ·
+`check:changeset-orphans` pass · Deno entrypoints 58/58. Every other step of the
+CI `build` job was run individually and passes.
+
+`pnpm test` was unreliable and the cause turned out to be a real defect, not
+host flakiness: `packages/web/src/capture/discovery.test.ts` slept a flat 150ms
+against a 100ms debounce and failed two isolated runs in three. Committed code
+predating this plan. Fixed by polling for the condition instead — no assertion
+changed — after which the web package went five for five and a full
+`turbo run test --force` came back 85/85. A second cause was then found the same way — `core/src/api-client.test.ts` timing
+out at vitest's 5s default while sleeping through a real retry backoff — so
+`core` and `server` now set a 30s `testTimeout`. The residual is the host: 6.1 GB
+free of 31.7 GB while turbo runs ten vitest instances, which is why the failing
+package moved every run. Detail as bug 11 in
+[plan-017-verification.md](./plan-017-verification.md).
+
+`pnpm install` was run and `pnpm-lock.yaml` is updated — CI's
+`--frozen-lockfile` needs it.

@@ -192,6 +192,46 @@ jobs:
         # so dead-click regressions fail PR CI before they ship.
         run: node scripts/check-dead-buttons.mjs
 
+      # Dead-code ratchet (Plan 017, docs/execplans/dead-code-voice-agent-loop.md A4).
+      # Both thresholds are the measured post-cleanup baselines committed under
+      # docs/execplans/knip-baseline/. Lower them as findings are paid down;
+      # never raise them to get a red run green.
+      - name: Check dead code (knip, production)
+        run: pnpm exec knip --production --max-issues 748
+
+      - name: Check dead code (knip, default + config hints)
+        run: pnpm exec knip --max-issues 587 --treat-config-hints-as-errors
+
+      - name: Check debug residue and suppression ratchet
+        # console.(log|debug|warn), @ts-ignore/@ts-expect-error, eslint-disable
+        # and `any` counts in non-test product source; maxima pinned to the
+        # 2026-09-12 baseline in scripts/check-residue-ratchet.mjs.
+        run: pnpm check:residue
+
+      - name: Check nav registry
+        run: pnpm check:nav-registry
+
+      - name: Check SDK docs match the web package surface
+        run: pnpm check:sdk-api-surface
+
+      - name: Check MCP catalog sync
+        # Tool/resource/prompt counts in mcp-admin.ts, the discovery card,
+        # the MCP pin and every prose site must match packages/mcp/src/catalog.ts.
+        run: pnpm check:catalog-sync
+
+      - name: Check MCP catalog count
+        run: pnpm check:catalog-count
+
+      - name: Check Helm migration mirror
+        # deploy/helm/migrations must mirror packages/server/supabase/migrations;
+        # run `pnpm sync:helm-migrations` and commit when this fails.
+        run: pnpm check:helm-migrations
+
+      - name: Check env names read in source are documented (warn)
+        # Reports env names read by source but absent from every .env.example.
+        # --warn until the backlog is zeroed; then drop the flag to enforce.
+        run: pnpm check:env-source-parity -- --warn
+
       - name: Check config docs are in sync
         # Regression guard: docs/CONFIG_REFERENCE.md is auto-generated from
         # apps/admin/src/lib/configDocs.ts and must not drift. Run
