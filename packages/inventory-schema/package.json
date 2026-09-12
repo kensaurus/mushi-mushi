@@ -49,7 +49,10 @@
     "user-story",
     "qa",
     "agentic-coding",
-    "knowledge-graph"
+    "knowledge-graph",
+    "test-inventory",
+    "schema",
+    "coverage"
   ],
   "publishConfig": {
     "access": "public",

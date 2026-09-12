@@ -49,7 +49,11 @@
     "github",
     "github-issues",
     "plugin",
-    "bug-tracking"
+    "bug-tracking",
+    "bug-reporting",
+    "integration",
+    "issue-tracker",
+    "issue-sync"
   ],
   "files": [
     "dist",

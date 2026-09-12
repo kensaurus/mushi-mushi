@@ -50,7 +50,10 @@
     "agentic-coding",
     "vibe-coding",
     "dead-code",
-    "mocks"
+    "mocks",
+    "lint-rules",
+    "static-analysis",
+    "code-quality"
   ],
   "publishConfig": {
     "access": "public",

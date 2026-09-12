@@ -42,7 +42,10 @@
     "auth",
     "playwright",
     "qa",
-    "cookie-refresh"
+    "cookie-refresh",
+    "e2e",
+    "authentication",
+    "test-automation"
   ],
   "publishConfig": {
     "access": "public",

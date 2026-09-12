@@ -48,7 +48,12 @@
     "mushi-mushi",
     "bugsnag",
     "plugin",
-    "error-tracking"
+    "error-tracking",
+    "bug-reporting",
+    "integration",
+    "error-monitoring",
+    "crash-reporting",
+    "observability"
   ],
   "files": [
     "dist",

@@ -50,7 +50,11 @@
     "crashlytics",
     "plugin",
     "mobile",
-    "crash-reporting"
+    "crash-reporting",
+    "bug-reporting",
+    "integration",
+    "android",
+    "ios"
   ],
   "files": [
     "dist",

@@ -50,7 +50,11 @@
     "msteams",
     "plugin",
     "notifications",
-    "adaptive-cards"
+    "adaptive-cards",
+    "bug-reporting",
+    "integration",
+    "chatops",
+    "alerting"
   ],
   "files": [
     "dist",

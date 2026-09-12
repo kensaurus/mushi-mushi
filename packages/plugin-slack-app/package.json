@@ -64,7 +64,11 @@
     "slack-app",
     "oauth",
     "slash-commands",
-    "interactive"
+    "interactive",
+    "bug-reporting",
+    "integration",
+    "chatops",
+    "notifications"
   ],
   "engines": {
     "node": ">=20"
