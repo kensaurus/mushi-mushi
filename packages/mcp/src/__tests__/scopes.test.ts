@@ -154,14 +154,16 @@ describe('per-scope tool filtering', () => {
     }
   })
 
-  it('calling a filtered-out tool returns an isError result without hitting the API', async () => {
+  it('calling a filtered-out tool is rejected by the server without hitting the API', async () => {
     const { client } = await connectClient(fetchStub.stub, ['mcp:read'])
     try {
-      // dispatch_fix is mcp:write — must not be registered.
-      const res = await client.callTool({ name: 'dispatch_fix', arguments: { reportId: 'r1' } })
-      expect(res.isError).toBe(true)
-      const content = res.content as Array<{ type: string; text: string }>
-      expect(content[0].text).toMatch(/dispatch_fix not found/)
+      // dispatch_fix is mcp:write — must not be registered. The v2 SDK
+      // answers an unknown tool with a JSON-RPC -32602 (Invalid params)
+      // error, where v1 returned an isError tool result; either way the
+      // client surfaces "<tool> not found".
+      await expect(
+        client.callTool({ name: 'dispatch_fix', arguments: { reportId: 'r1' } }),
+      ).rejects.toThrow(/dispatch_fix not found/)
       // Critically: no fetch was made — the LLM didn't burn a round-trip
       // on an INSUFFICIENT_SCOPE response from the API.
       expect(fetchStub.calls).toHaveLength(0)
@@ -244,5 +246,51 @@ describe('structured tool output (MCP 2025-06-18)', () => {
     const recent = tools.find(t => t.name === 'get_recent_reports')
     expect(recent?.outputSchema).toBeTruthy()
     expect(recent?.outputSchema).toMatchObject({ type: 'object' })
+  })
+
+  it('check_sdk_version hits /v1/sdk/latest-version and returns structured freshness', async () => {
+    fetchStub.enqueue({
+      ok: true,
+      data: { package: '@mushi-mushi/web', latest: '1.27.2' },
+    })
+    const res = await client.callTool({
+      name: 'check_sdk_version',
+      arguments: { package: '@mushi-mushi/web', current: '1.27.0' },
+    })
+    expect(fetchStub.calls[0]?.url).toContain('/v1/sdk/latest-version?package=%40mushi-mushi%2Fweb')
+    expect(res.structuredContent).toEqual({
+      package: '@mushi-mushi/web',
+      latest: '1.27.2',
+      current: '1.27.0',
+      outdated: true,
+      suggestedActions: [
+        {
+          type: 'tool_call',
+          toolName: 'search_mushi_docs',
+          arguments: { query: '@mushi-mushi/web upgrade mushi-sdk-upgrade' },
+          reason:
+            'Read current upgrade notes, then apply the mushi-sdk-upgrade skill. This tool does not bump the pin.',
+        },
+      ],
+    })
+    const listed = (await client.listTools()).tools.find(t => t.name === 'check_sdk_version')
+    expect(listed?.annotations?.readOnlyHint).toBe(true)
+  })
+
+  it('check_sdk_version omits suggestedActions when the pin matches latest', async () => {
+    fetchStub.enqueue({
+      ok: true,
+      data: { package: '@mushi-mushi/web', latest: '1.27.2' },
+    })
+    const res = await client.callTool({
+      name: 'check_sdk_version',
+      arguments: { package: '@mushi-mushi/web', current: '1.27.2' },
+    })
+    expect(res.structuredContent).toEqual({
+      package: '@mushi-mushi/web',
+      latest: '1.27.2',
+      current: '1.27.2',
+      outdated: false,
+    })
   })
 })

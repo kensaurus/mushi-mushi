@@ -8,7 +8,7 @@ export default defineConfig([
     dts: true,
     clean: true,
     target: 'node18',
-    external: ['@modelcontextprotocol/sdk', 'zod', '@mushi-mushi/core'],
+    external: ['@modelcontextprotocol/server', '@modelcontextprotocol/core', 'zod', '@mushi-mushi/core'],
     banner: {
       js: '#!/usr/bin/env node',
     },
@@ -28,6 +28,6 @@ export default defineConfig([
     dts: true,
     clean: false,
     target: 'node18',
-    external: ['@modelcontextprotocol/sdk', 'zod', '@mushi-mushi/core'],
+    external: ['@modelcontextprotocol/server', '@modelcontextprotocol/core', 'zod', '@mushi-mushi/core'],
   },
 ]);

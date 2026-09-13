@@ -52,6 +52,11 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   'stripe-webhooks': 'Stripe signature verified in handler',
   'webhooks-github-indexer': 'GitHub HMAC verified in handler',
   'slack-interactions': 'Slack signing secret verified in handler',
+  // Telegram Bot API webhook for the voice inbox — Telegram cannot carry a
+  // Supabase JWT. Each update carries X-Telegram-Bot-Api-Secret-Token (set via
+  // setWebhook) which handler.ts compares (sha256, constant-time) against
+  // project_settings.telegram_webhook_secret_hash before any work.
+  'telegram-webhook': 'Telegram setWebhook secret_token verified in handler',
   // Linear integration — public endpoints authenticated in-handler.
   // linear-oauth-callback: OAuth2 redirect target from Linear (user browser,
   //   no Supabase JWT); CSRF enforced via state nonce in linear_oauth_states.
@@ -62,6 +67,11 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   'linear-oauth-callback': 'OAuth2 redirect — state nonce CSRF + Linear token exchange',
   'webhooks-linear': 'Linear HMAC-SHA256 webhook signature verified in handler',
   'webhooks-linear-agent': 'Linear HMAC-SHA256 agent webhook signature verified in handler',
+  // cursor-webhook: Cursor Cloud Agents v0 statusChange receiver. Cursor
+  //   cannot send a Supabase JWT; the handler verifies X-Webhook-Signature
+  //   (HMAC-SHA256 over the raw body with the per-project derived secret)
+  //   constant-time before reading anything from the payload.
+  'cursor-webhook': 'Cursor v0 webhook HMAC (X-Webhook-Signature) verified in handler',
   // Deliberately unauthenticated liveness/readiness surface. It returns only
   // process/DB health and a version, never tenant data.
   healthz: 'Public liveness probe — exposes only status, DB health, and version',

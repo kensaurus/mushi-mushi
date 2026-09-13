@@ -23,7 +23,7 @@
  * needs deterministic data and exercises SDK capture/ingest, not Conduit logic.
  */
 
-import express from 'express'
+import express, { type Express } from 'express'
 import { MushiNodeClient } from '@mushi-mushi/node'
 import { mushiExpressErrorHandler, mushiTraceMiddleware } from '@mushi-mushi/node'
 
@@ -124,7 +124,7 @@ const FIXTURE_JWT =
 // App setup
 // ─────────────────────────────────────────────────────────────────────────────
 
-const app = express()
+const app: Express = express()
 app.use(express.json())
 // Mushi trace middleware (adds traceparent to upstream requests).
 app.use(mushiTraceMiddleware({

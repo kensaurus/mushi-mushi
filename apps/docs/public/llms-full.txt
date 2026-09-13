@@ -3,8 +3,8 @@
 > Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Generated: 2026-08-06
-Pages: 188
+Generated: 2026-09-12
+Pages: 190
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. For a compact link index see
@@ -3535,7 +3535,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**71 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**73 tools**, 8 resources, 4 prompts).
 
 ---
 
@@ -6108,6 +6108,140 @@ session. Attempts from non-operator sessions return `404 NOT_FOUND`.
 
 ---
 
+## Voice intake
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/voice
+
+---
+title: Voice intake
+---
+
+# Voice intake
+
+**Route:** `/voice`
+
+> **Scenario:** You are away from your desk and something is broken. You say what
+> is wrong, read back the transcript the console shows you, tap Confirm, and a
+> draft pull request lands while you are still holding your phone.
+
+Voice intake turns a spoken note into a report, and optionally into a dispatched
+draft-PR fix. Everything passes through one gate: **you always see the verbatim
+transcript before anything is dispatched.**
+
+---
+
+## Turning it on
+
+Voice intake is off until you enable it. Go to **Settings → Voice intake** and
+turn on the toggle. In the same tab you set:
+
+| Setting | What it does |
+|---|---|
+| **Audio retention** | Days to keep the clip. `0` deletes it the moment the transcript exists. |
+| **Languages** | Hints passed to the transcriber. Leave them all off to let it detect. |
+| **Telegram bot token** | Optional. Enables the Telegram inbox described below. |
+| **GitHub user token** | Optional. Needed only for GitHub-hosted cloud agent tasks. |
+
+Transcription uses your OpenAI key from **Settings → API keys**. Without one,
+audio intake fails with a message telling you so; typed intake still works.
+
+---
+
+## The four ways in
+
+| Path | Where it works |
+|---|---|
+| **Tap to talk** | The `/voice` page in any browser, best installed to the Home Screen. |
+| **Upload a clip** | Anywhere. Accepts ogg, m4a, mp3, webm and wav up to 25 MB. |
+| **Type it instead** | Anywhere. Skips transcription entirely. |
+| **Share a voice memo** | Android Chrome only, once the console is installed. Share the memo to Mushi. |
+
+  Install the console to your Home Screen to get the share target, offline shell
+  and push notifications. On iOS, notifications only work after installing —
+  that is an Apple restriction, and the page says so where it matters.
+
+---
+
+## The confirmation gate
+
+Nothing dispatches on your voice alone. After transcription you see the exact
+words that were heard, what Mushi intends to do, and a one-line summary. Then
+you choose Confirm or Cancel.
+
+The confirm token is bound to the session, the transcript hash, the intended
+action and the expiry. It is single-use and valid for ten minutes. Change any
+of those and the token stops verifying, so a replayed or forwarded link cannot
+dispatch anything.
+
+Some phrases are refused outright and never reach a model, in English and
+Japanese: merge, deploy, delete, drop, force-push, production, rollback,
+revert, and anything about secrets or tokens. Voice is a good way to describe a
+bug. It is not a way to touch production.
+
+  The transcript is untrusted input. It is wrapped in explicit delimiters before
+  any model sees it, and personally identifying strings are scrubbed before the
+  text is stored. Read what is on screen before you confirm — that is the whole
+  point of the gate.
+
+---
+
+## Getting the answer back
+
+When the draft pull request opens, or a confirmation is needed, or a fix fails,
+Mushi tells you on whichever surface you used:
+
+- **Push to this phone** — tap *Notify this device* on the voice page. Uses Web
+  Push, so it reaches you with the console closed.
+- **Slack** — the transcript card carries Confirm and Cancel buttons.
+- **Telegram** — same two buttons, as an inline keyboard.
+
+---
+
+## Telegram
+
+Telegram is the practical Android inbox: a voice memo sent to a bot arrives as a
+file the server can fetch.
+
+1. Create a bot with `@BotFather` and paste its token into **Settings → Voice intake**.
+2. Press **Generate bind code** and send `/start ` to your bot within ten minutes.
+3. Press **Connect webhook**.
+
+The binding is per chat and per project, and you can remove any chat from the
+same panel.
+
+---
+
+## Recent voice requests
+
+The list below the recorder shows every session with its status, and links
+through to the report or the pull request once they exist. It updates live.
+
+| Status | Meaning |
+|---|---|
+| `created` | A report was filed; no fix was requested. |
+| `awaiting_confirm` | Waiting for you. Expires ten minutes after the transcript. |
+| `confirmed` | You approved it; the agent has been dispatched. |
+| `cancelled` | You declined, or the window closed. Nothing was dispatched. |
+| `failed` | Transcription, a cap, or a refusal stopped it. The reason is shown. |
+
+---
+
+## Limits
+
+Voice intake is capped per project so a stuck client cannot spend your
+transcription budget: 30 intakes per minute, a daily ceiling on transcribed
+audio minutes, 25 MB per clip, and a maximum clip length. Transcribed minutes
+and their cost are recorded per session so you can see what voice actually
+costs you.
+
+## Self-hosting
+
+Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` as edge secrets
+before push will work; the page reports push as unavailable until you do. See
+[Edge functions](/self-hosting/edge-functions) for the deploy list.
+
+---
+
 ## Mushi goes AGPLv3 — the honest open source story
 
 Source: https://kensaur.us/mushi-mushi/docs/blog/agplv3-relicense
@@ -7975,7 +8109,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP71 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP73 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*OpenAPI 3.1 at /openapi.jsonadminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/taskscreate / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSEfix dispatch streamAPI key OR JWT"]
@@ -8002,7 +8136,7 @@ your client:
   integrations (Cursor / Claude Desktop / Claude Code / Continue /
   Cline / Zed / Windsurf). Your client launches the server as a
   subprocess and pipes JSON-RPC over stdio.
-- **Streamable HTTP** (2025-03-26 spec, 2026-05-09 release) — single
+- **Streamable HTTP** (2024-11-05 … 2026-07-28, dual-era since 2026-09-12) — single
   endpoint at `/functions/v1/mcp`. POST returns `application/json` or
   `text/event-stream` per content negotiation, GET opens an SSE stream
   for server-pushed notifications, DELETE terminates the session. Use
@@ -8023,7 +8157,7 @@ your client:
 }
 ```
 
-The full tool catalog (71 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (73 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools (generated)`](/sdks/mcp-tools.generated). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -8198,7 +8332,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 71 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 73 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -8732,7 +8866,11 @@ Your AI wrote it. Mushi tells you why it broke.</>}
 
 {LANDING_QUICKSTART_INTRO}
 
-## Where Sentry stops, this picks up.
+## One queue. Sentry flows in, fixes flow out.
+
+Sentry tells you what threw. Mushi ingests that — plus the bugs that never
+throw — explains each one in plain English, and closes the loop with a fix your
+agent can ship. With or without Sentry.
 
   
 
@@ -8853,6 +8991,177 @@ dispatch fixes. Rotate to a key with the right scope in Settings → API Keys.
 
 ---
 
+## Voice intake
+
+Source: https://kensaur.us/mushi-mushi/docs/integrations/voice-intake
+
+---
+title: Voice intake
+description: Say the bug on your phone, get a draft PR back. iOS Shortcut, Telegram, Slack, or the installed console — one pipeline, one confirmation gate, no audio kept.
+---
+
+# Voice intake
+
+Dictate a bug or a small change request on your phone. Mushi transcribes it, files a report, and — only for change requests, and only after you confirm the verbatim transcript — dispatches the fix and replies with the draft PR link in the same chat.
+
+```
+phone voice ──▶ transcript ──▶ sanitise + PII scrub ──▶ refuse privileged verbs
+            ──▶ intent (create_report | open_draft_pr | unknown)
+            ──▶ report (source = voice)
+            ──▶ [open_draft_pr only] verbatim transcript + confirm token ──▶ you confirm
+            ──▶ fix dispatched ──▶ draft PR ──▶ reply in Slack / Telegram / push
+```
+
+Four inboxes feed the same pipeline. Pick the one that matches your phone.
+
+| Inbox | Best for | Audio leaves the phone? |
+| --- | --- | --- |
+| iOS Shortcut (Siri dictation) | iPhone, lowest friction | No — iOS transcribes on device, only text is sent |
+| Telegram bot | Android (and anything with Telegram) | Yes — the voice note is transcribed server-side, then deleted |
+| Slack | Teams already triaging in Slack | Yes — the clip is transcribed server-side, then deleted |
+| Installed console (PWA) | Tap-to-talk in the console, or Android share sheet | Yes — uploaded to a private bucket, transcribed, then deleted |
+
+## Enable it
+
+Voice intake is **off by default** because speech is personal data.
+
+### Turn it on
+
+Console → **Settings** → **Voice intake**: enable, pick the languages you speak (`ja`, `en`, …), and choose an audio retention window. `0 days` (the default) deletes every audio object the moment its transcript is stored.
+
+### Mint a `voice:write` key
+
+Console → **Settings** → **API keys** → new key with the **`voice:write`** scope only. This is the key that lives on your phone. It can call the voice routes and nothing else — not reports, not MCP, not admin.
+
+### Make sure Autofix is on
+
+Draft PRs need **Settings → Fixes → Autofix** enabled and a connected GitHub repo. Filing reports works without it.
+
+  Transcription and intent classification run on the project's OpenAI / Anthropic keys (BYOK or the hosted wallet). Speech-to-text costs about **$0.0045 per audio minute** (`gpt-transcribe`); the intent call is a few hundred tokens on a small model.
+
+## iOS Shortcut
+
+Two Shortcuts: one to speak, one to confirm.
+
+  
+    1. **Dictate Text** — language: your choice, *Stop listening: After pause*.
+    2. **Get Contents of URL**
+       - URL: `https://.supabase.co/functions/v1/api/v1/intake/voice`
+       - Method: `POST` · Request body: **JSON**
+       - Headers: `X-Mushi-Api-Key: mushi_…` (the `voice:write` key), `Idempotency-Key: ` (Shortcuts: *Get UUID* action)
+       - Body: `source` = `ios_shortcut`, `transcript` = *Dictated Text*
+    3. **Get Dictionary Value** — key `session.message`
+    4. **Show Result** — Siri reads the message aloud. (*Speak Text* is unreliable inside Siri-invoked runs; *Show Result* is what gets spoken.)
+
+    For a change request the message reads back the verbatim transcript and ends with *"Reply confirm to proceed"*. Save `session.id` and `session.confirm_token` from the same response (two more *Get Dictionary Value* actions into a note or a variable) for the second Shortcut.
+  
+  
+    1. **Get Contents of URL**
+       - URL: `https://.supabase.co/functions/v1/api/v1/intake/voice//confirm`
+       - Method: `POST` · Body: JSON with `token` = the saved `confirm_token`
+       - Header: `X-Mushi-Api-Key: mushi_…`
+    2. **Show Result** — `session.message` says *"Draft PR requested"*; the PR link arrives as a push notification or in the console's Voice activity card once the agent opens it.
+
+    A single Shortcut with an *If Dictated Text contains "確認"* branch works too.
+  
+
+The raw request, for reference:
+
+```bash
+curl -X POST "https://.supabase.co/functions/v1/api/v1/intake/voice" \
+  -H "X-Mushi-Api-Key: mushi_xxx" \
+  -H "Idempotency-Key: 4d2a…" \
+  -H "Content-Type: application/json" \
+  -d '{"source":"ios_shortcut","transcript":"the login button does nothing on Safari"}'
+```
+
+```json
+{
+  "ok": true,
+  "session": {
+    "id": "…",
+    "status": "created",
+    "transcript": "the login button does nothing on Safari",
+    "action": "create_report",
+    "summary": "Login button unresponsive on Safari",
+    "report_id": "…",
+    "message": "Filed report: Login button unresponsive on Safari\n\nFrom: \"the login button does nothing on Safari\""
+  }
+}
+```
+
+A change request comes back as `status: "awaiting_confirm"` with a `confirm_token`; `POST /v1/intake/voice/:id/confirm` with `{ "token": "…" }` dispatches, `…/cancel` discards. Tokens are single-use and expire after 10 minutes.
+
+## Telegram (the Android inbox)
+
+### Create a bot
+
+Message [@BotFather](https://t.me/BotFather) → `/newbot` → copy the token.
+
+### Connect it
+
+Console → **Settings** → **Voice intake** → paste the bot token. It is stored in Vault, never in plain text. The console registers the webhook for you.
+
+### Bind your chat
+
+Console → **Generate bind code** (valid 10 minutes, single use). Open your bot in Telegram and send `/start `. The bot greets you with the project name.
+
+### Talk
+
+Hold the microphone, describe the bug or the change, release. The bot replies with the transcript. Change requests get **Confirm** / **Cancel** buttons; tap Confirm and the draft PR link is posted back into the same chat when the agent opens it.
+
+Plain text messages work the same way. Voice notes are capped at 120 seconds and 20 MB.
+
+## Slack
+
+Two ways in, both need the Mushi Slack app installed with `files:read`, `commands` and `chat:write`:
+
+- **Slash command**: `/mushi voice fix the footer alignment on checkout` — the reply is ephemeral and the confirmation uses the same buttons as fix dispatch.
+- **Audio clip**: record a Slack audio clip (or share an audio file) in a channel the app is in. Mushi downloads the clip with the bot token, transcribes it, and replies in a thread. Slack's own transcript is ignored.
+
+## Installed console (PWA)
+
+Install the console to your Home Screen (Chrome on Android: *Install app*; Safari on iOS: *Add to Home Screen*). The **Voice** page has a tap-to-talk button (max 120 s) and, on Android, the console appears in the share sheet for audio files — Google Recorder's `.m4a` works. The recording is uploaded through a short-lived signed URL into the private `voice-intake` bucket and deleted after transcription. Confirmation is a button on the page; the PR link arrives as a web push notification when you granted permission.
+
+## What voice intake refuses
+
+Voice text is untrusted **and** lossy — "delete" and "deploy" sound alike, 削除 and 消去 do too. A transcript that mentions any of these is refused outright, before any model sees it, and the verbatim transcript is echoed back so you can see what was heard:
+
+| English | Japanese |
+| --- | --- |
+| merge, deploy, delete, drop, force push, production / prod, rollback, revert, secret, token, rotate | マージ, デプロイ, 削除, 消去, 本番, 強制, ロールバック, リバート, シークレット, トークン |
+
+Everything else that gets through is still constrained:
+
+- Agents open **draft PRs on a new branch only**. Merging stays a human action in the console.
+- The intent is extracted into a strict schema (`create_report`, `open_draft_pr`, `unknown`); the transcript is passed as delimited untrusted data and is never free-texted into an agent prompt.
+- Invisible Unicode (zero-width characters, tag characters, bidi controls) and HTML comments are stripped before classification.
+- A change request needs an explicit confirmation of the **verbatim transcript**: a single-use HMAC token bound to the session, transcript hash, action and expiry.
+- Reporter (end-user) tokens cannot use the voice routes at all.
+
+## Privacy and retention
+
+- Audio is deleted from the bucket as soon as the transcript is stored unless you set a retention window (0–365 days). The daily retention sweep enforces the window.
+- Transcripts pass through the PII scrubber (emails, phone numbers, IPs, secret-shaped tokens) **before** they are written to the report.
+- The report keeps the sanitised transcript, the detected language and the sha256 of the audio bytes as an audit trail; it never keeps the audio itself unless retention is on.
+- Speech-to-text is a vendor hop to OpenAI on the project's key. Mention it in your privacy policy if your users can reach a voice inbox.
+- Per-project caps: 30 voice requests per minute, 120 audio minutes per day, plus the normal ingest burst limit.
+
+## API reference
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/v1/intake/voice` | `voice:write` key or admin JWT | Body: exactly one of `transcript`, `audio_path`, `audio_base64` (+ `mime`, ≤ 8 MB decoded). Optional `source`, `external_id`, `languages`, `duration_sec`. Honours `Idempotency-Key`. |
+| `POST` | `/v1/intake/voice/upload-url` | same | `{ mime }` → signed upload URL + `path` for the bucket. `400 UNSUPPORTED_STORAGE_PROVIDER` on BYO S3/R2/GCS projects — send `audio_base64` instead. |
+| `POST` | `/v1/intake/voice/:id/confirm` | same | `{ token }` → dispatches the fix. `403 INVALID_CONFIRM_TOKEN`, `410 EXPIRED`, `409 CONFLICT` once used. |
+| `POST` | `/v1/intake/voice/:id/cancel` | same | `{ token }` → cancels a pending request. |
+| `GET` | `/v1/intake/voice/sessions?limit=20` | admin JWT or `mcp:read` | Recent sessions with status, action, report and PR link. |
+| `GET` | `/v1/intake/voice/:id` | same | One session. |
+
+`403 VOICE_INTAKE_DISABLED` means the project has not enabled the feature. See the [error catalog](/concepts/error-catalog) for the rest.
+
+---
+
 ## Launch Week
 
 Source: https://kensaur.us/mushi-mushi/docs/launch-week
@@ -8953,36 +9262,11 @@ screenshot) plus structured user metadata.
 
 | BugHerd | Mushi |
 |---------|-------|
-| `` | `` mounting `Mushi.init({ projectId, apiKey })` |
-| Sidebar widget (always visible) | Floating button widget (`widget.trigger: 'button'`) — discreet, opens on click |
-| Element click → annotation | User triggers widget → screenshot + element selector capture |
-| `bugherd.identify(user)` | `Mushi.setUser({ id, email, name })` |
-| Project-board view | Mushi admin console — Reports tab |
-| `data-bugherd-private` (skip element from screenshots) | `data-mushi-redact` (same idea) |
-
-## Before / After
-
-```html
-<!-- BEFORE — BugHerd -->
-
-  (function(d,t) {
-    var bh = d.createElement(t); bh.async = true;
-    bh.type = 'text/javascript';
-    bh.src = 'https://www.bugherd.com/sidebarv2.js?apikey=YOUR_API_KEY';
-    var s = d.getElementsByTagName(t)[0]; s.parentNode.insertBefore(bh, s);
-  })(document, 'script');
-
+| `
 ```
 
 ```html
 <!-- AFTER — Mushi (web) -->
-
-  import { Mushi } from 'https://esm.sh/@mushi-mushi/web'
-  Mushi.init({
-    projectId: 'YOUR_PROJECT_ID',
-    apiKey:    'YOUR_PUBLIC_KEY',
-    widget:    { trigger: 'button' },  // BugHerd-equivalent UX
-  })
 
 ```
 
@@ -8992,9 +9276,6 @@ For React / Vue / Svelte / Next, use the framework-specific SDK instead.
 
 Sign in to the Mushi admin console; copy projectId + apiKey.</> },
     { id: 'install', label: 'Install or script-tag Mushi', content: {`# CDN — for the same script-tag UX BugHerd had:
-
-  import { Mushi } from 'https://esm.sh/@mushi-mushi/web'
-  Mushi.init({ projectId: '...', apiKey: '...' })
 
 # Or via npm:
 npm install @mushi-mushi/web`} },
@@ -10476,10 +10757,17 @@ performance monitoring, and release health — keep it. Mushi adds what Sentry
 doesn't do: user-triggered bug reports with plain-English AI diagnosis and a
 paste-ready fix you can hand to your editor's agent via MCP.
 
-  **Two ways to run Mushi with Sentry:**
-  1. **Enrich** — keep Sentry as-is; Mushi captures user bug reports and links
+  **Three ways to run Mushi with Sentry:**
+  1. **Route errors in (recommended)** — point a Sentry issue-alert webhook at
+     `/v1/webhooks/sentry?projectId=<your-project>` and Sentry errors land
+     in the same Mushi queue as user reports: deduped per issue, diagnosed in
+     plain English, fix-dispatchable. Merging the fix resolves the Sentry issue;
+     resolving in Sentry resolves the report; a repeat alert on a fixed report
+     reopens it as a regression. See [the Sentry plugin page](/plugins/sentry)
+     for the 3-step setup.
+  2. **Enrich** — keep Sentry as-is; Mushi captures user bug reports and links
      each one to the matching Sentry event via `@mushi-mushi/plugin-sentry`.
-  2. **Standalone** — use Mushi on its own for capture + diagnosis + fix. You
+  3. **Standalone** — use Mushi on its own for capture + diagnosis + fix. You
      can add Sentry later (or never); nothing in Mushi assumes it.
 
 ## What each tool is for
@@ -10771,16 +11059,6 @@ export default defineNuxtPlugin((nuxtApp) => {
 
 // SvelteKit — src/routes/+layout.svelte
 
-  import { onMount } from 'svelte'
-  import { Mushi } from '@mushi-mushi/web'
-  import { initMushi } from '@mushi-mushi/svelte'
-  import { PUBLIC_MUSHI_PROJECT_ID, PUBLIC_MUSHI_API_KEY } from '$env/static/public'
-  onMount(() => {
-    const credentials = { projectId: PUBLIC_MUSHI_PROJECT_ID, apiKey: PUBLIC_MUSHI_API_KEY }
-    initMushi(credentials)
-    Mushi.init(credentials)
-  })
-
 `} },
     { id: 'hydration', label: 'Verify no hydration warnings', content: <>Mushi renders its widget into a Shadow DOM mounted on document.body on the client side only. It does NOT cause hydration mismatches because the widget is never present in server-rendered HTML. If you see hydration warnings, they're from your code, not Mushi.</> },
     { id: 'dynamic-import', label: 'For Nuxt/Next, use a .client suffix or "use client" for Mushi components', content: <>Mushi components ({``}, useMushi(), useMushiReport()) are client-only because they touch window. Mark them appropriately so SSR does not try to render them server-side.</> },
@@ -10867,50 +11145,7 @@ brings you onto the adapter.
 |-------------------------------|--------------------------------------------------|
 | `Mushi.init({ projectId, apiKey })` in main.js | Same `Mushi.init(...)` PLUS `app.use(MushiPlugin, { projectId, apiKey })` |
 | Manually attach `Vue.config.errorHandler = ...` to forward to Mushi | The adapter wires Vue 3's `app.config.errorHandler` automatically |
-| Reach into `Mushi` directly from any component | Use `useMushi()` composable inside `` |
-
-## Migration checklist
-
-{`# Vue 3 ships a compat build that runs Vue 2 code with deprecation warnings:
-npm install vue@^3
-# Then in your build config, alias 'vue' to '@vue/compat'
-# This lets you migrate incrementally without flag-day risk`} },
-    { id: 'fix-warnings', label: 'Fix every Vue 2-style deprecation warning', content: <>Each warning links to its migration page. Common ones: filters removed, $on/$off/$once removed, functional: true removed. Work through them all before removing the compat alias.</> },
-    { id: 'remove-compat', label: 'Remove @vue/compat alias once warnings are zero', content: <>Now you're on real Vue 3.</> },
-    { id: 'router', label: 'Upgrade Vue Router 3 → 4', content: {`npm install vue-router@^4
-
-// router.js
-- import VueRouter from 'vue-router'
-- Vue.use(VueRouter)
-- export default new VueRouter({ routes })
-+ import { createRouter, createWebHistory } from 'vue-router'
-+ export default createRouter({ history: createWebHistory(), routes })`} },
-    { id: 'state', label: 'Decide: Vuex 4 or Pinia', content: <>Vuex 4 is a Vue-3-compatible drop-in. Pinia is the new recommended state library — better TS, smaller, simpler. If you're touching state code anyway, Pinia is worth the switch.</> },
-    { id: 'install-mushi-adapter', label: 'Install the Mushi Vue adapter', content: {`npm install @mushi-mushi/vue @mushi-mushi/web`} },
-    { id: 'wire-mushi', label: 'Replace direct Mushi.init usage with the adapter', content: {`// main.ts
-
-const credentials = {
-  projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
-  apiKey:    import.meta.env.VITE_MUSHI_API_KEY,
-}
-
-const app = createApp(App)
-
-// 1. Vue plugin: wires useMushi() composable + Vue 3 errorHandler
-app.use(MushiPlugin, credentials)
-
-// 2. Web SDK: actually mounts the floating widget + capture pipeline
-Mushi.init(credentials)
-
-app.mount('#app')`} },
-    { id: 'use-composable', label: 'Migrate components to useMushi()', content: {`
-
-const mushi = useMushi()
-
-async function reportIssue() {
-  await mushi.submitReport({ description: 'Issue from Vue component' })
-}
-`} },
+| Reach into `Mushi` directly from any component | Use `useMushi()` composable inside ``} },
     { id: 'remove-vue2-mushi', label: 'Remove any Vue-2-era Mushi error-handler shims', content: <>If you previously did Vue.config.errorHandler = (err) =&gt; Mushi.captureException(err), delete it. The adapter installs its own app.config.errorHandler that calls Mushi automatically.</> },
     { id: 'verify', label: 'Smoke-test: throw an error, verify it lands as a Mushi report', content: <>Throw inside a Vue lifecycle hook. The adapter forwards it to Mushi as a report tagged with source: vue. Confirm it appears in the admin console.</> },
   ]}
@@ -11733,9 +11968,36 @@ title: Sentry
 
 # Sentry plugin
 
-Mirrors critical Mushi reports into Sentry and resolves linked Sentry issues when a fix merges.
+Two-way Sentry integration: Sentry errors flow **into** Mushi's queue, and Mushi
+fixes flow **back** — merging a fix resolves the linked Sentry issue, resolving
+in Sentry resolves the linked report. The outbound plugin below also mirrors
+critical Mushi reports into Sentry.
 
-## Setup
+## Route Sentry errors into Mushi (inbound)
+
+No plugin needed — this is built into the hosted API:
+
+1. In the Mushi console: **Integrations → Sentry** — set a **Webhook secret**
+   and copy the **Receive URL** shown on the card
+   (`/v1/webhooks/sentry?projectId=<your-project-id>`).
+2. In Sentry: **Alerts → Create Alert Rule** (issue alert) → add a
+   **webhook** action pointed at the receive URL, and set the same secret on
+   the webhook (HMAC-SHA256, `X-Sentry-Hook-Signature`).
+3. Fire a test alert. The error lands in **Reports** with a `via Sentry` badge,
+   a plain-English diagnosis, and a dispatchable fix.
+
+Behavior:
+
+- **Deduped per Sentry issue** — repeat alerts land on the same report.
+- **Regressions reopen** — an alert for an already-fixed report flips it to
+  `reopened` and bumps the regression counter instead of filing a duplicate.
+- **Resolves both ways** — `fix.applied` in Mushi resolves the Sentry issue;
+  `action: resolved` from Sentry resolves the linked Mushi report.
+- Your Sentry **alert rules are the noise filter**: only alerts you route at
+  the webhook are ingested. Sentry User Feedback submissions are also ingested
+  on the same endpoint.
+
+## Setup (outbound plugin)
 
 1. In Mushi: **Marketplace → Sentry → Install**.
 2. Paste your Sentry auth token and org/project slugs.
@@ -11766,25 +12028,82 @@ title: Slack app
 
 # Slack app plugin
 
-Posts classified reports and fix updates to your team channel. Supports Block Kit messages and the `/mushi` slash command for inline triage.
+Triage a bug from the channel it lands in. Mushi posts each classified report
+as a Block Kit card carrying the plain-English title, root cause, and evidence
+counts — and the card's buttons let you dispatch a fix, resolve, or dismiss
+without opening the console.
+
+**Why it exists** — the fastest triage is the one that doesn't need a second
+tab.
+
+**Who it's for** — teams whose bugs already get discussed in Slack.
 
 ## Setup
 
-1. Create a Slack app with bot scopes for your workspace.
-2. In Mushi: **Marketplace → Slack → Install** and paste the bot token + signing secret.
-3. Pick the channel for report notifications and optional thread replies on QA failures.
+1. Create a Slack app with bot scopes in your workspace.
+2. In Mushi: **Marketplace → Slack → Install**, then paste the bot token +
+   signing secret.
+3. Pick the channel for report notifications, and optional thread replies on
+   QA failures.
+4. Point Slack's **Interactivity → Request URL** at
+   `<functions-url>/slack-interactions` so the card buttons work.
+
+## What's on the card
+
+| Element | What it tells you |
+| --- | --- |
+| Header | Severity, category, project — plus `(N×)` when the bug is a repeat |
+| Title | The plain-language headline ("Checkout button does nothing"), with the technical summary beneath it |
+| 🔍 line | Likely root cause from Stage 2 |
+| Context row | Area · component · confidence · reporter · environment · page · release |
+| Evidence row | Console errors, failed requests, repro-step count, screenshot, SDK version |
+| Footer | Report id and session id |
+
+Rows only render when there's something to show, so a thin report stays a
+small card.
+
+## Acting from the channel
+
+| Button | What happens |
+| --- | --- |
+| **Triage →** | Opens the report in the console, scoped to the right project |
+| **Dispatch fix** | Runs the fix agent and opens a draft PR. Swaps to *Install GitHub App* / *Enable Autofix* when the prerequisites are missing |
+| **Resolve ✓** | Marks the report resolved and notifies the reporter |
+| **Dismiss** | Marks it dismissed (noise, duplicate, won't fix), behind a confirm dialog |
+
+Resolve and Dismiss run the same transition contract as the console — plugin
+event, linked-issue resolution, and reporter notification — so acting from
+Slack and acting from the web app can't drift apart.
+
+After an action the card rewrites itself in place: the button row is replaced
+with an outcome line naming who acted and when, and a threaded reply records
+it in channel history.
+
+  **Assign is deliberately absent.** Reports have no assignee column, so an
+  "Assign" button would be a UI with nothing behind it.
 
 ## Package
 
 [`@mushi-mushi/plugin-slack-app`](https://www.npmjs.com/package/@mushi-mushi/plugin-slack-app)
 
+The `/mushi` slash command (`list`, `open `, `resolve `) ships in this
+package for hosts that mount it themselves.
+
 ## Events
 
 | Event | Action |
 | --- | --- |
-| `report.created` / `report.classified` | Post Block Kit summary to channel |
-| `fix.pr_opened` | Thread with PR link |
+| `report.created` / `report.classified` | Post the Block Kit card to the channel |
+| `fix.pr_opened` | Thread with the PR link |
 | `qa_story.failed` / `qa_story.recovered` | Transition-aware threaded updates |
+
+## Troubleshooting
+
+| Symptom | Cause |
+| --- | --- |
+| Buttons do nothing | Interactivity Request URL not set, or the signing secret doesn't match |
+| Cards post but Triage 404s | `ADMIN_BASE_URL` unset on the server — the deep link can't be built |
+| No cards at all | No bot token for the project, and no `slack_webhook_url` fallback configured |
 
 ---
 
@@ -12694,7 +13013,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.19.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.20.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -12720,7 +13039,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.19.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.20.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -13063,8 +13382,6 @@ const mushi = Mushi.init({
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
   apiKey: import.meta.env.VITE_MUSHI_API_KEY,
 })
-
-window.addEventListener('beforeunload', () => mushi.flushOfflineQueueNow())
 ```
 
 ## 3. Submit
@@ -13675,9 +13992,19 @@ Console URL resolution: `MUSHI_CONSOLE_URL` → saved config → localhost `:646
 mushi doctor                  # local: config, endpoint, SDK install
 mushi doctor --server         # + 4 dispatch checks (GitHub, codebase, Anthropic, autofix)
 mushi doctor --ingest         # + SDK heartbeat / first-report ingest steps
+mushi doctor --host-app       # + host wiring: env vars, MCP config, hash-router capture
 mushi doctor --qa-stories     # + QA story setup warnings (needs --server credentials)
+mushi doctor --full           # run every check category in one pass
 mushi doctor --json           # machine-readable; exits 1 if any check fails
 ```
+
+`--host-app` (also included in `--full`) scans your source for hash-routed SPAs
+— `HashRouter`, `createHashRouter`, `location.hash`, `hashchange` — and, when it
+finds them, advises adding `/#/`-prefixed `discoverInventory.routeTemplates` to
+your `Mushi.init()` so parametric hash routes group in the Inventory instead of
+inflating it one row per slug. It's advisory only (never fails the run) and
+stays silent when no hash routing is present. See
+[Hash-routed SPAs](/sdks/web#hash-routed-spas-eg-react-router-hashrouter-backbone-legacy-apps).
 
 ### `mushi nudge`
 
@@ -13945,6 +14272,76 @@ Force any queued reports out before page unload or app suspend. The web,
 React-Native, iOS, Android, Flutter, and Capacitor SDKs all wire this into
 the appropriate lifecycle hook automatically.
 
+### PII scrubbing utilities (1.27+)
+
+The redactor that every SDK uses at capture time is exported so you can reuse
+it in your own `beforeSend` hook, server code, or logs. It runs entirely in
+your process — scrubbed values never leave the client.
+
+```ts
+
+// Free text → typed placeholders
+scrubPii('email jake@x.com or call +1 415 555 0100')
+// → 'email [REDACTED_EMAIL] or call [REDACTED_PHONE]'
+
+// URL query values → redacted; keys and path preserved for debuggability
+scrubUrl('/articles?tag=dragons&token=eyJhbGciOiJIUzI1NiJ9.payload.sig')
+// → '/articles?tag=dragons&token=[Scrubbed]'
+```
+
+**`scrubPii(text, config?)`** replaces sensitive substrings anywhere in free
+text. **`scrubUrl(url, config?)`** redacts only query-string *values* — both the
+standard `?…` part and any `?…` inside a hash-router fragment (`#/path?…`) — and
+leaves keys and path segments intact. `scrubUrl` redacts values under
+known-sensitive keys (`token`, `password`, `api_key`, `secret`, `auth`,
+`session`, `email`, `phone`, `ssn`, and the exact keys `key` / `code` / `sig`)
+to `[Scrubbed]`, then pattern-scrubs the remaining values so a JWT hiding under
+an innocent key (`?next=eyJ…`) is still caught. Both accept absolute or relative
+URLs and never throw.
+
+Patterns and their placeholders (all matched case-sensitively unless noted):
+
+| Data | Placeholder | Default |
+|------|-------------|:-------:|
+| Email | `[REDACTED_EMAIL]` | on |
+| Phone number | `[REDACTED_PHONE]` | on |
+| US SSN | `[REDACTED_SSN]` | on |
+| Credit-card PAN | `[REDACTED_CC]` | on |
+| JWT (`eyJ….….…`) | `[REDACTED_JWT]` | on |
+| AWS / Stripe / Slack / GitHub / OpenAI / Anthropic / Google keys | `[REDACTED_*_KEY]` (per vendor) | on |
+| IPv4 address | `[REDACTED_IP]` | **off** |
+| IPv6 address | `[REDACTED_IPV6]` | **off** |
+
+IP scrubbing is off by default because IPs are frequently load-bearing for
+debugging (rate-limit keys, geo). Toggle any pattern via `PiiScrubberConfig`:
+
+```ts
+interface PiiScrubberConfig {
+  emails?: boolean       // default true
+  phones?: boolean       // default true
+  creditCards?: boolean  // default true
+  ssns?: boolean         // default true
+  secretTokens?: boolean // default true — JWTs + vendor API keys
+  ipAddresses?: boolean  // default false — IPv4
+  ipv6?: boolean         // default false
+}
+
+// e.g. also redact IPs, keep everything else on
+scrubPii(text, { ipAddresses: true })
+```
+
+`createPiiScrubber(config)` returns `{ scrub, scrubObject }` when you want to
+build the scrubber once and reuse it across many strings or object fields:
+
+```ts
+const { scrub, scrubObject } = createPiiScrubber({ ipAddresses: true })
+scrub(logLine)
+scrubObject(record, ['description', 'url']) // scrubs only those string keys
+```
+
+The pattern set is the single source of truth shared with the Flutter SDK's
+generated copy, so the two scrubbers can't drift.
+
 ### Region resolution
 
 ```ts
@@ -14179,13 +14576,13 @@ Published npm packages ship on independent semver tracks (see [npm](https://www.
 {/* sdk-version-matrix:start */}
 | Package | Version |
 | --- | --- |
-| @mushi-mushi/core, @mushi-mushi/web | 1.26.x |
+| @mushi-mushi/core, @mushi-mushi/web | 1.27.x |
 | @mushi-mushi/react | 1.21.x |
 | @mushi-mushi/react-native | 0.21.x |
-| @mushi-mushi/cli | 0.26.x |
-| @mushi-mushi/mcp | 0.19.x |
+| @mushi-mushi/cli | 0.27.x |
+| @mushi-mushi/mcp | 0.20.x |
 | @mushi-mushi/capacitor | 1.1.x |
-| @mushi-mushi/node | 1.1.x |
+| @mushi-mushi/node | 1.2.x |
 | @mushi-mushi/angular, @mushi-mushi/vue, @mushi-mushi/svelte | 1.0.x |
 | mushi-mushi (launcher) | 0.8.x |
 {/* sdk-version-matrix:end */}
@@ -14731,7 +15128,7 @@ title: MCP tools (generated)
 
   Auto-generated from `packages/mcp/src/catalog.ts`. Do not edit by hand — run `pnpm gen:mcp-tools-doc`.
 
-**71 tools** · **8 resources** · **4 prompts**
+**73 tools** · **8 resources** · **4 prompts**
 
 ## Read tools (`mcp:read`)
 
@@ -14754,14 +15151,16 @@ title: MCP tools (generated)
 | `get_graph_node` | Graph node detail | Fetch one knowledge-graph node row by id. Returns \{ node: \{ id, node_type, label, metadata } } including the v2 derived status on Action nodes (ok \| stale \| broken). Read-only. Use to inspect a single node's status; use get_graph_neighborhood to see what connects to it. |
 | `suggest_fix` | Suggested fix (from triage) | Return the Stage-2 suggested-fix slice for one report: root cause, suggested fix, repro steps, summary, and component — faster than get_report_detail when you only need the human-readable hint. Returns \{ reportId, rootCause, suggestedFix, reproductionSteps, summary, component }. Read-only; reads the existing classification (run triage_issue first if unclassified). Use for a quick "what should we try?"; use get_fix_context for the full paste-ready bundle. |
 | `diagnose_setup` | Unified setup diagnose | Diagnose Mushi setup health and return the single best next action. mode=full (default) runs both SDK-ingest and fix-dispatch preflight checks; mode=ingest runs ingest checks only (project exists, active API key, SDK heartbeat, at least one report); mode=dispatch runs dispatch readiness only (GitHub connected, codebase indexed, LLM key present, autofix enabled). Returns \{ ready, steps: [\{ label, complete, required, hint }], nextAction }. Read-only. The one setup-diagnosis entry point — use this instead of separate connection/ingest checks. |
+| `check_sdk_version` | Check SDK freshness | Compare a published @mushi-mushi/* package version against the catalog (GET /v1/sdk/latest-version). Returns \{ package, current, latest, outdated } and, when outdated, suggestedActions (Sentry-style, max 1) pointing at search_mushi_docs plus the mushi-sdk-upgrade skill. Read-only. Use when Dependabot or mushi upgrade --check reports a drift, or before dispatching a fix that assumes a current SDK. Does not bump the pin — that stays a human/Dependabot change. |
 | `search_mushi_docs` | Search Mushi documentation | Search the official Mushi documentation (guides, MCP setup, inventory, QA, skills) by keyword. Returns ranked \{ results: [\{ title, url, excerpt }] }. Read-only. Use before guessing API shapes, tool names, or RPC names; use run_nl_query for questions about your own project data, not the docs. |
 | `list_top_contributors` | Top contributors leaderboard | Return the top N contributors for the organization, ranked by points in a time window (30d \| 90d \| all). Each row includes display name, tier, total points, report count, and anti-fraud flag. Use this to identify your most engaged power users, write them a thank-you message, or decide who deserves a bonus. |
 | `list_projects` | List accessible projects | List all Mushi projects accessible to this API key. For project-scoped keys returns a single-item list; for org-scoped keys (account mode) returns every project owned by this account. Call this first when MUSHI_PROJECT_ID is not configured — use the returned id with subsequent tool calls. If multiple projects are returned, pass the target projectId explicitly to project-scoped tools. Multi-project tip: run `mushi setup --all-projects` in your terminal to create one named MCP server entry per project in .cursor/mcp.json. |
 | `get_account_overview` | Account overview — all projects | Return an enriched summary of every Mushi project accessible to this API key: id, name, recent report count (last 30 days), number of connected MCP keys, and last-seen heartbeat timestamp. For project-scoped keys this is a one-item list; for org-scoped (account) keys it lists every owned project. Also includes toolCount, resourceCount, promptCount so agents know how many tools are available. Call this at the start of a multi-repo or multi-app triage session to orient yourself. |
 | `get_project_context` | Project context snapshot | Return a rich context snapshot for a project: name, repo URL, SDK heartbeat, ingest status, open report count, autofix readiness, your LLM key config, plan tier, and active integration health. Equivalent to a merged preflight + activation + settings read. Agents should call this at the start of a review session to orient themselves. |
 | `get_pipeline_logs` | Recent pipeline logs | Pull recent log entries from the Mushi pipeline services: fix-worker, qa-story-runner, pipeline, or all. Accepts project_id, service, since (ISO-8601), limit (max 200), and level (info \| warn \| error \| fatal) filters. Returns structured log rows with timestamp, level, service, message, and a trace_id/report_id when available. Use this when a fix failed, a QA story keeps erroring, or an ingest pipeline went silent. |
-| `get_report_evidence` | Bug report evidence | Return the full evidence package for a single bug report: screenshot URL, console logs, network excerpts, browser environment (user agent, URL, viewport, SDK version), user replay link if available, breadcrumb trail, and the reporter's own comments thread. This is the same data an engineer would collect for a root-cause investigation. Faster than calling get_report_detail + report timeline separately. |
+| `get_report_evidence` | Bug report evidence | Return the full evidence package for a single bug report covering all three observability pillars: (1) LOGS — console_logs (error/warn/info/debug entries with timestamps), breadcrumbs (SDK ring buffer: navigation, clicks, network, lifecycle events with category/level), repro_timeline (merged SDK event stream: route/click/request/log/screen), and the reporter's own comments thread; (2) TRACES — network_requests (SDK-captured fetch/XHR with method/status/duration/traceId), backend_spans (server-side spans joined by W3C trace_id: name/duration_ms/parentSpanId/status), and Sentry trace correlation IDs (sentry_trace_id, sentry_event_id) for deeplinks; (3) METRICS — performance_metrics (Web Vitals snapshot: LCP/CLS/INP/TTFB/FCP + INP attribution + page timing + connection info), anomalies (statistical provenance when auto-filed by CI metric regression: baseline_mean/std, score in σ, threshold); plus screenshot_url, browser environment (user agent, URL, viewport, SDK version), and tags. This is the same data an engineer would collect for a root-cause investigation. Faster than calling get_report_detail + report timeline separately. |
 | `triage_issue` | Triage issue end-to-end | Read-only combined tool: merges report detail, evidence, similar bugs, fix context, blast radius, and recent pipeline logs for a report into a single structured review packet. Returns a prioritised list of recommended next actions (investigate, dispatch_fix, group_with, dismiss). Equivalent to a Sentry "Analyze with Seer" flow grounded in user-felt reports. Pass report_id to kick off review. Call this before dispatch_fix. |
+| `triage_next_steps` | What should I work on now? | Prioritised "do this next" list for the project: blocked auto-fixes first (with the unblock action), then in-flight fixes to shepherd to merge, then user-felt classified reports by severity, with robot/cron chores (dependency bumps) last. Returns \{ steps: [\{ priority, action, reason, tool, args }], summary }. Read-only. Call this first when the user asks "what needs my attention / what should I triage or fix". |
 | `query_lessons` | Query lessons for diff context | Retrieve the learning rules ("lessons") most relevant to a given code diff or PR context, packed within a token budget. Uses bi-encoder retrieval + severity-weighted scoring; pass the diff/description as the query and max_tokens (default 2000). Returns ranked \{ lessons: [\{ title, rule, severity }] }. Read-only. Use before writing a fix or opening a PR; use list_lessons to browse all lessons unfiltered. |
 | `list_lessons` | List project lessons | List promoted learning rules ("lessons") for the current project, highest-frequency first. Returns \{ lessons: [\{ id, rule_text, severity, frequency, anti_pattern, … }] }. Read-only. Use to browse the full catalog of encoded heuristics; use query_lessons to retrieve only lessons relevant to a specific diff or PR within a token budget. |
 | `activation_status` | Activation cockpit status | Return the unified activation posture — SDK heartbeat, ingested reports, GitHub, MCP readiness, QA stories, and the next best action. Read this before guessing which onboarding step is blocking the user. Also available as the mushi://activation resource for resource-reader clients. Returns \{ sdkActive, reportsIngested, githubConnected, mcpConnected, qaStoriesCreated, nextBestAction }. |
@@ -14789,7 +15188,7 @@ title: MCP tools (generated)
 | Tool | Title | Description |
 |------|-------|-------------|
 | `submit_fix_result` | Record a fix outcome | Record a fix outcome from an external agent (e.g. your own Cursor/Claude run): branch, PR URL, files changed, lines added/removed. Creates a fix_attempt row then patches it to completed and links it to the report. Returns \{ fixAttemptId }. Write; NOT idempotent — each call creates a new fix_attempt, so call once per PR. Use after you opened a PR outside Mushi; use dispatch_fix to have Mushi open the PR instead, or merge_fix once CI is green. |
-| `dispatch_fix` | Dispatch Mushi fix agent | Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns \{ fixAttemptId }; poll get_fix_timeline for progress and merge_fix when CI is green. Write; NOT idempotent — each call starts a new attempt. Report must be classified — run triage_issue if not. |
+| `dispatch_fix` | Dispatch Mushi fix agent | Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns \{ fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not. |
 | `trigger_judge` | Run Sonnet-as-Judge | Queue the Sonnet-as-Judge to grade recent fix quality across accessible projects. Returns \{ dispatched: number } — one judge-batch job per project; scores land asynchronously in judge_results (read back with run_nl_query). Write; consumes LLM budget. Idempotent within a short window. Use before shipping to vet fix quality; use get_fix_timeline to inspect a single attempt instead. |
 | `test_gen_from_report` | Generate Playwright test from report | Generate a Playwright regression test from a classified report using your project LLM key, then open a draft GitHub PR with the spec. Requires the inventory_v2 plan plus GitHub and LLM keys configured. Returns \{ qaStoryId, prUrl }. Write; consumes LLM budget; NOT idempotent — each call opens a new PR. Use to lock in a regression as an E2E test; use generate_tdd_from_story to build a test from a mapped user story instead. |
 | `transition_status` | Move report between states | Move a report to a new workflow state, enforcing the same transition rules as the admin UI. Valid targets: classified, grouped, fixing, fixed, verified, reopened, dismissed. Returns \{ report } with the updated status. Write; idempotent (setting the current status is a no-op); rejects illegal transitions. Use to dismiss a duplicate or mark fixed; use merge_fix to mark fixed via a merged PR, or reopen_report for the reopened path. |
@@ -14864,7 +15263,7 @@ into your IDE.
   Windsurf. Your client launches the server as a subprocess and pipes
   JSON-RPC over stdio.
 - **Streamable HTTP (hosted, 2026-05-09 release)** — single endpoint
-  at `/functions/v1/mcp` per the MCP 2025-03-26 spec. POST returns
+  at `/functions/v1/mcp`, dual-era (MCP 2024-11-05 … 2025-11-25 with `initialize`, and the current 2026-07-28 revision with `server/discover`). POST returns
   `application/json` or `text/event-stream` per content negotiation,
   GET opens an SSE stream for server-pushed notifications, DELETE
   terminates the session. Use this when you want to skip the local
@@ -14911,7 +15310,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **71-tool** catalog and
+on npm for the full **73-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 
@@ -15118,6 +15517,39 @@ await mushi.captureReport({
 The Node SDK speaks the same wire protocol as the web SDK and shares
 classification quotas — server-thrown bugs and user-side bugs land in
 the same queue.
+
+## PII and credential scrubbing
+
+Every `description`, `url`, and `error.message` value is passed through the
+core PII scrubber before it leaves the process:
+
+- **JWT-shaped tokens** (three dot-separated `eyJ…` segments, regardless of
+  header scheme) are redacted to `[REDACTED_JWT]`.
+- **Emails, phone numbers** and similar patterns are replaced with
+  `[REDACTED_EMAIL]`, `[REDACTED_PHONE]`, and friends.
+- **Sensitive query-string keys** (`token`, `api_key`, `password`, `secret`, …)
+  have their values replaced with `[Scrubbed]`.
+
+This applies to `captureReport`, `mushiExpressErrorHandler`, and
+`mushiTraceMiddleware` — no extra configuration required.
+
+If you use `Authorization: Token ` (Conduit / RealWorld spec), the JWT in
+that header is **never captured** — the SDK only reads response status codes and
+timing from network spans, not request headers.
+
+The following fields are scrubbed **before the report leaves the Node process**:
+
+| Field | Scrubber applied |
+| --- | --- |
+| `description` | PII scrub (emails, phones, JWTs, SSNs, CC-shaped strings) |
+| `environment.url` | URL scrub (sensitive query-param keys and value patterns) |
+| `error.message` | PII scrub |
+| `error.stack` | PII scrub |
+| `request.url` *(trace middleware)* | URL scrub |
+
+`userId` and host-supplied `metadata` are left unmodified — the SDK cannot know
+which IDs or metadata keys are safe to alter, so the host is responsible for any
+additional scrubbing at those sites.
 
 ---
 
@@ -15862,7 +16294,7 @@ description: Install Mushi playbooks into Cursor and Claude Code, sync them into
 From the public [Connect page](/connect), pick **Skills** and run:
 
 ```bash
-npx skills add kensaurus/cursor-kenji
+npx skills add kensaurus/mushi-mushi
 ```
 
 That adds playbooks such as `mushi-health`, `mushi-integration`, and `workflow-fix-and-ship` to your local agent.
@@ -16000,20 +16432,11 @@ createApp(App)
 
 ```vue
 
-const mushi = useMushi()
-const { user } = useAuth()
-
-watch(user, (u) => {
-  if (u) mushi.identify(u.id, { email: u.email, name: u.name })
-})
-
 ```
 
 ## Submitting a report
 
 ```vue
-
-const { submit, isSubmitting } = useMushiReport()
 
   
     Report issue
@@ -16077,12 +16500,20 @@ shake-to-report widget in a Shadow DOM so your CSS never leaks in or out.
 
 See [Quickstart → Vanilla JS](/quickstart/web) for setup. Notable extras:
 
+- **XHR + fetch network capture** — the SDK patches both `XMLHttpRequest` and
+  `window.fetch` globally at `init()`. Every network request (including legacy
+  jQuery/axios XHR calls) is captured as a `MushiNetworkEntry` and appears in
+  the Network breadcrumbs tab. Calling `destroy()` removes the patches; if
+  another APM tool (Sentry, Datadog) has since wrapped the same globals, the
+  SDK detects the unsafe state and leaves the native references alone.
 - **`runtimeConfig: 'auto'`** — fetches console settings from `GET /v1/sdk/config`
   and merges them over host init. Host-wired banner and capture flags win over
   console defaults. See [Runtime config](/concepts/runtime-config).
-- **`onProactiveTrigger(({ context }) => …)`** — fires when the SDK detects
-  user friction (rage clicks, repeated navigation, console errors during
-  the same interaction). Use it to surface the report widget contextually.
+- **`proactive: { rageClick, errorBoundary, longTask, apiCascade, pageDwell, firstSession, cooldown }`** —
+  friction detectors that open the reporter contextually (rage clicks, error
+  boundaries, long tasks, API cascades, page dwell, first session). Subscribe
+  with `mushi.on('proactive:triggered', ({ data }) => …)` (`proactive:dismissed`
+  fires on close) and cap frequency with `cooldown`.
 - **`beforeSend((report) => report | null)`** — last-mile transform after
   built-in PII scrub. Return `null` to drop the report client-side. Prefer
   this over the deprecated `beforeSendFeedback` (feedback-only).
@@ -16318,6 +16749,47 @@ SDK finishes initialising, so you never need to null-check the instance.
 
 ---
 
+## Hash-routed SPAs (e.g. React Router ``, Backbone, legacy apps)
+
+Hash-routed SPAs navigate via `location.hash` changes (`#/login`, `#/article/my-post`).
+The Mushi web SDK subscribes to `hashchange` automatically — every navigation is
+captured as a timeline entry. To group parametric routes in the **Inventory**,
+supply `/#/`-prefixed route templates:
+
+```typescript
+Mushi.init({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey: 'YOUR_API_KEY',
+  capture: {
+    discoverInventory: {
+      enabled: true,
+      routeTemplates: [
+        '/#/article/[slug]',   // matches #/article/my-post → /#/article/[slug]
+        '/#/profile/[username]',
+      ],
+    },
+  },
+})
+```
+
+**Why the `/#/` prefix?** Hash fragments are not part of the pathname.
+When a hash route is present Mushi stores `'/#' + hashPath` (the pathname is
+dropped); otherwise it stores the plain pathname. History-based routes
+(`/article/[slug]`) and hash routes (`/#/article/[slug]`) therefore stay
+distinct in the Inventory and can be monitored independently.
+
+**Filter params** (e.g. `#/?tag=elixir&offset=10`) are stripped before the route
+template is matched — only the path segment after `#/` is matched.
+
+**Without templates**, every unique hash path becomes its own Inventory row.
+For slug-heavy apps (articles, profiles, products) this inflates the Inventory;
+route templates collapse them to a manageable list.
+
+**`mushi doctor --host-app`** detects hash-router usage in your source files and
+warns when `/#/` route templates are missing from your Mushi init call.
+
+---
+
 ## BYO storage
 
 Source: https://kensaur.us/mushi-mushi/docs/security/byo-storage
@@ -16545,6 +17017,8 @@ This page is the single-source citation for the privacy claims made on the Mushi
 ### 2. PII is scrubbed before it reaches Postgres or an LLM
 
 **Control (at-rest, Wave 5 Gap A):** `scrubPii()` from `_shared/pii-scrubber.ts` is called in the ingest path (`api/helpers.ts::ingestReport`) before the `reports` row is inserted. Fields scrubbed: `description`, `user_intent`, `console_logs[].message`, `network_logs[].url` (including query parameters). Patterns cover: SSN, credit-card PAN, AWS/Stripe/Slack/GitHub/OpenAI/Anthropic keys, JWTs, IPv4, IPv6, emails, phone numbers.
+
+**Control (client-side, at capture — SDK 1.27+):** The web and Node SDKs now scrub PII *before the report leaves the browser or server process*, so sensitive values never travel the wire in the first place. The web SDK runs `scrubUrl()` over every captured network URL and route-timeline entry; the Node SDK runs `scrubPii()` / `scrubUrl()` over `description`, `environment.url`, and `error.message` / `error.stack` in `captureReport`, the Express handler, and the trace middleware. This is the same pattern set as the server-side scrubber (shared source of truth), so client and server redact identically — the at-rest and pre-LLM scrubs below are now defence-in-depth behind it rather than the first line.
 
 **Control (pre-LLM, defence-in-depth):** `scrubReport()` is also called in `classify-report` and `fast-filter` before building the Anthropic prompt, so even if the ingest scrub is ever bypassed the LLM never sees raw PII.
 
@@ -16949,6 +17423,9 @@ npx supabase functions deploy drift-walker --no-verify-jwt
 npx supabase functions deploy contract-graph-builder --no-verify-jwt
 npx supabase functions deploy a2a-push-notify --no-verify-jwt
 npx supabase functions deploy test-gen-from-report --no-verify-jwt
+npx supabase functions deploy telegram-webhook --no-verify-jwt
+npx supabase functions deploy cursor-webhook --no-verify-jwt
+npx supabase functions deploy agent-status-poll --no-verify-jwt
 ```
 
 For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `release-builder`, `experiment-analyzer`, `anomaly-detector`, …) and cron setup, follow [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md).
@@ -16974,6 +17451,9 @@ For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `r
 | `inventory-gates` | manual | Runs gate checks (dead handlers, mock leaks) |
 | `a2a-push-notify` | manual / agents | Sends A2A protocol notifications to connected agents |
 | `test-gen-from-report` | manual | Generates a Playwright test from a report, opens draft PR |
+| `telegram-webhook` | Telegram Bot API | Voice-note inbox: secret-token auth, `/start ` project binding, transcript + inline-keyboard confirmation |
+| `cursor-webhook` | Cursor Cloud Agent (v0 callback) | Receives `statusChange` callbacks, writes `fix_attempts.pr_url`, notifies |
+| `agent-status-poll` | cron (`5-55/5`) | Polls open Cursor / GitHub cloud-agent runs and closes them (PR URL, failure) |
 
 The remaining workers (billing, retention, SDK upgrade, skill-sync, rewards payout, …) live alongside these. Full list: `ls packages/server/supabase/functions/` or `pnpm docs-stats`.
 
@@ -17255,7 +17735,7 @@ having written the module; every investigation starts cold. The fix itself is
 cheap — an agent can write it in seconds — but only once someone has worked
 out **what actually broke and where**.
 
-Mushi Mushi is built around that bottleneck. It's the comprehension layer for
+Mushi Mushi is built around that bottleneck. It's the bug mediator for
 AI-built apps: it turns raw user reports into diagnoses an agent (or you) can
 act on immediately.
 
@@ -17429,7 +17909,7 @@ description: Where Mushi Mushi fits — as an open-source Sentry alternative, a 
 
 # Use cases & comparisons
 
-Mushi Mushi is the comprehension layer for AI-built apps: user bug reports in,
+Mushi Mushi is the bug mediator for AI-built apps: user bug reports and Sentry errors in,
 plain-English diagnoses and ready fixes out. These pages map that loop onto
 the situations people actually search for.
 
@@ -17525,23 +18005,27 @@ description: An open-source Sentry alternative for AI-built apps — plain-Engli
 
 # An open-source Sentry alternative built for AI-written code
 
-Sentry answers "what did the code throw?" Mushi Mushi answers "what did the
-user hit, why did it happen, and what's the fix?" If your app was largely
-written by Cursor, Claude Code, or another agent, the second question is the
-one you actually need answered — you didn't write the code, so a raw stack
-trace costs you an afternoon of archaeology.
+Sentry tells you what threw. Mushi ingests that — plus the bugs that never
+throw — explains each one in plain English, and closes the loop with a fix
+your agent can ship. One queue, one audit trail, with or without Sentry. If
+your app was largely written by Cursor, Claude Code, or another agent, that's
+the answer you actually need — you didn't write the code, so a raw stack trace
+costs you an afternoon of archaeology.
 
 Mushi is open source (MIT SDKs, AGPLv3 server), works standalone, and turns a
-user's bug report into a plain-English diagnosis with a fix you can paste into
-your editor.
+user's bug report — or a Sentry error alert — into a plain-English diagnosis
+with a fix you can paste into your editor.
 
-## When Mushi replaces Sentry — and when it doesn't
+## Instead of Sentry, or alongside it — your call
 
-You can run Mushi **instead of** Sentry if what you care about is
-user-reported friction: broken buttons, dead flows, confusing states. You
-should run Mushi **alongside** Sentry if you also want crash-level telemetry —
-an optional bridge links Sentry stack traces to Mushi reports so each side
-keeps its job.
+Run Mushi **instead of** Sentry if user-felt friction is what you care about:
+broken buttons, dead flows, confusing states, plus the thrown errors the SDK
+captures along the way. Run Mushi **alongside** Sentry to keep crash-level
+telemetry, performance tracing, and release health where they are — and point
+a Sentry issue-alert webhook at Mushi so every error still lands in the one
+queue, deduped and diagnosed, with the fix resolving the Sentry issue when it
+merges ([3-step setup](/plugins/sentry)). Both paths are first-class; neither
+asks you to rip anything out.
 
 ## Side by side
 

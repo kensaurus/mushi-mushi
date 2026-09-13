@@ -268,7 +268,7 @@ npx skills add kensaurus/mushi-mushi
 
 Then: `/mushi-setup` (guided SDK install + MCP wiring), `/mushi-debug` (diagnose ingest / MCP / pipeline failures), `/mushi-health` (pass/fail check across CLI, API, edge functions, BYOK keys), `/mushi-integration` (two-way loop, fix dispatch, lessons). The admin **Connect & Update** page (`/connect`) mirrors the same flows with one-click **Add to Cursor** deeplinks.
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~373K TS lines · 1,772 source files · 44 workspace / 36 npm packages · 55 edge functions · 337 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~386K TS lines · 1,812 source files · 44 workspace / 36 npm packages · 58 edge functions · 347 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ---
 
@@ -301,16 +301,21 @@ Security researchers: see [`SECURITY.md`](./SECURITY.md) for the threat model, P
 
 ---
 
-## Also by @kensaurus
+## More from KENSAURUS
 
-Other free apps and tools from the same Tokyo studio:
+| | App | What it is |
+|---|---|---|
+| <img src="https://kensaur.us/glot-it/icon-512.png" width="28" height="28" alt=""> | [Glot It](https://kensaur.us/glot-it/?utm_source=github&utm_medium=readme) | Learn Thai — bite-size lessons, smart flashcards, and an AI tutor |
+| <img src="https://kensaur.us/yen-yen/icon.svg" width="28" height="28" alt=""> | [yen-yen](https://kensaur.us/yen-yen/?utm_source=github&utm_medium=readme) | Where did the money go? Now you'll know. A kakeibo for households |
+| <img src="https://kensaur.us/the-wanting-mind/pwa-512x512.png" width="28" height="28" alt=""> | [The Wanting Mind](https://kensaur.us/the-wanting-mind/?utm_source=github&utm_medium=readme) | How the Battle Between Extraction and Generation Is Reshaping Our World — a 147,000-word interactive webbook with 268 concepts, 242 citations, and original illustrations |
+| <img src="https://kensaur.us/help-her-take-photo/assets/apple-touch-icon.png" width="28" height="28" alt=""> | [Help Her Take Photo](https://kensaur.us/help-her-take-photo/?utm_source=github&utm_medium=readme) | Pair phones, direct the pose, nail the photo |
+| <img src="https://talk.kensaur.us/pwa-192.png" width="28" height="28" alt=""> | [How to Talk to Girls](https://talk.kensaur.us/?utm_source=github&utm_medium=readme) | BYOK Claude practice coach for sticky chats |
+| <img src="https://solo-boss.kensaur.us/apple-touch-icon.png" width="28" height="28" alt=""> | [一人社長 Solo Boss](https://solo-boss.kensaur.us/?utm_source=github&utm_medium=readme) | Bookkeeping and tax-filing co-pilot for one-person companies in Japan |
+| <img src="https://tsumagoi.kensaur.us/apple-touch-icon.png" width="28" height="28" alt=""> | [Tsumagoi Work&Camp 嬬恋牧場](https://tsumagoi.kensaur.us/?utm_source=github&utm_medium=readme) | Coworking camp at 1,444 m — [Instagram](https://www.instagram.com/tsumagoicamp/) · [Facebook](https://www.facebook.com/profile.php?id=61592113053042) · [Maps](https://maps.app.goo.gl/JCNnTfsdQVHCS1FA7) |
+| <img src="https://github.com/kensaurus.png" width="28" height="28" alt=""> | [cursor-kenji](https://github.com/kensaurus/cursor-kenji) | Ready-made playbooks for your AI coding editor |
+| <img src="https://kensaur.us/favicon.svg" width="28" height="28" alt=""> | [KENSAURUS](https://kensaur.us/?view=portfolio&utm_source=github&utm_medium=readme) | Everything else built under the same roof |
 
-| App | What it does | Links |
-|:----|:-------------|:------|
-| **[glot.it — Learn Thai Free](https://kensaur.us/glot-it/)** | 161 lessons, pitch-contour tone mirror, AI roleplay chat, offline-first. | [App Store](https://apps.apple.com/us/app/glot-it/id6761582648) · [Google Play](https://play.google.com/store/apps/details?id=com.glotit.app) |
-| **[yen-yen — Expense Tracker](https://kensaur.us/yen-yen/)** | Kakeibo-style household ledger. No bank password, no ads, no auto-writes. | [App Store](https://apps.apple.com/app/id6764548441) · [Google Play](https://play.google.com/store/apps/details?id=app.yenyen) |
-| **[The Wanting Mind — Free Book](https://kensaur.us/the-wanting-mind/)** | 147,000-word interactive book — 3D knowledge graph, 12 narrators, 22 simulations. | [App Store](https://apps.apple.com/us/app/the-wanting-mind/id6761361305) · [Google Play](https://play.google.com/store/apps/details?id=us.kensaur.thewantingmind) |
-| **[cursor-kenji](https://github.com/kensaurus/cursor-kenji)** | 58 Cursor AI agent skills for React / Next.js / Supabase development. | `npx skills add kensaurus/cursor-kenji` |
+All apps live under [kensaur.us](https://kensaur.us).
 
 ---
 

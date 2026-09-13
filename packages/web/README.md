@@ -30,6 +30,28 @@ Mushi.init({
 
 That's the whole integration. A floating 🐛 launcher appears; a report is one click away.
 
+### Same-origin tunnel (ad blockers)
+
+Point ingest at a first-party proxy — the same pattern as Sentry `tunnel`.
+Host APIs must allowlist host + project + `/v1/` (empty project list → 503).
+
+```typescript
+Mushi.init({
+  projectId: '00000000-0000-0000-0000-000000000000',
+  apiKey: 'mushi_xxx',
+  tunnel: '/api/mushi-tunnel',
+  // Published SDKs that ignore `tunnel` still honor apiEndpoint:
+  apiEndpoint: '/api/mushi-tunnel',
+  ignoreErrors: ['ResizeObserver loop', /^Script error\.?$/],
+  denyUrls: [/chrome-extension:/i],
+  replaysOnErrorSampleRate: 0,
+});
+```
+
+`ignoreErrors` / `denyUrls` apply to **automatic** captures only. User widget
+feedback always sends. Pagehide uses `fetch({ keepalive: true })`, then a
+same-origin `sendBeacon` envelope the tunnel unwraps.
+
 ## Runtime config
 
 With `runtimeConfig: 'auto'` (default), the SDK fetches console settings from
@@ -263,7 +285,7 @@ Screenshot capture uses canvas / SVG `foreignObject` serialization — it does n
 
 ## Bundle size
 
-~7 KB brotli, enforced at 88 KB gzipped (105 KB uncompressed) in CI. Requires `@mushi-mushi/core` (installed automatically, not bundled inline). The widget's visual system — washi paper, sumi ink, vermillion 朱 accent, system serif — lives in [`src/styles.ts`](./src/styles.ts).
+~7 KB brotli, enforced at 89 KB gzipped (105 KB uncompressed) in CI. Requires `@mushi-mushi/core` (installed automatically, not bundled inline). The widget's visual system — washi paper, sumi ink, vermillion 朱 accent, system serif — lives in [`src/styles.ts`](./src/styles.ts).
 
 ## License
 
@@ -272,4 +294,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 55 edge functions · 337 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 58 edge functions · 347 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

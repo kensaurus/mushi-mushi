@@ -1,0 +1,11 @@
+{
+  "extends": "@mushi-mushi/tsconfig/base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "WebWorker"],
+    "types": ["vite/client"],
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src/sw.ts", "src/vite-env.d.ts"]
+}

@@ -27,13 +27,13 @@ thing and point to the same install flow.
 | **Connect landing** | `apps/docs/app/connect/page.tsx` | ✅ Public `/connect` with optional keyless demo |
 | **Install badges** | Root `README.md`, `packages/mcp/README.md` | ✅ Point to `https://kensaur.us/mushi-mushi/docs/connect` |
 | **cursor.directory** | Root [`.mcp.json`](../../.mcp.json) | ✅ Auto-detect manifest committed — submit repo URL |
-| **VS Code extension** | `packages/vscode-extension/` | 📦 Built; marketplace publish is manual (see marketplace doc) |
+| **VS Code extension** | `packages/vscode-extension/` | 🔑 Workflow ready — [`publish-vscode-extension.yml`](../../.github/workflows/publish-vscode-extension.yml). Never published: needs `VSCE_PAT` + `OVSX_PAT` repo secrets |
 | **Cursor Marketplace plugin** | `packages/cursor-plugin/` | 📋 Checklist ready; submission pending |
 | **npm keywords** | All primary `@mushi-mushi/*` packages | ✅ Aligned to MCP / vibe-coder discovery terms |
 
 | **PulseMCP** | Auto-index from official registry | ⏳ Ingest weekly — no form; verify after ~7 days |
-| **awesome-mcp-servers** | PR [#8625](https://github.com/punkpeye/awesome-mcp-servers/pull/8625) | 📬 Open |
-| **awesome-remote-mcp-servers** | PR [#431](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/431) (supersedes closed #428) | 📬 Open |
+| **awesome-mcp-servers** | PR [#8625](https://github.com/punkpeye/awesome-mcp-servers/pull/8625) | ✅ Merged 2026-07-22 |
+| **awesome-remote-mcp-servers** | PR [#431](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/431) (supersedes closed #428) | 📬 Open since 2026-06-25 — stale, worth a nudge |
 | **cursor.directory** | Repo already registered | ✅ Duplicate on re-submit confirms live listing |
 | **mcp.so** | Web submit at `/submit` | ✅ Live — [mcp.so/server/mushi-mushi](https://mcp.so/server/mushi-mushi). Description + Overview + Server Config on canonical URLs — see [`mcp-so-listing.md`](./mcp-so-listing.md) |
 | **smithery.ai** | `kensaurus/mushi-mushi` | ✅ Republished Jun 2026 — upstream `kensaur.us/mushi-mushi/hosted-mcp/` — see [`smithery-external-publish.json`](./smithery-external-publish.json) |
@@ -254,7 +254,12 @@ Registers an MCP server definition provider; stdio default runs
 
 Publishing to VS Code Marketplace + Open VSX is documented in
 [`../marketplace/vscode-extension-publishing.md`](../marketplace/vscode-extension-publishing.md).
-Not yet wired into `release.yml` — manual `VSCE_PAT` / `OVSX_PAT` publish per release.
+Wired as [`publish-vscode-extension.yml`](../../.github/workflows/publish-vscode-extension.yml)
+(`gh workflow run "Publish VS Code Extension" --ref master`). It packages the
+.vsix and uploads it as an artifact every run, then publishes to each
+marketplace only when that marketplace token is present, so it is safe to run
+before the secrets exist. **The extension has never been published to either
+marketplace** — add `VSCE_PAT` and `OVSX_PAT` as repo secrets to go live.
 
 ---
 

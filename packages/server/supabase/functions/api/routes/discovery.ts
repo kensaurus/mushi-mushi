@@ -136,20 +136,59 @@ export function registerPostRegionDiscoveryRoutes(app: Hono<{ Variables: Variabl
   // A2A Agent Card
   //
   // Public discovery document for the Mushi Mushi autofix agent, following the
-  // Agent-to-Agent (A2A) protocol pattern at `/.well-known/agent-card`.
-  // Returned schema mirrors the draft A2A spec: identity, capabilities,
-  // supported skills, auth requirements, and a link to the MCP transport.
+  // Agent-to-Agent (A2A) 1.0 well-known path `/.well-known/agent-card.json`
+  // (`/.well-known/agent-card` and `/v1/agent-card` stay as aliases for
+  // 0.3-era clients and dotfile-stripping proxies). Returned schema mirrors
+  // the A2A spec: identity, capabilities, supported skills, auth requirements,
+  // and a link to the MCP transport. Clients send `A2A-Version: 1.0`; an
+  // absent header means a 0.3 client, which we record on the card and answer
+  // with the same document (the card is a superset of the 0.3 fields).
   // Cache-Control 1h matches the conservative end of A2A discovery guidance.
   // ============================================================
+  const A2A_SERVED_VERSION = '1.0';
+  /** MCP revisions the hosted server negotiates, newest first (Workstream B ladder). */
+  const MCP_PROTOCOL_VERSIONS = ['2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
+
+  function requestedA2AVersion(req: Request): string {
+    const header = req.headers.get('A2A-Version')?.trim();
+    // Empty / absent ⇒ pre-1.0 client (the header was introduced in 1.0).
+    return header && header.length > 0 ? header : '0.3';
+  }
+
   function buildAgentCard(req: Request): Record<string, unknown> {
     const url = new URL(req.url);
-    const origin = `${url.protocol}//${url.host}`;
+    // Behind the Supabase gateway the function sees http://. Trust
+    // X-Forwarded-Proto and default to https for any non-loopback host so the
+    // card never advertises a plaintext self-URL.
+    const forwardedProto = req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+    const isLoopback = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(url.host);
+    const scheme =
+      forwardedProto === 'http' || forwardedProto === 'https'
+        ? forwardedProto
+        : isLoopback
+          ? url.protocol.replace(':', '')
+          : 'https';
+    const origin = `${scheme}://${url.host}`;
     const apiBase = `${origin}/functions/v1/api`;
     const mcpBase = `${origin}/functions/v1/mcp`;
+    const requestedVersion = requestedA2AVersion(req);
 
     return {
       schemaVersion: '1.0',
-      spec: 'https://github.com/agent-protocol/a2a',
+      // A2A 1.0 core fields (https://a2a-protocol.org/latest/specification/)
+      protocolVersion: A2A_SERVED_VERSION,
+      url: `${apiBase}/v1/a2a`,
+      preferredTransport: 'HTTP+JSON',
+      supportedInterfaces: [
+        { url: `${apiBase}/v1/a2a`, transport: 'HTTP+JSON', protocolVersion: A2A_SERVED_VERSION },
+      ],
+      a2a: {
+        servedVersion: A2A_SERVED_VERSION,
+        requestedVersion,
+        wellKnown: `${apiBase}/.well-known/agent-card.json`,
+        aliases: [`${apiBase}/.well-known/agent-card`, `${apiBase}/v1/agent-card`],
+      },
+      spec: 'https://a2a-protocol.org/latest/specification/',
       id: 'dev.mushimushi.autofix',
       name: 'Mushi Mushi Autofix Agent',
       description:
@@ -157,33 +196,49 @@ export function registerPostRegionDiscoveryRoutes(app: Hono<{ Variables: Variabl
         'classifies them via a two-stage pipeline, and ships fixes through sandboxed agentic workflows.',
       version: '2.0.0',
       publisher: { name: 'Mushi Mushi', url: 'https://kensaur.us/mushi-mushi' },
+      provider: { organization: 'Mushi Mushi', url: 'https://kensaur.us/mushi-mushi' },
       documentation: 'https://kensaur.us/mushi-mushi/docs/api/agent-card',
+      documentationUrl: 'https://kensaur.us/mushi-mushi/docs/api/agent-card',
+      defaultInputModes: ['application/json', 'text/plain'],
+      defaultOutputModes: ['application/json', 'text/uri-list'],
       capabilities: {
+        // A2A 1.0 capability flags
+        pushNotifications: true,
+        stateTransitionHistory: false,
         streaming: {
           protocol: 'agui',
           version: '0.4',
           endpoint: `${apiBase}/v1/admin/fixes/dispatch/:id/stream`,
+          a2aSubscribe: `${apiBase}/v1/a2a/tasks/:id:subscribe`,
         },
         sse: { sanitization: 'CVE-2026-29085', lastEventId: true },
         mcp: {
-          // Streamable HTTP per the 2025-03-26 spec — single endpoint,
-          // POST returns application/json or text/event-stream as
-          // negotiated; GET opens an SSE stream for server-pushed
-          // notifications. Replaces the deprecated HTTP+SSE transport
-          // the agent card was advertising (and 404'ing) since V5.3.2.
+          // Streamable HTTP — single endpoint, POST returns application/json
+          // or text/event-stream as negotiated; GET opens an SSE stream for
+          // server-pushed notifications. Replaces the deprecated HTTP+SSE
+          // transport the agent card was advertising (and 404'ing) since
+          // V5.3.2. The version ladder is the dual-era set the hosted
+          // server negotiates via MCP-Protocol-Version.
           transport: 'streamable-http',
           endpoint: mcpBase,
-          protocolVersions: ['2025-03-26', '2024-11-05'],
+          protocolVersions: MCP_PROTOCOL_VERSIONS,
         },
         auth: {
           schemes: ['bearer', 'mushi-api-key'],
           discovery: `${apiBase}/v1/admin/auth/manifest`,
           dynamicRegistration: `${apiBase}/v1/admin/auth/register`,
         },
-        // A2A v1.0.0 task surface lives on the api function alongside
-        // the existing fix dispatch routes — wraps fix_dispatch_jobs as
-        // A2A Task resources (GET / cancel / subscribe).
-        tasks: { spec: 'A2A-1.0.0', endpoint: `${apiBase}/v1/a2a/tasks` },
+        // A2A 1.0 task surface lives on the api function alongside the
+        // existing fix dispatch routes — wraps fix_dispatch_jobs as A2A
+        // Task resources (GET / cancel / subscribe). Push callbacks are
+        // `StreamResponse { statusUpdate }` bodies with
+        // Content-Type application/a2a+json (see a2a-push-notify).
+        tasks: {
+          spec: 'A2A-1.0',
+          endpoint: `${apiBase}/v1/a2a/tasks`,
+          pushNotificationConfig: 'configuration.taskPushNotificationConfig',
+          pushCallbackContentType: 'application/a2a+json',
+        },
         tracing: {
           standard: 'W3C-TraceContext',
           propagation: 'traceparent',
@@ -242,15 +297,23 @@ export function registerPostRegionDiscoveryRoutes(app: Hono<{ Variables: Variabl
   const AGENT_CARD_HEADERS: Record<string, string> = {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'public, max-age=3600, s-maxage=3600',
+    'A2A-Version': A2A_SERVED_VERSION,
+    Vary: 'A2A-Version',
     ...PUBLIC_CORS_HEADERS,
   };
 
-  app.get('/.well-known/agent-card', (c) => {
-    return new Response(JSON.stringify(buildAgentCard(c.req.raw), null, 2), {
+  function agentCardResponse(req: Request): Response {
+    return new Response(JSON.stringify(buildAgentCard(req), null, 2), {
       status: 200,
       headers: AGENT_CARD_HEADERS,
     });
-  });
+  }
+
+  // A2A 1.0 canonical well-known path.
+  app.get('/.well-known/agent-card.json', (c) => agentCardResponse(c.req.raw));
+
+  // 0.3-era path, kept as an alias.
+  app.get('/.well-known/agent-card', (c) => agentCardResponse(c.req.raw));
 
   // Smithery / SEP-1649 static metadata when hosted MCP scan is blocked by auth.
   app.get('/.well-known/mcp/server-card.json', (c) => {
@@ -263,12 +326,7 @@ export function registerPostRegionDiscoveryRoutes(app: Hono<{ Variables: Variabl
 
   // Convenience alias so consumers hitting `/v1/agent-card` (no leading dot) get
   // the same payload — useful for proxies that strip dotfiles.
-  app.get('/v1/agent-card', (c) => {
-    return new Response(JSON.stringify(buildAgentCard(c.req.raw), null, 2), {
-      status: 200,
-      headers: AGENT_CARD_HEADERS,
-    });
-  });
+  app.get('/v1/agent-card', (c) => agentCardResponse(c.req.raw));
 
   // Public auth-discovery manifest advertised by the A2A agent card under
   // `capabilities.auth.discovery`. Lets external agents enumerate the auth

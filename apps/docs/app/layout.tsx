@@ -1,3 +1,4 @@
+import { KensaurusPortfolioTable } from '@mushi-mushi/marketing-ui'
 import { Footer, Layout, Navbar } from 'nextra-theme-docs'
 import { Banner, Head } from 'nextra/components'
 import { getPageMap } from 'nextra/page-map'
@@ -120,8 +121,13 @@ const navbar = (
 
 const footer = (
   <Footer>
-    MIT (SDKs) · AGPLv3 (server) · commercial (enterprise edition) — ©{' '}
-    {new Date().getFullYear()} Mushi Mushi. Built with Nextra.
+    <div className="flex flex-col gap-6">
+      <p>
+        MIT (SDKs) · AGPLv3 (server) · commercial (enterprise edition) — ©{' '}
+        {new Date().getFullYear()} Mushi Mushi. Built with Nextra.
+      </p>
+      <KensaurusPortfolioTable utmSource="mushi-docs" />
+    </div>
   </Footer>
 )
 

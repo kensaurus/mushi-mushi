@@ -210,6 +210,15 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Why is Mushi setup broken — one call, clear next step.',
   },
   {
+    name: 'check_sdk_version',
+    title: 'Check SDK freshness',
+    description:
+      'Compare a published @mushi-mushi/* package version against the catalog (GET /v1/sdk/latest-version). Returns { package, current, latest, outdated } and, when outdated, suggestedActions (Sentry-style, max 1) pointing at search_mushi_docs plus the mushi-sdk-upgrade skill. Read-only. Use when Dependabot or mushi upgrade --check reports a drift, or before dispatching a fix that assumes a current SDK. Does not bump the pin — that stays a human/Dependabot change.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Is this project on the current Mushi SDK?',
+  },
+  {
     name: 'search_mushi_docs',
     title: 'Search Mushi documentation',
     description:
@@ -933,6 +942,7 @@ export const USE_MUSHI_INTENTS: Record<string, UseMushiIntent> = {
     label: 'Set up Mushi',
     tools: [
       'diagnose_setup',
+      'check_sdk_version',
       'activation_status',
       'get_backend_health',
       'list_byok_keys',

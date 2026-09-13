@@ -48,20 +48,11 @@ createApp(App)
 
 ```vue
 
-const mushi = useMushi()
-const { user } = useAuth()
-
-watch(user, (u) => {
-  if (u) mushi.identify(u.id, { email: u.email, name: u.name })
-})
-
 ```
 
 ## Submitting a report
 
 ```vue
-
-const { submit, isSubmitting } = useMushiReport()
 
   
     Report issue

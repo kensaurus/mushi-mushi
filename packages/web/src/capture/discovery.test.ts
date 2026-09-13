@@ -60,6 +60,23 @@ describe('createDiscoveryCapture (hashchange subscription)', () => {
 
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+  /**
+   * Poll until `predicate` holds. `createDiscoveryCapture` debounces its first
+   * emission by 100ms (see discovery.ts), and these tests used to sleep a flat
+   * 150ms. That 50ms margin is not enough when several vitest workers share a
+   * loaded machine: the timer fires late, the assertion runs against an empty
+   * array, and the suite fails perhaps one run in three. Polling removes the
+   * race without weakening a single assertion — every expect() below is
+   * unchanged, and a genuine regression still fails, just via the timeout.
+   */
+  const waitFor = async (predicate: () => boolean, timeoutMs = 3000) => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (predicate()) return;
+      await wait(10);
+    }
+  };
+
   it('emits a new inventory event when the hash route changes', async () => {
     history.pushState({}, '', '/#/');
     const events: DiscoveryEvent[] = [];
@@ -70,10 +87,10 @@ describe('createDiscoveryCapture (hashchange subscription)', () => {
       getSessionId: () => 'sess-1',
       onEvent: (e) => events.push(e),
     });
-    await wait(150); // initial 100ms debounce
+    await waitFor(() => events.length > 0); // initial 100ms debounce
     history.pushState({}, '', '/#/article/98765');
     window.dispatchEvent(new Event('hashchange'));
-    await wait(150);
+    await waitFor(() => events.some((e) => e.route === '/#/article/[id]'));
 
     const routes = events.map((e) => e.route);
     expect(routes).toContain('/#/');
@@ -90,7 +107,7 @@ describe('createDiscoveryCapture (hashchange subscription)', () => {
       getSessionId: () => 'sess-2',
       onEvent: (e) => events.push(e),
     });
-    await wait(150);
+    await waitFor(() => events.length > 0);
 
     expect(events.length).toBeGreaterThan(0);
     const e = events[events.length - 1]!;

@@ -322,7 +322,7 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **72 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.generated.mdx`](apps/docs/content/sdks/mcp-tools.generated.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **73 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.generated.mdx`](apps/docs/content/sdks/mcp-tools.generated.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 
@@ -841,6 +841,17 @@ Prefix **`/v1/sync/*`** — reports, lessons, ingest-setup mirrors for MCP and C
 Under **`/v1/admin/skills/*`**: catalog (`GET /`, `GET /:slug`), sources CRUD + `POST /sources/:id/sync`, pipeline runs + checkin, `GET /cloud-readiness`. See `api/routes/skills.ts`.
 
 ---
+
+## Voice loop, cloud agents, MCP 2026-07-28 (Sep 12 2026)
+
+Plan 017 (`docs/execplans/dead-code-voice-agent-loop.md`, ADRs 0007–0013).
+
+- **Hosted MCP is dual-era**: legacy clients (2024-11-05 … 2025-11-25) keep `initialize`; 2026-07-28 clients use `server/discover`, per-request `_meta`, `Mcp-Method`/`Mcp-Name` headers, MRTR `input_required`, and the `io.modelcontextprotocol/tasks` extension (`tasks/get|update|cancel` over `fix_dispatch_jobs`). Modules: `_shared/mcp-protocol.ts`, `mcp-mrtr.ts`, `mcp-tasks.ts`.
+- **Voice intake**: `api/routes/intake-voice.ts` (`POST /v1/intake/voice`, scope `voice:write`), `_shared/voice-intake.ts` / `voice-intent.ts` / `stt.ts` / `voice-return.ts`; inboxes: iOS Shortcut (text), Slack (`api/routes/slack-events.ts`: Events API + `/mushi` commands), Telegram (`telegram-webhook` function + `api/routes/telegram-admin.ts`), installed console PWA (`apps/admin` share_target + tap-to-talk). Tables: `voice_intake_sessions`, `telegram_chat_bindings`, `telegram_bind_codes`, `user_push_subscriptions`; bucket `voice-intake`; `reports.source`.
+- **Cloud agents**: `_shared/agent-adapters.ts` (`cursor_cloud` via `_shared/cursor-cloud.ts` v1 API, `github_cloud_agent` via `_shared/github-agent-tasks.ts`, `anthropic_managed` stub); `fix-worker` dispatches and writes `fix_attempts` up front; completion via `cursor-webhook` (v0 callback) or `agent-status-poll` (cron `5-55/5`); unknown agents are a 400 at `POST /v1/admin/fixes/dispatch`.
+- **A2A 1.0 wire format** (`taskPushNotificationConfig`, StreamResponse callbacks, `/.well-known/agent-card.json`) with 0.3 aliases.
+- **Web Push**: `_shared/web-push.ts` (`@pushforge/builder`, host allowlist), `api/routes/push.ts`; secrets `VAPID_*`.
+- **Dead-code gate**: knip@6 baselines in `docs/execplans/knip-baseline/`, ratchets in the `build` job (`check:residue`, `check:env-source-parity`).
 
 ## ExecPlans
 

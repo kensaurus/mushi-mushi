@@ -61,8 +61,33 @@ export interface ScopedRateLimitResult {
 }
 
 /**
- * Per-tenant rate limit via scoped_rate_limit_claim RPC.
- * scopeKey examples: `org:{id}:invite`, `project:{id}:sdk_upgrade`
+ * Fold an opaque scope key into the 8-4-4-4-12 hex shape Postgres's `uuid`
+ * type accepts. `scoped_rate_limits.user_id` is an opaque actor bucket, not a
+ * real `auth.users` id — see 20260702035407_scoped_rate_limits_generalize_actor.sql
+ * — so a SHA-256 of the scope key is a valid actor. Mirrors
+ * `ipRateLimitActorId()` in api/routes/cli-auth.ts.
+ */
+export async function rateLimitActorId(scopeKey: string): Promise<string> {
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(scopeKey));
+  const hex = Array.from(new Uint8Array(hash).slice(0, 16))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+/**
+ * Per-tenant rate limit via the `scoped_rate_limit_claim` RPC.
+ * scopeKey examples: `org:{id}:invite`, `project:{id}:sdk_upgrade`.
+ *
+ * The RPC signature is
+ * `(p_user_id uuid, p_scope text, p_max_per_window integer, p_window interval)`.
+ * This helper previously called it as `(p_scope_key, p_limit, p_window_sec)`,
+ * which does not exist: PostgREST answered "Could not find the function ... in
+ * the schema cache" on every call, the error fell through to the fail-open
+ * branch, and every limit routed through here — voice intake burst, skill
+ * pipeline starts, push self-test — was silently disabled. That is the same
+ * failure the generalize-actor migration was written to fix, so the unexpected
+ * -error branch now logs at error level to keep a future signature drift loud.
  */
 export async function claimTenantRateLimit(
   db: SupabaseClient,
@@ -71,9 +96,10 @@ export async function claimTenantRateLimit(
   windowSec: number,
 ): Promise<ScopedRateLimitResult> {
   const { error } = await db.rpc('scoped_rate_limit_claim', {
-    p_scope_key: scopeKey,
-    p_limit: limit,
-    p_window_sec: windowSec,
+    p_user_id: await rateLimitActorId(scopeKey),
+    p_scope: scopeKey,
+    p_max_per_window: limit,
+    p_window: `${windowSec} seconds`,
   });
   if (!error) return { allowed: true };
   const msg = error.message ?? '';
@@ -81,8 +107,10 @@ export async function claimTenantRateLimit(
     const match = msg.match(/retry_after=(\d+)/);
     return { allowed: false, retryAfterSec: match ? parseInt(match[1]!, 10) : windowSec };
   }
-  // Non-fatal — allow on RPC failure so infra issues don't block legit traffic.
-  tenantLog.warn('scoped_rate_limit_claim failed (non-fatal)', { scopeKey, err: msg });
+  // Fail open on genuine infra errors so a database blip cannot lock out
+  // legitimate traffic — but log loudly, because a silent fail-open here is
+  // indistinguishable from having no rate limit at all.
+  tenantLog.error('scoped_rate_limit_claim failed — allowing request', { scopeKey, err: msg });
   return { allowed: true };
 }
 

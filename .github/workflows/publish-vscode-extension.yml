@@ -1,0 +1,112 @@
+# FILE: publish-vscode-extension.yml
+# PURPOSE: Publish packages/vscode-extension to the two extension marketplaces —
+#          the VS Code Marketplace (vsce) and Open VSX (ovsx).
+#
+# WHY:     The extension has been built and versioned in-repo since 0.17.0 but
+#          was never published to either marketplace, because publishing was a
+#          manual runbook nobody ran on release day. See
+#          docs/marketplace/vscode-extension-publishing.md.
+#
+# SECRETS: VSCE_PAT  — Azure DevOps PAT for the `mushimushi` publisher
+#          OVSX_PAT  — Open VSX token for the `mushimushi` namespace
+#          Each marketplace is skipped independently when its token is absent,
+#          so this workflow is safe to merge before the tokens exist.
+#
+# USAGE:   gh workflow run "Publish VS Code Extension" --ref master
+#          (dry_run: true packages the .vsix and uploads it as an artifact
+#           without publishing anywhere)
+
+name: Publish VS Code Extension
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Package the .vsix and upload it as an artifact, but do not publish'
+        type: boolean
+        default: false
+
+concurrency:
+  group: publish-vscode-extension-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Package and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271  # v4.1.0
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Report what will happen
+        env:
+          HAS_VSCE: ${{ secrets.VSCE_PAT != '' }}
+          HAS_OVSX: ${{ secrets.OVSX_PAT != '' }}
+        run: |
+          VERSION=$(node -p "require('./packages/vscode-extension/package.json').version")
+          echo "### VS Code extension v$VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Target | Will publish |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| VS Code Marketplace | $HAS_VSCE |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Open VSX | $HAS_OVSX |" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "_Dry run — packaging only._" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Package the .vsix
+        working-directory: packages/vscode-extension
+        run: pnpm run package
+
+      - name: Upload the .vsix as a build artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: mushi-mushi-vscode
+          path: packages/vscode-extension/*.vsix
+          if-no-files-found: error
+
+      - name: Publish to the VS Code Marketplace
+        if: ${{ !inputs.dry_run && secrets.VSCE_PAT != '' }}
+        working-directory: packages/vscode-extension
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: pnpm run publish:vsce
+
+      - name: Publish to Open VSX
+        if: ${{ !inputs.dry_run && secrets.OVSX_PAT != '' }}
+        working-directory: packages/vscode-extension
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: pnpm run publish:ovsx
+
+      - name: Note any marketplace that was skipped
+        if: ${{ !inputs.dry_run }}
+        # Compare the booleans, never the secret values — interpolating a secret
+        # into a shell script writes it into the process args.
+        env:
+          HAS_VSCE: ${{ secrets.VSCE_PAT != '' }}
+          HAS_OVSX: ${{ secrets.OVSX_PAT != '' }}
+        run: |
+          if [ "$HAS_VSCE" != "true" ]; then
+            echo "::warning::VSCE_PAT is not set — skipped the VS Code Marketplace. See docs/marketplace/vscode-extension-publishing.md"
+          fi
+          if [ "$HAS_OVSX" != "true" ]; then
+            echo "::warning::OVSX_PAT is not set — skipped Open VSX. See docs/marketplace/vscode-extension-publishing.md"
+          fi

@@ -17,7 +17,6 @@
 import { test, expect, type Page } from '@playwright/test'
 
 const DOGFOOD_URL = process.env.MUSHI_DOGFOOD_URL ?? 'http://localhost:3000'
-const ADMIN_URL   = process.env.MUSHI_ADMIN_URL   ?? 'http://localhost:6464'
 const BASE_PATH   = '/glot-it'
 const WIDGET_TRIGGER = process.env.MUSHI_WIDGET_TRIGGER ?? 'fab'
 

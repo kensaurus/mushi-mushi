@@ -301,3 +301,42 @@ describe('setupProactiveTriggers apiCascade', () => {
     cleanup.destroy();
   });
 });
+
+describe('setupProactiveTriggers errorBoundary filters', () => {
+  it('does not fire when ignoreErrors matches', () => {
+    const onTrigger = vi.fn();
+    const cleanup = setupProactiveTriggers(
+      { onTrigger },
+      {
+        rageClick: false,
+        longTask: false,
+        apiCascade: false,
+        errorBoundary: true,
+        ignoreErrors: ['ResizeObserver'],
+      },
+    );
+    window.dispatchEvent(new ErrorEvent('error', { message: 'ResizeObserver loop limit exceeded' }));
+    expect(onTrigger).not.toHaveBeenCalled();
+    cleanup.destroy();
+  });
+
+  it('fires for an unmatched error', () => {
+    const onTrigger = vi.fn();
+    const cleanup = setupProactiveTriggers(
+      { onTrigger },
+      {
+        rageClick: false,
+        longTask: false,
+        apiCascade: false,
+        errorBoundary: true,
+        ignoreErrors: ['ResizeObserver'],
+      },
+    );
+    window.dispatchEvent(new ErrorEvent('error', { message: 'Checkout crashed' }));
+    expect(onTrigger).toHaveBeenCalledWith(
+      'error_boundary',
+      expect.objectContaining({ message: 'Checkout crashed' }),
+    );
+    cleanup.destroy();
+  });
+});

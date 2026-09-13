@@ -1,17 +1,14 @@
 {
+  "extends": "@mushi-mushi/tsconfig/node.json",
   "compilerOptions": {
-    "target": "ES2022",
     "module": "ES2022",
-    "moduleResolution": "bundler",
-    "lib": ["ES2022"],
-    "types": ["node"],
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "resolveJsonModule": true,
+    "types": [
+      "node"
+    ],
     "noEmit": true,
-    "allowImportingTsExtensions": true,
-    "ignoreDeprecations": "6.0"
+    "allowImportingTsExtensions": true
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*"
+  ]
 }

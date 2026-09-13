@@ -1,0 +1,96 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreWorkspaces": [
+    "examples/realworld/*"
+  ],
+  "tags": [
+    "-public"
+  ],
+  "compilers": {
+    "mdx": true
+  },
+  "rules": {
+    "optionalPeerDependencies": "warn"
+  },
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/*.mjs",
+        "scripts/cloudflare/*.mjs",
+        "scripts/marketing/*.mjs",
+        "scripts/cloudfront-*.js",
+        "scripts/vendor/*.js"
+      ],
+      "project": [
+        "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,mdx}!",
+        "!packages/android/**",
+        "!packages/ios/**",
+        "!packages/flutter/**",
+        "!packages/cursor-plugin/**",
+        "!deploy/**",
+        "!supabase/**",
+        "!session-artifacts/**",
+        "!tmp/**"
+      ],
+      "ignoreBinaries": [
+        "rg",
+        "netstat",
+        "findstr",
+        "ffmpeg"
+      ]
+    },
+    "apps/admin": {
+      "entry": [
+        "src/stubs/rrweb.ts"
+      ]
+    },
+    "apps/docs": {
+      "entry": [
+        "content/**/_meta.ts",
+        "content/**/*.mdx"
+      ],
+      "project": [
+        "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,mdx}!",
+        "!playground/**"
+      ]
+    },
+    "packages/capacitor": {
+      "ignoreBinaries": [
+        "pod"
+      ]
+    },
+    "packages/cli": {
+      "ignoreBinaries": [
+        "supabase",
+        "icacls"
+      ]
+    },
+    "packages/create-mushi-mushi": {
+      "project": [
+        "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,mdx}!",
+        "!templates/**"
+      ]
+    },
+    "packages/server": {
+      "entry": [
+        "src/index.ts!",
+        "src/__tests__/__stubs__/npm-stub.ts"
+      ],
+      "project": [
+        "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,mdx}!",
+        "!supabase/**"
+      ],
+      "ignoreDependencies": [
+        "npm"
+      ],
+      "node": false
+    },
+    "packages/web": {
+      "vite": {
+        "config": [
+          "ask-harness/vite.config.ts"
+        ]
+      }
+    }
+  }
+}

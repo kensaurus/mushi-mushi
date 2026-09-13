@@ -1,17 +1,22 @@
 {
+  "extends": "../../tooling/tsconfig/node.json",
   "compilerOptions": {
     "module": "commonjs",
-    "target": "ES2022",
-    "lib": ["ES2022"],
     "outDir": "dist",
     "rootDir": "src",
-    "sourceMap": true,
-    "strict": true,
     "noUncheckedIndexedAccess": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "types": ["node", "vscode"]
+    "types": [
+      "node",
+      "vscode"
+    ],
+    "moduleResolution": "node10",
+    "verbatimModuleSyntax": false
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

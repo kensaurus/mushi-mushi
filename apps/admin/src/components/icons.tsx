@@ -212,6 +212,16 @@ export function IconBell(p: IconProps) {
   </>)
 }
 
+/** Microphone — Voice intake page (tap-to-talk). */
+export function IconMic(p: IconProps) {
+  return wrap(p, <>
+    <rect x="5.5" y="2" width="5" height="7.5" rx="2.5" />
+    <path d="M3.5 7.5a4.5 4.5 0 0 0 9 0" />
+    <path d="M8 12v2" />
+    <path d="M6 14h4" />
+  </>)
+}
+
 export function IconIntelligence(p: IconProps) {
   return wrap(p, <>
     <rect x="2.5" y="2.5" width="11" height="11" rx="1" />

@@ -8,5 +8,8 @@
     },
     "types": ["vite/client"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  // The service worker needs the WebWorker lib, which conflicts with DOM in
+  // one program — it is type-checked separately via tsconfig.sw.json.
+  "exclude": ["src/sw.ts"]
 }

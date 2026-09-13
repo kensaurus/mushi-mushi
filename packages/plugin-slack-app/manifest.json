@@ -1,7 +1,7 @@
 {
   "display_information": {
     "name": "Mushi Mushi",
-    "description": "Triage, transition, and assign Mushi Mushi bug reports without leaving Slack.",
+    "description": "Triage, transition, and assign Mushi Mushi bug reports without leaving Slack. Drop a voice clip or run /mushi voice to dictate a request.",
     "background_color": "#0b3d2e"
   },
   "features": {
@@ -9,39 +9,13 @@
     "slash_commands": [
       {
         "command": "/mushi",
-        "description": "Show, search, or transition Mushi reports",
-        "usage_hint": "list | open <id> | assign <id> @user | resolve <id>",
+        "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/webhooks/slack/commands",
+        "description": "Dictate a request, or list / open / resolve Mushi reports",
+        "usage_hint": "voice <text> | list | open <id> | resolve <id> | help",
         "should_escape": false
       }
     ],
-    "app_home": { "home_tab_enabled": true, "messages_tab_enabled": false, "messages_tab_read_only_enabled": true }
-  },
-  "oauth_config": {
-    "scopes": {
-      "bot": [
-        "chat:write",
-        "chat:write.public",
-        "commands",
-        "im:history",
-        "im:read",
-        "im:write",
-        "users:read",
-        "users:read.email"
-      ]
-    }
-  },
-  "settings": {
-    "event_subscriptions": {
-      "request_url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/webhooks/slack/events",
-      "bot_events": ["app_home_opened", "app_mention"]
-    },
-    "interactivity": {
-      "is_enabled": true,
-      "request_url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/slack-interactions"
-    },
-    "org_deploy_enabled": false,
-    "socket_mode_enabled": false,
-    "token_rotation_enabled": false
+    "app_home": { "home_tab_enabled": true, "messages_tab_enabled": true, "messages_tab_read_only_enabled": false }
   },
   "oauth_config": {
     "redirect_urls": [
@@ -52,13 +26,36 @@
         "chat:write",
         "chat:write.public",
         "channels:read",
-        "commands",
+        "channels:history",
+        "groups:history",
         "im:history",
         "im:read",
         "im:write",
+        "files:read",
+        "commands",
         "users:read",
         "users:read.email"
       ]
     }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/webhooks/slack/events",
+      "bot_events": [
+        "app_home_opened",
+        "app_mention",
+        "message.channels",
+        "message.groups",
+        "message.im",
+        "file_shared"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/slack-interactions"
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
   }
 }

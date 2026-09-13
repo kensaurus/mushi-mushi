@@ -1,6 +1,16 @@
 import { createHash } from 'node:crypto'
 import type { ApiClientOptions } from '@mushi-mushi/core'
-import { DEFAULT_API_ENDPOINT, scrubPii, scrubUrl } from '@mushi-mushi/core'
+import {
+  DEFAULT_API_ENDPOINT,
+  DEFAULT_MAX_RETRIES,
+  MUSHI_SDK_PACKAGE_HEADER,
+  MUSHI_SDK_VERSION_HEADER,
+  getBackoffDelay,
+  parseRetryAfter,
+  scrubPii,
+  scrubUrl,
+} from '@mushi-mushi/core'
+import { MUSHI_SDK_PACKAGE, MUSHI_SDK_VERSION } from './version'
 
 /**
  * Wave G1 — server-originated report shape.
@@ -63,13 +73,40 @@ export interface CaptureReportOptions {
   signal?: AbortSignal
 }
 
+const DEFAULT_CIRCUIT_THRESHOLD = 4
+const DEFAULT_CIRCUIT_COOLDOWN_MS = 30_000
+const MAX_INLINE_RETRY_WAIT_MS = 10_000
+
 export class MushiNodeClient {
   private opts: NodeClientOptions
   private endpoint: string
+  private cbFailures = 0
+  private cbOpenUntil = 0
 
   constructor(options: NodeClientOptions) {
     this.opts = options
     this.endpoint = (options.apiEndpoint ?? DEFAULT_API_ENDPOINT).replace(/\/$/, '')
+  }
+
+  private cbEnabled(): boolean {
+    return this.opts.circuitBreaker?.enabled !== false
+  }
+
+  private cbIsOpen(): boolean {
+    return this.cbEnabled() && this.cbOpenUntil > Date.now()
+  }
+
+  private cbRecordReachable(): void {
+    this.cbFailures = 0
+    this.cbOpenUntil = 0
+  }
+
+  private cbRecordUnreachable(): void {
+    if (!this.cbEnabled()) return
+    this.cbFailures += 1
+    const threshold = Math.max(1, this.opts.circuitBreaker?.threshold ?? DEFAULT_CIRCUIT_THRESHOLD)
+    const cooldown = Math.max(1_000, this.opts.circuitBreaker?.cooldownMs ?? DEFAULT_CIRCUIT_COOLDOWN_MS)
+    if (this.cbFailures >= threshold) this.cbOpenUntil = Date.now() + cooldown
   }
 
   /**
@@ -114,84 +151,123 @@ export class MushiNodeClient {
     payload: NodeReportPayload,
     options?: CaptureReportOptions,
   ): Promise<{ ok: boolean; reportId?: string }> {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), this.opts.timeout ?? 10_000)
-    const signal = composeSignals([
-      controller.signal,
-      options?.signal,
-      this.opts.signal,
-    ])
-    try {
-      // If the caller stashed a W3C traceparent (e.g. from a middleware), pass
-      // it both as the standard HTTP header and inside `metadata` so the server
-      // can mint a child span and propagate it to outbound BYOK calls.
-      const inboundTraceparent =
-        typeof payload.metadata?.traceparent === 'string'
-          ? payload.metadata.traceparent
-          : null
+    if (this.cbIsOpen()) {
+      warnOnce('[mushi-mushi/node] submit skipped: circuit open')
+      return { ok: false }
+    }
 
-      const extraHeaders: Record<string, string> = {}
-      if (inboundTraceparent) extraHeaders['traceparent'] = inboundTraceparent
+    const inboundTraceparent =
+      typeof payload.metadata?.traceparent === 'string'
+        ? payload.metadata.traceparent
+        : null
 
-      const res = await fetch(`${this.endpoint}/v1/reports`, {
-        method: 'POST',
-        signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Mushi-Api-Key': this.opts.apiKey,
-          'X-Mushi-Project': this.opts.projectId,
-          'User-Agent': '@mushi-mushi/node',
-          ...extraHeaders,
-        },
-        body: JSON.stringify({
-          projectId: this.opts.projectId,
-          category: payload.userCategory ?? this.opts.defaultCategory ?? 'bug',
-          // RealWorld attunement: parity with the web SDK's wire-time
-          // scrubbing. Server errors routinely embed request URLs and user
-          // input ("user jake@x.com not found") — scrub description, error
-          // text, and URL query values before anything leaves the process.
-          description: scrubPii(payload.description),
-          ...(payload.severity ? { severity: payload.severity } : {}),
-          environment: buildNodeEnvironment({
-            url: payload.url ? scrubUrl(payload.url) : undefined,
-            env: this.opts.environment,
-            release: this.opts.release,
-            traceContext: payload.traceContext,
-          }),
-          metadata: {
-            ...(payload.metadata ?? {}),
-            error: payload.error
-              ? {
-                  ...payload.error,
-                  ...(payload.error.message !== undefined
-                    ? { message: scrubPii(payload.error.message) }
-                    : {}),
-                  ...(payload.error.stack !== undefined
-                    ? { stack: scrubPii(payload.error.stack) }
-                    : {}),
-                }
-              : payload.error,
-            userId: payload.userId,
-            ...(payload.component ? { component: payload.component } : {}),
+    const extraHeaders: Record<string, string> = {}
+    if (inboundTraceparent) extraHeaders['traceparent'] = inboundTraceparent
+
+    const body = JSON.stringify({
+      projectId: this.opts.projectId,
+      category: payload.userCategory ?? this.opts.defaultCategory ?? 'bug',
+      description: scrubPii(payload.description),
+      ...(payload.severity ? { severity: payload.severity } : {}),
+      environment: buildNodeEnvironment({
+        url: payload.url ? scrubUrl(payload.url) : undefined,
+        env: this.opts.environment,
+        release: this.opts.release,
+        traceContext: payload.traceContext,
+      }),
+      metadata: {
+        ...(payload.metadata ?? {}),
+        error: payload.error
+          ? {
+              ...payload.error,
+              ...(payload.error.message !== undefined
+                ? { message: scrubPii(payload.error.message) }
+                : {}),
+              ...(payload.error.stack !== undefined
+                ? { stack: scrubPii(payload.error.stack) }
+                : {}),
+            }
+          : payload.error,
+        userId: payload.userId,
+        ...(payload.component ? { component: payload.component } : {}),
+      },
+      reporterToken: `node-${createHash('sha256').update(this.opts.projectId).digest('hex').slice(0, 32)}`,
+      createdAt: new Date().toISOString(),
+      sdkPackage: MUSHI_SDK_PACKAGE,
+      sdkVersion: MUSHI_SDK_VERSION,
+    })
+
+    const maxRetries = this.opts.maxRetries ?? DEFAULT_MAX_RETRIES
+    let retriesLeft = maxRetries
+
+    while (true) {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), this.opts.timeout ?? 10_000)
+      const signal = composeSignals([
+        controller.signal,
+        options?.signal,
+        this.opts.signal,
+      ])
+      try {
+        const res = await fetch(`${this.endpoint}/v1/reports`, {
+          method: 'POST',
+          signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Mushi-Api-Key': this.opts.apiKey,
+            'X-Mushi-Project': this.opts.projectId,
+            [MUSHI_SDK_PACKAGE_HEADER]: MUSHI_SDK_PACKAGE,
+            [MUSHI_SDK_VERSION_HEADER]: MUSHI_SDK_VERSION,
+            'User-Agent': `${MUSHI_SDK_PACKAGE}/${MUSHI_SDK_VERSION}`,
+            ...extraHeaders,
           },
-          reporterToken: `node-${createHash('sha256').update(this.opts.projectId).digest('hex').slice(0, 32)}`,
-          createdAt: new Date().toISOString(),
-          sdkPackage: '@mushi-mushi/node',
-        }),
-      })
-      if (!res.ok) {
+          body,
+        })
+        if (res.ok) {
+          this.cbRecordReachable()
+          const parsed = await res.json().catch(() => ({})) as { data?: { reportId?: string } }
+          return { ok: true, reportId: parsed.data?.reportId }
+        }
+
+        const rateLimited = res.status === 429
+        const unusable = res.status >= 500 || rateLimited
+        const retryAfterMs = rateLimited ? parseRetryAfter(res.headers.get('Retry-After')) : null
+        const canWaitInline = retryAfterMs === null || retryAfterMs <= MAX_INLINE_RETRY_WAIT_MS
+        if (unusable && retriesLeft > 0 && canWaitInline) {
+          retriesLeft -= 1
+          await sleep(retryAfterMs ?? getBackoffDelay(maxRetries - retriesLeft - 1))
+          continue
+        }
+        if (unusable) this.cbRecordUnreachable()
+        else this.cbRecordReachable()
         warnOnce(`[mushi-mushi/node] submit failed: HTTP ${res.status}`)
         return { ok: false }
+      } catch (err) {
+        const cancelled = options?.signal?.aborted || this.opts.signal?.aborted
+        if (!cancelled && retriesLeft > 0 && isRetryableNodeError(err)) {
+          retriesLeft -= 1
+          await sleep(getBackoffDelay(maxRetries - retriesLeft - 1))
+          continue
+        }
+        this.cbRecordUnreachable()
+        warnOnce(`[mushi-mushi/node] submit threw: ${(err as Error).message}`)
+        return { ok: false }
+      } finally {
+        clearTimeout(timer)
       }
-      const body = await res.json().catch(() => ({})) as { data?: { reportId?: string } }
-      return { ok: true, reportId: body.data?.reportId }
-    } catch (err) {
-      warnOnce(`[mushi-mushi/node] submit threw: ${(err as Error).message}`)
-      return { ok: false }
-    } finally {
-      clearTimeout(timer)
     }
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isRetryableNodeError(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === 'AbortError') return true
+  if (error instanceof Error && error.name === 'AbortError') return true
+  if (error instanceof TypeError) return true
+  return false
 }
 
 const warnedMessages = new Set<string>()

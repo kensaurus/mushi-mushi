@@ -52,6 +52,7 @@ import {
   type ScopePresetId,
   type OrgRole,
   SCOPE_PRESETS,
+  isScopePresetId,
 } from '../components/projects/project-models'
 import {
   ACTIVE_PROJECT_QUERY_PARAM,
@@ -135,6 +136,11 @@ export function ProjectsPage() {
   // Per-project preset selection so multiple keys can be minted without
   // losing the user's last choice on rerender.
   const [keyScopePreset, setKeyScopePreset] = useState<Record<string, ScopePresetId>>({})
+  // Deep link (Settings → Voice intake → "Mint a voice:write key"):
+  // `?keyScope=voice` preselects that preset on every row until the user
+  // picks another one for a specific project.
+  const keyScopeParam = searchParams.get('keyScope')
+  const defaultKeyScopePreset: ScopePresetId = isScopePresetId(keyScopeParam) ? keyScopeParam : 'sdk'
 
   // Delete-project flow (type-the-slug to confirm). `pendingDelete` holds the
   // project the user is currently confirming. The actual DELETE call lives
@@ -295,7 +301,7 @@ export function ProjectsPage() {
   }
 
   async function generateKey(projectId: string) {
-    const presetId = keyScopePreset[projectId] ?? 'sdk'
+    const presetId = keyScopePreset[projectId] ?? defaultKeyScopePreset
     const preset = SCOPE_PRESETS.find((p) => p.id === presetId) ?? SCOPE_PRESETS[0]
     setBusyProject(projectId)
     try {
@@ -730,6 +736,7 @@ export function ProjectsPage() {
           revealedKeys={revealedKeys}
           sdkOpenOverride={sdkOpenOverride}
           keyScopePreset={keyScopePreset}
+          defaultKeyScopePreset={defaultKeyScopePreset}
           renamingId={renamingId}
           renameDraft={renameDraft}
           renamingProject={renamingProject}

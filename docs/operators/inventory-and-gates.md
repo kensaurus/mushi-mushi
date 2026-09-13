@@ -33,7 +33,7 @@ from that contract.
   view that overlays the positive inventory on the live knowledge graph so you
   can see the dead corners.
 - 🔌 **First-class orchestrator interop.** MCP Streamable HTTP at
-  `/functions/v1/mcp` (2025-03-26 spec), A2A `tasks` endpoints at `/v1/a2a/tasks`
+  `/functions/v1/mcp` (MCP 2024-11-05 … 2026-07-28, dual-era), A2A `tasks` endpoints at `/v1/a2a/tasks`
   (create / get / cancel / SSE subscribe), OpenAPI 3.1 at `/openapi.json`, AG-UI
   v0.4 SSE accepts API keys (`mcp:read`), `SandboxProvider` as an open contract,
   and JSON Schemas at `/v1/schemas/*`. See
