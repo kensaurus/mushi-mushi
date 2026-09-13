@@ -457,15 +457,18 @@ export async function probeIntegration(
       detail = 'No Cursor API key configured. Paste your crsr_… key under Integrations → Cursor Cloud.'
     } else {
       try {
-        const res = await fetch('https://api.cursor.com/v0/me', {
+        // v1 key probe — same endpoint byok-validation.ts uses, so the
+        // Integrations page and the BYOK validator can never disagree.
+        // Response is ApiKeyInfo { apiKeyName, createdAt, userEmail?, … }.
+        const res = await fetch('https://api.cursor.com/v1/me', {
           headers: { Authorization: `Bearer ${apiKey}`, 'User-Agent': 'mushi-mushi-health-probe/1.0' },
           signal: AbortSignal.timeout(8_000),
         })
         httpStatus = res.status
         if (res.ok) {
-          const data = await res.json() as { email?: string; username?: string; user?: { email?: string } }
+          const data = await res.json() as { apiKeyName?: string; userEmail?: string; email?: string }
           status = 'ok'
-          detail = `Connected as ${data.email ?? data.user?.email ?? data.username ?? 'Cursor account'}`
+          detail = `Connected as ${data.userEmail ?? data.email ?? data.apiKeyName ?? 'Cursor account'}`
         } else if (res.status === 401 || res.status === 403) {
           status = 'down'
           detail = 'API key invalid or revoked. Regenerate at cursor.com/dashboard/integrations.'

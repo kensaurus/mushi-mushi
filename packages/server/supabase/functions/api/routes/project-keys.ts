@@ -12,7 +12,9 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
   // migration 20260421003000_api_key_scopes.sql). We echo it here so the API
   // rejects bad input with a 400 and a helpful message, rather than letting
   // Postgres surface a noisy `23514` error.
-  const ALLOWED_KEY_SCOPES = ['report:write', 'mcp:read', 'mcp:write'] as const;
+  // `voice:write` is the phone-resident scope for POST /v1/intake/voice
+  // (migration 20260912001000). It unlocks that route only.
+  const ALLOWED_KEY_SCOPES = ['report:write', 'mcp:read', 'mcp:write', 'voice:write'] as const;
   type AllowedScope = (typeof ALLOWED_KEY_SCOPES)[number];
 
   function normaliseScopes(input: unknown): AllowedScope[] | { error: string } {

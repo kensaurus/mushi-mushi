@@ -21,6 +21,7 @@ import {
 } from './sdk-upgrade-plan.ts'
 import { upsertProjectSdkObservationAsync } from './sdk-observation.ts'
 import { UPGRADE_BRANCH_PREFIX } from './sdk-upgrade-gates.ts'
+import { SDK_UPGRADE_STALE_MS, shouldClaimSdkUpgradeJob } from './sdk-upgrade-reclaim.ts'
 
 const log = rootLog.child('sdk-upgrade-runner')
 
@@ -58,22 +59,45 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
 
   const { data: job } = await db
     .from('sdk_upgrade_jobs')
-    .select('id, project_id, status')
+    .select('id, project_id, status, started_at')
     .eq('id', jobId)
     .single()
 
-  if (!job || (job.status !== 'queued' && job.status !== 'running')) {
-    return { ok: false, status: 'skipped', error: `Job ${jobId} not runnable (status=${job?.status ?? 'missing'})` }
+  if (!job) {
+    return { ok: false, status: 'skipped', error: `Job ${jobId} not runnable (status=missing)` }
   }
 
-  const { error: runErr } = await db
-    .from('sdk_upgrade_jobs')
-    .update({ status: 'running', started_at: new Date().toISOString() })
-    .eq('id', jobId)
-    .eq('status', 'queued')
+  const claim = shouldClaimSdkUpgradeJob({
+    status: job.status,
+    started_at: job.started_at,
+  })
+  if (claim === 'skip') {
+    return {
+      ok: false,
+      status: 'skipped',
+      error: `Job ${jobId} not runnable (status=${job.status})`,
+    }
+  }
 
-  if (runErr) {
-    log.warn('sdk-upgrade-runner: could not mark job running', { jobId, error: runErr.message })
+  const startedAt = new Date().toISOString()
+  const staleIso = new Date(Date.now() - SDK_UPGRADE_STALE_MS).toISOString()
+  let claimQuery = db
+    .from('sdk_upgrade_jobs')
+    .update({ status: 'running', started_at: startedAt })
+    .eq('id', jobId)
+  claimQuery = claim === 'claim'
+    ? claimQuery.eq('status', 'queued')
+    : claimQuery
+      .eq('status', 'running')
+      .or(`started_at.is.null,started_at.lte.${staleIso}`)
+  const { data: claimed, error: runErr } = await claimQuery.select('id')
+
+  if (runErr || !claimed?.length) {
+    log.warn('sdk-upgrade-runner: could not mark job running', {
+      jobId,
+      claim,
+      error: runErr?.message,
+    })
     return { ok: false, status: 'skipped', error: 'Job already started by another worker.' }
   }
 

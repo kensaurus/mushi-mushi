@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createApiClient, parseRetryAfter } from './api-client';
+import { createApiClient, parseRetryAfter, resolveRequestBaseUrl } from './api-client';
 
 describe('createApiClient', () => {
   const mockOptions = {
@@ -202,6 +202,42 @@ describe('createApiClient', () => {
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe('HTTP_429');
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('POSTs reports to the tunnel path', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ reportId: 'rpt_tun' }), { status: 200 }),
+    );
+    const client = createApiClient({
+      ...mockOptions,
+      tunnel: '/api/mushi-tunnel',
+    });
+    await client.submitReport({
+      id: 'rpt_tun',
+      projectId: 'proj_test',
+      category: 'bug',
+      description: 'Tunnel',
+      environment: {
+        userAgent: 'test', platform: 'test', language: 'en',
+        viewport: { width: 0, height: 0 }, url: '', referrer: '',
+        timestamp: '', timezone: 'UTC',
+      },
+      reporterToken: 'mushi_test',
+      createdAt: new Date().toISOString(),
+    });
+    expect(fetchSpy.mock.calls[0][0]).toBe('/api/mushi-tunnel/v1/reports');
+  });
+});
+
+describe('resolveRequestBaseUrl', () => {
+  it('uses tunnel when set and strips a trailing slash', () => {
+    expect(resolveRequestBaseUrl('https://ingest.example/api', '/api/mushi-tunnel/')).toBe(
+      '/api/mushi-tunnel',
+    );
+  });
+
+  it('falls back to the API endpoint', () => {
+    expect(resolveRequestBaseUrl('https://ingest.example/api/')).toBe('https://ingest.example/api');
   });
 });
 

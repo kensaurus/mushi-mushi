@@ -76,7 +76,6 @@ test.describe('Admin mode matrix — Quick / Beginner / Advanced nav', () => {
     expect(navLinks.length).toBeGreaterThanOrEqual(4)
 
     // Advanced-only pages (Graph, Explore, Audit, Compliance) should NOT be in nav
-    const navText = navLinks.join(' ').toLowerCase()
     // We don't check for strict exclusions because the nav can change, but
     // we verify the basic structural invariant: fewer links than Advanced mode
     expect(navLinks.length).toBeLessThan(30) // sanity upper bound

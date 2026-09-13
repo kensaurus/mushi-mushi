@@ -1,27 +1,41 @@
 /**
- * Contract tests for the Cursor Cloud plugin.
+ * Contract tests for the Cursor Cloud plugin (Cursor Cloud Agents v1 API).
  *
  * Coverage targets the audit-flagged risks:
  *  - severity gate prevents spending Cursor API credit on low/medium reports
  *  - missing repoUrl silently no-ops (no API call)
- *  - report.classified at the threshold dispatches exactly one POST
- *  - fix.requested always dispatches regardless of severity
+ *  - report.classified at the threshold dispatches exactly one POST /v1/agents
+ *    with the documented v1 body (top-level autoCreatePR, repos[], agentId)
+ *  - fix.requested always dispatches regardless of severity — unless Mushi's
+ *    fix-worker already created the agent (data.fix.externalAgentId)
+ *  - 409 agent_id_conflict on a re-delivered event is idempotent success
  *  - retry on 503; bail on 401 — no unbounded $$ on bad keys
  */
 
 import { describe, it, expect, vi } from 'vitest'
 import { signPayload } from '@mushi-mushi/plugin-sdk'
-import { createCursorCloudPlugin, type CursorCloudPluginConfig } from '../index.js'
+import {
+  buildCreateAgentBody,
+  createCursorCloudPlugin,
+  deterministicAgentId,
+  type CursorCloudPluginConfig,
+} from '../index.js'
 
 const WEBHOOK_SECRET = 'test-webhook-secret'
 
-function makePlugin(overrides: Partial<CursorCloudPluginConfig> = {}) {
-  const fetchMock = vi.fn(async () =>
-    new Response(
-      JSON.stringify({ agentId: 'agent_abc', status: 'queued' }),
-      { status: 201, headers: { 'Content-Type': 'application/json' } },
-    ),
+function v1Response(overrides: Record<string, unknown> = {}) {
+  return new Response(
+    JSON.stringify({
+      agent: { id: 'bc-11111111-2222-5333-8444-555555555555', status: 'ACTIVE', url: 'https://cursor.com/agents/1' },
+      run: { id: 'run_abc', agentId: 'bc-11111111-2222-5333-8444-555555555555', status: 'CREATING', git: { branches: [] } },
+      ...overrides,
+    }),
+    { status: 201, headers: { 'Content-Type': 'application/json' } },
   )
+}
+
+function makePlugin(overrides: Partial<CursorCloudPluginConfig> = {}) {
+  const fetchMock = vi.fn(async () => v1Response())
   const plugin = createCursorCloudPlugin({
     apiKey: 'crsr_test_key',
     webhookSecret: WEBHOOK_SECRET,
@@ -43,6 +57,43 @@ function deliver(
     headers: { 'x-mushi-signature': signPayload(WEBHOOK_SECRET, raw) },
   })
 }
+
+describe('buildCreateAgentBody — v1 wire shape', () => {
+  it('puts autoCreatePR at the TOP LEVEL and the repo under repos[]', () => {
+    const body = buildCreateAgentBody({
+      prompt: 'fix it',
+      repoUrl: 'https://github.com/example/repo',
+      startingRef: 'main',
+      model: 'composer-2.5',
+      autoCreatePR: true,
+      agentId: 'bc-11111111-2222-5333-8444-555555555555',
+      name: 'Mushi fix',
+    })
+    expect(body).toEqual({
+      prompt: { text: 'fix it' },
+      repos: [{ url: 'https://github.com/example/repo', startingRef: 'main' }],
+      autoCreatePR: true,
+      skipReviewerRequest: true,
+      model: { id: 'composer-2.5' },
+      agentId: 'bc-11111111-2222-5333-8444-555555555555',
+      name: 'Mushi fix',
+    })
+    // v0-only keys must be gone.
+    expect(body).not.toHaveProperty('source')
+    expect(body).not.toHaveProperty('target')
+    expect(body).not.toHaveProperty('cloud')
+    expect(body).not.toHaveProperty('webhook')
+  })
+
+  it('deterministicAgentId is stable per seed and Cursor-shaped', async () => {
+    const a = await deterministicAgentId('fix.requested:p-1:f-1')
+    const b = await deterministicAgentId('fix.requested:p-1:f-1')
+    const c = await deterministicAgentId('fix.requested:p-1:f-2')
+    expect(a).toBe(b)
+    expect(a).not.toBe(c)
+    expect(a).toMatch(/^bc-[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+  })
+})
 
 describe('createCursorCloudPlugin — severity gate', () => {
   it('skips report.classified below the severity threshold (no Cursor API call)', async () => {
@@ -78,8 +129,8 @@ describe('createCursorCloudPlugin — severity gate', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('dispatches report.classified at the configured threshold (one POST to /v0/agents)', async () => {
-    const { plugin, fetchMock } = makePlugin({ severityThreshold: 'high' })
+  it('dispatches report.classified at the configured threshold (one POST to /v1/agents)', async () => {
+    const { plugin, fetchMock } = makePlugin({ severityThreshold: 'high', startingRef: 'main' })
     const res = await deliver(plugin, {
       event: 'report.classified',
       deliveryId: 'd-hi-1',
@@ -94,7 +145,7 @@ describe('createCursorCloudPlugin — severity gate', () => {
     expect(res.status).toBe(200)
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
-    expect(url).toBe('https://api.cursor.com/v0/agents')
+    expect(url).toBe('https://api.cursor.com/v1/agents')
     expect(init.method).toBe('POST')
     const headers = init.headers as Record<string, string>
     expect(headers.Authorization).toBe('Bearer crsr_test_key')
@@ -102,11 +153,11 @@ describe('createCursorCloudPlugin — severity gate', () => {
     const body = JSON.parse(init.body as string) as Record<string, unknown>
     expect(body.prompt).toEqual({ text: expect.stringContaining('r-hi') })
     expect((body.prompt as { text: string }).text).toContain('auth')
-    expect(body.source).toEqual({
-      repository: 'https://github.com/example/repo',
-      ref: 'main',
-    })
-    expect((body.target as Record<string, unknown>).autoCreatePr).toBe(true)
+    expect((body.prompt as { text: string }).text).toContain('DRAFT')
+    expect(body.repos).toEqual([{ url: 'https://github.com/example/repo', startingRef: 'main' }])
+    expect(body.autoCreatePR).toBe(true)
+    expect(body.model).toEqual({ id: 'composer-2.5' })
+    expect(body.agentId).toBe(await deterministicAgentId('report.classified:p-1:r-hi'))
   })
 
   it('dispatches critical severity when threshold defaults to critical', async () => {
@@ -161,16 +212,64 @@ describe('createCursorCloudPlugin — fix.requested', () => {
     })
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1]
-    const body = JSON.parse(init.body as string) as { prompt: { text: string } }
+    const body = JSON.parse(init.body as string) as { prompt: { text: string }; agentId: string }
     expect(body.prompt.text).toContain('f-1')
     expect(body.prompt.text).toContain('r-low-fix')
+    expect(body.agentId).toBe(await deterministicAgentId('fix.requested:p-1:f-1'))
+  })
+
+  it('does NOT start a second agent when Mushi already dispatched one (externalAgentId set)', async () => {
+    const { plugin, fetchMock } = makePlugin()
+    const res = await deliver(plugin, {
+      event: 'fix.requested',
+      deliveryId: 'd-fix-already',
+      occurredAt: '2026-09-12T00:00:00Z',
+      projectId: 'p-1',
+      pluginSlug: 'cursor-cloud',
+      data: {
+        report: { id: 'r-cloud', status: 'classified' },
+        fix: {
+          id: 'f-cloud',
+          status: 'requested',
+          agent: 'cursor_cloud',
+          externalAgentId: 'bc-aaaaaaaa-bbbb-5ccc-8ddd-eeeeeeeeeeee',
+        },
+      },
+    })
+    expect(res.status).toBe(200)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('treats 409 agent_id_conflict on a re-delivered event as idempotent success', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ error: { code: 'agent_id_conflict', message: 'exists' } }), { status: 409 }),
+    )
+    const plugin = createCursorCloudPlugin({
+      apiKey: 'crsr_test_key',
+      webhookSecret: WEBHOOK_SECRET,
+      repoUrl: 'https://github.com/example/repo',
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    })
+    const res = await deliver(plugin, {
+      event: 'fix.requested',
+      deliveryId: 'd-fix-409',
+      occurredAt: '2026-09-12T00:00:00Z',
+      projectId: 'p-1',
+      pluginSlug: 'cursor-cloud',
+      data: {
+        report: { id: 'r-409', status: 'classified' },
+        fix: { id: 'f-409', status: 'requested' },
+      },
+    })
+    expect(res.status).toBe(200)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })
 
 describe('createCursorCloudPlugin — error handling', () => {
   it('bails on 401 without retrying — no money burned on a bad key', async () => {
     const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ error: 'invalid api key' }), { status: 401 }),
+      new Response(JSON.stringify({ error: { code: 'unauthorized', message: 'invalid api key' } }), { status: 401 }),
     )
     const plugin = createCursorCloudPlugin({
       apiKey: 'crsr_bad_key',
@@ -208,8 +307,8 @@ describe('createCursorCloudPlugin — error handling', () => {
     })
     const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1]
     const body = JSON.parse(init.body as string) as Record<string, unknown>
-    expect(body.model).toBe('composer-2.5')
-    expect((body.target as Record<string, unknown>).autoCreatePr).toBe(true)
+    expect(body.model).toEqual({ id: 'composer-2.5' })
+    expect(body.autoCreatePR).toBe(true)
   })
 })
 

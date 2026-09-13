@@ -45,6 +45,9 @@ npx supabase functions deploy drift-walker --no-verify-jwt
 npx supabase functions deploy contract-graph-builder --no-verify-jwt
 npx supabase functions deploy a2a-push-notify --no-verify-jwt
 npx supabase functions deploy test-gen-from-report --no-verify-jwt
+npx supabase functions deploy telegram-webhook --no-verify-jwt
+npx supabase functions deploy cursor-webhook --no-verify-jwt
+npx supabase functions deploy agent-status-poll --no-verify-jwt
 ```
 
 For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `release-builder`, `experiment-analyzer`, `anomaly-detector`, …) and cron setup, follow [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md).
@@ -70,6 +73,9 @@ For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `r
 | `inventory-gates` | manual | Runs gate checks (dead handlers, mock leaks) |
 | `a2a-push-notify` | manual / agents | Sends A2A protocol notifications to connected agents |
 | `test-gen-from-report` | manual | Generates a Playwright test from a report, opens draft PR |
+| `telegram-webhook` | Telegram Bot API | Voice-note inbox: secret-token auth, `/start <code>` project binding, transcript + inline-keyboard confirmation |
+| `cursor-webhook` | Cursor Cloud Agent (v0 callback) | Receives `statusChange` callbacks, writes `fix_attempts.pr_url`, notifies |
+| `agent-status-poll` | cron (`5-55/5`) | Polls open Cursor / GitHub cloud-agent runs and closes them (PR URL, failure) |
 
 The remaining workers (billing, retention, SDK upgrade, skill-sync, rewards payout, …) live alongside these. Full list: `ls packages/server/supabase/functions/` or `pnpm docs-stats`.
 

@@ -3,15 +3,19 @@
 /**
  * FILE: packages/mcp/src/index.ts
  * PURPOSE: Stdio entry point for the Mushi Mushi MCP server. Reads env,
- *          builds the server via `createMushiServer`, and bridges it over
- *          `StdioServerTransport`.
+ *          builds the server via `createMushiServer`, and serves it over
+ *          stdio with the SDK's `serveStdio`, which owns the protocol-era
+ *          decision per connection: 2025-era `initialize` clients and
+ *          2026-07-28 `_meta`-envelope clients are both served from the
+ *          same factory.
  *
  *          Kept intentionally thin so `createMushiServer` can be unit- and
  *          integration-tested with `InMemoryTransport` without this file
  *          executing `main()` at import time.
  */
 
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { serveStdio } from '@modelcontextprotocol/server/stdio'
+import type { McpServer } from '@modelcontextprotocol/server'
 import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -264,17 +268,29 @@ async function main() {
     scopes: SCOPES.join(','),
   })
 
-  const server = createMushiServer({
-    version: VERSION,
-    apiEndpoint: API_ENDPOINT,
-    apiKey: API_KEY,
-    projectId: PROJECT_ID || undefined,
-    scopes: SCOPES,
-    features: FEATURES,
-  })
-
-  const transport = new StdioServerTransport()
-  await server.connect(transport)
+  // serveStdio calls the factory lazily, once the client's opening message
+  // reveals which protocol era it speaks, and pins that ONE instance for the
+  // life of the connection. (It may also build and discard one instance to
+  // answer a bare `server/discover` probe.) `server` therefore stays
+  // undefined until a client has actually opened the session.
+  let server: McpServer | undefined
+  const handle = serveStdio(
+    (ctx) => {
+      server = createMushiServer({
+        version: VERSION,
+        apiEndpoint: API_ENDPOINT,
+        apiKey: API_KEY,
+        projectId: PROJECT_ID || undefined,
+        scopes: SCOPES,
+        features: FEATURES,
+      })
+      log.debug('[mushi-mcp] server instance created', { era: ctx.era })
+      return server
+    },
+    {
+      onerror: (err) => log.error('stdio transport error', { err: String(err) }),
+    },
+  )
 
   // Graceful shutdown: real MCP clients (Cursor, Claude Desktop, …) manage
   // the child process lifecycle by killing it directly, so this path was
@@ -290,7 +306,7 @@ async function main() {
     if (shuttingDown) return
     shuttingDown = true
     if (pollTimer) clearInterval(pollTimer)
-    void transport.close().finally(() => process.exit(exitCode))
+    void handle.close().finally(() => process.exit(exitCode))
   }
   // Let the crash guards close the transport instead of a bare process.exit.
   setActiveShutdown(shutdown)
@@ -336,8 +352,9 @@ async function main() {
         const data = await res.json() as { data?: { updatedAt?: string } }
         const updatedAt = data?.data?.updatedAt ?? null
         if (updatedAt && updatedAt !== lastInventoryAt) {
-          if (lastInventoryAt !== null) {
-            // Only notify after the first successful fetch (not on startup).
+          if (lastInventoryAt !== null && server) {
+            // Only notify after the first successful fetch (not on startup),
+            // and only once a client session exists to receive it.
             await server.server.sendResourceUpdated({ uri: 'inventory://current' })
             log.info('inventory://current updated — notified subscribers', { updatedAt })
           }

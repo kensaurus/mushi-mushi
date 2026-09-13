@@ -35,6 +35,7 @@ const KNOWN_CONFIG_KEYS: readonly string[] = [
   'projectId',
   'apiKey',
   'apiEndpoint',
+  'tunnel',
   'timeout',
   'maxRetries',
   'circuitBreaker',
@@ -55,8 +56,12 @@ const KNOWN_CONFIG_KEYS: readonly string[] = [
   'appVersion',
   'sampleRate',
   'replaySampleRate',
+  'replaysOnErrorSampleRate',
   'beforeSend',
   'beforeSendFeedback',
+  'ignoreErrors',
+  'denyUrls',
+  'allowUrls',
   'onCrashedLastRun',
 ];
 

@@ -63,16 +63,6 @@ export default defineNuxtPlugin((nuxtApp) => {
 
 // SvelteKit — src/routes/+layout.svelte
 
-  import { onMount } from 'svelte'
-  import { Mushi } from '@mushi-mushi/web'
-  import { initMushi } from '@mushi-mushi/svelte'
-  import { PUBLIC_MUSHI_PROJECT_ID, PUBLIC_MUSHI_API_KEY } from '$env/static/public'
-  onMount(() => {
-    const credentials = { projectId: PUBLIC_MUSHI_PROJECT_ID, apiKey: PUBLIC_MUSHI_API_KEY }
-    initMushi(credentials)
-    Mushi.init(credentials)
-  })
-
 `} },
     { id: 'hydration', label: 'Verify no hydration warnings', content: <>Mushi renders its widget into a Shadow DOM mounted on document.body on the client side only. It does NOT cause hydration mismatches because the widget is never present in server-rendered HTML. If you see hydration warnings, they're from your code, not Mushi.</> },
     { id: 'dynamic-import', label: 'For Nuxt/Next, use a .client suffix or "use client" for Mushi components', content: <>Mushi components ({``}, useMushi(), useMushiReport()) are client-only because they touch window. Mark them appropriately so SSR does not try to render them server-side.</> },

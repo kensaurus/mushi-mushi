@@ -37,6 +37,9 @@ import {
   parseIdentityToken,
   expandPreset,
   validateConfig,
+  shouldDropCapturedError,
+  markPageUnloading,
+  flushLastOutboundOnUnload,
 } from '@mushi-mushi/core';
 
 import { MushiWidget } from './widget';
@@ -173,6 +176,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     ...(typeof bootstrapConfig.timeout === 'number' ? { timeout: bootstrapConfig.timeout } : {}),
     ...(typeof bootstrapConfig.maxRetries === 'number' ? { maxRetries: bootstrapConfig.maxRetries } : {}),
     ...(bootstrapConfig.circuitBreaker ? { circuitBreaker: bootstrapConfig.circuitBreaker } : {}),
+    ...(bootstrapConfig.tunnel ? { tunnel: bootstrapConfig.tunnel } : {}),
     getUserToken: () => userToken,
     sdkPackage: MUSHI_SDK_PACKAGE,
     sdkVersion: MUSHI_SDK_VERSION,
@@ -438,7 +442,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     // sessions, which reduces bundle cost for those users.
     const replaySampleRate = activeConfig.replaySampleRate ?? 1;
     const replaySampled = replaySampleRate >= 1 || Math.random() < replaySampleRate;
-    if ((replayMode === 'rrweb' || replayMode === 'lite') && replaySampled) {
+    const onErrorReplayRate = activeConfig.replaysOnErrorSampleRate ?? 0;
+    const replayOnErrorSampled =
+      !replaySampled && onErrorReplayRate > 0 && Math.random() < onErrorReplayRate;
+    if ((replayMode === 'rrweb' || replayMode === 'lite') && (replaySampled || replayOnErrorSampled)) {
       const generation = ++replayGeneration;
       void createReplayCapture({
         enabled: true,
@@ -975,6 +982,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         apiCascade: proactiveCfg?.apiCascade,
         apiEndpoint: resolveApiEndpoint(activeConfig),
         errorBoundary: proactiveCfg?.errorBoundary,
+        ignoreErrors: activeConfig.ignoreErrors,
+        denyUrls: activeConfig.denyUrls,
+        allowUrls: activeConfig.allowUrls,
         pageDwell: proactiveCfg?.pageDwell,
         firstSession: proactiveCfg?.firstSession,
         projectId: bootstrapConfig.projectId,
@@ -1622,6 +1632,21 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
     async captureException(error, options) {
       const normalised = normaliseThrown(error);
+      const filename =
+        typeof options?.metadata?.filename === 'string'
+          ? options.metadata.filename
+          : undefined;
+      if (
+        shouldDropCapturedError({
+          message: normalised.message,
+          filename,
+          ignoreErrors: activeConfig.ignoreErrors,
+          denyUrls: activeConfig.denyUrls,
+          allowUrls: activeConfig.allowUrls,
+        })
+      ) {
+        return null;
+      }
       // Drop a breadcrumb at the call site so this exception shows up
       // in Mushi's own timeline even if the report itself is rate-limited
       // or rejected by the pre-filter — losing the report shouldn't lose
@@ -1882,6 +1907,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       // the same page later and we want a fresh sentinel each time.
       window.addEventListener('pagehide', () => {
         try { localStorage.setItem(SENTINEL_KEY, 'clean'); } catch { /* noop */ }
+        markPageUnloading();
+        flushLastOutboundOnUnload();
       });
     } catch { /* noop — addEventListener never actually throws on Window */ }
     if (typeof bootstrapConfig.onCrashedLastRun === 'function') {

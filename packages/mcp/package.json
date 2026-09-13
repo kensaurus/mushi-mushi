@@ -60,12 +60,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/core": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
     "@mushi-mushi/core": "workspace:^",
     "@sentry/node": "^10.57.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@mushi-mushi/eslint-config": "workspace:*",
     "@types/node": "^22.20.0",
     "eslint": "^10.6.0",

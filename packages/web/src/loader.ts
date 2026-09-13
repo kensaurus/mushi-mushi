@@ -20,7 +20,7 @@
  *          Mushi.init() path, so the loader stays a thin shim with zero
  *          divergent behaviour from the npm package.
  *
- *          Build: emitted as `dist/loader.global.js` (IIFE) via tsup so it can
+ *          Build: emitted as `dist/mushi.loader.global.js` (IIFE) via tsup so it can
  *          be served from a CDN and executed directly in the browser.
  */
 

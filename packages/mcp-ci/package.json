@@ -35,7 +35,11 @@
     "mcp",
     "github-action",
     "ci",
-    "dispatch-fix"
+    "dispatch-fix",
+    "github-actions",
+    "mcp-server",
+    "ci-cd",
+    "automation"
   ],
   "publishConfig": {
     "access": "public",

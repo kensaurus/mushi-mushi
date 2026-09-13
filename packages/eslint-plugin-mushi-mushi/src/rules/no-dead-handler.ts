@@ -44,11 +44,6 @@ interface JSXAttribute {
   name: { type: 'JSXIdentifier'; name: string }
   value: { type: 'JSXExpressionContainer'; expression: Node } | null
 }
-interface JSXOpeningElement {
-  type: 'JSXOpeningElement'
-  name: { type: 'JSXIdentifier'; name: string } | { type: string; name?: string }
-  attributes: JSXAttribute[]
-}
 
 const DEFAULT_HANDLER_REGEX = /^on[A-Z]/
 

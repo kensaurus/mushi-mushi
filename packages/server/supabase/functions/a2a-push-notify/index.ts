@@ -14,12 +14,17 @@
 //   1. Auth-check the inbound caller (must carry the service-role key).
 //   2. Re-read the fix_dispatch_jobs row (avoids trusting trigger-supplied
 //      data and gives us all task fields needed for the A2A envelope).
-//   3. Build the A2A v1.0.0 Task envelope (mirrors api/routes/a2a-tasks.ts
-//      `taskFromRow` output).
-//   4. POST the envelope to push_notification_config.url with Standard
-//      Webhooks signing headers (webhook-id / webhook-timestamp /
-//      webhook-signature). Optional bearer token from the config is
-//      forwarded as `Authorization: Bearer <token>`.
+//   3. Build the A2A 1.0 push callback body — a `StreamResponse` carrying
+//      exactly one `statusUpdate` (TaskStatusUpdateEvent):
+//        { statusUpdate: { taskId, contextId, status: { state, timestamp,
+//          message? }, final, metadata } }
+//      (A2A 1.0 §push notifications; 0.3 sent a bare Mushi task envelope.)
+//   4. POST it to push_notification_config.url with
+//      `Content-Type: application/a2a+json`, `Authorization: {scheme}
+//      {credentials}` from the stored 1.0 `authentication` (or `Bearer
+//      <token>` for the 0.3 `token` field), plus Standard Webhooks signing
+//      headers (webhook-id / webhook-timestamp / webhook-signature) and the
+//      X-Mushi-* headers — unchanged so existing receivers keep verifying.
 //   5. Log the attempt to a2a_push_deliveries so operators can debug.
 //
 // Why a separate function (vs. inlining in the trigger):
@@ -49,16 +54,21 @@ declare const Deno: {
 
 const plog = log.child('a2a-push-notify');
 
-const A2A_PROTOCOL_VERSION = '1.0.0';
+export const A2A_PROTOCOL_VERSION = '1.0.0';
+export const A2A_PUSH_CONTENT_TYPE = 'application/a2a+json';
 const DELIVERY_TIMEOUT_MS = 8_000;
 const RESPONSE_EXCERPT_MAX = 512;
 
-interface PushConfig {
+export interface PushConfig {
   url: string;
+  /** 0.3 bearer token (still honoured). */
   token?: string;
+  id?: string;
+  /** 1.0 `authentication: { scheme, credentials? }`. */
+  authentication?: { scheme?: string; credentials?: string } | null;
 }
 
-interface FixDispatchRow {
+export interface FixDispatchRow {
   id: string;
   project_id: string;
   report_id: string;
@@ -74,40 +84,99 @@ interface FixDispatchRow {
   push_notification_config: PushConfig | null;
 }
 
-const STATUS_TO_STATE: Record<string, string> = {
+/** fix_dispatch_jobs.status → A2A 1.0 TaskState enum name. */
+export const STATUS_TO_TASK_STATE: Record<string, string> = {
+  queued: 'TASK_STATE_SUBMITTED',
+  running: 'TASK_STATE_WORKING',
+  completed: 'TASK_STATE_COMPLETED',
+  completed_no_pr: 'TASK_STATE_COMPLETED',
+  failed: 'TASK_STATE_FAILED',
+  skipped: 'TASK_STATE_COMPLETED',
+  skipped_no_sandbox: 'TASK_STATE_COMPLETED',
+  cancelled: 'TASK_STATE_CANCELED',
+};
+
+/** Lower-case 0.3 spelling, kept for a2a_push_deliveries.task_state + X-Mushi-Event. */
+const STATUS_TO_LEGACY_STATE: Record<string, string> = {
   queued: 'submitted',
   running: 'working',
   completed: 'completed',
+  completed_no_pr: 'completed',
   failed: 'failed',
   skipped: 'completed',
+  skipped_no_sandbox: 'completed',
   cancelled: 'canceled',
 };
 
-function buildTaskEnvelope(row: FixDispatchRow): Record<string, unknown> {
-  const state = STATUS_TO_STATE[row.status] ?? 'unknown';
+const FINAL_STATES = new Set(['TASK_STATE_COMPLETED', 'TASK_STATE_FAILED', 'TASK_STATE_CANCELED']);
+
+export function taskStateFor(status: string): string {
+  return STATUS_TO_TASK_STATE[status] ?? 'TASK_STATE_UNKNOWN';
+}
+
+export function legacyStateFor(status: string): string {
+  return STATUS_TO_LEGACY_STATE[status] ?? 'unknown';
+}
+
+/**
+ * A2A 1.0 push body: `StreamResponse` with exactly one of
+ * { task | message | statusUpdate | artifactUpdate } — we always send
+ * `statusUpdate`. `contextId` groups every task about the same report.
+ * The PR URL (when present) rides in `status.message` parts and in
+ * `metadata`, so a phone-side consumer needs no second round-trip.
+ */
+export function buildStreamResponse(row: FixDispatchRow, nowIso = new Date().toISOString()): Record<string, unknown> {
+  const state = taskStateFor(row.status);
   const skill = row.skill ?? 'dispatch_fix';
-  const artifacts: Array<Record<string, unknown>> = [];
-  if (row.pr_url) {
-    artifacts.push({ type: 'text', mimeType: 'text/uri-list', text: row.pr_url, url: row.pr_url });
-  }
+  const final = FINAL_STATES.has(state);
+  const parts: Array<Record<string, unknown>> = [];
+  if (row.pr_url) parts.push({ text: `Pull request: ${row.pr_url}` });
+  if (row.error) parts.push({ text: `Error: ${row.error.slice(0, 500)}` });
+  if (parts.length === 0) parts.push({ text: `${skill} is ${legacyStateFor(row.status)}` });
+
   return {
-    id: row.id,
-    type: 'task',
-    state,
-    skill,
-    submittedAt: row.created_at,
-    startedAt: row.started_at,
-    completedAt: row.finished_at,
-    error: row.error,
-    artifacts,
-    metadata: {
-      projectId: row.project_id,
-      reportId: row.report_id,
-      fixAttemptId: row.fix_attempt_id,
-      inventoryActionNodeId: row.inventory_action_node_id,
-      mushiVersion: A2A_PROTOCOL_VERSION,
+    statusUpdate: {
+      taskId: row.id,
+      contextId: row.report_id,
+      status: {
+        state,
+        timestamp: row.finished_at ?? row.started_at ?? nowIso,
+        message: {
+          messageId: `${row.id}:${row.status}`,
+          role: 'ROLE_AGENT',
+          taskId: row.id,
+          contextId: row.report_id,
+          parts,
+        },
+      },
+      final,
+      metadata: {
+        skill,
+        projectId: row.project_id,
+        reportId: row.report_id,
+        fixAttemptId: row.fix_attempt_id,
+        inventoryActionNodeId: row.inventory_action_node_id,
+        prUrl: row.pr_url,
+        error: row.error,
+        submittedAt: row.created_at,
+        startedAt: row.started_at,
+        completedAt: row.finished_at,
+        mushiStatus: row.status,
+        mushiVersion: A2A_PROTOCOL_VERSION,
+      },
     },
   };
+}
+
+/** `Authorization` value from the stored config: 1.0 authentication wins, 0.3 token is `Bearer`. */
+export function authorizationHeaderFor(config: PushConfig): string | null {
+  const scheme = config.authentication?.scheme?.trim();
+  if (scheme) {
+    const credentials = config.authentication?.credentials ?? config.token ?? '';
+    return credentials ? `${scheme} ${credentials}` : scheme;
+  }
+  if (config.token) return `Bearer ${config.token}`;
+  return null;
 }
 
 async function signHmacBase64(secret: string, payload: string): Promise<string> {
@@ -124,6 +193,39 @@ async function signHmacBase64(secret: string, payload: string): Promise<string> 
   let bin = '';
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
   return btoa(bin);
+}
+
+export interface PushHeadersInput {
+  config: PushConfig;
+  projectId: string;
+  legacyState: string;
+  deliveryId: string;
+  stdTimestamp: string;
+  rawBody: string;
+  signingSecret: string | null;
+}
+
+export async function buildPushHeaders(input: PushHeadersInput): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
+    'Content-Type': A2A_PUSH_CONTENT_TYPE,
+    'A2A-Version': '1.0',
+    'webhook-id': input.deliveryId,
+    'webhook-timestamp': input.stdTimestamp,
+    'X-Mushi-Event': `a2a.task.${input.legacyState}`,
+    'X-Mushi-Delivery': input.deliveryId,
+    'X-Mushi-Project': input.projectId,
+    'X-Mushi-Schema': `a2a/v${A2A_PROTOCOL_VERSION}/status-update`,
+  };
+  if (input.signingSecret) {
+    const stdSig = await signHmacBase64(
+      input.signingSecret,
+      `${input.deliveryId}.${input.stdTimestamp}.${input.rawBody}`,
+    );
+    headers['webhook-signature'] = `v1,${stdSig}`;
+  }
+  const authorization = authorizationHeaderFor(input.config);
+  if (authorization) headers['Authorization'] = authorization;
+  return headers;
 }
 
 function isHttpsUrl(url: string): boolean {
@@ -154,7 +256,7 @@ async function loadProjectPushSecret(
   return typeof data === 'string' ? data : null;
 }
 
-async function handle(req: Request): Promise<Response> {
+export async function handle(req: Request): Promise<Response> {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   const authError = requireServiceRoleAuth(req);
@@ -191,6 +293,8 @@ async function handle(req: Request): Promise<Response> {
     return new Response(JSON.stringify({ ok: true, skipped: 'no_config' }), { status: 200 });
   }
 
+  const legacyState = legacyStateFor(job.status);
+
   if (!isHttpsUrl(config.url)) {
     plog.warn('Refusing push to non-HTTPS or internal URL', { taskId, url: config.url });
     await db.from('a2a_push_deliveries').insert({
@@ -198,36 +302,34 @@ async function handle(req: Request): Promise<Response> {
       project_id: job.project_id,
       delivery_id: crypto.randomUUID(),
       callback_url: config.url,
-      task_state: STATUS_TO_STATE[job.status] ?? 'unknown',
+      task_state: legacyState,
       status: 'skipped',
       response_excerpt: 'non-https or internal URL',
     });
     return new Response(JSON.stringify({ ok: false, skipped: 'invalid_url' }), { status: 200 });
   }
 
-  const envelope = buildTaskEnvelope(job);
+  const envelope = buildStreamResponse(job);
   const rawBody = JSON.stringify(envelope);
   const deliveryId = crypto.randomUUID();
   const stdTimestamp = String(Math.floor(Date.now() / 1000));
-  const signingSecret = config.token ?? (await loadProjectPushSecret(db, job.project_id));
+  // Signing secret: the 0.3 `token` doubled as the HMAC secret; a 1.0
+  // `authentication.credentials` plays the same role. Otherwise the
+  // per-project vault secret. Never sign with nothing.
+  const signingSecret =
+    config.authentication?.credentials ??
+    config.token ??
+    (await loadProjectPushSecret(db, job.project_id));
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'webhook-id': deliveryId,
-    'webhook-timestamp': stdTimestamp,
-    'X-Mushi-Event': `a2a.task.${envelope.state}`,
-    'X-Mushi-Delivery': deliveryId,
-    'X-Mushi-Project': job.project_id,
-    'X-Mushi-Schema': `a2a/v${A2A_PROTOCOL_VERSION}/task`,
-  };
-
-  if (signingSecret) {
-    const stdSig = await signHmacBase64(signingSecret, `${deliveryId}.${stdTimestamp}.${rawBody}`);
-    headers['webhook-signature'] = `v1,${stdSig}`;
-  }
-  if (config.token) {
-    headers['Authorization'] = `Bearer ${config.token}`;
-  }
+  const headers = await buildPushHeaders({
+    config,
+    projectId: job.project_id,
+    legacyState,
+    deliveryId,
+    stdTimestamp,
+    rawBody,
+    signingSecret,
+  });
 
   const startedAt = Date.now();
   let httpStatus: number | null = null;
@@ -259,7 +361,7 @@ async function handle(req: Request): Promise<Response> {
       project_id: job.project_id,
       delivery_id: deliveryId,
       callback_url: config.url,
-      task_state: envelope.state as string,
+      task_state: legacyState,
       http_status: httpStatus,
       duration_ms: durationMs,
       status,
@@ -275,4 +377,6 @@ async function handle(req: Request): Promise<Response> {
   });
 }
 
-Deno.serve(withSentry('a2a-push-notify', handle));
+if (typeof Deno !== 'undefined') {
+  Deno.serve(withSentry('a2a-push-notify', handle));
+}

@@ -377,7 +377,21 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'tdd_max_gens_per_day',
       // Fix-worker branch naming template ({date}/{category}/{shortId})
       'fix_branch_template',
+      // Voice intake (migration 20260912001000). The two *_ref fields are
+      // auto-vaulted below; the rest are validated scalars.
+      'voice_intake_enabled',
+      'voice_audio_retention_days',
+      'voice_languages',
+      'telegram_bot_token_ref',
+      'github_user_token_ref',
     ];
+    // Secrets submitted raw are written to Supabase Vault and persisted as
+    // `vault://<name>` — same auto-vault contract as
+    // PUT /v1/admin/integrations/platform/:kind (integrations.ts). Masked
+    // values from a GET round-trip ("…abcd") are ignored so a partial form
+    // submit can never replace a real token with its mask.
+    const VAULTED_VOICE_FIELDS = new Set(['telegram_bot_token_ref', 'github_user_token_ref']);
+    const VOICE_LANGUAGE_RE = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/;
     // Free-text banner fields are served verbatim on the UNAUTHENTICATED
     // public SDK config endpoint — enforce the same caps as
     // coerceSdkConfigUpdate (helpers.ts) so this generic PATCH path can't
@@ -393,6 +407,73 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
       if (!allowed.includes(key)) continue;
+      if (key === 'voice_intake_enabled') {
+        if (typeof value !== 'boolean') {
+          return c.json(
+            { error: { code: 'VALIDATION_ERROR', message: 'voice_intake_enabled must be a boolean' } },
+            400,
+          );
+        }
+        updates[key] = value;
+        continue;
+      }
+      if (key === 'voice_audio_retention_days') {
+        const days = typeof value === 'number' ? value : Number(value);
+        if (!Number.isInteger(days) || days < 0 || days > 365) {
+          return c.json(
+            { error: { code: 'VALIDATION_ERROR', message: 'voice_audio_retention_days must be an integer between 0 and 365' } },
+            400,
+          );
+        }
+        updates[key] = days;
+        continue;
+      }
+      if (key === 'voice_languages') {
+        if (!Array.isArray(value) || value.length === 0 || value.length > 4) {
+          return c.json(
+            { error: { code: 'VALIDATION_ERROR', message: 'voice_languages must list 1–4 BCP-47 tags (e.g. ["ja","en"])' } },
+            400,
+          );
+        }
+        const tags = Array.from(new Set(value.map((v) => String(v).trim().toLowerCase())));
+        if (tags.some((t) => !VOICE_LANGUAGE_RE.test(t))) {
+          return c.json(
+            { error: { code: 'VALIDATION_ERROR', message: 'voice_languages entries must look like "en" or "ja-JP"' } },
+            400,
+          );
+        }
+        updates[key] = tags;
+        continue;
+      }
+      if (VAULTED_VOICE_FIELDS.has(key)) {
+        if (value === null || value === '') {
+          updates[key] = null;
+          continue;
+        }
+        if (typeof value !== 'string') continue;
+        const raw = value.trim();
+        if (!raw || (raw.startsWith('…') && raw.length <= 6)) continue;
+        if (raw.startsWith('vault://')) {
+          updates[key] = raw;
+          continue;
+        }
+        const secretName = `mushi/integration/${project.id}/voice/${key}`;
+        const { error: vaultErr } = await db.rpc('vault_store_secret', {
+          secret_name: secretName,
+          secret_value: raw,
+        });
+        if (vaultErr) {
+          // Never persist a raw bot/user token in project_settings: fail the
+          // write instead (unlike webhook secrets, these tokens can act as the user).
+          log.error('vault_store_secret failed for voice secret', { scope: 'settings', field: key, err: vaultErr.message });
+          return c.json(
+            { error: { code: 'DB_ERROR', message: `Could not store ${key} in Vault. Retry in a moment.` } },
+            500,
+          );
+        }
+        updates[key] = `vault://${secretName}`;
+        continue;
+      }
       const cap = textCaps[key];
       if (cap !== undefined) {
         if (typeof value === 'string') {

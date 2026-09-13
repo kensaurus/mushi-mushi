@@ -42,6 +42,10 @@
       "reason"
     ]
   },
+  "check_sdk_version": {
+    "description": "Compare a published @mushi-mushi/* package version against the catalog (GET /v1/sdk/latest-version). Returns { package, current, latest, outdated } and, when outdated, suggestedActions (Sentry-style, max 1) pointing at search_mushi_docs plus the mushi-sdk-upgrade skill. Read-only. Use when Dependabot or mushi upgrade --check reports a drift, or before dispatching a fix that assumes a current SDK. Does not bump the pin — that stays a human/Dependabot change.",
+    "scope": "mcp:read"
+  },
   "checkin_pipeline_step": {
     "description": "Report the completion status of a pipeline step (passed, failed, running, or skipped). Optionally include notes, a PR URL, or the Cursor agentId. Updates the live React Flow canvas in the Mushi console so PMs see real-time progress.",
     "scope": "mcp:write",

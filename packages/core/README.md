@@ -96,6 +96,9 @@ Top-level `MushiConfig` fields (consumed by `@mushi-mushi/web` and framework wra
 |-------|---------|----------|
 | `sampleRate` | `1` | Probabilistic gate for **automatic** error reports (`0`–`1`). User-initiated feedback always sends. |
 | `replaySampleRate` | `1` | Probabilistic gate for session replay; decided once at session init. Independent of `sampleRate`. |
+| `replaysOnErrorSampleRate` | `0` | Start a replay buffer on automatic errors when session sample missed. Keep `0` unless you explicitly want rrweb. |
+| `tunnel` | — | Same-origin ingest base (e.g. `/api/mushi-tunnel`). Wins over `apiEndpoint` so browser calls stay first-party. Pagehide uses `fetch` keepalive, then a `{ mushiBeacon, path, headers, body }` envelope because `sendBeacon` cannot set headers. |
+| `ignoreErrors` / `denyUrls` / `allowUrls` | — | Drop **automatic** captures only. Never applied to user widget feedback. |
 | `beforeSend` | — | `(report) => report \| null \| Promise<…>` after built-in PII scrub. Return `null` to drop. |
 | `beforeSendFeedback` | — | Deprecated feedback-only hook; ignored when `beforeSend` is set. |
 
@@ -138,4 +141,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 55 edge functions · 337 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 58 edge functions · 347 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

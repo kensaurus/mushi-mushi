@@ -9,8 +9,22 @@
  *
  * Critical timing: Linear requires an 'acknowledgement' (thought activity)
  * within 10 seconds of receiving an AgentSessionEvent or it marks the agent
- * as unresponsive. We post the thought immediately and kick off the longer
- * fix-worker job in the background.
+ * as unresponsive. We post the thought immediately and run the dispatch in the
+ * background.
+ *
+ * Dispatch (fixed 2026-09-12, exec plan row 35): this function used to POST
+ * `fix-worker` a `{ trigger: 'linear_agent', … }` body that the worker's only
+ * request path rejects with 400 `dispatchId required`; the 400 was swallowed
+ * by a `.catch(() => {})` + 2 s abort and the log claimed success. The worker
+ * needs a QUEUED `fix_dispatch_jobs` row, which needs a report. So now:
+ *   1. find-or-create the Mushi report for the Linear issue
+ *      (`report_external_issues` system='linear' is the mapping; a new report
+ *      is inserted with custom_metadata.source = 'linear' — and
+ *      `reports.source = 'linear'` once that column exists);
+ *   2. `dispatchFixForReport({ projectId, reportId, metadata: { source:
+ *      'linear', linearAgentSessionId } })` — the same helper Slack uses;
+ *   3. log the REAL result code and post it back to the Linear agent session
+ *      (text on success, error on AUTOFIX_DISABLED / DISPATCH_FAILED).
  *
  * Security: signed with Linear-Signature HMAC-SHA256 using the actor token.
  * If no signature is present we fall back to verifying against the
@@ -18,20 +32,22 @@
  * Every request also goes through `_shared/webhook-middleware.ts` for the
  * audit log, the per-IP rate limit, and the 24h replay cache keyed on the
  * `Linear-Delivery` header. The replay cache matters most here: this handler
- * dispatches a code-mutating fix-worker job, and Linear retries any delivery
- * it does not see acknowledged inside 10 seconds — so a retry used to start a
- * SECOND fix job for the same agent session.
+ * dispatches a code-mutating fix job, and Linear retries any delivery it does
+ * not see acknowledged inside 10 seconds — so a retry used to start a SECOND
+ * fix job for the same agent session.
  */
 
-import { createClient } from 'npm:@supabase/supabase-js@2'
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from '../_shared/logger.ts'
 import {
   getLinearActorToken,
   getAgentSessionContext,
   postAgentActivity,
+  type AgentSessionData,
 } from '../_shared/linear-agent.ts'
 import { dereferenceMaybeVault } from '../_shared/integration-probes.ts'
 import { createWebhookMiddleware, ReplayAttackError, RateLimitError } from '../_shared/webhook-middleware.ts'
+import { dispatchFixForReport, type DispatchResult } from '../_shared/dispatch.ts'
 
 const log = rootLog.child('webhooks-linear-agent')
 
@@ -73,9 +89,233 @@ async function verifyHmac(body: string, header: string | null, secret: string): 
   return diff === 0
 }
 
+// ── Linear issue → Mushi report ──────────────────────────────────────────────
+
+/** Linear priority (0 none, 1 urgent … 4 low) → Mushi severity. */
+export function linearPriorityToSeverity(priority: number | null | undefined): 'low' | 'medium' | 'high' | 'critical' {
+  switch (priority) {
+    case 1:
+      return 'critical'
+    case 2:
+      return 'high'
+    case 3:
+      return 'medium'
+    default:
+      return 'low'
+  }
+}
+
+export interface LinearReportResolution {
+  reportId: string
+  created: boolean
+}
+
+/**
+ * Find the Mushi report already linked to this Linear issue
+ * (`report_external_issues` system='linear', external_id = issue id — the row
+ * `createExternalIssue` writes for outbound Linear tickets), or create one
+ * from the issue. Idempotent per issue: a second agent session on the same
+ * issue re-uses the report, and `dispatchFixForReport`'s in-flight guard then
+ * answers ALREADY_DISPATCHED instead of starting a second job.
+ */
+export async function findOrCreateLinearReport(
+  db: SupabaseClient,
+  projectId: string,
+  session: Pick<AgentSessionData, 'id' | 'issue' | 'promptContext'>,
+): Promise<LinearReportResolution> {
+  const issue = session.issue
+  const { data: existing } = await db
+    .from('report_external_issues')
+    .select('report_id')
+    .eq('project_id', projectId)
+    .eq('system', 'linear')
+    .eq('external_id', issue.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+  if (existing && existing.length > 0) {
+    const reportId = (existing[0] as { report_id: string }).report_id
+    const { data: report } = await db.from('reports').select('id').eq('id', reportId).maybeSingle()
+    if (report) return { reportId, created: false }
+  }
+
+  const title = issue.title?.trim() || issue.identifier
+  const body = (issue.description ?? '').trim()
+  const description = [
+    `${issue.identifier}: ${title}`,
+    body,
+    session.promptContext ? `\nAgent session context:\n${session.promptContext.slice(0, 4000)}` : '',
+  ]
+    .filter((s) => s.length > 0)
+    .join('\n\n')
+    .slice(0, 5000)
+
+  const nowIso = new Date().toISOString()
+  const row: Record<string, unknown> = {
+    project_id: projectId,
+    description,
+    summary: `${issue.identifier}: ${title}`.slice(0, 500),
+    user_category: 'bug',
+    category: 'bug',
+    severity: linearPriorityToSeverity(issue.priority),
+    status: 'new',
+    reporter_token_hash: 'linear-agent',
+    custom_metadata: {
+      source: 'linear',
+      kind: 'agent_session',
+      linearIssueId: issue.id,
+      linearIssueIdentifier: issue.identifier,
+      linearIssueUrl: issue.url,
+      linearAgentSessionId: session.id,
+      linearPriority: issue.priority ?? null,
+      linearState: issue.state?.name ?? null,
+    },
+    environment: {
+      userAgent: 'linear-agent',
+      platform: 'linear',
+      language: '',
+      viewport: { width: 0, height: 0 },
+      url: issue.url,
+      referrer: '',
+      timestamp: nowIso,
+      timezone: 'UTC',
+    },
+    created_at: nowIso,
+  }
+
+  // `reports.source` is added by a sibling migration; write it when the
+  // column exists and fall back to custom_metadata.source alone when the
+  // schema has not caught up (PostgREST answers 42703 / PGRST204).
+  let inserted = await db.from('reports').insert({ ...row, source: 'linear' }).select('id').single()
+  if (inserted.error && /source|PGRST204|42703/i.test(`${inserted.error.code} ${inserted.error.message}`)) {
+    inserted = await db.from('reports').insert(row).select('id').single()
+  }
+  if (inserted.error || !inserted.data) {
+    throw new Error(`reports insert failed: ${inserted.error?.message ?? 'no row returned'}`)
+  }
+  const reportId = (inserted.data as { id: string }).id
+
+  const { error: linkErr } = await db.from('report_external_issues').insert({
+    report_id: reportId,
+    project_id: projectId,
+    system: 'linear',
+    external_id: issue.id,
+    external_url: issue.url,
+  })
+  if (linkErr && linkErr.code !== '23505') {
+    log.warn('report_external_issues link insert failed (non-fatal)', { reportId, err: linkErr.message })
+  }
+  return { reportId, created: true }
+}
+
+export interface LinearAgentDispatchInput {
+  projectId: string
+  agentSessionId: string
+  actorToken: string
+  session: AgentSessionData
+}
+
+export interface LinearAgentDispatchOutcome {
+  ok: boolean
+  code: DispatchResult['code'] | 'OK'
+  reportId: string
+  dispatchId: string | null
+  reportCreated: boolean
+  message: string
+}
+
+export interface LinearAgentDispatchDeps {
+  dispatch: typeof dispatchFixForReport
+  postActivity: typeof postAgentActivity
+}
+
+/** Human message posted back into the Linear agent session per outcome. */
+export function describeDispatchOutcome(result: DispatchResult, issueIdentifier: string): string {
+  if (result.ok) {
+    return `Dispatched a fix for **${issueIdentifier}** (Mushi dispatch \`${result.dispatchId}\`). I'll open a draft pull request when the agent finishes.`
+  }
+  switch (result.code) {
+    case 'AUTOFIX_DISABLED':
+      return 'Autofix is disabled for this Mushi project. Enable it under Settings → Auto-fix in the Mushi console, then reassign the issue.'
+    case 'ALREADY_DISPATCHED':
+      return `A fix is already in progress for **${issueIdentifier}** (Mushi dispatch \`${result.dispatchId ?? 'unknown'}\`). I'll report back on that one.`
+    case 'FORBIDDEN':
+      return 'Mushi is not allowed to dispatch fixes for this project. Check the Linear integration under Settings → Integrations.'
+    default:
+      return `Mushi could not start a fix: ${result.message ?? 'dispatch failed'}. Please try reassigning the issue.`
+  }
+}
+
+/**
+ * The real dispatch: report row → dispatchFixForReport → Linear activity.
+ * Exported so the contract test can drive it with a fake db + fake helpers.
+ */
+export async function runLinearAgentDispatch(
+  db: SupabaseClient,
+  input: LinearAgentDispatchInput,
+  deps: LinearAgentDispatchDeps = { dispatch: dispatchFixForReport, postActivity: postAgentActivity },
+): Promise<LinearAgentDispatchOutcome> {
+  const { projectId, agentSessionId, actorToken, session } = input
+  const { reportId, created } = await findOrCreateLinearReport(db, projectId, session)
+
+  const result = await deps.dispatch({
+    projectId,
+    reportId,
+    requestedBy: null,
+    skipMembershipCheck: true,
+    metadata: {
+      source: 'linear',
+      requestedBy: 'linear-agent',
+      linearAgentSessionId: agentSessionId,
+      linearIssueId: session.issue.id,
+      linearIssueIdentifier: session.issue.identifier,
+    },
+  })
+
+  const message = describeDispatchOutcome(result, session.issue.identifier)
+  const outcome: LinearAgentDispatchOutcome = {
+    ok: result.ok,
+    code: result.ok ? 'OK' : (result.code ?? 'DISPATCH_FAILED'),
+    reportId,
+    dispatchId: result.dispatchId ?? null,
+    reportCreated: created,
+    message,
+  }
+
+  if (result.ok) {
+    log.info('Linear agent session dispatched a fix', {
+      agentSessionId,
+      projectId,
+      reportId,
+      dispatchId: result.dispatchId,
+      reportCreated: created,
+      issueIdentifier: session.issue.identifier,
+    })
+  } else {
+    log.warn('Linear agent session dispatch not started', {
+      agentSessionId,
+      projectId,
+      reportId,
+      code: result.code,
+      message: result.message,
+      issueIdentifier: session.issue.identifier,
+    })
+  }
+
+  try {
+    await deps.postActivity(actorToken, agentSessionId, {
+      type: result.ok || result.code === 'ALREADY_DISPATCHED' ? 'text' : 'error',
+      body: message,
+    })
+  } catch (err) {
+    log.warn('Failed to post Linear dispatch outcome activity', { agentSessionId, err: String(err) })
+  }
+
+  return outcome
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 
-Deno.serve(async (req: Request) => {
+export async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
 
   const t0 = Date.now()
@@ -106,7 +346,7 @@ Deno.serve(async (req: Request) => {
     if (err instanceof ReplayAttackError) {
       // Linear retried a delivery we already ran. Returning 409 (instead of
       // silently re-dispatching) is what keeps one agent session from starting
-      // two fix-worker jobs.
+      // two fix jobs.
       await auditRow.resolve('rejected_replay', 409, Date.now() - t0, err.message)
       return new Response('Duplicate delivery', { status: 409 })
     }
@@ -146,12 +386,10 @@ Deno.serve(async (req: Request) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     { auth: { persistSession: false } },
   )
-  // deno-lint-ignore no-explicit-any
-  const dbAny = db as any
 
   // ── Find project by Linear workspace ─────────────────────────────────────
 
-  const { data: projectRows } = await dbAny
+  const { data: projectRows } = await db
     .from('project_settings')
     .select('project_id, linear_webhook_secret_ref, linear_actor_token_ref, linear_access_token_ref')
     .or('linear_actor_token_ref.not.is.null,linear_access_token_ref.not.is.null')
@@ -165,7 +403,6 @@ Deno.serve(async (req: Request) => {
 
   // Verify signature and find matching project
   let projectId: string | null = null
-  let actorToken: string | null = null
 
   for (const row of projectRows as Array<{ project_id: string; linear_webhook_secret_ref: string | null }>) {
     if (row.linear_webhook_secret_ref) {
@@ -182,7 +419,7 @@ Deno.serve(async (req: Request) => {
 
   // No fallback: if HMAC verification did not match any project, drop the
   // event. Never process an unauthenticated payload — an attacker with the
-  // webhook URL could otherwise trigger code-mutating fix-worker dispatches.
+  // webhook URL could otherwise trigger code-mutating fix dispatches.
   if (!projectId) {
     log.warn('Could not match agent webhook to a project', { deliveryId })
     // NOT 'accepted': an unauthenticated payload must never claim the
@@ -191,7 +428,7 @@ Deno.serve(async (req: Request) => {
     return new Response('OK', { status: 200 })
   }
 
-  actorToken = await getLinearActorToken(db, projectId)
+  const actorToken = await getLinearActorToken(db, projectId)
   if (!actorToken) {
     log.warn('No Linear actor token for project', { projectId, deliveryId })
     await auditRow.resolve('accepted', 200, Date.now() - t0, 'No Linear actor token for project')
@@ -211,67 +448,36 @@ Deno.serve(async (req: Request) => {
     // Don't return early — still attempt to dispatch even if acknowledgement fails
   }
 
-  // ── Fetch session context and dispatch to fix-worker ─────────────────────
+  // ── Fetch session context and dispatch ────────────────────────────────────
 
   // Keep the isolate alive until the background dispatch completes.
   // EdgeRuntime.waitUntil prevents the runtime from killing the isolate after
   // the HTTP response is sent. The ?. guard keeps local (non-edge) dev working.
-  // deno-lint-ignore no-explicit-any
-  ;(globalThis as any).EdgeRuntime?.waitUntil((async () => {
+  const resolvedProjectId = projectId
+  const background = (async () => {
     try {
-      const sessionCtx = await getAgentSessionContext(actorToken!, agentSessionId)
+      const sessionCtx = await getAgentSessionContext(actorToken, agentSessionId)
       if (!sessionCtx) {
         log.warn('Could not fetch agent session context', { agentSessionId })
         return
       }
 
-      await postAgentActivity(actorToken!, agentSessionId, {
+      await postAgentActivity(actorToken, agentSessionId, {
         type: 'text',
         body: `I'm working on **${sessionCtx.issue.identifier}: ${sessionCtx.issue.title}**. I'll post updates as I make progress.`,
       })
 
-      // Dispatch to fix-worker with Linear issue as context
-      const mushiBaseUrl = Deno.env.get('SUPABASE_URL')
-      if (mushiBaseUrl) {
-        await fetch(`${mushiBaseUrl}/functions/v1/fix-worker`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            projectId,
-            trigger: 'linear_agent',
-            linearAgentSessionId: agentSessionId,
-            linearIssueIdentifier: sessionCtx.issue.identifier,
-            linearIssueId: sessionCtx.issue.id,
-            linearIssueTitle: sessionCtx.issue.title,
-            linearIssueDescription: sessionCtx.issue.description,
-            linearIssueUrl: sessionCtx.issue.url,
-            promptContext: sessionCtx.promptContext,
-          }),
-          // Don't hold this background task open on the worker booting —
-          // matches invokeFixWorker in api/helpers.ts. An unbounded fetch here
-          // pinned the isolate for as long as fix-worker took to answer.
-          signal: AbortSignal.timeout(2_000),
-        }).catch(() => {
-          // Fire-and-forget, exactly like invokeFixWorker: the worker reports
-          // its own progress back through Linear. Swallowed here rather than
-          // rethrown so a 2s abort on a dispatch that DID land can't fall into
-          // the catch below and tell the user analysis failed.
-        })
-      }
-
-      log.info('Dispatched to fix-worker from Linear agent session', {
+      await runLinearAgentDispatch(db, {
+        projectId: resolvedProjectId,
         agentSessionId,
-        issueIdentifier: sessionCtx.issue.identifier,
-        projectId,
+        actorToken,
+        session: sessionCtx,
       })
     } catch (err) {
       log.error('Linear agent background dispatch failed', { agentSessionId, err: String(err) })
       // Best-effort error activity
       try {
-        await postAgentActivity(actorToken!, agentSessionId, {
+        await postAgentActivity(actorToken, agentSessionId, {
           type: 'error',
           body: 'Mushi encountered an error starting analysis. Please try reassigning the issue.',
         })
@@ -279,14 +485,21 @@ Deno.serve(async (req: Request) => {
         // Ignore
       }
     }
-  })())
+  })()
+  const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
+  if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(background)
+  else background.catch(() => undefined)
 
   // Resolve the audit row BEFORE returning. `checkReplay` only counts rows
   // already marked 'accepted', so this write is what makes a Linear retry of
-  // this delivery a 409 instead of a second fix-worker dispatch. It runs ahead
+  // this delivery a 409 instead of a second fix dispatch. It runs ahead
   // of the background task above by design.
   await auditRow.resolve('accepted', 200, Date.now() - t0)
 
   // Return immediately so Linear receives its 200 within the 10s window
   return new Response('OK', { status: 200 })
-})
+}
+
+if (typeof Deno !== 'undefined') {
+  Deno.serve(handler)
+}

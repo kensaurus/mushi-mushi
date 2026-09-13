@@ -15,7 +15,7 @@
  *          a proxy strips first.
  */
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { createLogger } from '@mushi-mushi/core';
 import {
@@ -44,7 +44,7 @@ import { installStdoutGuard } from './stdout-guard.js';
 installStdoutGuard();
 
 /** Explicit schema for no-argument MCP tools (avoids ambiguous empty `{}`). */
-const NO_ARG_INPUT: Record<string, never> = {};
+const NO_ARG_INPUT = z.object({});
 
 /**
  * Default per-request timeout for every Mushi API call made by a tool.
@@ -194,7 +194,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   // host can set MUSHI_MCP_TIMEOUT_MS before booting, and tests can inject an
   // explicit (unclamped) value without touching process.env.
   const timeoutMs =
-    typeof config.timeoutMs === 'number' && Number.isFinite(config.timeoutMs) && config.timeoutMs > 0
+    typeof config.timeoutMs === 'number' &&
+    Number.isFinite(config.timeoutMs) &&
+    config.timeoutMs > 0
       ? config.timeoutMs
       : resolveTimeoutMsFromEnv();
   const apiLog = createLogger({
@@ -557,7 +559,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_recent_reports'),
       description: descOf('get_recent_reports'),
       annotations: annotationsFor('get_recent_reports'),
-      inputSchema: {
+      inputSchema: z.object({
         status: z
           .string()
           .optional()
@@ -576,11 +578,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
               'Useful when you have multiple projects and want to query a specific one by its ID. ' +
               'Get IDs by calling list_projects or get_account_overview first.',
           ),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         reports: z.array(z.unknown()),
         total: z.number(),
-      },
+      }),
     },
     async (args) => {
       const params = new URLSearchParams();
@@ -607,14 +609,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_report_detail'),
       description: descOf('get_report_detail'),
       annotations: annotationsFor('get_report_detail'),
-      inputSchema: {
+      inputSchema: z.object({
         reportId: z.string().describe('The report UUID'),
         project_id: z
           .string()
           .optional()
           .describe('Project UUID — required for org-scoped keys with multiple projects.'),
-      },
-      outputSchema: { report: z.unknown() },
+      }),
+      outputSchema: z.object({ report: z.unknown() }),
     },
     async (args) => {
       const { headers } = await projectScopeHeaders(args.project_id);
@@ -639,7 +641,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_report_timeline'),
       description: descOf('get_report_timeline'),
       annotations: annotationsFor('get_report_timeline'),
-      inputSchema: { reportId: z.string().describe('The report UUID') },
+      inputSchema: z.object({ reportId: z.string().describe('The report UUID') }),
     },
     async (args) => jsonText(await apiCall(`/v1/sync/reports/${args.reportId}/timeline`)),
   );
@@ -661,14 +663,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('search_reports'),
       description: descOf('search_reports'),
       annotations: annotationsFor('search_reports'),
-      inputSchema: {
+      inputSchema: z.object({
         query: z.string().describe('Natural-language search text or component path'),
         limit: z.number().optional().describe('Max results (default 10, max 50)'),
         threshold: z.number().optional().describe('Similarity threshold 0..1, default 0.2'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         results: z.array(z.unknown()),
-      },
+      }),
     },
     async (args) => {
       const data = await apiCall<{ results: unknown[] }>('/v1/admin/reports/similarity', {
@@ -691,13 +693,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_similar_bugs'),
       description: descOf('get_similar_bugs'),
       annotations: annotationsFor('get_similar_bugs'),
-      inputSchema: {
+      inputSchema: z.object({
         query: z.string().describe('Component name, page path, or bug description'),
         limit: z.number().optional().describe('Max results (default 5, max 20)'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         results: z.array(z.unknown()),
-      },
+      }),
     },
     async (args) => {
       const data = await apiCall<{ results: unknown[] }>('/v1/admin/reports/similarity', {
@@ -720,21 +722,21 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_fix_context'),
       description: descOf('get_fix_context'),
       annotations: annotationsFor('get_fix_context'),
-      inputSchema: {
+      inputSchema: z.object({
         reportId: z.string().describe('The report UUID to fix'),
         project_id: z
           .string()
           .optional()
           .describe('Project UUID — required for org-scoped keys with multiple projects.'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         report: z.unknown(),
         fixPrompt: z.unknown(),
         reproductionSteps: z.unknown(),
         component: z.unknown(),
         rootCause: z.unknown(),
         bugOntologyTags: z.unknown(),
-      },
+      }),
     },
     async (args) => {
       const { headers } = await projectScopeHeaders(args.project_id);
@@ -766,13 +768,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_fix_timeline'),
       description: descOf('get_fix_timeline'),
       annotations: annotationsFor('get_fix_timeline'),
-      inputSchema: {
+      inputSchema: z.object({
         fixId: z.string().describe('fix_attempt UUID'),
         project_id: z
           .string()
           .optional()
           .describe('Project UUID — required for org-scoped keys with multiple projects.'),
-      },
+      }),
     },
     async (args) => {
       const { headers } = await projectScopeHeaders(args.project_id);
@@ -786,7 +788,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_blast_radius'),
       description: descOf('get_blast_radius'),
       annotations: annotationsFor('get_blast_radius'),
-      inputSchema: { nodeId: z.string().describe('Graph node UUID') },
+      inputSchema: z.object({ nodeId: z.string().describe('Graph node UUID') }),
     },
     async (args) => jsonText(await apiCall(`/v1/admin/graph/blast-radius/${args.nodeId}`)),
   );
@@ -797,7 +799,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_knowledge_graph'),
       description: descOf('get_knowledge_graph'),
       annotations: annotationsFor('get_knowledge_graph'),
-      inputSchema: {
+      inputSchema: z.object({
         seed: z
           .string()
           .describe('Starting graph node id or human-readable label to traverse from'),
@@ -805,11 +807,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .number()
           .optional()
           .describe('BFS hops outward from seed — clamped to 4 in the handler (default 2)'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         nodes: z.array(z.unknown()).describe('Graph nodes within the depth budget'),
         edges: z.array(z.unknown()).describe('Edges connecting the returned nodes'),
-      },
+      }),
     },
     async (args) => {
       const params = new URLSearchParams({
@@ -829,7 +831,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_graph_neighborhood'),
       description: descOf('get_graph_neighborhood'),
       annotations: annotationsFor('get_graph_neighborhood'),
-      inputSchema: {
+      inputSchema: z.object({
         seed: z
           .string()
           .describe(
@@ -842,11 +844,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .max(4)
           .optional()
           .describe('BFS hops to traverse outward. Default 2; clamped to a max of 4.'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         nodes: z.array(z.unknown()).describe('Graph nodes within the depth budget'),
         edges: z.array(z.unknown()).describe('Edges connecting the returned nodes'),
-      },
+      }),
     },
     async (args) => {
       const params = new URLSearchParams({
@@ -866,14 +868,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_graph_node'),
       description: descOf('get_graph_node'),
       annotations: annotationsFor('get_graph_node'),
-      inputSchema: {
+      inputSchema: z.object({
         nodeId: z.string().describe('The graph_nodes.id of the node to fetch (UUID).'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         node: z
           .unknown()
           .describe('Single graph_nodes row including metadata (Action nodes carry v2 status)'),
-      },
+      }),
     },
     async (args) => {
       const data = await apiCall<{ node: unknown }>(`/v1/admin/graph/node/${args.nodeId}`);
@@ -887,12 +889,12 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_inventory'),
       description: descOf('get_inventory'),
       annotations: annotationsFor('get_inventory'),
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z
           .string()
           .optional()
           .describe('Project UUID — defaults to the server-configured project when omitted'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.projectId ?? projectId;
@@ -908,11 +910,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('diff_inventory'),
       description: descOf('diff_inventory'),
       annotations: annotationsFor('diff_inventory'),
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().optional().describe('Project UUID — defaults to configured project'),
         fromSha: z.string().describe('Older commit SHA (the baseline to diff from)'),
         toSha: z.string().describe('Newer commit SHA (the candidate to diff to)'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.projectId ?? projectId;
@@ -929,7 +931,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('list_gate_findings'),
       description: descOf('list_gate_findings'),
       annotations: annotationsFor('list_gate_findings'),
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().optional().describe('Project UUID — defaults to configured project'),
         gate: z
           .string()
@@ -939,11 +941,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .string()
           .optional()
           .describe('Minimum severity to include: low | medium | high | critical'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         runs: z.array(z.unknown()).describe('Recent gate_runs rows, newest first'),
         findings: z.array(z.unknown()).describe('gate_findings rows for those runs'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.projectId ?? projectId;
@@ -970,10 +972,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('suggest_fix'),
       description: descOf('suggest_fix'),
       annotations: annotationsFor('suggest_fix'),
-      inputSchema: {
+      inputSchema: z.object({
         reportId: z.string().describe('Report UUID to read the Stage-2 suggested-fix slice for'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         reportId: z.string().describe('The report this slice was read from'),
         rootCause: z.unknown().describe('Stage-2 root-cause hint, or null if not yet classified'),
         suggestedFix: z.unknown().describe('Stage-2 suggested fix, or null if not yet classified'),
@@ -985,8 +987,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         note: z
           .string()
           .optional()
-          .describe('Present when no Stage-2 analysis exists — explains why and what to call instead'),
-      },
+          .describe(
+            'Present when no Stage-2 analysis exists — explains why and what to call instead',
+          ),
+      }),
     },
     async (args) => {
       const report = await apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.reportId}`);
@@ -1025,13 +1029,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('run_nl_query'),
       description: descOf('run_nl_query'),
       annotations: annotationsFor('run_nl_query'),
-      inputSchema: {
+      inputSchema: z.object({
         question: z
           .string()
           .describe(
             'Question in plain English, e.g. "Which components had the most critical bugs this week?"',
           ),
-      },
+      }),
     },
     async (args) => {
       const data = await apiCall('/v1/admin/query', {
@@ -1052,7 +1056,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('diagnose_setup'),
       description: descOf('diagnose_setup'),
       annotations: annotationsFor('diagnose_setup'),
-      inputSchema: {
+      inputSchema: z.object({
         mode: z
           .enum(['full', 'ingest', 'dispatch'])
           .optional()
@@ -1064,8 +1068,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .optional()
           .describe('Project UUID for dispatch checks (defaults to configured project).'),
         projectId: z.string().optional().describe('Alias for project_id.'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         mode: z.string(),
         ready: z.boolean(),
         summary: z.string(),
@@ -1073,7 +1077,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         ingest: z.unknown().optional(),
         dispatch: z.unknown().optional(),
         connection: z.unknown().optional(),
-      },
+      }),
     },
     async (args) => {
       const mode = args.mode ?? 'full';
@@ -1271,18 +1275,85 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
+    'check_sdk_version',
+    {
+      title: titleOf('check_sdk_version'),
+      description: descOf('check_sdk_version'),
+      annotations: annotationsFor('check_sdk_version'),
+      inputSchema: z.object({
+        package: z
+          .string()
+          .optional()
+          .describe(
+            'npm package name (default @mushi-mushi/web). Examples: @mushi-mushi/web, @mushi-mushi/node, @mushi-mushi/core.',
+          ),
+        current: z
+          .string()
+          .optional()
+          .describe('Installed version from package.json, if known (e.g. 1.27.0).'),
+      }),
+      outputSchema: z.object({
+        package: z.string(),
+        latest: z.string().optional(),
+        current: z.string().optional(),
+        outdated: z.boolean().optional(),
+        suggestedActions: z
+          .array(
+            z.object({
+              type: z.literal('tool_call'),
+              toolName: z.string(),
+              arguments: z.record(z.string(), z.unknown()),
+              reason: z.string(),
+            }),
+          )
+          .optional(),
+      }),
+    },
+    async (args) => {
+      // Catalog payload only — no user-authored text, so jsonResult (not wrappedJsonResult).
+      const pkg = args.package?.trim() || '@mushi-mushi/web';
+      const query = new URLSearchParams({ package: pkg }).toString();
+      const data = await apiCall<{ version?: string; latest?: string; package?: string }>(
+        `/v1/sdk/latest-version?${query}`,
+      );
+      const latest = data.latest ?? data.version;
+      const current = args.current;
+      const outdated = current && latest ? current !== latest : undefined;
+      return jsonResult({
+        package: data.package ?? pkg,
+        latest,
+        current,
+        outdated,
+        ...(outdated
+          ? {
+              suggestedActions: [
+                {
+                  type: 'tool_call' as const,
+                  toolName: 'search_mushi_docs',
+                  arguments: { query: `${pkg} upgrade mushi-sdk-upgrade` },
+                  reason:
+                    'Read current upgrade notes, then apply the mushi-sdk-upgrade skill. This tool does not bump the pin.',
+                },
+              ],
+            }
+          : {}),
+      });
+    },
+  );
+
+  server.registerTool(
     'search_mushi_docs',
     {
       title: titleOf('search_mushi_docs'),
       description: descOf('search_mushi_docs'),
       annotations: annotationsFor('search_mushi_docs'),
-      inputSchema: {
+      inputSchema: z.object({
         query: z
           .string()
           .describe('Keywords to search official Mushi docs (guides, MCP, inventory, QA).'),
         limit: z.number().int().min(1).max(20).optional().describe('Max results (default 8).'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         query: z.string(),
         results: z.array(
           z.object({
@@ -1292,7 +1363,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
             score: z.number(),
           }),
         ),
-      },
+      }),
     },
     async (args) => {
       const query = args.query ?? '';
@@ -1316,11 +1387,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('list_projects'),
       annotations: annotationsFor('list_projects'),
       inputSchema: NO_ARG_INPUT,
-      outputSchema: {
+      outputSchema: z.object({
         projects: z.array(z.unknown()),
         total: z.number().optional(),
         _multi_project_hint: z.string().optional(),
-      },
+      }),
     },
     async () => {
       const data = await apiCall<{ projects: unknown[]; total?: number }>('/v1/admin/mcp/projects');
@@ -1342,7 +1413,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('get_account_overview'),
       annotations: annotationsFor('get_account_overview'),
       inputSchema: NO_ARG_INPUT,
-      outputSchema: {
+      outputSchema: z.object({
         projects: z.array(z.unknown()),
         total: z.number(),
         active_project_id: z.string().nullable(),
@@ -1350,7 +1421,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         resourceCount: z.number().optional(),
         promptCount: z.number().optional(),
         multi_project_hint: z.string(),
-      },
+      }),
     },
     async () => {
       const data = await apiCall<{
@@ -1386,9 +1457,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_project_context'),
       description: descOf('get_project_context'),
       annotations: annotationsFor('get_project_context'),
-      inputSchema: {
+      inputSchema: z.object({
         project_id: z.string().optional().describe('Project UUID. Defaults to configured project.'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.project_id ?? projectId;
@@ -1419,7 +1490,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_pipeline_logs'),
       description: descOf('get_pipeline_logs'),
       annotations: annotationsFor('get_pipeline_logs'),
-      inputSchema: {
+      inputSchema: z.object({
         project_id: z.string().optional().describe('Project UUID. Defaults to configured project.'),
         service: z
           .enum(['fix-worker', 'qa-story-runner', 'pipeline', 'all'])
@@ -1434,7 +1505,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .enum(['info', 'warn', 'error', 'fatal'])
           .optional()
           .describe('Minimum severity level (default: warn).'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.project_id ?? projectId;
@@ -1457,9 +1528,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_report_evidence'),
       description: descOf('get_report_evidence'),
       annotations: annotationsFor('get_report_evidence'),
-      inputSchema: {
+      inputSchema: z.object({
         report_id: z.string().describe('Report UUID.'),
-      },
+      }),
     },
     async (args) => {
       const [reportRes, timelineRes] = await Promise.allSettled([
@@ -1474,7 +1545,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       // arrays that belong in get_report_detail, keep only the evidence fields.
       // Covers all three observability pillars so the AI diagnosis agent has the
       // full causal picture (see the get_report_evidence catalog description).
-      const r = report as Record<string, unknown> | null
+      const r = report as Record<string, unknown> | null;
       const evidence = r
         ? {
             report_id: args.report_id,
@@ -1517,15 +1588,15 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('triage_issue'),
       description: descOf('triage_issue'),
       annotations: annotationsFor('triage_issue'),
-      inputSchema: {
+      inputSchema: z.object({
         report_id: z.string().uuid().describe('Report UUID to triage.'),
         project_id: z.string().optional().describe('Project UUID. Defaults to configured project.'),
         include_logs: z
           .boolean()
           .optional()
           .describe('Include recent pipeline logs in triage packet (default: true).'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         report_id: z.string(),
         severity: z.unknown(),
         category: z.unknown(),
@@ -1538,7 +1609,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         recent_logs: z.unknown().nullable(),
         recommended_actions: z.array(z.unknown()),
         triage_summary: z.string(),
-      },
+      }),
     },
     async (args) => {
       const { projectId: pid, headers } = await projectScopeHeaders(args.project_id);
@@ -1590,7 +1661,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         ? ((report as Record<string, unknown>).processing_error as string | null)
         : null;
       const attempts = report
-        ? (((report as Record<string, unknown>).fix_attempts as Array<Record<string, unknown>>) ?? [])
+        ? (((report as Record<string, unknown>).fix_attempts as Array<Record<string, unknown>>) ??
+          [])
         : [];
       const lastAttempt = attempts.length > 0 ? attempts[attempts.length - 1] : null;
       const lastAttemptStatus = lastAttempt ? String(lastAttempt.status ?? '') : '';
@@ -1698,7 +1770,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('submit_fix_result'),
       description: descOf('submit_fix_result'),
       annotations: annotationsFor('submit_fix_result'),
-      inputSchema: {
+      inputSchema: z.object({
         reportId: z.string().describe('Report UUID to attach this external fix attempt to'),
         branch: z.string().describe('Git branch name where the fix was implemented'),
         prUrl: z.string().optional().describe('GitHub pull request URL, if a PR was opened'),
@@ -1714,11 +1786,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
               'fix rows. Omit it and a stable key is derived from reportId + branch + prUrl, ' +
               'so a retried submission carries the identical key instead of a fresh random one.',
           ),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         ok: z.boolean().describe('True when the fix_attempt row was created and marked completed'),
         fixId: z.string().describe('UUID of the new fix_attempt row'),
-      },
+      }),
     },
     async (args) => {
       // Derived, NOT random: a fresh randomUUID() per invocation meant every
@@ -1728,12 +1800,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       // idempotent — `_shared/idempotency.ts` replays the stored response.
       const idemKey =
         args.idempotencyKey ??
-        (await stableUuidFrom(
-          IDEMPOTENCY_NAMESPACE,
-          args.reportId,
-          args.branch,
-          args.prUrl ?? '',
-        ));
+        (await stableUuidFrom(IDEMPOTENCY_NAMESPACE, args.reportId, args.branch, args.prUrl ?? ''));
       const created = await apiCall<{ fixId: string }>('/v1/admin/fixes', {
         method: 'POST',
         headers: { 'Idempotency-Key': idemKey },
@@ -1780,14 +1847,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('triage_next_steps'),
       description: descOf('triage_next_steps'),
       annotations: annotationsFor('triage_next_steps'),
-      inputSchema: {
+      inputSchema: z.object({
         project_id: z
           .string()
           .uuid()
           .optional()
           .describe('Project UUID (defaults to the configured project).'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         steps: z.array(
           z.object({
             priority: z.number(),
@@ -1798,7 +1865,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           }),
         ),
         summary: z.string(),
-      },
+      }),
     },
     async (args) => {
       // The "what should I work on" answer, ordered by leverage:
@@ -1855,7 +1922,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       }
 
       const openUserReports = reports
-        .filter((r) => (r.status === 'new' || r.status === 'classified') && !isCron(r) && !isBlocked(r))
+        .filter(
+          (r) => (r.status === 'new' || r.status === 'classified') && !isCron(r) && !isBlocked(r),
+        )
         .sort((a, b) => {
           const rank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
           return (rank[String(a.severity)] ?? 4) - (rank[String(b.severity)] ?? 4);
@@ -1875,7 +1944,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         steps.push({
           priority: priority++,
           action: `Batch ${chores.length} maintenance chore${chores.length === 1 ? '' : 's'} (dependency bumps)`,
-          reason: 'Robot-filed modernization reports — batch-dispatch or dismiss in one sitting; do not let them crowd out user bugs.',
+          reason:
+            'Robot-filed modernization reports — batch-dispatch or dismiss in one sitting; do not let them crowd out user bugs.',
           tool: 'get_recent_reports',
           args: { status: 'classified' },
         });
@@ -1896,7 +1966,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('dispatch_fix'),
       description: descOf('dispatch_fix'),
       annotations: annotationsFor('dispatch_fix'),
-      inputSchema: {
+      inputSchema: z.object({
         reportId: z.string().uuid().describe('Report UUID to fix'),
         agent: z
           .enum(['claude_code', 'codex', 'rest_worker', 'mcp'])
@@ -1916,22 +1986,22 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .describe(
             'Optional inventory Action node UUID for spec-traceability (§2.10). When provided, the fix-worker embeds the expected_outcome contract in the LLM prompt and runs validateAgainstSpec before opening the PR.',
           ),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         fixId: z.string(),
         status: z.string(),
-      },
+      }),
     },
-    async (args, extra) => {
+    async (args, ctx) => {
       // Long-running: emit a progress ping so MCP clients that support
       // `notifications/progress` can render a live status (Claude Desktop,
       // Cursor 0.47+). Safe no-op on clients that ignore it.
-      if (extra?.sendNotification && extra?._meta?.progressToken) {
+      if (ctx?.mcpReq.notify && ctx?.mcpReq._meta?.progressToken) {
         try {
-          await extra.sendNotification({
+          await ctx.mcpReq.notify({
             method: 'notifications/progress',
             params: {
-              progressToken: extra._meta.progressToken,
+              progressToken: ctx.mcpReq._meta.progressToken,
               progress: 0,
               total: 100,
               message: 'Dispatching Mushi fix orchestrator…',
@@ -1977,7 +2047,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('trigger_judge'),
       description: descOf('trigger_judge'),
       annotations: annotationsFor('trigger_judge'),
-      inputSchema: {
+      inputSchema: z.object({
         limit: z
           .number()
           .optional()
@@ -1986,12 +2056,12 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .string()
           .optional()
           .describe('Restrict to one project when the API key owns multiple'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         dispatched: z
           .number()
           .describe('Number of judge-batch jobs dispatched (one per accessible project)'),
-      },
+      }),
     },
     async (args) => {
       const data = await apiCall<{ dispatched: number }>('/v1/admin/judge/run', {
@@ -2011,10 +2081,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('test_gen_from_report'),
       description: descOf('test_gen_from_report'),
       annotations: annotationsFor('test_gen_from_report'),
-      inputSchema: {
+      inputSchema: z.object({
         reportId: z.string().describe('Report UUID to turn into a Playwright PR'),
         projectId: z.string().optional().describe('Project UUID — defaults to configured project'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.projectId ?? projectId;
@@ -2041,14 +2111,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('merge_fix'),
       description: descOf('merge_fix'),
       annotations: annotationsFor('merge_fix'),
-      inputSchema: {
+      inputSchema: z.object({
         fixId: z.string().describe('Fix attempt UUID whose GitHub PR should be squash-merged'),
         mergeMethod: z
           .enum(['squash', 'merge', 'rebase'])
           .optional()
           .describe('GitHub merge method (default squash)'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         merged: z.boolean().optional().describe('True when GitHub accepted the merge in this call'),
         alreadyMerged: z
           .boolean()
@@ -2056,7 +2126,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .describe('True when the PR was already merged (idempotent no-op)'),
         reportId: z.string().describe('Report UUID linked to this fix attempt'),
         reportStatus: z.string().describe('Report workflow status after merge bookkeeping'),
-      },
+      }),
     },
     async (args) => {
       const data = await apiCall<{
@@ -2078,10 +2148,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('refresh_ci'),
       description: descOf('refresh_ci'),
       annotations: annotationsFor('refresh_ci'),
-      inputSchema: {
+      inputSchema: z.object({
         fixId: z.string().describe('Fix attempt UUID whose PR check-runs should be re-polled'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         check_run_status: z.string().nullable().describe('GitHub check run status after refresh'),
         check_run_conclusion: z
           .string()
@@ -2091,7 +2161,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .string()
           .nullable()
           .describe('ISO timestamp when CI status was last persisted'),
-      },
+      }),
     },
     async (args) => {
       const data = await apiCall<{
@@ -2109,13 +2179,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('reopen_report'),
       description: descOf('reopen_report'),
       annotations: annotationsFor('reopen_report'),
-      inputSchema: {
+      inputSchema: z.object({
         reportId: z.string().describe('Report UUID to move back to reopened status'),
         note: z.string().optional().describe('Operator note recorded on the reopen transition'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         report: z.unknown().describe('Updated report row with status=reopened'),
-      },
+      }),
     },
     async (args) => {
       const report = await apiCall<unknown>(`/v1/sync/reports/${args.reportId}`, {
@@ -2132,7 +2202,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('transition_status'),
       description: descOf('transition_status'),
       annotations: annotationsFor('transition_status'),
-      inputSchema: {
+      inputSchema: z.object({
         reportId: z.string().describe('Report UUID'),
         status: z
           .enum([
@@ -2153,7 +2223,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           ])
           .describe('Target status (resolved is stored as fixed)'),
         reason: z.string().optional().describe('Reason for the transition (audit trail)'),
-      },
+      }),
     },
     async (args) => {
       const data = await apiCall(`/v1/admin/reports/${args.reportId}`, {
@@ -2170,9 +2240,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('setup_repo_for_mushi'),
       description: descOf('setup_repo_for_mushi'),
       annotations: annotationsFor('setup_repo_for_mushi'),
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().optional().describe('Project UUID — defaults to configured project'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.projectId ?? projectId;
@@ -2196,7 +2266,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('query_lessons'),
       description: descOf('query_lessons'),
       annotations: annotationsFor('query_lessons'),
-      inputSchema: {
+      inputSchema: z.object({
         diff_text: z
           .string()
           .describe('The PR diff, code snippet, or description of the change being made.'),
@@ -2209,7 +2279,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .optional()
           .describe('Max number of lessons to return (default 15, max 50).'),
         project_id: z.string().optional().describe('Project UUID. Defaults to configured project.'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.project_id ?? projectId;
@@ -2233,17 +2303,17 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('list_lessons'),
       description: descOf('list_lessons'),
       annotations: annotationsFor('list_lessons'),
-      inputSchema: {
+      inputSchema: z.object({
         severity: z
           .enum(['info', 'warn', 'critical'])
           .optional()
           .describe('Filter to one severity level'),
         limit: z.number().optional().describe('Max lessons to return (default 50, max 200)'),
         project_id: z.string().optional().describe('Project UUID — defaults to configured project'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         lessons: z.array(z.unknown()).describe('Promoted lesson rows ordered by frequency'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.project_id ?? projectId;
@@ -2259,7 +2329,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
 
   // --- Resources (stdio only — hosted HTTP exposes these as separate tools) ---
 
-  server.resource(
+  server.registerResource(
     'project_stats',
     'project://stats',
     { description: 'Report counts, category breakdown, severity distribution' },
@@ -2274,7 +2344,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     }),
   );
 
-  server.resource(
+  server.registerResource(
     'project_settings',
     'project://settings',
     {
@@ -2291,7 +2361,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     }),
   );
 
-  server.resource(
+  server.registerResource(
     'project_dashboard',
     'project://dashboard',
     {
@@ -2317,7 +2387,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('list_top_contributors'),
       description: descOf('list_top_contributors'),
       annotations: annotationsFor('list_top_contributors'),
-      inputSchema: {
+      inputSchema: z.object({
         limit: z
           .number()
           .int()
@@ -2331,7 +2401,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .optional()
           .default('30d')
           .describe('Time window for points calculation'),
-      },
+      }),
     },
     async ({ limit, range }) => ({
       content: [
@@ -2353,7 +2423,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('award_bonus_points'),
       description: descOf('award_bonus_points'),
       annotations: annotationsFor('award_bonus_points'),
-      inputSchema: {
+      inputSchema: z.object({
         external_user_id: z.string().describe('The host-app user id as passed to Mushi.identify()'),
         points: z
           .number()
@@ -2362,7 +2432,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .max(50000)
           .describe('Bonus points to award (max 50,000 per call)'),
         reason: z.string().max(200).describe('Human-readable reason, logged to end_user_activity'),
-      },
+      }),
     },
     async ({ external_user_id, points, reason }) => ({
       content: [
@@ -2388,13 +2458,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('set_tier'),
       description: descOf('set_tier'),
       annotations: annotationsFor('set_tier'),
-      inputSchema: {
+      inputSchema: z.object({
         external_user_id: z.string().describe('The host-app user id as passed to Mushi.identify()'),
         tier_slug: z
           .string()
           .describe('Tier slug to assign, e.g. "champion", "contributor", "explorer"'),
         reason: z.string().max(200).optional().describe('Optional reason for manual override'),
-      },
+      }),
     },
     async ({ external_user_id, tier_slug, reason }) => ({
       content: [
@@ -2414,7 +2484,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     }),
   );
 
-  server.resource(
+  server.registerResource(
     'privacy_status',
     'privacy://status',
     {
@@ -2433,7 +2503,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     }),
   );
 
-  server.resource(
+  server.registerResource(
     'evolution_history',
     'evolution://history',
     {
@@ -2460,7 +2530,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     }),
   );
 
-  server.resource(
+  server.registerResource(
     'project_integration_health',
     'project://integration-health',
     {
@@ -2480,7 +2550,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     }),
   );
 
-  server.resource(
+  server.registerResource(
     'inventory_current',
     'inventory://current',
     {
@@ -2513,12 +2583,12 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('activation_status'),
       description: descOf('activation_status'),
       annotations: annotationsFor('activation_status'),
-      inputSchema: {
+      inputSchema: z.object({
         project_id: z
           .string()
           .optional()
           .describe('Project UUID (defaults to the configured project).'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.project_id ?? projectId;
@@ -2527,7 +2597,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   );
 
-  server.resource(
+  server.registerResource(
     'activation_status',
     'mushi://activation',
     {
@@ -2550,10 +2620,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
 
   // --- Prompts ---------------------------------------------------------
 
-  server.prompt(
+  server.registerPrompt(
     'summarize_report_for_fix',
-    'Turn a Mushi report into a one-line root cause, smallest file set, repro steps, and blast-radius warnings. Use before asking an agent to write the patch.',
-    { reportId: z.string().describe('The report UUID to summarize') },
+    {
+      description:
+        'Turn a Mushi report into a one-line root cause, smallest file set, repro steps, and blast-radius warnings. Use before asking an agent to write the patch.',
+      argsSchema: z.object({ reportId: z.string().describe('The report UUID to summarize') }),
+    },
     ({ reportId }) => ({
       messages: [
         {
@@ -2578,10 +2651,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     }),
   );
 
-  server.prompt(
+  server.registerPrompt(
     'explain_judge_result',
-    'Turn raw Sonnet-as-Judge scores into ship / iterate / dismiss guidance. Use after a fix attempt has been judged.',
-    { fixId: z.string().describe('The fix_attempt UUID to explain') },
+    {
+      description:
+        'Turn raw Sonnet-as-Judge scores into ship / iterate / dismiss guidance. Use after a fix attempt has been judged.',
+      argsSchema: z.object({ fixId: z.string().describe('The fix_attempt UUID to explain') }),
+    },
     ({ fixId }) => ({
       messages: [
         {
@@ -2602,10 +2678,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     }),
   );
 
-  server.prompt(
+  server.registerPrompt(
     'triage_next_steps',
-    'Answer "what should I focus on right now?" — five-item markdown list drawn from the dashboard + recent classified queue.',
-    {},
+    {
+      description:
+        'Answer "what should I focus on right now?" — five-item markdown list drawn from the dashboard + recent classified queue.',
+      argsSchema: z.object({}),
+    },
     () => ({
       messages: [
         {
@@ -2625,10 +2704,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     }),
   );
 
-  server.prompt(
+  server.registerPrompt(
     'mushi_setup',
-    'Diagnose why Mushi setup is stuck and return the single next command or console step to unblock it.',
-    {},
+    {
+      description:
+        'Diagnose why Mushi setup is stuck and return the single next command or console step to unblock it.',
+      argsSchema: z.object({}),
+    },
     () => ({
       messages: [
         {
@@ -2660,7 +2742,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('map_user_stories', TDD_TOOL_CATALOG),
       description: descOf('map_user_stories', TDD_TOOL_CATALOG),
       annotations: annotationsFor('map_user_stories', TDD_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().describe('Project id to map stories for'),
         baseUrl: z.string().url().describe('Live app URL to crawl'),
         maxPages: z
@@ -2678,7 +2760,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .boolean()
           .optional()
           .describe('Dispatch Cursor Cloud agent to refine and open a PR'),
-      },
+      }),
     },
     async ({ projectId, baseUrl, maxPages, provider, cursorCloudRefine }) => {
       if (!projectId) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required');
@@ -2704,9 +2786,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_map_run_status', TDD_TOOL_CATALOG),
       description: descOf('get_map_run_status', TDD_TOOL_CATALOG),
       annotations: annotationsFor('get_map_run_status', TDD_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().describe('Project id'),
-      },
+      }),
     },
     async ({ projectId }) => {
       const data = await apiCall<{ runs: unknown[] }>(`/v1/admin/inventory/${projectId}/map-runs`);
@@ -2720,7 +2802,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('generate_tdd_from_story', TDD_TOOL_CATALOG),
       description: descOf('generate_tdd_from_story', TDD_TOOL_CATALOG),
       annotations: annotationsFor('generate_tdd_from_story', TDD_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().describe('Project UUID that owns the inventory story'),
         storyNodeId: z
           .string()
@@ -2740,8 +2822,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .boolean()
           .optional()
           .describe('Open a draft GitHub PR with the generated spec (default true)'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         qaStoryId: z.string().describe('UUID of the inserted qa_stories row'),
         prUrl: z
           .string()
@@ -2753,7 +2835,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         needsHumanReview: z
           .boolean()
           .describe('True when the story requires operator approval before scheduled runs'),
-      },
+      }),
     },
     async ({ projectId, storyNodeId, automationMode, baseUrl, openPr }) => {
       if (!projectId) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required');
@@ -2780,9 +2862,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('improve_qa_story', TDD_TOOL_CATALOG),
       description: descOf('improve_qa_story', TDD_TOOL_CATALOG),
       annotations: annotationsFor('improve_qa_story', TDD_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().optional().describe('Project id (omit to run across all projects)'),
-      },
+      }),
     },
     async ({ projectId }) => {
       const data = await apiCall<{ improved: number }>('/v1/admin/pdca/improve-qa-stories', {
@@ -2799,10 +2881,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('run_qa_story', TDD_TOOL_CATALOG),
       description: descOf('run_qa_story', TDD_TOOL_CATALOG),
       annotations: annotationsFor('run_qa_story', TDD_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().describe('Project id'),
         qaStoryId: z.string().describe('qa_story id to run'),
-      },
+      }),
     },
     async ({ projectId, qaStoryId }) => {
       const data = await apiCall<unknown>(
@@ -2819,9 +2901,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('list_byok_keys', TDD_TOOL_CATALOG),
       description: descOf('list_byok_keys', TDD_TOOL_CATALOG),
       annotations: annotationsFor('list_byok_keys', TDD_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().describe('Project id'),
-      },
+      }),
     },
     async ({ projectId }) => {
       const data = await apiCall<unknown>(
@@ -2837,7 +2919,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('add_byok_key', TDD_TOOL_CATALOG),
       description: descOf('add_byok_key', TDD_TOOL_CATALOG),
       annotations: annotationsFor('add_byok_key', TDD_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().describe('Project id'),
         provider: z
           .enum(['anthropic', 'openai', 'firecrawl', 'browserbase', 'cursor'])
@@ -2857,7 +2939,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .max(2048)
           .optional()
           .describe('Allow-listed OpenAI-compatible HTTPS base URL'),
-      },
+      }),
     },
     async ({ projectId, provider, key, label, priority, baseUrl }) => {
       const data = await apiCall<unknown>('/v1/admin/byok/keys', {
@@ -2881,10 +2963,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('test_byok_key', TDD_TOOL_CATALOG),
       description: descOf('test_byok_key', TDD_TOOL_CATALOG),
       annotations: annotationsFor('test_byok_key', TDD_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().describe('Project id'),
         keyId: z.string().uuid().describe('Pooled BYOK key id'),
-      },
+      }),
     },
     async ({ keyId }) => {
       const data = await apiCall<unknown>(`/v1/admin/byok/keys/${encodeURIComponent(keyId)}/test`, {
@@ -2900,10 +2982,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('remove_byok_key', TDD_TOOL_CATALOG),
       description: descOf('remove_byok_key', TDD_TOOL_CATALOG),
       annotations: annotationsFor('remove_byok_key', TDD_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().describe('Project id'),
         keyId: z.string().uuid().describe('Pooled BYOK key UUID from list_byok_keys'),
-      },
+      }),
     },
     async ({ keyId }) => {
       const data = await apiCall<unknown>(`/v1/admin/byok/keys/${encodeURIComponent(keyId)}`, {
@@ -2919,9 +3001,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('list_pending_review_stories', TDD_TOOL_CATALOG),
       description: descOf('list_pending_review_stories', TDD_TOOL_CATALOG),
       annotations: annotationsFor('list_pending_review_stories', TDD_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().describe('Project id'),
-      },
+      }),
     },
     async ({ projectId }) => {
       const data = await apiCall<unknown>(
@@ -2937,11 +3019,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('approve_qa_story', TDD_TOOL_CATALOG),
       description: descOf('approve_qa_story', TDD_TOOL_CATALOG),
       annotations: annotationsFor('approve_qa_story', TDD_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().describe('Project id'),
         qaStoryId: z.string().describe('QA story id to approve or reject'),
         status: z.enum(['approved', 'rejected']).describe('New approval status'),
-      },
+      }),
     },
     async ({ projectId, qaStoryId, status }) => {
       const data = await apiCall<unknown>(
@@ -2958,14 +3040,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('reply_to_reporter', TDD_TOOL_CATALOG),
       description: descOf('reply_to_reporter', TDD_TOOL_CATALOG),
       annotations: annotationsFor('reply_to_reporter', TDD_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         reportId: z.string().describe('Report id to reply to'),
         message: z.string().min(1).max(10_000).describe('Message text to send to the reporter'),
         authorName: z
           .string()
           .optional()
           .describe('Display name for the admin sender (default: "Mushi Admin")'),
-      },
+      }),
     },
     async ({ reportId, message, authorName }) => {
       const data = await apiCall<unknown>(`/v1/sync/reports/${reportId}/reply`, {
@@ -2982,7 +3064,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('list_qa_story_runs', TDD_TOOL_CATALOG),
       description: descOf('list_qa_story_runs', TDD_TOOL_CATALOG),
       annotations: annotationsFor('list_qa_story_runs', TDD_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         storyId: z.string().describe('QA story id (uuid)'),
         limit: z
           .number()
@@ -2992,7 +3074,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .optional()
           .default(10)
           .describe('Max runs to return (default 10)'),
-      },
+      }),
     },
     async ({ storyId, limit }) => {
       const data = await apiCall<unknown>(
@@ -3008,10 +3090,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_qa_story_run', TDD_TOOL_CATALOG),
       description: descOf('get_qa_story_run', TDD_TOOL_CATALOG),
       annotations: annotationsFor('get_qa_story_run', TDD_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         storyId: z.string().describe('QA story id (uuid)'),
         runId: z.string().describe('Run id (uuid) to fetch detail for'),
-      },
+      }),
     },
     async ({ storyId, runId }) => {
       // There is no single-run detail route that accepts an API key (the
@@ -3039,9 +3121,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('test_notification_channel', TDD_TOOL_CATALOG),
       description: descOf('test_notification_channel', TDD_TOOL_CATALOG),
       annotations: annotationsFor('test_notification_channel', TDD_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         kind: z.enum(['slack', 'discord']).describe('Notification channel kind to test'),
-      },
+      }),
     },
     async ({ kind }) => {
       const data = await apiCall<unknown>(
@@ -3060,12 +3142,12 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('run_fullstack_audit'),
       description: descOf('run_fullstack_audit'),
       annotations: annotationsFor('run_fullstack_audit'),
-      inputSchema: {
+      inputSchema: z.object({
         project_id: z
           .string()
           .optional()
           .describe('Project ID to audit. Defaults to the configured project.'),
-      },
+      }),
     },
     async ({ project_id }) => {
       const pid = project_id ?? config.projectId;
@@ -3084,7 +3166,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_backend_health'),
       description: descOf('get_backend_health'),
       annotations: annotationsFor('get_backend_health'),
-      inputSchema: {
+      inputSchema: z.object({
         project_id: z
           .string()
           .optional()
@@ -3093,7 +3175,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .boolean()
           .optional()
           .describe('Whether to include recent backend error logs (default: true).'),
-      },
+      }),
     },
     async ({ project_id, include_logs = true }) => {
       const pid = project_id ?? config.projectId;
@@ -3132,12 +3214,12 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_usage'),
       description: descOf('get_usage'),
       annotations: annotationsFor('get_usage'),
-      inputSchema: {
+      inputSchema: z.object({
         project_id: z
           .string()
           .optional()
           .describe('Project ID. Defaults to the configured project.'),
-      },
+      }),
     },
     async ({ project_id }) => {
       const pid = project_id ?? config.projectId;
@@ -3164,7 +3246,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('list_skills'),
       description: descOf('list_skills'),
       annotations: annotationsFor('list_skills'),
-      inputSchema: {
+      inputSchema: z.object({
         category: z
           .string()
           .optional()
@@ -3172,7 +3254,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         search: z.string().optional().describe('Free-text search across slug, title, description'),
         page: z.number().optional().describe('Page number (default 1)'),
         limit: z.number().optional().describe('Max results per page (default 200, max 200)'),
-      },
+      }),
     },
     async (args) => {
       const qs = new URLSearchParams();
@@ -3193,9 +3275,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_skill'),
       description: descOf('get_skill'),
       annotations: annotationsFor('get_skill'),
-      inputSchema: {
+      inputSchema: z.object({
         slug: z.string().describe('Skill slug, e.g. "workflow-fix-and-ship"'),
-      },
+      }),
     },
     async (args) => {
       const data = await apiCall<unknown>(`/v1/admin/skills/${args.slug}`);
@@ -3209,7 +3291,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('start_skill_pipeline'),
       description: descOf('start_skill_pipeline'),
       annotations: annotationsFor('start_skill_pipeline'),
-      inputSchema: {
+      inputSchema: z.object({
         root_skill_slug: z
           .string()
           .describe('Root skill slug to run, e.g. "workflow-fix-and-ship"'),
@@ -3224,7 +3306,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .string()
           .optional()
           .describe('Project UUID. Falls back to the configured project.'),
-      },
+      }),
     },
     async (args) => {
       const resolvedProjectId = args.project_id ?? projectId;
@@ -3245,9 +3327,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_pipeline_run'),
       description: descOf('get_pipeline_run'),
       annotations: annotationsFor('get_pipeline_run'),
-      inputSchema: {
+      inputSchema: z.object({
         run_id: z.string().describe('Pipeline run UUID'),
-      },
+      }),
     },
     async (args) => {
       const data = await apiCall<unknown>(`/v1/admin/skills/pipelines/${args.run_id}`);
@@ -3261,14 +3343,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('checkin_pipeline_step'),
       description: descOf('checkin_pipeline_step'),
       annotations: annotationsFor('checkin_pipeline_step'),
-      inputSchema: {
+      inputSchema: z.object({
         run_id: z.string().describe('Pipeline run UUID'),
         step_index: z.number().describe('Step index (0-based)'),
         status: z.enum(['running', 'passed', 'failed', 'skipped']).describe('Step status'),
         notes: z.string().optional().describe('Optional notes or output summary'),
         pr_url: z.string().optional().describe('PR URL opened during this step'),
         agent_ref: z.string().optional().describe('Cursor agentId or external agent reference'),
-      },
+      }),
     },
     async (args) => {
       const { run_id, step_index, ...body } = args;
@@ -3288,7 +3370,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('ask_codebase', CODEBASE_TOOL_CATALOG),
       description: descOf('ask_codebase', CODEBASE_TOOL_CATALOG),
       annotations: annotationsFor('ask_codebase', CODEBASE_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
         question: z.string().describe('Plain-English question about the repo'),
         thread_id: z
@@ -3297,7 +3379,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .describe('Optional thread UUID to continue a conversation'),
         file_path: z.string().optional().describe('Optional file path focus'),
         symbol_name: z.string().optional().describe('Optional symbol name focus'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.project_id ?? projectId;
@@ -3326,12 +3408,12 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_file_summary', CODEBASE_TOOL_CATALOG),
       description: descOf('get_file_summary', CODEBASE_TOOL_CATALOG),
       annotations: annotationsFor('get_file_summary', CODEBASE_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
         file_path: z.string().describe('Indexed file path'),
         symbol_name: z.string().optional().describe('Optional symbol name within the file'),
         force: z.boolean().optional().describe('Bypass cache and regenerate'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.project_id ?? projectId;
@@ -3350,10 +3432,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_codebase_tour', CODEBASE_TOOL_CATALOG),
       description: descOf('get_codebase_tour', CODEBASE_TOOL_CATALOG),
       annotations: annotationsFor('get_codebase_tour', CODEBASE_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
         force: z.boolean().optional().describe('Bypass cache and regenerate'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.project_id ?? projectId;
@@ -3370,7 +3452,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('search_codebase', CODEBASE_TOOL_CATALOG),
       description: descOf('search_codebase', CODEBASE_TOOL_CATALOG),
       annotations: annotationsFor('search_codebase', CODEBASE_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
         query: z.string().describe('Plain-English search query against indexed source files'),
         k: z
@@ -3384,14 +3466,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .string()
           .optional()
           .describe('Optional repo subdirectory prefix to limit search scope'),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         results: z
           .array(z.unknown())
           .describe('Ranked file/symbol hits with paths, line ranges, and similarity'),
         query: z.string().describe('Normalized query string that was searched'),
         mode: z.string().optional().describe('semantic (embeddings) or name (path/symbol match)'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.project_id ?? projectId;
@@ -3417,11 +3499,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_codebase_domains', CODEBASE_TOOL_CATALOG),
       description: descOf('get_codebase_domains', CODEBASE_TOOL_CATALOG),
       annotations: annotationsFor('get_codebase_domains', CODEBASE_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
         force: z.boolean().optional().describe('Bypass cache and regenerate'),
         scope_prefix: z.string().optional().describe('Optional subdirectory scope prefix'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.project_id ?? projectId;
@@ -3441,7 +3523,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('analyze_codebase_impact', CODEBASE_TOOL_CATALOG),
       description: descOf('analyze_codebase_impact', CODEBASE_TOOL_CATALOG),
       annotations: annotationsFor('analyze_codebase_impact', CODEBASE_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
         paths: z
           .array(z.string())
@@ -3459,8 +3541,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .string()
           .optional()
           .describe("Fix attempt UUID — uses that PR's changed files when source=fix"),
-      },
-      outputSchema: {
+      }),
+      outputSchema: z.object({
         changed_paths: z.array(z.string()).describe('Resolved set of changed paths analyzed'),
         source: z
           .string()
@@ -3476,7 +3558,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .nullable()
           .optional()
           .describe('Extra resolution metadata when auto-sourced'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.project_id ?? projectId;
@@ -3510,9 +3592,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('analyze_wiki_knowledge', CODEBASE_TOOL_CATALOG),
       description: descOf('analyze_wiki_knowledge', CODEBASE_TOOL_CATALOG),
       annotations: annotationsFor('analyze_wiki_knowledge', CODEBASE_TOOL_CATALOG),
-      inputSchema: {
+      inputSchema: z.object({
         project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
-      },
+      }),
     },
     async (args) => {
       const pid = args.project_id ?? projectId;
@@ -3531,7 +3613,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     {
       title: titleOf('use_mushi'),
       description: descOf('use_mushi'),
-      inputSchema: {
+      inputSchema: z.object({
         intent: z
           .string()
           .optional()
@@ -3540,7 +3622,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
               '"check project health", "run QA tests", "set up Mushi". ' +
               'Leave blank for a general orientation.',
           ),
-      },
+      }),
       annotations: annotationsFor('use_mushi'),
     },
     async (args) => {

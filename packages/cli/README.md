@@ -181,9 +181,14 @@ local bumps; use the PR flow when you want review + CI on the dependency change.
 ```bash
 mushi upgrade               # plan + install
 mushi upgrade --dry-run     # print the install command without running it
+mushi upgrade --check       # plan only: exit 0 current, 1 outdated, 2 registry down
 mushi upgrade --json        # machine-readable plan + result
 mushi upgrade --cwd ../app  # target another repo
 ```
+
+`--check` never installs. Use it in a **non-required** CI job so a one-patch
+drift cannot freeze production deploys. Exit `2` (registry unreachable) should
+not fail a required gate — retry or treat as a warning.
 
 Pre-release versions are never auto-selected, registry versions are validated
 against strict semver before being interpolated into the install command, and
@@ -440,4 +445,4 @@ The CLI is also importable for tooling (used by `create-mushi-mushi`):
 MIT
 
 <!-- mushi-readme-stats-footer -->
-<sub>Monorepo scale (July 2026): 55 edge functions · 337 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 58 edge functions · 347 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

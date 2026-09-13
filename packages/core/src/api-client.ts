@@ -17,6 +17,15 @@ import type {
 } from './types';
 import { checkReportPayloadSize } from './payload-guard';
 import { sha256Hex, hmacSha256Hex } from './digest';
+import { isPageUnloading, sendOnUnload } from './unload-transport';
+
+let lastOutbound: { url: string; headers: Record<string, string>; body: string; path: string } | null = null;
+
+/** Replay the last POST via keepalive/beacon during pagehide. */
+export function flushLastOutboundOnUnload(): boolean {
+  if (!lastOutbound) return false;
+  return sendOnUnload(lastOutbound);
+}
 
 // One-time credential-failure warning gate — emitted at most once per JS
 // process so it's visible without flooding the console on every queued retry.
@@ -79,6 +88,11 @@ export interface ApiClientOptions {
    * backend can verify it and scope identity-bound features to that user.
    */
   getUserToken?: () => string | null | undefined;
+  /**
+   * Same-origin (or absolute) proxy. When set, replaces `apiEndpoint` as the
+   * request base so browser calls stay first-party. See `MushiConfig.tunnel`.
+   */
+  tunnel?: string;
 }
 
 // V5.3 (M-cross-cutting): canonical Cloud URL — the older `api.mushimushi.dev`
@@ -88,6 +102,13 @@ export const MUSHI_INTERNAL_HEADER = 'X-Mushi-Internal';
 export const MUSHI_INTERNAL_INIT_MARKER = '__mushiInternal';
 
 export type MushiInternalRequestKind = 'sdk-config' | 'report-submit' | 'report-status' | 'reporter-poll' | 'diagnose' | 'discovery' | 'community';
+
+/** Resolve the HTTP base: tunnel wins so ingest stays first-party. */
+export function resolveRequestBaseUrl(apiEndpoint: string | undefined, tunnel?: string): string {
+  const trimmedTunnel = tunnel?.trim();
+  if (trimmedTunnel) return trimmedTunnel.replace(/\/$/, '');
+  return (apiEndpoint ?? DEFAULT_API_ENDPOINT).replace(/\/$/, '');
+}
 
 export const DEFAULT_TIMEOUT = 10_000;
 export const DEFAULT_MAX_RETRIES = 2;
@@ -105,6 +126,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
     projectId,
     apiKey,
     apiEndpoint = DEFAULT_API_ENDPOINT,
+    tunnel,
     timeout = DEFAULT_TIMEOUT,
     maxRetries = DEFAULT_MAX_RETRIES,
     getUserToken,
@@ -113,7 +135,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
     circuitBreaker,
   } = options;
 
-  let baseUrl = apiEndpoint.replace(/\/$/, '');
+  let baseUrl = resolveRequestBaseUrl(apiEndpoint, tunnel);
 
   // Circuit breaker state (per client). Trips after consecutive unreachable
   // failures so a down endpoint isn't hammered; half-opens after a cooldown.
@@ -148,22 +170,28 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
     const userToken = getUserToken?.() ?? null;
+    const headers = {
+      ...buildSdkIngestHeaders({
+        apiKey,
+        projectId,
+        sdkPackage,
+        sdkVersion,
+        userToken,
+        internalKind,
+      }),
+      ...extraHeaders,
+    };
+    const serialized = body ? JSON.stringify(body) : undefined;
+    if (serialized && method !== 'GET') {
+      lastOutbound = { url, headers, body: serialized, path };
+    }
 
     try {
       const response = await fetch(url, {
         method,
-        headers: {
-          ...buildSdkIngestHeaders({
-            apiKey,
-            projectId,
-            sdkPackage,
-            sdkVersion,
-            userToken,
-            internalKind,
-          }),
-          ...extraHeaders,
-        },
-        body: body ? JSON.stringify(body) : undefined,
+        headers,
+        body: serialized,
+        keepalive: isPageUnloading(),
         signal: controller.signal,
         ...(internalKind ? { [MUSHI_INTERNAL_INIT_MARKER]: internalKind } : {}),
       } as RequestInit & { [MUSHI_INTERNAL_INIT_MARKER]?: MushiInternalRequestKind });
@@ -298,6 +326,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
         'X-Reporter-Hmac': hmac,
       },
       body: body ? JSON.stringify(body) : undefined,
+      keepalive: isPageUnloading(),
       [MUSHI_INTERNAL_INIT_MARKER]: 'reporter-poll',
     } as RequestInit & { [MUSHI_INTERNAL_INIT_MARKER]?: MushiInternalRequestKind });
     if (!response.ok) {
@@ -604,7 +633,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function getBackoffDelay(attempt: number): number {
+export function getBackoffDelay(attempt: number): number {
   return Math.min(1000 * 2 ** attempt + Math.random() * 500, 10_000);
 }
 

@@ -26,6 +26,7 @@ import { SETTINGS_TAB_DESCRIPTIONS, SETTINGS_TAB_LABELS } from '../lib/settingsT
 import { ByokPanel } from '../components/settings/ByokPanel';
 import { FirecrawlPanel } from '../components/settings/FirecrawlPanel';
 import { BrowserbasePanel } from '../components/settings/BrowserbasePanel';
+import { VoiceIntakePanel } from '../components/settings/VoiceIntakePanel';
 import { HealthPanel } from '../components/settings/HealthPanel';
 import { DevToolsPanel } from '../components/settings/DevToolsPanel';
 import { SettingsIntegrationsReadout } from '../components/settings/SettingsIntegrationsReadout';
@@ -81,6 +82,11 @@ const TABS: Array<{ id: SettingsTabId; label: string; description: string }> = [
     description: SETTINGS_TAB_DESCRIPTIONS.browserbase,
   },
   {
+    id: 'voice',
+    label: SETTINGS_TAB_LABELS.voice,
+    description: SETTINGS_TAB_DESCRIPTIONS.voice,
+  },
+  {
     id: 'health',
     label: SETTINGS_TAB_LABELS.health,
     description: SETTINGS_TAB_DESCRIPTIONS.health,
@@ -93,6 +99,7 @@ const TAB_TITLES: Record<SettingsTabId, string> = {
   byok: SETTINGS_TAB_LABELS.byok,
   firecrawl: SETTINGS_TAB_LABELS.firecrawl,
   browserbase: SETTINGS_TAB_LABELS.browserbase,
+  voice: SETTINGS_TAB_LABELS.voice,
   health: SETTINGS_TAB_LABELS.health,
   dev: SETTINGS_TAB_LABELS.dev,
 };
@@ -103,7 +110,7 @@ function isTabId(value: string | null): value is SettingsTabId {
 
 const TAB_GROUPS: Array<{ label: string; tabs: SettingsTabId[] }> = [
   { label: 'Project', tabs: ['general', 'health'] },
-  { label: 'Integrations', tabs: ['byok', 'firecrawl', 'browserbase'] },
+  { label: 'Integrations', tabs: ['byok', 'firecrawl', 'browserbase', 'voice'] },
   { label: 'Advanced', tabs: ['dev'] },
 ];
 
@@ -400,6 +407,7 @@ export function SettingsPage() {
         {active === 'byok' && <ByokPanel />}
         {active === 'firecrawl' && <FirecrawlPanel />}
         {active === 'browserbase' && <BrowserbasePanel />}
+        {active === 'voice' && <VoiceIntakePanel />}
         {active === 'health' && (
           <HealthPanel
             projectId={activeProjectId}

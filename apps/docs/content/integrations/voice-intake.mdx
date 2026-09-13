@@ -1,0 +1,174 @@
+---
+title: Voice intake
+description: Say the bug on your phone, get a draft PR back. iOS Shortcut, Telegram, Slack, or the installed console — one pipeline, one confirmation gate, no audio kept.
+---
+
+import { Callout, Steps, Tabs } from 'nextra/components'
+
+# Voice intake
+
+Dictate a bug or a small change request on your phone. Mushi transcribes it, files a report, and — only for change requests, and only after you confirm the verbatim transcript — dispatches the fix and replies with the draft PR link in the same chat.
+
+```
+phone voice ──▶ transcript ──▶ sanitise + PII scrub ──▶ refuse privileged verbs
+            ──▶ intent (create_report | open_draft_pr | unknown)
+            ──▶ report (source = voice)
+            ──▶ [open_draft_pr only] verbatim transcript + confirm token ──▶ you confirm
+            ──▶ fix dispatched ──▶ draft PR ──▶ reply in Slack / Telegram / push
+```
+
+Four inboxes feed the same pipeline. Pick the one that matches your phone.
+
+| Inbox | Best for | Audio leaves the phone? |
+| --- | --- | --- |
+| iOS Shortcut (Siri dictation) | iPhone, lowest friction | No — iOS transcribes on device, only text is sent |
+| Telegram bot | Android (and anything with Telegram) | Yes — the voice note is transcribed server-side, then deleted |
+| Slack | Teams already triaging in Slack | Yes — the clip is transcribed server-side, then deleted |
+| Installed console (PWA) | Tap-to-talk in the console, or Android share sheet | Yes — uploaded to a private bucket, transcribed, then deleted |
+
+## Enable it
+
+Voice intake is **off by default** because speech is personal data.
+
+<Steps>
+### Turn it on
+
+Console → **Settings** → **Voice intake**: enable, pick the languages you speak (`ja`, `en`, …), and choose an audio retention window. `0 days` (the default) deletes every audio object the moment its transcript is stored.
+
+### Mint a `voice:write` key
+
+Console → **Settings** → **API keys** → new key with the **`voice:write`** scope only. This is the key that lives on your phone. It can call the voice routes and nothing else — not reports, not MCP, not admin.
+
+### Make sure Autofix is on
+
+Draft PRs need **Settings → Fixes → Autofix** enabled and a connected GitHub repo. Filing reports works without it.
+</Steps>
+
+<Callout type="info">
+  Transcription and intent classification run on the project's OpenAI / Anthropic keys (BYOK or the hosted wallet). Speech-to-text costs about **$0.0045 per audio minute** (`gpt-transcribe`); the intent call is a few hundred tokens on a small model.
+</Callout>
+
+## iOS Shortcut
+
+Two Shortcuts: one to speak, one to confirm.
+
+<Tabs items={['Mushi voice', 'Mushi confirm']}>
+  <Tabs.Tab>
+    1. **Dictate Text** — language: your choice, *Stop listening: After pause*.
+    2. **Get Contents of URL**
+       - URL: `https://<ref>.supabase.co/functions/v1/api/v1/intake/voice`
+       - Method: `POST` · Request body: **JSON**
+       - Headers: `X-Mushi-Api-Key: mushi_…` (the `voice:write` key), `Idempotency-Key: <UUID>` (Shortcuts: *Get UUID* action)
+       - Body: `source` = `ios_shortcut`, `transcript` = *Dictated Text*
+    3. **Get Dictionary Value** — key `session.message`
+    4. **Show Result** — Siri reads the message aloud. (*Speak Text* is unreliable inside Siri-invoked runs; *Show Result* is what gets spoken.)
+
+    For a change request the message reads back the verbatim transcript and ends with *"Reply confirm to proceed"*. Save `session.id` and `session.confirm_token` from the same response (two more *Get Dictionary Value* actions into a note or a variable) for the second Shortcut.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    1. **Get Contents of URL**
+       - URL: `https://<ref>.supabase.co/functions/v1/api/v1/intake/voice/<session id>/confirm`
+       - Method: `POST` · Body: JSON with `token` = the saved `confirm_token`
+       - Header: `X-Mushi-Api-Key: mushi_…`
+    2. **Show Result** — `session.message` says *"Draft PR requested"*; the PR link arrives as a push notification or in the console's Voice activity card once the agent opens it.
+
+    A single Shortcut with an *If Dictated Text contains "確認"* branch works too.
+  </Tabs.Tab>
+</Tabs>
+
+The raw request, for reference:
+
+```bash
+curl -X POST "https://<ref>.supabase.co/functions/v1/api/v1/intake/voice" \
+  -H "X-Mushi-Api-Key: mushi_xxx" \
+  -H "Idempotency-Key: 4d2a…" \
+  -H "Content-Type: application/json" \
+  -d '{"source":"ios_shortcut","transcript":"the login button does nothing on Safari"}'
+```
+
+```json
+{
+  "ok": true,
+  "session": {
+    "id": "…",
+    "status": "created",
+    "transcript": "the login button does nothing on Safari",
+    "action": "create_report",
+    "summary": "Login button unresponsive on Safari",
+    "report_id": "…",
+    "message": "Filed report: Login button unresponsive on Safari\n\nFrom: \"the login button does nothing on Safari\""
+  }
+}
+```
+
+A change request comes back as `status: "awaiting_confirm"` with a `confirm_token`; `POST /v1/intake/voice/:id/confirm` with `{ "token": "…" }` dispatches, `…/cancel` discards. Tokens are single-use and expire after 10 minutes.
+
+## Telegram (the Android inbox)
+
+<Steps>
+### Create a bot
+
+Message [@BotFather](https://t.me/BotFather) → `/newbot` → copy the token.
+
+### Connect it
+
+Console → **Settings** → **Voice intake** → paste the bot token. It is stored in Vault, never in plain text. The console registers the webhook for you.
+
+### Bind your chat
+
+Console → **Generate bind code** (valid 10 minutes, single use). Open your bot in Telegram and send `/start <code>`. The bot greets you with the project name.
+
+### Talk
+
+Hold the microphone, describe the bug or the change, release. The bot replies with the transcript. Change requests get **Confirm** / **Cancel** buttons; tap Confirm and the draft PR link is posted back into the same chat when the agent opens it.
+</Steps>
+
+Plain text messages work the same way. Voice notes are capped at 120 seconds and 20 MB.
+
+## Slack
+
+Two ways in, both need the Mushi Slack app installed with `files:read`, `commands` and `chat:write`:
+
+- **Slash command**: `/mushi voice fix the footer alignment on checkout` — the reply is ephemeral and the confirmation uses the same buttons as fix dispatch.
+- **Audio clip**: record a Slack audio clip (or share an audio file) in a channel the app is in. Mushi downloads the clip with the bot token, transcribes it, and replies in a thread. Slack's own transcript is ignored.
+
+## Installed console (PWA)
+
+Install the console to your Home Screen (Chrome on Android: *Install app*; Safari on iOS: *Add to Home Screen*). The **Voice** page has a tap-to-talk button (max 120 s) and, on Android, the console appears in the share sheet for audio files — Google Recorder's `.m4a` works. The recording is uploaded through a short-lived signed URL into the private `voice-intake` bucket and deleted after transcription. Confirmation is a button on the page; the PR link arrives as a web push notification when you granted permission.
+
+## What voice intake refuses
+
+Voice text is untrusted **and** lossy — "delete" and "deploy" sound alike, 削除 and 消去 do too. A transcript that mentions any of these is refused outright, before any model sees it, and the verbatim transcript is echoed back so you can see what was heard:
+
+| English | Japanese |
+| --- | --- |
+| merge, deploy, delete, drop, force push, production / prod, rollback, revert, secret, token, rotate | マージ, デプロイ, 削除, 消去, 本番, 強制, ロールバック, リバート, シークレット, トークン |
+
+Everything else that gets through is still constrained:
+
+- Agents open **draft PRs on a new branch only**. Merging stays a human action in the console.
+- The intent is extracted into a strict schema (`create_report`, `open_draft_pr`, `unknown`); the transcript is passed as delimited untrusted data and is never free-texted into an agent prompt.
+- Invisible Unicode (zero-width characters, tag characters, bidi controls) and HTML comments are stripped before classification.
+- A change request needs an explicit confirmation of the **verbatim transcript**: a single-use HMAC token bound to the session, transcript hash, action and expiry.
+- Reporter (end-user) tokens cannot use the voice routes at all.
+
+## Privacy and retention
+
+- Audio is deleted from the bucket as soon as the transcript is stored unless you set a retention window (0–365 days). The daily retention sweep enforces the window.
+- Transcripts pass through the PII scrubber (emails, phone numbers, IPs, secret-shaped tokens) **before** they are written to the report.
+- The report keeps the sanitised transcript, the detected language and the sha256 of the audio bytes as an audit trail; it never keeps the audio itself unless retention is on.
+- Speech-to-text is a vendor hop to OpenAI on the project's key. Mention it in your privacy policy if your users can reach a voice inbox.
+- Per-project caps: 30 voice requests per minute, 120 audio minutes per day, plus the normal ingest burst limit.
+
+## API reference
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/v1/intake/voice` | `voice:write` key or admin JWT | Body: exactly one of `transcript`, `audio_path`, `audio_base64` (+ `mime`, ≤ 8 MB decoded). Optional `source`, `external_id`, `languages`, `duration_sec`. Honours `Idempotency-Key`. |
+| `POST` | `/v1/intake/voice/upload-url` | same | `{ mime }` → signed upload URL + `path` for the bucket. `400 UNSUPPORTED_STORAGE_PROVIDER` on BYO S3/R2/GCS projects — send `audio_base64` instead. |
+| `POST` | `/v1/intake/voice/:id/confirm` | same | `{ token }` → dispatches the fix. `403 INVALID_CONFIRM_TOKEN`, `410 EXPIRED`, `409 CONFLICT` once used. |
+| `POST` | `/v1/intake/voice/:id/cancel` | same | `{ token }` → cancels a pending request. |
+| `GET` | `/v1/intake/voice/sessions?limit=20` | admin JWT or `mcp:read` | Recent sessions with status, action, report and PR link. |
+| `GET` | `/v1/intake/voice/:id` | same | One session. |
+
+`403 VOICE_INTAKE_DISABLED` means the project has not enabled the feature. See the [error catalog](/concepts/error-catalog) for the rest.

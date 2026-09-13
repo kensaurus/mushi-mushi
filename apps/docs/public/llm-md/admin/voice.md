@@ -1,0 +1,131 @@
+# Voice intake
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/voice
+
+---
+title: Voice intake
+---
+
+# Voice intake
+
+**Route:** `/voice`
+
+> **Scenario:** You are away from your desk and something is broken. You say what
+> is wrong, read back the transcript the console shows you, tap Confirm, and a
+> draft pull request lands while you are still holding your phone.
+
+Voice intake turns a spoken note into a report, and optionally into a dispatched
+draft-PR fix. Everything passes through one gate: **you always see the verbatim
+transcript before anything is dispatched.**
+
+---
+
+## Turning it on
+
+Voice intake is off until you enable it. Go to **Settings → Voice intake** and
+turn on the toggle. In the same tab you set:
+
+| Setting | What it does |
+|---|---|
+| **Audio retention** | Days to keep the clip. `0` deletes it the moment the transcript exists. |
+| **Languages** | Hints passed to the transcriber. Leave them all off to let it detect. |
+| **Telegram bot token** | Optional. Enables the Telegram inbox described below. |
+| **GitHub user token** | Optional. Needed only for GitHub-hosted cloud agent tasks. |
+
+Transcription uses your OpenAI key from **Settings → API keys**. Without one,
+audio intake fails with a message telling you so; typed intake still works.
+
+---
+
+## The four ways in
+
+| Path | Where it works |
+|---|---|
+| **Tap to talk** | The `/voice` page in any browser, best installed to the Home Screen. |
+| **Upload a clip** | Anywhere. Accepts ogg, m4a, mp3, webm and wav up to 25 MB. |
+| **Type it instead** | Anywhere. Skips transcription entirely. |
+| **Share a voice memo** | Android Chrome only, once the console is installed. Share the memo to Mushi. |
+
+  Install the console to your Home Screen to get the share target, offline shell
+  and push notifications. On iOS, notifications only work after installing —
+  that is an Apple restriction, and the page says so where it matters.
+
+---
+
+## The confirmation gate
+
+Nothing dispatches on your voice alone. After transcription you see the exact
+words that were heard, what Mushi intends to do, and a one-line summary. Then
+you choose Confirm or Cancel.
+
+The confirm token is bound to the session, the transcript hash, the intended
+action and the expiry. It is single-use and valid for ten minutes. Change any
+of those and the token stops verifying, so a replayed or forwarded link cannot
+dispatch anything.
+
+Some phrases are refused outright and never reach a model, in English and
+Japanese: merge, deploy, delete, drop, force-push, production, rollback,
+revert, and anything about secrets or tokens. Voice is a good way to describe a
+bug. It is not a way to touch production.
+
+  The transcript is untrusted input. It is wrapped in explicit delimiters before
+  any model sees it, and personally identifying strings are scrubbed before the
+  text is stored. Read what is on screen before you confirm — that is the whole
+  point of the gate.
+
+---
+
+## Getting the answer back
+
+When the draft pull request opens, or a confirmation is needed, or a fix fails,
+Mushi tells you on whichever surface you used:
+
+- **Push to this phone** — tap *Notify this device* on the voice page. Uses Web
+  Push, so it reaches you with the console closed.
+- **Slack** — the transcript card carries Confirm and Cancel buttons.
+- **Telegram** — same two buttons, as an inline keyboard.
+
+---
+
+## Telegram
+
+Telegram is the practical Android inbox: a voice memo sent to a bot arrives as a
+file the server can fetch.
+
+1. Create a bot with `@BotFather` and paste its token into **Settings → Voice intake**.
+2. Press **Generate bind code** and send `/start ` to your bot within ten minutes.
+3. Press **Connect webhook**.
+
+The binding is per chat and per project, and you can remove any chat from the
+same panel.
+
+---
+
+## Recent voice requests
+
+The list below the recorder shows every session with its status, and links
+through to the report or the pull request once they exist. It updates live.
+
+| Status | Meaning |
+|---|---|
+| `created` | A report was filed; no fix was requested. |
+| `awaiting_confirm` | Waiting for you. Expires ten minutes after the transcript. |
+| `confirmed` | You approved it; the agent has been dispatched. |
+| `cancelled` | You declined, or the window closed. Nothing was dispatched. |
+| `failed` | Transcription, a cap, or a refusal stopped it. The reason is shown. |
+
+---
+
+## Limits
+
+Voice intake is capped per project so a stuck client cannot spend your
+transcription budget: 30 intakes per minute, a daily ceiling on transcribed
+audio minutes, 25 MB per clip, and a maximum clip length. Transcribed minutes
+and their cost are recorded per session so you can see what voice actually
+costs you.
+
+## Self-hosting
+
+Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` as edge secrets
+before push will work; the page reports push as unavailable until you do. See
+[Edge functions](/self-hosting/edge-functions) for the deploy list.

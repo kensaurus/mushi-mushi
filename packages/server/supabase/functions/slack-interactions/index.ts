@@ -6,9 +6,14 @@
  * `_shared/slack.ts > buildReportBlocks`) and fires the `fix-worker` the
  * same way the admin UI does.
  *
+ * Handled `block_actions` action ids: pause_story, improve_story,
+ * resolve_report, dismiss_report, dispatch_fix, and the voice-intake pair
+ * voice_confirm / voice_cancel (cards posted by `api/routes/slack-events.ts`).
+ *
  * Security:
  *   - HMAC-SHA256 signature check per Slack's `v0` signed-request spec
- *     (https://api.slack.com/authentication/verifying-requests-from-slack).
+ *     (https://api.slack.com/authentication/verifying-requests-from-slack),
+ *     shared with the Events/commands routes via `_shared/slack-verify.ts`.
  *     Timestamp must be within 5 minutes to defeat replay.
  *   - We resolve the project via the clicked `value` (report_id) and
  *     its owning project, then the shared `dispatchFixForReport` helper
@@ -36,14 +41,13 @@ import { withSentry, reportMessage } from '../_shared/sentry.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { getServiceClient } from '../_shared/db.ts'
 import { dispatchFixForReport } from '../_shared/dispatch.ts'
-import { sendBotMessage, updateReportMessage } from '../_shared/slack.ts'
+import { sendBotMessage, updateReportMessage, buildReportDeepLink } from '../_shared/slack.ts'
 import { applyReportStatusTransition } from '../_shared/report-transition.ts'
 import { createWebhookMiddleware, ReplayAttackError, RateLimitError } from '../_shared/webhook-middleware.ts'
+import { verifySlackSignature } from '../_shared/slack-verify.ts'
+import { confirmVoice, cancelVoice } from '../_shared/voice-intake.ts'
 
 const log = rootLog.child('slack-interactions')
-
-const SIGNATURE_VERSION = 'v0'
-const MAX_TIMESTAMP_DRIFT_S = 60 * 5
 
 /**
  * Minimal shim so the Hono-shaped `createWebhookMiddleware().audit()` can
@@ -229,6 +233,36 @@ Deno.serve(
         actionKind === 'resolve_report'
           ? ':hourglass_flowing_sand: Resolving…'
           : ':hourglass_flowing_sand: Dismissing…',
+      )
+    }
+
+    // ── Voice intake: voice_confirm / voice_cancel ───────────────────────────
+    // Buttons posted by `api/routes/slack-events.ts` under an awaiting_confirm
+    // transcript card. `value` is `${sessionId}:${confirmToken}`; the token
+    // is single-use and HMAC-bound server-side, so a replayed click is a
+    // no-op. Slack user id is recorded as the actor for the audit trail —
+    // same trust posture as dispatch_fix (signature already verified).
+    if (actionKind === 'voice_confirm' || actionKind === 'voice_cancel') {
+      const parsed = parseVoiceActionValue(action.value ?? actionValue)
+      if (!parsed) {
+        await auditRow.resolve('accepted', 200, Date.now() - t0, 'Malformed voice action value')
+        return ephemeral('That confirmation link is malformed.')
+      }
+      const bgWork = finishVoiceDecision({
+        db,
+        decision: actionKind === 'voice_confirm' ? 'confirm' : 'cancel',
+        sessionId: parsed.sessionId,
+        token: parsed.token,
+        slackUser,
+        responseUrl,
+        originalMessage: payload.message,
+      }).catch((err) => log.error(`${actionKind} failed`, { err: String(err) }))
+      waitUntil(bgWork)
+      await auditRow.resolve('accepted', 200, Date.now() - t0)
+      return ephemeral(
+        actionKind === 'voice_confirm'
+          ? ':hourglass_flowing_sand: Confirming…'
+          : ':hourglass_flowing_sand: Cancelling…',
       )
     }
 
@@ -526,38 +560,67 @@ function ephemeral(text: string): Response {
   })
 }
 
-async function verifySlackSignature(input: {
-  signingSecret: string
-  timestamp: string
-  rawBody: string
-  signature: string
-}): Promise<boolean> {
-  const ts = Number(input.timestamp)
-  if (!Number.isFinite(ts)) return false
-  const now = Math.floor(Date.now() / 1000)
-  if (Math.abs(now - ts) > MAX_TIMESTAMP_DRIFT_S) return false
-
-  const base = `${SIGNATURE_VERSION}:${input.timestamp}:${input.rawBody}`
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(input.signingSecret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  )
-  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(base))
-  const expected = `${SIGNATURE_VERSION}=${Array.from(new Uint8Array(mac))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')}`
-
-  return constantTimeEqual(expected, input.signature)
+/** `${sessionId}:${confirmToken}` — session ids are UUIDs, tokens are opaque. */
+function parseVoiceActionValue(value: string | undefined): { sessionId: string; token: string } | null {
+  if (!value) return null
+  const idx = value.indexOf(':')
+  if (idx <= 0 || idx === value.length - 1) return null
+  return { sessionId: value.slice(0, idx), token: value.slice(idx + 1) }
 }
 
-function constantTimeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
-  let diff = 0
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+/** Swap the voice card's button row for an outcome line so a confirmed or
+ *  cancelled transcript never keeps offering Confirm/Cancel. */
+function voiceBlocksWithOutcome(blocks: unknown[], outcomeText: string): unknown[] {
+  const out: unknown[] = []
+  let swapped = false
+  for (const block of blocks) {
+    const b = block as { type?: string; block_id?: string }
+    if (!swapped && b.type === 'actions' && String(b.block_id ?? '').startsWith('mushi_voice_')) {
+      out.push({ type: 'context', elements: [{ type: 'mrkdwn', text: outcomeText }] })
+      swapped = true
+      continue
+    }
+    out.push(block)
   }
-  return diff === 0
+  return swapped ? out : [...blocks, { type: 'context', elements: [{ type: 'mrkdwn', text: outcomeText }] }]
+}
+
+async function finishVoiceDecision(input: {
+  db: SupabaseClient
+  decision: 'confirm' | 'cancel'
+  sessionId: string
+  token: string
+  slackUser: string
+  responseUrl?: string
+  originalMessage?: { ts?: string; blocks?: unknown[] }
+}): Promise<void> {
+  const actor = `slack:${input.slackUser}`
+  let outcomeText: string
+  if (input.decision === 'confirm') {
+    const result = await confirmVoice(input.db, { sessionId: input.sessionId, token: input.token, actor })
+    outcomeText = result.ok
+      ? `:white_check_mark: *Confirmed* by <@${input.slackUser}> — ${result.message}` +
+        (result.reportId ? voiceReportLinkSuffix(result.reportId) : '')
+      : `:x: Could not confirm — ${result.message}`
+  } else {
+    const result = await cancelVoice(input.db, { sessionId: input.sessionId, token: input.token, actor })
+    outcomeText = result.ok
+      ? `:wastebasket: *Cancelled* by <@${input.slackUser}> — ${result.message}`
+      : `:x: Could not cancel — ${result.message}`
+  }
+
+  if (!input.responseUrl) return
+  const blocks = input.originalMessage?.blocks?.length
+    ? voiceBlocksWithOutcome(input.originalMessage.blocks, outcomeText)
+    : [{ type: 'section', text: { type: 'mrkdwn', text: outcomeText } }]
+  await fetch(input.responseUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ replace_original: true, text: outcomeText, blocks }),
+  }).catch((err) => log.error('response_url POST failed', { err: String(err) }))
+}
+
+function voiceReportLinkSuffix(reportId: string): string {
+  const link = buildReportDeepLink(reportId)
+  return link ? ` · <${link}|open report>` : ` · report \`${reportId.slice(0, 8)}\``
 }

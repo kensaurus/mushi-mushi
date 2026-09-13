@@ -49,6 +49,31 @@ export interface MushiConfig {
    */
   appVersion?: string;
   /**
+   * Same-origin (or absolute) ingest proxy. When set, every SDK HTTP call
+   * goes here instead of `apiEndpoint` so ad blockers that drop third-party
+   * `*.supabase.co/functions` hosts cannot silently eat reports.
+   * Relative URLs resolve against the page origin — that is the recommended
+   * form (no CORS preflight; matches Sentry `tunnel`).
+   *
+   * @example
+   * tunnel: '/api/mushi-tunnel'
+   */
+  tunnel?: string;
+  /**
+   * Drop automatic error reports whose message matches any string (substring)
+   * or RegExp. Never applied to user-submitted widget feedback.
+   */
+  ignoreErrors?: Array<string | RegExp>;
+  /**
+   * Drop automatic error reports whose script URL / stack filename matches.
+   */
+  denyUrls?: Array<string | RegExp>;
+  /**
+   * When set, drop automatic error reports unless the script URL matches
+   * at least one entry.
+   */
+  allowUrls?: Array<string | RegExp>;
+  /**
    * Probabilistic sampling rate for session-replay recording (rrweb/lite).
    * Range 0–1, default 1 (record all sessions). The sampling decision is made
    * once at session init — a sampled-out session never loads the rrweb chunk,
@@ -61,6 +86,13 @@ export interface MushiConfig {
    * replaySampleRate: 0.2  // record replay for ~20% of sessions
    */
   replaySampleRate?: number;
+  /**
+   * When session replay was sampled out, still start the rolling buffer for
+   * this fraction of sessions (0–1, default 0) so an error/feedback report
+   * can attach replay. Keep at 0 unless you have accepted the CPU/egress
+   * cost — do not set to 1 with `capture.replay: 'rrweb'`.
+   */
+  replaysOnErrorSampleRate?: number;
   /**
    * Probabilistic sampling rate for automatic (non-user-initiated) error
    * reports. Range 0–1, default 1 (send all). User-initiated feedback reports

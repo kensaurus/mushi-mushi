@@ -100,13 +100,16 @@ const handler = async (req: Request): Promise<Response> => {
     const stats = await runSweep(db)
     const totalDeleted = stats.reduce((sum, s) => sum + s.deleted_count, 0)
     const skippedLegalHold = stats.filter((s) => s.legal_hold).length
+    const voice = await sweepVoiceIntake(db)
 
     await cron.finish({
-      rowsAffected: totalDeleted,
+      rowsAffected: totalDeleted + voice.audio_deleted + voice.sessions_expired,
       metadata: {
         projects_swept: stats.length,
         total_deleted: totalDeleted,
         skipped_legal_hold: skippedLegalHold,
+        voice_audio_deleted: voice.audio_deleted,
+        voice_sessions_expired: voice.sessions_expired,
       },
     })
 
@@ -117,6 +120,7 @@ const handler = async (req: Request): Promise<Response> => {
         total_deleted: totalDeleted,
         skipped_legal_hold: skippedLegalHold,
         per_project: stats,
+        voice,
       },
     })
   } catch (err) {
@@ -352,6 +356,119 @@ export async function deleteOldReportsBatch(
   if (deleteErr) return { deleted: 0, error: deleteErr.message }
 
   return { deleted: deletedRows?.length ?? ids.length, error: null }
+}
+
+// ── Voice intake (plan C6) ─────────────────────────────────────────────────
+//
+// Two jobs the report sweep above does not cover:
+//   1. Audio objects in the `voice-intake` bucket. Projects with
+//      voice_audio_retention_days = 0 never keep audio past transcription, so
+//      any object still referenced is a crash leftover — reap it after a day.
+//      Projects with a positive window keep objects that many days.
+//   2. `awaiting_confirm` sessions whose 10-minute confirm window passed
+//      without a confirm/cancel → `expired`, so the console and the return
+//      path stop treating them as live.
+
+export const VOICE_INTAKE_BUCKET = 'voice-intake'
+const VOICE_AUDIO_BATCH = 200
+
+interface VoiceSweepStats {
+  audio_deleted: number
+  sessions_expired: number
+  projects_with_audio: number
+}
+
+interface VoiceSettingsRow {
+  project_id: string
+  voice_audio_retention_days: number | null
+}
+
+interface VoiceAudioRow {
+  id: string
+  audio_path: string
+  report_id: string | null
+}
+
+export async function sweepVoiceIntake(db: ReturnType<typeof getServiceClient>): Promise<VoiceSweepStats> {
+  const stats: VoiceSweepStats = { audio_deleted: 0, sessions_expired: 0, projects_with_audio: 0 }
+  const nowIso = new Date().toISOString()
+
+  // 1. Expire stale confirmation gates.
+  const { data: expired, error: expireErr } = await db
+    .from('voice_intake_sessions')
+    .update({ status: 'expired', confirm_token_hash: null })
+    .eq('status', 'awaiting_confirm')
+    .lt('expires_at', nowIso)
+    .select('id')
+    .returns<Array<{ id: string }>>()
+  if (expireErr) {
+    // Migration window (table not yet created) or transient — log, keep sweeping.
+    rlog.warn('voice_sessions_expire_failed', { err: expireErr.message })
+  } else {
+    stats.sessions_expired = expired?.length ?? 0
+  }
+
+  // 2. Retained audio past each project's window.
+  const { data: settings, error: settingsErr } = await db
+    .from('project_settings')
+    .select('project_id, voice_audio_retention_days')
+    .returns<VoiceSettingsRow[]>()
+  if (settingsErr) {
+    rlog.warn('voice_settings_list_failed', { err: settingsErr.message })
+    return stats
+  }
+
+  for (const row of settings ?? []) {
+    const days = Math.max(0, Number(row.voice_audio_retention_days ?? 0))
+    // 0 = delete-after-transcription; anything still referenced after a day is a leftover.
+    const windowDays = days > 0 ? days : 1
+    const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString()
+
+    const { data: candidates, error: candErr } = await db
+      .from('voice_intake_sessions')
+      .select('id, audio_path, report_id')
+      .eq('project_id', row.project_id)
+      .not('audio_path', 'is', null)
+      .lt('created_at', cutoff)
+      .limit(VOICE_AUDIO_BATCH)
+      .returns<VoiceAudioRow[]>()
+    if (candErr) {
+      rlog.warn('voice_audio_candidates_failed', { project_id: row.project_id, err: candErr.message })
+      continue
+    }
+    if (!candidates || candidates.length === 0) continue
+    stats.projects_with_audio += 1
+
+    const paths = candidates.map((c) => c.audio_path).filter(Boolean)
+    const { error: rmErr } = await db.storage.from(VOICE_INTAKE_BUCKET).remove(paths)
+    if (rmErr) {
+      rlog.warn('voice_audio_remove_failed', { project_id: row.project_id, count: paths.length, err: rmErr.message })
+      continue
+    }
+
+    const ids = candidates.map((c) => c.id)
+    const { error: clearErr } = await db
+      .from('voice_intake_sessions')
+      .update({ audio_path: null })
+      .in('id', ids)
+    if (clearErr) rlog.warn('voice_audio_clear_failed', { project_id: row.project_id, err: clearErr.message })
+
+    const reportIds = candidates.map((c) => c.report_id).filter((r): r is string => typeof r === 'string')
+    if (reportIds.length > 0) {
+      const { error: repErr } = await db
+        .from('reports')
+        .update({ voice_audio_path: null })
+        .in('id', reportIds)
+      if (repErr) rlog.warn('voice_audio_report_clear_failed', { project_id: row.project_id, err: repErr.message })
+    }
+
+    stats.audio_deleted += paths.length
+  }
+
+  if (stats.audio_deleted > 0 || stats.sessions_expired > 0) {
+    rlog.info('voice_intake_swept', { ...stats })
+  }
+  return stats
 }
 
 if (typeof Deno !== 'undefined') {

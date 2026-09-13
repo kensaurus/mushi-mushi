@@ -28,6 +28,7 @@ import { getBlastRadius } from '../../_shared/knowledge-graph.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins, dispatchPluginEvent } from '../../_shared/plugins.ts';
+import { cancelCloudAgentAttempt, validateAgentOverride } from '../../_shared/agent-adapters.ts';
 import { getAvailableTags } from '../../_shared/ontology.ts';
 import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
@@ -68,8 +69,9 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
         // by classify-report (e.g. a freshly ingested inventory).
         inventoryActionNodeId?: string;
         // Agent override: allow callers to specify which agent to use
-        // (e.g. 'claude_code', 'codex'). Validated against the allowed
-        // set; unknown values are treated as 'auto'.
+        // (e.g. 'claude_code', 'cursor_cloud', 'github_cloud_agent').
+        // Validated against ALLOWED_AGENT_OVERRIDES; unknown values are a
+        // 400 UNSUPPORTED_AGENT, 'auto' means the project default.
         agentOverride?: string;
       };
       if (!body.reportId || !body.projectId) {
@@ -163,33 +165,28 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
         );
       }
 
-      // Validate the agent override to a known set; unknown values are
-      // coerced to null so the worker falls back to the project-level
-      // default. Accept BOTH body keys: the MCP servers send `agent`, the
-      // console sends `agentOverride` — reading only the latter silently
-      // dropped every MCP agent selection (2026-08-16 audit P1-1). The set
-      // is the union of runnable ('claude_code', 'rest_worker'/'rest_fix_
-      // worker', 'llm') and orchestrator-only values ('codex', 'mcp') —
-      // fix-worker normalizes/rejects with an actionable skip reason and
-      // now stamps the report, so an unsupported choice is visible instead
-      // of silently swapped.
-      const ALLOWED_AGENTS = [
-        'claude_code',
-        'codex',
-        'auto',
-        'rest_worker',
-        'rest_fix_worker',
-        'llm',
-        'mcp',
-      ] as const;
+      // Validate the agent override against the shared allow-list
+      // (_shared/agent-adapters.ts ALLOWED_AGENT_OVERRIDES). Accept BOTH body
+      // keys: the MCP servers send `agent`, the console sends `agentOverride`
+      // — reading only the latter silently dropped every MCP agent selection
+      // (2026-08-16 audit P1-1). Unknown values are now a 400
+      // UNSUPPORTED_AGENT instead of a silent null: the old coercion
+      // downgraded `mushi fix --agent cursor_cloud` to the project default
+      // without a word (2026-09-12 audit row 34). 'auto' still means "project
+      // default"; runnable cloud agents (cursor_cloud, github_cloud_agent)
+      // are dispatched by fix-worker through _shared/agent-adapters.ts.
       const rawAgent =
         (typeof body.agentOverride === 'string' && body.agentOverride) ||
         (typeof body.agent === 'string' && body.agent) ||
         null;
-      const agentOverride =
-        rawAgent && ALLOWED_AGENTS.includes(rawAgent as (typeof ALLOWED_AGENTS)[number])
-          ? rawAgent
-          : null;
+      const agentValidation = validateAgentOverride(rawAgent);
+      if (!agentValidation.ok) {
+        return c.json(
+          { ok: false, error: { code: agentValidation.code, message: agentValidation.message } },
+          400,
+        );
+      }
+      const agentOverride = agentValidation.agent;
 
       const { data: job, error: insertErr } = await db
         .from('fix_dispatch_jobs')
@@ -302,7 +299,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
 
     const { data: job } = await db
       .from('fix_dispatch_jobs')
-      .select('id, project_id, status, fix_attempt_id')
+      .select('id, project_id, status, fix_attempt_id, dispatch_metadata')
       .eq('id', dispatchId)
       .single();
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
@@ -361,6 +358,25 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
           },
         },
         409,
+      );
+    }
+
+    // Cloud agents (cursor_cloud / github_cloud_agent): the job row above is
+    // what stops the poller from re-opening it, but the vendor run keeps
+    // going unless we say otherwise. Best-effort vendor cancel + close the
+    // attempt (no team notification — the operator asked for this).
+    const cloudAgent = (
+      (job as { dispatch_metadata?: Record<string, unknown> | null }).dispatch_metadata?.cloud_agent ?? null
+    ) as { kind?: string; externalAgentId?: string; externalRunId?: string | null } | null;
+    if (cloudAgent?.kind && updated.fix_attempt_id) {
+      void cancelCloudAgentAttempt(db, {
+        attemptId: updated.fix_attempt_id as string,
+        projectId: job.project_id,
+        kind: cloudAgent.kind,
+        externalAgentId: cloudAgent.externalAgentId ?? null,
+        externalRunId: cloudAgent.externalRunId ?? null,
+      }).catch((err) =>
+        log.warn('cloud agent cancel failed (non-fatal)', { dispatchId, err: String(err) }),
       );
     }
 

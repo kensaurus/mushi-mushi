@@ -43,6 +43,24 @@ describe('resolveProjectFaviconDomains', () => {
     ).toEqual(['solo-boss.kensaur.us']);
   });
 
+  it('resolves How to Talk to Girls and Tsumagoi from slug hints', () => {
+    expect(
+      resolveProjectFaviconDomains({
+        project_id: 'httg',
+        project_name: 'How to Talk to Girls',
+        project_slug: 'how-to-talk-to-girls',
+        sdk_origin: 'https://kensaur.us/',
+      }),
+    ).toEqual(['talk.kensaur.us']);
+    expect(
+      resolveProjectFaviconDomains({
+        project_id: 'tsu',
+        project_name: 'Tsumagoi',
+        project_slug: 'tsumagoi',
+      }),
+    ).toEqual(['tsumagoi.kensaur.us']);
+  });
+
   it('skips kensaur.us for yen-yen native app — no domain, initials fallback', () => {
     expect(
       resolveProjectFaviconDomains({
@@ -109,6 +127,16 @@ describe('projectFaviconUrlCandidates', () => {
       project_slug: 'glot-it',
     });
     expect(urls[0]).toBe('https://kensaur.us/glot-it/apple-touch-icon.png');
+  });
+
+  it('uses slug icon for the-wanting-mind on the shared parent host', () => {
+    const urls = projectFaviconUrlCandidates({
+      project_id: 'twm',
+      project_name: 'The Wanting Mind',
+      project_slug: 'the-wanting-mind',
+      sdk_origin: 'https://kensaur.us/the-wanting-mind/',
+    });
+    expect(urls[0]).toBe('https://kensaur.us/the-wanting-mind/pwa-512x512.png');
   });
 });
 
