@@ -8,6 +8,12 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ## Unreleased *(pending release)*
 
+### Highlights
+
+- **`tunnel`** — post reports to a same-origin path (`tunnel: '/api/mushi-tunnel'`) instead of the API host, so no CORS preflight is needed and ad-blockers that match on third-party hosts do not drop the request. Mirrors Sentry's option of the same name.
+- **`ignoreErrors` / `denyUrls` / `allowUrls`** — drop errors by message pattern or by the URL of the frame that raised them, before anything leaves the page.
+- **`sendOnUnload`** — flush a queued report from a `pagehide` handler, where a normal `fetch` is cancelled as the document goes away.
+
 ## v1.27.x
 
 Latest tag: `v1.27.2`

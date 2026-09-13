@@ -121,6 +121,25 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Check dependency overrides are bounded
+        # A pnpm override that patches an advisory must raise the floor, not
+        # lift the ceiling. `">=3.15.2"` is also satisfied by 4.x, which is how
+        # read-yaml-file@1.1.0 lost js-yaml's safeLoad and broke the Release
+        # workflow after #380 had already merged and deployed.
+        run: pnpm check:dependency-overrides
+
+      - name: Check the release version step
+        # Runs `changeset version` and restores the tree. That command lives
+        # only in release.yml, so before this step a PR could pass every gate,
+        # merge, deploy to seven channels, and only then fail to publish.
+        #
+        # Must run BEFORE `pnpm build`: the docs build rewrites the tracked
+        # apps/docs/public/llms-full.txt (nextra embeds git modified-times and
+        # CI checks out shallow), which leaves the tree dirty. The same dirty
+        # file already broke the changesets action's own `git checkout` during
+        # the failed release of #380.
+        run: pnpm check:release-version
+
       - name: Audit dependencies for known vulnerabilities
         # Supply-chain gate (P2): fails if any installed package has a
         # High or Critical advisory. Moderate/Low advisories surface as

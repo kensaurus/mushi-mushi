@@ -50,6 +50,8 @@
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
     "check:catalog-count": "node scripts/check-catalog-count.mjs",
     "check:server-json": "node scripts/sync-server-json-version.mjs --check",
+    "check:dependency-overrides": "node scripts/check-dependency-overrides.mjs",
+    "check:release-version": "node scripts/check-release-version.mjs",
     "check:design-tokens": "node scripts/check-design-tokens.mjs",
     "check:gradient-utilities": "node scripts/check-gradient-utilities.mjs",
     "check:token-parity": "node scripts/check-token-parity.mjs",
@@ -159,14 +161,14 @@
   },
   "pnpm": {
     "overrides": {
-      "browserslist": ">=4.28.7",
-      "fast-uri": ">=4.1.3",
-      "@xmldom/xmldom": ">=0.9.12",
-      "sharp": ">=0.35.4",
-      "js-yaml@3": ">=3.15.2",
+      "browserslist": ">=4.28.7 <5",
+      "fast-uri": ">=4.1.3 <5",
+      "@xmldom/xmldom": ">=0.9.12 <0.10",
+      "sharp": ">=0.35.4 <0.36",
+      "js-yaml@3": ">=3.15.2 <4",
       "postcss": "^8.5.18",
-      "read-yaml-file>js-yaml": "^4.3.2",
-      "@connectrpc/connect-node>undici": "^6.27.0"
+      "@connectrpc/connect-node>undici": "^6.27.0",
+      "js-yaml@4": ">=4.3.2 <5"
     }
   }
 }
