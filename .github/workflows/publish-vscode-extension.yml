@@ -38,6 +38,14 @@ jobs:
     name: Package and publish
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # The `secrets` context is NOT valid inside a step-level `if:` — GitHub
+    # rejects the whole file at parse time and the run reports zero jobs under
+    # the file's path instead of its name. Resolve each secret to a boolean
+    # here, where `secrets` IS allowed, and test `env.*` in the conditions.
+    env:
+      HAS_VSCE: ${{ secrets.VSCE_PAT != '' }}
+      HAS_OVSX: ${{ secrets.OVSX_PAT != '' }}
+      DRY_RUN: ${{ github.event.inputs.dry_run == 'true' }}
     steps:
       - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
         with:
@@ -55,9 +63,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Report what will happen
-        env:
-          HAS_VSCE: ${{ secrets.VSCE_PAT != '' }}
-          HAS_OVSX: ${{ secrets.OVSX_PAT != '' }}
         run: |
           VERSION=$(node -p "require('./packages/vscode-extension/package.json').version")
           echo "### VS Code extension v$VERSION" >> "$GITHUB_STEP_SUMMARY"
@@ -66,7 +71,7 @@ jobs:
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
           echo "| VS Code Marketplace | $HAS_VSCE |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Open VSX | $HAS_OVSX |" >> "$GITHUB_STEP_SUMMARY"
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
+          if [ "$DRY_RUN" = "true" ]; then
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "_Dry run — packaging only._" >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -83,26 +88,22 @@ jobs:
           if-no-files-found: error
 
       - name: Publish to the VS Code Marketplace
-        if: ${{ !inputs.dry_run && secrets.VSCE_PAT != '' }}
+        if: ${{ env.DRY_RUN != 'true' && env.HAS_VSCE == 'true' }}
         working-directory: packages/vscode-extension
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: pnpm run publish:vsce
 
       - name: Publish to Open VSX
-        if: ${{ !inputs.dry_run && secrets.OVSX_PAT != '' }}
+        if: ${{ env.DRY_RUN != 'true' && env.HAS_OVSX == 'true' }}
         working-directory: packages/vscode-extension
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: pnpm run publish:ovsx
 
       - name: Note any marketplace that was skipped
-        if: ${{ !inputs.dry_run }}
-        # Compare the booleans, never the secret values — interpolating a secret
-        # into a shell script writes it into the process args.
-        env:
-          HAS_VSCE: ${{ secrets.VSCE_PAT != '' }}
-          HAS_OVSX: ${{ secrets.OVSX_PAT != '' }}
+        if: ${{ env.DRY_RUN != 'true' }}
+        # Compares the job-level booleans, never the secret values.
         run: |
           if [ "$HAS_VSCE" != "true" ]; then
             echo "::warning::VSCE_PAT is not set — skipped the VS Code Marketplace. See docs/marketplace/vscode-extension-publishing.md"

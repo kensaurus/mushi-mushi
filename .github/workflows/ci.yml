@@ -128,6 +128,13 @@ jobs:
         # workflow after #380 had already merged and deployed.
         run: pnpm check:dependency-overrides
 
+      - name: Check workflow expressions
+        # The `secrets` context is invalid inside a step-level `if:`. GitHub
+        # rejects the whole file and the run appears with ZERO jobs named after
+        # the file path, with no annotation and no log — publish-vscode-extension.yml
+        # failed exactly this way and gave nothing to read.
+        run: pnpm check:workflow-expressions
+
       - name: Check the release version step
         # Runs `changeset version` and restores the tree. That command lives
         # only in release.yml, so before this step a PR could pass every gate,
