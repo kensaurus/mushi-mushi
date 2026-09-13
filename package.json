@@ -51,6 +51,7 @@
     "check:catalog-count": "node scripts/check-catalog-count.mjs",
     "check:server-json": "node scripts/sync-server-json-version.mjs --check",
     "check:dependency-overrides": "node scripts/check-dependency-overrides.mjs",
+    "check:workflow-expressions": "node scripts/check-workflow-expressions.mjs",
     "check:release-version": "node scripts/check-release-version.mjs",
     "check:design-tokens": "node scripts/check-design-tokens.mjs",
     "check:gradient-utilities": "node scripts/check-gradient-utilities.mjs",
