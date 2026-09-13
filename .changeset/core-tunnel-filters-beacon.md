@@ -4,13 +4,13 @@
 
 Add same-origin `tunnel`, error filtering, and a page-unload beacon transport.
 
-- **`tunnel`** — post reports to a same-origin path (`tunnel: '/api/mushi-tunnel'`)
+- **`tunnel`**: post reports to a same-origin path (`tunnel: '/api/mushi-tunnel'`)
   instead of the API host, so no CORS preflight is needed and ad-blockers that
   match on third-party hosts do not drop the request. Mirrors Sentry's option
   of the same name.
-- **`ignoreErrors` / `denyUrls` / `allowUrls`** — drop errors by message pattern
+- **`ignoreErrors` / `denyUrls` / `allowUrls`**: drop errors by message pattern
   or by the URL of the frame that raised them, before anything leaves the page.
-- **`sendOnUnload`** — flush a queued report from a `pagehide` handler, where a
+- **`sendOnUnload`**: flush a queued report from a `pagehide` handler, where a
   normal `fetch` is cancelled as the document goes away.
 
 These shipped in #380 as part of a larger merge, but the only `@mushi-mushi/core`

@@ -4,7 +4,20 @@
     "headline": "Unreleased",
     "pending": true,
     "versions": [],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "`tunnel`",
+        "description": "post reports to a same-origin path (`tunnel: '/api/mushi-tunnel'`) instead of the API host, so no CORS preflight is needed and ad-blockers that match on third-party hosts do not drop the request. Mirrors Sentry's option of the same name."
+      },
+      {
+        "title": "`ignoreErrors` / `denyUrls` / `allowUrls`",
+        "description": "drop errors by message pattern or by the URL of the frame that raised them, before anything leaves the page."
+      },
+      {
+        "title": "`sendOnUnload`",
+        "description": "flush a queued report from a `pagehide` handler, where a normal `fetch` is cancelled as the document goes away."
+      }
+    ],
     "packages": []
   },
   {
