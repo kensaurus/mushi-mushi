@@ -1,5 +1,43 @@
 # @mushi-mushi/core
 
+## 1.28.0
+
+### Minor Changes
+
+- 73d4c89: Add same-origin `tunnel`, error filtering, and a page-unload beacon transport.
+
+  - **`tunnel`**: post reports to a same-origin path (`tunnel: '/api/mushi-tunnel'`)
+    instead of the API host, so no CORS preflight is needed and ad-blockers that
+    match on third-party hosts do not drop the request. Mirrors Sentry's option
+    of the same name.
+  - **`ignoreErrors` / `denyUrls` / `allowUrls`**: drop errors by message pattern
+    or by the URL of the frame that raised them, before anything leaves the page.
+  - **`sendOnUnload`**: flush a queued report from a `pagehide` handler, where a
+    normal `fetch` is cancelled as the document goes away.
+
+  These shipped in #380 as part of a larger merge, but the only `@mushi-mushi/core`
+  changesets in that release were patches — a new public export surface is a minor.
+  This is the release note they should have had; the code is already on master.
+
+  Related: the `KNOWN_CONFIG_KEYS` fix released alongside this is what makes
+  `tunnel`, `ignoreErrors`, `denyUrls` and `allowUrls` actually take effect rather
+  than being rejected as unknown options.
+
+### Patch Changes
+
+- 4af54f0: Stop rejecting five documented, typed config options as unknown.
+
+  `tunnel`, `ignoreErrors`, `denyUrls`, `allowUrls` and `replaysOnErrorSampleRate`
+  are all declared on `MushiConfig`, but none were listed in `KNOWN_CONFIG_KEYS`.
+  Setting any of them logged `[mushi] Unknown config key: … — check for typos
+(see MushiConfig). Ignored.` and dropped the value, so error filtering and the
+  replay-on-error sample rate silently did nothing for anyone who configured them.
+
+  Same defect class as the `presets.config-keys` guard added in #376 — that test
+  is what caught these once both branches were merged.
+
+- 4af54f0: Resolve favicons for The Wanting Mind, How to Talk to Girls, Tsumagoi, and sibling slugs from first-party icon/domain hints.
+
 ## 1.27.2
 
 ### Patch Changes
