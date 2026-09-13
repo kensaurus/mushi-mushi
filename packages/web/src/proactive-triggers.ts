@@ -1,4 +1,5 @@
 import type { MushiApiCascadeConfig, MushiUrlMatcher } from '@mushi-mushi/core'
+import { shouldDropCapturedError, type MushiErrorFilter } from '@mushi-mushi/core'
 import { getInternalRequestKind, getRequestUrl, shouldIgnoreMushiUrl } from './internal-requests'
 import { subscribeHistory } from './history-patch'
 
@@ -31,6 +32,9 @@ export interface ProactiveTriggerConfig {
    * projects. Sourced from `MushiConfig.projectId` by the SDK.
    */
   projectId?: string
+  ignoreErrors?: readonly MushiErrorFilter[]
+  denyUrls?: readonly MushiErrorFilter[]
+  allowUrls?: readonly MushiErrorFilter[]
 }
 
 const DEFAULT_EXCLUDE_ROUTES: readonly string[] = [
@@ -221,6 +225,17 @@ export function setupProactiveTriggers(
   // --- Global Error Boundary ---
   if (config.errorBoundary) {
     function handleError(event: ErrorEvent) {
+      if (
+        shouldDropCapturedError({
+          message: event.message,
+          filename: event.filename,
+          ignoreErrors: config.ignoreErrors,
+          denyUrls: config.denyUrls,
+          allowUrls: config.allowUrls,
+        })
+      ) {
+        return
+      }
       callbacks.onTrigger('error_boundary', {
         message: event.message,
         filename: event.filename,
@@ -229,8 +244,19 @@ export function setupProactiveTriggers(
       })
     }
     function handleUnhandledRejection(event: PromiseRejectionEvent) {
+      const message = event.reason instanceof Error ? event.reason.message : String(event.reason)
+      if (
+        shouldDropCapturedError({
+          message,
+          ignoreErrors: config.ignoreErrors,
+          denyUrls: config.denyUrls,
+          allowUrls: config.allowUrls,
+        })
+      ) {
+        return
+      }
       callbacks.onTrigger('error_boundary', {
-        message: event.reason instanceof Error ? event.reason.message : String(event.reason),
+        message,
         type: 'unhandled_rejection',
       })
     }

@@ -43,6 +43,17 @@ export const SETTINGS_TAB_EXPLAINERS: Record<SettingsTabId, SettingsTabExplainer
       'Optional Browserbase key runs scheduled QA user-story tests in a remote Chromium session with screenshots. Skip if you only run tests locally.',
     affects: ['QA Coverage stories with the Browserbase provider'],
   },
+  voice: {
+    title: 'Voice intake from your phone',
+    summary:
+      'Optional. Turn on voice intake so a spoken bug or fix request — from the installed console app, a Telegram bot, Slack, or an iPhone Shortcut — becomes a report and a draft PR after you confirm the transcript.',
+    affects: [
+      'Voice page in the console and the /v1/intake/voice API (needs a voice:write key for Shortcuts)',
+      'Telegram bot token, chat binding, and webhook for Android voice notes',
+      'Audio retention — clips are deleted right after transcription unless you keep them',
+      'GitHub user token for cloud agent tasks (installation tokens are not accepted by GitHub there)',
+    ],
+  },
   health: {
     title: 'Connection check and smoke test',
     summary:
@@ -63,6 +74,7 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTabId, string> = {
   byok: 'AI keys',
   firecrawl: 'Web crawl',
   browserbase: 'Cloud browser',
+  voice: 'Voice intake',
   health: 'Health check',
   dev: 'Developer',
 }
@@ -72,6 +84,7 @@ export const SETTINGS_TAB_DESCRIPTIONS: Record<SettingsTabId, string> = {
   byok: 'Your Anthropic / OpenAI keys — optional, bills your account',
   firecrawl: 'Optional key for Research and doc-aware triage',
   browserbase: 'Optional key for cloud QA test runs',
+  voice: 'Phone voice intake — Telegram bot, retention, languages, agent tokens',
   health: 'SDK connectivity and send a test bug',
   dev: 'Widget debug flags — developers only',
 }

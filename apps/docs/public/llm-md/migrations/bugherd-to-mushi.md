@@ -34,36 +34,11 @@ screenshot) plus structured user metadata.
 
 | BugHerd | Mushi |
 |---------|-------|
-| `` | `` mounting `Mushi.init({ projectId, apiKey })` |
-| Sidebar widget (always visible) | Floating button widget (`widget.trigger: 'button'`) — discreet, opens on click |
-| Element click → annotation | User triggers widget → screenshot + element selector capture |
-| `bugherd.identify(user)` | `Mushi.setUser({ id, email, name })` |
-| Project-board view | Mushi admin console — Reports tab |
-| `data-bugherd-private` (skip element from screenshots) | `data-mushi-redact` (same idea) |
-
-## Before / After
-
-```html
-<!-- BEFORE — BugHerd -->
-
-  (function(d,t) {
-    var bh = d.createElement(t); bh.async = true;
-    bh.type = 'text/javascript';
-    bh.src = 'https://www.bugherd.com/sidebarv2.js?apikey=YOUR_API_KEY';
-    var s = d.getElementsByTagName(t)[0]; s.parentNode.insertBefore(bh, s);
-  })(document, 'script');
-
+| `
 ```
 
 ```html
 <!-- AFTER — Mushi (web) -->
-
-  import { Mushi } from 'https://esm.sh/@mushi-mushi/web'
-  Mushi.init({
-    projectId: 'YOUR_PROJECT_ID',
-    apiKey:    'YOUR_PUBLIC_KEY',
-    widget:    { trigger: 'button' },  // BugHerd-equivalent UX
-  })
 
 ```
 
@@ -73,9 +48,6 @@ For React / Vue / Svelte / Next, use the framework-specific SDK instead.
 
 Sign in to the Mushi admin console; copy projectId + apiKey.</> },
     { id: 'install', label: 'Install or script-tag Mushi', content: {`# CDN — for the same script-tag UX BugHerd had:
-
-  import { Mushi } from 'https://esm.sh/@mushi-mushi/web'
-  Mushi.init({ projectId: '...', apiKey: '...' })
 
 # Or via npm:
 npm install @mushi-mushi/web`} },

@@ -237,4 +237,32 @@ describe('replaySampleRate config', () => {
     expect(sdk.report).toBeTypeOf('function')
     expect(() => sdk.open()).not.toThrow()
   })
+
+  it('Mushi.init accepts replaysOnErrorSampleRate without throwing', () => {
+    expect(() =>
+      Mushi.init({ ...BASE_CONFIG, replaySampleRate: 0, replaysOnErrorSampleRate: 1 }),
+    ).not.toThrow()
+  })
+})
+
+describe('ignoreErrors config', () => {
+  beforeEach(() => {
+    destroyQuietly()
+    stubMatchMedia()
+    stubFetch()
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+    destroyQuietly()
+  })
+
+  it('captureException returns null when the message is ignored', async () => {
+    const sdk = Mushi.init({
+      ...BASE_CONFIG,
+      ignoreErrors: ['ResizeObserver'],
+    })
+    const id = await sdk.captureException(new Error('ResizeObserver loop limit exceeded'))
+    expect(id).toBeNull()
+  })
 })

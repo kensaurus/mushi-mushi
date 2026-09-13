@@ -1,5 +1,9 @@
 /**
- * `mushi upgrade` — bump installed @mushi-mushi/* packages to latest npm.
+ * FILE: packages/cli/src/upgrade.ts
+ * PURPOSE: `mushi upgrade` — bump installed @mushi-mushi/* to latest npm.
+ *
+ * `--check` is the CI/local freshness probe: plan only, no install.
+ * Exit codes: 0 current, 1 outdated or missing, 2 registry unreachable.
  */
 
 import { resolve } from 'node:path'
@@ -86,6 +90,25 @@ export interface RunUpgradeOptions {
   cwd?: string
   dryRun?: boolean
   json?: boolean
+  /** Plan only. Used by `mushi upgrade --check`. */
+  check?: boolean
+}
+
+/** Process exit code for `mushi upgrade --check`. */
+export type UpgradeCheckExit = 0 | 1 | 2
+
+/**
+ * 0 = current (or only non-registry pins).
+ * 1 = outdated, or no @mushi-mushi/* deps.
+ * 2 = every semver pin failed to reach the registry (retry; do not flake CI).
+ */
+export function evaluateUpgradeCheckExit(plan: UpgradePlan): UpgradeCheckExit {
+  if (plan.entries.length === 0) return 1
+  const semverEntries = plan.entries.filter((e) => /^\d/.test(e.current.replace(/^[\^~>=<]*/, '')))
+  if (semverEntries.length === 0) return 0
+  if (semverEntries.every((e) => e.latest === null)) return 2
+  if (plan.entries.some((e) => e.willUpgrade)) return 1
+  return 0
 }
 
 export interface RunUpgradeResult {
@@ -96,6 +119,19 @@ export interface RunUpgradeResult {
 
 export async function runUpgrade(opts: RunUpgradeOptions = {}): Promise<RunUpgradeResult> {
   const plan = await planUpgrade(opts.cwd ?? process.cwd())
+
+  if (opts.check) {
+    const exit = evaluateUpgradeCheckExit(plan)
+    const message =
+      exit === 0
+        ? 'All installed Mushi packages are already at the latest stable version.'
+        : exit === 2
+          ? 'Could not reach the npm registry to check for updates — try again in a moment.'
+          : plan.entries.length === 0
+            ? 'No @mushi-mushi/* packages in package.json — run `mushi init` first.'
+            : 'One or more Mushi packages are behind the latest stable npm release.'
+    return { plan, upgraded: false, message }
+  }
 
   if (plan.entries.length === 0) {
     return {

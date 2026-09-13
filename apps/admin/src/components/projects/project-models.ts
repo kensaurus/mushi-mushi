@@ -5,7 +5,7 @@
 import { CHIP_TONE } from '../../lib/chipTone'
 import type { SdkStatus } from '../SdkVersionBadge'
 
-export type ScopePresetId = 'sdk' | 'mcp-read' | 'mcp-write'
+export type ScopePresetId = 'sdk' | 'mcp-read' | 'mcp-write' | 'voice'
 
 export const SCOPE_PRESETS: Array<{ id: ScopePresetId; label: string; scopes: string[]; hint: string }> = [
   {
@@ -26,11 +26,22 @@ export const SCOPE_PRESETS: Array<{ id: ScopePresetId; label: string; scopes: st
     scopes: ['mcp:write'],
     hint: 'Coding agent can dispatch fixes, run judge, transition status.',
   },
+  {
+    id: 'voice',
+    label: 'Voice intake',
+    scopes: ['voice:write'],
+    hint: 'For a phone (iPhone Shortcut) — submit voice transcripts and confirm them, nothing else.',
+  },
 ]
+
+export function isScopePresetId(value: string | null | undefined): value is ScopePresetId {
+  return SCOPE_PRESETS.some((p) => p.id === value)
+}
 
 export function scopeBadgeTone(scope: string): string {
   if (scope === 'mcp:write') return CHIP_TONE.dangerSubtle
   if (scope === 'mcp:read') return CHIP_TONE.infoSubtle
+  if (scope === 'voice:write') return CHIP_TONE.warnSubtle
   return CHIP_TONE.neutral
 }
 

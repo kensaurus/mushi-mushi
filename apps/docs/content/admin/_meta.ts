@@ -28,6 +28,7 @@ export default {
   'prompt-lab': 'Prompt lab',
   releases: 'Releases',
   feedback: 'Feedback hub',
+  voice: 'Voice intake',
   'feature-board': 'Feature board',
   content: 'Content quality',
 

@@ -63,7 +63,10 @@
     "bug-tracking",
     "atlassian",
     "oauth",
-    "bidirectional-sync"
+    "bidirectional-sync",
+    "integration",
+    "issue-tracker",
+    "issue-sync"
   ],
   "engines": {
     "node": ">=20"

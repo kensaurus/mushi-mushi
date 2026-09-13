@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+/// <reference types="vite-plugin-pwa/client" />
 
 // Build-time constants injected via Vite's `define` config (see
 // apps/admin/vite.config.ts). These get statically replaced at build time

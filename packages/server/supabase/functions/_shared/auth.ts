@@ -355,24 +355,29 @@ async function lookupActiveApiKey(apiKey: string): Promise<ApiKeyRow | null> {
   return data as unknown as ApiKeyRow
 }
 
+/** True iff the key's scopes satisfy ANY of the accepted scopes (mcp:write implies mcp:read). */
+function keyGrantsAnyScope(scopes: string[], accepted: readonly McpScope[]): boolean {
+  return accepted.some((s) => scopes.includes(s) || (s === 'mcp:read' && scopes.includes('mcp:write')))
+}
+
 async function authenticateApiKey(
   c: Context,
   apiKey: string,
-  requiredScope: McpScope,
+  requiredScope: McpScope | readonly McpScope[],
 ): Promise<Response | null> {
   const keyRow = await lookupActiveApiKey(apiKey)
   if (!keyRow) {
     return authError(c, 'INVALID_API_KEY', 'Invalid or revoked API key')
   }
 
+  const accepted: readonly McpScope[] = Array.isArray(requiredScope) ? requiredScope : [requiredScope as McpScope]
   const scopes = keyRow.scopes ?? []
-  const grants = scopes.includes(requiredScope) ||
-    (requiredScope === 'mcp:read' && scopes.includes('mcp:write'))
-  if (!grants) {
+  if (!keyGrantsAnyScope(scopes, accepted)) {
+    const wanted = accepted.length === 1 ? `"${accepted[0]}"` : `one of ${accepted.map((s) => `"${s}"`).join(', ')}`
     return authError(
       c,
       'INSUFFICIENT_SCOPE',
-      `API key is missing required scope "${requiredScope}". Mint a new key with the correct scope or upgrade this one in the admin console.`,
+      `API key is missing required scope ${wanted}. Mint a new key with the correct scope or upgrade this one in the admin console.`,
       403,
     )
   }
@@ -537,8 +542,12 @@ export async function jwtAuth(c: Context, next: Next) {
   await next()
 }
 
-/** Scope required for a route. mcp:write implies mcp:read. */
-export type McpScope = 'mcp:read' | 'mcp:write'
+/**
+ * Scope required for a route. mcp:write implies mcp:read. `voice:write` is
+ * the narrow scope for the phone-resident key behind POST /v1/intake/voice —
+ * it grants nothing else, and no other scope implies it.
+ */
+export type McpScope = 'mcp:read' | 'mcp:write' | 'voice:write'
 
 interface AdminOrApiKeyOptions {
   /**
@@ -546,7 +555,7 @@ interface AdminOrApiKeyOptions {
    * are the project owner — scopes only matter for delegated, rotatable
    * credentials). Defaults to 'mcp:read' — read-only admin endpoints.
    */
-  scope?: McpScope
+  scope?: McpScope | readonly McpScope[]
 }
 
 /**
@@ -567,7 +576,7 @@ interface AdminOrApiKeyOptions {
  *     (`api_key_has_scope`) and mirrored here for fast-path checks.
  */
 export function adminOrApiKey(options: AdminOrApiKeyOptions = {}) {
-  const requiredScope: McpScope = options.scope ?? 'mcp:read'
+  const requiredScope: McpScope | readonly McpScope[] = options.scope ?? 'mcp:read'
 
   return async function middleware(c: Context, next: Next) {
     const explicitKey = c.req.header('X-Mushi-Api-Key')

@@ -2,23 +2,24 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-08-19 · **524** routes.
+> Generated: 2026-09-12 · **541** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 89 |
+| `adminOrApiKey` | 95 |
 | `apiKeyAuth` | 46 |
-| `jwtAuth` | 326 |
+| `jwtAuth` | 333 |
 | `jwtOrApiKey` | 3 |
-| `unknown` | 60 |
+| `unknown` | 64 |
 
 ## Routes by path
 
 | Method | Path | Auth | Source |
 | --- | --- | --- | --- |
 | GET | `/.well-known/agent-card` | `unknown` | `packages/server/supabase/functions/api/routes/discovery.ts` |
+| GET | `/.well-known/agent-card.json` | `unknown` | `packages/server/supabase/functions/api/routes/discovery.ts` |
 | GET | `/.well-known/mcp/server-card.json` | `unknown` | `packages/server/supabase/functions/api/routes/discovery.ts` |
 | GET | `/health` | `unknown` | `packages/server/supabase/functions/api/routes/discovery.ts` |
 | GET | `/health/ready` | `unknown` | `packages/server/supabase/functions/api/routes/discovery.ts` |
@@ -410,6 +411,10 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/support/tickets/summary` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
 | GET | `/v1/admin/synthetic` | `jwtAuth` | `packages/server/supabase/functions/api/routes/intelligence-synthetic.ts` |
 | POST | `/v1/admin/synthetic` | `jwtAuth` | `packages/server/supabase/functions/api/routes/intelligence-synthetic.ts` |
+| POST | `/v1/admin/telegram/bind-code` | `jwtAuth` | `packages/server/supabase/functions/api/routes/telegram-admin.ts` |
+| DELETE | `/v1/admin/telegram/bindings/:chatId` | `jwtAuth` | `packages/server/supabase/functions/api/routes/telegram-admin.ts` |
+| POST | `/v1/admin/telegram/setup` | `jwtAuth` | `packages/server/supabase/functions/api/routes/telegram-admin.ts` |
+| GET | `/v1/admin/telegram/status` | `jwtAuth` | `packages/server/supabase/functions/api/routes/telegram-admin.ts` |
 | POST | `/v1/admin/tester-redemptions/:id/approve` | `jwtAuth` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | POST | `/v1/admin/tester-redemptions/:id/deny` | `jwtAuth` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | GET | `/v1/admin/tester-redemptions/withheld` | `jwtAuth` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
@@ -436,6 +441,12 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/content-quality/callback` | `unknown` | `packages/server/supabase/functions/api/routes/content-quality.ts` |
 | POST | `/v1/ingest/metrics` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/ingest/spans` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
+| POST | `/v1/intake/voice` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/intake-voice.ts` |
+| GET | `/v1/intake/voice/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/intake-voice.ts` |
+| POST | `/v1/intake/voice/:id/cancel` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/intake-voice.ts` |
+| POST | `/v1/intake/voice/:id/confirm` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/intake-voice.ts` |
+| GET | `/v1/intake/voice/sessions` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/intake-voice.ts` |
+| POST | `/v1/intake/voice/upload-url` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/intake-voice.ts` |
 | POST | `/v1/invitations/accept` | `jwtAuth` | `packages/server/supabase/functions/api/routes/organizations.ts` |
 | GET | `/v1/invitations/preview` | `unknown` | `packages/server/supabase/functions/api/routes/organizations.ts` |
 | GET | `/v1/marketplace/plugins` | `unknown` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
@@ -466,6 +477,10 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/public/roadmap/:projectSlug` | `unknown` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | POST | `/v1/public/roadmap/:projectSlug/:id/vote` | `unknown` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | GET | `/v1/public/tester-leaderboard` | `unknown` | `packages/server/supabase/functions/api/routes/community.ts` |
+| DELETE | `/v1/push/subscriptions` | `jwtAuth` | `packages/server/supabase/functions/api/routes/push.ts` |
+| POST | `/v1/push/subscriptions` | `jwtAuth` | `packages/server/supabase/functions/api/routes/push.ts` |
+| POST | `/v1/push/test` | `jwtAuth` | `packages/server/supabase/functions/api/routes/push.ts` |
+| GET | `/v1/push/vapid-public-key` | `unknown` | `packages/server/supabase/functions/api/routes/push.ts` |
 | GET | `/v1/region/resolve` | `unknown` | `packages/server/supabase/functions/api/routes/discovery.ts` |
 | GET | `/v1/reporter/feature-board` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/reporter-feature-board.ts` |
 | POST | `/v1/reporter/feature-board/:id/vote` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/reporter-feature-board.ts` |
@@ -540,5 +555,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/webhooks/github/app-installation` | `unknown` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/webhooks/sentry` | `unknown` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/webhooks/sentry/seer` | `unknown` | `packages/server/supabase/functions/api/routes/public.ts` |
+| POST | `/v1/webhooks/slack/commands` | `unknown` | `packages/server/supabase/functions/api/routes/slack-events-core.ts` |
+| POST | `/v1/webhooks/slack/events` | `unknown` | `packages/server/supabase/functions/api/routes/slack-events-core.ts` |
 | GET | `/v1/webhooks/slack/oauth-callback` | `unknown` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/webhooks/tremendous` | `unknown` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
