@@ -222,6 +222,19 @@ jobs:
       - name: Check MCP catalog count
         run: pnpm check:catalog-count
 
+      - name: Check dependency overrides are bounded
+        # A pnpm override that patches an advisory must raise the floor, not
+        # lift the ceiling. `">=3.15.2"` is also satisfied by 4.x, which is how
+        # read-yaml-file@1.1.0 lost js-yaml's safeLoad and broke the Release
+        # workflow after #380 had already merged and deployed.
+        run: pnpm check:dependency-overrides
+
+      - name: Check the release version step
+        # Runs `changeset version` and restores the tree. This command lives
+        # only in release.yml, so before this step a PR could pass every gate,
+        # merge, deploy to seven channels, and only then fail to publish.
+        run: pnpm check:release-version
+
       - name: Check MCP registry manifest
         # packages/mcp/server.json must match packages/mcp/package.json's version
         # AND satisfy the registry schema. `description` has maxLength 100 and is
