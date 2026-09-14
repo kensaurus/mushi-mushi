@@ -63,7 +63,7 @@
     "@modelcontextprotocol/core": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "@mushi-mushi/core": "workspace:^",
-    "@sentry/node": "^10.57.0",
+    "@sentry/node": "^10.73.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
