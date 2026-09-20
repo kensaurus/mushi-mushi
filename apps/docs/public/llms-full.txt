@@ -14726,7 +14726,7 @@ pseudo-event itself is never stored.
 ## The console: Users & Funnels
 
 Every project gets a **Users & Funnels** page at `/analytics` in the console
-(<https://kensaur.us/mushi-mushi/admin/analytics>):
+([kensaur.us/mushi-mushi/admin/analytics](https://kensaur.us/mushi-mushi/admin/analytics)):
 
 | Tab | What it shows |
 |---|---|
