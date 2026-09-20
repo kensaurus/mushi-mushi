@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
-// `ai` is pinned to 4.3.19 in this package's devDependencies — the exact
-// version `classify-report/index.ts` resolves through its `npm:ai@4`
-// specifier. Not a new runtime dependency: it makes an existing implicit one
-// explicit, so the conversion assertions below run against the same converter
-// production uses instead of a hoisted copy that happened to be on disk.
-import { zodSchema } from 'ai'
+// `zodSchema` is the AI SDK's own Zod→JSON-Schema entry point, and it lives in
+// @ai-sdk/ui-utils — the exact 1.2.11 that `npm:ai@4` (4.3.19) depends on, so
+// these assertions run against the converter production actually uses.
+//
+// Deliberately NOT a devDependency on `ai` itself: that pulls jsondiffpatch
+// 0.6.0, which carries a high-severity prototype-pollution advisory
+// (GHSA-j4fx-xxwh-2485) and fails this repo's audit gate. ui-utils needs only
+// @ai-sdk/provider, @ai-sdk/provider-utils and zod-to-json-schema.
+import { zodSchema } from '@ai-sdk/ui-utils'
 import {
   clampLlmText,
   stage2Schema,
