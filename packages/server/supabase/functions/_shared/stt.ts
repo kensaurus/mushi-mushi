@@ -278,6 +278,14 @@ export async function transcribeAudio(
       latencyMs,
       inputTokens: 0,
       outputTokens: 0,
+      // Audio is priced per second, not per token. Without this the hosted
+      // wallet meters the call at `0 units * per_unit_micro` = 0 and the
+      // transcription is billed nothing (Sentry MUSHI-MUSHI-SERVER-1Z).
+      // `durationSec` prefers OpenAI's reported `usage.seconds`, then the
+      // container duration, then the caller's declared length; when all three
+      // are absent the call is dead-lettered as unpriceable rather than
+      // debited zero.
+      billableUnits: durationSec ?? null,
       keySource: keySource ?? null,
       langfuseTraceId: trace.id,
     }).catch(() => {
