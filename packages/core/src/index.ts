@@ -65,6 +65,9 @@ export type {
   MushiAssistantConfig,
   MushiAssistantStep,
   MushiAssistantReply,
+  MushiAnalyticsConfig,
+  MushiProductEventPayload,
+  MushiPropertyValue,
 } from './types';
 
 /** @public */
@@ -165,6 +168,7 @@ export {
   EVENT_PROPERTY_LIMITS,
   isValidEventName,
   sanitizeEventProperties,
+  propertiesWithinByteLimit,
   type MushiEventName,
   type MushiSurface,
   type MushiEventProperties,

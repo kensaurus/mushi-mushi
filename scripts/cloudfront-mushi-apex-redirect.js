@@ -63,6 +63,8 @@ var DOCS_EXACT = [
   '/changelog',
   '/cloud',
   '/use-cases',
+  '/compare',
+  '/legal',
 ];
 
 // Docs nested paths — trailing slash required so /integrations (admin) is not
@@ -81,6 +83,8 @@ var DOCS_NESTED_PREFIXES = [
   '/plugins/',
   '/blog/',
   '/use-cases/',
+  '/compare/',
+  '/legal/',
 ];
 
 // SPA route prefixes under /mushi-mushi/admin/.

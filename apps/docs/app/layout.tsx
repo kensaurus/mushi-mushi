@@ -1,10 +1,10 @@
-import { KensaurusPortfolioTable } from '@mushi-mushi/marketing-ui'
-import { Footer, Layout, Navbar } from 'nextra-theme-docs'
+import { Layout, Navbar } from 'nextra-theme-docs'
 import { Banner, Head } from 'nextra/components'
 import { getPageMap } from 'nextra/page-map'
 import Link from 'next/link'
 import { NavbarAuthChrome } from '../components/NavbarAuthChrome'
 import { MushiSiteAnalytics } from '../components/MushiSiteAnalytics'
+import { SiteFooter } from '../components/SiteFooter'
 /* globals.css imports both `tailwindcss` AND `nextra-theme-docs/style.css`,
  * so we only import the one entry file to keep the cascade ordering stable
  * (Tailwind base layer before Nextra theme styles). */
@@ -120,17 +120,10 @@ const navbar = (
   </Navbar>
 )
 
-const footer = (
-  <Footer>
-    <div className="flex flex-col gap-6">
-      <p>
-        MIT (SDKs) · AGPLv3 (server) · commercial (enterprise edition) — ©{' '}
-        {new Date().getFullYear()} Mushi Mushi. Built with Nextra.
-      </p>
-      <KensaurusPortfolioTable utmSource="mushi-docs" />
-    </div>
-  </Footer>
-)
+/* Footer lives in components/SiteFooter.tsx (client) so it can read the
+ * pathname: legal/security/status/contact links on every page, the
+ * kensaurus portfolio table only off the conversion surfaces. */
+const footer = <SiteFooter />
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   return (

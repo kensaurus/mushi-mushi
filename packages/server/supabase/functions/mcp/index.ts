@@ -258,6 +258,29 @@ interface ToolDef {
   handler: ToolHandler
 }
 
+/** Build a query string, skipping undefined/empty values (events/* tools). */
+function eventsQuery(params: Record<string, string | number | undefined>): string {
+  const qs = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '') qs.set(k, String(v))
+  }
+  return qs.toString()
+}
+
+/** Trailing [from, to] ISO range ending now (events/* tools). */
+function trailingRange(windowDays: number): { from: string; to: string } {
+  const to = new Date()
+  const from = new Date(to.getTime() - windowDays * 24 * 60 * 60 * 1000)
+  return { from: from.toISOString(), to: to.toISOString() }
+}
+
+/** windowDays → integer in [1, 365], default 30. */
+function clampWindowDays(raw: unknown): number {
+  const n = Number(raw ?? 30)
+  if (!Number.isFinite(n)) return 30
+  return Math.min(Math.max(Math.trunc(n), 1), 365)
+}
+
 const BASE_TOOLS: Record<string, ToolDef> = {
   get_recent_reports: {
     scope: 'mcp:read',
@@ -716,6 +739,108 @@ const BASE_TOOLS: Record<string, ToolDef> = {
       const pid = (args.project_id as string | undefined) ?? ctx.projectIdHint
       const qs = pid ? `?project_id=${encodeURIComponent(pid)}` : ''
       return apiCall<unknown>(`/v1/admin/activation${qs}`, { headers: ctx.authHeaders })
+    },
+  },
+
+  // ── Product analytics (Mushi.track() funnels) ─────────────────────────────
+  // Thin wrappers over GET /v1/admin/events/* (adminOrApiKey mcp:read) — the
+  // same routes the console's Users → Funnels tab reads. Mirror of the three
+  // tools in packages/mcp/src/server.ts; keep both transports in lock-step.
+
+  query_funnel: {
+    scope: 'mcp:read',
+    description:
+      'Where do users drop off? Ordered funnel over Mushi.track() events for this project. Pass 2–8 step event names in order; each step counts distinct users who did the previous step then this one within stepWindow (default 7d), over the trailing windowDays (default 30). Optional breakdown property splits every step. Returns { steps: [{ name, entered, converted, pct, median_secs }], breakdown: [{ value, entered, steps }] } (pct is conversion from step 1; breakdown is empty unless requested). Read-only. Use get_product_events_summary to discover event names first.',
+    inputSchema: {
+      type: 'object',
+      required: ['steps'],
+      properties: {
+        steps: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 2,
+          maxItems: 8,
+          description: 'Ordered event names, 2–8 (e.g. ["landing_view", "signup_completed", "first_report_received"]).',
+        },
+        windowDays: { type: 'number', description: 'Trailing window in days (default 30, max 365).' },
+        stepWindow: {
+          type: 'string',
+          enum: ['1h', '1d', '7d', '30d'],
+          description: 'Max time allowed between consecutive steps (default 7d).',
+        },
+        breakdown: { type: 'string', description: 'Event property to split every step by (e.g. "utm_source", "$surface").' },
+        project_id: { type: 'string', description: 'Project UUID (defaults to key-bound project).' },
+      },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (args, ctx) => {
+      const steps = Array.isArray(args.steps) ? args.steps.map((s) => String(s).trim()).filter(Boolean) : []
+      if (steps.length < 2 || steps.length > 8) {
+        throw new McpError(ERR_INVALID_PARAMS, 'query_funnel requires 2–8 ordered step event names')
+      }
+      const stepWindow = typeof args.stepWindow === 'string' ? args.stepWindow : '7d'
+      if (!['1h', '1d', '7d', '30d'].includes(stepWindow)) {
+        throw new McpError(ERR_INVALID_PARAMS, 'stepWindow must be one of 1h, 1d, 7d, 30d')
+      }
+      const qs = eventsQuery({
+        steps: steps.join(','),
+        window: stepWindow,
+        ...trailingRange(clampWindowDays(args.windowDays)),
+        breakdown: typeof args.breakdown === 'string' ? args.breakdown : undefined,
+        project_id: (args.project_id as string | undefined) ?? ctx.projectIdHint,
+      })
+      return apiCall<unknown>(`/v1/admin/events/funnel?${qs}`, { headers: ctx.authHeaders })
+    },
+  },
+
+  get_product_events_summary: {
+    scope: 'mcp:read',
+    description:
+      'Summarise the Mushi.track() product events this project received in the trailing windowDays (default 30): event names with counts and distinct users, daily volume, and top properties. Returns { window_days, events_total, persons, identified, anonymous, events_per_day: [{ day, count }], top_events: [{ name, count, persons }] }. Read-only. Use first to learn which event names exist before calling query_funnel or get_user_paths.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        windowDays: { type: 'number', description: 'Trailing window in days (default 30, max 365).' },
+        project_id: { type: 'string', description: 'Project UUID (defaults to key-bound project).' },
+      },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (args, ctx) => {
+      const qs = eventsQuery({
+        window: clampWindowDays(args.windowDays),
+        project_id: (args.project_id as string | undefined) ?? ctx.projectIdHint,
+      })
+      return apiCall<unknown>(`/v1/admin/events/summary?${qs}`, { headers: ctx.authHeaders })
+    },
+  },
+
+  get_user_paths: {
+    scope: 'mcp:read',
+    description:
+      'What did users do next? Rank the events users fired immediately after fromEvent within the trailing windowDays (default 30), most common first, up to limit rows (default 20, max 50). Returns { from_event, total, next: [{ name, count, pct }] }. Read-only. Use query_funnel once you know the ordered steps.',
+    inputSchema: {
+      type: 'object',
+      required: ['fromEvent'],
+      properties: {
+        fromEvent: { type: 'string', description: 'Event name to start from (e.g. "key_minted").' },
+        windowDays: { type: 'number', description: 'Trailing window in days (default 30, max 365).' },
+        limit: { type: 'number', description: 'Max distinct paths to return (default 20, max 50).' },
+        project_id: { type: 'string', description: 'Project UUID (defaults to key-bound project).' },
+      },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (args, ctx) => {
+      const fromEvent = typeof args.fromEvent === 'string' ? args.fromEvent.trim() : ''
+      if (!fromEvent) throw new McpError(ERR_INVALID_PARAMS, 'fromEvent is required for get_user_paths')
+      const limitRaw = Number(args.limit ?? 20)
+      const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 50) : 20
+      const qs = eventsQuery({
+        from_event: fromEvent,
+        ...trailingRange(clampWindowDays(args.windowDays)),
+        limit,
+        project_id: (args.project_id as string | undefined) ?? ctx.projectIdHint,
+      })
+      return apiCall<unknown>(`/v1/admin/events/paths?${qs}`, { headers: ctx.authHeaders })
     },
   },
 

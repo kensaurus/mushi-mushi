@@ -72,7 +72,7 @@
     "check:residue": "node scripts/check-residue-ratchet.mjs",
     "check:env-source-parity": "node scripts/check-env-source-parity.mjs",
     "check:ia-labels": "node scripts/check-ia-labels.mjs",
-    "check:catalog-sync": "node scripts/check-mcp-catalog-sync.mjs && node scripts/sync-mcp-tool-count.mjs --check && node scripts/check-mcp-prose-tool-count.mjs && node scripts/sync-mcp-discovery-card.mjs --check && node scripts/sync-mcp-pin.mjs --check",
+    "check:catalog-sync": "node scripts/check-mcp-catalog-sync.mjs && node scripts/sync-mcp-tool-count.mjs --check && node scripts/check-mcp-prose-tool-count.mjs && node scripts/sync-mcp-discovery-card.mjs --check && node scripts/sync-mcp-pin.mjs --check && node scripts/gen-analytics-taxonomy.mjs --check && node scripts/gen-mcp-docs-index.mjs --check",
     "sync:mcp-pin": "node scripts/sync-mcp-pin.mjs",
     "sync:server-json": "node scripts/sync-server-json-version.mjs",
     "sync:docs-versions": "node scripts/check-docs-versions.mjs --write",

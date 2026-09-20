@@ -6,6 +6,7 @@ import { log } from '../_shared/logger.ts';
 import { checkIngestQuota } from '../_shared/quota.ts';
 import { getStorageAdapter } from '../_shared/storage.ts';
 import { reportSubmissionSchema } from '../_shared/schemas.ts';
+import { normalizeReportCategory } from '../_shared/report-category.ts';
 import { checkAntiGaming } from '../_shared/anti-gaming.ts';
 import { logAntiGamingEvent } from '../_shared/telemetry.ts';
 import { awardPoints, awardPointsForEndUser } from '../_shared/reputation.ts';
@@ -203,7 +204,10 @@ export async function ingestReport(
     userToken?: string
   },
 ): Promise<{ ok: boolean; reportId?: string; error?: string; deduplicated?: boolean }> {
-  const normalizedBody = { ...body };
+  // User-only categories ('feedback' | 'question' | 'feature') are kept in
+  // userCategory and mapped onto the classifier vocabulary so the schema
+  // below (classifier enum) agrees with the route-level union.
+  const normalizedBody: Record<string, any> = normalizeReportCategory({ ...body });
   if (typeof normalizedBody.description === 'string') {
     const trimmed = normalizedBody.description.trim();
     if (trimmed.length > 0 && trimmed.length < 20) {

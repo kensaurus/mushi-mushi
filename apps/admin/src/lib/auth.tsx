@@ -33,9 +33,13 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<{ error?: string }>
   signInWithMagicLink: (email: string) => Promise<{ error?: string }>
   /** OAuth sign-in. `signupMeta` (source / campaign / loop ref) is stashed in
-   *  sessionStorage and replayed onto a *newly created* user after redirect. */
-  signInWithGitHub: (signupMeta?: SignupMeta) => Promise<{ error?: string }>
-  signInWithGoogle: (signupMeta?: SignupMeta) => Promise<{ error?: string }>
+   *  sessionStorage and replayed onto a *newly created* user after redirect.
+   *  `opts.next` is the in-app path to land on after the provider round-trip
+   *  (signup passes `/onboarding`; login passes the deep link it was asked
+   *  for). Sanitised by `authRedirectUrl`, so a bad value falls back to
+   *  `/dashboard`. */
+  signInWithGitHub: (signupMeta?: SignupMeta, opts?: OAuthOptions) => Promise<{ error?: string }>
+  signInWithGoogle: (signupMeta?: SignupMeta, opts?: OAuthOptions) => Promise<{ error?: string }>
   /** Sign in as a Mushi Bounties tester via magic-link. Sets signup_intent='tester'
    *  so the DB trigger auto-provisions a mushi_testers row on first login. */
   signInAsTester: (email: string) => Promise<{ error?: string }>
@@ -47,8 +51,17 @@ interface AuthContextValue {
   updatePassword: (newPassword: string) => Promise<{ error?: string }>
 }
 
-function getRedirectUrl(): string {
-  return authRedirectUrl('/dashboard')
+export interface OAuthOptions {
+  /** In-app path to return to after the provider redirect. Default `/dashboard`. */
+  next?: string
+}
+
+/** Post-signup lands on the wizard so the first action is "send a test
+ *  report", not a dashboard of zeros (docs/plan-gtm.md, Workstream B §2a). */
+const SIGNUP_LANDING_PATH = '/onboarding'
+
+function getRedirectUrl(path: string = '/dashboard'): string {
+  return authRedirectUrl(path)
 }
 
 function getResetPasswordRedirectUrl(): string {
@@ -165,21 +178,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message }
   }
 
-  const signInWithGitHub = async (signupMeta?: SignupMeta) => {
+  const signInWithGitHub = async (signupMeta?: SignupMeta, opts?: OAuthOptions) => {
     if (signupMeta) stashSignupMeta(signupMeta)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'github',
-      options: { redirectTo: getRedirectUrl() },
+      options: { redirectTo: getRedirectUrl(opts?.next) },
     })
     return { error: error?.message }
   }
 
-  const signInWithGoogle = async (signupMeta?: SignupMeta) => {
+  const signInWithGoogle = async (signupMeta?: SignupMeta, opts?: OAuthOptions) => {
     if (signupMeta) stashSignupMeta(signupMeta)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: getRedirectUrl(),
+        redirectTo: getRedirectUrl(opts?.next),
         // Without this, Google silently re-authenticates whichever Google
         // account is already active in the browser session (or the last one
         // used) instead of showing the account chooser — so a user with
@@ -211,7 +224,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email,
       password,
       options: {
-        emailRedirectTo: getRedirectUrl(),
+        // The confirmation link drops the new user on the wizard.
+        emailRedirectTo: getRedirectUrl(SIGNUP_LANDING_PATH),
         // Persisted to auth.users.raw_user_meta_data → growth funnel by source.
         ...(Object.keys(meta).length > 0 ? { data: meta } : {}),
       },

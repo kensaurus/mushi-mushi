@@ -205,7 +205,21 @@ export interface MushiWidgetConfig {
    *   - `axis`        constrain movement to one axis (`'x'`, `'y'`, or `'both'` default).
    */
   draggable?: boolean | { persist?: boolean; snapToEdge?: boolean; axis?: 'both' | 'x' | 'y' };
-  /** Show the tiny "Powered by Mushi vX" footer inside the widget panel. */
+  /**
+   * Show the "Bug reports by Mushi" mark at the bottom of the widget panel.
+   * It links to the Mushi site (`utm_source=widget&utm_medium=powered-by` plus
+   * an anonymous `ref` derived from a SHA-256 prefix of the project id) and
+   * feeds the `loop_impression` / `loop_click` analytics events.
+   *
+   * Precedence (most specific wins):
+   * 1. An explicit value here — the MIT SDK config is a hard override and
+   *    beats anything the runtime config sends.
+   * 2. `widget.brandFooter` from the runtime config (`GET /v1/sdk/config`):
+   *    Mushi Cloud sends `true` for Free Cloud projects and `false` for paid
+   *    plans; self-hosted servers send nothing. Opt out with one toggle in the
+   *    console project settings.
+   * 3. Default `false`.
+   */
   brandFooter?: boolean;
   /** How the widget should surface SDK freshness warnings. Defaults to auto. */
   outdatedBanner?: 'auto' | 'banner' | 'console-only' | 'off';

@@ -99,8 +99,11 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   privacy_status: 'admin',
   evolution_history: 'admin',
 
-  // usage / billing
+  // usage / billing / product analytics (Mushi.track() funnels)
   get_usage: 'usage',
+  query_funnel: 'usage',
+  get_product_events_summary: 'usage',
+  get_user_paths: 'usage',
 
   // qa / tdd
   map_user_stories: 'qa',

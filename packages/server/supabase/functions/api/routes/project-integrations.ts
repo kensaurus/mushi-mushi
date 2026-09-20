@@ -5,6 +5,9 @@ import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { resolveLlmKey } from '../../_shared/byok.ts';
 import { dbError, userCanAccessProject } from '../shared.ts';
 import { ingestReport } from '../helpers.ts';
+import { emitFunnelEvent } from '../../_shared/setup-funnel.ts';
+import { emitProductEvent } from '../../_shared/product-events.ts';
+import { getDemoReportFixture, materializeDemoReport } from '../../_shared/demo-report-fixtures.ts';
 
 export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variables }>): void {
   // Lenient UUID matcher (mirrors projects-crud.ts; see note there).
@@ -193,13 +196,19 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
     return c.json({ ok: true, data: { autofix_enabled: enabled } });
   });
 
-  // Admin pipeline diagnostic. Exists so the admin console's "Send test report"
-  // buttons (DashboardPage.GettingStartedEmpty, SettingsPage.QuickTestSection)
-  // can verify the ingest path without copy-pasting an API key — the admin is
-  // already JWT-authenticated and owns the project. Goes through ingestReport()
-  // so it really exercises schema validation, queue insert, circuit breaker, and
-  // classification trigger. Tagged with metadata.source so admins can filter
-  // these out of the inbox.
+  // One-click test report. Exists so the admin console's "Send test report"
+  // buttons (onboarding S2, DashboardPage.GettingStartedEmpty,
+  // SettingsPage.QuickTestSection) can produce a real diagnosis without
+  // copy-pasting an API key — the admin is already JWT-authenticated and owns
+  // the project. Goes through ingestReport() so it really exercises schema
+  // validation, queue insert, circuit breaker, and classification trigger.
+  //
+  // The payload is the iPad-Safari login fixture from
+  // _shared/demo-report-fixtures.json (breadcrumbs, a 401 on /api/session,
+  // a real user agent) so the first diagnosis a new user sees is an aha, not
+  // "Admin pipeline test". metadata.source = 'admin_test_report' keeps it out
+  // of activation (first_report_received) and the growth funnel; the console
+  // inbox filters on the same tag.
   app.post('/v1/admin/projects/:id/test-report', jwtAuth, async (c) => {
     const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
@@ -222,32 +231,40 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
     const ipAddress =
       c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip');
     const userAgent = c.req.header('user-agent') ?? 'mushi-admin';
-    const now = new Date().toISOString();
 
-    const syntheticBody = {
-      projectId, // schema-required; ingestReport actually uses the auth-context projectId
-      category: 'other' as const,
-      description:
-        'Admin pipeline test — verifying ingest, validation, queue, and classification end-to-end.',
-      environment: {
-        userAgent,
-        platform: 'mushi-admin',
-        language: 'en',
-        viewport: { width: 0, height: 0 },
-        url: 'admin://test-report',
-        referrer: '',
-        timestamp: now,
-        timezone: 'UTC',
-      },
+    // projectId in the body is schema-required; ingestReport actually uses the
+    // auth-context projectId. The reporter token is per-admin so repeated test
+    // reports from the same person group under one reporter.
+    const syntheticBody = materializeDemoReport(getDemoReportFixture(), {
+      projectId,
       reporterToken: `admin-test-${userId}`,
       metadata: { source: 'admin_test_report', userId },
-      createdAt: now,
-    };
+    });
 
     const result = await ingestReport(db, projectId, syntheticBody, { ipAddress, userAgent });
     if (!result.ok) {
       return c.json({ ok: false, error: { code: 'INGEST_ERROR', message: result.error } }, 400);
     }
+
+    // Activation funnel (setup_funnel_events) + product_events, both
+    // fire-and-forget and idempotent on their dedup keys. A deduplicated
+    // ingest returns the existing reportId, so a double click cannot
+    // double-count.
+    const reportId = result.reportId ?? 'unknown';
+    void emitFunnelEvent(db, {
+      userId,
+      projectId,
+      eventName: 'test_report_sent',
+      dedupKey: `${projectId}:${reportId}`,
+      source: 'console',
+    });
+    void emitProductEvent(db, {
+      userId,
+      eventName: 'test_report_sent',
+      surface: 'console',
+      properties: { project_id: projectId },
+      dedupKey: `test_report_sent:${reportId}`,
+    });
 
     return c.json(
       {

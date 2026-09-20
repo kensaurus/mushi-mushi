@@ -4,7 +4,7 @@
     "kensaurus"
   ],
   "name": "mushi-mushi",
-  "description": "Bug-report triage and fix-dispatch MCP for vibe coders. Ask your AI coding agent for a plain-English diagnosis of any user-reported bug — with evidence, blast radius, and a paste-ready fix prompt — then dispatch an automated GitHub fix PR without a second LLM key. 73 tools, Supabase-backed, MIT SDK. npx @mushi-mushi/mcp.\n\nAlso from KENSAURUS:\n| | App |\n|---|---|\n| ![The Wanting Mind](https://kensaur.us/the-wanting-mind/pwa-512x512.png) | [The Wanting Mind](https://kensaur.us/the-wanting-mind/) — 268 concepts |\n| ![How to Talk to Girls](https://talk.kensaur.us/pwa-192.png) | [How to Talk to Girls](https://talk.kensaur.us) |\n| ![Glot It](https://kensaur.us/glot-it/icon-512.png) | [Glot It](https://kensaur.us/glot-it/) |\n| ![yen-yen](https://kensaur.us/yen-yen/icon.svg) | [yen-yen](https://kensaur.us/yen-yen/) |\n| ![Help Her Take Photo](https://kensaur.us/help-her-take-photo/assets/apple-touch-icon.png) | [Help Her Take Photo](https://kensaur.us/help-her-take-photo/) |\n| ![Tsumagoi](https://tsumagoi.kensaur.us/apple-touch-icon.png) | [Tsumagoi Work&Camp](https://tsumagoi.kensaur.us/) — [Instagram](https://www.instagram.com/tsumagoicamp/) · [Facebook](https://www.facebook.com/profile.php?id=61592113053042) · [Maps](https://maps.app.goo.gl/JCNnTfsdQVHCS1FA7) |\n| ![cursor-kenji](https://github.com/kensaurus.png) | [cursor-kenji](https://github.com/kensaurus/cursor-kenji) |",
+  "description": "Bug-report triage and fix-dispatch MCP for vibe coders. Ask your AI coding agent for a plain-English diagnosis of any user-reported bug — with evidence, blast radius, and a paste-ready fix prompt — then dispatch an automated GitHub fix PR without a second LLM key. 76 tools, Supabase-backed, MIT SDK. npx @mushi-mushi/mcp.\n\nAlso from KENSAURUS:\n| | App |\n|---|---|\n| ![The Wanting Mind](https://kensaur.us/the-wanting-mind/pwa-512x512.png) | [The Wanting Mind](https://kensaur.us/the-wanting-mind/) — 268 concepts |\n| ![How to Talk to Girls](https://talk.kensaur.us/pwa-192.png) | [How to Talk to Girls](https://talk.kensaur.us) |\n| ![Glot It](https://kensaur.us/glot-it/icon-512.png) | [Glot It](https://kensaur.us/glot-it/) |\n| ![yen-yen](https://kensaur.us/yen-yen/icon.svg) | [yen-yen](https://kensaur.us/yen-yen/) |\n| ![Help Her Take Photo](https://kensaur.us/help-her-take-photo/assets/apple-touch-icon.png) | [Help Her Take Photo](https://kensaur.us/help-her-take-photo/) |\n| ![Tsumagoi](https://tsumagoi.kensaur.us/apple-touch-icon.png) | [Tsumagoi Work&Camp](https://tsumagoi.kensaur.us/) — [Instagram](https://www.instagram.com/tsumagoicamp/) · [Facebook](https://www.facebook.com/profile.php?id=61592113053042) · [Maps](https://maps.app.goo.gl/JCNnTfsdQVHCS1FA7) |\n| ![cursor-kenji](https://github.com/kensaurus.png) | [cursor-kenji](https://github.com/kensaurus/cursor-kenji) |",
   "license": "MIT",
   "tools": [
     {
@@ -278,6 +278,18 @@
     {
       "name": "analyze_wiki_knowledge",
       "description": "Return the wiki/docs knowledge-graph nodes and their sources for the project. Returns { nodes: [{ id, label, source_url }], sources }. Read-only. Use to see what doc entities exist; pass include_wiki=true to ask_codebase to merge this corpus into a grounded answer."
+    },
+    {
+      "name": "query_funnel",
+      "description": "Where do users drop off? Ordered funnel over Mushi.track() events for this project. Pass 2–8 step event names in order; each step counts distinct users who did the previous step then this one within stepWindow (default 7d), over the trailing windowDays (default 30). Optional breakdown property splits every step. Returns { steps: [{ name, entered, converted, pct, median_secs }], breakdown: [{ value, entered, steps }] } (pct is conversion from step 1). Read-only. Use get_product_events_summary to discover event names first."
+    },
+    {
+      "name": "get_product_events_summary",
+      "description": "Summarise the Mushi.track() product events this project received in the trailing windowDays (default 30): event names with counts and distinct users, daily volume, and top properties. Returns { window_days, events_total, persons, identified, anonymous, events_per_day: [{ day, count }], top_events: [{ name, count, persons }] }. Read-only. Use first to learn which event names exist before calling query_funnel or get_user_paths."
+    },
+    {
+      "name": "get_user_paths",
+      "description": "What did users do next? Rank the events users fired immediately after fromEvent within the trailing windowDays (default 30), most common first, up to limit rows (default 20, max 50). Returns { from_event, total, next: [{ name, count, pct }] }. Read-only. Use query_funnel once you know the ordered steps."
     }
   ]
 }

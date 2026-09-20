@@ -26,6 +26,10 @@ function fail(msg) {
   failures++
 }
 
+function warn(msg) {
+  console.warn(`  ! ${msg}`)
+}
+
 function ok(msg) {
   console.log(`  ✓ ${msg}`)
 }

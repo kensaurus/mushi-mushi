@@ -24,6 +24,20 @@ Onboard the current repo onto Mushi Mushi. The CLI wizard already automates
 detection, auth, install, and env writing — **delegate to it instead of
 hand-editing files**, then verify.
 
+## Step 0 — Read the current docs, not this file's memory
+
+This skill is a procedure, not a copy of the docs. Package names, env-var
+prefixes, and snippets change; before quoting any of them, look them up:
+
+- With the Mushi MCP server connected: call the `search_mushi_docs` tool
+  (e.g. `search_mushi_docs { query: "expo quickstart" }`). It returns the
+  page URL and a one-line excerpt; open the URL for the snippet.
+- Without MCP: fetch `https://kensaur.us/mushi-mushi/llms.txt` (every page,
+  one link per line) and open the matching page, or the plain-markdown twin at
+  `https://kensaur.us/mushi-mushi/docs/llm-md/<path>.md`.
+
+If what you find disagrees with the tables below, the docs win.
+
 ## Step 1 — Run the wizard (SDK install + credentials)
 
 ```bash
@@ -60,6 +74,7 @@ Use it when installing manually or reviewing what the wizard chose:
 | If the project has… | Framework | SDK package |
 |---------------------|-----------|-------------|
 | `next` | Next.js | `@mushi-mushi/react` |
+| `react` + `vite` (incl. a **Lovable export**) | Vite + React | `@mushi-mushi/react` |
 | `react` (no meta-framework) / `react-scripts` / `@remix-run/*` | React / CRA / Remix | `@mushi-mushi/react` |
 | `vue` v3 | Vue 3 | `@mushi-mushi/vue` |
 | `nuxt` | Nuxt | `@mushi-mushi/vue` |
@@ -74,6 +89,25 @@ Use it when installing manually or reviewing what the wizard chose:
 Coming from Sentry? Don't remove it — see the
 [Sentry + Mushi guide](https://kensaur.us/mushi-mushi/docs/migrations/sentry-to-mushi)
 (enrich or standalone; `mushi migrate` detects `@sentry/*` and suggests it).
+
+### Path notes (where the wizard needs a hint)
+
+- **Next.js** — env prefix `NEXT_PUBLIC_MUSHI_*`; the provider goes in
+  `app/layout.tsx` (App Router) or `pages/_app.tsx`. Static export
+  (`output: 'export'`) works; see `search_mushi_docs { query: "next static export" }`.
+- **Vite (React)** — env prefix `VITE_MUSHI_*`, read via `import.meta.env`;
+  wrap `<App />` in `src/main.tsx`. Restart `vite dev` after writing `.env.local`.
+- **Lovable export** — it is a Vite + React + TypeScript app, usually with a
+  Supabase client under `src/integrations/supabase/`. Treat it as the Vite
+  path above; run the wizard with `--framework react` if detection is unsure.
+  Mushi does not need the app's Supabase keys — only its own two env vars —
+  and the Supabase client stays untouched. Commit `.env.local` changes only
+  to the `.env.example`; the real values go into Lovable's project secrets /
+  the host's env settings before redeploying.
+- **Expo / React Native** — package `@mushi-mushi/react-native`; env prefix
+  `EXPO_PUBLIC_MUSHI_*` (Expo) or your config plugin; wrap the root component
+  in `App.tsx` / `app/_layout.tsx`. Rebuild the dev client after install — a
+  JS-only reload does not pick up native deps. Bare RN: run `pod install`.
 
 ## Step 2 — Paste the init snippet
 
@@ -103,7 +137,13 @@ Every `FAIL` line comes with a `→ Fix:` hint. For a full sweep use
 
 Then send a test report: trigger any error in the running app (or use the
 wizard's "send test report" option) and confirm it appears with
-`get_recent_reports` (MCP) or in the console dashboard.
+`get_recent_reports` (MCP) or in the console dashboard. With MCP connected,
+`activation_status` reports the phase (`ingest` → `dispatch` → `loop`) and
+`diagnose_setup` explains any remaining gap; `mushi status` prints the same
+`Activation:` line from the terminal.
+
+If a check fails and the `→ Fix:` hint is not enough, look it up before
+guessing: `search_mushi_docs { query: "<the FAIL line>" }`.
 
 ## Handoffs
 

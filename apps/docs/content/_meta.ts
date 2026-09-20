@@ -12,14 +12,16 @@ export default {
      * `toc: false`         — the page is short enough to scan without a
      *   right-rail outline; freeing that column gives the hero room to
      *   breathe at 1024-1280 widths.
-     * Sidebar stays ON — the landing no longer uses position:fixed pin
-     * chapters, so the docs rail (Quickstart / Concepts / SDKs …) is the
-     * primary nav and must be present. */
+     * `sidebar: false`     — GTM plan (Workstream B §1c): the landing is a
+     *   conversion surface, not a docs article. The docs rail read as
+     *   "portfolio side project"; the hero CTAs and navbar carry the nav.
+     *   Same for `pricing` below. Nextra 4 per-page option. */
     theme: {
       layout: 'full',
       breadcrumb: false,
       timestamp: false,
       toc: false,
+      sidebar: false,
     },
   },
 
@@ -45,11 +47,14 @@ export default {
 
   '-- Compare': { type: 'separator', title: 'Compare & use cases' },
   'use-cases': 'Use cases',
+  compare: 'Compare',
 
   '-- Reference': { type: 'separator', title: 'Reference' },
   changelog: { title: 'Changelog', theme: { toc: false } },
   roadmap: 'Roadmap',
-  pricing: 'Pricing',
+  // Conversion surface — same sidebar-off treatment as the landing (see `index`).
+  pricing: { title: 'Pricing', theme: { sidebar: false } },
+  legal: 'Legal',
   'launch-week': { title: 'Launch Week', theme: { toc: false } },
   blog: { title: 'Blog', theme: { toc: false } },
   whitepaper: { title: 'Whitepaper ↗', href: 'https://github.com/kensaurus/mushi-mushi/blob/master/MushiMushi_Whitepaper_V5.md' },

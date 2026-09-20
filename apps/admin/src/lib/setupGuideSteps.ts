@@ -70,12 +70,14 @@ export interface SetupGuideModel {
 
 /**
  * The required chain the backend models: you cannot install the SDK without a
- * key, and a report cannot arrive before the SDK is running. Nothing else is
- * asserted — see the module header.
+ * key, and a report needs a key to exist (the onboarding "send a test report"
+ * button is JWT-authed, so `sdk_installed` is *not* a prerequisite — since
+ * 2026-09 it is an optional step and the first report may be the fixture).
+ * Nothing else is asserted — see the module header.
  */
 const REQUIRED_PREREQUISITE: Record<string, string> = {
   sdk_installed: 'api_key_generated',
-  first_report_received: 'sdk_installed',
+  first_report_received: 'api_key_generated',
 }
 
 /**

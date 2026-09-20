@@ -99,133 +99,178 @@ the GIF, a screenshot, or the install command.
 
 ## Show HN — title + body
 
-Post 9am PT Tuesday. Be at your desk for the next 6 hours.
+One shot, on release R1 "Proof" (see [launch-week.md](./launch-week.md)).
+Post on a Tuesday between 12:00 and 17:00 UTC and stay at the keyboard for
+the next six hours. The URL is the no-signup demo (`/connect`), never the
+repo; if the demo gate has not passed, the URL is the repo and line one of
+the README must be `npx mushi-mushi`.
 
-### Title options (pick whichever feels less salesy *to you*)
+HN removes posts that read as AI-written and downvotes ones that read as
+marketing. So: first person, sober, specific, no mascot, no emoji, no
+"Mushi-chan". Positioning is ADR 0004 (the bug mediator for AI-built apps),
+not v1 ("user-friction layer that complements Sentry").
 
-- `Show HN: Mushi Mushi – The user-friction layer that complements Sentry`
-- `Show HN: Mushi Mushi – A small Japanese bug who classifies user-felt bugs and opens fix PRs`
-- `Show HN: I built the bug-reporting tool I wanted Sentry to be`
+### Title options (under 80 characters; pick one)
 
-### Body (paste in the first comment, not the post body — HN etiquette)
+- `Show HN: Mushi Mushi – Open-source bug reports that explain why AI-written code broke`
+- `Show HN: I built a bug reporter that gives a plain-English diagnosis for apps Cursor wrote`
+
+### Body (paste as the first comment, not the post body — HN etiquette)
+
+Replace the bracketed numbers with the live ones from
+[`scorecard.md`](./scorecard.md) on the day. Never round.
 
 ```
-Hi HN,
+Hi HN, I'm Kenji, solo on this.
 
-I'm Ken. For the last ~8 months I've been building Mushi Mushi — the user-friction
-intelligence layer I kept wanting next to Sentry.
+What it is: a bug-report widget for your app (web, React Native, Capacitor,
+Flutter, iOS, Android). A user clicks it or shakes the phone and writes one
+sentence. Mushi attaches the screenshot, the console and network tail, the
+route and what they did before, then writes a plain-English diagnosis of what
+broke and why, scoped to the files involved. The fix prompt lands in Cursor or
+Claude Code over MCP; the MCP server needs no LLM key of its own.
 
-Sentry is excellent at showing me what my code *threw*. It can't see:
-- A button that looks clickable but does nothing
-- A checkout flow that confuses every new user
-- A page that takes 12 seconds to load but never errors
-- A layout that breaks on one specific Android phone
+Why: I ship apps that Cursor wrote most of. When a user DMs "it's broken", I
+lose an afternoon on code I didn't write. I wanted the report to arrive
+already explained.
 
-Those are user-felt bugs. Users just leave.
+What's open: SDKs are MIT, the server is AGPLv3, self-hosting is one command.
+The hosted free tier is 50 diagnoses a month, no card.
 
-How it works: drop a 14 KB SDK into your app, users shake their phone (or click
-the widget), and Mushi auto-captures screenshot + console + network + route +
-intent. Then a two-stage LLM pipeline (Haiku fast-filter → Sonnet vision + RAG)
-classifies, dedupes, and — if you opt in — opens a draft fix PR on your GitHub
-repo via a sandboxed agent (e2b / modal / cloudflare; never runs in prod without
-one).
+How it differs from what you already use, as far as I can tell:
+- Sentry shows what the code threw; Seer, its AI debugging agent, is a
+  separate subscription (third-party write-ups say $40 per active contributor
+  per month since Jan 2026) and isn't in Sentry self-hosted. Mushi's
+  diagnosis is on every plan, and a Sentry issue-alert webhook feeds Mushi
+  if you want both.
+- PostHog gives you replay plus error tracking; you scrub the replay
+  yourself, and there's no fix loop into the editor.
+- Jam.dev is a human recording a bug in Chrome for a team. Mushi is the end
+  user reporting from inside the app, plus the diagnosis.
 
-Stack: React 19 + Tailwind 4 + Vite 8 (admin), Supabase Edge Functions + Postgres
-+ pgvector (backend), Claude Sonnet + Haiku with OpenAI fallback, Playwright for
-fix verification. MCP JSON-RPC server so Cursor / Claude Code / Codex can read
-reports and dispatch fixes from inside the agent.
+Honest state: [9] signups in five months, [0] external projects that have
+sent a report. Every diagnosis in the database is from my own apps. What I'd
+like tested is diagnosis quality on a repo I've never seen: install it,
+file a report against something you know is broken, tell me where the
+diagnosis was wrong.
 
-SDKs under MIT, server under AGPLv3 (open-core — copyleft, commercial license for SaaS modifiers;
-a small enterprise edition is the only commercial boundary). BYOK, BYO storage,
-region-pinned (US / EU / JP), SOC 2 evidence pack on the hosted tier.
-
-Live demo with seeded bugs: https://kensaur.us/mushi-mushi/
-Quick start: `npx mushi-mushi`
+Demo, no signup: https://kensaur.us/mushi-mushi/docs/connect
+Install: npx mushi-mushi
 Repo: https://github.com/kensaurus/mushi-mushi
+Two-minute video: [link]
 
-Happy to answer anything about the open-core split (AGPLv3 core,
-narrow commercial enterprise edition). 🐛
+Known limits: docs are English only; file references need the repo indexed
+first; the free tier caps diagnoses, not reports; the hosted LLM is mine
+unless you bring your own key.
 ```
 
 ### Responding in comments
 
+- Reply to every comment within 10 minutes for the first two hours, then
+  within the hour. Presence is most of what HN rewards.
 - Lead with agreement whenever you can ("You're right that X — here's what I chose…")
-- Never use "we" if you're solo. Just "I".
+- Never use "we". It is one person.
 - If someone compares to Sentry — agree, then give the canonical answer: "Sentry tells you what threw. Mushi ingests that — plus the bugs that never throw — explains each one in plain English, and closes the loop with a fix your agent can ship. One queue, with or without Sentry." Never say "not a replacement" — instead-of or alongside is their call.
 - If someone asks about LLM cost — show the real `/health` page numbers.
-- Stay for 6 hours at minimum. HN rewards presence.
+- If someone asks about users — give the scorecard number, not a feeling.
+- Stay for six hours at minimum. Do not resubmit if it falls off.
 
 ---
 
 ## Reddit — opener per subreddit
 
-Different angle per subreddit. Never cross-post the same text. Post one per day
-across the launch window.
+Reddit is not a launch channel for us; it is value threads in the two weeks
+after the Show HN (release R1) and around Product Hunt (R2). The rules that
+matter more than the copy:
 
-### r/webdev — "I built"
+- **Thread first, link in the comments.** The post is the useful thing; the
+  link is a reply to whoever asks. A link post from a new account is removed
+  in most of these subs.
+- **One angle per subreddit, never the same text twice.** Check each sub's
+  self-promotion rule the week you post; r/lovable and r/boltnewbuilders in
+  particular change theirs.
+- **No mascot, no emoji, first person.** Same standard as HN.
+- **Reply to every comment for 48 hours.** Then leave the thread alone.
 
-```
-Title: I built a bug-reporting widget that classifies and opens fix PRs
-
-I kept running into user feedback that my monitoring couldn't see — dead buttons,
-slow screens, layouts that break on one Android. So I spent a few months building
-the thing I wanted: a 14 KB shake-to-report widget + an LLM pipeline that
-classifies, dedupes, and optionally opens a draft GitHub PR with a fix.
-
-OSS, MIT-licensed SDKs for React / Vue / Svelte / Angular / React Native /
-Capacitor / vanilla JS. Live demo at kensaur.us/mushi-mushi if you want to poke
-around without installing anything.
-
-Runs with or without Sentry — Sentry alerts can route straight into Mushi's queue, and merged fixes resolve the linked Sentry issue. Repo: github.com/kensaurus/mushi-mushi. Happy to take hate.
-```
-
-### r/reactjs — "drop-in for React"
+### r/cursor — "how I handle 'it's broken' DMs"
 
 ```
-Title: Drop-in user-felt-bug reporting for React (with auto-fix PRs)
+Title: How I handle "it's broken" DMs for apps Cursor wrote — a report → fix-prompt loop over MCP
 
-Four lines to add to any React / Next.js app:
+Most of my apps are 70-90% Cursor-written. The part nobody warned me about
+is what happens after launch: a user DMs "the save button doesn't work", and
+I'm now debugging code I've read once, on a device I don't have, from a
+one-line description.
 
-    import { MushiProvider } from '@mushi-mushi/react'
+What I do now, in order:
 
-    <MushiProvider config={{ projectId, apiKey }}>
-      <YourApp />
-    </MushiProvider>
+1. The app has a bug-report widget. The user writes one sentence; the report
+   carries the screenshot, the console/network tail, the route, and the last
+   few actions. That alone removes the "can you reproduce it?" round-trip.
+2. The report gets a plain-English diagnosis: what broke, why, which files.
+   Not a stack trace. For code I didn't write, this is the step that saves
+   the afternoon.
+3. In Cursor, an MCP server exposes the open reports. I ask "what's broken in
+   prod?", it pulls the diagnosis and a fix prompt scoped to the files, and I
+   apply it in the same session. No second LLM key for the MCP server.
+4. Each merged fix becomes a lesson the agent reads on the next PR, so the
+   same bug doesn't come back with the next feature.
 
-Users get a quiet shake-to-report widget. Reports land classified by an LLM
-within seconds. Dedupe is pgvector-backed. The cool part: if you wire a GitHub
-token, it opens a draft fix PR via an agentic orchestrator (sandboxed, never
-runs in prod without e2b/modal/cloudflare).
+Happy to share the MCP config and the diagnosis prompt if useful. What do
+other people do with those DMs?
 
-MIT on the SDK, 5 KB gzipped for the React bindings, 14 KB for the core widget.
-Would love feedback from people actually running this pattern in prod.
-
-Live demo (no signup): kensaur.us/mushi-mushi
-npm: @mushi-mushi/react
-Repo: github.com/kensaurus/mushi-mushi
+(Link to the tool in a comment if anyone asks; it's open source.)
 ```
 
-### r/selfhosted — "here's the docker-compose"
+### r/ClaudeAI — "a subagent for user bug reports"
 
 ```
-Title: Self-hosted user-felt-bug tracker with LLM classification + auto-fix PRs
+Title: A subagent that pulls a user's bug report + fix context into Claude Code
 
-Been dogfooding this for months and finally got the self-host story clean. One
-docker-compose up, BYOK for Anthropic/OpenAI, your Postgres, your object store
-(S3 / R2 / GCS / Azure Blob), your region.
+I wanted Claude Code to start from the answer instead of the question when a
+user reports a bug. So I wrote a subagent that, given a report id, pulls the
+user's sentence, the screenshot description, the console/network tail, the
+plain-English diagnosis, the fix context (files + why) and any past lessons
+for that component, over MCP, and then proposes the smallest change plus a
+test.
 
-It catches the bugs your crash tracker can't — dead buttons, confusing flows,
-slow pages that never error. 2-stage LLM pipeline classifies and dedupes them.
-Optionally opens fix PRs on your GitHub via a sandboxed agent.
+Here's the agent definition (paste from plugins/mushi-debugger/agents/mushi-debugger.md):
 
-MIT SDKs, AGPLv3 server (open-core). Sentry + Langfuse + GitHub
-integration health probe is on by default.
+<paste the file verbatim>
 
-Repo: github.com/kensaurus/mushi-mushi
-Self-host guide: SELF_HOSTED.md in the repo.
+Things I got wrong on the way: giving it the whole repo instead of the fix
+context (worse diffs, slower), and letting it refactor. The "smallest change
+plus a failing test" instruction did more than any model choice.
 
-Anyone else running something like this self-hosted? Curious how you handle
-LLM cost over volume.
+Curious how others scope subagents for debugging. Link to the MCP server in
+a comment if wanted.
+```
+
+### r/lovable and r/boltnewbuilders — "it broke for a real user" (check rules first)
+
+```
+Title: Your Lovable app broke for a real user: a debug checklist when you didn't write the code
+
+Sharing the checklist I use when an app I mostly generated breaks for
+someone else. None of it needs a tool.
+
+1. Get their exact words and the page. "It's broken" isn't a bug report.
+2. Reproduce logged out, in a private window, on their device type. Most
+   "works for me" bugs are auth state, a cached build, or an env var that
+   only exists locally.
+3. Read the FIRST red line in the console, not the last. Copy the file:line.
+4. Find that file and ask the agent what the function assumes about its
+   inputs. Generated code assumes the happy path it was generated against.
+5. Ask for the smallest fix and a failing test. Refuse the refactor.
+6. Ship, reproduce again, reply to the user with what changed.
+7. Write the cause where the agent will read it next time (a rule file, a
+   comment, a lessons file).
+
+The expensive steps are 1-3, and the user can't do them for you. That's the
+only place I use a tool (in-app bug reporter that attaches the screenshot and
+console and writes the diagnosis) - link in a comment if anyone wants it.
+
+What's on your list that isn't on mine?
 ```
 
 ### r/opensource — "the open-core rationale"
@@ -235,29 +280,15 @@ Title: I MIT'd the SDKs and AGPLv3'd the server (open-core) — here's why
 
 TL;DR: people shouldn't need a license lawyer to embed my widget in their app,
 and self-hosters shouldn't fear copyleft or a future bait-and-switch. So it's
-MIT on everything a user installs, AGPLv3 (copyleft; commercial license available) on the
-server — fork it and ship products on it. The only commercial boundary is a small
-source-available enterprise edition (SSO/SCIM, audit export, region pinning) that
-a solo builder never needs. The Langfuse / Supabase model. Happy to get told I'm wrong.
+MIT on everything a user installs, AGPLv3 (copyleft; commercial license
+available) on the server — fork it and ship products on it. The only
+commercial boundary is a small source-available enterprise edition (SSO/SCIM,
+audit export, region pinning) that a solo builder never needs. The Langfuse /
+Supabase model. Happy to get told I'm wrong.
 
-The tool: github.com/kensaurus/mushi-mushi — user-felt bug reports (the ones
-Sentry can't see) with an LLM classifier and optional auto-fix PRs.
-
-Live demo: kensaur.us/mushi-mushi
-```
-
-### r/javascript — "the auto-fix demo"
-
-```
-Title: Watch an LLM classify a user bug report and open the fix PR (60s video)
-
-Little weekend demo of the auto-fix loop: user shakes phone → 14 KB widget pops
-up → types "login button does nothing on iPad Safari" → Haiku fast-filter tags
-it 'actionable' → Sonnet classifies as High severity, Authentication component
-→ agent drafts a fix, sandboxed in e2b → GitHub PR opened for review.
-
-All OSS, MIT-licensed SDKs: github.com/kensaurus/mushi-mushi
-Live demo: kensaur.us/mushi-mushi
+The tool: an in-app bug reporter for AI-written apps — the user's report
+arrives with a plain-English diagnosis and a fix prompt for Cursor / Claude
+Code. Repo and demo in a comment.
 ```
 
 ### r/mcp — "receipts, not hype"
@@ -267,73 +298,37 @@ Title: MCP server that turns a user bug report into a paste-ready fix prompt in 
 
 Been building this in the open for a while, posting the boring parts too.
 
-The MCP server (@mushi-mushi/mcp) exposes triage/fix/inventory/setup tools
-against your own project's reports — it doesn't bundle an LLM; it calls the
-Mushi API using a project MCP key (`MUSHI_API_KEY`).
-No LLM key is needed in the MCP server process itself (model usage is handled
-by your project's Mushi/BYOK configuration).
+The MCP server (@mushi-mushi/mcp) exposes report / fix / inventory / setup
+tools against your own project's reports. It doesn't bundle an LLM; it calls
+the Mushi API with a project MCP key (MUSHI_API_KEY), so no LLM key lives in
+the MCP process. Model usage is your project's hosted or BYOK configuration.
 
-What it does end to end: a user shakes their phone or clicks a widget, the
-report gets classified (severity, component, root-cause hint) and deduped
-against a knowledge graph, then you ask your agent "what's broken in prod?"
-and it pulls the plain-English diagnosis + a ready-to-paste fix straight from
-MCP. Optional: dispatch a sandboxed agent to open a draft PR.
+End to end: a user clicks the widget or shakes the phone, the report is
+classified (severity, component, root cause) and deduped, then you ask your
+agent "what's broken in prod?" and it pulls the plain-English diagnosis plus a
+ready-to-paste fix over MCP. Optional: dispatch a sandboxed agent to open a
+draft PR.
 
-Config schema + smithery.yaml are in the repo if you want to see exactly what
-env vars it needs before installing anything.
+Config schema and smithery.yaml are in the repo so you can see exactly which
+env vars it needs before installing anything. Repo + Smithery link in a
+comment.
 
-Repo: github.com/kensaurus/mushi-mushi
-Live demo (no signup): kensaur.us/mushi-mushi
-Smithery: smithery.ai/servers/kensaurus/mushi-mushi
-
-Genuinely curious what MCP server design choices people here have regretted —
-scope creep in tool count is the one I keep fighting.
+Genuinely curious which MCP server design choices people here have regretted.
+Scope creep in tool count is the one I keep fighting.
 ```
 
-### r/programming — "the architecture post"
+### r/webdev and r/reactjs — journey post #2 only
 
-```
-Title: Architecture: turning user rage-shakes into GitHub PRs (with LLM judging itself weekly)
+Do not post product openers here. When journey post #2 ("Show HN, by the
+numbers") is live, post it as a text thread with the numbers inline and the
+link in a comment. The angle is the data, not the tool.
 
-Wrote up the architecture of Mushi Mushi — the user-felt-bug tracker I've been
-working on. Interesting bits:
+### Backlog angles (not scheduled; earlier drafts kept in git history)
 
-- 2-stage LLM pipeline (Haiku fast-filter → Sonnet + vision + RAG) for classification
-- Knowledge graph in Postgres + pgvector for dedup (bug ↔ component ↔ page ↔ version)
-- LLM-as-Judge runs weekly, scores the classifier's own output, low scorers feed
-  a prompt A/B queue that auto-promotes candidates when their judge score beats
-  the baseline
-- Fix orchestrator opens draft GitHub PRs via a sandboxed agent (e2b/modal/cloudflare)
-  with MCP JSON-RPC so any compatible agent can plug in (Cursor, Claude Code, Codex)
-
-Full architecture: \<link to apps/docs/content/concepts/architecture.mdx\>
-Repo: github.com/kensaurus/mushi-mushi
-```
-
-### r/reactnative — "shake-to-report for mobile"
-
-```
-Title: Native shake-to-report for React Native / Expo (with bottom-sheet widget)
-
-Built a bug-reporting widget for RN / Expo — users shake, bottom sheet pops up,
-offline queue handles the airplane-mode case, reports classified server-side
-by an LLM within seconds.
-
-Drop-in:
-
-    import { MushiProvider } from '@mushi-mushi/react-native'
-
-    <MushiProvider projectId={…} apiKey={…}>
-      <App />
-    </MushiProvider>
-
-OSS, MIT. Peer-deps are @react-native-async-storage/async-storage and
-@react-navigation/native (both optional).
-
-Live web demo: kensaur.us/mushi-mushi
-npm: @mushi-mushi/react-native
-Repo: github.com/kensaurus/mushi-mushi
-```
+- r/selfhosted — the one-command self-host story, BYOK, your object store.
+- r/javascript — the 60-second video of report → diagnosis → PR.
+- r/programming — the architecture write-up (two-stage classification, pgvector dedupe, the weekly judge).
+- r/reactnative — shake-to-report with an offline queue for RN / Expo.
 
 ---
 
@@ -466,44 +461,58 @@ If the idea is useful, a star helps the next developer find it. 🐛
 
 ## Product Hunt copy
 
-Launch on the Wednesday of launch week, 12:01am PT.
+Product Hunt is release R2 "Found", not launch week. It runs after the Show
+HN has been measured, and it carries the HN numbers. Submit at 12:01 am PT on
+a weekday; pin the maker comment immediately. No mascot on PH either: the
+listing is a credibility artifact, and the reader is deciding whether this is
+real.
 
-### Tagline (≤ 60 chars)
+- **Tagline (≤ 60 chars):** `Bug reports that explain why your AI-built app broke`
+- **Topics:** Developer Tools, Open Source, AI
+- **Gallery:** the hero GIF from `scripts/marketing/record-readme-gif.mjs`
+  first, then three stills from `scripts/marketing/capture-admin-screenshots.mjs`
+  (report detail with the diagnosis, the fix prompt in Cursor, the queue).
 
-> Every bug, one queue, fixes included — with or without Sentry.
-
-### Description
+### Description (items 1, 3 and 4 of the Show HN comment)
 
 ```
-Sentry sees what your code throws. Mushi sees what your users feel.
+A bug-report widget for the app your AI editor wrote.
 
-Drop a 14 KB SDK in your app (React, Vue, Svelte, Angular, React Native,
-Capacitor, or vanilla JS). Users shake to report. A 2-stage LLM pipeline
-classifies, dedupes, and — if you opt in — opens a draft fix PR on your
-GitHub repo.
+A user clicks the widget or shakes the phone and writes one sentence. Mushi
+attaches the screenshot, the console and network tail, the route and what
+they did before, then writes a plain-English diagnosis of what broke and
+why, scoped to the files involved. The fix prompt lands in Cursor or Claude
+Code over MCP, with no second LLM key.
 
-• MIT-licensed SDKs, AGPLv3 server (open-core)
-• Self-host with one docker-compose, or use the hosted tier
-• One queue for everything: Sentry / Datadog / New Relic alerts route in, fixes route back out
-• MCP server so Cursor / Claude Code / Codex can triage from the agent
+Open source: MIT SDKs, AGPLv3 server, self-host in one command. Hosted free
+tier: 50 diagnoses a month, no card.
 
-Live demo (no signup): kensaur.us/mushi-mushi
+How it differs:
+• Sentry shows what the code threw; its AI agent (Seer) is a separate
+  subscription and is not in Sentry self-hosted. Mushi's diagnosis is on
+  every plan, and a Sentry webhook feeds Mushi if you run both.
+• PostHog gives you replay and error tracking; you read the replay yourself.
+• Jam is a teammate recording a bug in Chrome. Mushi is the end user
+  reporting from inside the app, plus the diagnosis.
+
+Demo, no signup: kensaur.us/mushi-mushi/docs/connect
 Repo: github.com/kensaurus/mushi-mushi
-
-🐛 Be nice to Mushi-chan.
 ```
 
-### First-comment from the maker
+### First comment from the maker (item 5 of the Show HN comment, with the HN numbers)
 
 ```
-Hey PH! I'm Ken, solo maintainer of Mushi-chan (the bug).
+Hi, I'm Kenji. One person, no team.
 
-I built this because my side projects kept getting user feedback Sentry couldn't
-see — dead buttons, confusing flows, slow pages. I wanted the loop from "user
-shakes phone" to "draft PR on my repo" to be under 60 seconds. It mostly is.
+This went on Show HN [N] weeks ago: [N] visitors, [N] signups, [N] projects
+that sent a first report. Those are the real numbers, and the next post on
+the blog will have the next ones.
 
-Happy to answer architecture / licensing / cost questions. And Mushi-chan is
-listening if you break the live demo — she'll classify her own bug reports. 🐛
+What I'd like from PH is the same thing I asked HN for: install it on a repo
+I've never seen, report something you know is broken, and tell me where the
+diagnosis was wrong. That's the part I can't test on my own apps.
+
+Happy to answer licensing, cost and architecture questions all day.
 ```
 
 ---

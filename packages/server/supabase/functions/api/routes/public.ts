@@ -46,6 +46,8 @@ import {
 import { safeParse, ApiReportBodySchema } from '../../_shared/validate.ts';
 import { registerReporterFeatureBoardRoutes } from './reporter-feature-board.ts';
 import { claimIpRateLimit, extractClientIp } from './cli-auth.ts';
+import { unsubscribeSecret, verifyUnsubscribeToken } from '../../_shared/lifecycle-unsubscribe.ts';
+import { brandFooterDefaultForProject } from '../../_shared/brand-footer.ts';
 
 // Upper bound for reporter-supplied notes that feed `mushi_apply_reporter_feedback`
 // (these can seed a reopened child report's description). Keeps a hostile or
@@ -147,6 +149,49 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   // other route file (identity-secret.ts, sdk-assistant.ts,
   // settings-research.ts, etc.) does.
 
+  // ============================================================
+  // Lifecycle email unsubscribe — GET|POST /v1/public/email/unsubscribe?t=
+  //
+  // `t` = `<user_id>.<hmac>` signed by the lifecycle-emails cron with
+  // LIFECYCLE_UNSUB_SECRET (_shared/lifecycle-unsubscribe.ts). GET serves
+  // the link in the email footer; POST is the RFC 8058 one-click form mail
+  // clients send to the List-Unsubscribe URL. Both write
+  // lifecycle_email_optout and render a tiny HTML page. Fails closed (400)
+  // when the secret is unset or the token does not verify — never a
+  // redirect, never a JSON blob a mail client would render.
+  // ============================================================
+  const unsubscribePage = (title: string, body: string) =>
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title></head><body style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:480px;margin:64px auto;padding:0 16px;color:#18181b;line-height:1.5"><h1 style="font-size:20px">${title}</h1><p>${body}</p></body></html>`;
+  const unsubscribeHandler = async (c: Context) => {
+    const secret = unsubscribeSecret();
+    const userId = secret ? await verifyUnsubscribeToken(c.req.query('t'), secret) : null;
+    if (!userId) {
+      return c.html(
+        unsubscribePage(
+          'This unsubscribe link is not valid',
+          'It may have been cut off by your mail client. You can also turn setup emails off in the Mushi console under Settings.',
+        ),
+        400,
+      );
+    }
+    const db = getServiceClient();
+    const { error } = await db
+      .from('lifecycle_email_optout')
+      .upsert({ user_id: userId }, { onConflict: 'user_id', ignoreDuplicates: true });
+    if (error) {
+      log.warn('lifecycle unsubscribe write failed', { err: error.message });
+      return c.html(unsubscribePage('Something went wrong', 'Please try the link again in a minute.'), 500);
+    }
+    return c.html(
+      unsubscribePage(
+        "You're unsubscribed",
+        'No more setup emails from Mushi. Account notices you asked for (usage alerts, team invites) still arrive.',
+      ),
+    );
+  };
+  app.get('/v1/public/email/unsubscribe', unsubscribeHandler);
+  app.post('/v1/public/email/unsubscribe', unsubscribeHandler);
+
   app.get('/v1/sdk/latest-version', async (c) => {
     const packageName = c.req.query('package')?.trim();
     if (!packageName) {
@@ -190,16 +235,24 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
           'sdk_screenshot_sensitive_hint, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, ' +
-          'reporter_notifications_enabled, ' +
+          'reporter_notifications_enabled, widget_brand_footer, ' +
           'assistant_enabled, assistant_label, assistant_greeting, assistant_suggestions',
       )
       .eq('project_id', projectId)
       .maybeSingle();
 
     if (error) return dbError(c, error);
+    // "Powered by Mushi" footer (growth loop, docs/plan-gtm.md → Workstream
+    // C §6): project_settings.widget_brand_footer wins when set; otherwise
+    // the plan decides (on for Free Cloud, off for paid / self-host). The
+    // host's MIT `brandFooter` config remains a hard override on the client.
+    const brandFooterDefault = await brandFooterDefaultForProject(db, projectId);
     c.header('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
     c.header('Vary', 'Origin, X-Mushi-Project, X-Mushi-Api-Key');
-    return c.json({ ok: true, data: normalizeSdkConfig(data as SdkConfigRow | null) });
+    return c.json({
+      ok: true,
+      data: normalizeSdkConfig(data as SdkConfigRow | null, { brandFooterDefault }),
+    });
   });
 
   // ============================================================

@@ -20,6 +20,14 @@ export const OG_CARD_URL = `${DOCS_SITE}/social-preview/og-card.png`
 
 const ORGANIZATION_ID = `${PRODUCT_ROOT}#organization`
 
+/**
+ * The Bluesky account that actually posts (docs/marketing/STOREFRONTS.md §5).
+ * The brand handle `mushimushi.dev` and the X handle `@mushimushi_dev` were
+ * never reserved, so neither may appear in `sameAs` — a `sameAs` URL that
+ * 404s (or points at a stranger) is worse for entity resolution than none.
+ */
+export const BLUESKY_PROFILE_URL = 'https://bsky.app/profile/kensaurus.bsky.social'
+
 /** schema.org Organization — rendered site-wide from app/layout.tsx. */
 export const ORGANIZATION_JSONLD = {
   '@context': 'https://schema.org',
@@ -28,8 +36,27 @@ export const ORGANIZATION_JSONLD = {
   name: 'Mushi Mushi',
   url: PRODUCT_ROOT,
   logo: `${DOCS_SITE}/brand/logo-mark.svg`,
-  sameAs: [MUSHI_CANONICAL_URLS.repo, 'https://x.com/mushimushi_dev'],
+  sameAs: [MUSHI_CANONICAL_URLS.repo, BLUESKY_PROFILE_URL],
 } as const
+
+/** One visible Q&A pair; the same array feeds the FAQPage JSON-LD so markup and schema cannot drift. */
+export interface FaqEntry {
+  q: string
+  a: string
+}
+
+/** schema.org FAQPage from a visible Q&A list (compare pages, how-to pages). Answers stay plain text. */
+export function faqPageJsonLd(items: readonly FaqEntry[]): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: items.map((item) => ({
+      '@type': 'Question',
+      name: item.q,
+      acceptedAnswer: { '@type': 'Answer', text: item.a },
+    })),
+  }
+}
 
 /** schema.org WebSite — rendered site-wide from app/layout.tsx. */
 export const WEBSITE_JSONLD = {

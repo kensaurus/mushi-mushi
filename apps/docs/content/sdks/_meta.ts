@@ -12,6 +12,7 @@ export default {
   node: '@mushi-mushi/node',
   presets: 'SDK presets',
   assistant: 'In-SDK Ask assistant',
+  analytics: 'Product analytics (track)',
 
   '-- Mobile': { type: 'separator', title: 'Mobile & native' },
   'react-native': '@mushi-mushi/react-native',

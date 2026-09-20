@@ -39,7 +39,6 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { isActivationCockpitV2Enabled, useActivationStatus } from '../lib/useActivationStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
-import { trackSelf } from '../lib/track'
 import { useCreateProject } from '../lib/useCreateProject'
 import { usePageCopy } from '../lib/copy'
 import { useOnboardingUx, resolveQuickOnboardingTab } from '../lib/onboardingModeUx'
@@ -58,6 +57,7 @@ import { restartFirstRunTour } from '../components/FirstRunTour'
 import { openSetupGuide } from '../lib/setupGuidePrefs'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { OnboardingActivationLanes } from '../components/onboarding/OnboardingActivationLanes'
+import { FirstDiagnosisScreen } from '../components/onboarding/FirstDiagnosisScreen'
 import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
 import {
   ProjectCreatedSuccessPanel,
@@ -230,6 +230,33 @@ export function OnboardingPage() {
     [project],
   )
 
+  // ── First-run path (docs/plan-gtm.md, Workstream B §2b) ──────────────────
+  // Two screens instead of the four-tab checklist while the project has no
+  // report yet: S1 names the project (the create endpoint mints the key),
+  // S2 sends a test report and renders the diagnosis inline. `?view=all`
+  // reaches the full checklist so nothing existing is unreachable. Once S2
+  // is on screen we hold it for the session — otherwise the setup refetch
+  // that follows the first report would swap the diagnosis out from under
+  // the user the moment it landed.
+  const viewParam = searchParams.get('view')
+  const firstRunEligible =
+    !setupCliMode &&
+    (!setup.hasAnyProject || (project != null && setup.isStepIncomplete('first_report_received')))
+  const [firstRunHeld, setFirstRunHeld] = useState(false)
+  useEffect(() => {
+    if (firstRunEligible && viewParam !== 'all') setFirstRunHeld(true)
+  }, [firstRunEligible, viewParam])
+  const firstRun = viewParam !== 'all' && (firstRunEligible || firstRunHeld)
+  const setView = useCallback(
+    (view: 'all' | null) => {
+      const next = new URLSearchParams(searchParams)
+      if (view) next.set('view', view)
+      else next.delete('view')
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+    },
+    [searchParams, setSearchParams],
+  )
+
   // NOTE: We deliberately do NOT auto-redirect when the project is fully set
   // up. An earlier version bounced finished projects to `/`, which made the
   // SDK install snippet (Card 4) unreachable from the sidebar "Setup" link,
@@ -330,7 +357,8 @@ export function OnboardingPage() {
     setTestRanAt(new Date().toISOString())
     setTestStatus(res.ok ? 'pass' : 'fail')
     if (res.ok) {
-      trackSelf('test_report_sent', { project_id: project.project_id })
+      // `test_report_sent` is emitted server-side by the test-report route
+      // (dedup per report), so the console does not double-count it here.
       toast.success('Test report sent', 'Look for it on the Reports page in a few seconds.')
       setup.reload()
       reloadStats()
@@ -432,6 +460,109 @@ export function OnboardingPage() {
   }
   if (statsError) return <ErrorAlert message={`Failed to load setup stats: ${statsError}`} onRetry={reloadAll} />
 
+  // Shared by the Steps tab and first-run S1 — one form, two homes.
+  const createProjectForm = (
+    <Card className="p-5 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-fg">
+          {setupCliMode && setup.hasAnyProject
+            ? 'Create a new project'
+            : setupCliMode
+              ? 'Create your project'
+              : 'Create your first project'}
+        </h3>
+        <ContainedBlock tone="muted" className="mt-2">
+          <p className="text-xs text-fg-muted">
+            A project groups all bug reports from one application. Name it after your app.
+          </p>
+        </ContainedBlock>
+      </div>
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <Input
+            label="Project name"
+            helpId="onboarding.project_name"
+            placeholder="e.g. My SaaS App"
+            value={projectName}
+            onChange={(e) => {
+              setProjectName(e.target.value)
+              if (createError) clearCreateError()
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && createProject()}
+            autoFocus
+            aria-invalid={createError ? true : undefined}
+            aria-describedby={createError ? 'onboarding-create-error' : undefined}
+          />
+        </div>
+        <Btn
+          onClick={createProject}
+          loading={creating}
+          disabled={creating || !projectName.trim()}
+          title={!projectName.trim() ? 'Enter a project name to continue' : undefined}
+        >
+          Create
+        </Btn>
+      </div>
+      {createError && (
+        <div id="onboarding-create-error">
+          <ErrorAlert
+            title={createErrorTitle}
+            message={createError.message}
+            code={createError.code}
+            actions={createErrorActions}
+          />
+        </div>
+      )}
+    </Card>
+  )
+
+  // First-run wizard: S1 (name the project) → S2 (see your first diagnosis).
+  // The key is auto-minted by the create endpoint, so there is no key step.
+  const firstRunWizard = (
+    <div className="space-y-4" data-testid="onboarding-first-run">
+      {!project ? (
+        <div className="space-y-4">
+          <div>
+            <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Step 1 of 2</p>
+            <h2 className="mt-0.5 text-base font-semibold text-fg">Name your project</h2>
+            <p className="mt-1 text-xs text-fg-muted">
+              That is the only input we need. Your report key is minted for you.
+            </p>
+          </div>
+          {createdProject ? (
+            <Card className="p-4 border-ok/30 bg-ok/5">
+              <p className="text-sm font-medium text-fg">
+                <span className="font-mono">{createdProject.name}</span> is ready
+              </p>
+              <p className="mt-0.5 text-xs text-fg-muted">Preparing your first diagnosis…</p>
+            </Card>
+          ) : (
+            <div ref={createFormRef}>{createProjectForm}</div>
+          )}
+        </div>
+      ) : (
+        <FirstDiagnosisScreen
+          projectId={project.project_id}
+          projectName={project.project_name}
+          projectSlug={project.project_slug}
+          apiKey={createdProject?.apiKey ?? apiKey?.key ?? null}
+          onDiagnosed={reloadAll}
+        />
+      )}
+      <p className="text-2xs text-fg-faint">
+        Prefer the full checklist (keys, integrations, every optional step)?{' '}
+        <Btn
+          variant="ghost"
+          size="sm"
+          onClick={() => setView('all')}
+          className="inline border-0 bg-transparent shadow-none px-0 py-0 text-2xs text-accent-foreground hover:text-accent underline underline-offset-2"
+        >
+          Show all steps
+        </Btn>
+      </p>
+    </div>
+  )
+
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-onboarding">
       <PageHeaderBar
@@ -453,6 +584,21 @@ export function OnboardingPage() {
           {stats.setupDone ? 'READY' : stats.hasAnyProject ? `${stats.requiredComplete}/${stats.requiredTotal}` : 'START'}
         </Badge>
       </PageHeaderBar>
+
+      {firstRun ? firstRunWizard : (
+      <>
+      {firstRunEligible && (
+        <p className="text-2xs text-fg-faint">
+          <Btn
+            variant="ghost"
+            size="sm"
+            onClick={() => setView(null)}
+            className="inline border-0 bg-transparent shadow-none px-0 py-0 text-2xs text-accent-foreground hover:text-accent underline underline-offset-2"
+          >
+            ← Back to the quick start
+          </Btn>
+        </p>
+      )}
 
       {/* Mode intro card — renders only on first visit; dismissed via localStorage */}
       <OnboardingModeIntroCard />
@@ -862,58 +1008,7 @@ export function OnboardingPage() {
 
       {shouldShowOnboardingCreateForm(setupCliMode, setup.hasAnyProject, Boolean(createdProject)) && (
         <div id="onboarding-create-form" ref={createFormRef}>
-        <Card className="p-5 space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold text-fg">
-              {setupCliMode && setup.hasAnyProject
-                ? 'Create a new project'
-                : setupCliMode
-                  ? 'Create your project'
-                  : 'Create your first project'}
-            </h3>
-            <ContainedBlock tone="muted" className="mt-2">
-              <p className="text-xs text-fg-muted">
-                A project groups all bug reports from one application. Name it after your app.
-              </p>
-            </ContainedBlock>
-          </div>
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <Input
-                label="Project name"
-                helpId="onboarding.project_name"
-                placeholder="e.g. My SaaS App"
-                value={projectName}
-                onChange={(e) => {
-                  setProjectName(e.target.value)
-                  if (createError) clearCreateError()
-                }}
-                onKeyDown={(e) => e.key === 'Enter' && createProject()}
-                autoFocus
-                aria-invalid={createError ? true : undefined}
-                aria-describedby={createError ? 'onboarding-create-error' : undefined}
-              />
-            </div>
-            <Btn
-              onClick={createProject}
-              loading={creating}
-              disabled={creating || !projectName.trim()}
-              title={!projectName.trim() ? 'Enter a project name to continue' : undefined}
-            >
-              Create
-            </Btn>
-          </div>
-          {createError && (
-            <div id="onboarding-create-error">
-              <ErrorAlert
-                title={createErrorTitle}
-                message={createError.message}
-                code={createError.code}
-                actions={createErrorActions}
-              />
-            </div>
-          )}
-        </Card>
+          {createProjectForm}
         </div>
       )}
         </>
@@ -1127,6 +1222,8 @@ export function OnboardingPage() {
         </div>
       )}
         </>
+      )}
+      </>
       )}
 
       {!ux.hideFooterLinks ? (

@@ -272,6 +272,12 @@ Then: `/mushi-setup` (guided SDK install + MCP wiring), `/mushi-debug` (diagnose
 
 ---
 
+## Community
+
+Questions, ideas and show-and-tell live in **[GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions)** — post a screenshot of your first diagnosis in the pinned *Show and tell* thread, or ask anything; the maintainer answers on weekdays. Release notes go to Discussions → Announcements. Bugs go in [Issues](https://github.com/kensaurus/mushi-mushi/issues), first reply within 24 hours on weekdays. There is also a quieter [Discord](https://discord.gg/mushimushi).
+
+---
+
 ## Contributing
 
 Issues and PRs welcome:

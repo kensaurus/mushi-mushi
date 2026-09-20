@@ -86,6 +86,6 @@ dispatch_fix { reportId: "<id>", autoReadyPr: false }
 ## Safety rules
 
 - All steps above Step 8 are **read-only** — no data is mutated.
-- Never call `dispatch_fix`, `close_report`, `reopen_report`, or `reply_to_reporter` without explicit user confirmation.
+- Never call `dispatch_fix`, `transition_status`, `reopen_report`, or `reply_to_reporter` without explicit user confirmation.
 - If the report is `severity: critical`, also check blast radius before dispatching.
 - Never expose the raw `MUSHI_API_KEY` value in chat or commits.

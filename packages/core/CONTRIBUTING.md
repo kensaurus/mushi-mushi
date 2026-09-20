@@ -223,4 +223,6 @@ chore: bump dependencies
 
 ## Questions?
 
-Open an issue or start a discussion. We're happy to help.
+Questions, ideas and show-and-tell go in [GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions). Bugs go in Issues.
+
+**Issue SLA:** first reply within 24 hours on weekdays (48 hours at weekends). "Looking at this" counts as a reply; the full investigation follows. Nothing is closed without a stated reason.

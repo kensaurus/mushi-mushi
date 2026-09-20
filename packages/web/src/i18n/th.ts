@@ -185,6 +185,6 @@ export const th: MushiLocale = {
     changelog: {
       whatsNew: 'มีอะไรใหม่ใน {version}',
     },
-    poweredBy: 'Powered by Mushi v{version}',
+    poweredBy: 'รายงานบั๊กโดย Mushi',
   },
 };

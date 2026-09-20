@@ -235,6 +235,14 @@ verify_jwt = false
 [functions.usage-alerts]
 verify_jwt = false
 
+# lifecycle-emails runs hourly via pg_cron at :37 (`dispatch_lifecycle_emails`,
+# 20260921000005). Day-0 / day-2 / day-7 activation emails for new accounts.
+# The SQL dispatcher and the handler both return early unless
+# mushi_runtime_config.lifecycle_emails_enabled = 'true'. Auth
+# (requireServiceRoleAuth) is enforced inside the handler.
+[functions.lifecycle-emails]
+verify_jwt = false
+
 # intelligence-report runs weekly via pg_cron. It writes a narrative LLM summary
 # of KPI trends into `intelligence_reports`. Auth is enforced inside the handler.
 [functions.intelligence-report]

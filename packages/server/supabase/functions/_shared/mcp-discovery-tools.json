@@ -145,6 +145,10 @@
       "run_id"
     ]
   },
+  "get_product_events_summary": {
+    "description": "Summarise the Mushi.track() product events this project received in the trailing windowDays (default 30): event names with counts and distinct users, daily volume, and top properties. Returns { window_days, events_total, persons, identified, anonymous, events_per_day: [{ day, count }], top_events: [{ name, count, persons }] }. Read-only. Use first to learn which event names exist before calling query_funnel or get_user_paths; use run_nl_query for ad-hoc SQL over the same rows.",
+    "scope": "mcp:read"
+  },
   "get_project_context": {
     "description": "Return a rich context snapshot for a project: name, repo URL, SDK heartbeat, ingest status, open report count, autofix readiness, your LLM key config, plan tier, and active integration health. Equivalent to a merged preflight + activation + settings read. Agents should call this at the start of a review session to orient themselves.",
     "scope": "mcp:read"
@@ -196,6 +200,10 @@
   },
   "get_usage": {
     "description": "Read-only diagnoses quota and billing summary for the current project: diagnoses used / limit / percentage, spend cap, period start/end, plan name, and whether the project is approaching or over its quota. Use this to answer \"how many diagnoses do I have left?\" or \"am I close to my spend cap?\".",
+    "scope": "mcp:read"
+  },
+  "get_user_paths": {
+    "description": "What did users do next? Rank the events users fired immediately after fromEvent within the trailing windowDays (default 30), most common first, up to limit rows (default 20, max 50). Returns { from_event, total, next: [{ name, count, pct }] }. Read-only. Use to see where users go after a step instead of guessing the funnel order; use query_funnel once you know the ordered steps, or get_product_events_summary for event names.",
     "scope": "mcp:read"
   },
   "improve_qa_story": {
@@ -254,6 +262,10 @@
     "required": [
       "fixId"
     ]
+  },
+  "query_funnel": {
+    "description": "Where do users drop off? Ordered funnel over Mushi.track() events for this project. Pass 2–8 step event names in order (e.g. [\"landing_view\", \"signup_completed\", \"first_report_received\"]); each step counts distinct users who did the previous step then this one within stepWindow (default 7d), over the trailing windowDays (default 30). Optional breakdown property (e.g. \"utm_source\", \"$surface\") splits every step. Returns { steps: [{ name, entered, converted, pct, median_secs }], breakdown: [{ value, entered, steps }] } (pct is conversion from step 1; breakdown is empty unless requested). Read-only. Use to find the biggest drop-off before changing onboarding; use get_product_events_summary to discover event names, or get_user_paths to see what users did after a step.",
+    "scope": "mcp:read"
   },
   "query_lessons": {
     "description": "Retrieve the learning rules (\"lessons\") most relevant to a given code diff or PR context, packed within a token budget. Uses bi-encoder retrieval + severity-weighted scoring; pass the diff/description as the query and max_tokens (default 2000). Returns ranked { lessons: [{ title, rule, severity }] }. Read-only. Use before writing a fix or opening a PR; use list_lessons to browse all lessons unfiltered.",

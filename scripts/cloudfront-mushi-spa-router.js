@@ -59,6 +59,9 @@ var DOCS_EXACT = [
   '/launch-week',
   '/changelog',
   '/cloud',
+  '/use-cases',
+  '/compare',
+  '/legal',
 ];
 
 var DOCS_NESTED_PREFIXES = [
@@ -74,6 +77,9 @@ var DOCS_NESTED_PREFIXES = [
   '/self-hosting/',
   '/plugins/',
   '/blog/',
+  '/use-cases/',
+  '/compare/',
+  '/legal/',
 ];
 
 // CloudFront's `request.querystring` is a map of `{ key: { value } }`, not a

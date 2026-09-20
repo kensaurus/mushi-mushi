@@ -4,58 +4,82 @@ Source: https://kensaur.us/mushi-mushi/docs/launch-week
 
 ---
 title: Launch Week
+description: How Mushi Mushi launches now — one public post per release (Show HN, then Product Hunt, then the growth loop), the gate each release must pass first, and what we publish afterwards. Corrected 2026-09-21.
 ---
 
 # Launch Week
 
-Every feature in Mushi's history was shipped quietly. Launch Week is the corrective.
+  **Correction, 2026-09-21.** This page used to say Launch Week 1 ran in June
+  2026 with posts on Show HN, Product Hunt and Reddit. The five features did
+  ship. The posts did not: no Show HN, no Product Hunt listing and no Reddit
+  thread for Mushi Mushi ever went out. We are keeping the shipped list below
+  and replacing the rest of the page with what actually happens next.
 
-One week, five themed days, real shipping cadence — modeled on how Supabase built their community: consistent public shipping that compounds over time.
-
-## Launch Week 1 — what's shipping
+## What shipped in June 2026
 
 | Day | Feature | Status |
 |---|---|---|
-| Mon | **Open-source relicense** — server goes true OSI open source (AGPLv3) | ✅ shipped |
-| Tue | **One-click MCP install** — `mushi setup` wires Cursor/Claude/Continue/Zed in seconds | ✅ shipped |
-| Wed | **Zero-config SDK init** — `` with no props, env vars just work | ✅ shipped |
-| Thu | **GitHub OAuth + onboarding** — signup in one click, straight to the wizard | ✅ shipped |
-| Fri | **`mushi login`** — browser-guided credential setup, no UUID paste | ✅ shipped |
+| Mon | **Open-source relicense** — the server moved to AGPLv3 ([the post](/blog/agplv3-relicense)) | shipped |
+| Tue | **One-click MCP install** — `mushi setup` wires Cursor, Claude Code, Continue and Zed | shipped |
+| Wed | **Zero-config SDK init** — `` reads its env vars, no props | shipped |
+| Thu | **GitHub OAuth + onboarding** — built; the provider stayed switched off in production until September | shipped, mis-configured |
+| Fri | **`mushi login`** — browser-guided credential setup, no UUID paste | shipped |
 
-  Launch Week 1 ran June 2026. Follow [GitHub Releases](https://github.com/kensaurus/mushi-mushi/releases) and [Bluesky](https://bsky.app/profile/mushimushi.dev) for Launch Week 2 dates.
+Nobody outside the project was told. That is the honest summary, and it is
+why the launch model changed.
 
-## How it works
+## How we launch now: one post per release
 
-Mushi ships a themed feature every day for five days, announced on:
+A five-day blast assumes an audience that is already watching. We do not have
+one yet. So each release gets one public post on one channel, and the next
+release does not launch until the previous one has been measured. The number
+we publish after each is not stars; it is **activated external projects per
+week**, meaning a project owned by someone who is not us received its first
+real bug report and its owner opened the diagnosis.
 
-- **Show HN** (Tuesday 9am PT)
-- **Product Hunt** (Wednesday 9am PT)
-- **Bluesky + X + LinkedIn** (daily threads)
-- **dev.to / Hashnode** (Wednesday longform)
-- **r/webdev, r/opensource, r/reactjs** (Tuesday and Wednesday)
-- **awesome-lists** (Thursday PRs)
+| Release | Ships | The post | What we publish afterwards |
+|---|---|---|---|
+| **R1 "Proof"** | The no-signup demo verified in a private window; `npx mushi-mushi` on a fresh app reaching a first diagnosis in under five minutes, filmed; docs search returning no dead links; privacy policy and terms live; a first-reply promise on issues | **Show HN**, one Tuesday, 12:00–17:00 UTC. The URL is the demo, never the repo. | A blog post with the real numbers from that week, whatever they are: referrers, signups, activated projects. |
+| **R2 "Found"** | The five [comparison and how-to pages](/compare); the Mushi setup skill audited for Cursor and Claude Code; the Cursor plugin submitted | **Product Hunt**, plus value threads in r/cursor and r/ClaudeAI over the following two weeks (a thread first, the link in the comments) and a pitch to two developer newsletters carrying the HN numbers | Journey post #2: what N visitors did on a no-signup demo. |
+| **R3 "Loop"** | A "Bug reports by Mushi" mark on the widget with a one-click opt-out; the events that let us measure whether it refers anyone; GitHub Discussions as the community home | A normal HN submission of journey post #3 (not a Show HN) and a dev.to cross-post | Journey posts #3 and #4, and the loop's referral rate. |
 
-A transparency retro ships Friday with real numbers (stars, signups, reports captured in the week).
+## The gate before R1
 
-## The five-signal counter-position
+R1 does not post until every line here is true. The list is public so that
+if you read the Show HN and find one of these false, you can say so.
 
-Launch Week content centers on the four signals Mushi captures that your existing tools don't:
+- The demo at [`/connect`](/connect) loads in a private window with no signup
+  and produces a diagnosis.
+- `npx mushi-mushi` on a fresh Next.js app reaches a first report and
+  diagnosis in under five minutes, screen-recorded.
+- The two hero GIF slots on the landing page show that recording.
+- The docs search tool our MCP server exposes returns zero dead links.
+- The VS Code extension is either published or marked "deferred" in the
+  distribution notes, and is not mentioned on HN until it is published.
+- The privacy policy and terms of service return 200.
+- `CONTRIBUTING.md` promises a first reply on issues within 24 hours on
+  weekdays.
+- This page tells the truth (done, 2026-09-21).
+- The site's structured data lists only accounts that exist.
+- The Bluesky queue has no items scheduled in the past.
+- The activation query returns a number, even if that number is zero.
 
-```
-Code-thrown errors       → Sentry / Crashlytics
-System telemetry         → Datadog / New Relic
-Product analytics        → Firebase / Amplitude
-User-felt friction  →    Mushi Mushi  ←  (the missing signal)
-```
+## What we will not do
 
-Every launch post leads with the signal gap and shows Mushi closing it.
+- Post the same text to two places.
+- Buy upvotes, hunters or ads.
+- Resubmit a Show HN that fell off the front page.
+- Claim a launch happened when it did not.
 
 ## Want to be notified?
 
-[Star the repo](https://github.com/kensaurus/mushi-mushi) — GitHub's watch feature will ping you when a release drops.
+[Watch releases on GitHub](https://github.com/kensaurus/mushi-mushi/releases),
+read [Announcements in Discussions](https://github.com/kensaurus/mushi-mushi/discussions),
+or follow [Bluesky](https://bsky.app/profile/kensaurus.bsky.social).
+The numbers from each release land on the [blog](/blog).
 
-Or [follow on Bluesky →](https://bsky.app/profile/mushimushi.dev) — every day-of post goes there first.
+## Run your own
 
-## Run your own launch week
-
-The full runbook lives in [`docs/marketing/launch-week.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/marketing/launch-week.md) — a Tuesday/Wednesday concentrated launch script with all copy templates, ready to paste.
+The runbook, with the presence rule, the hard rules and the post-mortem
+template, lives in
+[`docs/marketing/launch-week.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/marketing/launch-week.md).

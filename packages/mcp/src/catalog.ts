@@ -482,6 +482,40 @@ export const TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Is Mushi fully set up and active for this project?',
   },
+  {
+    name: 'query_funnel',
+    title: 'Ordered funnel over product events',
+    description:
+      'Where do users drop off? Ordered funnel over Mushi.track() events for this project. ' +
+      'Pass 2–8 step event names in order (e.g. ["landing_view", "signup_completed", "first_report_received"]); each step counts distinct users who did the previous step then this one within stepWindow (default 7d), over the trailing windowDays (default 30). Optional breakdown property (e.g. "utm_source", "$surface") splits every step. ' +
+      'Returns { steps: [{ name, entered, converted, pct, median_secs }], breakdown: [{ value, entered, steps }] } (pct is conversion from step 1; breakdown is empty unless requested). Read-only. ' +
+      'Use to find the biggest drop-off before changing onboarding; use get_product_events_summary to discover event names, or get_user_paths to see what users did after a step.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Where do users drop off between signup and first report?',
+  },
+  {
+    name: 'get_product_events_summary',
+    title: 'Product events summary',
+    description:
+      'Summarise the Mushi.track() product events this project received in the trailing windowDays (default 30): event names with counts and distinct users, daily volume, and top properties. ' +
+      'Returns { window_days, events_total, persons, identified, anonymous, events_per_day: [{ day, count }], top_events: [{ name, count, persons }] }. Read-only. ' +
+      'Use first to learn which event names exist before calling query_funnel or get_user_paths; use run_nl_query for ad-hoc SQL over the same rows.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Which product events is this project sending, and how many?',
+  },
+  {
+    name: 'get_user_paths',
+    title: 'Paths users take after an event',
+    description:
+      'What did users do next? Rank the events users fired immediately after fromEvent within the trailing windowDays (default 30), most common first, up to limit rows (default 20, max 50). ' +
+      'Returns { from_event, total, next: [{ name, count, pct }] }. Read-only. ' +
+      'Use to see where users go after a step instead of guessing the funnel order; use query_funnel once you know the ordered steps, or get_product_events_summary for event names.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What do users do right after they mint an API key?',
+  },
 ];
 
 export interface ResourceSpec {

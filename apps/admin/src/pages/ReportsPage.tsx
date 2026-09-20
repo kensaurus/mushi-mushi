@@ -48,6 +48,7 @@ import { PAGE_SIZE, type ReportRow, type SortDir, type SortField } from '../comp
 import { pluralize, pluralizeWithCount } from '../lib/format'
 import { DogfoodNarrativeBanner } from '../components/DogfoodNarrativeBanner'
 import { SdkConnectivityEmptyState } from '../components/SdkHealthSummary'
+import { FirstDiagnosisInline } from '../components/onboarding/FirstDiagnosisScreen'
 import { IconReports } from '../components/icons'
 
 export function ReportsPage() {
@@ -842,18 +843,33 @@ export function ReportsPage() {
         // install something they almost certainly already have.
         // Only renders when we have a project to diagnose; the legacy
         // fallback (no active project) keeps the bare RecommendedAction.
+        // With zero reports and no filters the first-diagnosis block leads:
+        // one click sends a test report and renders the classification
+        // inline, so the empty state IS the aha rather than a link to it.
         setup.activeProject ? (
-          <SdkConnectivityEmptyState
-            projectId={setup.activeProject.project_id}
-            projectName={setup.activeProject.project_name}
-            lastReportAt={null}
-            diagnostic={setup.getStep('sdk_installed')?.diagnostic ?? null}
-            adminHost={setup.data?.admin_endpoint_host ?? null}
-            onTestReportSent={() => {
-              setup.reload()
-              reload()
-            }}
-          />
+          <div className="space-y-4">
+            {!hasFilters && (
+              <FirstDiagnosisInline
+                projectId={setup.activeProject.project_id}
+                projectName={setup.activeProject.project_name}
+                onDiagnosed={() => {
+                  setup.reload()
+                  reload()
+                }}
+              />
+            )}
+            <SdkConnectivityEmptyState
+              projectId={setup.activeProject.project_id}
+              projectName={setup.activeProject.project_name}
+              lastReportAt={null}
+              diagnostic={setup.getStep('sdk_installed')?.diagnostic ?? null}
+              adminHost={setup.data?.admin_endpoint_host ?? null}
+              onTestReportSent={() => {
+                setup.reload()
+                reload()
+              }}
+            />
+          </div>
         ) : null
       ) : (
         // `data-mushi-reports-queue` is the engagement sentinel. The

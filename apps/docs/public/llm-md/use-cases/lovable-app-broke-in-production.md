@@ -1,0 +1,89 @@
+# Your Lovable app broke in production
+
+Source: https://kensaur.us/mushi-mushi/docs/use-cases/lovable-app-broke-in-production
+
+---
+title: Your Lovable app broke in production
+description: A debugging checklist for when a Lovable, Bolt, Cursor or Claude Code app breaks for a real user and you did not write the code — reproduce, read the first error, find the file, ask the agent for the smallest fix, stop the repeat.
+---
+
+# Your Lovable app broke in production. Now what?
+
+You shipped an app with Lovable, Bolt, Cursor or Claude Code. It works for
+you. A user messages "it's broken". You open the code and it is a few
+thousand lines you have read once, if that.
+
+This is a checklist for that afternoon. It assumes you can open the browser
+console and you have an AI editor. Most of it has nothing to do with Mushi;
+one step does.
+
+## 1. Get the user's exact words and their screen
+
+"It's broken" is not a bug report. Ask for three things: what they were
+trying to do, what happened instead, and the page they were on. If they can
+send a screenshot, take it. Ask what device and browser; "iPhone, Safari" or
+"work laptop, Edge" narrows the search more than any log.
+
+## 2. Reproduce in a private window, logged out
+
+Open a private window on the same page. Most "works for me" bugs are one of
+three things: you are logged in and they are not, you have a fresh build and
+they have a cached one, or you have an environment variable locally that the
+deployed app does not. Check those three before reading any code.
+
+## 3. Read the first red line in the console, not the last
+
+Open the browser console on the failing page and scroll to the first error.
+Later errors are usually consequences of the first. Copy the message and the
+file:line it names. If the console is clean, open the Network tab, repeat the
+action, and look for a request that returned 4xx or 5xx; the response body
+usually says why.
+
+## 4. Find the file and ask what it assumes
+
+Search your repo for the file or function the error named. Do not try to
+understand the whole module. Ask your editor's agent: "What does this
+function assume about its inputs, and which of those could be false for a
+logged-out user on Safari?" Generated code tends to assume the happy path it
+was generated against.
+
+## 5. Ask for the smallest fix, and a test
+
+Give the agent the error, the file, and one sentence of what the user was
+trying to do. Ask for the smallest change that fixes it and a test that fails
+without the change. Refuse the refactor it offers on the side. Strip user
+emails, tokens and keys from anything you paste.
+
+## 6. Ship, then tell the user
+
+Deploy, reproduce once more in the private window, and reply to the user with
+what you changed. People who hear back report the next bug too.
+
+## 7. Write the cause down where the agent will read it
+
+Add a one-line comment at the site, a rule to your editor's rules file, or an
+entry in a lessons file the agent loads. The bug you fix today is the bug the
+agent reintroduces next month unless the reason is in its context.
+
+## 8. Make the next report arrive with all of this attached
+
+Steps 1 to 3 are the expensive part, and a user cannot do them for you. An
+in-app bug reporter can: [Mushi Mushi](/) is an open-source SDK that lets the
+user report from a widget or a phone shake, attaches the screenshot and the
+console/network tail, writes a plain-English diagnosis of what broke and
+why, and hands the fix prompt to Cursor or Claude Code over MCP. One command
+installs it:
+
+```bash
+npx mushi-mushi
+```
+
+Free Cloud is 50 diagnoses a month with no card; self-hosting is free. Other
+tools that solve parts of this are compared on
+[Sentry alternatives for solo founders](/compare/sentry-alternatives-for-solo-founders).
+
+## Frequently asked questions
+
+**Related:** [Debug apps built with Cursor](/use-cases/debug-cursor-apps) ·
+[Debug apps built with Claude Code](/use-cases/debug-claude-code-apps) ·
+[Incident-loop quickstart](/quickstart/incident-loop)

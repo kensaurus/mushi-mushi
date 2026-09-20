@@ -144,7 +144,7 @@ export const QUICK_SUB_GROUPS: readonly QuickSubGroup[] = [
   {
     id: 'quick-loop',
     title: 'Daily loop',
-    paths: ['/dashboard', '/inbox', '/reports', '/fixes', '/code-health'],
+    paths: ['/dashboard', '/inbox', '/reports', '/fixes', '/code-health', '/analytics'],
   },
   { id: 'quick-tools', title: 'More tools', paths: ['/skills', '/mcp', '/feedback'] },
 ]
@@ -475,6 +475,22 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     beginner: true,
     paletteDescription: 'Per-project activity — sessions, page views, identified vs. anonymous users, top routes.',
     paletteKeywords: ['sessions', 'users', 'page views', 'analytics', 'dau', 'activity', 'engagement'],
+    paletteGroup: 'Check',
+  },
+  {
+    // `/users` + `nav:users` are the operator-only signup directory below
+    // (docs: apps/docs/content/admin/users.mdx), so the customer-facing
+    // product-analytics page lives at `/analytics`.
+    id: 'nav:analytics',
+    path: '/analytics',
+    label: 'Users & Funnels',
+    quickstartLabel: 'Users & Funnels',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    iconKey: 'gauge',
+    beginner: true,
+    paletteDescription: 'Product analytics from Mushi.track() — event volume, funnels, next-step paths, people, and weekly retention.',
+    paletteKeywords: ['funnel', 'funnels', 'events', 'track', 'analytics', 'retention', 'paths', 'people', 'conversion', 'cohort'],
     paletteGroup: 'Check',
   },
   {

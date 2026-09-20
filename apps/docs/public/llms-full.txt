@@ -4,7 +4,7 @@
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
 Generated: 2026-09-20
-Pages: 190
+Pages: 201
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. For a compact link index see
@@ -3535,7 +3535,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**73 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**76 tools**, 8 resources, 4 prompts).
 
 ---
 
@@ -6302,13 +6302,92 @@ That's the model we committed to — documented in [Open source & licensing](/co
 
 ---
 
+## 60 seconds from "this is broken" to a draft PR — building Mushi Mushi
+
+Source: https://kensaur.us/mushi-mushi/docs/blog/auto-fix-loop
+
+---
+title: 60 seconds from "this is broken" to a draft PR — building Mushi Mushi
+description: A walkthrough of how Mushi Mushi turns a one-sentence user complaint into a classified, deduped, AI-judged draft PR — and why we kept the human in the loop the whole way.
+---
+
+# 60 seconds from "this is broken" to a draft PR — building Mushi Mushi
+
+*Kenji Sakuramoto*
+
+---
+
+> Sentry sees what your code throws. Mushi sees what your users *feel*.
+
+This is the post I would have wanted to read a year ago, when I was staring at a Sentry dashboard that was perfectly green while three people in a row told me the login button on iPad Safari "did nothing." No exception. No 5xx. No console error. Just a user, frustrated.
+
+That gap — between **errors that throw** and **bugs that users feel** — is what [Mushi Mushi (虫虫)](https://github.com/kensaurus/mushi-mushi) tries to close.
+
+This post walks through the loop end-to-end, what each stage actually does, and why we kept a human in the loop for the parts that should not be automated.
+
+## The 60-second loop
+
+A user opens our SDK widget on the site they're frustrated with. They type one sentence: *"login button does nothing on my iPad."* They hit send.
+
+What happens next, in order, every time:
+
+1. **Plan** — the report lands in Mushi's `reports` table with the user's text, the page URL, the viewport, the browser, the console + network tail, and a 30-second session-replay snippet. We attach a screenshot if the user opted in.
+2. **Plan, classified** — a fast Haiku model fast-filters the report for spam in ~500 ms. Real reports get a Sonnet 4.6 classification: category, severity, component path, summary, and a confidence score. The component path is grounded against the project's repo embeddings so it points at *real* files (`apps/web/src/login/SignInButton.tsx:42`), not invented ones.
+3. **Plan, deduped** — every classified report is embedded and similarity-searched against existing reports. If we have a >0.92 cosine match, the new report joins the existing cluster instead of creating noise. The cluster grows a `blast_radius` counter so triage prioritises bugs hitting the most users first.
+4. **Do** — the operator clicks **Dispatch fix**. A worker spins up an agent against the repo, gets the classified report + the embeddings of the relevant files as context, drafts a one-file change, and opens a draft PR. We log every LLM call to Langfuse so you can see exactly what the agent thought.
+5. **Check** — an LLM-as-Judge re-evaluates the original classification on five dimensions (accuracy, severity, component, repro, summary). If the judge disagrees, the report flips back to *needs review* and goes back into the operator's queue. If the judge agrees, the receipt strip on the report stamps "✓ Check closed."
+6. **Act** — the operator merges the PR (or doesn't). Mushi notes the merge, links the original report to the merge commit, and the report's PDCA receipt closes its final stamp. The user who reported the bug gets a one-line "we fixed this" note if they opted in.
+
+## Why we kept the human in the loop
+
+The full PDCA loop *could* be fully autonomous. The agent has the context, the judge has the receipts, and a draft PR is technically reversible.
+
+We chose not to do that, for two reasons.
+
+### 1. The judge is good. The judge is not infallible.
+
+Our LLM-as-Judge agrees with the classifier ~92% of the time on our golden eval set. That's good. It is not "auto-merge" good. The remaining 8% includes the exact cases that an autonomous loop would silently ship wrong fixes for: ambiguous severity, mis-routed component paths, and duplicate-fix attempts that mask the real bug.
+
+Keeping the operator as the merge gate means the loop *gets faster* (one click instead of three) without removing the safety net.
+
+### 2. The user's trust is the moat.
+
+A user who reports a bug and watches the team respond — even with a one-line "we shipped this" — develops a kind of operational trust that tells them "this app is alive." That trust survives outages and slow weeks. It does not survive an automated reply that ships the wrong fix and silently breaks something else.
+
+So the human stays in the loop. The loop just gets compressed from *days* to *minutes*.
+
+## What's actually open source
+
+Everything you see in the live admin demo, plus all 14 SDKs (web, React, Vue, Svelte, Angular, React Native, Capacitor, Node, MIT) is on [github.com/kensaurus/mushi-mushi](https://github.com/kensaurus/mushi-mushi). The backend (Supabase Edge Functions + Postgres + pgvector for the embeddings) is AGPLv3 — true OSI open source: self-host it free, fork it, modify it for your own org. Offer a modified server as a hosted service and you publish your changes (§13) or take a commercial license.
+
+It's open-core, the Grafana / Supabase model: the core is genuinely open (AGPLv3), and the only paid boundary is a small source-available enterprise edition (SSO/SCIM, audit export, region pinning) that a solo builder never needs.
+
+## Try it
+
+If you'd rather see than read:
+
+- **Live admin demo** (read-only, dark by design): [kensaur.us/mushi-mushi/](https://kensaur.us/mushi-mushi/)
+- **Five-line install** (any web framework):
+  ```bash
+  npx mushi-mushi
+  ```
+- **Source + self-host docs**: [github.com/kensaurus/mushi-mushi](https://github.com/kensaurus/mushi-mushi)
+
+If Mushi's voice — slightly Japanese, slightly bug-themed, *very* opinionated about the difference between an error and a bug — clicks for you, the easiest way to support the project is to [star the repo](https://github.com/kensaurus/mushi-mushi/stargazers). The next dev who needs this finds it that way.
+
+---
+
+*Also published on dev.to from [`docs/marketing/posts/01-auto-fix-loop.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/marketing/posts/01-auto-fix-loop.md); this page is the canonical copy.*
+
+---
+
 ## Blog
 
 Source: https://kensaur.us/mushi-mushi/docs/blog
 
 ---
 title: Blog
-description: Notes from building Mushi Mushi — open-source licensing, launch weeks, and how AI-built apps get debugged in practice.
+description: Notes from building Mushi Mushi — the real numbers behind the funnel, open-source licensing, launches, and how AI-built apps get debugged in practice.
 ---
 
 # Mushi Mushi Blog
@@ -6334,6 +6413,13 @@ date: 2026-06-17
 *Jun 17, 2026 · Kenji Sakuramoto*
 
 ---
+
+  **Correction, 2026-09-21.** The five features below shipped. The public
+  posts this article promised (Show HN, Product Hunt, Reddit, a Friday retro)
+  never went out, and the GitHub OAuth provider stayed switched off in
+  production until September. The post is kept as written; the current launch
+  plan and its gate are on the [launch page](/launch-week), and the numbers
+  are in [9 signups in 5 months](/blog/nine-signups-what-the-data-said).
 
 Mushi has been shipping quietly for a year. This week we stop doing that.
 
@@ -6380,7 +6466,113 @@ Friday's retro post will include: GitHub stars gained during the week, new signu
 
 ---
 
-*Follow along on [Bluesky →](https://bsky.app/profile/mushimushi.dev)*
+*Follow along on [Bluesky →](https://bsky.app/profile/kensaurus.bsky.social)*
+
+---
+
+## I shipped a bug tool for 5 months and got 9 signups. Here's what the data said.
+
+Source: https://kensaur.us/mushi-mushi/docs/blog/nine-signups-what-the-data-said
+
+---
+title: "I shipped a bug tool for 5 months and got 9 signups. Here's what the data said."
+description: Five months after going public, Mushi Mushi had 30 npm packages, an MCP server in every registry, and nine signups. This is what the database, GitHub and the deploy config said when I finally looked, and what changed.
+date: 2026-09-21
+---
+
+# I shipped a bug tool for 5 months and got 9 signups. Here's what the data said.
+
+*Sep 21, 2026 · Kenji Sakuramoto*
+
+---
+
+The repo went public on 16 April 2026. On 20 September I ran the queries I
+should have been running every Monday. Here is what came back, and then what
+I think it means.
+
+## The numbers
+
+- **9** console signups, all time. Three in April, five in May, one in June,
+  zero in July, August and September.
+- **4** external projects created by those signups. **0** of them ever sent
+  a report. The API keys were minted on day one and never seen again.
+- **16** bug reports in the database, all from my own apps.
+- **26,000** end-user sessions, all on my own apps.
+- **3** GitHub stars.
+- **100** repository views from **25** unique visitors in the last 14 days.
+- **0** issues from anyone but me. **1** external pull request.
+
+Against that: **30** published npm packages, and an MCP server listed in the
+official registry, Glama, mcp.so, Smithery, cursor.directory and
+awesome-mcp-servers.
+
+I had built every surface a launch is supposed to land on. Nothing had landed
+on them.
+
+## Three things I found when I looked
+
+**The launch never ran.** In June I wrote a five-day launch runbook: Show HN
+on Tuesday, Product Hunt on Wednesday, Reddit across the week, a retro on
+Friday. The five features it was built around shipped on schedule. The posts
+did not. There is no Show HN, no Product Hunt listing and no Reddit thread
+for this project anywhere. The public launch page said otherwise until this
+week; it now says this.
+
+**GitHub OAuth was off the whole time.** The console has a "Continue with
+GitHub" button for a developer audience. The provider was never enabled in
+the auth settings of the live project, so the button never rendered, and
+every one of the nine signups used email and password. I found out by
+reading the live auth config, not from any dashboard.
+
+**The console was not measuring itself.** Mushi's own console is supposed to
+run the Mushi SDK, so that "did the owner open the diagnosis" is a number.
+The deployed console had never been given its own SDK key. The build pipeline
+did not pass it. Dogfooding was silently off, and every funnel cell between
+"signed up" and "paid" was blank.
+
+## What the data said
+
+Put together, the three findings are one sentence: I built distribution
+surfaces, never ran the distribution, and could not see the funnel. The
+registries and packages were real work, and I would do them again. But they
+are where people arrive, not why they come, and without measurement I could
+not tell the difference between "nobody came" and "people came and left".
+
+The four external projects are the part that stings. Four strangers signed
+up, created a project and got a key. None of them installed the SDK, or if
+they did, it never sent anything. I do not know which, because the step
+between "key minted" and "first report" was not instrumented.
+
+## What changed
+
+**One number.** The goal is now activated external projects per week: a
+project owned by someone who is not me receives its first real bug report,
+and the owner opens the diagnosis. Not signups (nine people did that and
+none came back), not stars, not downloads.
+
+**Measured with our own SDK.** The SDK grew a `track()` call and the console
+grew a Users & Funnels page, and Mushi's own landing, docs and console emit
+events through it. The company funnel is a query now. Zero is a value it
+returns; "unmeasured" is not.
+
+**First run rebuilt.** A new signup should see a diagnosis of a realistic
+report in under a minute, before installing anything, and then be walked to
+the install. That is the step the four external projects fell through, so it
+is the step that got rebuilt first.
+
+## What happens next
+
+A Show HN, once a public gate list is true: the demo loads with no signup in a
+private window, a fresh app reaches a diagnosis in under five minutes on
+camera, the docs search returns no dead links, the legal pages exist, and the
+activation query returns a number. The [launch page](/launch-week) lists the
+gate so anyone can check it.
+
+Whatever the numbers are afterwards, they go in the next post. If you have
+shipped an app mostly written by an AI editor and hear about bugs from users,
+I would like to know what you actually do with those messages. The
+[Discussions board](https://github.com/kensaurus/mushi-mushi/discussions) is
+the place; I reply on weekdays.
 
 ---
 
@@ -6481,6 +6673,321 @@ Every paid plan supports a **hard monthly spend cap** — set it in the console 
 If you'd rather run Mushi on your own Supabase project, see
 [Self-hosting](/self-hosting) — every feature on Cloud is in the OSS
 repo. Self-hosting is free forever; you supply your own LLM keys.
+
+---
+
+## Compare
+
+Source: https://kensaur.us/mushi-mushi/docs/compare
+
+---
+title: Compare
+description: Honest, dated comparisons of Mushi Mushi with Sentry, Jam and PostHog session replay, plus a Sentry-alternatives table for solo founders. Every number links to the page it was read from.
+---
+
+# Compare Mushi Mushi with the tools you already know
+
+These pages exist because "is this a Sentry replacement?" is the first
+question almost everyone asks, and a fair answer needs the other tool's
+numbers next to ours. Each page states what the other product is for in its
+own terms, puts the two side by side, and says plainly where they work
+together.
+
+- **[Sentry vs Mushi](/compare/sentry-vs-mushi)** — what the code threw versus
+  what the user felt, the Developer free tier, Seer, self-hosting.
+- **[Jam vs Mushi](/compare/jam-vs-mushi)** — a person recording a bug versus
+  an end user reporting one, and what each hands to your coding agent.
+- **[PostHog session replay vs Mushi](/compare/posthog-session-replay-vs-mushi)** —
+  every session recorded versus the one where someone said it was broken.
+- **[Sentry alternatives for solo founders](/compare/sentry-alternatives-for-solo-founders)** —
+  Sentry, Bugsnag, Rollbar, highlight.io, PostHog and Mushi: free caps,
+  self-host, AI fixes, and a "pick this if" for each.
+- **[Your Lovable app broke in production](/use-cases/lovable-app-broke-in-production)** —
+  not a comparison: a debugging checklist for code you did not write.
+
+## How these pages are written
+
+Every fact sits in one typed file with the URL it was read from and the date
+it was checked, and the page renders that file. Nothing numeric is typed into
+the prose by hand. When a source page did not confirm a value, the row says
+"unverified — check before publishing" instead of guessing. The whole set is
+re-read quarterly; the date below is the last full pass.
+
+If a number here is wrong, [open an issue](https://github.com/kensaurus/mushi-mushi/issues)
+with the link and we will fix the row, not argue about it.
+
+---
+
+## Jam vs Mushi Mushi
+
+Source: https://kensaur.us/mushi-mushi/docs/compare/jam-vs-mushi
+
+---
+title: Jam vs Mushi Mushi
+description: Jam.dev vs Mushi Mushi in 2026 — a teammate recording a bug with the Jam extension versus an end user reporting from inside your app, what each hands to Cursor over MCP, and the free tiers side by side.
+---
+
+# Jam vs Mushi Mushi
+
+Jam and Mushi both put console and network logs next to a bug so nobody has
+to ask "can you reproduce that?". The difference is who presses the button.
+With Jam, a person on or near your team records the bug in Chrome. With
+Mushi, the user who hit the bug reports it from inside your production app,
+and the report arrives with a diagnosis already written.
+
+## What each one is
+
+## Side by side
+
+## Where they overlap
+
+Both attach the technical context a developer needs: console output, network
+requests, device details and the sequence of user actions. Both expose that
+context to a coding agent over MCP, and Jam's "Debug Jams via MCP" is on the
+free tier, which is a fair point in its favour for a team that already uses
+Jam for QA.
+
+## Where they do not
+
+Jam is a recording tool. The unit is a Jam: a video a human made, sent to a
+tracker such as Jira or Linear. Reading the video is still your job, and
+Recording Links are the way to get one from someone outside the workspace.
+
+Mushi is a reporting SDK plus a diagnosis. The unit is a report: the user's
+sentence, a screenshot, the console/network tail, the route and a timeline of
+what they did before. Mushi reads that against your repo and writes what
+broke and why. Repeat reports collapse into one row, and each fix becomes a
+lesson your editor sees next time.
+
+## Using both
+
+Sensible, and common: Jam for internal QA passes and support-desk recordings,
+Mushi for reports from real users in production and for the fix loop in
+Cursor or Claude Code. There is no direct integration between the two today;
+if you want a Jam link on a Mushi report, put it in the report's metadata.
+
+## Pick Jam if
+
+- Your bugs are found by teammates, testers or support agents who can run a
+  Chrome extension.
+- A video is the artefact your tracker workflow expects.
+
+## Pick Mushi if
+
+- Your bugs are found by end users on devices you do not control, including
+  mobile (React Native, Capacitor, Flutter, iOS, Android).
+- You want the first thing you read to be the diagnosis, not the recording.
+- You want the report and fix context inside Cursor or Claude Code.
+
+## Frequently asked questions
+
+**Related:** [Sentry vs Mushi](/compare/sentry-vs-mushi) ·
+[Debug apps built with Cursor](/use-cases/debug-cursor-apps) ·
+[MCP quickstart](/quickstart/mcp)
+
+---
+
+## PostHog session replay vs Mushi Mushi
+
+Source: https://kensaur.us/mushi-mushi/docs/compare/posthog-session-replay-vs-mushi
+
+---
+title: PostHog session replay vs Mushi Mushi
+description: PostHog session replay and error tracking vs Mushi Mushi in 2026 — every session recorded versus the one where a user said it was broken, the free tiers, and why most teams run both.
+---
+
+# PostHog session replay vs Mushi Mushi
+
+PostHog records every session and every exception, and gives you product
+analytics on top. Mushi records the moment a user says something is wrong,
+attaches the screen they were looking at and the console/network tail, and
+writes the diagnosis. They answer different questions, and this page is
+mostly about which question you have.
+
+## What each one is
+
+## Side by side
+
+## They work alongside each other
+
+Nothing here conflicts in the browser: the PostHog snippet and the Mushi SDK
+run side by side. There is no PostHog plugin for Mushi today, so a Mushi
+report will not deep-link to the matching replay. If you want that, add the
+PostHog session id to Mushi's metadata when you initialise the SDK and the
+report will carry it.
+
+Mushi also ships a basic product-analytics surface of its own, `Mushi.track()`
+with funnels, paths, people and retention in the same console. It exists so a
+solo builder does not need a second tool to see a signup funnel; it is not a
+PostHog replacement and does not try to be. See the
+[SDK analytics reference](/sdks/analytics).
+
+## Pick PostHog if
+
+- You want replay for every session, not only reported ones, and product
+  analytics, flags and surveys in the same place.
+- Your bugs are found by watching replays rather than by users telling you.
+
+## Pick Mushi if
+
+- You want the bug to arrive explained, with the screenshot and a fix prompt,
+  instead of a replay to scrub.
+- You fix bugs in Cursor or Claude Code and want the report in the editor.
+- You want the AI layer on the free tier or on your own server.
+
+## Frequently asked questions
+
+**Related:** [Sentry vs Mushi](/compare/sentry-vs-mushi) ·
+[Sentry Replay coexistence](/sdks/sentry-replay-coexistence) ·
+[LogRocket Feedback to Mushi](/migrations/logrocket-feedback-to-mushi)
+
+---
+
+## Sentry alternatives for solo founders
+
+Source: https://kensaur.us/mushi-mushi/docs/compare/sentry-alternatives-for-solo-founders
+
+---
+title: Sentry alternatives for solo founders
+description: Sentry alternatives for solo founders in 2026 — Sentry, Bugsnag, Rollbar, highlight.io, PostHog and Mushi Mushi compared on free-tier caps, self-hosting, AI diagnosis and fixes, with a "pick this if" for each.
+---
+
+# Sentry alternatives for solo founders
+
+If you are one person shipping an app to real users, the question is not
+"which error tracker is best". It is "which one will I still be reading in
+month three". This page compares six tools on the four things that decide
+that for a solo builder: what the free tier caps, whether you can run it
+yourself, whether it explains the bug or only reports it, and who each one
+is really for.
+
+Mushi is on the list. We tried to describe the others in their own terms, and
+every number links to the page it came from.
+
+## The table
+
+## How to read it
+
+**Free tiers.** All six have one, and none of them asks for a card. The caps
+are measured in different units (errors, events, spans, replays, diagnoses),
+so compare them against your own volume rather than each other. A side
+project with a few hundred users rarely reaches any of these limits.
+
+**Self-hosting.** Sentry, PostHog, highlight.io and Mushi publish a
+self-hosted path. Sentry's needs a real machine (4 cores, 16 GB RAM per its
+docs) and leaves out Seer. Mushi's is one command and includes the diagnosis
+when you bring your own LLM key. Bugsnag's and Rollbar's on-premise options
+are not stated on their pricing pages; we did not verify them.
+
+**AI diagnosis.** This is where the tools split. Sentry's Seer is a separate
+paid subscription on Team and above. PostHog lists AI credits and a PR beta
+on the free tier; we could not verify what it does for exceptions. Mushi's
+diagnosis and fix prompt run on every plan. Bugsnag, Rollbar and highlight.io
+list nothing of the kind on the pages we checked.
+
+**Who it is for.** Sentry, Bugsnag and Rollbar were built for teams that read
+error dashboards. PostHog and highlight.io were built around replay. Mushi
+was built for a builder who did not write most of the code and hears about
+bugs from users; the output is the diagnosis and the fix, in the editor.
+
+## What this page does not claim
+
+It does not claim Mushi is cheaper at scale, and it does not claim feature
+parity with Sentry on tracing, profiling or platform coverage. If you need
+those, Sentry is the right answer and Mushi runs alongside it: a Sentry
+issue-alert webhook sends errors into Mushi's queue, and merging the fix
+resolves the Sentry issue. See [Sentry vs Mushi](/compare/sentry-vs-mushi).
+
+## Frequently asked questions
+
+**Related:** [Sentry alternative for AI-built apps](/use-cases/sentry-alternative) ·
+[PostHog session replay vs Mushi](/compare/posthog-session-replay-vs-mushi) ·
+[Self-hosting](/self-hosting)
+
+---
+
+## Sentry vs Mushi Mushi
+
+Source: https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi
+
+---
+title: Sentry vs Mushi Mushi
+description: Sentry vs Mushi Mushi in 2026 — what each captures, the Sentry Developer free tier and Seer pricing next to Mushi's free 50 diagnoses a month, self-hosting, and how the two run together.
+---
+
+import {
+  SENTRY,
+  MUSHI,
+  SENTRY_PRICING_ROWS,
+  SENTRY_FAQ,
+  FACTS_REVIEWED_AT,
+  NEXT_REVIEW_DUE,
+  signupUrl,
+} from './_facts'
+
+# Sentry vs Mushi Mushi
+
+Sentry tells you what threw. Mushi ingests that — plus the bugs that never
+throw — explains each one in plain English, and closes the loop with a fix
+your agent can ship. One queue, with or without Sentry.
+
+That is the whole difference in one paragraph. The rest of this page is the
+detail: what each product captures, what the free tiers include, what the AI
+layer costs, and how they run side by side.
+
+## What each one is
+
+## Side by side
+
+## Where they overlap, and where they do not
+
+Both capture thrown exceptions from the browser and from Node. Sentry goes
+much deeper on the code side: performance tracing, release health, profiling,
+source-map symbolication across many platforms, and a mature alerting model.
+If your app is instrumented to the hilt and a team reads the dashboards,
+Sentry alone is a fine choice.
+
+Mushi starts from the other end. The signal is a person saying "this is
+broken" inside your app, and the output is a diagnosis you can read without
+opening a stack trace, plus a fix prompt scoped to the files involved. It
+matters most when you did not write most of the code, which is the normal
+case for an app built with Cursor, Claude Code or Lovable.
+
+## Running Mushi alongside Sentry
+
+Keep Sentry where it is. Point a Sentry issue-alert webhook at Mushi and every
+error lands in the same queue as user reports, deduped and diagnosed; when the
+fix merges, Mushi resolves the linked Sentry issue. The setup is three steps
+on the [Sentry plugin page](/plugins/sentry), and there is a
+[migration guide](/migrations/sentry-to-mushi) for the enrich-or-standalone
+decision.
+
+Two things to know before you compare bills: Seer is not part of Sentry
+self-hosted, so the AI layer is cloud-only on their side; and Mushi's
+diagnosis runs on every plan, including self-hosted with your own LLM key.
+
+## Pick Sentry if
+
+- You need tracing, profiling, release health or platform coverage Mushi does
+  not have (native iOS symbolication, for example).
+- A team already reads Sentry every day and the workflow works.
+
+## Pick Mushi if
+
+- Users tell you about bugs and you want the report to arrive already
+  explained, with the screenshot they were looking at.
+- You fix bugs in Cursor or Claude Code and want the diagnosis, fix context
+  and past lessons in the editor over MCP, without a second LLM key.
+- You want the AI layer on the free tier or on your own server.
+
+Or run `npx mushi-mushi` in your app and send a test report from the console.
+[Self-hosting](/self-hosting) is one command.
+
+## Frequently asked questions
+
+**Related:** [Sentry alternative for AI-built apps](/use-cases/sentry-alternative) ·
+[Sentry alternatives for solo founders](/compare/sentry-alternatives-for-solo-founders) ·
+[Sentry Replay coexistence](/sdks/sentry-replay-coexistence)
 
 ---
 
@@ -8109,7 +8616,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP73 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP76 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*OpenAPI 3.1 at /openapi.jsonadminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/taskscreate / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSEfix dispatch streamAPI key OR JWT"]
@@ -8157,7 +8664,7 @@ your client:
 }
 ```
 
-The full tool catalog (73 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (76 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools (generated)`](/sdks/mcp-tools.generated). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -8332,7 +8839,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 73 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 76 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -9168,61 +9675,561 @@ Source: https://kensaur.us/mushi-mushi/docs/launch-week
 
 ---
 title: Launch Week
+description: How Mushi Mushi launches now — one public post per release (Show HN, then Product Hunt, then the growth loop), the gate each release must pass first, and what we publish afterwards. Corrected 2026-09-21.
 ---
 
 # Launch Week
 
-Every feature in Mushi's history was shipped quietly. Launch Week is the corrective.
+  **Correction, 2026-09-21.** This page used to say Launch Week 1 ran in June
+  2026 with posts on Show HN, Product Hunt and Reddit. The five features did
+  ship. The posts did not: no Show HN, no Product Hunt listing and no Reddit
+  thread for Mushi Mushi ever went out. We are keeping the shipped list below
+  and replacing the rest of the page with what actually happens next.
 
-One week, five themed days, real shipping cadence — modeled on how Supabase built their community: consistent public shipping that compounds over time.
-
-## Launch Week 1 — what's shipping
+## What shipped in June 2026
 
 | Day | Feature | Status |
 |---|---|---|
-| Mon | **Open-source relicense** — server goes true OSI open source (AGPLv3) | ✅ shipped |
-| Tue | **One-click MCP install** — `mushi setup` wires Cursor/Claude/Continue/Zed in seconds | ✅ shipped |
-| Wed | **Zero-config SDK init** — `` with no props, env vars just work | ✅ shipped |
-| Thu | **GitHub OAuth + onboarding** — signup in one click, straight to the wizard | ✅ shipped |
-| Fri | **`mushi login`** — browser-guided credential setup, no UUID paste | ✅ shipped |
+| Mon | **Open-source relicense** — the server moved to AGPLv3 ([the post](/blog/agplv3-relicense)) | shipped |
+| Tue | **One-click MCP install** — `mushi setup` wires Cursor, Claude Code, Continue and Zed | shipped |
+| Wed | **Zero-config SDK init** — `` reads its env vars, no props | shipped |
+| Thu | **GitHub OAuth + onboarding** — built; the provider stayed switched off in production until September | shipped, mis-configured |
+| Fri | **`mushi login`** — browser-guided credential setup, no UUID paste | shipped |
 
-  Launch Week 1 ran June 2026. Follow [GitHub Releases](https://github.com/kensaurus/mushi-mushi/releases) and [Bluesky](https://bsky.app/profile/mushimushi.dev) for Launch Week 2 dates.
+Nobody outside the project was told. That is the honest summary, and it is
+why the launch model changed.
 
-## How it works
+## How we launch now: one post per release
 
-Mushi ships a themed feature every day for five days, announced on:
+A five-day blast assumes an audience that is already watching. We do not have
+one yet. So each release gets one public post on one channel, and the next
+release does not launch until the previous one has been measured. The number
+we publish after each is not stars; it is **activated external projects per
+week**, meaning a project owned by someone who is not us received its first
+real bug report and its owner opened the diagnosis.
 
-- **Show HN** (Tuesday 9am PT)
-- **Product Hunt** (Wednesday 9am PT)
-- **Bluesky + X + LinkedIn** (daily threads)
-- **dev.to / Hashnode** (Wednesday longform)
-- **r/webdev, r/opensource, r/reactjs** (Tuesday and Wednesday)
-- **awesome-lists** (Thursday PRs)
+| Release | Ships | The post | What we publish afterwards |
+|---|---|---|---|
+| **R1 "Proof"** | The no-signup demo verified in a private window; `npx mushi-mushi` on a fresh app reaching a first diagnosis in under five minutes, filmed; docs search returning no dead links; privacy policy and terms live; a first-reply promise on issues | **Show HN**, one Tuesday, 12:00–17:00 UTC. The URL is the demo, never the repo. | A blog post with the real numbers from that week, whatever they are: referrers, signups, activated projects. |
+| **R2 "Found"** | The five [comparison and how-to pages](/compare); the Mushi setup skill audited for Cursor and Claude Code; the Cursor plugin submitted | **Product Hunt**, plus value threads in r/cursor and r/ClaudeAI over the following two weeks (a thread first, the link in the comments) and a pitch to two developer newsletters carrying the HN numbers | Journey post #2: what N visitors did on a no-signup demo. |
+| **R3 "Loop"** | A "Bug reports by Mushi" mark on the widget with a one-click opt-out; the events that let us measure whether it refers anyone; GitHub Discussions as the community home | A normal HN submission of journey post #3 (not a Show HN) and a dev.to cross-post | Journey posts #3 and #4, and the loop's referral rate. |
 
-A transparency retro ships Friday with real numbers (stars, signups, reports captured in the week).
+## The gate before R1
 
-## The five-signal counter-position
+R1 does not post until every line here is true. The list is public so that
+if you read the Show HN and find one of these false, you can say so.
 
-Launch Week content centers on the four signals Mushi captures that your existing tools don't:
+- The demo at [`/connect`](/connect) loads in a private window with no signup
+  and produces a diagnosis.
+- `npx mushi-mushi` on a fresh Next.js app reaches a first report and
+  diagnosis in under five minutes, screen-recorded.
+- The two hero GIF slots on the landing page show that recording.
+- The docs search tool our MCP server exposes returns zero dead links.
+- The VS Code extension is either published or marked "deferred" in the
+  distribution notes, and is not mentioned on HN until it is published.
+- The privacy policy and terms of service return 200.
+- `CONTRIBUTING.md` promises a first reply on issues within 24 hours on
+  weekdays.
+- This page tells the truth (done, 2026-09-21).
+- The site's structured data lists only accounts that exist.
+- The Bluesky queue has no items scheduled in the past.
+- The activation query returns a number, even if that number is zero.
 
-```
-Code-thrown errors       → Sentry / Crashlytics
-System telemetry         → Datadog / New Relic
-Product analytics        → Firebase / Amplitude
-User-felt friction  →    Mushi Mushi  ←  (the missing signal)
-```
+## What we will not do
 
-Every launch post leads with the signal gap and shows Mushi closing it.
+- Post the same text to two places.
+- Buy upvotes, hunters or ads.
+- Resubmit a Show HN that fell off the front page.
+- Claim a launch happened when it did not.
 
 ## Want to be notified?
 
-[Star the repo](https://github.com/kensaurus/mushi-mushi) — GitHub's watch feature will ping you when a release drops.
+[Watch releases on GitHub](https://github.com/kensaurus/mushi-mushi/releases),
+read [Announcements in Discussions](https://github.com/kensaurus/mushi-mushi/discussions),
+or follow [Bluesky](https://bsky.app/profile/kensaurus.bsky.social).
+The numbers from each release land on the [blog](/blog).
 
-Or [follow on Bluesky →](https://bsky.app/profile/mushimushi.dev) — every day-of post goes there first.
+## Run your own
 
-## Run your own launch week
+The runbook, with the presence rule, the hard rules and the post-mortem
+template, lives in
+[`docs/marketing/launch-week.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/marketing/launch-week.md).
 
-The full runbook lives in [`docs/marketing/launch-week.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/marketing/launch-week.md) — a Tuesday/Wednesday concentrated launch script with all copy templates, ready to paste.
+---
+
+## Privacy Policy
+
+Source: https://kensaur.us/mushi-mushi/docs/legal/privacy
+
+---
+title: Privacy Policy
+description: What Mushi Mushi collects, why, who processes it, how long it is kept, and how to exercise your rights under GDPR and Japan's APPI.
+---
+
+# Privacy Policy
+
+  **Draft** — reviewed by the founder on ____; not legal advice. This page is a
+  complete plain-English draft of how Mushi Mushi handles personal data today.
+  Until the review date above is filled in, treat it as a description of
+  practice, not a finished legal document.
+
+**Effective date:** 2026-09-21 · **Version:** 1
+
+This policy covers **Mushi Cloud** (the hosted service at
+`kensaur.us/mushi-mushi`), the **admin console**, the **docs site**, the
+**Mushi Bounties** tester marketplace, and the **SDKs** when they send data
+to Mushi Cloud. If you self-host the open-source server, you are the operator
+and this policy does not apply to your instance.
+
+## 1. Who is responsible
+
+Mushi Mushi is built and operated by **kensaurus**, an individual developer
+based in Japan (the "controller" for the data described in section 3, and the
+"processor" for the data described in section 4).
+
+- **Contact for anything in this policy:** [kensaurus@gmail.com](mailto:kensaurus@gmail.com)
+- **Subject line that gets the fastest answer:** `[mushi-privacy]`
+- **Security reports:** see [SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md) and the [security summary](/security).
+
+There is no separate data-protection officer. The founder answers these
+requests personally.
+
+## 2. What data we handle, in one table
+
+| Category | Examples | Where it comes from | Why |
+| --- | --- | --- | --- |
+| **Account data** | Email address, display name and avatar from Google or GitHub sign-in, the "how did you hear about us" answer and `?src=` signup source, plan and billing status | You, when you create a console account | Run your account, bill you, understand which channels bring users |
+| **End-user report data** | Screenshot, console and network log excerpts, browser user agent, viewport, page URL, the reporter's free-text description, an opaque reporter token, any end-user identifier (email, user ID) the host app chooses to pass, voice transcripts when the host app turns on voice intake | The SDK in an app that a project owner built | Diagnose the bug and hand the owner a fix |
+| **Fix and repo data** | Repository names, file paths and an index of your code, draft pull requests, MCP tool calls from your editor | The GitHub integration and the MCP server, when you connect them | Produce fixes that fit your codebase |
+| **Product usage events** | Console page views, setup-funnel steps (project created, key minted, first report), feature clicks, tagged with your user ID | The console and the docs site, through Mushi's own SDK | Improve activation and find dead ends |
+| **Docs-site analytics** | Anonymous page views and CTA clicks on the docs and landing pages | Only after you accept the consent bar | Measure the funnel from landing to signup |
+| **Console error telemetry** | Stack traces, browser and OS, the console route you were on when something broke | Sentry, from the admin console | Fix bugs in the console itself |
+| **Support and security mail** | Whatever you put in an email to us | You | Answer you |
+| **Bounties tester data** | Tester display name, points balance, gift-card redemptions, and KYC details (legal name, jurisdiction, tax ID) once redemptions pass US$599 in a calendar year | You, on the Bounties marketplace | Pay out gift cards and meet US tax reporting rules |
+
+We do not sell personal data and we do not run advertising.
+
+## 3. Data where Mushi is the controller
+
+This is data about **you**, the person with the console or tester account:
+account data, product usage events, docs-site analytics, console error
+telemetry, support mail, and Bounties tester data.
+
+**Legal bases (GDPR art. 6(1))**
+
+- **(b) contract** — creating and running your account, billing, delivering
+  diagnoses, paying tester bounties.
+- **(f) legitimate interests** — keeping the service secure, preventing abuse
+  and quota gaming, keeping the console working (error telemetry), and
+  understanding which onboarding steps fail. We ran a balancing test on the
+  product-usage events: they are scoped to your own account, never shared, and
+  expire (section 7).
+- **(a) consent** — docs-site analytics. Nothing loads before you accept the
+  consent bar, and Do Not Track is honoured as a refusal.
+- **(c) legal obligation** — tax records for paid plans and tester payouts.
+
+## 4. Data where Mushi is the processor
+
+End-user report data, fix and repo data, and any voice transcript belong to the
+**project owner** — the developer who put the SDK in their app. For that data:
+
+- The **project owner is the controller**. They decide what the SDK captures,
+  whether to pass end-user identifiers, whether to enable voice intake, and
+  they must tell their own users that screenshots and console output may be
+  captured (this duty is in the [Terms](/legal/terms#5-acceptable-use)).
+- **Mushi is the processor** and acts only on the owner's instructions: store
+  the report, run the diagnosis, produce a fix, delete on schedule or on
+  request.
+- **Data-processing summary (DPA).** Mushi processes this data only to provide
+  the service; applies the security measures on the [security summary](/security);
+  uses only the sub-processors in section 5 and gives notice on this page before
+  adding one; assists the owner with data-subject requests through the DSAR
+  tooling in the console; deletes or returns the data at the end of the
+  contract; and makes the SOC 2 readiness evidence available on request. Owners
+  who need a signed DPA on their own paper can email us.
+
+End users of a project owner's app should contact **that owner** first. If you
+cannot reach them, email us and we will forward the request.
+
+## 5. Sub-processors
+
+| Sub-processor | What they process | Location | Notes |
+| --- | --- | --- | --- |
+| **Supabase** (on AWS) | Database, auth, storage, edge functions — everything at rest | AWS `ap-northeast-1` (Tokyo) today. EU and JP residency options are reserved; when the dedicated clusters ship, a project's data stays in the [region chosen at creation](/security/data-residency) | Row-level security on every table, nightly coverage check |
+| **Anthropic**, **OpenAI**, **OpenRouter** | Report text, sanitised screenshots and logs sent for diagnosis; audio clips for voice transcription (OpenAI only) | US | **BYOK:** if you add your own model key, calls run against *your* provider account. Nothing is billed to or stored by Mushi's provider account. Hosted keys are used only when you have not added your own |
+| **Resend** | Email address and the content of transactional email (verification, usage alerts, invitations, lifecycle nudges) | US | No marketing list, no tracking pixels |
+| **AWS S3 + CloudFront** | Static docs and console files; screenshots when you pick S3 as [BYO storage](/security/byo-storage) | US / your bucket's region | Public assets only, unless you bring your own bucket |
+| **Sentry** | Console error telemetry (section 2) | US | Console only; the SDK in your app never reports to our Sentry |
+| **GitHub** | OAuth sign-in profile; repo metadata, code index and draft PRs when you connect a repository | US | Access is scoped to the repos you pick and revocable in GitHub settings |
+| **Stripe** | Billing name, email, card details (Stripe holds the card, we never see the full number), invoices | US | Paid plans only |
+| **Firecrawl** | Public URLs you point Mushi at (for example your own site) when running inventory or QA-coverage crawls | US | Only pages you ask us to crawl |
+| **Tremendous** | Gift-card delivery for Bounties testers: email, amount, and KYC data past the threshold | US | Bounties only |
+
+## 6. International transfers and residency
+
+Mushi is operated from **Japan**, and production data is stored in **Tokyo**.
+The EU recognises Japan as providing adequate protection, and Japan
+recognises the EEA and the UK in the same way, so EEA/UK ↔ Japan transfers need
+no extra safeguard.
+
+Transfers to the US sub-processors above rely on the provider's **EU-US Data
+Privacy Framework** certification where it exists, and otherwise on **Standard
+Contractual Clauses** in the provider's data-processing terms.
+
+You can pick a residency region at project creation; see
+[Data residency](/security/data-residency) for what is live today and what is
+reserved.
+
+## 7. Retention
+
+| Data | Kept for | Mechanism |
+| --- | --- | --- |
+| End-user reports and everything attached to them | The retention window of your plan: **Free 7 days · Indie 30 days · Pro 90 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
+| Product usage events | **90 days** by default | Nightly delete; Enterprise can extend |
+| Docs-site analytics | 90 days | Same table as above |
+| Console error telemetry | 90 days | Sentry retention |
+| Account data | Until you delete your account, then 30 days for backups to roll off | Delete from **Settings**, or email us |
+| Billing records and tester payout records | As long as Japanese and US tax law requires (currently up to 7 years) | Stripe / Tremendous exports |
+| Support and security email | 2 years | Mailbox |
+| Backups | Point-in-time recovery, 7 days | Supabase |
+
+## 8. Your rights and how to use them
+
+If you are in the EEA, the UK, or another place with similar law, you can ask
+us to **access**, **correct**, **delete**, **restrict**, or **export** your
+data, **object** to processing based on legitimate interests, and **withdraw
+consent** (the docs consent bar can be reset by clearing site data). You can
+also complain to your local supervisory authority.
+
+- **Console accounts:** most of this is self-service in **Settings**. For a
+  full export or deletion, email [kensaurus@gmail.com](mailto:kensaurus@gmail.com)
+  from the address on the account.
+- **Project owners handling requests from their end users:** the console
+  has a DSAR tool that produces a signed export per reporter; see
+  [SOC 2 readiness → DSAR](/security/soc2#dsar-data-subject-access-request).
+- **End users of someone else's app:** contact the app's owner. If you cannot,
+  email us with the app name and we will route the request.
+
+We answer within **30 days**. We will ask you to prove you own the account
+or the reporter identity before releasing anything.
+
+## 9. Japan — Act on the Protection of Personal Information (APPI)
+
+This section applies to personal information handled by Mushi as a
+business operator under the APPI (個人情報の保護に関する法律).
+
+- **Business operator (個人情報取扱事業者):** kensaurus, Japan. Contact:
+  [kensaurus@gmail.com](mailto:kensaurus@gmail.com).
+- **Purpose of use (利用目的):** to provide and improve the Mushi service,
+  bill for paid plans, answer support requests, keep the service secure, pay
+  Bounties testers, and comply with law. We do not use personal information
+  beyond these purposes without your consent.
+- **Provision to third parties (第三者提供):** we do not provide personal
+  information to third parties except (a) to the sub-processors in section 5,
+  who act on our instructions under a contract (委託), (b) where required by
+  law, or (c) with your consent. Some sub-processors are outside Japan
+  (mainly the US); we have confirmed their data-protection systems and the
+  measures they take, as required for cross-border provision.
+- **Retained personal data (保有個人データ):** you may request disclosure,
+  correction, addition, deletion, suspension of use, or suspension of
+  third-party provision. Email us with `[mushi-privacy]` in the subject. We
+  will verify identity and respond without undue delay. We do not charge a fee.
+- **Security measures (安全管理措置):** row-level security on every table,
+  encryption at rest and in transit, least-privilege access with an
+  append-only audit log, and the controls listed on the
+  [security summary](/security).
+- **Complaints (苦情):** use the same address. If we cannot resolve it, you may
+  contact the Personal Information Protection Commission (個人情報保護委員会).
+
+## 10. Children
+
+Mushi is not directed at anyone under **16**, and we do not knowingly collect
+their data. Project owners must not point the SDK at apps built for children
+without their own compliance review. If you think a child has given us data,
+email us and we will delete it.
+
+## 11. Cookies and browser storage
+
+We use no advertising or cross-site cookies. What each surface stores in your
+browser:
+
+| Surface | Key | Purpose | Lifetime |
+| --- | --- | --- | --- |
+| Console | Supabase auth session (cookie / localStorage) | Keep you signed in | Until sign-out or expiry |
+| Console | `mushi:tour-v1-completed` | Remember that you finished the first-run tour | Until cleared |
+| Console | Theme preference | Light / dark | Until cleared |
+| Docs | `mushi_events_consent_` | Remember your answer to the analytics consent bar | Until cleared |
+| Docs | Release-banner dismissal, theme preference | Hide a banner you closed; light / dark | Until cleared |
+| **Your app** (SDK) | `mushi:reporter-token:` | An opaque token so repeat reports from the same browser group together. It is not an email or a name | Until cleared |
+
+The SDK sets nothing else and reads no third-party cookies.
+
+## 12. Changes
+
+We will post changes on this page and bump the version number. For changes
+that reduce your rights or add a sub-processor, we also email console account
+holders at least **14 days** before the change takes effect. Continued use
+after the effective date means the new version applies.
+
+## 13. Contact
+
+**kensaurus** · Japan · [kensaurus@gmail.com](mailto:kensaurus@gmail.com) ·
+subject `[mushi-privacy]`
+
+Related: [Terms of Service](/legal/terms) · [Security summary](/security) ·
+[Data residency](/security/data-residency) · [SOC 2 readiness](/security/soc2)
+
+---
+
+## Terms of Service
+
+Source: https://kensaur.us/mushi-mushi/docs/legal/terms
+
+---
+title: Terms of Service
+description: The agreement for using Mushi Cloud, the admin console, the SDKs, and the Mushi Bounties tester marketplace — plans, limits, AI-output disclaimer, licenses, and liability.
+---
+
+# Terms of Service
+
+  **Draft** — reviewed by the founder on ____; not legal advice. This is a
+  complete plain-English draft. The governing-law clause carries a founder
+  placeholder until the review date is filled in.
+
+**Effective date:** 2026-09-21 · **Version:** 1
+
+These terms are between you and **kensaurus** (an individual developer in
+Japan, "Mushi", "we") and cover **Mushi Cloud** at `kensaur.us/mushi-mushi`,
+the **admin console**, the **hosted MCP server**, the **docs site**, and the
+**Mushi Bounties** tester marketplace (together, the "Service"). The
+open-source software is licensed separately (section 3).
+
+## 1. Acceptance
+
+You accept these terms by creating an account, sending a report through the
+SDK to Mushi Cloud, connecting an editor to the hosted MCP server, or joining
+Bounties. If you accept on behalf of a company, you confirm you can bind it.
+If you do not agree, do not use the Service — the [self-hosted
+server](/self-hosting) is available under its open-source license instead.
+
+## 2. The Service
+
+Mushi collects bug reports from the apps you build, turns each into a
+plain-English **diagnosis** (one finished root cause), and can hand your editor
+or a coding agent a fix. A diagnosis is the unit we meter and bill; filtered
+noise and duplicates collapsed into one row do not count. We may change,
+add, or retire features. We give notice on the [changelog](/changelog) and, for
+removals that affect paid plans, by email at least 30 days ahead.
+
+## 3. Software licenses
+
+The Service runs on open-source code. Three licenses apply, and the split is
+deliberate:
+
+| Component | License | What it means for you |
+| --- | --- | --- |
+| **SDKs** (`@mushi-mushi/web`, `react`, `react-native`, `node`, `cli`, `mcp`, and the rest) | [MIT](https://github.com/kensaurus/mushi-mushi/blob/master/LICENSE) | Embed in proprietary apps with no copyleft obligation |
+| **Server** (`@mushi-mushi/server`, `agents`, `verify`) | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) | Self-host free. If you offer a *modified* server as a network service, publish your changes |
+| **Enterprise edition** and hosting Mushi for third parties | [Commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md) | A separate agreement that replaces AGPL terms for that use |
+
+Using Mushi Cloud does not grant you a license to the Service's hosted
+configuration, brand, or content beyond what these terms allow.
+
+## 4. Accounts
+
+- You need a working email address or a Google / GitHub login. Keep your
+  credentials and API keys secret; you are responsible for what happens under
+  them. Rotate a key from **Settings → API keys** the moment you suspect a leak.
+- One person per seat. Team seats on Pro and Enterprise are for named people
+  in your organisation.
+- You must be **16 or older**.
+- We may suspend an account that breaks section 5, does not pay, or is used
+  in a way that endangers the Service or other users. We tell you why unless
+  the law or an active investigation prevents it.
+
+## 5. Acceptable use
+
+You agree **not** to:
+
+- send reports from apps you do not own or are not authorised to instrument;
+- use the Service to build a competing hosted bug-diagnosis product by
+  bulk-extracting diagnoses, prompts, or fix output;
+- probe, scan, or load-test the Service outside the rules in
+  [SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md#safe-harbor);
+- upload malware, credentials that are not yours, or content that is illegal
+  where you or we are;
+- game usage limits, bounties, or the anti-abuse controls;
+- resell or sublicense access to Mushi Cloud.
+
+**Duty to inform your users.** The SDK can capture screenshots, console and
+network log excerpts, the page URL, and, if you enable it, a voice recording
+that is transcribed. **You** are the controller of that data and you must
+tell your users, in your own privacy notice, that a bug report may include
+these things, and obtain any consent your law requires before enabling voice
+intake or passing end-user identifiers. Mushi acts as your processor under the
+terms in the [Privacy Policy](/legal/privacy#4-data-where-mushi-is-the-processor).
+
+## 6. Your data and the license you give us
+
+Everything you and your users send stays **yours**. You give us a
+non-exclusive, worldwide license to store, copy, sanitise, transmit to the
+sub-processors listed in the Privacy Policy, and process that data **only** to
+provide the Service to you, to keep it secure, and to meet legal duties. We do
+not train models on your reports or code. When you delete data, or your
+retention window passes, the license ends for that data and we delete it on the
+schedule in the Privacy Policy.
+
+Aggregate, de-identified usage figures (for example "reports processed this
+month") may appear in our own public proof lines. They never identify you, your
+users, or your app.
+
+## 7. Free tier
+
+The **Free Cloud** plan includes **50 diagnoses per month**, one seat, and
+7-day report retention. At 50, the pipeline **stops** for the rest of the
+calendar month: reports are still accepted and stored, but no new diagnoses
+run until the counter resets or you upgrade. We do not silently bill overage
+on Free. We may change Free limits with 30 days' notice on the pricing page.
+
+## 8. Paid plans and billing
+
+- Plans, prices, and limits are on the [pricing page](/pricing). Billing runs
+  through **Stripe**; we never see your full card number.
+- Plans bill **monthly** or **annually** in advance, in US dollars, plus any
+  tax we must collect.
+- **Overage** on Indie and Pro is metered per diagnosis at the rate shown on
+  the pricing page and capped by a **spend cap** ($50 on Indie, $200 on Pro).
+  When the cap is reached the pipeline stops, like Free, until the next period
+  or until you raise the cap in **Billing**. You get email alerts at 50 %,
+  80 %, and 100 % of your included diagnoses.
+- **Upgrades** take effect immediately and are prorated. **Downgrades** and
+  cancellations take effect at the end of the current period; you keep the
+  higher plan until then.
+- **No refunds** for partial months or years except where the law requires
+  one. If we terminate your paid plan under section 12 for a reason that is
+  not your breach, we refund the unused portion.
+- If a payment fails we retry for 14 days and email you. After that the
+  project drops to Free limits until payment succeeds; your data is kept for
+  the Free retention window.
+- Enterprise terms, SLAs, and invoicing are set in a separate order form that
+  wins over this section where they conflict.
+
+## 9. AI output — read before you merge
+
+Diagnoses, fix briefs, generated tests, and draft pull requests are produced
+by large language models. **They can be wrong, incomplete, or unsafe.** You
+agree that:
+
+- you review every diagnosis and every fix before acting on it, and you are
+  responsible for anything you merge or deploy;
+- AI output is provided "as is" and is not advice of any kind;
+- prompt-injection defences reduce but do not remove the risk that a
+  malicious report steers a model; keep the fix agent on draft PRs and human
+  review, which is the default.
+
+## 10. Intellectual property
+
+- **Your code is yours.** Connecting a repository or letting the fix agent
+  open a draft PR grants us no rights beyond section 6.
+- **Fix output is yours** to the extent we can grant it, with no attribution
+  required. The same output may be produced for other users because models are
+  not exclusive.
+- **Mushi's marks** — the names "Mushi", "Mushi Mushi", "Mushi Bounties", the
+  logo, and the 虫々 mark — are ours. Open-source use of the code does not
+  include the marks; the "Bug reports by Mushi" widget mark may be shown only
+  as the SDK renders it.
+- Feedback you send us may be used without obligation to you.
+
+## 11. Third-party services
+
+The Service depends on the providers listed in the
+[Privacy Policy](/legal/privacy#5-sub-processors) and on integrations you
+connect (GitHub, Slack, Linear, Jira, Sentry, and your model provider under
+BYOK). Their terms govern your relationship with them. If you bring your own
+model key, **you** pay that provider and are bound by its usage policies; we
+are not responsible for their availability, pricing, or output.
+
+## 12. Termination
+
+- **You** can close your account any time from **Settings** or by email.
+  Data is deleted on the schedule in the Privacy Policy; export it first.
+- **We** can suspend or terminate for breach of section 5, non-payment after
+  the retry window, a legal requirement, or if we shut the Service down. For a
+  shutdown we give **90 days' notice** and an export path; the open-source
+  server remains available so you can self-host.
+- Sections 6 (for data still held), 9, 10, 13, 14, and 15 survive termination.
+
+## 13. Warranties and liability
+
+To the fullest extent the law allows:
+
+- the Service is provided **"as is"** and **"as available"**, without
+  warranties of merchantability, fitness for a particular purpose, or
+  non-infringement. Uptime commitments exist only on the
+  [status page](/operating/status) and in Enterprise contracts;
+- we are **not liable** for indirect, incidental, special, consequential, or
+  punitive damages, lost profits, lost data, or the cost of substitute
+  services, even if we were told they were possible;
+- our **total liability** for any claim arising from the Service is limited to
+  the amount you paid us in the **12 months** before the claim, or **US$100**
+  if you paid nothing;
+- nothing here limits liability for fraud, gross negligence, wilful
+  misconduct, death or personal injury, or anything that cannot be limited
+  under the law that applies to you. Consumers in the EU, UK, and Japan keep
+  their statutory rights.
+
+You will indemnify us against third-party claims caused by your breach of
+section 5, including claims from your own users about data the SDK captured
+without proper notice.
+
+## 14. Governing law and disputes
+
+These terms are governed by the laws of **[Japan / founder to confirm]**,
+without regard to conflict-of-law rules. Disputes go first to good-faith
+discussion by email for 30 days, then to the courts of
+**[Tokyo District Court / founder to confirm]**, which have exclusive
+jurisdiction. Consumers may also bring claims in their home courts where the
+law gives them that right.
+
+## 15. Mushi Bounties tester program
+
+If you join Bounties as a tester, this section also applies:
+
+- **Points.** Accepted bug reports earn mushi-points at the rate the app's
+  developer set. Points have no cash value until redeemed, cannot be
+  transferred, and can be revoked for duplicate, fabricated, or automated
+  reports. Developer decisions on acceptance are final; use the feedback to
+  improve your next report.
+- **Redemption.** 1,000 points redeem for US$10 in gift cards (delivered by
+  Tremendous) or US$13 in Mushi Pro credit. Redemption thresholds and
+  catalogue are shown in your wallet.
+- **KYC.** Gift-card redemptions above **US$599 in a calendar year** are held
+  until you complete a tax-identification form (W-9 or W-8BEN). Pro credit is
+  not subject to this gate.
+- **Sanctions.** Bounties is not available in jurisdictions under US OFAC
+  sanctions. We may cancel redemptions we cannot lawfully pay.
+- **Testing rules.** Test only apps listed on the marketplace, stay within
+  the app's stated scope, never access other users' data, and report
+  security findings privately through the app's channel or
+  [SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md).
+
+Full mechanics are on [How it works](https://kensaur.us/mushi-mushi/testers/how-it-works/).
+
+## 16. Changes to these terms
+
+We will post changes here and bump the version. For changes that materially
+reduce your rights, raise prices, or change limits on a plan you pay for, we
+email account holders at least **30 days** before they take effect. Continued
+use after the effective date means the new terms apply. If you disagree, close
+your account before that date and we refund any prepaid, unused annual period.
+
+## 17. Contact
+
+**kensaurus** · Japan · [kensaurus@gmail.com](mailto:kensaurus@gmail.com) ·
+subject `[mushi-legal]`
+
+Related: [Privacy Policy](/legal/privacy) · [Pricing](/pricing) ·
+[Security summary](/security) · [Commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md)
 
 ---
 
@@ -13567,6 +14574,241 @@ The package ships ~90 unit tests covering both the happy-path translation and th
 
 ---
 
+## Product analytics (track)
+
+Source: https://kensaur.us/mushi-mushi/docs/sdks/analytics
+
+---
+title: Product analytics (track)
+description: Mushi.track() reference — named events, consent, sampling, batching, the property contract, useMushiTrack() for React, the Users & Funnels console page, the POST /v1/sdk/events wire format, and the MCP funnel tools.
+---
+
+# Product analytics: `Mushi.track()`
+
+Every Mushi SDK can record named product events alongside bug reports and
+sessions, so a solo builder can see a signup funnel, a user's path, and
+retention in the same console that holds the bug reports, without a second
+analytics tool. Mushi's own funnel (landing → signup → first report) runs on
+the same API.
+
+It is deliberately small: named events with flat properties, a funnel, a
+paths view, a people list and retention. If you need replay, feature flags
+or experiments, run PostHog beside it; see
+[PostHog session replay vs Mushi](/compare/posthog-session-replay-vs-mushi).
+
+## Quick start
+
+```ts
+
+const mushi = Mushi.init({
+  projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
+  apiKey: process.env.NEXT_PUBLIC_MUSHI_API_KEY!,
+  // Optional. Defaults: enabled, consent 'implied', DNT/GPC respected, sampleRate 1.
+  analytics: { consent: 'required' },
+})
+
+mushi.setConsent('granted')                        // only needed with consent: 'required'
+mushi.track('checkout_started', { plan: 'pro' })   // snake_case name, flat properties
+mushi.identify('usr_42')                           // stitches earlier anonymous events to the person
+```
+
+React:
+
+```tsx
+
+function BuyButton() {
+  const track = useMushiTrack()
+  return  track('checkout_started', { plan: 'pro' })}>Buy
+}
+```
+
+`useMushiTrack()` returns a stable function that forwards to `sdk.track()`
+and returns `false` until the provider has initialised.
+
+## API
+
+| Method | Returns | Notes |
+|---|---|---|
+| `track(event, properties?)` | `boolean` | `true` when the event was queued. `false` for an invalid name, an over-size payload, or when tracking is off. Never throws. |
+| `setConsent('granted' \| 'denied')` | `void` | Persisted per project in `localStorage`. `granted` releases the pending buffer; `denied` drops it and stops tracking. |
+| `getAnonymousId()` | `string \| null` | The opaque per-project id events are keyed on. `null` when tracking is off, consent is denied, or Do Not Track is active. |
+| `identify(userId, traits?)` | `void` | Existing SDK method. Also attaches `user_id` and traits to the next flush so earlier anonymous rows are stitched to the person server-side. |
+
+## Configuration: `analytics`
+
+| Key | Default | What it does |
+|---|---|---|
+| `enabled` | `true` | Master switch. `false` never initialises the tracker. |
+| `consent` | `'implied'` | `'implied'` sends immediately. `'required'` buffers up to 50 events in memory until `setConsent('granted')`; a stored `denied` wins. |
+| `sampleRate` | `1` | 0..1, decided once per person from a hash of the anonymous id, never per event, so funnels stay consistent. |
+| `respectDoNotTrack` | `true` | Honours `navigator.doNotTrack` and Global Privacy Control. When active, no events are sent and no anonymous id is exposed. |
+| `autoPageviews` | `false` | Emit `pageview` on `history.pushState` and `popstate`. Off because sessions already record page views. |
+| `flushIntervalMs` | `5000` | Timer flush. Floor is 1,000 ms. |
+| `propertyAllowlist` | `[]` | Property keys that may pass the PII key filter (below). |
+| `surface` | `'web'` | Stamped on every event as `$surface`. One of `web`, `console`, `docs`, `cli`, `mcp`, `server`, `mobile`. |
+
+## Event names and properties
+
+Names must match `^[a-z][a-z0-9_]{1,63}$`: lowercase, start with a letter,
+2 to 64 characters. The convention is `object_verb` in snake_case, past
+tense for completions (`checkout_completed`), `_view` for exposure
+(`pricing_view`), `_click` for intent (`cta_click`). An invalid name is
+dropped and `track()` returns `false`.
+
+Properties are flat: `string | number | boolean | null`, depth 1. Objects,
+arrays and functions are dropped; `Date` becomes an ISO string;
+non-finite numbers become `null`.
+
+| Limit | Value |
+|---|---|
+| Keys per event | 40 |
+| Key length | 64 characters |
+| String value length | 256 characters |
+| Serialized properties | 8 KB |
+| Distinct event names per project | 200, then the server returns 422 |
+
+**PII key filter.** Any key matching
+`email`, `phone`, `password`, `passwd`, `token`, `secret`, `ssn`, `address`,
+`credit`, `card` or `iban` (case-insensitive substring) is dropped on the
+client and again on the server, unless it is in `propertyAllowlist`. Every
+string value also runs through the SDK's PII scrubber, the same one reports
+use.
+
+**Reserved keys.** Keys starting with `$` are set by the SDK and dropped if
+a host app sends them. The SDK attaches `$surface` and, in a browser,
+`$route` (the current `location.pathname`) to every event.
+
+## Consent and privacy
+
+- The anonymous id is the same opaque per-project reporter token the SDK
+  already uses for reports and sessions. It is never a cookie you set.
+- With `consent: 'required'`, events are held in memory (up to 50) until
+  `setConsent('granted')`. Reloading the page before consent loses them; that
+  is intended.
+- `setConsent` persists to `localStorage` under a per-project key, so a
+  returning visitor keeps their choice.
+- Do Not Track and Global Privacy Control are respected by default; turn that
+  off only if your own policy covers it.
+- Sampling is per person, not per event.
+
+## Batching and delivery
+
+Events are buffered and sent to `POST /v1/sdk/events` when any of these
+happens: the buffer reaches 20 events, the 5-second timer fires, the page is
+hidden (`visibilitychange`) or unloaded (`pagehide`; the client switches to
+`keepalive` during unload). A batch that fails to send is spilled to
+`localStorage` (up to 200 events, 24-hour TTL) and replayed on the next page
+load. The server accepts at most 50 events and 64 KB per request.
+
+Call `identify()` at any point and the next flush carries an `identify`
+pseudo-event with the user id and traits. The server resolves the person and
+back-fills earlier anonymous rows with the same anonymous id. The
+pseudo-event itself is never stored.
+
+## The console: Users & Funnels
+
+Every project gets a **Users & Funnels** page at `/analytics` in the console
+(<https://kensaur.us/mushi-mushi/admin/analytics>):
+
+| Tab | What it shows |
+|---|---|
+| Overview | Event volume, distinct people and top events for the period |
+| Funnels | Ordered steps (e.g. `session_start → checkout_started → checkout_completed`) with conversion between each and a breakdown by a property |
+| Paths | The most common sequences of events people take from a chosen starting event |
+| People | Identified users with their traits, last seen, and their event history |
+| Retention | Cohorts by first-seen week and the share that came back |
+
+Events are retained for **90 days** per project by default
+(`project_settings.events_retention_days`); a cron deletes older rows. The
+per-project switch `product_events_enabled` turns ingest off; the API then
+answers `200` with `accepted: 0` and `reason: "disabled"` so clients do not
+retry.
+
+  Report opens, fix pulls and dispatches on your own project are recorded by
+  the console as events too, so "did the owner see the diagnosis" is a funnel
+  step you can query, not a guess.
+
+## MCP tools
+
+The Mushi MCP server exposes the same data to Cursor, Claude Code and any
+MCP client, scoped to the project of the MCP key:
+
+| Tool | Answers |
+|---|---|
+| `query_funnel` | "Of people who did A, how many did B, then C, in the last N days?" — ordered steps, optional breakdown property |
+| `get_product_events_summary` | Event counts, distinct people and top properties for a period |
+| `get_user_paths` | The most common next steps after a given event |
+
+Ask your agent "where do people drop off between signup and first report?"
+and it calls `query_funnel` with those steps.
+
+## Wire format: `POST /v1/sdk/events`
+
+Auth is the project's SDK API key (the same header as `/v1/sdk/session`).
+CORS is handled by the `/v1/sdk/*` middleware.
+
+```json
+{
+  "anon_id": "rt_7f3a…",
+  "user_id": "usr_42",
+  "user_traits": { "email": "a@example.com", "name": "Ada" },
+  "session_id": "sess_…",
+  "sdk_version": "0.9.0",
+  "surface": "web",
+  "events": [
+    { "name": "identify", "ts": "2026-09-21T09:00:00.000Z", "properties": {} },
+    {
+      "name": "checkout_started",
+      "ts": "2026-09-21T09:00:01.000Z",
+      "properties": { "plan": "pro", "$surface": "web", "$route": "/pricing" },
+      "dedup_key": "optional-idempotency-key"
+    }
+  ]
+}
+```
+
+| Field | Rules |
+|---|---|
+| `anon_id` | ≤ 128 chars, optional |
+| `user_id` / `user_traits` | ≤ 256 chars; traits `email` ≤ 320, `name` ≤ 120, extra keys pass through |
+| `session_id` | ≤ 128 chars, optional |
+| `surface` | one of the seven surfaces above; falls back to `$surface` on the event, then `web` |
+| `events[]` | 1 to 50 items; `name` must match the regex; `ts` is RFC 3339 with offset, defaults to receive time |
+| `dedup_key` | ≤ 128 chars; a duplicate `(project_id, dedup_key)` is ignored, not an error |
+
+Responses:
+
+| Status | Body |
+|---|---|
+| `200` | `{ "ok": true, "data": { "accepted": 2, "dropped": 0 } }` |
+| `200` (ingest off) | `{ "ok": true, "data": { "accepted": 0, "dropped": 2, "reason": "disabled" } }` |
+| `400` | `INVALID_JSON` |
+| `401` | bad or missing API key |
+| `413` | `PAYLOAD_TOO_LARGE` — body over 64 KB |
+| `422` | `INVALID_EVENT_BATCH` with per-field `issues` |
+| `500` | `INSERT_FAILED` — retry with the same `dedup_key`s |
+
+Server-side, the property contract is applied again: reserved `$` keys are
+kept only from a fixed allowlist (`$surface`, `$route`, `$referrer`,
+`$session_id`, `$sdk_version`, `$utm_*`, `$first_touch`, `$ref`), PII-looking
+keys are dropped, and any event whose properties exceed 8 KB is counted in
+`dropped`.
+
+## Mushi's own events
+
+The SDK's vocabulary for Mushi's own funnel lives in
+[`packages/core/src/analytics-taxonomy.ts`](https://github.com/kensaurus/mushi-mushi/blob/master/packages/core/src/analytics-taxonomy.ts):
+`landing_view`, `cta_click`, `signup_completed`, `project_created`,
+`key_minted`, `first_report_received` (the activation event),
+`report_opened`, `fix_context_pulled`, `fix_dispatched`, and the growth-loop
+trio `loop_impression`, `loop_click`, `loop_signup`. It is a worked example of
+the naming rules, not something your app needs to emit.
+
+**Related:** [`@mushi-mushi/web`](/sdks/web) · [`@mushi-mushi/react`](/sdks/react) ·
+[Runtime config](/concepts/runtime-config)
+
+---
+
 ## dev.mushimushi:mushi-android (Android)
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/android
@@ -15123,7 +16365,7 @@ title: MCP tools (generated)
 
   Auto-generated from `packages/mcp/src/catalog.ts`. Do not edit by hand — run `pnpm gen:mcp-tools-doc`.
 
-**73 tools** · **8 resources** · **4 prompts**
+**76 tools** · **8 resources** · **4 prompts**
 
 ## Read tools (`mcp:read`)
 
@@ -15159,6 +16401,9 @@ title: MCP tools (generated)
 | `query_lessons` | Query lessons for diff context | Retrieve the learning rules ("lessons") most relevant to a given code diff or PR context, packed within a token budget. Uses bi-encoder retrieval + severity-weighted scoring; pass the diff/description as the query and max_tokens (default 2000). Returns ranked \{ lessons: [\{ title, rule, severity }] }. Read-only. Use before writing a fix or opening a PR; use list_lessons to browse all lessons unfiltered. |
 | `list_lessons` | List project lessons | List promoted learning rules ("lessons") for the current project, highest-frequency first. Returns \{ lessons: [\{ id, rule_text, severity, frequency, anti_pattern, … }] }. Read-only. Use to browse the full catalog of encoded heuristics; use query_lessons to retrieve only lessons relevant to a specific diff or PR within a token budget. |
 | `activation_status` | Activation cockpit status | Return the unified activation posture — SDK heartbeat, ingested reports, GitHub, MCP readiness, QA stories, and the next best action. Read this before guessing which onboarding step is blocking the user. Also available as the mushi://activation resource for resource-reader clients. Returns \{ sdkActive, reportsIngested, githubConnected, mcpConnected, qaStoriesCreated, nextBestAction }. |
+| `query_funnel` | Ordered funnel over product events | Where do users drop off? Ordered funnel over Mushi.track() events for this project. Pass 2–8 step event names in order (e.g. ["landing_view", "signup_completed", "first_report_received"]); each step counts distinct users who did the previous step then this one within stepWindow (default 7d), over the trailing windowDays (default 30). Optional breakdown property (e.g. "utm_source", "$surface") splits every step. Returns \{ steps: [\{ name, entered, converted, pct, median_secs }], breakdown: [\{ value, entered, steps }] } (pct is conversion from step 1; breakdown is empty unless requested). Read-only. Use to find the biggest drop-off before changing onboarding; use get_product_events_summary to discover event names, or get_user_paths to see what users did after a step. |
+| `get_product_events_summary` | Product events summary | Summarise the Mushi.track() product events this project received in the trailing windowDays (default 30): event names with counts and distinct users, daily volume, and top properties. Returns \{ window_days, events_total, persons, identified, anonymous, events_per_day: [\{ day, count }], top_events: [\{ name, count, persons }] }. Read-only. Use first to learn which event names exist before calling query_funnel or get_user_paths; use run_nl_query for ad-hoc SQL over the same rows. |
+| `get_user_paths` | Paths users take after an event | What did users do next? Rank the events users fired immediately after fromEvent within the trailing windowDays (default 30), most common first, up to limit rows (default 20, max 50). Returns \{ from_event, total, next: [\{ name, count, pct }] }. Read-only. Use to see where users go after a step instead of guessing the funnel order; use query_funnel once you know the ordered steps, or get_product_events_summary for event names. |
 | `get_map_run_status` | Story map run status | Poll the status and results of a story_map_run started by map_user_stories. Returns \{ status: pending\|running\|completed\|failed, pages_crawled, proposal_id (once done), cursor_pr_url (if Cursor Cloud refined the draft) }. Read-only. Use to know when a crawl has finished and which inventory_proposals row to review next. |
 | `list_byok_keys` | List your API key pool | List the project's BYOK API keys grouped by provider (anthropic \| openai \| firecrawl \| browserbase \| cursor). Returns pooled \{ keys: [\{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at }] } plus read-only \{ legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, or rate-limited; use add_byok_key to add one. |
 | `list_pending_review_stories` | List QA stories pending review | List auto-generated QA/TDD stories in approval_status=pending_review — the queue waiting for human sign-off before they run on schedule. Returns \{ stories: [\{ id, title, source, target_url, created_at }] }. Read-only. Use to find what needs review today; then approve_qa_story to approve or reject each. |
@@ -16957,30 +18202,81 @@ If you self-host on your own Supabase project, you control the region entirely �
 
 ---
 
-## index
+## Security & compliance
 
 Source: https://kensaur.us/mushi-mushi/docs/security
 
-# Security overview
+---
+title: Security & compliance
+description: How Mushi Mushi protects bug-report data — residency, bring-your-own keys and storage, retention sweeps, nightly RLS coverage, prompt-injection defence, SOC 2 readiness, status page, and how to report a vulnerability.
+---
 
-Mushi handles raw bug reports — screenshots, console logs, source code
-hints, sometimes user PII. The security model is layered and documented:
+# Security & compliance
 
-- **[Bring-your-own-key](/security/byok)** — keep model keys in your own
-  Anthropic / OpenAI account. We never see them in plaintext.
-- **[Data residency](/security/data-residency)** — pick US, EU, or JP at
-  project creation; the SDK auto-routes via DNS.
-- **[BYO storage](/security/byo-storage)** — pin screenshots into your
-  own S3 / R2 / GCS / MinIO bucket.
-- **[SOC 2 readiness](/security/soc2)** — retention, DSAR, evidence
-  snapshots, audit log all built in.
-- **[Prompt-injection defence](/security/prompt-injection)** — the
-  vision-safe multimodal sanitizer + the regression suite that keeps it
-  honest.
+Mushi handles raw bug reports — screenshots, console output, sometimes a
+user's email. This page is the one-screen summary for whoever has to sign off
+on that. Every row links to the page with the mechanism and the evidence.
 
-Every Edge Function uses the **`(SELECT auth.uid())` subquery form** in
-RLS, indexes every policy column, and verifies coverage nightly via
-`mushi_rls_coverage_snapshot()`.
+  **Short version.** Your data is scoped to your project by row-level security
+  on every table, you can run diagnoses on your own model keys and keep
+  screenshots in your own bucket, old reports are hard-deleted on your plan's
+  schedule, and the controls are checked by cron, not by promise. Mushi is
+  **SOC 2 ready, not SOC 2 certified** — see the last row.
+
+## Posture at a glance
+
+| Control | What it means for you | Status | Details |
+| --- | --- | --- | --- |
+| **Data residency** | Pick a region at project creation; rows never replicate across regions | Live: single Tokyo (`ap-northeast-1`) cluster today. EU / JP dedicated clusters reserved, nightly no-cross-region attestation already runs | [Data residency](/security/data-residency) |
+| **Bring-your-own-key (BYOK)** | Diagnoses run against *your* Anthropic / OpenAI / OpenRouter account. Keys are stored in Vault, never shown back in plaintext, and nothing is billed to Mushi's provider account | Live | [BYOK](/security/byok) |
+| **BYO storage** | Screenshots and crash dumps pinned to your own S3 / R2 / GCS / MinIO bucket; URLs signed server-side | Live | [BYO storage](/security/byo-storage) |
+| **Retention sweep** | Reports older than your plan window (Free 7 d · Indie 30 d · Pro 90 d · Enterprise custom) or your per-project policy are hard-deleted daily; legal holds are skipped | Live, daily 03:00 UTC | [SOC 2 → retention](/security/soc2#data-retention-policies) |
+| **Tenant isolation** | Every table carries a row-level-security policy keyed on `(SELECT auth.uid())`; every policy column is indexed | Live | [No client data leakage](/security/no-leakage-claim) |
+| **Nightly RLS coverage check** | `mushi_rls_coverage_snapshot()` verifies each public table still has a policy and writes the delta to the evidence table | Live, nightly | [SOC 2 → automated controls](/security/soc2#automated-controls) |
+| **Prompt-injection sanitizer** | Report text, console lines, OCR output, and screenshots pass `sanitizeForLLM()` and a vision-safe path before any model sees them; the OWASP LLM01 corpus runs in CI | Live | [Prompt-injection defence](/security/prompt-injection) |
+| **Encryption** | TLS 1.2+ in transit; disk encryption at rest; PII columns (`reporter_email`, `reporter_name`, `screenshot_url`) additionally encrypted with `pgsodium` | Live | [SOC 2 readiness](/security/soc2) |
+| **Audit log** | Append-only `audit_log` of who did what, per user, under RLS | Live | [SOC 2 readiness](/security/soc2) |
+| **DSAR tooling** | One SQL call produces a signed export per reporter for data-subject requests | Live | [SOC 2 → DSAR](/security/soc2#dsar-data-subject-access-request) |
+| **SOC 2** | **Readiness, not certification.** The evidence pack, RLS and retention attestations, and the audit log are generated and refreshed automatically so an auditor has what they need. No third-party audit has been performed | Readiness live · certification not started | [SOC 2 readiness](/security/soc2) |
+
+## Operational transparency
+
+- **Status page:** [updown.io/p/b6lod](https://updown.io/p/b6lod) — live
+  availability and history for the ingest API, hosted MCP, console, and docs.
+  What is monitored and the uptime commitment per plan are on
+  [Status & uptime](/operating/status).
+- **Open source:** the server that enforces all of the above is
+  [public](https://github.com/kensaurus/mushi-mushi) under AGPLv3, so the
+  policies, the cron jobs, and the tests can be read rather than trusted.
+- **Sub-processors, retention table, and your rights:** on the
+  [Privacy Policy](/legal/privacy).
+
+## Report a vulnerability
+
+Please do not open a public issue. Use either channel:
+
+1. **GitHub private vulnerability reporting** (preferred):
+   [github.com/kensaurus/mushi-mushi/security/advisories/new](https://github.com/kensaurus/mushi-mushi/security/advisories/new)
+2. **Email:** [kensaurus@gmail.com](mailto:kensaurus@gmail.com), subject
+   prefix `[mushi-security]`
+
+Acknowledgement within 2 days, triage within 7, and a fix for critical and
+high findings within 30. The full timeline, safe-harbor terms, and what to
+include are in
+[SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md).
+
+## What we do not claim
+
+- No SOC 2 Type 1 or Type 2 report exists yet.
+- Dedicated EU and JP clusters are not live; the region setting is honoured
+  by the attestation but all rows sit in Tokyo today.
+- Prompt-injection defences reduce risk; they do not make model output safe to
+  merge unreviewed. Keep the fix agent on draft PRs.
+
+The deeper pages: [BYOK](/security/byok) · [Data residency](/security/data-residency) ·
+[BYO storage](/security/byo-storage) · [SOC 2 readiness](/security/soc2) ·
+[Prompt-injection defence](/security/prompt-injection) ·
+[No client data leakage](/security/no-leakage-claim)
 
 ---
 
@@ -17927,6 +19223,98 @@ npx mushi-mushi
 ```
 
 Start with the [incident-loop quickstart](/quickstart/incident-loop).
+
+---
+
+## Your Lovable app broke in production
+
+Source: https://kensaur.us/mushi-mushi/docs/use-cases/lovable-app-broke-in-production
+
+---
+title: Your Lovable app broke in production
+description: A debugging checklist for when a Lovable, Bolt, Cursor or Claude Code app breaks for a real user and you did not write the code — reproduce, read the first error, find the file, ask the agent for the smallest fix, stop the repeat.
+---
+
+# Your Lovable app broke in production. Now what?
+
+You shipped an app with Lovable, Bolt, Cursor or Claude Code. It works for
+you. A user messages "it's broken". You open the code and it is a few
+thousand lines you have read once, if that.
+
+This is a checklist for that afternoon. It assumes you can open the browser
+console and you have an AI editor. Most of it has nothing to do with Mushi;
+one step does.
+
+## 1. Get the user's exact words and their screen
+
+"It's broken" is not a bug report. Ask for three things: what they were
+trying to do, what happened instead, and the page they were on. If they can
+send a screenshot, take it. Ask what device and browser; "iPhone, Safari" or
+"work laptop, Edge" narrows the search more than any log.
+
+## 2. Reproduce in a private window, logged out
+
+Open a private window on the same page. Most "works for me" bugs are one of
+three things: you are logged in and they are not, you have a fresh build and
+they have a cached one, or you have an environment variable locally that the
+deployed app does not. Check those three before reading any code.
+
+## 3. Read the first red line in the console, not the last
+
+Open the browser console on the failing page and scroll to the first error.
+Later errors are usually consequences of the first. Copy the message and the
+file:line it names. If the console is clean, open the Network tab, repeat the
+action, and look for a request that returned 4xx or 5xx; the response body
+usually says why.
+
+## 4. Find the file and ask what it assumes
+
+Search your repo for the file or function the error named. Do not try to
+understand the whole module. Ask your editor's agent: "What does this
+function assume about its inputs, and which of those could be false for a
+logged-out user on Safari?" Generated code tends to assume the happy path it
+was generated against.
+
+## 5. Ask for the smallest fix, and a test
+
+Give the agent the error, the file, and one sentence of what the user was
+trying to do. Ask for the smallest change that fixes it and a test that fails
+without the change. Refuse the refactor it offers on the side. Strip user
+emails, tokens and keys from anything you paste.
+
+## 6. Ship, then tell the user
+
+Deploy, reproduce once more in the private window, and reply to the user with
+what you changed. People who hear back report the next bug too.
+
+## 7. Write the cause down where the agent will read it
+
+Add a one-line comment at the site, a rule to your editor's rules file, or an
+entry in a lessons file the agent loads. The bug you fix today is the bug the
+agent reintroduces next month unless the reason is in its context.
+
+## 8. Make the next report arrive with all of this attached
+
+Steps 1 to 3 are the expensive part, and a user cannot do them for you. An
+in-app bug reporter can: [Mushi Mushi](/) is an open-source SDK that lets the
+user report from a widget or a phone shake, attaches the screenshot and the
+console/network tail, writes a plain-English diagnosis of what broke and
+why, and hands the fix prompt to Cursor or Claude Code over MCP. One command
+installs it:
+
+```bash
+npx mushi-mushi
+```
+
+Free Cloud is 50 diagnoses a month with no card; self-hosting is free. Other
+tools that solve parts of this are compared on
+[Sentry alternatives for solo founders](/compare/sentry-alternatives-for-solo-founders).
+
+## Frequently asked questions
+
+**Related:** [Debug apps built with Cursor](/use-cases/debug-cursor-apps) ·
+[Debug apps built with Claude Code](/use-cases/debug-claude-code-apps) ·
+[Incident-loop quickstart](/quickstart/incident-loop)
 
 ---
 

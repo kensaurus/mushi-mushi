@@ -2597,6 +2597,137 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   );
 
+  // --- Product analytics (Mushi.track() funnels) --------------------------
+  // Thin wrappers over GET /v1/admin/events/* (adminOrApiKey mcp:read), the
+  // same routes the console's Users → Funnels tab reads.
+
+  function eventsQuery(params: Record<string, string | number | undefined>): string {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== '') qs.set(k, String(v));
+    }
+    return qs.toString();
+  }
+
+  function trailingRange(windowDays: number): { from: string; to: string } {
+    const to = new Date();
+    const from = new Date(to.getTime() - windowDays * 24 * 60 * 60 * 1000);
+    return { from: from.toISOString(), to: to.toISOString() };
+  }
+
+  server.registerTool(
+    'query_funnel',
+    {
+      title: titleOf('query_funnel'),
+      description: descOf('query_funnel'),
+      annotations: annotationsFor('query_funnel'),
+      inputSchema: z.object({
+        steps: z
+          .array(z.string().min(1))
+          .min(2)
+          .max(8)
+          .describe('Ordered event names, 2–8 (e.g. ["landing_view", "signup_completed", "first_report_received"]).'),
+        windowDays: z
+          .number()
+          .int()
+          .min(1)
+          .max(365)
+          .optional()
+          .describe('Trailing window in days (default 30).'),
+        stepWindow: z
+          .enum(['1h', '1d', '7d', '30d'])
+          .optional()
+          .describe('Max time allowed between consecutive steps (default 7d).'),
+        breakdown: z
+          .string()
+          .optional()
+          .describe('Event property to split every step by (e.g. "utm_source", "$surface").'),
+        project_id: z
+          .string()
+          .optional()
+          .describe('Project UUID (defaults to the configured project).'),
+      }),
+    },
+    async (args) => {
+      const qs = eventsQuery({
+        steps: args.steps.join(','),
+        window: args.stepWindow ?? '7d',
+        ...trailingRange(args.windowDays ?? 30),
+        breakdown: args.breakdown,
+        project_id: args.project_id ?? projectId,
+      });
+      return jsonResult(await apiCall(`/v1/admin/events/funnel?${qs}`));
+    },
+  );
+
+  server.registerTool(
+    'get_product_events_summary',
+    {
+      title: titleOf('get_product_events_summary'),
+      description: descOf('get_product_events_summary'),
+      annotations: annotationsFor('get_product_events_summary'),
+      inputSchema: z.object({
+        windowDays: z
+          .number()
+          .int()
+          .min(1)
+          .max(365)
+          .optional()
+          .describe('Trailing window in days (default 30).'),
+        project_id: z
+          .string()
+          .optional()
+          .describe('Project UUID (defaults to the configured project).'),
+      }),
+    },
+    async (args) => {
+      const qs = eventsQuery({
+        window: args.windowDays ?? 30,
+        project_id: args.project_id ?? projectId,
+      });
+      return jsonResult(await apiCall(`/v1/admin/events/summary?${qs}`));
+    },
+  );
+
+  server.registerTool(
+    'get_user_paths',
+    {
+      title: titleOf('get_user_paths'),
+      description: descOf('get_user_paths'),
+      annotations: annotationsFor('get_user_paths'),
+      inputSchema: z.object({
+        fromEvent: z.string().min(1).describe('Event name to start from (e.g. "key_minted").'),
+        windowDays: z
+          .number()
+          .int()
+          .min(1)
+          .max(365)
+          .optional()
+          .describe('Trailing window in days (default 30).'),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(50)
+          .optional()
+          .describe('Max distinct paths to return (default 20, max 50).'),
+        project_id: z
+          .string()
+          .optional()
+          .describe('Project UUID (defaults to the configured project).'),
+      }),
+    },
+    async (args) => {
+      const qs = eventsQuery({
+        from_event: args.fromEvent,
+        ...trailingRange(args.windowDays ?? 30),
+        limit: args.limit ?? 20,
+        project_id: args.project_id ?? projectId,
+      });
+      return jsonResult(await apiCall(`/v1/admin/events/paths?${qs}`));
+    },
+  );
+
   server.registerResource(
     'activation_status',
     'mushi://activation',

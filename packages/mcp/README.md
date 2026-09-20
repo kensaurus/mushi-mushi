@@ -146,7 +146,7 @@ The Mushi backend now exposes the same tool catalog over the **Streamable HTTP**
 
 ### Feature groups (`?features=` / `MUSHI_FEATURES`)
 
-Full catalog is **73 tools** (stdio / `MUSHI_FEATURES=all`). The hosted HTTP
+Full catalog is **76 tools** (stdio / `MUSHI_FEATURES=all`). The hosted HTTP
 endpoint exposes a leaner subset filtered by feature groups (see
 `mcp-hosted-tool-manifest.json`). New installs now default to the lean
 `triage,fixes,inventory,setup,docs` set automatically (stdio: when
@@ -214,6 +214,9 @@ The endpoint accepts JSON-RPC 2.0 over POST (returns `application/json` or `text
 | `diagnose_setup` | Setup health in one call: `mode=full` (default) runs ingest + dispatch preflight, `mode=ingest` / `mode=dispatch` narrow it. Returns the single best next action. Run first when a user says setup is broken |
 | `check_sdk_version` | Compare a published `@mushi-mushi/*` pin to `GET /v1/sdk/latest-version`. Returns `{ package, current, latest, outdated }` and, when outdated, Sentry-style `suggestedActions` (max 1). Does not bump the pin. |
 | `activation_status` | Unified activation posture for the active project: required steps, SDK heartbeat, dispatch preflight, and the next best action |
+| `query_funnel` | Ordered funnel over `Mushi.track()` events (2–8 steps, per-step window, optional breakdown). Answers "where do users drop off?" from `GET /v1/admin/events/funnel` |
+| `get_product_events_summary` | Event names, counts, distinct users and daily volume for the trailing window — call first to discover event names |
+| `get_user_paths` | Most common events users fired right after a given event ("what did they do next?") from `GET /v1/admin/events/paths` |
 | `get_report_timeline` | Ordered report timeline: the reporter/admin comment thread (including verify/reopen signals) plus fix, QA, and status lanes. Use when triaging whether an end user still sees a bug as unfixed |
 | `list_projects` | Discover all Mushi projects accessible to this API key. Returns project id, name, and created date |
 | `get_project_context` | Rich context snapshot: SDK heartbeat, ingest status, autofix readiness, and open report counts |
@@ -391,7 +394,7 @@ Spawns `dist/index.js` with a dummy unreachable endpoint and confirms it adverti
 pnpm --filter @mushi-mushi/mcp build
 pnpm --filter @mushi-mushi/mcp test:smoke
 # OK; prints live tool/resource/prompt counts from the catalog
-# (see packages/mcp/src/catalog.ts — currently 73 tools / 8 resources / 4 prompts)
+# (see packages/mcp/src/catalog.ts — currently 76 tools / 8 resources / 4 prompts)
 ```
 
 ### Layer 3; Full localhost E2E (real binary + real backend behaviour)

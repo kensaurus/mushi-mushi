@@ -84,6 +84,8 @@ import {
   updateEventIdentity,
   destroyEventTracker,
   getEventAnonymousId,
+  flushEvents,
+  sha256Hex,
 } from '@mushi-mushi/core';
 
 /** Resolve `reports.app_version` from SDK config and captured environment. */
@@ -665,6 +667,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     widget.setScreenshotPreview(pendingScreenshot);
   }
 
+  // Brand-mark ref: SHA-256 prefix of the project id, never the id itself.
+  const brandRefReady: Promise<string | null> = sha256Hex(projectId)
+    .then((hex) => hex.slice(0, 12))
+    .catch(() => null);
+
   widget = new MushiWidget(bootstrapConfig.widget, {
     onSubmit: async ({ category, userCategory, description, intent }) => {
       log.info('Report submitted', { category, userCategory, intent });
@@ -686,6 +693,18 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       // capture between init and open.
       replayCap?.start();
       emit('widget:opened');
+    },
+    // Growth loop (plan-gtm C §5); the tracker already honours DNT/consent/enabled.
+    onBrandFooterImpression: () => {
+      void brandRefReady.then((ref) => {
+        trackEvent('loop_impression', { placement: 'widget' }, ref ? { reserved: { $ref: ref } } : undefined);
+      });
+    },
+    onBrandFooterClick: () => {
+      void brandRefReady.then((ref) => {
+        trackEvent('loop_click', { placement: 'widget' }, ref ? { reserved: { $ref: ref } } : undefined);
+        return flushEvents();
+      });
     },
     onClose: () => {
       log.debug('Widget closed');
@@ -936,6 +955,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       return res.ok ? (res.data ?? null) : null;
     },
   }, MUSHI_SDK_VERSION);
+  void brandRefReady.then((ref) => widget.setBrandRef(ref));
   syncCaptureModules();
 
   if (typeof document !== 'undefined') {
@@ -1038,7 +1058,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       log.debug('Runtime SDK config disabled; using bootstrap config', { version: runtime.version });
       return;
     }
-    activeConfig = mergeRuntimeConfig(activeConfig, runtime);
+    // Host (MIT) config beats remote for host-wins keys even on the second merge.
+    activeConfig = mergeRuntimeConfig(activeConfig, runtime, bootstrapConfig);
     syncCaptureModules();
     if (runtime.widget) widget.updateConfig(activeConfig.widget);
     if (reporterNotificationsEnabled) startReporterInboxPolling();

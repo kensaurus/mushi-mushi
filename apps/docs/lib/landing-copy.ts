@@ -392,4 +392,9 @@ export const LANDING_TRUST_LINKS = [
     text: 'Runs on glot.it',
     href: 'https://kensaur.us/glot-it',
   },
+  {
+    label: 'Security',
+    text: 'RLS · BYOK · retention sweep',
+    href: '/security',
+  },
 ] as const

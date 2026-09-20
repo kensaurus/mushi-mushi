@@ -14,6 +14,13 @@ date: 2026-06-17
 
 ---
 
+  **Correction, 2026-09-21.** The five features below shipped. The public
+  posts this article promised (Show HN, Product Hunt, Reddit, a Friday retro)
+  never went out, and the GitHub OAuth provider stayed switched off in
+  production until September. The post is kept as written; the current launch
+  plan and its gate are on the [launch page](/launch-week), and the numbers
+  are in [9 signups in 5 months](/blog/nine-signups-what-the-data-said).
+
 Mushi has been shipping quietly for a year. This week we stop doing that.
 
 Five real features, five days, all announced publicly. The model is Supabase's Launch Week — not a PR stunt, just a concentrated shipping cadence with enough momentum for the GitHub Trending algorithm to notice.
@@ -59,4 +66,4 @@ Friday's retro post will include: GitHub stars gained during the week, new signu
 
 ---
 
-*Follow along on [Bluesky →](https://bsky.app/profile/mushimushi.dev)*
+*Follow along on [Bluesky →](https://bsky.app/profile/kensaurus.bsky.social)*

@@ -23,7 +23,14 @@ export function mergeRuntimeCapture(
   return merged as MushiConfig['capture'];
 }
 
-export function mergeRuntimeConfig(config: MushiConfig, runtime: MushiRuntimeSdkConfig): MushiConfig {
+/** Widget keys where an explicit host value beats the runtime one; pass the original init config as `host` when merging repeatedly. */
+const HOST_WINS_WIDGET_KEYS: readonly string[] = ['brandFooter'];
+
+export function mergeRuntimeConfig(
+  config: MushiConfig,
+  runtime: MushiRuntimeSdkConfig,
+  host: MushiConfig = config,
+): MushiConfig {
   const nativeTrigger = runtime.native?.triggerMode;
   const runtimeLauncher = (runtime.widget as Record<string, unknown>)?.launcher as string | undefined;
   const hostTrigger = config.widget?.trigger;
@@ -70,7 +77,14 @@ export function mergeRuntimeConfig(config: MushiConfig, runtime: MushiRuntimeSdk
   if (runtime.widget) {
     for (const [key, value] of Object.entries(runtime.widget)) {
       if (key === 'trigger' || key === 'launcher') continue;
-      if (value !== undefined && value !== null) definedRuntimeWidget[key] = value;
+      if (value === undefined || value === null) continue;
+      if (
+        HOST_WINS_WIDGET_KEYS.includes(key) &&
+        (host.widget as Record<string, unknown> | undefined)?.[key] !== undefined
+      ) {
+        continue; // MIT config beats remote for this key
+      }
+      definedRuntimeWidget[key] = value;
     }
   }
   return {

@@ -1,0 +1,60 @@
+# Sentry alternatives for solo founders
+
+Source: https://kensaur.us/mushi-mushi/docs/compare/sentry-alternatives-for-solo-founders
+
+---
+title: Sentry alternatives for solo founders
+description: Sentry alternatives for solo founders in 2026 — Sentry, Bugsnag, Rollbar, highlight.io, PostHog and Mushi Mushi compared on free-tier caps, self-hosting, AI diagnosis and fixes, with a "pick this if" for each.
+---
+
+# Sentry alternatives for solo founders
+
+If you are one person shipping an app to real users, the question is not
+"which error tracker is best". It is "which one will I still be reading in
+month three". This page compares six tools on the four things that decide
+that for a solo builder: what the free tier caps, whether you can run it
+yourself, whether it explains the bug or only reports it, and who each one
+is really for.
+
+Mushi is on the list. We tried to describe the others in their own terms, and
+every number links to the page it came from.
+
+## The table
+
+## How to read it
+
+**Free tiers.** All six have one, and none of them asks for a card. The caps
+are measured in different units (errors, events, spans, replays, diagnoses),
+so compare them against your own volume rather than each other. A side
+project with a few hundred users rarely reaches any of these limits.
+
+**Self-hosting.** Sentry, PostHog, highlight.io and Mushi publish a
+self-hosted path. Sentry's needs a real machine (4 cores, 16 GB RAM per its
+docs) and leaves out Seer. Mushi's is one command and includes the diagnosis
+when you bring your own LLM key. Bugsnag's and Rollbar's on-premise options
+are not stated on their pricing pages; we did not verify them.
+
+**AI diagnosis.** This is where the tools split. Sentry's Seer is a separate
+paid subscription on Team and above. PostHog lists AI credits and a PR beta
+on the free tier; we could not verify what it does for exceptions. Mushi's
+diagnosis and fix prompt run on every plan. Bugsnag, Rollbar and highlight.io
+list nothing of the kind on the pages we checked.
+
+**Who it is for.** Sentry, Bugsnag and Rollbar were built for teams that read
+error dashboards. PostHog and highlight.io were built around replay. Mushi
+was built for a builder who did not write most of the code and hears about
+bugs from users; the output is the diagnosis and the fix, in the editor.
+
+## What this page does not claim
+
+It does not claim Mushi is cheaper at scale, and it does not claim feature
+parity with Sentry on tracing, profiling or platform coverage. If you need
+those, Sentry is the right answer and Mushi runs alongside it: a Sentry
+issue-alert webhook sends errors into Mushi's queue, and merging the fix
+resolves the Sentry issue. See [Sentry vs Mushi](/compare/sentry-vs-mushi).
+
+## Frequently asked questions
+
+**Related:** [Sentry alternative for AI-built apps](/use-cases/sentry-alternative) ·
+[PostHog session replay vs Mushi](/compare/posthog-session-replay-vs-mushi) ·
+[Self-hosting](/self-hosting)
