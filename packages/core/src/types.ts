@@ -26,6 +26,13 @@ export interface MushiConfig {
    * host apps. Set false for fully static/offline deployments.
    */
   runtimeConfig?: boolean | 'auto';
+  /**
+   * Product analytics (`Mushi.track()`, Users & Funnels). Enabled by default
+   * and keyed on the same opaque per-project reporter token as sessions;
+   * honours DNT / GPC. Set `enabled: false` to opt out, or
+   * `consent: 'required'` to buffer until `setConsent('granted')`.
+   */
+  analytics?: MushiAnalyticsConfig;
 
   sentry?: MushiSentryConfig;
   widget?: MushiWidgetConfig;
@@ -1481,8 +1488,26 @@ export interface MushiSDKInstance {
    * Manually record a host-defined activity event (e.g. 'lesson_completed').
    * The SDK batches these and flushes to POST /v1/sdk/activity.
    * No-op when rewards are disabled or the user has not opted in.
+   * For product analytics (funnels, paths, people) use `track()` instead.
    */
   recordActivity(action: string, metadata?: Record<string, unknown>): void;
+
+  // ─── Product analytics (Users & Funnels) ──────────────────────────
+
+  /**
+   * Record a product-analytics event, e.g. `track('checkout_started', { plan: 'pro' })`.
+   * Names must match `^[a-z][a-z0-9_]{1,63}$`; properties are flat
+   * (string | number | boolean | null), PII-looking keys are dropped, and
+   * every string value runs through the PII scrubber. Batched to
+   * POST /v1/sdk/events. No-op under DNT/GPC, `analytics.enabled: false`,
+   * or before consent when `analytics.consent === 'required'`.
+   * Returns true when the event was queued.
+   */
+  track(event: string, properties?: Record<string, MushiPropertyValue>): boolean;
+  /** Grant or deny analytics consent (persisted per project in localStorage). */
+  setConsent(state: 'granted' | 'denied'): void;
+  /** The anonymous id analytics events are keyed on, or null when tracking is off. */
+  getAnonymousId(): string | null;
 
   /**
    * Briefly animate the bug-report trigger button to draw the user's
@@ -1597,6 +1622,8 @@ export interface MushiApiClient {
   postDiscoveryEvent(event: MushiDiscoveryEventPayload): Promise<MushiApiResponse<{ accepted: boolean }>>;
   /** POST /v1/sdk/session — lightweight session lifecycle event (best-effort). */
   postSessionEvent(payload: MushiSessionEventPayload): Promise<MushiApiResponse<{ accepted: boolean }>>;
+  /** POST /v1/sdk/events — batched product-analytics events (Mushi.track()). */
+  postProductEvents(payload: MushiProductEventPayload): Promise<MushiApiResponse<{ accepted: number; dropped: number }>>;
   listReporterReports(reporterToken: string): Promise<MushiApiResponse<{ reports: MushiReporterReport[] }>>;
   listReporterComments(
     reportId: string,
@@ -1747,6 +1774,44 @@ export interface MushiSessionEventPayload {
   user_id_hash?: string | null;
   user_agent?: string | null;
   sdk_version?: string;
+}
+
+export type MushiPropertyValue = string | number | boolean | null;
+
+/** Configuration for `Mushi.track()` product analytics. */
+export interface MushiAnalyticsConfig {
+  /** Master switch (default true). */
+  enabled?: boolean;
+  /** 'implied' (default) sends immediately; 'required' buffers until setConsent('granted'). */
+  consent?: 'implied' | 'required';
+  /** 0..1, decided once per person (default 1). */
+  sampleRate?: number;
+  /** Honour navigator.doNotTrack / globalPrivacyControl (default true). */
+  respectDoNotTrack?: boolean;
+  /** Emit `pageview` on history navigation (default false; sessions already record page views). */
+  autoPageviews?: boolean;
+  /** Flush cadence in ms (default 5000, min 1000). */
+  flushIntervalMs?: number;
+  /** Property keys allowed through the PII key filter. */
+  propertyAllowlist?: string[];
+  /** Which surface these events come from (default 'web'). */
+  surface?: 'web' | 'console' | 'docs' | 'cli' | 'mcp' | 'server' | 'mobile';
+}
+
+/** Wire shape for POST /v1/sdk/events. */
+export interface MushiProductEventPayload {
+  anon_id?: string | null;
+  user_id?: string | null;
+  user_traits?: Record<string, unknown> | null;
+  session_id?: string | null;
+  sdk_version?: string | null;
+  surface?: MushiAnalyticsConfig['surface'];
+  events: Array<{
+    name: string;
+    ts?: string;
+    properties?: Record<string, MushiPropertyValue>;
+    dedup_key?: string;
+  }>;
 }
 
 export interface MushiApiResponse<T> {

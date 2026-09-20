@@ -141,6 +141,34 @@ export {
   destroySessionTracker,
   type SessionTrackerOptions,
 } from './session-tracker';
+/** @public — product analytics (Mushi.track()) */
+export {
+  initEventTracker,
+  trackEvent,
+  setEventConsent,
+  updateEventIdentity,
+  flushEvents,
+  destroyEventTracker,
+  getEventAnonymousId,
+  isEventTrackingActive,
+  dntActive,
+  type EventTrackerOptions,
+} from './event-tracker';
+/** @public — analytics vocabulary shared by SDKs, console, docs and server */
+export {
+  MUSHI_EVENTS,
+  MUSHI_EVENT_NAMES,
+  MUSHI_SURFACES,
+  ACTIVATION_EVENT,
+  HABIT_EVENTS,
+  EVENT_NAME_RE,
+  EVENT_PROPERTY_LIMITS,
+  isValidEventName,
+  sanitizeEventProperties,
+  type MushiEventName,
+  type MushiSurface,
+  type MushiEventProperties,
+} from './analytics-taxonomy';
 /** @public */
 export { createRateLimiter, type RateLimiter, type RateLimiterConfig } from './rate-limiter';
 /** @public */

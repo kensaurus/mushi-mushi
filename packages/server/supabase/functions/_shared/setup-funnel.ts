@@ -43,6 +43,11 @@ export type FunnelEventName =
   | 'cli_key_minted'
   | 'wizard_env_written'
   | 'sdk_first_heartbeat'
+  // Console onboarding steps (CHECK widened in 20260921000002_company_funnel_rpc.sql).
+  | 'console_project_created'
+  | 'console_key_minted'
+  | 'test_report_sent'
+  | 'diagnosis_viewed'
   | 'mcp_setup_done'
   | 'mcp_first_tool_call'
 

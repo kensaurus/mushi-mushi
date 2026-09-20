@@ -27,6 +27,7 @@ import { Card } from '../../components/ui'
 import { Btn } from '../ui'
 import { IconExternalLink } from '../icons'
 import { useToast } from '../../lib/toast'
+import { trackSelf } from '../../lib/track'
 import { ContainedBlock } from './ReportSurface'
 import type { ReportDetail } from './types'
 
@@ -99,9 +100,14 @@ export function CursorAgentLaunch({ report, cursorWorkspace }: CursorAgentLaunch
   const cloudUrl = buildCursorCloudUrl(prompt, cursorWorkspace)
   const deeplink = buildCursorDeeplink(prompt)
 
+  // Funnel: every hand-off path pulls the fix context into an editor/agent.
+  const trackPulled = (via: 'copy' | 'cursor_ide' | 'cursor_cloud') =>
+    trackSelf('fix_context_pulled', { report_id: report.id, via })
+
   const onCopy = async () => {
     try {
       await navigator.clipboard.writeText(prompt)
+      trackPulled('copy')
       setCopied(true)
       toast.success('Prompt copied', 'Paste into Cursor (Cmd-K) or any MCP-aware agent.')
       setTimeout(() => setCopied(false), 1500)
@@ -126,12 +132,12 @@ export function CursorAgentLaunch({ report, cursorWorkspace }: CursorAgentLaunch
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <a href={deeplink} target="_blank" rel="noopener noreferrer">
+        <a href={deeplink} target="_blank" rel="noopener noreferrer" onClick={() => trackPulled('cursor_ide')}>
           <Btn variant="primary" size="sm" leadingIcon={<IconExternalLink />}>
             Open in Cursor IDE
           </Btn>
         </a>
-        <a href={cloudUrl} target="_blank" rel="noopener noreferrer">
+        <a href={cloudUrl} target="_blank" rel="noopener noreferrer" onClick={() => trackPulled('cursor_cloud')}>
           <Btn variant="ghost" size="sm" leadingIcon={<IconExternalLink />}>
             Cloud agent (cursor.com/agents)
           </Btn>

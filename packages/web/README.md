@@ -172,6 +172,25 @@ The widget's "Your reports" tab lets reporters see team replies and respond, sig
 </details>
 
 <details>
+<summary><b>Product analytics</b> — <code>track()</code>, funnels, paths and people in the same console</summary>
+
+```typescript
+const mushi = Mushi.init({
+  projectId: 'proj_xxx',
+  apiKey: 'mushi_xxx',
+  // Optional. Defaults: enabled, consent 'implied', DNT/GPC respected, sampleRate 1.
+  analytics: { consent: 'required' },
+});
+
+mushi.setConsent('granted');                       // only needed with consent: 'required'
+mushi.track('checkout_started', { plan: 'pro' });  // snake_case names, flat properties
+mushi.identify('usr_42');                          // stitches earlier anonymous events to the person
+```
+
+Events batch to `POST /v1/sdk/events` (20 per batch or every 5 s, flushed on `pagehide`, spilled to `localStorage` when offline). Names must match `^[a-z][a-z0-9_]{1,63}$`; properties are flat `string | number | boolean | null`, PII-looking keys (`email`, `phone`, `token`, …) are dropped, and string values run through the PII scrubber. `analytics.enabled: false` turns it off; `navigator.doNotTrack` / Global Privacy Control are honoured by default. The console's **Users & Funnels** page reads the same events; retention defaults to 90 days per project.
+</details>
+
+<details>
 <summary><b>Runtime control &amp; self-noise filters</b> — imperative APIs and CSP-safe defaults</summary>
 
 ```typescript

@@ -14,6 +14,7 @@ import type {
   MushiTesterReputation,
   MushiTierResult,
   MushiSessionEventPayload,
+  MushiProductEventPayload,
 } from './types';
 import { checkReportPayloadSize } from './payload-guard';
 import { sha256Hex, hmacSha256Hex } from './digest';
@@ -482,6 +483,19 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
       return request<{ accepted: boolean }>(
         'POST',
         '/v1/sdk/session',
+        payload,
+        1,
+        'discovery',
+      );
+    },
+
+    /** POST /v1/sdk/events — batched product-analytics events (Mushi.track()).
+     *  Best-effort (1 retry); the event tracker spills unsent batches to
+     *  localStorage and replays them on the next page load. */
+    async postProductEvents(payload: MushiProductEventPayload) {
+      return request<{ accepted: number; dropped: number }>(
+        'POST',
+        '/v1/sdk/events',
         payload,
         1,
         'discovery',

@@ -37,6 +37,7 @@ const envStatus = checkEnv()
 const ContentQualityPage = lazy(() => import('./pages/ContentQualityPage').then(m => ({ default: m.ContentQualityPage })))
 const ContentQualityDetailPage = lazy(() => import('./pages/ContentQualityDetailPage').then(m => ({ default: m.ContentQualityDetailPage })))
 const ActivityPage = lazy(() => import('./pages/ActivityPage').then(m => ({ default: m.ActivityPage })))
+const GrowthPage = lazy(() => import('./pages/GrowthPage').then(m => ({ default: m.GrowthPage })))
 const OverviewPage = lazy(() => import('./pages/OverviewPage').then(m => ({ default: m.OverviewPage })))
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const ReportsPage = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })))
@@ -353,6 +354,7 @@ export function App() {
                 <SentryRoutes>
                   <Route path="/overview" element={<OverviewPage />} />
                   <Route path="/activity" element={<ActivityPage />} />
+                  <Route path="/growth" element={<GrowthPage />} />
                   <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/console" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/reports" element={<ReportsPage />} />

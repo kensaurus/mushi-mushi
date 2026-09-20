@@ -41,6 +41,10 @@ type MushiInstance = {
   report: (opts?: { category?: string }) => void
   setTrigger?: (trigger: 'auto' | 'banner' | 'edge-tab' | 'attach' | 'manual' | 'hidden') => void
   hide?: () => void
+  /** Product analytics (Users & Funnels). Returns true when the event was queued. */
+  track: (event: string, properties?: Record<string, string | number | boolean | null>) => boolean
+  setConsent: (state: 'granted' | 'denied') => void
+  getAnonymousId: () => string | null
 }
 
 type MushiModule = {

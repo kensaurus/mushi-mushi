@@ -4,6 +4,7 @@ import { Banner, Head } from 'nextra/components'
 import { getPageMap } from 'nextra/page-map'
 import Link from 'next/link'
 import { NavbarAuthChrome } from '../components/NavbarAuthChrome'
+import { MushiSiteAnalytics } from '../components/MushiSiteAnalytics'
 /* globals.css imports both `tailwindcss` AND `nextra-theme-docs/style.css`,
  * so we only import the one entry file to keep the cascade ordering stable
  * (Tailwind base layer before Nextra theme styles). */
@@ -151,6 +152,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         >
           {children}
         </Layout>
+        {/* Mushi measuring its own funnel with its own SDK — client-only,
+            consent-gated, no-op unless NEXT_PUBLIC_MUSHI_SELF_* are set. */}
+        <MushiSiteAnalytics />
       </body>
     </html>
   )

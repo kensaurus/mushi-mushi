@@ -58,6 +58,9 @@ const LANDING_PATHS = [
 const PUBLIC_PATHS = [
   'apps/docs/lib/public-copy.ts',
   'apps/docs/components/TroubleshootingAccordion.tsx',
+  'apps/docs/components/PricingTiersTable.tsx',
+  'apps/docs/components/PricingCta.tsx',
+  'apps/docs/components/MushiSiteAnalytics.tsx',
   'apps/docs/content/pricing.mdx',
   'apps/docs/content/cloud.mdx',
   'apps/docs/content/concepts/index.mdx',

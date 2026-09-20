@@ -3,7 +3,7 @@
 > Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Generated: 2026-09-12
+Generated: 2026-09-20
 Pages: 190
 
 This file contains the full prose of every documentation page, stripped of
@@ -12290,14 +12290,9 @@ Annual pricing applies to the **base subscription** only. Overage diagnoses are 
 
 Use the interactive estimator above, or run `mushi billing status` after wiring the SDK — it shows diagnoses used, limit, and spend cap for the current period.
 
-## Sign up
+## Start free
 
-```bash
-npx mushi-mushi
-# wizard: detect framework → install SDK → write env vars → connect MCP
-```
-
-Or [open the console →](https://kensaur.us/mushi-mushi/signup)
+Prefer the terminal? `npx mushi-mushi` runs the wizard — detect framework, install the SDK, write env vars, connect MCP. See the [incident loop quickstart](/quickstart/incident-loop), or [create your free account in the console](https://kensaur.us/mushi-mushi/admin/signup?src=pricing-text).
 
 ---
 
@@ -13013,7 +13008,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.20.2"],
+      "args": ["-y", "@mushi-mushi/mcp@0.21.0"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -13039,7 +13034,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.20.2"],
+      "args": ["-y", "@mushi-mushi/mcp@0.21.0"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -14576,11 +14571,11 @@ Published npm packages ship on independent semver tracks (see [npm](https://www.
 {/* sdk-version-matrix:start */}
 | Package | Version |
 | --- | --- |
-| @mushi-mushi/core, @mushi-mushi/web | 1.27.x |
+| @mushi-mushi/core, @mushi-mushi/web | 1.28.x |
 | @mushi-mushi/react | 1.21.x |
 | @mushi-mushi/react-native | 0.21.x |
 | @mushi-mushi/cli | 0.27.x |
-| @mushi-mushi/mcp | 0.20.x |
+| @mushi-mushi/mcp | 0.21.x |
 | @mushi-mushi/capacitor | 1.1.x |
 | @mushi-mushi/node | 1.2.x |
 | @mushi-mushi/angular, @mushi-mushi/vue, @mushi-mushi/svelte | 1.0.x |

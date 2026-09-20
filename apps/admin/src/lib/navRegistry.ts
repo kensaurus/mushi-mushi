@@ -97,6 +97,8 @@ export interface NavRegistryEntry {
   requiresFeature?: FeatureFlag
   requiresAdvancedMode?: boolean
   superAdmin?: boolean
+  /** Mushi-operator-only (entitlements `operator`) — company dashboards like /growth. */
+  operatorOnly?: boolean
   /** false = palette-only utility route */
   inSidebar?: boolean
   paletteDescription: string
@@ -473,6 +475,19 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     beginner: true,
     paletteDescription: 'Per-project activity — sessions, page views, identified vs. anonymous users, top routes.',
     paletteKeywords: ['sessions', 'users', 'page views', 'analytics', 'dau', 'activity', 'engagement'],
+    paletteGroup: 'Check',
+  },
+  {
+    id: 'nav:growth',
+    path: '/growth',
+    label: 'Growth',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'release-intel',
+    iconKey: 'gauge',
+    operatorOnly: true,
+    paletteDescription: 'Operator-only company funnel — activated external projects per week, by signup source.',
+    paletteKeywords: ['growth', 'funnel', 'signups', 'activation', 'activated', 'paid', 'source', 'operator'],
     paletteGroup: 'Check',
   },
   {

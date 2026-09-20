@@ -46,12 +46,16 @@ interface EntitlementResponse {
   isSuperAdmin: boolean
   hasProject: boolean
   userEmail?: string | null
+  /** Mushi operator (company staff) — unlocks /growth and other internal dashboards. */
+  operator?: boolean
 }
 
 export interface UseEntitlementsResult {
   planId: string
   planName: string
   isSuperAdmin: boolean
+  /** True for Mushi operators (internal growth / company dashboards). Defaults false. */
+  isOperator: boolean
   hasProject: boolean
   /** Returns true when the caller's plan grants this feature. */
   has: (flag: FeatureFlag) => boolean
@@ -72,6 +76,7 @@ export function useEntitlements(): UseEntitlementsResult {
         planId: 'hobby',
         planName: 'Hobby',
         isSuperAdmin: false,
+        isOperator: false,
         hasProject: false,
         has: FALLBACK,
         loading,
@@ -83,6 +88,7 @@ export function useEntitlements(): UseEntitlementsResult {
       planId: data.planId,
       planName: data.planName,
       isSuperAdmin: Boolean(data.isSuperAdmin),
+      isOperator: Boolean(data.operator),
       hasProject: Boolean(data.hasProject),
       has: (flag) => data.featureFlags?.[flag] === true,
       loading,

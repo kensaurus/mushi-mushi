@@ -6,6 +6,12 @@ import { authRedirectUrl, detectRecoveryFromUrl } from './authRedirect'
 import { notifySignOut, subscribeAuthBroadcast } from './authBroadcast'
 import { signInWithPasskey as signInWithPasskeyApi } from './passkeys'
 import { upsertAccount } from './accountSessions'
+import {
+  completeSignupAttribution,
+  compactSignupMeta,
+  stashSignupMeta,
+  type SignupMeta,
+} from './signupAttribution'
 
 // Attach the Supabase user id (UUID — not PII) to every Sentry event so we can
 // answer "which user hit this?" without scanning replays. Email is intentionally
@@ -26,13 +32,16 @@ interface AuthContextValue {
   clearPasswordRecovery: () => void
   signIn: (email: string, password: string) => Promise<{ error?: string }>
   signInWithMagicLink: (email: string) => Promise<{ error?: string }>
-  signInWithGitHub: () => Promise<{ error?: string }>
-  signInWithGoogle: () => Promise<{ error?: string }>
+  /** OAuth sign-in. `signupMeta` (source / campaign / loop ref) is stashed in
+   *  sessionStorage and replayed onto a *newly created* user after redirect. */
+  signInWithGitHub: (signupMeta?: SignupMeta) => Promise<{ error?: string }>
+  signInWithGoogle: (signupMeta?: SignupMeta) => Promise<{ error?: string }>
   /** Sign in as a Mushi Bounties tester via magic-link. Sets signup_intent='tester'
    *  so the DB trigger auto-provisions a mushi_testers row on first login. */
   signInAsTester: (email: string) => Promise<{ error?: string }>
   signInWithPasskey: () => Promise<{ error?: string }>
-  signUp: (email: string, password: string) => Promise<{ error?: string; needsConfirmation?: boolean }>
+  /** Email/password signup. `signupMeta` lands in `auth.users.raw_user_meta_data`. */
+  signUp: (email: string, password: string, signupMeta?: SignupMeta) => Promise<{ error?: string; needsConfirmation?: boolean }>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<{ error?: string }>
   updatePassword: (newPassword: string) => Promise<{ error?: string }>
@@ -131,6 +140,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // First-session signup attribution: replay a stashed OAuth signup meta onto
+  // a freshly created user and emit `signup_completed` once. Keyed on the
+  // user id so token refreshes don't re-run it; the helper is idempotent.
+  useEffect(() => {
+    const user = session?.user
+    if (!user) return
+    void completeSignupAttribution(user)
+  }, [session?.user?.id])
+
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     return { error: error?.message }
@@ -147,7 +165,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message }
   }
 
-  const signInWithGitHub = async () => {
+  const signInWithGitHub = async (signupMeta?: SignupMeta) => {
+    if (signupMeta) stashSignupMeta(signupMeta)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'github',
       options: { redirectTo: getRedirectUrl() },
@@ -155,7 +174,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message }
   }
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (signupMeta?: SignupMeta) => {
+    if (signupMeta) stashSignupMeta(signupMeta)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -185,11 +205,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithPasskey = async () => signInWithPasskeyApi()
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, signupMeta?: SignupMeta) => {
+    const meta = signupMeta ? compactSignupMeta(signupMeta) : {}
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: getRedirectUrl() },
+      options: {
+        emailRedirectTo: getRedirectUrl(),
+        // Persisted to auth.users.raw_user_meta_data → growth funnel by source.
+        ...(Object.keys(meta).length > 0 ? { data: meta } : {}),
+      },
     })
     if (error) return { error: error.message }
     const needsConfirmation = !data.session && !!data.user

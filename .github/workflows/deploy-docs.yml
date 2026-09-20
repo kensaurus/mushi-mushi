@@ -126,6 +126,13 @@ jobs:
           NEXT_PUBLIC_MUSHI_DEMO_MCP_HTTP: ${{ secrets.MUSHI_DEMO_MCP_HTTP }}
           NEXT_PUBLIC_MUSHI_DEMO_PROJECT_ID: ${{ secrets.MUSHI_DEMO_PROJECT_ID }}
           NEXT_PUBLIC_MUSHI_DEMO_PROJECT_NAME: ${{ secrets.MUSHI_DEMO_PROJECT_NAME }}
+          # First-party site analytics (consent-gated) against the mushi-self
+          # project — landing_view / cta_click / pricing_view feed the company
+          # growth funnel. Same public ingest key the console uses. Unset →
+          # MushiSiteAnalytics is a no-op. See apps/docs/.env.example.
+          NEXT_PUBLIC_MUSHI_SELF_PROJECT_ID: ${{ secrets.MUSHI_SELF_PROJECT_ID }}
+          NEXT_PUBLIC_MUSHI_SELF_API_KEY: ${{ secrets.MUSHI_SELF_API_KEY }}
+          NEXT_PUBLIC_MUSHI_SELF_API_ENDPOINT: ${{ secrets.MUSHI_SELF_API_ENDPOINT }}
 
       - name: Generate version file
         env:

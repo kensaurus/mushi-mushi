@@ -26,6 +26,7 @@ import { useDispatchFix } from '../lib/dispatchFix'
 import { usePublishPageContext } from '../lib/pageContext'
 import { FixProgressStream } from '../components/FixProgressStream'
 import { useReportComments } from '../lib/reportComments'
+import { trackSelf } from '../lib/track'
 import {
   IconUser,
   IconIntelligence,
@@ -118,6 +119,16 @@ export function ReportDetailPage() {
   useEffect(() => {
     if (serverReport) setReport(serverReport)
   }, [serverReport])
+
+  // Funnel: `report_opened` is one of the HABIT_EVENTS (diagnosis consumed).
+  // Keyed on the report id so refetches / triage saves don't re-fire.
+  useEffect(() => {
+    if (!serverReport?.id) return
+    trackSelf('report_opened', {
+      report_id: serverReport.id,
+      ...(serverReport.severity ? { severity: serverReport.severity } : {}),
+    })
+  }, [serverReport?.id])
 
   useEffect(() => {
     if (!serverReport) return

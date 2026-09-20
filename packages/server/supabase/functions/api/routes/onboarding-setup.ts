@@ -4,6 +4,7 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
 import { callerProjectIds, enumerateAccessibleProjectIds, resolveOwnedProject } from '../shared.ts';
 import { resolveNextStepTo } from '../../_shared/activation-status.ts';
+import { isOperatorUser } from '../../_shared/operator-gate.ts';
 
 export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }>): void {
   // =================================================================================
@@ -160,16 +161,20 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
     const setupDone = requiredComplete === requiredSteps.length;
     const nextRequired = requiredSteps.find((s) => !s.complete) ?? null;
 
-    // Funnel dropoff stats for the operator panel (last 7 days, all users).
-    // Fire-and-forget alongside main data; returns null on any DB error.
-    const funnelCounts = await (async () => {
-      try {
-        const { data } = await db.rpc('get_setup_funnel_counts_7d')
-        return data as Record<string, number> | null
-      } catch {
-        return null
-      }
-    })()
+    // Funnel dropoff stats for the operator panel (last 7 days, ALL users).
+    // Cross-tenant aggregate → operators only (MUSHI_OPERATOR_USER_IDS); the
+    // field is omitted for everyone else. Returns null on any DB error.
+    const isOperator = isOperatorUser(userId);
+    const funnelCounts = isOperator
+      ? await (async () => {
+          try {
+            const { data } = await db.rpc('get_setup_funnel_counts_7d')
+            return data as Record<string, number> | null
+          } catch {
+            return null
+          }
+        })()
+      : null
 
     return c.json({
       ok: true,
@@ -195,7 +200,7 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
         reportCount,
         fixCount,
         mergedFixCount,
-        funnelCounts,
+        ...(isOperator ? { funnelCounts } : {}),
       },
     });
   });

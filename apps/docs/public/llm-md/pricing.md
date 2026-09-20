@@ -120,11 +120,6 @@ Annual pricing applies to the **base subscription** only. Overage diagnoses are 
 
 Use the interactive estimator above, or run `mushi billing status` after wiring the SDK — it shows diagnoses used, limit, and spend cap for the current period.
 
-## Sign up
+## Start free
 
-```bash
-npx mushi-mushi
-# wizard: detect framework → install SDK → write env vars → connect MCP
-```
-
-Or [open the console →](https://kensaur.us/mushi-mushi/signup)
+Prefer the terminal? `npx mushi-mushi` runs the wizard — detect framework, install the SDK, write env vars, connect MCP. See the [incident loop quickstart](/quickstart/incident-loop), or [create your free account in the console](https://kensaur.us/mushi-mushi/admin/signup?src=pricing-text).

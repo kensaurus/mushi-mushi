@@ -11,27 +11,46 @@ export { MUSHI_TAGLINE_V2 }
 export const LANDING_HERO = {
   eyebrow: MUSHI_TAGLINE_V2.category,
   lead:
-    'Plain-English explanation of what broke, plus a fix you can paste into Cursor or Claude Code — so a bug costs five minutes, not your whole afternoon.',
+    'For solo builders shipping Cursor- or Claude-written apps to real users. When someone hits a bug, Mushi turns what they felt into a plain-English diagnosis and a paste-ready fix in your editor — where Sentry only shows you what the code threw.',
   proofLine: 'One queue for every bug. Sentry flows in, fixes flow out. Open source.',
 } as const
 
-export const LANDING_HERO_CTAS = [
+export interface LandingHeroCta {
+  /** Stable id — becomes `cta_click.cta_id` and the `?src=` on signup links. */
+  id: string
+  label: string
+  href: string
+  kind: 'primary' | 'secondary' | 'ghost'
+  /** Absolute URL to another app / site (rendered as a plain `<a>`, not next/link). */
+  external: boolean
+  /**
+   * External links open in a new tab by default. The console signup is our
+   * own product — the visitor should stay in this tab and land there.
+   */
+  sameTab?: boolean
+}
+
+export const LANDING_HERO_CTAS: readonly LandingHeroCta[] = [
   {
-    label: 'Run the wizard',
-    href: '/quickstart/incident-loop',
-    kind: 'primary' as const,
+    id: 'landing-hero',
+    label: 'Start free — first diagnosis in 60 seconds',
+    href: `${ADMIN_DEMO_BASE}/signup?src=landing-hero`,
+    kind: 'primary',
+    external: true,
+    sameTab: true,
+  },
+  {
+    id: 'landing-demo',
+    label: 'Try the live demo — no signup',
+    href: '/connect',
+    kind: 'secondary',
     external: false,
   },
   {
-    label: 'Browse the repo',
-    href: MUSHI_CANONICAL_URLS.repo,
-    kind: 'secondary' as const,
-    external: true,
-  },
-  {
-    label: 'Connect your editor',
-    href: '/connect',
-    kind: 'ghost' as const,
+    id: 'landing-terminal',
+    label: 'Prefer the terminal? npx mushi-mushi',
+    href: '/quickstart/incident-loop',
+    kind: 'ghost',
     external: false,
   },
 ] as const
@@ -55,7 +74,7 @@ export const LANDING_SIXTY_SECOND_STEPS = {
       desc: 'The wizard detects your framework, installs the SDK, and writes your env vars.',
     },
     {
-      title: 'Ship, then break something',
+      title: 'Send a test report (or ship and wait)',
       desc: 'When a user hits a bug, the report lands with a plain-English read on the cause.',
     },
     {
@@ -116,6 +135,8 @@ export interface LandingPathCard {
   desc: string
   href: string
   cmd?: string
+  /** When set, the card is a tracked CTA (`cta_click.cta_id`). */
+  ctaId?: string
 }
 
 export const LANDING_WHERE_TO_START: readonly LandingPathCard[] = [
@@ -137,8 +158,9 @@ export const LANDING_WHERE_TO_START: readonly LandingPathCard[] = [
     // Absolute URL (not `/admin/onboarding`) so the apex-redirect CloudFront
     // Function — which treats `/admin/*` as a docs-nested prefix — never gets
     // a chance to send this to the *documentation* page instead of the app.
-    href: `${ADMIN_DEMO_BASE}/onboarding`,
+    href: `${ADMIN_DEMO_BASE}/onboarding?src=landing-console`,
     cmd: 'mushi login && mushi status',
+    ctaId: 'landing-console',
   },
 ] as const
 
@@ -317,8 +339,9 @@ export const LANDING_ARCHITECTURE_LINK =
 
 export const LANDING_OPERATOR = {
   question: 'Run the 60-second proof',
-  soloCta: 'npx mushi-mushi →',
-  soloHref: '/quickstart/incident-loop',
+  soloCta: 'Start free →',
+  soloHref: `${ADMIN_DEMO_BASE}/signup?src=landing-closing`,
+  soloCtaId: 'landing-closing',
   teamLead:
     'Need SSO, audit trails, or adapters for a team? Setup notes live in the operators docs on GitHub.',
   teamCta: 'Operators docs →',

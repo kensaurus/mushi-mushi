@@ -14,11 +14,11 @@ Published npm packages ship on independent semver tracks (see [npm](https://www.
 {/* sdk-version-matrix:start */}
 | Package | Version |
 | --- | --- |
-| @mushi-mushi/core, @mushi-mushi/web | 1.27.x |
+| @mushi-mushi/core, @mushi-mushi/web | 1.28.x |
 | @mushi-mushi/react | 1.21.x |
 | @mushi-mushi/react-native | 0.21.x |
 | @mushi-mushi/cli | 0.27.x |
-| @mushi-mushi/mcp | 0.20.x |
+| @mushi-mushi/mcp | 0.21.x |
 | @mushi-mushi/capacitor | 1.1.x |
 | @mushi-mushi/node | 1.2.x |
 | @mushi-mushi/angular, @mushi-mushi/vue, @mushi-mushi/svelte | 1.0.x |

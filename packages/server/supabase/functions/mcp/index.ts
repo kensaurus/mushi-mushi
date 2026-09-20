@@ -131,6 +131,7 @@ import {
 import { readOAuthParams } from '../_shared/mcp-oauth-helpers.ts'
 import { callLinearMcpTool } from '../_shared/linear-mcp-client.ts'
 import { getServiceClient, getServiceClient as getLinearServiceClient } from '../_shared/db.ts'
+import { emitProductEvent } from '../_shared/product-events.ts'
 import { attachTraceparent, childTraceparent } from '../_shared/trace.ts'
 import {
   ERR_MISSING_CLIENT_CAPABILITY,
@@ -238,7 +239,7 @@ const ERR_RATE_LIMITED = -32001
  */
 type ToolHandler = (
   args: Record<string, unknown>,
-  ctx: { authHeaders: Record<string, string>; projectIdHint?: string },
+  ctx: { authHeaders: Record<string, string>; projectIdHint?: string; ownerUserId?: string },
 ) => Promise<unknown>
 
 interface ToolDef {
@@ -365,6 +366,19 @@ const BASE_TOOLS: Record<string, ToolDef> = {
         `/v1/admin/reports/${encodeURIComponent(args.reportId as string)}`,
         { headers: ctx.authHeaders },
       )) as Record<string, unknown>
+      // Company funnel (mushi-self): "diagnosis consumed by an agent". Rows
+      // belong to the self project; the customer project id rides along in
+      // properties. Fire-and-forget, never on the tool-result path.
+      void emitProductEvent(getServiceClient(), {
+        userId: ctx.ownerUserId ?? null,
+        eventName: 'fix_context_pulled',
+        surface: 'mcp',
+        properties: {
+          report_id: args.reportId as string,
+          project_id:
+            (typeof report.project_id === 'string' ? report.project_id : ctx.projectIdHint) ?? null,
+        },
+      })
       return {
         report,
         reproductionSteps: report.reproduction_steps ?? [],
@@ -1991,7 +2005,11 @@ async function invokeToolAsResult(
   const def = TOOLS[name]
   if (!def) throw new McpError(ERR_METHOD_NOT_FOUND, `tool not found: ${name}`)
   try {
-    const data = await def.handler(args, { authHeaders: ctx.authHeaders, projectIdHint: ctx.projectIdHint })
+    const data = await def.handler(args, {
+      authHeaders: ctx.authHeaders,
+      projectIdHint: ctx.projectIdHint,
+      ownerUserId: ctx.ownerUserId,
+    })
     recordOutcome('ok')
     // Modern clients read structuredContent directly (no re-parse). Older
     // clients fall back to the text content. Only emit structuredContent

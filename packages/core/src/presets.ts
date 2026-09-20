@@ -41,6 +41,7 @@ const KNOWN_CONFIG_KEYS: readonly string[] = [
   'circuitBreaker',
   'preset',
   'runtimeConfig',
+  'analytics',
   'sentry',
   'widget',
   'capture',

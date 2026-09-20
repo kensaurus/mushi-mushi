@@ -15,6 +15,7 @@ import {
   LANDING_TRUST_LINKS,
   MUSHI_TAGLINE_V2,
 } from './landing-copy'
+import { ADMIN_DEMO_BASE } from '../data/admin-screenshots'
 
 describe('landing cinematic copy SSOT', () => {
   it('keeps category eyebrow on the v2 ladder', () => {
@@ -35,17 +36,34 @@ describe('landing cinematic copy SSOT', () => {
     ])
   })
 
-  it('keeps a clear closing question and solo CTA to incident-loop', () => {
+  it('keeps a clear closing question and a tracked solo CTA to console signup', () => {
     expect(LANDING_OPERATOR.question.length).toBeGreaterThan(0)
-    expect(LANDING_OPERATOR.soloHref).toBe('/quickstart/incident-loop')
+    expect(LANDING_OPERATOR.soloCta).toBe('Start free →')
+    expect(LANDING_OPERATOR.soloHref).toBe(`${ADMIN_DEMO_BASE}/signup?src=landing-closing`)
+    expect(LANDING_OPERATOR.soloCtaId).toBe('landing-closing')
     expect(LANDING_OPERATOR.teamHref).toContain('github.com/kensaurus/mushi-mushi')
   })
 
-  it('ships hero CTAs for wizard, repo, and connect', () => {
-    const hrefs = LANDING_HERO_CTAS.map((c) => c.href)
-    expect(hrefs).toContain('/quickstart/incident-loop')
-    expect(hrefs.some((h) => h.includes('github.com/kensaurus/mushi-mushi'))).toBe(true)
-    expect(hrefs).toContain('/connect')
+  it('ships hero CTAs for signup (same tab), live demo, and the terminal path', () => {
+    expect(LANDING_HERO_CTAS.map((c) => c.id)).toEqual(['landing-hero', 'landing-demo', 'landing-terminal'])
+    expect(LANDING_HERO_CTAS.map((c) => c.kind)).toEqual(['primary', 'secondary', 'ghost'])
+
+    const [signup, demo, terminal] = LANDING_HERO_CTAS
+    expect(signup?.href).toBe(`${ADMIN_DEMO_BASE}/signup?src=landing-hero`)
+    expect(signup?.external).toBe(true)
+    expect(signup?.sameTab).toBe(true)
+    expect(demo?.href).toBe('/connect')
+    expect(terminal?.href).toBe('/quickstart/incident-loop')
+  })
+
+  it('keeps the hero lead on the solo-builder positioning against Sentry', () => {
+    expect(LANDING_HERO.lead).toMatch(/solo builders/i)
+    expect(LANDING_HERO.lead).toMatch(/Sentry/)
+  })
+
+  it('tags the console card as a tracked CTA with a src param', () => {
+    const console = LANDING_WHERE_TO_START.find((c) => c.ctaId === 'landing-console')
+    expect(console?.href).toBe(`${ADMIN_DEMO_BASE}/onboarding?src=landing-console`)
   })
 
   it('keeps both start paths — intent picker plus platform quickstarts', () => {

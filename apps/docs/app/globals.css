@@ -1657,3 +1657,94 @@ html:has(.landing-cinematic-hero) {
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Pricing CTAs — the primary "start free" button under the /pricing lede and
+ * at its foot (<PricingCta />), plus the per-tier "Get started" links in
+ * <PricingTiersTable />. Buttons reuse the hero CTA classes so the two
+ * conversion surfaces read as one system.
+ * ------------------------------------------------------------------------- */
+.docs-pricing-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.docs-pricing-cta__note {
+  font-size: 0.875rem;
+  color: var(--mushi-ink-muted);
+}
+
+.docs-pricing-tier-cta {
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------
+ * Consent bar — <MushiSiteAnalytics />. First-party funnel measurement is
+ * opt-in; the bar shows once, bottom-anchored, and disappears on either
+ * choice. Entrance motion is dropped under prefers-reduced-motion.
+ * ------------------------------------------------------------------------- */
+.docs-consent-bar {
+  position: fixed;
+  inset: auto 1rem 1rem 1rem;
+  z-index: 60;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  max-width: 46rem;
+  margin-inline: auto;
+  padding: 0.85rem 1rem;
+  background: var(--mushi-paper);
+  color: var(--mushi-ink);
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.75rem;
+  box-shadow: 0 12px 32px -12px color-mix(in oklch, var(--mushi-ink) 35%, transparent);
+  animation: docs-consent-in 240ms var(--mushi-ease-stamp, ease) both;
+}
+
+.docs-consent-bar__text {
+  flex: 1 1 22rem;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--mushi-ink-muted);
+}
+
+.docs-consent-bar__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.docs-consent-bar__btn {
+  font-size: 0.85rem;
+  padding: 0.45rem 0.85rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.docs-consent-bar__btn:focus-visible {
+  outline: 2px solid var(--mushi-vermillion);
+  outline-offset: 2px;
+}
+
+@keyframes docs-consent-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docs-consent-bar {
+    animation: none;
+  }
+}
+

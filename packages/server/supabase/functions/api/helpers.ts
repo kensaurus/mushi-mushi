@@ -24,6 +24,14 @@ import { childTraceparent } from '../_shared/trace.ts';
 import { scrubPii } from '../_shared/pii-scrubber.ts';
 import { sendBotMessage, sendSlackText } from '../_shared/slack.ts';
 import { upsertProjectSdkObservationAsync } from '../_shared/sdk-observation.ts';
+import { emitProductEvent } from '../_shared/product-events.ts';
+
+// Company funnel: projects whose first_report_received emit already ran in
+// this isolate. Bounds the owner lookup to once per project per isolate; the
+// (project_id, dedup_key) unique constraint on product_events is the real
+// once-per-project guarantee across isolates and retries.
+const firstReportEmitted = new Set<string>();
+const FIRST_REPORT_SKIP_SOURCES = new Set(['admin_test_report', 'mushi-marketing-seed']);
 
 // Fixed namespace for deriving deterministic report ids from non-UUID client
 // ids (RFC 4122 §4.3 name-based v5). Arbitrary but stable — it only has to be
@@ -563,6 +571,36 @@ export async function ingestReport(
       errHint: (insertError as { hint?: string }).hint,
     });
     return { ok: false, error: 'Failed to store report' };
+  }
+
+  // Company funnel (mushi-self): the project's first real report = "activated".
+  // Console test reports (admin_test_report) and the marketing demo seed never
+  // count. Fire-and-forget; repeat emits are no-ops on the dedup constraint.
+  {
+    const reportSource = typeof enrichedMetadata.source === 'string' ? enrichedMetadata.source : null;
+    if (!firstReportEmitted.has(projectId) && !(reportSource && FIRST_REPORT_SKIP_SOURCES.has(reportSource))) {
+      firstReportEmitted.add(projectId);
+      void (async () => {
+        const { data: proj } = await db
+          .from('projects')
+          .select('owner_id')
+          .eq('id', projectId)
+          .maybeSingle();
+        await emitProductEvent(db, {
+          userId: ((proj as { owner_id?: string | null } | null)?.owner_id) ?? null,
+          eventName: 'first_report_received',
+          surface: 'server',
+          properties: {
+            project_id: projectId,
+            source: reportSource,
+            sdk_package: report.sdkPackage ?? null,
+          },
+          dedupKey: `first_report_received:${projectId}`,
+        });
+      })().catch((err: unknown) =>
+        log.warn('first_report_received emit failed (non-fatal)', { projectId, err: String(err) }),
+      );
+    }
   }
 
   if (report.sdkPackage && report.sdkVersion) {

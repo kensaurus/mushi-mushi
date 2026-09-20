@@ -554,7 +554,7 @@ export function Layout({ children }: { children: ReactNode }) {
     ? projectSnapshots.byId.get(activeProjectId)
     : undefined
   const criticalReports30d = activeProjectSnapshot?.severity_breakdown_30d?.critical ?? 0
-  const { isSuperAdmin, has } = useEntitlements()
+  const { isSuperAdmin, isOperator, has } = useEntitlements()
   const fallbackHero = shouldShowLayoutPageHero(pathname, postureHasStatusBanner)
     ? PAGE_HERO_FALLBACKS[pathname]
     : null
@@ -726,7 +726,11 @@ export function Layout({ children }: { children: ReactNode }) {
   // Always strip operator-only routes for non-super-admins, regardless
   // of mode. The gateway also enforces this — UI hiding is purely so
   // we don't tease a feature non-operators can't access.
-  const visibleByRole = (i: NavItem) => !i.superAdmin || isSuperAdmin
+  // `operatorOnly` (company dashboards such as /growth) is a separate axis
+  // from super-admin: the entitlements endpoint reports `operator` and the
+  // route 403s for everyone else, so hide it rather than tease it.
+  const visibleByRole = (i: NavItem) =>
+    (!i.superAdmin || isSuperAdmin) && (!i.operatorOnly || isOperator)
   // Nudge-not-hide: feature-gated items used to be filtered out for
   // unentitled users. That hid the upsell (the user couldn't *see* what
   // their plan was missing). Now we surface the item alongside an
@@ -798,6 +802,7 @@ export function Layout({ children }: { children: ReactNode }) {
     isBeginner,
     isAdvanced,
     isSuperAdmin,
+    isOperator,
     has,
     setupStatus.selectors.done,
   ])

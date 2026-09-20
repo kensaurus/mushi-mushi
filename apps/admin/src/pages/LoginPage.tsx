@@ -5,10 +5,10 @@
  *   - Self-hosted mode: connection context, health indicator, diagnostics
  */
 
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, useEffect, useMemo, type FormEvent } from 'react'
 import { useAuth } from '../lib/auth'
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom'
-import { Input, Btn, Tooltip, HelpBanner } from '../components/ui'
+import { Input, SelectField, Btn, Tooltip, HelpBanner } from '../components/ui'
 import { isCloudMode, RESOLVED_SUPABASE_URL } from '../lib/env'
 import { nextPathFromLoginState } from '../lib/authRedirect'
 import {
@@ -20,6 +20,12 @@ import { LOGIN_HERO } from '../lib/public-copy-shared'
 import { canUsePasskeys } from '../lib/passkeys'
 import { useEnabledAuthProviders } from '../lib/authProviders'
 import { CHIP_TONE, LINK_ACCENT } from '../lib/chipTone'
+import {
+  SIGNUP_SOURCE_OPTIONS,
+  readSignupMetaFromSearch,
+  type SignupMeta,
+  type SignupSource,
+} from '../lib/signupAttribution'
 
 type HealthStatus = 'checking' | 'ok' | 'error' | 'unknown'
 type FormMode = 'login' | 'magic' | 'signup' | 'forgot'
@@ -71,6 +77,19 @@ export function LoginPage() {
   const [rememberEmail, setRememberEmail] = useState(!isSignupRoute)
   const [health, setHealth] = useState<HealthStatus>(cloud ? 'ok' : 'checking')
   const [passkeyAvailable, setPasskeyAvailable] = useState(false)
+  // Signup attribution — optional self-reported source plus `?src=` / `?ref=`
+  // campaign / growth-loop tags carried on the URL. Persisted on the auth
+  // user (see lib/signupAttribution.ts) so /growth can split the funnel.
+  const [signupSource, setSignupSource] = useState<SignupSource | ''>('')
+  const [signupSourceDetail, setSignupSourceDetail] = useState('')
+  const urlAttribution = useMemo(() => readSignupMetaFromSearch(searchParams), [searchParams])
+  const buildSignupMeta = (): SignupMeta => ({
+    ...urlAttribution,
+    ...(signupSource ? { signup_source: signupSource } : {}),
+    ...(signupSource === 'other' && signupSourceDetail.trim()
+      ? { signup_source_detail: signupSourceDetail.trim() }
+      : {}),
+  })
   // Only offer providers the backend has actually enabled. Prevents the raw
   // GoTrue "provider is not enabled" JSON page (supabase-js hard-redirects to
   // /authorize before any client-side error can fire). See authProviders.ts.
@@ -157,7 +176,7 @@ export function LoginPage() {
           setSuccess('magic-sent')
         }
       } else if (mode === 'signup') {
-        const result = await signUp(email, password)
+        const result = await signUp(email, password, buildSignupMeta())
         if (result.error) {
           setError(classifyAuthError(result.error))
         } else if (result.needsConfirmation) {
@@ -379,7 +398,7 @@ export function LoginPage() {
                     variant="ghost"
                     size="sm"
                     disabled={loading}
-                    onClick={() => void signInWithGitHub()}
+                    onClick={() => void signInWithGitHub(buildSignupMeta())}
                     className="w-full justify-center gap-2 rounded-md bg-surface px-3 py-2.5 text-xs font-medium text-fg hover:bg-surface-raised"
                   >
                     <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -394,7 +413,7 @@ export function LoginPage() {
                     variant="ghost"
                     size="sm"
                     disabled={loading}
-                    onClick={() => void signInWithGoogle()}
+                    onClick={() => void signInWithGoogle(buildSignupMeta())}
                     className="w-full justify-center gap-2 rounded-md bg-surface px-3 py-2.5 text-xs font-medium text-fg hover:bg-surface-raised"
                   >
                     {/* mushi-mushi-allowlist: Google "G" logo official brand colors (#4285F4/#34A853/#FBBC05/#EA4335) — mandated by Google branding guidelines, cannot be tokenized */}
@@ -493,6 +512,38 @@ export function LoginPage() {
                 autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                 autoFocus={mode === 'login' && Boolean(rememberedEmail)}
               />
+            )}
+
+            {mode === 'signup' && (
+              <>
+                <SelectField
+                  label="How did you hear about us? (optional)"
+                  id="signup-source"
+                  name="signup_source"
+                  value={signupSource}
+                  onChange={(e) => setSignupSource(e.target.value as SignupSource | '')}
+                  autoComplete="off"
+                >
+                  <option value="">Skip this</option>
+                  {SIGNUP_SOURCE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </SelectField>
+                {signupSource === 'other' && (
+                  <Input
+                    label="Where was that?"
+                    id="signup-source-detail"
+                    type="text"
+                    value={signupSourceDetail}
+                    onChange={(e) => setSignupSourceDetail(e.target.value)}
+                    maxLength={120}
+                    placeholder="A newsletter, a talk, a Discord…"
+                    autoComplete="off"
+                  />
+                )}
+              </>
             )}
 
             {mode !== 'signup' && (

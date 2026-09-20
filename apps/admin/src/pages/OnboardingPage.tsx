@@ -39,6 +39,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { isActivationCockpitV2Enabled, useActivationStatus } from '../lib/useActivationStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
+import { trackSelf } from '../lib/track'
 import { useCreateProject } from '../lib/useCreateProject'
 import { usePageCopy } from '../lib/copy'
 import { useOnboardingUx, resolveQuickOnboardingTab } from '../lib/onboardingModeUx'
@@ -329,6 +330,7 @@ export function OnboardingPage() {
     setTestRanAt(new Date().toISOString())
     setTestStatus(res.ok ? 'pass' : 'fail')
     if (res.ok) {
+      trackSelf('test_report_sent', { project_id: project.project_id })
       toast.success('Test report sent', 'Look for it on the Reports page in a few seconds.')
       setup.reload()
       reloadStats()

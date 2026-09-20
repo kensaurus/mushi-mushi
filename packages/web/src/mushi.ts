@@ -78,6 +78,12 @@ import {
   initSessionTracker,
   updateSessionIdentity,
   destroySessionTracker,
+  initEventTracker,
+  trackEvent,
+  setEventConsent,
+  updateEventIdentity,
+  destroyEventTracker,
+  getEventAnonymousId,
 } from '@mushi-mushi/core';
 
 /** Resolve `reports.app_version` from SDK config and captured environment. */
@@ -195,6 +201,20 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   const offlineQueue = createOfflineQueue(bootstrapConfig.offline);
   const rateLimiter = createRateLimiter({ maxBurst: 10, refillRate: 1, refillIntervalMs: 5_000 });
   const piiScrubber = createPiiScrubber();
+
+  // Product analytics (Mushi.track()) — same opaque per-project reporter
+  // token as sessions; DNT/GPC and consent handled inside the tracker.
+  // Opt-out via analytics.enabled:false. Reserved UTM/referrer props are
+  // attached by the tracker's caller (landing/docs) via trackEvent opts.
+  initEventTracker({
+    client: apiClient,
+    projectId: bootstrapConfig.projectId,
+    anonId: getReporterToken(bootstrapConfig.projectId) ?? null,
+    sdkVersion: MUSHI_SDK_VERSION,
+    config: bootstrapConfig.analytics,
+    scrub: (s) => piiScrubber.scrub(s),
+    getSessionId,
+  });
 
   // Apply the same scrubber that runs over `description` to the
   // observability surfaces (breadcrumbs, tags, sentry context) right
@@ -1502,6 +1522,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     destroy() {
       proactiveTriggers?.destroy();
       proactiveManager?.reset();
+      destroyEventTracker();
       widget.destroy();
       consoleCap?.destroy();
       networkCap?.destroy();
@@ -1703,6 +1724,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         level: 'info',
         message: `Mushi.identify(${userId})`,
       });
+      // Stitch anonymous analytics history to the person (Users & Funnels).
+      updateEventIdentity(userId, traits ?? null);
 
       // Wire rewards program when enabled
       wireRewardsForIdentifiedUser(
@@ -1822,6 +1845,20 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     recordActivity(action, metadata) {
       if (!activeConfig.rewards?.enabled) return;
       enqueueActivity({ action, metadata });
+    },
+
+    // ─── Product analytics (Users & Funnels) ──────────────────────────
+
+    track(event, properties) {
+      return trackEvent(event, properties);
+    },
+
+    setConsent(state) {
+      setEventConsent(state);
+    },
+
+    getAnonymousId() {
+      return getEventAnonymousId();
     },
 
     pulseTrigger() {
@@ -2191,6 +2228,9 @@ function createNoopInstance(): MushiSDKInstance {
     getReputation: async () => null,
     getTier: async () => null,
     recordActivity: () => {},
+    track: () => false,
+    setConsent: () => {},
+    getAnonymousId: () => null,
     pulseTrigger: () => {},
     listMyReports: async () => [],
     listMyComments: async () => [],
