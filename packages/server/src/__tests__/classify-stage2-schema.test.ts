@@ -1,4 +1,9 @@
 import { describe, expect, it } from 'vitest'
+// `ai` is pinned to 4.3.19 in this package's devDependencies — the exact
+// version `classify-report/index.ts` resolves through its `npm:ai@4`
+// specifier. Not a new runtime dependency: it makes an existing implicit one
+// explicit, so the conversion assertions below run against the same converter
+// production uses instead of a hoisted copy that happened to be on disk.
 import { zodSchema } from 'ai'
 import {
   clampLlmText,
