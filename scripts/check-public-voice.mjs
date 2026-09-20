@@ -90,6 +90,7 @@ const PUBLIC_PATHS = [
   'apps/docs/content/blog/nine-signups-what-the-data-said.mdx',
   'apps/docs/content/blog/auto-fix-loop.mdx',
   // GTM Phase 2 (2026-09-21): trust pages + site footer.
+  'apps/docs/content/legal/index.mdx',
   'apps/docs/content/legal/privacy.mdx',
   'apps/docs/content/legal/terms.mdx',
   'apps/docs/content/security/index.mdx',

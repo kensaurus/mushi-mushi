@@ -24,7 +24,7 @@ function docPath(suffix: string): string {
   return suffix === '/' ? BASE : BASE + suffix
 }
 
-/** 201 pages, generated from llms.txt. */
+/** 202 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -583,6 +583,12 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     path: docPath("/launch-week"),
     keywords: ["launch-week", "launch", "week"],
     excerpt: "How Mushi Mushi launches now — one public post per release (Show HN, then Product Hunt, then the growth loop), the gate each release must pass first, and what we publish…",
+  },
+  {
+    title: "Legal",
+    path: docPath("/legal"),
+    keywords: ["legal"],
+    excerpt: "Privacy policy and terms of service for Mushi Mushi Cloud, the SDKs, and the tester program.",
   },
   {
     title: "Privacy Policy",

@@ -122,6 +122,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Cursor integration](https://kensaur.us/mushi-mushi/docs/integrations/cursor)
 - [Voice intake](https://kensaur.us/mushi-mushi/docs/integrations/voice-intake)
 - [Launch Week](https://kensaur.us/mushi-mushi/docs/launch-week)
+- [Legal](https://kensaur.us/mushi-mushi/docs/legal)
 - [Privacy Policy](https://kensaur.us/mushi-mushi/docs/legal/privacy)
 - [Terms of Service](https://kensaur.us/mushi-mushi/docs/legal/terms)
 - [Migration guides](https://kensaur.us/mushi-mushi/docs/migrations)
