@@ -90,6 +90,21 @@ export interface LlmInvocationRecord {
   cacheCreationInputTokens?: number | null
   cacheReadInputTokens?: number | null
   /**
+   * Billable units for a model that is NOT priced per token — audio seconds
+   * for speech-to-text, characters for text-to-speech. `kensaurus_model_prices`
+   * stores these as `unit_kind='seconds'|'chars'` with a `per_unit_micro`
+   * rate, and `computeProviderCostMicro` multiplies that rate by
+   * `usage.units`.
+   *
+   * 2026-09-20 (Sentry MUSHI-MUSHI-SERVER-1Z): this field did not exist, so
+   * the hosted-billing bridge below built `usage` from token counts ONLY.
+   * A seconds-priced STT call therefore metered as `0 units * 75 micro` = 0
+   * and was debited nothing — silently, once the missing price row was added.
+   * Any caller of a non-token model MUST set this or the call cannot be
+   * billed (and will be dead-lettered as unpriceable).
+   */
+  billableUnits?: number | null
+  /**
    * Optional W3C traceparent from the caller's inbound span. When set,
    * `logLlmInvocation` automatically emits a child OTLP/GenAI span using
    * the OpenTelemetry GenAI semantic conventions so every LLM call is
@@ -159,6 +174,10 @@ export function logLlmInvocation(
         inputTokens: (rec.inputTokens ?? 0) + (rec.cacheCreationInputTokens ?? 0),
         outputTokens: rec.outputTokens ?? 0,
         cachedInputTokens: rec.cacheReadInputTokens ?? 0,
+        // Non-token models (STT seconds, TTS chars) price off `units`. Left
+        // undefined for token models so the cost falls out of the token
+        // branch exactly as before.
+        units: rec.billableUnits ?? undefined,
       },
       traceId: rec.langfuseTraceId,
       metadata: {
