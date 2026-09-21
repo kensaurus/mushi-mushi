@@ -21,10 +21,10 @@
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
-    "@types/node": "^22.20.0",
+    "@types/node": "^22.20.2",
     "@types/pngjs": "^6.0.5",
     "eslint": "^10.6.0",
-    "tsx": "^4.22.4",
+    "tsx": "^4.23.13",
     "typescript": "^6.0.3"
   },
   "author": "Kenji Sakuramoto",
