@@ -1,7 +1,10 @@
 /**
  * FILE: apps/admin/src/lib/track.test.ts
  * PURPOSE: `trackSelf` must never throw and must be a no-op when the
- *          dogfooded SDK is disabled or not loaded.
+ *          dogfooded SDK is disabled or not loaded. It accepts only taxonomy
+ *          events with their required properties (the `@ts-expect-error`
+ *          lines are checked by `tsc`), and reports through the admin debug
+ *          channel when a cast slips a required property past the types.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -12,7 +15,10 @@ const mocks = vi.hoisted(() => ({
   isMushiSelfEnabled: vi.fn(),
 }))
 
+const debug = vi.hoisted(() => ({ debugWarn: vi.fn() }))
+
 vi.mock('./mushi-self', () => mocks)
+vi.mock('./debug', () => debug)
 
 import { trackSelf } from './track'
 
@@ -56,5 +62,79 @@ describe('trackSelf', () => {
       },
     })
     expect(() => trackSelf('fix_dispatched', { report_id: 'r', agent: 'x' })).not.toThrow()
+  })
+})
+
+describe('trackSelf — taxonomy contract', () => {
+  const warn = debug.debugWarn
+
+  beforeEach(() => {
+    mocks.getMushiSelf.mockReset()
+    warn.mockReset()
+  })
+
+  it('sends an empty bag for events with no required properties', () => {
+    const track = vi.fn()
+    mocks.getMushiSelf.mockReturnValue({ track })
+    trackSelf('invite_sent')
+    expect(track).toHaveBeenCalledWith('invite_sent', {})
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it('does not warn when every required property is present', () => {
+    mocks.getMushiSelf.mockReturnValue({ track: vi.fn() })
+    trackSelf('fix_dispatched', { report_id: 'r1', agent: 'claude' })
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it('warns when a cast drops a required property, and still sends', () => {
+    const track = vi.fn()
+    mocks.getMushiSelf.mockReturnValue({ track })
+    const incomplete = { report_id: 'r1' } as unknown as { report_id: string; agent: string }
+    trackSelf('fix_dispatched', incomplete)
+    expect(warn).toHaveBeenCalledWith(
+      'track',
+      'fix_dispatched is missing required properties: agent',
+      { event: 'fix_dispatched', missing: ['agent'] },
+    )
+    expect(track).toHaveBeenCalledWith('fix_dispatched', { report_id: 'r1' })
+  })
+
+  it('still sends when the debug channel itself throws (blocked storage)', () => {
+    const track = vi.fn()
+    mocks.getMushiSelf.mockReturnValue({ track })
+    warn.mockImplementationOnce(() => {
+      throw new Error('SecurityError: localStorage blocked')
+    })
+    const incomplete = { report_id: 'r1' } as unknown as { report_id: string; agent: string }
+    trackSelf('fix_dispatched', incomplete)
+    expect(track).toHaveBeenCalledWith('fix_dispatched', { report_id: 'r1' })
+  })
+
+  it('treats a null required property as missing', () => {
+    mocks.getMushiSelf.mockReturnValue({ track: vi.fn() })
+    const nulled = { report_id: null } as unknown as { report_id: string }
+    trackSelf('report_opened', nulled)
+    expect(warn).toHaveBeenCalledWith(
+      'track',
+      'report_opened is missing required properties: report_id',
+      { event: 'report_opened', missing: ['report_id'] },
+    )
+  })
+
+  it('rejects off-taxonomy names and missing required properties at compile time', () => {
+    mocks.getMushiSelf.mockReturnValue({ track: vi.fn() })
+    // @ts-expect-error — not a MUSHI_EVENTS name (a bag is passed so the
+    // error is the name, not the argument count)
+    trackSelf('pageview', {})
+    // @ts-expect-error — report_opened requires report_id
+    trackSelf('report_opened', { project_id: 'p1' })
+    // @ts-expect-error — required properties cannot be null
+    trackSelf('upgrade_clicked', { plan: null })
+    // @ts-expect-error — events with required properties need a bag
+    trackSelf('loop_signup')
+    // At runtime the three required-property gaps still reach the debug
+    // warning; the unknown name has no taxonomy entry to check against.
+    expect(warn).toHaveBeenCalledTimes(3)
   })
 })

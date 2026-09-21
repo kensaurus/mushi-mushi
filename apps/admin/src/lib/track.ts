@@ -10,36 +10,74 @@
  * `fix_context_pulled`, `fix_dispatched`, `invite_sent`, `upgrade_clicked`,
  * `test_report_sent` and `loop_signup`.
  *
+ * Contract: only taxonomy events, and each event's `required` properties
+ * must be present and non-null. The types enforce both at compile time; a
+ * caller that reaches here through a cast is also reported at runtime via
+ * the admin diagnostic channel (`debugWarn`, visible with `?debug=true` /
+ * `mushi:debug`, dev or prod). The event is still sent — a funnel row with a
+ * gap beats a silently dropped one. The warning goes through `debug.ts`
+ * rather than a bare `console.warn` so it adds no residue to
+ * scripts/check-residue-ratchet.mjs.
+ *
  * Guarantees: never throws, never blocks UI, no-op when the SDK is disabled
  * (env vars absent), DNT active, or consent denied — the SDK tracker
  * enforces the last two itself.
  */
 
-import type { MushiEventName } from '@mushi-mushi/core'
+import { MUSHI_EVENTS, type MushiEventName } from '@mushi-mushi/core'
+import { debugWarn } from './debug'
 import { getMushiSelf, initMushiSelf, isMushiSelfEnabled } from './mushi-self'
 
-export type TrackProps = Record<string, string | number | boolean | null>
+type TrackValue = string | number | boolean | null
+
+export type TrackProps = Record<string, TrackValue>
+
+/** The property keys the taxonomy marks `required` for event `E`. */
+type RequiredKey<E extends MushiEventName> = (typeof MUSHI_EVENTS)[E]['required'][number]
 
 /**
- * Emit a console funnel event. Accepts any string so ad-hoc events don't need
- * a taxonomy round-trip, but prefer `MushiEventName` members — the server
- * validates names against the same regex either way.
+ * Properties for event `E`: free-form extras plus every required key with a
+ * non-null value. Events with no required keys take an optional bag.
  */
-export function trackSelf(event: MushiEventName | string, props?: TrackProps): void {
+type TrackArgs<E extends MushiEventName> = [RequiredKey<E>] extends [never]
+  ? [props?: TrackProps]
+  : [props: TrackProps & { [K in RequiredKey<E>]: Exclude<TrackValue, null> }]
+
+function missingRequired(event: MushiEventName, props: TrackProps): string[] {
+  const required: readonly string[] = MUSHI_EVENTS[event]?.required ?? []
+  return required.filter((key) => props[key] === undefined || props[key] === null)
+}
+
+/**
+ * Emit a console funnel event from the Mushi taxonomy. The SDK loads lazily,
+ * so an event fired before it resolves is handed to the init promise rather
+ * than dropped.
+ */
+export function trackSelf<E extends MushiEventName>(event: E, ...args: TrackArgs<E>): void {
   try {
+    const props: TrackProps = args[0] ?? {}
+    const missing = missingRequired(event, props)
+    if (missing.length > 0) {
+      // debugWarn reads localStorage, which throws when site data is blocked;
+      // a diagnostic must never cost the event itself.
+      try {
+        debugWarn('track', `${event} is missing required properties: ${missing.join(', ')}`, { event, missing })
+      } catch {
+        /* diagnostics only */
+      }
+    }
     const sdk = getMushiSelf()
     if (sdk) {
-      sdk.track(event, props ?? {})
+      sdk.track(event, props)
       return
     }
-    // The SDK loads lazily (dynamic import). Post-signup and deep-link
-    // landings can fire before it resolves, so hand the event to the init
-    // promise instead of dropping it. Still a no-op when disabled.
+    // Post-signup and deep-link landings can fire before the lazy import
+    // resolves. Still a no-op when disabled.
     if (!isMushiSelfEnabled()) return
     void initMushiSelf()
       .then((late) => {
         try {
-          late?.track(event, props ?? {})
+          late?.track(event, props)
         } catch {
           /* analytics must never surface as an app error */
         }
