@@ -65,10 +65,10 @@ You can also dispatch a Cursor Cloud Agent run outside of the Marketplace plugin
 
 ```bash
 # CLI
-mushi fix  --agent cursor_cloud --wait
+mushi fix <reportId> --agent cursor_cloud --wait
 
 # MCP tool
-dispatch_fix reportId= agent=cursor_cloud
+dispatch_fix reportId=<reportId> agent=cursor_cloud
 ```
 
 See [`mushi fix`](/sdks/cli) and [`@mushi-mushi/mcp`](/sdks/mcp) for details.

@@ -47,9 +47,15 @@ Most teams will never hand-author `inventory.yaml`. Turn on
 `capture.discoverInventory` in the SDK config:
 
 ```ts
+import { MushiProvider } from '@mushi-mushi/react'
 
-  
-
+<MushiProvider config={{
+  projectId: '…',
+  apiKey: '…',
+  capture: { discoverInventory: true },
+}}>
+  <App />
+</MushiProvider>
 ```
 
 The SDK quietly observes routes, `data-testid`s, and outbound API paths

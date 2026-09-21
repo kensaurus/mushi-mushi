@@ -46,14 +46,14 @@ title: 'Instabug (Luciq) → Mushi'
 
 ```ts
 // BEFORE — Instabug Web
-
+import * as Instabug from 'instabug'
 Instabug.start('YOUR_TOKEN', { invocationEvents: ['shake', 'floatingButton'] })
 Instabug.identifyUser('user@example.com', 'Jane Doe')
 ```
 
 ```ts
 // AFTER — Mushi
-
+import { Mushi } from '@mushi-mushi/web'
 Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
   apiKey:    'YOUR_PUBLIC_KEY',
@@ -66,7 +66,7 @@ Mushi.setUser({ id: 'user-42', email: 'user@example.com', name: 'Jane Doe' })
 
 ```ts
 // BEFORE — Luciq React Native
-
+import Luciq, { LogLevel } from 'luciq-reactnative-sdk'
 Luciq.init({
   token: 'YOUR_TOKEN',
   invocationEvents: [Luciq.invocationEvent.shake],
@@ -77,16 +77,22 @@ Luciq.identifyUser('user@example.com', 'Jane Doe', 'user-42')
 
 ```tsx
 // AFTER — Mushi React Native
+import { MushiProvider } from '@mushi-mushi/react-native'
 
+export default function App() {
   return (
-    
-      
-    
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_KEY"
+      config={{ widget: { trigger: 'shake' } }}
+    >
+      <RootNavigator />
+    </MushiProvider>
   )
 }
 
 // Inside any screen:
-
+import { useMushi } from '@mushi-mushi/react-native'
 function ProfileScreen() {
   const mushi = useMushi()
   useEffect(() => {

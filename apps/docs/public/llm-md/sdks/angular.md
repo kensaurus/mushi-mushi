@@ -20,7 +20,7 @@ See [Quickstart → Angular](/quickstart/angular) for the full setup walkthrough
 ## API surface
 
 ```ts
-
+import { provideMushi, MushiService, MushiReportDirective } from '@mushi-mushi/angular'
 ```
 
 | Export | Purpose |
@@ -33,6 +33,9 @@ See [Quickstart → Angular](/quickstart/angular) for the full setup walkthrough
 
 ```ts
 // main.ts
+import { bootstrapApplication } from '@angular/platform-browser'
+import { provideMushi } from '@mushi-mushi/angular'
+import { AppComponent } from './app/app.component'
 
 bootstrapApplication(AppComponent, {
   providers: [
@@ -48,9 +51,11 @@ bootstrapApplication(AppComponent, {
 
 ```ts
 // auth.service.ts
+import { Injectable, inject } from '@angular/core'
+import { MushiService } from '@mushi-mushi/angular'
 
 @Injectable({ providedIn: 'root' })
-
+export class AuthService {
   private readonly mushi = inject(MushiService)
 
   onSignIn(user: { id: string; email: string; name: string }) {
@@ -62,9 +67,11 @@ bootstrapApplication(AppComponent, {
 ## Submitting a report
 
 ```ts
+import { Component, inject } from '@angular/core'
+import { MushiService } from '@mushi-mushi/angular'
 
 @Component({ ... })
-
+export class FeedbackButtonComponent {
   private readonly mushi = inject(MushiService)
 
   async reportIssue() {

@@ -23,6 +23,7 @@ or experiments, run PostHog beside it; see
 ## Quick start
 
 ```ts
+import { Mushi } from '@mushi-mushi/web'
 
 const mushi = Mushi.init({
   projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
@@ -39,10 +40,11 @@ mushi.identify('usr_42')                           // stitches earlier anonymous
 React:
 
 ```tsx
+import { useMushiTrack } from '@mushi-mushi/react'
 
 function BuyButton() {
   const track = useMushiTrack()
-  return  track('checkout_started', { plan: 'pro' })}>Buy
+  return <button onClick={() => track('checkout_started', { plan: 'pro' })}>Buy</button>
 }
 ```
 

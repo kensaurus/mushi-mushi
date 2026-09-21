@@ -82,13 +82,13 @@ land in the same inbox; the SDK tag on the report (`ios`, `android`,
 
 ```ts
 // Native iOS — stays as-is during the migration
-
+import Mushi from "MushiMushi"
 Mushi.shared.configure(projectId: "YOUR_PROJECT_ID", apiKey: "YOUR_PUBLIC_KEY")
 ```
 
 ```ts
 // JS shell — added on top
-
+import { Mushi } from '@mushi-mushi/capacitor'
 await Mushi.configure({ projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_PUBLIC_KEY' })
 ```
 

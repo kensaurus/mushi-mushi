@@ -130,7 +130,7 @@ to the PR branch.
 From the CLI:
 
 ```bash
-mushi fixes refresh-ci 
+mushi fixes refresh-ci <fixId>
 ```
 
 ---
@@ -182,8 +182,8 @@ idempotent — `finalizeFixMerge()` backfills `merged_at` and report status.
 From the CLI (requires `mcp:write` API key):
 
 ```bash
-mushi fixes merge 
-mushi fixes merge  --method squash
+mushi fixes merge <fixId>
+mushi fixes merge <fixId> --method squash
 ```
 
 ### Prerequisites

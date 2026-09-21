@@ -32,11 +32,21 @@ so you only need this one dependency.
 ## 2. Wrap your app
 
 ```tsx filename="src/main.tsx"
+import { MushiProvider } from '@mushi-mushi/react'
+import { App } from './App'
 
+export function Root() {
   return (
-    
-      
-    
+    <MushiProvider
+      config={{
+        projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+        apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+        // optional: pin a region — defaults to auto-routing
+        // region: 'eu',
+      }}
+    >
+      <App />
+    </MushiProvider>
   )
 }
 ```
@@ -50,15 +60,17 @@ so you only need this one dependency.
 Add a hook anywhere in your tree to capture programmatic reports:
 
 ```tsx filename="src/components/CrashFallback.tsx"
+import { useMushiReport } from '@mushi-mushi/react'
 
+export function CrashFallback({ error }: { error: Error }) {
   const { submit } = useMushiReport()
   return (
-    
-      Something broke.
-       submit({ description: error.message, severity: 'high' })}>
+    <div role="alert">
+      <p>Something broke.</p>
+      <button onClick={() => submit({ description: error.message, severity: 'high' })}>
         Send a bug report
-      
-    
+      </button>
+    </div>
   )
 }
 ```

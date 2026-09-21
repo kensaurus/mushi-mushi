@@ -44,6 +44,7 @@ guides, NPS) — the two tools share user identity via a single
 ## Recipe: keep Pendo for analytics + guides; use Mushi for feedback
 
 ```ts
+import { Mushi } from '@mushi-mushi/web'
 
 // 1. Initialise both
 window.pendo.initialize({

@@ -15,6 +15,7 @@ pnpm add @mushi-mushi/svelte
 ```
 
 ```ts
+import { initMushi } from '@mushi-mushi/svelte'
 
 initMushi({
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,

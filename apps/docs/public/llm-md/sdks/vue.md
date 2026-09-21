@@ -22,7 +22,7 @@ See [Quickstart → Vue](/quickstart/vue) for the full setup walkthrough.
 ## API surface
 
 ```ts
-
+import { MushiPlugin, useMushi, useMushiReport } from '@mushi-mushi/vue'
 ```
 
 | Export | Purpose |
@@ -35,6 +35,9 @@ See [Quickstart → Vue](/quickstart/vue) for the full setup walkthrough.
 
 ```ts
 // main.ts
+import { createApp } from 'vue'
+import { MushiPlugin } from '@mushi-mushi/vue'
+import App from './App.vue'
 
 createApp(App)
   .use(MushiPlugin, {
@@ -47,15 +50,31 @@ createApp(App)
 ## Identifying users
 
 ```vue
+<script setup lang="ts">
+import { useMushi } from '@mushi-mushi/vue'
+import { useAuth } from './auth'
 
+const mushi = useMushi()
+const { user } = useAuth()
+
+watch(user, (u) => {
+  if (u) mushi.identify(u.id, { email: u.email, name: u.name })
+})
+</script>
 ```
 
 ## Submitting a report
 
 ```vue
+<script setup lang="ts">
+import { useMushiReport } from '@mushi-mushi/vue'
 
-  
+const { submit, isSubmitting } = useMushiReport()
+</script>
+
+<template>
+  <button :disabled="isSubmitting" @click="submit({ title: 'Something feels off', severity: 'p2' })">
     Report issue
-  
-
+  </button>
+</template>
 ```

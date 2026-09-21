@@ -66,6 +66,7 @@ the Capacitor build and the React Native build land in the same inbox.
 
 ```ts
 // BEFORE — Capacitor
+import { Mushi } from '@mushi-mushi/capacitor'
 
 await Mushi.configure({
   projectId: 'glot-it-prod',
@@ -77,11 +78,20 @@ await Mushi.configure({
 
 ```tsx
 // AFTER — React Native
+import { MushiProvider } from '@mushi-mushi/react-native'
 
+export default function App() {
   return (
-    
-      
-    
+    <MushiProvider
+      projectId="glot-it-prod"
+      apiKey={process.env.EXPO_PUBLIC_MUSHI_KEY!}
+      config={{
+        widget:  { trigger: 'shake' },
+        capture: { screenshot: 'on-report' },
+      }}
+    >
+      <RootNavigator />
+    </MushiProvider>
   )
 }
 ```

@@ -37,6 +37,9 @@ Every translator returns a `MushiCaptureEventInput` (from `@mushi-mushi/core`) s
 ## Quick start — Datadog → Hono
 
 ```ts
+import { Hono } from 'hono';
+import { createDatadogWebhookHandler } from '@mushi-mushi/adapters';
+import { MushiNodeClient } from '@mushi-mushi/node';
 
 const mushi = new MushiNodeClient({
   apiKey: process.env.MUSHI_API_KEY!,

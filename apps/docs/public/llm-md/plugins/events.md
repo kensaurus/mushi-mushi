@@ -11,7 +11,7 @@ title: Webhook events
 Every event ships with this envelope:
 
 ```ts
-interface MushiEvent {
+interface MushiEvent<TName extends MushiEventName, TData> {
   event: TName
   project_id: string
   occurred_at: string  // ISO 8601 UTC

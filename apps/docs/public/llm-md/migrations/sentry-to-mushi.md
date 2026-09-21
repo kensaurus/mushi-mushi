@@ -46,6 +46,8 @@ Install Mushi alongside Sentry. Neither SDK interferes with the other —
 Mushi's widget is Shadow-DOM isolated and captures on user trigger only.
 
 ```ts
+import * as Sentry from '@sentry/react'
+import { Mushi } from '@mushi-mushi/web'
 
 Sentry.init({ dsn: 'YOUR_DSN' })
 Mushi.init({ projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_PUBLIC_KEY' })

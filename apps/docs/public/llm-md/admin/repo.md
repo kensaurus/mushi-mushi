@@ -82,8 +82,8 @@ update the GitHub token, repository URL, and default branch.
 ## API
 
 ```bash
-GET /v1/admin/repo/overview?project_id=
-GET /v1/admin/repo/activity?project_id=&limit=100
+GET /v1/admin/repo/overview?project_id=<pid>
+GET /v1/admin/repo/activity?project_id=<pid>&limit=100
 ```
 
 ---

@@ -29,7 +29,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { stripMarkupToFixpoint } from './lib/strip-markup.mjs';
+import { mapOutsideCodeFences, stripMarkupToFixpoint } from './lib/strip-markup.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -69,11 +69,16 @@ function collectMdxFiles(dir, results = []) {
  * agents can still extract `title` and other metadata.
  */
 function stripMdx(src) {
-  return stripMarkupToFixpoint(
-    src
-      // Remove import / export lines
-      .replace(/^import\s.+from\s+['"].+['"]\s*;?\s*$/gm, '')
-      .replace(/^export\s+(?:default\s+)?(?:const|function|class)\s.*/gm, ''),
+  // Only the prose between code fences is MDX to strip. Fenced samples are
+  // copied verbatim: they are what an agent copies to install Mushi, and
+  // stripping them deleted `<MushiProvider>` and `export function …` lines.
+  return mapOutsideCodeFences(src, (prose) =>
+    stripMarkupToFixpoint(
+      prose
+        // Remove MDX import / export lines
+        .replace(/^import\s.+from\s+['"].+['"]\s*;?\s*$/gm, '')
+        .replace(/^export\s+(?:default\s+)?(?:const|function|class)\s.*/gm, ''),
+    ),
   )
     // Collapse 3+ blank lines to 2
     .replace(/\n{3,}/g, '\n\n')

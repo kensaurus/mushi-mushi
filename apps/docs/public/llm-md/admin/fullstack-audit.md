@@ -43,7 +43,7 @@ Add your Supabase PAT under **Settings → API Keys** and set
 ```bash
 mushi audit
 mushi audit --json
-mushi audit --project-id 
+mushi audit --project-id <uuid>
 ```
 
 ---

@@ -74,6 +74,7 @@ request body using your signing secret). Always verify this in your handler befo
 processing events:
 
 ```ts
+import crypto from 'crypto'
 
 function verify(body: string, signature: string, secret: string) {
   const expected = crypto.createHmac('sha256', secret).update(body).digest('hex')

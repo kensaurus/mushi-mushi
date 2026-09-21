@@ -178,6 +178,7 @@ for the previous session first.
 Add a `rewards` block to your `init()` config:
 
 ```typescript
+import { Mushi } from '@mushi-mushi/web'
 
 const mushi = Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
@@ -259,6 +260,7 @@ The same methods are exposed on the `useMushi()` hook, memoised so they're
 stable across renders:
 
 ```tsx
+import { useMushi } from '@mushi-mushi/react'
 
 function MyReports() {
   const { listMyReports, replyToReport } = useMushi()

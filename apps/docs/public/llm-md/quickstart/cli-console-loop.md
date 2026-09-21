@@ -176,7 +176,7 @@ If the browser auth path isn't available, select "Paste a Project ID + API key"
 in the wizard, or pass flags directly:
 
 ```bash
-mushi init --project-id  --api-key mushi_xxx
+mushi init --project-id <uuid> --api-key mushi_xxx
 ```
 
 To get the values manually:
@@ -194,14 +194,14 @@ To get the values manually:
 Pass all three flags so the wizard skips all interactive prompts:
 
 ```bash
-npx mushi-mushi --yes --project-id  --api-key mushi_xxx
+npx mushi-mushi --yes --project-id <uuid> --api-key mushi_xxx
 ```
 
 Or use the non-interactive connect command after minting a key in the console:
 
 ```bash
 MUSHI_API_KEY=mushi_xxx mushi connect \
-  --project-id  \
+  --project-id <uuid> \
   --endpoint https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api \
   --write-env --wire-ide
 ```

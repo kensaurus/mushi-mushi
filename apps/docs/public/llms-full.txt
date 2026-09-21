@@ -167,18 +167,18 @@ without requiring manual review.
 
 ```bash
 # List anomalies
-GET /v1/admin/anomalies?project_id=&limit=100
+GET /v1/admin/anomalies?project_id=<pid>&limit=100
 
 # Ingest a metric data point
 POST /v1/admin/metric-series
-{ "project_id": "", "metric_name": "p95_latency", "value": 1240, "ts": "2026-05-19T12:00:00Z" }
+{ "project_id": "<pid>", "metric_name": "p95_latency", "value": 1240, "ts": "2026-05-19T12:00:00Z" }
 
 # Run detection
 POST /v1/admin/anomalies/detect
-{ "project_id": "", "lookback_hours": 24 }
+{ "project_id": "<pid>", "lookback_hours": 24 }
 
 # Confirm / dismiss
-PATCH /v1/admin/anomalies/
+PATCH /v1/admin/anomalies/<id>
 { "status": "confirmed" }
 ```
 
@@ -603,7 +603,7 @@ Reference implementation: `kensaurus/yen-yen` — `.github/workflows/bundle-budg
 ## API
 
 ```bash
-GET /v1/admin/code-health?project_id=
+GET /v1/admin/code-health?project_id=<uuid>
 POST /v1/ingest/metrics   # CI push — apiKeyAuth, prefix allow-list bundle.* / code_health.*
 ```
 
@@ -900,7 +900,7 @@ Copy **Connect SDK + MCP** from the CLI section:
 
 ```bash
 MUSHI_API_KEY=mushi_xxx mushi connect \
-  --project-id  \
+  --project-id <uuid> \
   --endpoint https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api \
   --write-env --wire-ide --wait
 ```
@@ -1353,11 +1353,11 @@ After major route additions:
 ## API
 
 ```bash
-POST /v1/admin/drift/scan             { "project_id": "", "max_paths": 50 }
-GET  /v1/admin/drift?project_id=&limit=100
-GET  /v1/admin/drift/snapshots?project_id=
-PATCH /v1/admin/drift/            { "status": "dismissed" }
-POST  /v1/admin/drift//create-lesson
+POST /v1/admin/drift/scan             { "project_id": "<pid>", "max_paths": 50 }
+GET  /v1/admin/drift?project_id=<pid>&limit=100
+GET  /v1/admin/drift/snapshots?project_id=<pid>
+PATCH /v1/admin/drift/<id>            { "status": "dismissed" }
+POST  /v1/admin/drift/<id>/create-lesson
 ```
 
 ---
@@ -1458,22 +1458,22 @@ automatically.
 
 ```bash
 # List experiments
-GET /v1/admin/experiments?project_id=
+GET /v1/admin/experiments?project_id=<pid>
 
 # Create
 POST /v1/admin/experiments
-{ "name": "...", "hypothesis": "...", "bandit_enabled": false, "project_id": "" }
+{ "name": "...", "hypothesis": "...", "bandit_enabled": false, "project_id": "<pid>" }
 
 # Add a variant
-POST /v1/admin/experiments//variants
+POST /v1/admin/experiments/<id>/variants
 { "name": "Variant B", "traffic_weight": 0.5 }
 
 # Launch / Stop
-POST /v1/admin/experiments//launch
-POST /v1/admin/experiments//stop
+POST /v1/admin/experiments/<id>/launch
+POST /v1/admin/experiments/<id>/stop
 
 # Analyze
-POST /v1/admin/experiments//analyze
+POST /v1/admin/experiments/<id>/analyze
 ```
 
 ---
@@ -2069,7 +2069,7 @@ to the PR branch.
 From the CLI:
 
 ```bash
-mushi fixes refresh-ci 
+mushi fixes refresh-ci <fixId>
 ```
 
 ---
@@ -2121,8 +2121,8 @@ idempotent — `finalizeFixMerge()` backfills `merged_at` and report status.
 From the CLI (requires `mcp:write` API key):
 
 ```bash
-mushi fixes merge 
-mushi fixes merge  --method squash
+mushi fixes merge <fixId>
+mushi fixes merge <fixId> --method squash
 ```
 
 ### Prerequisites
@@ -2189,7 +2189,7 @@ Add your Supabase PAT under **Settings → API Keys** and set
 ```bash
 mushi audit
 mushi audit --json
-mushi audit --project-id 
+mushi audit --project-id <uuid>
 ```
 
 ---
@@ -2875,9 +2875,15 @@ Most teams will never hand-author `inventory.yaml`. Turn on
 `capture.discoverInventory` in the SDK config:
 
 ```ts
+import { MushiProvider } from '@mushi-mushi/react'
 
-  
-
+<MushiProvider config={{
+  projectId: '…',
+  apiKey: '…',
+  capture: { discoverInventory: true },
+}}>
+  <App />
+</MushiProvider>
 ```
 
 The SDK quietly observes routes, `data-testid`s, and outbound API paths
@@ -3094,13 +3100,13 @@ run is active. The drawer doesn't auto-poll to avoid hammering the API during a 
 ## API
 
 ```bash
-GET    /v1/admin/pdca?project_id=&limit=50
-GET    /v1/admin/pdca/
+GET    /v1/admin/pdca?project_id=<pid>&limit=50
+GET    /v1/admin/pdca/<id>
 POST   /v1/admin/pdca   { "target_url": "...", "goal": "...", "iterations_target": 5,
                           "target_score": 0.85, "primary_model": "claude-4-sonnet",
-                          "judge_model": "claude-3-haiku", "project_id": "" }
-DELETE /v1/admin/pdca/         (abort)
-POST   /v1/admin/pdca//trigger (manually trigger queued run)
+                          "judge_model": "claude-3-haiku", "project_id": "<pid>" }
+DELETE /v1/admin/pdca/<id>         (abort)
+POST   /v1/admin/pdca/<id>/trigger (manually trigger queued run)
 ```
 
 ---
@@ -3439,6 +3445,7 @@ request body using your signing secret). Always verify this in your handler befo
 processing events:
 
 ```ts
+import crypto from 'crypto'
 
 function verify(body: string, signature: string, secret: string) {
   const expected = crypto.createHmac('sha256', secret).update(body).digest('hex')
@@ -4936,8 +4943,8 @@ update the GitHub token, repository URL, and default branch.
 ## API
 
 ```bash
-GET /v1/admin/repo/overview?project_id=
-GET /v1/admin/repo/activity?project_id=&limit=100
+GET /v1/admin/repo/overview?project_id=<pid>
+GET /v1/admin/repo/activity?project_id=<pid>&limit=100
 ```
 
 ---
@@ -5030,8 +5037,8 @@ resolution notification, and `fix.applied` webhooks fire.
 Equivalent CLI:
 
 ```bash
-mushi fixes refresh-ci 
-mushi fixes merge 
+mushi fixes refresh-ci <fixId>
+mushi fixes merge <fixId>
 ```
 
 See [Fix orchestrator → Merging from the console](/admin/fixes#merging-from-the-console)
@@ -5696,15 +5703,15 @@ mushi skills show workflow-fix-and-ship
 mushi skills sync
 
 # Start a pipeline for a report
-mushi pipeline start  --skill workflow-fix-and-ship
-mushi pipeline start  --skill workflow-fix-and-ship --mode cloud
+mushi pipeline start <reportId> --skill workflow-fix-and-ship
+mushi pipeline start <reportId> --skill workflow-fix-and-ship --mode cloud
 
 # Watch a pipeline run and print the context packet
-mushi pipeline watch 
+mushi pipeline watch <runId>
 
 # Check in a step (report your progress back to Mushi)
-mushi pipeline checkin  --step 0 --status passed
-mushi pipeline checkin  --step 1 --status failed --notes "Build failed: missing dep"
+mushi pipeline checkin <runId> --step 0 --status passed
+mushi pipeline checkin <runId> --step 1 --status failed --notes "Build failed: missing dep"
 ```
 
 ---
@@ -6091,7 +6098,7 @@ Click any user row to open the drawer:
 
 ```bash
 GET /v1/super-admin/metrics
-GET /v1/super-admin/users?limit=100&search=&plan=
+GET /v1/super-admin/users?limit=100&search=<email>&plan=<plan>
 GET /v1/super-admin/users/:userId
 ```
 
@@ -6440,8 +6447,8 @@ mushi setup --ide zed     # wires Zed
 **Wednesday — Zero-config SDK init.** `` needs no props if `NEXT_PUBLIC_MUSHI_*` (or `VITE_MUSHI_*`, `EXPO_PUBLIC_MUSHI_*`, etc.) are in your `.env`. The snippet in the wizard now reads exactly what was written to the file.
 
 ```tsx
-// Before: 
-// After:    ← reads from env automatically
+// Before: <MushiProvider config={{ projectId: '...', apiKey: '...' }}>
+// After:  <MushiProvider>  ← reads from env automatically
 ```
 
 **Thursday — GitHub OAuth + onboarding.** Signup with one GitHub click. New users land on `/onboarding` instead of an empty dashboard. Self-hosters get `MUSHI_INIT_*` env vars for headless bootstrapping.
@@ -8219,7 +8226,11 @@ individual gates, so a transient monitor hiccup doesn't block merges permanently
 Most teams will never hand-author `inventory.yaml`. Turn on the v2.1 SDK option:
 
 ```ts
-
+<MushiProvider config={{
+  projectId: '…',
+  apiKey: '…',
+  capture: { discoverInventory: true },
+}}>
 ```
 
 The SDK quietly observes routes, `data-testid`s, and outbound API paths in
@@ -8654,16 +8665,16 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP76 tools / 8 resources / 4 prompts"]
-    REST["REST /v1/admin/*OpenAPI 3.1 at /openapi.jsonadminOrApiKey({ scope: 'mcp:read|write' })"]
-    A2A["A2A v1.0.0 /v1/a2a/taskscreate / get / cancel / SSE subscribe"]
-    AGUI["AG-UI v0.4 SSEfix dispatch streamAPI key OR JWT"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>76 tools / 8 resources / 4 prompts"]
+    REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
+    A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
+    AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
   end
   subgraph Outbound["Outbound from Mushi"]
-    Hooks["HMAC-signed webhooks10 event typesplugin SDK helpers"]
+    Hooks["HMAC-signed webhooks<br/>10 event types<br/>plugin SDK helpers"]
   end
   subgraph Native["Embed inside Mushi"]
-    FA["FixAgent + SandboxProvideropen contract — JSON Schemasat /v1/schemas/*"]
+    FA["FixAgent + SandboxProvider<br/>open contract — JSON Schemas<br/>at /v1/schemas/*"]
   end
   Orch["Your orchestrator"] -->|"call tools"| MCP
   Orch -->|"REST"| REST
@@ -8741,11 +8752,11 @@ curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/ta
   }'
 
 # Subscribe to live updates
-curl -N https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks/:subscribe \
+curl -N https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks/<id>:subscribe \
   -H "X-Mushi-Api-Key: mushi_live_…"
 
 # Cancel
-curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks/:cancel \
+curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks/<id>:cancel \
   -H "X-Mushi-Api-Key: mushi_live_…"
 ```
 
@@ -8777,12 +8788,12 @@ A Postgres trigger fires on every status change (`queued → working → complet
 ```
 POST https://orchestrator.example.com/a2a/callback
 Content-Type: application/json
-webhook-id: 
+webhook-id: <uuid>
 webhook-timestamp: <unix-secs>
 webhook-signature: v1,<base64-hmac-sha256>      ← signed with `token` (or per-project Vault secret)
 X-Mushi-Event: a2a.task.completed
 X-Mushi-Schema: a2a/v1.0.0/task
-Authorization: Bearer 
+Authorization: Bearer <your token, if provided>
 ```
 
 Pull _and_ push are supported simultaneously — subscribe to the SSE stream AND configure a push URL if you want belt-and-suspenders delivery. Every push attempt (success, error, timeout, skipped) lands in `a2a_push_deliveries` so operators can debug callback failures from the admin UI without grepping logs.
@@ -8857,6 +8868,7 @@ Browse the full index at `GET /v1/schemas` for shape `{ schemas: [{ name, url, $
 Sealos DevBox, internal corp envs) register at runtime:
 
 ```ts filename="bootstrap.ts"
+import { registerSandboxProvider, type SandboxProvider } from '@mushi-mushi/agents';
 
 const corpProvider: SandboxProvider = {
   name: 'corp-firecracker',
@@ -9308,6 +9320,7 @@ corner stamp, edge tab, help menu, or your own custom button.
 ## Bring Your Own Button
 
 ```ts
+import { Mushi } from '@mushi-mushi/web'
 
 const mushi = Mushi.init({
   projectId: '00000000-0000-0000-0000-000000000000',
@@ -9441,7 +9454,7 @@ description: Wire Mushi's evolution loop into Cursor with one command — get fi
 **The three-line setup:**
 
 ```bash
-npx mushi-mushi login --api-key mushi_xxx --endpoint https://.supabase.co/functions/v1/api
+npx mushi-mushi login --api-key mushi_xxx --endpoint https://<ref>.supabase.co/functions/v1/api
 npx mushi-mushi setup --ide cursor
 # Restart Cursor
 ```
@@ -9453,7 +9466,7 @@ npx mushi-mushi setup --ide cursor
 ```bash
 npx mushi-mushi login \
   --api-key mushi_xxx \
-  --endpoint https://.supabase.co/functions/v1/api \
+  --endpoint https://<ref>.supabase.co/functions/v1/api \
   --project-id xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
 
@@ -9614,7 +9627,7 @@ Two Shortcuts: one to speak, one to confirm.
 The raw request, for reference:
 
 ```bash
-curl -X POST "https://.supabase.co/functions/v1/api/v1/intake/voice" \
+curl -X POST "https://<ref>.supabase.co/functions/v1/api/v1/intake/voice" \
   -H "X-Mushi-Api-Key: mushi_xxx" \
   -H "Idempotency-Key: 4d2a…" \
   -H "Content-Type: application/json" \
@@ -10324,12 +10337,37 @@ screenshot) plus structured user metadata.
 
 | BugHerd | Mushi |
 |---------|-------|
-| `
+| `` | `` mounting `Mushi.init({ projectId, apiKey })` |
+| Sidebar widget (always visible) | Floating button widget (`widget.trigger: 'button'`) — discreet, opens on click |
+| Element click → annotation | User triggers widget → screenshot + element selector capture |
+| `bugherd.identify(user)` | `Mushi.setUser({ id, email, name })` |
+| Project-board view | Mushi admin console — Reports tab |
+| `data-bugherd-private` (skip element from screenshots) | `data-mushi-redact` (same idea) |
+
+## Before / After
+
+```html
+<!-- BEFORE — BugHerd -->
+<script type="text/javascript">
+  (function(d,t) {
+    var bh = d.createElement(t); bh.async = true;
+    bh.type = 'text/javascript';
+    bh.src = 'https://www.bugherd.com/sidebarv2.js?apikey=YOUR_API_KEY';
+    var s = d.getElementsByTagName(t)[0]; s.parentNode.insertBefore(bh, s);
+  })(document, 'script');
+</script>
 ```
 
 ```html
 <!-- AFTER — Mushi (web) -->
-
+<script type="module">
+  import { Mushi } from 'https://esm.sh/@mushi-mushi/web'
+  Mushi.init({
+    projectId: 'YOUR_PROJECT_ID',
+    apiKey:    'YOUR_PUBLIC_KEY',
+    widget:    { trigger: 'button' },  // BugHerd-equivalent UX
+  })
+</script>
 ```
 
 For React / Vue / Svelte / Next, use the framework-specific SDK instead.
@@ -10338,6 +10376,9 @@ For React / Vue / Svelte / Next, use the framework-specific SDK instead.
 
 Sign in to the Mushi admin console; copy projectId + apiKey.</> },
     { id: 'install', label: 'Install or script-tag Mushi', content: {`# CDN — for the same script-tag UX BugHerd had:
+
+  import { Mushi } from 'https://esm.sh/@mushi-mushi/web'
+  Mushi.init({ projectId: '...', apiKey: '...' })
 
 # Or via npm:
 npm install @mushi-mushi/web`} },
@@ -10449,6 +10490,7 @@ the Capacitor build and the React Native build land in the same inbox.
 
 ```ts
 // BEFORE — Capacitor
+import { Mushi } from '@mushi-mushi/capacitor'
 
 await Mushi.configure({
   projectId: 'glot-it-prod',
@@ -10460,11 +10502,20 @@ await Mushi.configure({
 
 ```tsx
 // AFTER — React Native
+import { MushiProvider } from '@mushi-mushi/react-native'
 
+export default function App() {
   return (
-    
-      
-    
+    <MushiProvider
+      projectId="glot-it-prod"
+      apiKey={process.env.EXPO_PUBLIC_MUSHI_KEY!}
+      config={{
+        widget:  { trigger: 'shake' },
+        capture: { screenshot: 'on-report' },
+      }}
+    >
+      <RootNavigator />
+    </MushiProvider>
   )
 }
 ```
@@ -11040,14 +11091,14 @@ title: 'Instabug (Luciq) → Mushi'
 
 ```ts
 // BEFORE — Instabug Web
-
+import * as Instabug from 'instabug'
 Instabug.start('YOUR_TOKEN', { invocationEvents: ['shake', 'floatingButton'] })
 Instabug.identifyUser('user@example.com', 'Jane Doe')
 ```
 
 ```ts
 // AFTER — Mushi
-
+import { Mushi } from '@mushi-mushi/web'
 Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
   apiKey:    'YOUR_PUBLIC_KEY',
@@ -11060,7 +11111,7 @@ Mushi.setUser({ id: 'user-42', email: 'user@example.com', name: 'Jane Doe' })
 
 ```ts
 // BEFORE — Luciq React Native
-
+import Luciq, { LogLevel } from 'luciq-reactnative-sdk'
 Luciq.init({
   token: 'YOUR_TOKEN',
   invocationEvents: [Luciq.invocationEvent.shake],
@@ -11071,16 +11122,22 @@ Luciq.identifyUser('user@example.com', 'Jane Doe', 'user-42')
 
 ```tsx
 // AFTER — Mushi React Native
+import { MushiProvider } from '@mushi-mushi/react-native'
 
+export default function App() {
   return (
-    
-      
-    
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_KEY"
+      config={{ widget: { trigger: 'shake' } }}
+    >
+      <RootNavigator />
+    </MushiProvider>
   )
 }
 
 // Inside any screen:
-
+import { useMushi } from '@mushi-mushi/react-native'
 function ProfileScreen() {
   const mushi = useMushi()
   useEffect(() => {
@@ -11207,6 +11264,8 @@ This is the killer recipe — every Mushi report includes a one-click
 without leaving the Mushi dashboard.
 
 ```ts
+import LogRocket from 'logrocket'
+import { Mushi } from '@mushi-mushi/web'
 
 LogRocket.init('your-app/id')
 Mushi.init({ projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_PUBLIC_KEY' })
@@ -11422,13 +11481,13 @@ land in the same inbox; the SDK tag on the report (`ios`, `android`,
 
 ```ts
 // Native iOS — stays as-is during the migration
-
+import Mushi from "MushiMushi"
 Mushi.shared.configure(projectId: "YOUR_PROJECT_ID", apiKey: "YOUR_PUBLIC_KEY")
 ```
 
 ```ts
 // JS shell — added on top
-
+import { Mushi } from '@mushi-mushi/capacitor'
 await Mushi.configure({ projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_PUBLIC_KEY' })
 ```
 
@@ -11550,14 +11609,15 @@ call Mushi:
 // app/articles/[slug]/page.tsx (Server Component)
 export default async function Page({ params }: { params: { slug: string } }) {
   const article = await fetchArticle(params.slug)
-  return 
+  return <ArticleReportButton articleId={article.id} />
 }
 
 // app/articles/[slug]/ArticleReportButton.tsx (Client Component)
 'use client'
-
+import { useMushiReport } from '@mushi-mushi/react'
+export function ArticleReportButton({ articleId }: { articleId: string }) {
   const { submit } = useMushiReport()
-  return  submit({ description: 'Article issue', metadata: { articleId } })}>Report
+  return <button onClick={() => submit({ description: 'Article issue', metadata: { articleId } })}>Report</button>
 }
 ```
 
@@ -11628,6 +11688,7 @@ guides, NPS) — the two tools share user identity via a single
 ## Recipe: keep Pendo for analytics + guides; use Mushi for feedback
 
 ```ts
+import { Mushi } from '@mushi-mushi/web'
 
 // 1. Initialise both
 window.pendo.initialize({
@@ -11850,6 +11911,8 @@ Install Mushi alongside Sentry. Neither SDK interferes with the other —
 Mushi's widget is Shadow-DOM isolated and captures on user trigger only.
 
 ```ts
+import * as Sentry from '@sentry/react'
+import { Mushi } from '@mushi-mushi/web'
 
 Sentry.init({ dsn: 'YOUR_DSN' })
 Mushi.init({ projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_PUBLIC_KEY' })
@@ -11975,7 +12038,7 @@ the same trigger UX.
 
 ```ts
 // BEFORE — Shake
-
+import Shake from '@shakebugs/react-native-shake'
 Shake.start('YOUR_API_KEY')
 Shake.setEnableBlackBox(true)
 Shake.setUserMetadata({ tier: 'pro' })
@@ -11983,16 +12046,25 @@ Shake.setUserMetadata({ tier: 'pro' })
 
 ```tsx
 // AFTER — Mushi
+import { MushiProvider } from '@mushi-mushi/react-native'
 
+export default function App() {
   return (
-    
-      
-    
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_KEY"
+      config={{
+        widget:  { trigger: 'shake' },
+        capture: { console: true, network: true },
+      }}
+    >
+      <RootNavigator />
+    </MushiProvider>
   )
 }
 
 // Inside any screen:
-
+import { useMushi } from '@mushi-mushi/react-native'
 const mushi = useMushi()
 mushi.setMetadata({ tier: 'pro' })
 ```
@@ -12001,14 +12073,14 @@ mushi.setMetadata({ tier: 'pro' })
 
 ```ts
 // BEFORE — Shake JS
-
+import Shake from '@softnoesis/shakebug-js'
 Shake.start('YOUR_API_KEY')
 Shake.setUser('user-42', 'jane@example.com', 'Jane Doe')
 ```
 
 ```ts
 // AFTER — Mushi web
-
+import { Mushi } from '@mushi-mushi/web'
 Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
   apiKey:    'YOUR_PUBLIC_KEY',
@@ -12121,6 +12193,16 @@ export default defineNuxtPlugin((nuxtApp) => {
 
 // SvelteKit — src/routes/+layout.svelte
 
+  import { onMount } from 'svelte'
+  import { Mushi } from '@mushi-mushi/web'
+  import { initMushi } from '@mushi-mushi/svelte'
+  import { PUBLIC_MUSHI_PROJECT_ID, PUBLIC_MUSHI_API_KEY } from '$env/static/public'
+  onMount(() => {
+    const credentials = { projectId: PUBLIC_MUSHI_PROJECT_ID, apiKey: PUBLIC_MUSHI_API_KEY }
+    initMushi(credentials)
+    Mushi.init(credentials)
+  })
+
 `} },
     { id: 'hydration', label: 'Verify no hydration warnings', content: <>Mushi renders its widget into a Shadow DOM mounted on document.body on the client side only. It does NOT cause hydration mismatches because the widget is never present in server-rendered HTML. If you see hydration warnings, they're from your code, not Mushi.</> },
     { id: 'dynamic-import', label: 'For Nuxt/Next, use a .client suffix or "use client" for Mushi components', content: <>Mushi components ({``}, useMushi(), useMushiReport()) are client-only because they touch window. Mark them appropriately so SSR does not try to render them server-side.</> },
@@ -12207,7 +12289,50 @@ brings you onto the adapter.
 |-------------------------------|--------------------------------------------------|
 | `Mushi.init({ projectId, apiKey })` in main.js | Same `Mushi.init(...)` PLUS `app.use(MushiPlugin, { projectId, apiKey })` |
 | Manually attach `Vue.config.errorHandler = ...` to forward to Mushi | The adapter wires Vue 3's `app.config.errorHandler` automatically |
-| Reach into `Mushi` directly from any component | Use `useMushi()` composable inside ``} },
+| Reach into `Mushi` directly from any component | Use `useMushi()` composable inside `` |
+
+## Migration checklist
+
+{`# Vue 3 ships a compat build that runs Vue 2 code with deprecation warnings:
+npm install vue@^3
+# Then in your build config, alias 'vue' to '@vue/compat'
+# This lets you migrate incrementally without flag-day risk`} },
+    { id: 'fix-warnings', label: 'Fix every Vue 2-style deprecation warning', content: <>Each warning links to its migration page. Common ones: filters removed, $on/$off/$once removed, functional: true removed. Work through them all before removing the compat alias.</> },
+    { id: 'remove-compat', label: 'Remove @vue/compat alias once warnings are zero', content: <>Now you're on real Vue 3.</> },
+    { id: 'router', label: 'Upgrade Vue Router 3 → 4', content: {`npm install vue-router@^4
+
+// router.js
+- import VueRouter from 'vue-router'
+- Vue.use(VueRouter)
+- export default new VueRouter({ routes })
++ import { createRouter, createWebHistory } from 'vue-router'
++ export default createRouter({ history: createWebHistory(), routes })`} },
+    { id: 'state', label: 'Decide: Vuex 4 or Pinia', content: <>Vuex 4 is a Vue-3-compatible drop-in. Pinia is the new recommended state library — better TS, smaller, simpler. If you're touching state code anyway, Pinia is worth the switch.</> },
+    { id: 'install-mushi-adapter', label: 'Install the Mushi Vue adapter', content: {`npm install @mushi-mushi/vue @mushi-mushi/web`} },
+    { id: 'wire-mushi', label: 'Replace direct Mushi.init usage with the adapter', content: {`// main.ts
+
+const credentials = {
+  projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+  apiKey:    import.meta.env.VITE_MUSHI_API_KEY,
+}
+
+const app = createApp(App)
+
+// 1. Vue plugin: wires useMushi() composable + Vue 3 errorHandler
+app.use(MushiPlugin, credentials)
+
+// 2. Web SDK: actually mounts the floating widget + capture pipeline
+Mushi.init(credentials)
+
+app.mount('#app')`} },
+    { id: 'use-composable', label: 'Migrate components to useMushi()', content: {`
+
+const mushi = useMushi()
+
+async function reportIssue() {
+  await mushi.submitReport({ description: 'Issue from Vue component' })
+}
+`} },
     { id: 'remove-vue2-mushi', label: 'Remove any Vue-2-era Mushi error-handler shims', content: <>If you previously did Vue.config.errorHandler = (err) =&gt; Mushi.captureException(err), delete it. The adapter installs its own app.config.errorHandler that calls Mushi automatically.</> },
     { id: 'verify', label: 'Smoke-test: throw an error, verify it lands as a Mushi report', content: <>Throw inside a Vue lifecycle hook. The adapter forwards it to Mushi as a report tagged with source: vue. Confirm it appears in the admin console.</> },
   ]}
@@ -12466,6 +12591,8 @@ npm install @mushi-mushi/plugin-sdk hono
 ## Minimal receiver
 
 ```ts
+import { Hono } from 'hono'
+import { verifyMushiSignature, type MushiEvent } from '@mushi-mushi/plugin-sdk'
 
 const app = new Hono()
 
@@ -12623,10 +12750,10 @@ You can also dispatch a Cursor Cloud Agent run outside of the Marketplace plugin
 
 ```bash
 # CLI
-mushi fix  --agent cursor_cloud --wait
+mushi fix <reportId> --agent cursor_cloud --wait
 
 # MCP tool
-dispatch_fix reportId= agent=cursor_cloud
+dispatch_fix reportId=<reportId> agent=cursor_cloud
 ```
 
 See [`mushi fix`](/sdks/cli) and [`@mushi-mushi/mcp`](/sdks/mcp) for details.
@@ -12693,7 +12820,7 @@ title: Webhook events
 Every event ships with this envelope:
 
 ```ts
-interface MushiEvent {
+interface MushiEvent<TName extends MushiEventName, TData> {
   event: TName
   project_id: string
   occurred_at: string  // ISO 8601 UTC
@@ -13399,9 +13526,11 @@ class App : Application() {
 ```
 
 ```xml filename="AndroidManifest.xml"
-
+<application
+  android:name=".App"
+  ...>
   <!-- ... -->
-
+</application>
 ```
 
 ## Submit a report
@@ -13432,7 +13561,9 @@ pnpm add @mushi-mushi/angular
 ```
 
 ```ts filename="src/app/app.config.ts"
+import { provideMushi } from '@mushi-mushi/angular'
 
+export const appConfig = {
   providers: [
     provideMushi({
       projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -13473,6 +13604,7 @@ npx cap sync
 ## 2. Configure
 
 ```ts filename="src/mushi.ts"
+import { Mushi } from '@mushi-mushi/capacitor'
 
 await Mushi.configure({
   projectId: 'YOUR_PROJECT_ID',
@@ -13682,7 +13814,7 @@ If the browser auth path isn't available, select "Paste a Project ID + API key"
 in the wizard, or pass flags directly:
 
 ```bash
-mushi init --project-id  --api-key mushi_xxx
+mushi init --project-id <uuid> --api-key mushi_xxx
 ```
 
 To get the values manually:
@@ -13700,14 +13832,14 @@ To get the values manually:
 Pass all three flags so the wizard skips all interactive prompts:
 
 ```bash
-npx mushi-mushi --yes --project-id  --api-key mushi_xxx
+npx mushi-mushi --yes --project-id <uuid> --api-key mushi_xxx
 ```
 
 Or use the non-interactive connect command after minting a key in the console:
 
 ```bash
 MUSHI_API_KEY=mushi_xxx mushi connect \
-  --project-id  \
+  --project-id <uuid> \
   --endpoint https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api \
   --write-env --wire-ide
 ```
@@ -14235,11 +14367,20 @@ npx expo install expo-sensors
 ## 2. Mount the provider
 
 ```tsx filename="App.tsx"
+import { MushiProvider } from '@mushi-mushi/react-native'
 
+export default function App() {
   return (
-    
-      
-    
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_API_KEY"
+      config={{
+        widget: { trigger: 'both' },        // 'shake' | 'button' | 'both' | 'manual'
+        capture: { console: true, network: true },
+      }}
+    >
+      <RootNavigator />
+    </MushiProvider>
   )
 }
 ```
@@ -14305,11 +14446,21 @@ so you only need this one dependency.
 ## 2. Wrap your app
 
 ```tsx filename="src/main.tsx"
+import { MushiProvider } from '@mushi-mushi/react'
+import { App } from './App'
 
+export function Root() {
   return (
-    
-      
-    
+    <MushiProvider
+      config={{
+        projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+        apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+        // optional: pin a region — defaults to auto-routing
+        // region: 'eu',
+      }}
+    >
+      <App />
+    </MushiProvider>
   )
 }
 ```
@@ -14323,15 +14474,17 @@ so you only need this one dependency.
 Add a hook anywhere in your tree to capture programmatic reports:
 
 ```tsx filename="src/components/CrashFallback.tsx"
+import { useMushiReport } from '@mushi-mushi/react'
 
+export function CrashFallback({ error }: { error: Error }) {
   const { submit } = useMushiReport()
   return (
-    
-      Something broke.
-       submit({ description: error.message, severity: 'high' })}>
+    <div role="alert">
+      <p>Something broke.</p>
+      <button onClick={() => submit({ description: error.message, severity: 'high' })}>
         Send a bug report
-      
-    
+      </button>
+    </div>
   )
 }
 ```
@@ -14370,6 +14523,7 @@ pnpm add @mushi-mushi/svelte
 ```
 
 ```ts
+import { initMushi } from '@mushi-mushi/svelte'
 
 initMushi({
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -14400,6 +14554,9 @@ pnpm add @mushi-mushi/vue
 ```
 
 ```ts filename="src/main.ts"
+import { createApp } from 'vue'
+import { MushiPlugin } from '@mushi-mushi/vue'
+import App from './App.vue'
 
 createApp(App)
   .use(MushiPlugin, {
@@ -14436,6 +14593,7 @@ pnpm add @mushi-mushi/web
 ## 2. Initialize
 
 ```ts filename="src/mushi.ts"
+import { Mushi } from '@mushi-mushi/web'
 
 const mushi = Mushi.init({
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -14446,6 +14604,7 @@ const mushi = Mushi.init({
 ## 3. Submit
 
 ```ts
+import { mushi } from './mushi'
 
 document.querySelector('#report-bug')?.addEventListener('click', async () => {
   await mushi.submitReport({
@@ -14567,6 +14726,9 @@ Every translator returns a `MushiCaptureEventInput` (from `@mushi-mushi/core`) s
 ## Quick start — Datadog → Hono
 
 ```ts
+import { Hono } from 'hono';
+import { createDatadogWebhookHandler } from '@mushi-mushi/adapters';
+import { MushiNodeClient } from '@mushi-mushi/node';
 
 const mushi = new MushiNodeClient({
   apiKey: process.env.MUSHI_API_KEY!,
@@ -14656,6 +14818,7 @@ or experiments, run PostHog beside it; see
 ## Quick start
 
 ```ts
+import { Mushi } from '@mushi-mushi/web'
 
 const mushi = Mushi.init({
   projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
@@ -14672,10 +14835,11 @@ mushi.identify('usr_42')                           // stitches earlier anonymous
 React:
 
 ```tsx
+import { useMushiTrack } from '@mushi-mushi/react'
 
 function BuyButton() {
   const track = useMushiTrack()
-  return  track('checkout_started', { plan: 'pro' })}>Buy
+  return <button onClick={() => track('checkout_started', { plan: 'pro' })}>Buy</button>
 }
 ```
 
@@ -14963,7 +15127,7 @@ See [Quickstart → Angular](/quickstart/angular) for the full setup walkthrough
 ## API surface
 
 ```ts
-
+import { provideMushi, MushiService, MushiReportDirective } from '@mushi-mushi/angular'
 ```
 
 | Export | Purpose |
@@ -14976,6 +15140,9 @@ See [Quickstart → Angular](/quickstart/angular) for the full setup walkthrough
 
 ```ts
 // main.ts
+import { bootstrapApplication } from '@angular/platform-browser'
+import { provideMushi } from '@mushi-mushi/angular'
+import { AppComponent } from './app/app.component'
 
 bootstrapApplication(AppComponent, {
   providers: [
@@ -14991,9 +15158,11 @@ bootstrapApplication(AppComponent, {
 
 ```ts
 // auth.service.ts
+import { Injectable, inject } from '@angular/core'
+import { MushiService } from '@mushi-mushi/angular'
 
 @Injectable({ providedIn: 'root' })
-
+export class AuthService {
   private readonly mushi = inject(MushiService)
 
   onSignIn(user: { id: string; email: string; name: string }) {
@@ -15005,9 +15174,11 @@ bootstrapApplication(AppComponent, {
 ## Submitting a report
 
 ```ts
+import { Component, inject } from '@angular/core'
+import { MushiService } from '@mushi-mushi/angular'
 
 @Component({ ... })
-
+export class FeedbackButtonComponent {
   private readonly mushi = inject(MushiService)
 
   async reportIssue() {
@@ -15101,6 +15272,7 @@ title: Capacitor bottom dock
 Use `triggerInsetPreset` for common mobile chrome:
 
 ```ts
+import { Mushi, triggerInsetPresets } from '@mushi-mushi/capacitor'
 
 await Mushi.configure({
   projectId: '...',
@@ -15153,6 +15325,7 @@ npx cap sync
 ## Configure
 
 ```ts
+import { Mushi } from '@mushi-mushi/capacitor'
 
 await Mushi.configure({
   projectId: 'YOUR_PROJECT_ID',
@@ -15232,11 +15405,11 @@ headless merge — all from the terminal.
 npm install -g @mushi-mushi/cli
 
 mushi login
-mushi connect --project-id  --endpoint  --wait
+mushi connect --project-id <uuid> --endpoint <url> --wait
 mushi doctor --server --qa-stories
 mushi reports list --status new
-mushi fix  --agent cursor_cloud --wait
-mushi fixes merge           # squash-merge the PR + mark report Fixed
+mushi fix <reportId> --agent cursor_cloud --wait
+mushi fixes merge <fixId>          # squash-merge the PR + mark report Fixed
 ```
 
   **Two key types:** SDK ingest keys (`report:write`) are minted on **Setup → Verify** or
@@ -15326,16 +15499,16 @@ mushi nudge --phase ga --max 2 --cooldown 24 --dwell 5 --welcome 10
 
 ```bash
 mushi reports list [--status new] [--severity critical]
-mushi reports show 
-mushi reports triage  --status acknowledged --severity high
-mushi reports resolve 
-mushi reports reopen 
-mushi reports dismiss 
-mushi reports reply  "Thanks — we're on it"
+mushi reports show <id>
+mushi reports triage <id> --status acknowledged --severity high
+mushi reports resolve <id>
+mushi reports reopen <id>
+mushi reports dismiss <id>
+mushi reports reply <id> "Thanks — we're on it"
 mushi reports search "checkout button"
 
 mushi lessons list
-mushi lessons show 
+mushi lessons show <id>
 mushi sync-lessons              # pull promoted rules → .mushi/lessons.json
 ```
 
@@ -15352,7 +15525,7 @@ Dispatch an agentic fix for a classified report.
 mushi fix 00000000-0000-0000-0000-000000000123
 
 # Cursor Cloud Agent — wait for PR
-mushi fix  --agent cursor_cloud --wait
+mushi fix <reportId> --agent cursor_cloud --wait
 
 # CI: fail the pipeline if the fix errors
 mushi fix $REPORT_ID --agent cursor_cloud --wait && echo "Fix PR opened"
@@ -15371,17 +15544,17 @@ Headless fix lifecycle — pairs with `mushi fix --wait`.
 
 ```bash
 # Stream dispatch SSE events (no browser)
-mushi fixes tail --report-id 
+mushi fixes tail --report-id <reportId>
 
 # Pull latest GitHub Actions status (same as console "Refresh CI status")
-mushi fixes refresh-ci 
-mushi fixes refresh-ci  --json
+mushi fixes refresh-ci <fixId>
+mushi fixes refresh-ci <fixId> --json
 
 # Squash-merge the draft PR and mark the report Fixed
-mushi fixes merge 
-mushi fixes merge  --method squash   # default
-mushi fixes merge  --method merge
-mushi fixes merge  --json
+mushi fixes merge <fixId>
+mushi fixes merge <fixId> --method squash   # default
+mushi fixes merge <fixId> --method merge
+mushi fixes merge <fixId> --json
 ```
 
 **Merge prerequisites:** the fix attempt must be `completed` with an open PR (`pr_url`
@@ -15401,16 +15574,16 @@ mushi stories map --url https://your-app.com --wait
 mushi stories map --url https://app.com --provider browserbase --cursor-refine
 
 # TDD test generation
-mushi tdd gen  --mode review
+mushi tdd gen <storyId> --mode review
 mushi tdd pending
-mushi tdd approve 
+mushi tdd approve <qaStoryId>
 mushi tdd improve                    # PDCA on failing tests
-mushi tdd run 
+mushi tdd run <qaStoryId>
 
 # QA story ops
 mushi qa stories
-mushi qa runs 
-mushi qa run 
+mushi qa runs <storyId>
+mushi qa run <storyId>
 mushi audit                        # full-stack project health audit
 ```
 
@@ -15421,9 +15594,9 @@ mushi audit                        # full-stack project health audit
 ```bash
 mushi skills list [--category workflow] [--search "fix bug"]
 mushi skills show workflow-fix-and-ship
-mushi skills sync [--source-id ]
+mushi skills sync [--source-id <id>]
 
-mushi pipeline start  --skill workflow-fix-and-ship [--mode cloud]
+mushi pipeline start <reportId> --skill workflow-fix-and-ship [--mode cloud]
 mushi pipeline watch <runId-or-prefix>
 mushi pipeline checkin <runId-or-prefix> --step 0 --status passed [--notes "Done"]
 ```
@@ -15522,7 +15695,7 @@ interface MushiConfig {
   /** Session-replay sampling (0–1). Decision at init. Default 1. */
   replaySampleRate?: number
   /** Drop or mutate any report after PII scrub. Prefer over beforeSendFeedback. */
-  beforeSend?: (report: MushiReport) => MushiReport | null | Promise
+  beforeSend?: (report: MushiReport) => MushiReport | null | Promise<MushiReport | null>
 }
 ```
 
@@ -15573,6 +15746,7 @@ it in your own `beforeSend` hook, server code, or logs. It runs entirely in
 your process — scrubbed values never leave the client.
 
 ```ts
+import { scrubPii, scrubUrl, createPiiScrubber } from '@mushi-mushi/core'
 
 // Free text → typed placeholders
 scrubPii('email jake@x.com or call +1 415 555 0100')
@@ -15639,6 +15813,7 @@ generated copy, so the two scrubbers can't drift.
 ### Region resolution
 
 ```ts
+import { resolveRegionEndpoint, REGION_ENDPOINTS } from '@mushi-mushi/core'
 
 const url = await resolveRegionEndpoint({ projectId: 'p_…', region: 'eu' })
 ```
@@ -15682,6 +15857,7 @@ Most projects pick up both rules at their default severity by extending
 the recommended preset:
 
 ```js filename="eslint.config.js"
+import mushi from 'eslint-plugin-mushi-mushi'
 
 export default [
   // …your other configs
@@ -15712,15 +15888,15 @@ arrow (`() => {}`). The CI gate fails on any non-test file that matches.
 
 ```jsx
 // ✗ caught
- {}}>Submit
-Submit
+<button onClick={() => {}}>Submit</button>
+<button onSubmit={noop}>Submit</button>
 
 // ✓ allowed
- mutate()}>Submit
-Submit
+<button onClick={() => mutate()}>Submit</button>
+<button onSubmit={handleSubmit}>Submit</button>
 
 // ✓ allowed in tests + stories
- {}} />        // foo.test.tsx, *.stories.tsx
+<button onClick={() => {}} />        // foo.test.tsx, *.stories.tsx
 ```
 
 ### `mushi-mushi/no-mock-leak`
@@ -15738,7 +15914,7 @@ const projects = [
 ]
 
 // ✓ allowed — apps/web/src/__mocks__/projects.ts
-
+export const projects = [
   { name: 'John Doe', tasks: 12 },
 ]
 ```
@@ -16635,6 +16811,10 @@ Mount Mushi inside a client component:
 ```tsx
 'use client'
 
+import { useEffect } from 'react'
+import { Mushi } from '@mushi-mushi/web'
+
+export function MushiClient() {
   useEffect(() => {
     Mushi.init({
       projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
@@ -16740,6 +16920,8 @@ pnpm add @mushi-mushi/node
 ## Express
 
 ```ts
+import express from 'express'
+import { mushiExpressErrorHandler } from '@mushi-mushi/node/express'
 
 const app = express()
 // …all your routes…
@@ -16756,6 +16938,8 @@ app.use(
 ## Fastify
 
 ```ts
+import Fastify from 'fastify'
+import { mushiFastifyPlugin } from '@mushi-mushi/node/fastify'
 
 const app = Fastify()
 mushiFastifyPlugin(app, {
@@ -16767,6 +16951,8 @@ mushiFastifyPlugin(app, {
 ## Hono
 
 ```ts
+import { Hono } from 'hono'
+import { mushiHonoErrorHandler } from '@mushi-mushi/node/hono'
 
 const app = new Hono()
 app.onError(
@@ -16782,6 +16968,7 @@ app.onError(
 Attach `uncaughtException` + `unhandledRejection` hooks so nothing escapes:
 
 ```ts
+import { attachUnhandledHook } from '@mushi-mushi/node'
 
 attachUnhandledHook({
   apiKey: process.env.MUSHI_API_KEY!,
@@ -16795,6 +16982,7 @@ Use the client directly when you want to report outside the request cycle
 (cron jobs, queue workers, integration failures):
 
 ```ts
+import { MushiNodeClient } from '@mushi-mushi/node'
 
 const mushi = new MushiNodeClient({
   apiKey: process.env.MUSHI_API_KEY!,
@@ -16873,6 +17061,9 @@ pnpm add @mushi-mushi/plugin-sdk
 ## Express adapter
 
 ```ts
+import express from 'express'
+import { expressMiddleware } from '@mushi-mushi/plugin-sdk/express'
+import { createMushiClient } from '@mushi-mushi/plugin-sdk'
 
 const app = express()
 const mushi = createMushiClient({ apiKey: process.env.MUSHI_API_KEY! })
@@ -16898,6 +17089,8 @@ app.listen(8080)
 ## Hono adapter
 
 ```ts
+import { Hono } from 'hono'
+import { honoHandler } from '@mushi-mushi/plugin-sdk/hono'
 
 const app = new Hono()
 app.post('/mushi/webhook', honoHandler({
@@ -16914,6 +17107,7 @@ If you'd rather use your own framework, just call `verifySignature` with
 the raw body and the `Mushi-Signature` header:
 
 ```ts
+import { verifySignature } from '@mushi-mushi/plugin-sdk'
 
 const result = await verifySignature({
   payload: rawBodyString,
@@ -17016,7 +17210,7 @@ console logs, network errors, and screenshots, then queues reports offline until
 connectivity returns. Works in bare React Native CLI projects and Expo.
 
 ```tsx
-
+import { MushiProvider, useMushi, useMushiReport } from '@mushi-mushi/react-native'
 ```
 
 ## Install
@@ -17045,11 +17239,20 @@ cd ios && bundle exec pod install
 ## Mount the provider
 
 ```tsx filename="App.tsx"
+import { MushiProvider } from '@mushi-mushi/react-native'
 
+export default function App() {
   return (
-    
-      
-    
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_API_KEY"
+      config={{
+        widget: { trigger: 'both' },        // 'shake' | 'button' | 'both' | 'manual'
+        capture: { console: true, network: true },
+      }}
+    >
+      <RootNavigator />
+    </MushiProvider>
   )
 }
 ```
@@ -17060,13 +17263,16 @@ Set `trigger: 'manual'` if you want to drive the widget yourself.
 ## Submit a report from a screen
 
 ```tsx
+import { useMushiReport, useMushiWidget } from '@mushi-mushi/react-native'
 
 function ChatScreen() {
   const { open } = useMushiWidget()
   const { submit, submitting } = useMushiReport()
 
   return (
-    
+    <Button
+      title={submitting ? 'Sending…' : 'Report bad response'}
+      onPress={() =>
         submit({
           description: 'AI returned an off-topic answer',
           severity: 'medium',
@@ -17114,9 +17320,20 @@ added in **0.19.0**):
 Configure the ring buffer and screenshot gate under `config.capture`:
 
 ```tsx
-
-  
-
+<MushiProvider
+  projectId="YOUR_PROJECT_ID"
+  apiKey="YOUR_PUBLIC_API_KEY"
+  config={{
+    capture: {
+      console: true,
+      network: true,
+      screenshot: true,       // default; set false on sensitive screens
+      maxBreadcrumbs: 50,
+    },
+  }}
+>
+  <RootNavigator />
+</MushiProvider>
 ```
 
 ### Screenshots (`react-native-view-shot`)
@@ -17133,7 +17350,16 @@ The SDK captures **before** the bottom sheet overlays the screen. Users see a
 **privacy caption** under the image (1.19+).
 
 ```tsx
-
+<MushiProvider
+  config={{
+    widget: {
+      screenshotSensitiveHint: true, // default caption
+      // screenshotSensitiveHint: 'Remove if account numbers are visible.',
+      // screenshotSensitiveHint: false, // hide caption; preview still shows
+    },
+    capture: { screenshot: true },
+  }}
+>
 ```
 
 Console operators can override the caption via **Projects → SDK install →
@@ -17201,6 +17427,8 @@ The bottom sheet (v0.17+) includes **Your reports** and **Community** tabs.
 Host apps can also surface the same data on a dedicated screen:
 
 ```tsx
+import { useMushi } from '@mushi-mushi/react-native'
+import { useEffect, useState } from 'react'
 
 function MyReportsScreen() {
   const sdk = useMushi()
@@ -17237,7 +17465,11 @@ is typically a Supabase `onAuthStateChange` subscriber; on Expo it's wherever
 you consume the session from your auth context.
 
 ```tsx filename="navigation/AuthGate.tsx"
+import { useMushi } from '@mushi-mushi/react-native'
+import { useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
+export function AuthGate({ children }) {
   const sdk = useMushi()
 
   useEffect(() => {
@@ -17270,13 +17502,28 @@ restore is safe — the server upserts the `end_users` row and updates
 ## Enabling the Rewards program
 
 ```tsx filename="App.tsx"
+import { MushiProvider } from '@mushi-mushi/react-native'
 
+export default function App() {
   return (
-    
-      
-        
-      
-    
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_API_KEY"
+      config={{
+        widget: { trigger: 'both' },
+        capture: { console: true, network: true },
+        rewards: {
+          enabled: true,
+          trackActivity: true,    // auto-captures screen changes via setScreen()
+          consentMode: 'explicit',
+          showInWidget: true,
+        },
+      }}
+    >
+      <AuthGate>
+        <RootNavigator />
+      </AuthGate>
+    </MushiProvider>
   )
 }
 ```
@@ -17287,17 +17534,21 @@ Call `setScreen()` on every navigation event to feed `page_view` and
 `navigate` activity events automatically:
 
 ```tsx filename="navigation/RootNavigator.tsx"
+import { useMushi } from '@mushi-mushi/react-native'
+import { NavigationContainer } from '@react-navigation/native'
 
+export function RootNavigator() {
   const sdk = useMushi()
 
   return (
-     {
+    <NavigationContainer
+      onStateChange={(state) => {
         const routeName = getActiveRouteName(state)
         sdk?.setScreen(routeName)
       }}
     >
       {/* … */}
-    
+    </NavigationContainer>
   )
 }
 ```
@@ -17305,6 +17556,7 @@ Call `setScreen()` on every navigation event to feed `page_view` and
 ### Custom activity events
 
 ```tsx
+import { useMushi } from '@mushi-mushi/react-native'
 
 function LessonScreen({ lessonId }) {
   const sdk = useMushi()
@@ -17315,7 +17567,7 @@ function LessonScreen({ lessonId }) {
     ])
   }
 
-  return 
+  return <Button title="Complete" onPress={onComplete} />
 }
 ```
 
@@ -17324,6 +17576,8 @@ function LessonScreen({ lessonId }) {
 ## Querying reputation & tier
 
 ```tsx
+import { useMushi } from '@mushi-mushi/react-native'
+import { useEffect, useState } from 'react'
 
 function ProfileBadge() {
   const sdk = useMushi()
@@ -17334,7 +17588,7 @@ function ProfileBadge() {
   }, [sdk])
 
   if (!tier) return null
-  return {tier.displayName}
+  return <Text>{tier.displayName}</Text>
 }
 ```
 
@@ -17386,9 +17640,10 @@ Call `mushi.identify()` on auth state change — typically inside a
 `useEffect` that watches your auth context:
 
 ```tsx filename="lib/auth-watcher.tsx"
-
+import { useMushi } from '@mushi-mushi/react'
 import { useSession } from './auth'  // your auth hook
 
+export function AuthWatcher() {
   const sdk = useMushi()
   const { user } = useSession()
 
@@ -17413,11 +17668,24 @@ Mount `` inside `` so `sdk` is always defined.
 ## Enabling the Rewards program
 
 ```tsx filename="app/layout.tsx"
+import { MushiProvider } from '@mushi-mushi/react'
 
+export default function RootLayout({ children }) {
   return (
-    
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_API_KEY"
+      config={{
+        rewards: {
+          enabled: true,
+          trackActivity: true,
+          consentMode: 'explicit',
+          showInWidget: true,
+        },
+      }}
+    >
       {children}
-    
+    </MushiProvider>
   )
 }
 ```
@@ -17430,16 +17698,17 @@ Returns the current user's reputation totals, or `null` if rewards are
 disabled or no user has been identified.
 
 ```tsx
+import { useReputation } from '@mushi-mushi/react'
 
 function PointsDisplay() {
   const reputation = useReputation()
   if (!reputation) return null
 
   return (
-    
+    <p>
       {reputation.totalPoints.toLocaleString()} pts total ·{' '}
       {reputation.points30d} this month
-    
+    </p>
   )
 }
 ```
@@ -17463,11 +17732,12 @@ interface MushiReputationResult {
 Returns the current user's tier, or `null`.
 
 ```tsx
+import { useTier } from '@mushi-mushi/react'
 
 function TierBanner() {
   const tier = useTier()
   if (!tier) return null
-  return You're a {tier.displayName}!
+  return <p>You're a {tier.displayName}!</p>
 }
 ```
 
@@ -17491,13 +17761,16 @@ Drop-in badge that renders the current user's tier name (and optionally
 their point total). Polymorphic — renders as a `` by default.
 
 ```tsx
+import { MushiRewardsBadge } from '@mushi-mushi/react'
 
 // Minimal — just the tier name
+<MushiRewardsBadge />
 
 // With point count
+<MushiRewardsBadge showPoints />
 
 // As a div, with custom class
-
+<MushiRewardsBadge as="div" className="my-badge" showPoints />
 ```
 
 **Props:**
@@ -17519,6 +17792,7 @@ The badge colour is driven by tier slug (`free` → grey, `explorer` → blue,
 Access the singleton to fire custom events:
 
 ```tsx
+import { useMushi } from '@mushi-mushi/react'
 
 function LessonCard({ lessonId }) {
   const sdk = useMushi()
@@ -17529,7 +17803,7 @@ function LessonCard({ lessonId }) {
     ])
   }
 
-  return Complete lesson
+  return <button onClick={onComplete}>Complete lesson</button>
 }
 
 ---
@@ -17547,6 +17821,8 @@ title: Sentry Replay coexistence
 Initialize Sentry first, then Mushi. Mushi reads Sentry event and replay IDs when available and sends them with the report.
 
 ```ts
+import * as Sentry from '@sentry/browser'
+import { Mushi } from '@mushi-mushi/web'
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
@@ -17644,7 +17920,7 @@ See [Quickstart → Svelte](/quickstart/svelte) for the short install path.
 ## API surface
 
 ```ts
-
+import { initMushi, getMushi, createMushiErrorHandler } from '@mushi-mushi/svelte'
 ```
 
 | Export | Purpose |
@@ -17657,6 +17933,7 @@ See [Quickstart → Svelte](/quickstart/svelte) for the short install path.
 ## Setup
 
 ```ts
+import { initMushi } from '@mushi-mushi/svelte'
 
 initMushi({
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -17669,6 +17946,7 @@ Call from `hooks.client.ts` or a top-level `+layout.svelte` `onMount`.
 ## Submitting a report
 
 ```ts
+import { getMushi } from '@mushi-mushi/svelte'
 
 const mushi = getMushi()
 await mushi.captureEvent({
@@ -17703,7 +17981,7 @@ See [Quickstart → Vue](/quickstart/vue) for the full setup walkthrough.
 ## API surface
 
 ```ts
-
+import { MushiPlugin, useMushi, useMushiReport } from '@mushi-mushi/vue'
 ```
 
 | Export | Purpose |
@@ -17716,6 +17994,9 @@ See [Quickstart → Vue](/quickstart/vue) for the full setup walkthrough.
 
 ```ts
 // main.ts
+import { createApp } from 'vue'
+import { MushiPlugin } from '@mushi-mushi/vue'
+import App from './App.vue'
 
 createApp(App)
   .use(MushiPlugin, {
@@ -17728,17 +18009,33 @@ createApp(App)
 ## Identifying users
 
 ```vue
+<script setup lang="ts">
+import { useMushi } from '@mushi-mushi/vue'
+import { useAuth } from './auth'
 
+const mushi = useMushi()
+const { user } = useAuth()
+
+watch(user, (u) => {
+  if (u) mushi.identify(u.id, { email: u.email, name: u.name })
+})
+</script>
 ```
 
 ## Submitting a report
 
 ```vue
+<script setup lang="ts">
+import { useMushiReport } from '@mushi-mushi/vue'
 
-  
+const { submit, isSubmitting } = useMushiReport()
+</script>
+
+<template>
+  <button :disabled="isSubmitting" @click="submit({ title: 'Something feels off', severity: 'p2' })">
     Report issue
-  
-
+  </button>
+</template>
 ```
 
 ---
@@ -17762,6 +18059,7 @@ pnpm add @mushi-mushi/wasm-classifier
 ```
 
 ```ts
+import { useWasmClassifier } from '@mushi-mushi/wasm-classifier'
 
 const classifier = await useWasmClassifier()
 const verdict = await classifier.classify('asdf qwer')
@@ -17953,6 +18251,7 @@ for the previous session first.
 Add a `rewards` block to your `init()` config:
 
 ```typescript
+import { Mushi } from '@mushi-mushi/web'
 
 const mushi = Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
@@ -18034,6 +18333,7 @@ The same methods are exposed on the `useMushi()` hook, memoised so they're
 stable across renders:
 
 ```tsx
+import { useMushi } from '@mushi-mushi/react'
 
 function MyReports() {
   const { listMyReports, replyToReport } = useMushi()
@@ -18233,6 +18533,7 @@ Mushi Cloud is designed for regional isolation — separate Supabase projects pe
 The SDK reads `MushiOptions.region` (or auto-detects from the `reporterToken` prefix `us_`, `eu_`, `jp_`) and resolves the API endpoint via `resolveRegionEndpoint`:
 
 ```ts
+import { init } from '@mushi-mushi/web'
 
 const mushi = init({
   projectId: 'YOUR_PROJECT_ID',
@@ -18464,11 +18765,11 @@ Every text field (report title, description, console lines, OCR output) passes t
 All user content is always enclosed in named XML tags before reaching the model:
 
 ```
-
-  …
-  …
-  …
-
+<user_report>
+  <title>…</title>
+  <description>…</description>
+  <console_logs>…</console_logs>
+</user_report>
 ```
 
 The system prompt instructs the model to treat anything inside `` as untrusted data. Instructions in that region are recognised as data, not commands.

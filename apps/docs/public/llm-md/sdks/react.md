@@ -40,9 +40,10 @@ Call `mushi.identify()` on auth state change — typically inside a
 `useEffect` that watches your auth context:
 
 ```tsx filename="lib/auth-watcher.tsx"
-
+import { useMushi } from '@mushi-mushi/react'
 import { useSession } from './auth'  // your auth hook
 
+export function AuthWatcher() {
   const sdk = useMushi()
   const { user } = useSession()
 
@@ -67,11 +68,24 @@ Mount `` inside `` so `sdk` is always defined.
 ## Enabling the Rewards program
 
 ```tsx filename="app/layout.tsx"
+import { MushiProvider } from '@mushi-mushi/react'
 
+export default function RootLayout({ children }) {
   return (
-    
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_API_KEY"
+      config={{
+        rewards: {
+          enabled: true,
+          trackActivity: true,
+          consentMode: 'explicit',
+          showInWidget: true,
+        },
+      }}
+    >
       {children}
-    
+    </MushiProvider>
   )
 }
 ```
@@ -84,16 +98,17 @@ Returns the current user's reputation totals, or `null` if rewards are
 disabled or no user has been identified.
 
 ```tsx
+import { useReputation } from '@mushi-mushi/react'
 
 function PointsDisplay() {
   const reputation = useReputation()
   if (!reputation) return null
 
   return (
-    
+    <p>
       {reputation.totalPoints.toLocaleString()} pts total ·{' '}
       {reputation.points30d} this month
-    
+    </p>
   )
 }
 ```
@@ -117,11 +132,12 @@ interface MushiReputationResult {
 Returns the current user's tier, or `null`.
 
 ```tsx
+import { useTier } from '@mushi-mushi/react'
 
 function TierBanner() {
   const tier = useTier()
   if (!tier) return null
-  return You're a {tier.displayName}!
+  return <p>You're a {tier.displayName}!</p>
 }
 ```
 
@@ -145,13 +161,16 @@ Drop-in badge that renders the current user's tier name (and optionally
 their point total). Polymorphic — renders as a `` by default.
 
 ```tsx
+import { MushiRewardsBadge } from '@mushi-mushi/react'
 
 // Minimal — just the tier name
+<MushiRewardsBadge />
 
 // With point count
+<MushiRewardsBadge showPoints />
 
 // As a div, with custom class
-
+<MushiRewardsBadge as="div" className="my-badge" showPoints />
 ```
 
 **Props:**
@@ -173,6 +192,7 @@ The badge colour is driven by tier slug (`free` → grey, `explorer` → blue,
 Access the singleton to fire custom events:
 
 ```tsx
+import { useMushi } from '@mushi-mushi/react'
 
 function LessonCard({ lessonId }) {
   const sdk = useMushi()
@@ -183,5 +203,5 @@ function LessonCard({ lessonId }) {
     ])
   }
 
-  return Complete lesson
+  return <button onClick={onComplete}>Complete lesson</button>
 }

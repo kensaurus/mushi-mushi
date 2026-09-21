@@ -15,7 +15,9 @@ pnpm add @mushi-mushi/angular
 ```
 
 ```ts filename="src/app/app.config.ts"
+import { provideMushi } from '@mushi-mushi/angular'
 
+export const appConfig = {
   providers: [
     provideMushi({
       projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,

@@ -74,7 +74,7 @@ Click any user row to open the drawer:
 
 ```bash
 GET /v1/super-admin/metrics
-GET /v1/super-admin/users?limit=100&search=&plan=
+GET /v1/super-admin/users?limit=100&search=<email>&plan=<plan>
 GET /v1/super-admin/users/:userId
 ```
 

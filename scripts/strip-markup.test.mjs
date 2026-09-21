@@ -16,7 +16,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { stripMarkupToFixpoint } from './lib/strip-markup.mjs';
+import { mapOutsideCodeFences, stripMarkupToFixpoint } from './lib/strip-markup.mjs';
 
 describe('stripMarkupToFixpoint — markup never survives', () => {
   const hostile = [
@@ -35,6 +35,14 @@ describe('stripMarkupToFixpoint — markup never survives', () => {
       assert.doesNotMatch(out, /<\/?\w[\w.]*(?:\s[^>]*)?\s*\/?>/, 'a tag survived');
     });
   }
+
+  it('keeps a script body as plain words once its tags are gone', () => {
+    // These outputs are Markdown/text for LLM consumers, never HTML, so the
+    // body is harmless. Saying so here keeps anyone from "fixing" it with a
+    // hand-written <script>…</script> matcher, which is the bypass-prone
+    // pattern this module exists to avoid (CodeQL js/bad-tag-filter).
+    assert.equal(stripMarkupToFixpoint('<script>alert(1)</script>'), 'alert(1)');
+  });
 
   it('terminates on input that is only angle brackets', () => {
     assert.equal(stripMarkupToFixpoint('<<<<>>>>'), '<<<<>>>>');
@@ -55,5 +63,36 @@ describe('stripMarkupToFixpoint — prose and placeholders are untouched', () =>
 
   it('removes the JSX wrapper but keeps its children', () => {
     assert.equal(stripMarkupToFixpoint('<Callout type="warn">read this</Callout>'), 'read this');
+  });
+});
+
+describe('mapOutsideCodeFences — code samples reach agents intact', () => {
+  const upper = (s) => s.toUpperCase();
+
+  it('transforms prose and copies fenced code verbatim', () => {
+    const src = ['intro <b>x</b>', '```tsx', '<MushiProvider apiKey="k">', '```', 'outro'].join('\n');
+    const out = mapOutsideCodeFences(src, stripMarkupToFixpoint);
+    assert.equal(out, ['intro x', '```tsx', '<MushiProvider apiKey="k">', '```', 'outro'].join('\n'));
+  });
+
+  it('keeps `export function` lines inside a fence', () => {
+    const src = ['```tsx', 'export function AuthWatcher() {', '}', '```'].join('\n');
+    assert.equal(mapOutsideCodeFences(src, () => 'X'), src);
+  });
+
+  it('a longer fence may contain a shorter one (CommonMark)', () => {
+    const src = ['````md', '```js', 'inside', '```', '````', 'after'].join('\n');
+    const out = mapOutsideCodeFences(src, upper);
+    assert.equal(out, ['````md', '```js', 'inside', '```', '````', 'AFTER'].join('\n'));
+  });
+
+  it('a ~~~ fence is not closed by ```', () => {
+    const src = ['~~~', '```', 'still code', '~~~', 'prose'].join('\n');
+    assert.equal(mapOutsideCodeFences(src, upper), ['~~~', '```', 'still code', '~~~', 'PROSE'].join('\n'));
+  });
+
+  it('an unclosed fence runs to the end of the file', () => {
+    const src = ['prose', '```', '<Tag>'].join('\n');
+    assert.equal(mapOutsideCodeFences(src, upper), ['PROSE', '```', '<Tag>'].join('\n'));
   });
 });

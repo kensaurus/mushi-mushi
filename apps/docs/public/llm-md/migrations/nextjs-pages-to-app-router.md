@@ -95,14 +95,15 @@ call Mushi:
 // app/articles/[slug]/page.tsx (Server Component)
 export default async function Page({ params }: { params: { slug: string } }) {
   const article = await fetchArticle(params.slug)
-  return 
+  return <ArticleReportButton articleId={article.id} />
 }
 
 // app/articles/[slug]/ArticleReportButton.tsx (Client Component)
 'use client'
-
+import { useMushiReport } from '@mushi-mushi/react'
+export function ArticleReportButton({ articleId }: { articleId: string }) {
   const { submit } = useMushiReport()
-  return  submit({ description: 'Article issue', metadata: { articleId } })}>Report
+  return <button onClick={() => submit({ description: 'Article issue', metadata: { articleId } })}>Report</button>
 }
 ```
 

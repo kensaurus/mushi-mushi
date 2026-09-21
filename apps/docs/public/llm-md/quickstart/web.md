@@ -21,6 +21,7 @@ pnpm add @mushi-mushi/web
 ## 2. Initialize
 
 ```ts filename="src/mushi.ts"
+import { Mushi } from '@mushi-mushi/web'
 
 const mushi = Mushi.init({
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -31,6 +32,7 @@ const mushi = Mushi.init({
 ## 3. Submit
 
 ```ts
+import { mushi } from './mushi'
 
 document.querySelector('#report-bug')?.addEventListener('click', async () => {
   await mushi.submitReport({

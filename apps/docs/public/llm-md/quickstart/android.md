@@ -37,9 +37,11 @@ class App : Application() {
 ```
 
 ```xml filename="AndroidManifest.xml"
-
+<application
+  android:name=".App"
+  ...>
   <!-- ... -->
-
+</application>
 ```
 
 ## Submit a report

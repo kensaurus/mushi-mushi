@@ -13,7 +13,7 @@ console logs, network errors, and screenshots, then queues reports offline until
 connectivity returns. Works in bare React Native CLI projects and Expo.
 
 ```tsx
-
+import { MushiProvider, useMushi, useMushiReport } from '@mushi-mushi/react-native'
 ```
 
 ## Install
@@ -42,11 +42,20 @@ cd ios && bundle exec pod install
 ## Mount the provider
 
 ```tsx filename="App.tsx"
+import { MushiProvider } from '@mushi-mushi/react-native'
 
+export default function App() {
   return (
-    
-      
-    
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_API_KEY"
+      config={{
+        widget: { trigger: 'both' },        // 'shake' | 'button' | 'both' | 'manual'
+        capture: { console: true, network: true },
+      }}
+    >
+      <RootNavigator />
+    </MushiProvider>
   )
 }
 ```
@@ -57,13 +66,16 @@ Set `trigger: 'manual'` if you want to drive the widget yourself.
 ## Submit a report from a screen
 
 ```tsx
+import { useMushiReport, useMushiWidget } from '@mushi-mushi/react-native'
 
 function ChatScreen() {
   const { open } = useMushiWidget()
   const { submit, submitting } = useMushiReport()
 
   return (
-    
+    <Button
+      title={submitting ? 'Sending…' : 'Report bad response'}
+      onPress={() =>
         submit({
           description: 'AI returned an off-topic answer',
           severity: 'medium',
@@ -111,9 +123,20 @@ added in **0.19.0**):
 Configure the ring buffer and screenshot gate under `config.capture`:
 
 ```tsx
-
-  
-
+<MushiProvider
+  projectId="YOUR_PROJECT_ID"
+  apiKey="YOUR_PUBLIC_API_KEY"
+  config={{
+    capture: {
+      console: true,
+      network: true,
+      screenshot: true,       // default; set false on sensitive screens
+      maxBreadcrumbs: 50,
+    },
+  }}
+>
+  <RootNavigator />
+</MushiProvider>
 ```
 
 ### Screenshots (`react-native-view-shot`)
@@ -130,7 +153,16 @@ The SDK captures **before** the bottom sheet overlays the screen. Users see a
 **privacy caption** under the image (1.19+).
 
 ```tsx
-
+<MushiProvider
+  config={{
+    widget: {
+      screenshotSensitiveHint: true, // default caption
+      // screenshotSensitiveHint: 'Remove if account numbers are visible.',
+      // screenshotSensitiveHint: false, // hide caption; preview still shows
+    },
+    capture: { screenshot: true },
+  }}
+>
 ```
 
 Console operators can override the caption via **Projects → SDK install →
@@ -198,6 +230,8 @@ The bottom sheet (v0.17+) includes **Your reports** and **Community** tabs.
 Host apps can also surface the same data on a dedicated screen:
 
 ```tsx
+import { useMushi } from '@mushi-mushi/react-native'
+import { useEffect, useState } from 'react'
 
 function MyReportsScreen() {
   const sdk = useMushi()
@@ -234,7 +268,11 @@ is typically a Supabase `onAuthStateChange` subscriber; on Expo it's wherever
 you consume the session from your auth context.
 
 ```tsx filename="navigation/AuthGate.tsx"
+import { useMushi } from '@mushi-mushi/react-native'
+import { useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
+export function AuthGate({ children }) {
   const sdk = useMushi()
 
   useEffect(() => {
@@ -267,13 +305,28 @@ restore is safe — the server upserts the `end_users` row and updates
 ## Enabling the Rewards program
 
 ```tsx filename="App.tsx"
+import { MushiProvider } from '@mushi-mushi/react-native'
 
+export default function App() {
   return (
-    
-      
-        
-      
-    
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_API_KEY"
+      config={{
+        widget: { trigger: 'both' },
+        capture: { console: true, network: true },
+        rewards: {
+          enabled: true,
+          trackActivity: true,    // auto-captures screen changes via setScreen()
+          consentMode: 'explicit',
+          showInWidget: true,
+        },
+      }}
+    >
+      <AuthGate>
+        <RootNavigator />
+      </AuthGate>
+    </MushiProvider>
   )
 }
 ```
@@ -284,17 +337,21 @@ Call `setScreen()` on every navigation event to feed `page_view` and
 `navigate` activity events automatically:
 
 ```tsx filename="navigation/RootNavigator.tsx"
+import { useMushi } from '@mushi-mushi/react-native'
+import { NavigationContainer } from '@react-navigation/native'
 
+export function RootNavigator() {
   const sdk = useMushi()
 
   return (
-     {
+    <NavigationContainer
+      onStateChange={(state) => {
         const routeName = getActiveRouteName(state)
         sdk?.setScreen(routeName)
       }}
     >
       {/* … */}
-    
+    </NavigationContainer>
   )
 }
 ```
@@ -302,6 +359,7 @@ Call `setScreen()` on every navigation event to feed `page_view` and
 ### Custom activity events
 
 ```tsx
+import { useMushi } from '@mushi-mushi/react-native'
 
 function LessonScreen({ lessonId }) {
   const sdk = useMushi()
@@ -312,7 +370,7 @@ function LessonScreen({ lessonId }) {
     ])
   }
 
-  return 
+  return <Button title="Complete" onPress={onComplete} />
 }
 ```
 
@@ -321,6 +379,8 @@ function LessonScreen({ lessonId }) {
 ## Querying reputation & tier
 
 ```tsx
+import { useMushi } from '@mushi-mushi/react-native'
+import { useEffect, useState } from 'react'
 
 function ProfileBadge() {
   const sdk = useMushi()
@@ -331,7 +391,7 @@ function ProfileBadge() {
   }, [sdk])
 
   if (!tier) return null
-  return {tier.displayName}
+  return <Text>{tier.displayName}</Text>
 }
 ```
 

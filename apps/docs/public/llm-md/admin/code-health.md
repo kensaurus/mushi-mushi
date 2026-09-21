@@ -51,7 +51,7 @@ Reference implementation: `kensaurus/yen-yen` — `.github/workflows/bundle-budg
 ## API
 
 ```bash
-GET /v1/admin/code-health?project_id=
+GET /v1/admin/code-health?project_id=<uuid>
 POST /v1/ingest/metrics   # CI push — apiKeyAuth, prefix allow-list bundle.* / code_health.*
 ```
 

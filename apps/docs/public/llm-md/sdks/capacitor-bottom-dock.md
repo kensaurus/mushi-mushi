@@ -11,6 +11,7 @@ title: Capacitor bottom dock
 Use `triggerInsetPreset` for common mobile chrome:
 
 ```ts
+import { Mushi, triggerInsetPresets } from '@mushi-mushi/capacitor'
 
 await Mushi.configure({
   projectId: '...',

@@ -25,6 +25,7 @@ npx cap sync
 ## 2. Configure
 
 ```ts filename="src/mushi.ts"
+import { Mushi } from '@mushi-mushi/capacitor'
 
 await Mushi.configure({
   projectId: 'YOUR_PROJECT_ID',

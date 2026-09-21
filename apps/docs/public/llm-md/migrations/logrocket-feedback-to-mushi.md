@@ -53,6 +53,8 @@ This is the killer recipe — every Mushi report includes a one-click
 without leaving the Mushi dashboard.
 
 ```ts
+import LogRocket from 'logrocket'
+import { Mushi } from '@mushi-mushi/web'
 
 LogRocket.init('your-app/id')
 Mushi.init({ projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_PUBLIC_KEY' })

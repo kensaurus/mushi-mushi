@@ -46,7 +46,7 @@ the same trigger UX.
 
 ```ts
 // BEFORE — Shake
-
+import Shake from '@shakebugs/react-native-shake'
 Shake.start('YOUR_API_KEY')
 Shake.setEnableBlackBox(true)
 Shake.setUserMetadata({ tier: 'pro' })
@@ -54,16 +54,25 @@ Shake.setUserMetadata({ tier: 'pro' })
 
 ```tsx
 // AFTER — Mushi
+import { MushiProvider } from '@mushi-mushi/react-native'
 
+export default function App() {
   return (
-    
-      
-    
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_KEY"
+      config={{
+        widget:  { trigger: 'shake' },
+        capture: { console: true, network: true },
+      }}
+    >
+      <RootNavigator />
+    </MushiProvider>
   )
 }
 
 // Inside any screen:
-
+import { useMushi } from '@mushi-mushi/react-native'
 const mushi = useMushi()
 mushi.setMetadata({ tier: 'pro' })
 ```
@@ -72,14 +81,14 @@ mushi.setMetadata({ tier: 'pro' })
 
 ```ts
 // BEFORE — Shake JS
-
+import Shake from '@softnoesis/shakebug-js'
 Shake.start('YOUR_API_KEY')
 Shake.setUser('user-42', 'jane@example.com', 'Jane Doe')
 ```
 
 ```ts
 // AFTER — Mushi web
-
+import { Mushi } from '@mushi-mushi/web'
 Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
   apiKey:    'YOUR_PUBLIC_KEY',

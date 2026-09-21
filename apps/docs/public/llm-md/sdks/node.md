@@ -21,6 +21,8 @@ pnpm add @mushi-mushi/node
 ## Express
 
 ```ts
+import express from 'express'
+import { mushiExpressErrorHandler } from '@mushi-mushi/node/express'
 
 const app = express()
 // …all your routes…
@@ -37,6 +39,8 @@ app.use(
 ## Fastify
 
 ```ts
+import Fastify from 'fastify'
+import { mushiFastifyPlugin } from '@mushi-mushi/node/fastify'
 
 const app = Fastify()
 mushiFastifyPlugin(app, {
@@ -48,6 +52,8 @@ mushiFastifyPlugin(app, {
 ## Hono
 
 ```ts
+import { Hono } from 'hono'
+import { mushiHonoErrorHandler } from '@mushi-mushi/node/hono'
 
 const app = new Hono()
 app.onError(
@@ -63,6 +69,7 @@ app.onError(
 Attach `uncaughtException` + `unhandledRejection` hooks so nothing escapes:
 
 ```ts
+import { attachUnhandledHook } from '@mushi-mushi/node'
 
 attachUnhandledHook({
   apiKey: process.env.MUSHI_API_KEY!,
@@ -76,6 +83,7 @@ Use the client directly when you want to report outside the request cycle
 (cron jobs, queue workers, integration failures):
 
 ```ts
+import { MushiNodeClient } from '@mushi-mushi/node'
 
 const mushi = new MushiNodeClient({
   apiKey: process.env.MUSHI_API_KEY!,

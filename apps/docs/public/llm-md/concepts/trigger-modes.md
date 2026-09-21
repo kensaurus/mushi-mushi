@@ -19,6 +19,7 @@ corner stamp, edge tab, help menu, or your own custom button.
 ## Bring Your Own Button
 
 ```ts
+import { Mushi } from '@mushi-mushi/web'
 
 const mushi = Mushi.init({
   projectId: '00000000-0000-0000-0000-000000000000',

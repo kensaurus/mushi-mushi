@@ -44,7 +44,11 @@ individual gates, so a transient monitor hiccup doesn't block merges permanently
 Most teams will never hand-author `inventory.yaml`. Turn on the v2.1 SDK option:
 
 ```ts
-
+<MushiProvider config={{
+  projectId: '…',
+  apiKey: '…',
+  capture: { discoverInventory: true },
+}}>
 ```
 
 The SDK quietly observes routes, `data-testid`s, and outbound API paths in

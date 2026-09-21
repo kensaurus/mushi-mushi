@@ -27,6 +27,7 @@ Mushi Cloud is designed for regional isolation — separate Supabase projects pe
 The SDK reads `MushiOptions.region` (or auto-detects from the `reporterToken` prefix `us_`, `eu_`, `jp_`) and resolves the API endpoint via `resolveRegionEndpoint`:
 
 ```ts
+import { init } from '@mushi-mushi/web'
 
 const mushi = init({
   projectId: 'YOUR_PROJECT_ID',

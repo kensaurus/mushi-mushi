@@ -17,6 +17,8 @@ npm install @mushi-mushi/plugin-sdk hono
 ## Minimal receiver
 
 ```ts
+import { Hono } from 'hono'
+import { verifyMushiSignature, type MushiEvent } from '@mushi-mushi/plugin-sdk'
 
 const app = new Hono()
 

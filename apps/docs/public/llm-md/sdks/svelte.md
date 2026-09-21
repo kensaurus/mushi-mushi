@@ -20,7 +20,7 @@ See [Quickstart → Svelte](/quickstart/svelte) for the short install path.
 ## API surface
 
 ```ts
-
+import { initMushi, getMushi, createMushiErrorHandler } from '@mushi-mushi/svelte'
 ```
 
 | Export | Purpose |
@@ -33,6 +33,7 @@ See [Quickstart → Svelte](/quickstart/svelte) for the short install path.
 ## Setup
 
 ```ts
+import { initMushi } from '@mushi-mushi/svelte'
 
 initMushi({
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -45,6 +46,7 @@ Call from `hooks.client.ts` or a top-level `+layout.svelte` `onMount`.
 ## Submitting a report
 
 ```ts
+import { getMushi } from '@mushi-mushi/svelte'
 
 const mushi = getMushi()
 await mushi.captureEvent({

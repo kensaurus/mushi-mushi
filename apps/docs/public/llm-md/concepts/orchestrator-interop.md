@@ -33,16 +33,16 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP76 tools / 8 resources / 4 prompts"]
-    REST["REST /v1/admin/*OpenAPI 3.1 at /openapi.jsonadminOrApiKey({ scope: 'mcp:read|write' })"]
-    A2A["A2A v1.0.0 /v1/a2a/taskscreate / get / cancel / SSE subscribe"]
-    AGUI["AG-UI v0.4 SSEfix dispatch streamAPI key OR JWT"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>76 tools / 8 resources / 4 prompts"]
+    REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
+    A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
+    AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
   end
   subgraph Outbound["Outbound from Mushi"]
-    Hooks["HMAC-signed webhooks10 event typesplugin SDK helpers"]
+    Hooks["HMAC-signed webhooks<br/>10 event types<br/>plugin SDK helpers"]
   end
   subgraph Native["Embed inside Mushi"]
-    FA["FixAgent + SandboxProvideropen contract — JSON Schemasat /v1/schemas/*"]
+    FA["FixAgent + SandboxProvider<br/>open contract — JSON Schemas<br/>at /v1/schemas/*"]
   end
   Orch["Your orchestrator"] -->|"call tools"| MCP
   Orch -->|"REST"| REST
@@ -120,11 +120,11 @@ curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/ta
   }'
 
 # Subscribe to live updates
-curl -N https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks/:subscribe \
+curl -N https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks/<id>:subscribe \
   -H "X-Mushi-Api-Key: mushi_live_…"
 
 # Cancel
-curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks/:cancel \
+curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks/<id>:cancel \
   -H "X-Mushi-Api-Key: mushi_live_…"
 ```
 
@@ -156,12 +156,12 @@ A Postgres trigger fires on every status change (`queued → working → complet
 ```
 POST https://orchestrator.example.com/a2a/callback
 Content-Type: application/json
-webhook-id: 
+webhook-id: <uuid>
 webhook-timestamp: <unix-secs>
 webhook-signature: v1,<base64-hmac-sha256>      ← signed with `token` (or per-project Vault secret)
 X-Mushi-Event: a2a.task.completed
 X-Mushi-Schema: a2a/v1.0.0/task
-Authorization: Bearer 
+Authorization: Bearer <your token, if provided>
 ```
 
 Pull _and_ push are supported simultaneously — subscribe to the SSE stream AND configure a push URL if you want belt-and-suspenders delivery. Every push attempt (success, error, timeout, skipped) lands in `a2a_push_deliveries` so operators can debug callback failures from the admin UI without grepping logs.
@@ -236,6 +236,7 @@ Browse the full index at `GET /v1/schemas` for shape `{ schemas: [{ name, url, $
 Sealos DevBox, internal corp envs) register at runtime:
 
 ```ts filename="bootstrap.ts"
+import { registerSandboxProvider, type SandboxProvider } from '@mushi-mushi/agents';
 
 const corpProvider: SandboxProvider = {
   name: 'corp-firecracker',

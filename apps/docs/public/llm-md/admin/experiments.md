@@ -85,22 +85,22 @@ automatically.
 
 ```bash
 # List experiments
-GET /v1/admin/experiments?project_id=
+GET /v1/admin/experiments?project_id=<pid>
 
 # Create
 POST /v1/admin/experiments
-{ "name": "...", "hypothesis": "...", "bandit_enabled": false, "project_id": "" }
+{ "name": "...", "hypothesis": "...", "bandit_enabled": false, "project_id": "<pid>" }
 
 # Add a variant
-POST /v1/admin/experiments//variants
+POST /v1/admin/experiments/<id>/variants
 { "name": "Variant B", "traffic_weight": 0.5 }
 
 # Launch / Stop
-POST /v1/admin/experiments//launch
-POST /v1/admin/experiments//stop
+POST /v1/admin/experiments/<id>/launch
+POST /v1/admin/experiments/<id>/stop
 
 # Analyze
-POST /v1/admin/experiments//analyze
+POST /v1/admin/experiments/<id>/analyze
 ```
 
 ---

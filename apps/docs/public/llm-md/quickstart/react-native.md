@@ -44,11 +44,20 @@ npx expo install expo-sensors
 ## 2. Mount the provider
 
 ```tsx filename="App.tsx"
+import { MushiProvider } from '@mushi-mushi/react-native'
 
+export default function App() {
   return (
-    
-      
-    
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_API_KEY"
+      config={{
+        widget: { trigger: 'both' },        // 'shake' | 'button' | 'both' | 'manual'
+        capture: { console: true, network: true },
+      }}
+    >
+      <RootNavigator />
+    </MushiProvider>
   )
 }
 ```

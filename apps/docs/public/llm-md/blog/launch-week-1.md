@@ -40,8 +40,8 @@ mushi setup --ide zed     # wires Zed
 **Wednesday — Zero-config SDK init.** `` needs no props if `NEXT_PUBLIC_MUSHI_*` (or `VITE_MUSHI_*`, `EXPO_PUBLIC_MUSHI_*`, etc.) are in your `.env`. The snippet in the wizard now reads exactly what was written to the file.
 
 ```tsx
-// Before: 
-// After:    ← reads from env automatically
+// Before: <MushiProvider config={{ projectId: '...', apiKey: '...' }}>
+// After:  <MushiProvider>  ← reads from env automatically
 ```
 
 **Thursday — GitHub OAuth + onboarding.** Signup with one GitHub click. New users land on `/onboarding` instead of an empty dashboard. Self-hosters get `MUSHI_INIT_*` env vars for headless bootstrapping.

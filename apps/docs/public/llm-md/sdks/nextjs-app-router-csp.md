@@ -18,6 +18,10 @@ Mount Mushi inside a client component:
 ```tsx
 'use client'
 
+import { useEffect } from 'react'
+import { Mushi } from '@mushi-mushi/web'
+
+export function MushiClient() {
   useEffect(() => {
     Mushi.init({
       projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,

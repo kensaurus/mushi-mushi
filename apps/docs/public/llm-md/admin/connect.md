@@ -105,7 +105,7 @@ Copy **Connect SDK + MCP** from the CLI section:
 
 ```bash
 MUSHI_API_KEY=mushi_xxx mushi connect \
-  --project-id  \
+  --project-id <uuid> \
   --endpoint https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api \
   --write-env --wire-ide --wait
 ```

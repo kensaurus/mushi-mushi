@@ -17,6 +17,7 @@ pnpm add @mushi-mushi/wasm-classifier
 ```
 
 ```ts
+import { useWasmClassifier } from '@mushi-mushi/wasm-classifier'
 
 const classifier = await useWasmClassifier()
 const verdict = await classifier.classify('asdf qwer')

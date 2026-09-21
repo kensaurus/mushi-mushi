@@ -78,8 +78,8 @@ resolution notification, and `fix.applied` webhooks fire.
 Equivalent CLI:
 
 ```bash
-mushi fixes refresh-ci 
-mushi fixes merge 
+mushi fixes refresh-ci <fixId>
+mushi fixes merge <fixId>
 ```
 
 See [Fix orchestrator → Merging from the console](/admin/fixes#merging-from-the-console)
