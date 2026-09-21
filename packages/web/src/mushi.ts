@@ -190,12 +190,17 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     sdkVersion: MUSHI_SDK_VERSION,
   });
 
-  // Session tracking — opt-out via trackSessions:false in MushiConfig
-  if ((bootstrapConfig as unknown as Record<string, unknown>)['trackSessions'] !== false) {
+  // Session tracking — opt-out via trackSessions:false in MushiConfig. It
+  // passes the same analytics gate as Mushi.track() (enabled, DNT / GPC,
+  // bots, consent), so under consent:'required' nothing is sent until
+  // setConsent('granted'), whichever tracker initialises first.
+  if (bootstrapConfig.trackSessions !== false) {
     initSessionTracker({
       client: apiClient,
       sdkVersion: MUSHI_SDK_VERSION,
       reporterTokenHash: getReporterToken(bootstrapConfig.projectId) ?? null,
+      projectId: bootstrapConfig.projectId,
+      analytics: bootstrapConfig.analytics,
     });
   }
 

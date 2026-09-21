@@ -31,8 +31,17 @@ export interface MushiConfig {
    * and keyed on the same opaque per-project reporter token as sessions;
    * honours DNT / GPC. Set `enabled: false` to opt out, or
    * `consent: 'required'` to buffer until `setConsent('granted')`.
+   * Session tracking passes the same gate: `enabled`, DNT / GPC, bot
+   * exclusion and consent all apply to it too.
    */
   analytics?: MushiAnalyticsConfig;
+  /**
+   * Session lifecycle tracking for the console's Activity and Users views
+   * (session start / heartbeat / end, page views). Default true. Runs only
+   * while the `analytics` gate allows tracking; `false` turns it off even
+   * then.
+   */
+  trackSessions?: boolean;
 
   sentry?: MushiSentryConfig;
   widget?: MushiWidgetConfig;
@@ -1802,6 +1811,13 @@ export interface MushiAnalyticsConfig {
   sampleRate?: number;
   /** Honour navigator.doNotTrack / globalPrivacyControl (default true). */
   respectDoNotTrack?: boolean;
+  /**
+   * Skip tracking in WebDriver-controlled browsers (Playwright, Puppeteer,
+   * Selenium), headless Chrome, Lighthouse and crawler user agents, so test
+   * runs and bots never count as users (default true). Set false to exercise
+   * analytics from an end-to-end test.
+   */
+  excludeBots?: boolean;
   /** Emit `pageview` on history navigation (default false; sessions already record page views). */
   autoPageviews?: boolean;
   /** Flush cadence in ms (default 5000, min 1000). */

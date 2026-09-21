@@ -36,6 +36,18 @@ function setDnt(value: string | undefined) {
   Object.defineProperty(navigator, 'doNotTrack', { value, configurable: true });
 }
 
+function setNavigator(prop: 'webdriver' | 'userAgent' | 'globalPrivacyControl', value: unknown) {
+  Object.defineProperty(navigator, prop, { value, configurable: true });
+}
+
+const JSDOM_UA = navigator.userAgent;
+
+function spilledNames(projectId = 'p1'): string[] {
+  const raw = localStorage.getItem('mushi_events_spill_' + projectId);
+  if (!raw) return [];
+  return (JSON.parse(raw) as { events: Array<{ name: string }> }).events.map((e) => e.name);
+}
+
 // ─── Taxonomy ────────────────────────────────────────────────────────────────
 
 describe('analytics-taxonomy', () => {
@@ -98,6 +110,9 @@ describe('event-tracker', () => {
   afterEach(() => {
     vi.useRealTimers();
     setDnt(undefined);
+    setNavigator('webdriver', false);
+    setNavigator('userAgent', JSDOM_UA);
+    setNavigator('globalPrivacyControl', undefined);
   });
 
   it('queues an event and flushes on the interval with surface, route and anon id', async () => {
@@ -261,5 +276,188 @@ describe('event-tracker', () => {
     await expect(vi.advanceTimersByTimeAsync(5_000)).resolves.not.toThrow();
     expect(localStorage.getItem('mushi_events_spill_p1')).toContain('landing_view');
     destroyEventTracker();
+  });
+
+  it('re-spills a replayed batch once when the retry also fails', async () => {
+    const mod = await freshTracker();
+    const failing = makeMockClient(false);
+    mod.initEventTracker({ client: failing, projectId: 'p1', anonId: 'anon-1' });
+    mod.trackEvent('cta_click');
+    await vi.advanceTimersByTimeAsync(5_000);
+    mod.destroyEventTracker();
+
+    const mod2 = await freshTracker();
+    mod2.initEventTracker({ client: failing, projectId: 'p1', anonId: 'anon-1' });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(spilledNames()).toEqual(['cta_click']);
+    mod2.destroyEventTracker();
+  });
+});
+
+// ─── Privacy gate: identify, spill, automation ──────────────────────────────
+
+describe('event-tracker privacy gate', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    setDnt(undefined);
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    setDnt(undefined);
+    setNavigator('webdriver', false);
+    setNavigator('userAgent', JSDOM_UA);
+    setNavigator('globalPrivacyControl', undefined);
+  });
+
+  it("holds identify under consent 'required' and sends it only after a grant", async () => {
+    const mod = await freshTracker();
+    const client = makeMockClient();
+    mod.initEventTracker({ client, projectId: 'p1', anonId: 'anon-1', config: { consent: 'required' } });
+    mod.updateEventIdentity('user-1', { email: 'person@example.com', name: 'Person' });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await mod.flushEvents();
+    expect(client.postProductEvents).not.toHaveBeenCalled();
+
+    mod.setEventConsent('granted');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(client.postProductEvents).toHaveBeenCalledTimes(1);
+    expect(client.payloads[0].user_id).toBe('user-1');
+    expect(client.payloads[0].events[0].name).toBe('identify');
+    mod.destroyEventTracker();
+  });
+
+  it('drops a pending identify when consent is denied', async () => {
+    const mod = await freshTracker();
+    const client = makeMockClient();
+    mod.initEventTracker({ client, projectId: 'p1', anonId: 'anon-1', config: { consent: 'required' } });
+    mod.updateEventIdentity('user-1', { name: 'Person' });
+    mod.setEventConsent('denied');
+    await vi.advanceTimersByTimeAsync(10_000);
+    await mod.flushEvents();
+    expect(client.postProductEvents).not.toHaveBeenCalled();
+    mod.destroyEventTracker();
+  });
+
+  it('never sends identify after a stored denial in implied mode', async () => {
+    localStorage.setItem('mushi_events_consent_p1', 'denied');
+    const mod = await freshTracker();
+    const client = makeMockClient();
+    mod.initEventTracker({ client, projectId: 'p1', anonId: 'anon-1' });
+    mod.updateEventIdentity('user-1', { email: 'person@example.com' });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await mod.flushEvents();
+    expect(client.postProductEvents).not.toHaveBeenCalled();
+    mod.destroyEventTracker();
+  });
+
+  it('never sends identify under Do Not Track or Global Privacy Control', async () => {
+    for (const apply of [() => setDnt('1'), () => setNavigator('globalPrivacyControl', true)]) {
+      apply();
+      const mod = await freshTracker();
+      const client = makeMockClient();
+      mod.initEventTracker({ client, projectId: 'p1', anonId: 'anon-1' });
+      mod.updateEventIdentity('user-1', { email: 'person@example.com' });
+      await vi.advanceTimersByTimeAsync(10_000);
+      await mod.flushEvents();
+      expect(client.postProductEvents).not.toHaveBeenCalled();
+      mod.destroyEventTracker();
+      setDnt(undefined);
+      setNavigator('globalPrivacyControl', undefined);
+    }
+  });
+
+  it('deletes a stored spill instead of replaying it under a stored denial', async () => {
+    localStorage.setItem(
+      'mushi_events_spill_p1',
+      JSON.stringify({ at: Date.now(), events: [{ name: 'cta_click', ts: new Date().toISOString(), properties: {} }] }),
+    );
+    localStorage.setItem('mushi_events_consent_p1', 'denied');
+    const mod = await freshTracker();
+    const client = makeMockClient();
+    mod.initEventTracker({ client, projectId: 'p1', anonId: 'anon-1' });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await mod.flushEvents();
+    expect(client.postProductEvents).not.toHaveBeenCalled();
+    expect(localStorage.getItem('mushi_events_spill_p1')).toBeNull();
+    mod.destroyEventTracker();
+  });
+
+  it('holds a stored spill while consent is pending and replays it on grant', async () => {
+    localStorage.setItem(
+      'mushi_events_spill_p1',
+      JSON.stringify({ at: Date.now(), events: [{ name: 'cta_click', ts: new Date().toISOString(), properties: {} }] }),
+    );
+    const mod = await freshTracker();
+    const client = makeMockClient();
+    mod.initEventTracker({ client, projectId: 'p1', anonId: 'anon-1', config: { consent: 'required' } });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(client.postProductEvents).not.toHaveBeenCalled();
+    expect(spilledNames()).toEqual(['cta_click']);
+
+    mod.setEventConsent('granted');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(client.postProductEvents).toHaveBeenCalledTimes(1);
+    expect(client.payloads[0].events.map((e) => e.name)).toEqual(['cta_click']);
+    mod.destroyEventTracker();
+  });
+
+  it('is inert in WebDriver-controlled and crawler browsers unless excludeBots is false', async () => {
+    setNavigator('webdriver', true);
+    const mod = await freshTracker();
+    const client = makeMockClient();
+    mod.initEventTracker({ client, projectId: 'p1', anonId: 'anon-1' });
+    expect(mod.isEventTrackingActive()).toBe(false);
+    expect(mod.trackEvent('landing_view')).toBe(false);
+    mod.destroyEventTracker();
+
+    setNavigator('webdriver', false);
+    setNavigator('userAgent', 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)');
+    const mod2 = await freshTracker();
+    mod2.initEventTracker({ client, projectId: 'p1', anonId: 'anon-1' });
+    expect(mod2.trackEvent('landing_view')).toBe(false);
+    mod2.destroyEventTracker();
+
+    setNavigator('webdriver', true);
+    const mod3 = await freshTracker();
+    mod3.initEventTracker({ client, projectId: 'p1', anonId: 'anon-1', config: { excludeBots: false } });
+    expect(mod3.trackEvent('landing_view')).toBe(true);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(client.postProductEvents).toHaveBeenCalledTimes(1);
+    mod3.destroyEventTracker();
+  });
+
+  it('persists a choice made on a blocked page under the project key', async () => {
+    setDnt('1');
+    const mod = await freshTracker();
+    mod.initEventTracker({ client: makeMockClient(), projectId: 'p1', anonId: 'anon-1' });
+    mod.setEventConsent('denied');
+    expect(localStorage.getItem('mushi_events_consent_p1')).toBe('denied');
+    mod.destroyEventTracker();
+  });
+});
+
+describe('isAutomatedBrowser', () => {
+  afterEach(() => {
+    setNavigator('webdriver', false);
+    setNavigator('userAgent', JSDOM_UA);
+  });
+
+  it('flags crawlers and headless Chrome but not phones whose model name ends in "bot"', async () => {
+    const { isAutomatedBrowser } = await import('./analytics-gate');
+    const cases: Array<[string, boolean]> = [
+      ['Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/126.0.0.0 Safari/537.36', true],
+      ['Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)', true],
+      ['AdsBot-Google (+http://www.google.com/adsbot.html)', true],
+      ['Mozilla/5.0 (compatible; Baiduspider/2.0)', true],
+      ['Mozilla/5.0 (Linux; Android 10; CUBOT X20 PRO) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36', false],
+      ['Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15', false],
+    ];
+    for (const [ua, expected] of cases) {
+      setNavigator('userAgent', ua);
+      expect(isAutomatedBrowser(), ua).toBe(expected);
+    }
   });
 });
