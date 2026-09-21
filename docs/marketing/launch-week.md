@@ -41,12 +41,12 @@ snippets.md → Reddit).
 - [ ] `npx mushi-mushi` on a fresh Next.js app reaches a first report and diagnosis in under five minutes, screen-recorded.
 - [ ] Both `TODO(loop-video)` slots on the landing show that recording.
 - [ ] `search_mushi_docs` returns zero dead links (curl every URL it emits).
-- [ ] VS Code extension published (`VSCE_PAT` / `OVSX_PAT` + `publish-vscode-extension.yml`) **or** marked "deferred" in `GTM-DISTRIBUTION.md` and not mentioned on HN.
+- [x] VS Code extension published (`VSCE_PAT` / `OVSX_PAT` + `publish-vscode-extension.yml`) **or** marked "deferred" in `GTM-DISTRIBUTION.md` and not mentioned on HN (2026-09-21: deferred, with the reason and the un-defer steps; the Show HN copy in snippets.md does not mention it).
 - [ ] Privacy policy and terms return 200.
 - [ ] `CONTRIBUTING.md` carries the issue SLA (first reply within 24 h on weekdays).
 - [x] `apps/docs/content/launch-week.mdx` tells the truth (2026-09-21).
 - [x] JSON-LD `sameAs` lists only accounts that exist (2026-09-21).
-- [ ] Bluesky queue has no items with a `scheduled_for` in the past.
+- [x] Bluesky queue has no enabled, unposted item with a `scheduled_for` in the past (2026-09-21: the four April items are `disabled` with a `disabled_reason`, and `post-bluesky.mjs` now refuses any item more than three days overdue).
 - [ ] The activation SQL (`plan-gtm.md` §8) returns a number, even if it is zero.
 
 **URL rule:** the Show HN URL is the demo. If the first box is not ticked on
