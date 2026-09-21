@@ -79,7 +79,6 @@
   },
   "files": [
     "dist",
-    "!dist/*.global.js.map",
     "README.md",
     "LICENSE",
     "CONTRIBUTING.md",
