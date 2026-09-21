@@ -63,19 +63,19 @@ export const MUSHI_TAGLINE_LEGACY = {
 }
 
 /**
+ * The promise the product makes about every bug — shared by `oneLiner` below
+ * and by the npm descriptions that scripts/normalize-package-metadata.mjs
+ * composes (which lower-case its first letter), so the two cannot drift.
+ */
+const PROMISE = 'Plain-English diagnosis + a ready fix, in your editor'
+
+/**
  * Primary tagline ladder (v2) — the comprehension layer for AI-built apps.
  * Import and use these on README headers, landing H1, docs landing, npm.
  * The canonical identity lives in /VISION.md (the constitution); this ladder
  * is the compressed propagation of its north-star sentence. See
  * docs/marketing/VOICE.md.
  */
-/**
- * The promise the product makes about every bug — shared verbatim by
- * `oneLiner` below and by the npm descriptions that
- * scripts/normalize-package-metadata.mjs composes, so the two cannot drift.
- */
-const PROMISE = 'Plain-English diagnosis + a ready fix, in your editor'
-
 export const MUSHI_TAGLINE_V2 = {
   /**
    * North star — the full sentence (VISION.md §1.3). Every other field below is
