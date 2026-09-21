@@ -489,6 +489,22 @@ export interface MushiCaptureConfig {
   elementSelector?: boolean;
   replay?: 'sentry' | 'rrweb' | 'lite' | 'off';
   /**
+   * How to load rrweb for `replay: 'rrweb'`. A published SDK cannot import
+   * rrweb itself: its bare `import('rrweb')` is invisible to your bundler, so
+   * rrweb never makes it into your build. Hand the import over and your
+   * bundler code-splits it like any other dynamic import. Install `rrweb`
+   * yourself; the chunk loads only for sessions sampled into replay.
+   *
+   * Without a loader the SDK uses a global `rrweb` (the UMD build from a
+   * script tag) when one exists, and otherwise records lite replay (clicks)
+   * and warns once in the console. Recording masks every input and every
+   * text node.
+   *
+   * @example
+   * capture: { replay: 'rrweb', rrweb: () => import('rrweb') }
+   */
+  rrweb?: () => Promise<{ record?: unknown }>;
+  /**
    * Mushi Mushi v2.1 (whitepaper §6 hybrid mode): passive inventory
    * discovery. When enabled the SDK observes navigations and emits a
    * tiny payload — `(route, title, testids[], outbound api paths[],

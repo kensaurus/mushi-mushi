@@ -476,6 +476,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       const generation = ++replayGeneration;
       void createReplayCapture({
         enabled: true,
+        mode: replayMode,
+        // Read from the host's own init config only: a loader is code, and
+        // the console's runtime config must never be able to supply one.
+        loadRrweb: bootstrapConfig.capture?.rrweb,
         redactSelectors: activeConfig.privacy?.redactSelectors,
       }).then((cap) => {
         // A newer sync (config change / flip to 'off') superseded this create
