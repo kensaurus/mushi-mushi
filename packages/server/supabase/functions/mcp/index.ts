@@ -256,6 +256,36 @@ interface ToolDef {
   handler: ToolHandler
 }
 
+/**
+ * The fix-context slice of a report detail row. The report route composes
+ * `fix_packet` server-side, so get_fix_context and triage_issue read it from
+ * the report — mirrors fixContextOf in packages/mcp/src/server.ts.
+ */
+function fixContextOf(report: Record<string, unknown>): Record<string, unknown> {
+  return {
+    fixPrompt: report.fix_packet ?? null,
+    reproductionSteps: report.reproduction_steps ?? [],
+    component: report.component ?? null,
+    rootCause: (report.stage2_analysis as Record<string, unknown> | null | undefined)?.rootCause ?? null,
+    bugOntologyTags: report.bug_ontology_tags ?? null,
+  }
+}
+
+/** Free text the similarity route can embed for a report, or null when it has none. */
+function similarityQueryOf(report: Record<string, unknown>): string | null {
+  for (const field of ['summary', 'description'] as const) {
+    const value = report[field]
+    if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 2000)
+  }
+  return null
+}
+
+/** Graph node id of the inventory action a report is filed against (get_report_inventory_action). */
+function inventoryActionNodeIdOf(report: Record<string, unknown>): string | null {
+  const anchor = report.inventory_action as { actionNodeId?: unknown } | null | undefined
+  return typeof anchor?.actionNodeId === 'string' && anchor.actionNodeId ? anchor.actionNodeId : null
+}
+
 /** Build a query string, skipping undefined/empty values (events/* tools). */
 function eventsQuery(params: Record<string, string | number | undefined>): string {
   const qs = new URLSearchParams()
@@ -402,10 +432,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
       })
       return {
         report,
-        reproductionSteps: report.reproduction_steps ?? [],
-        component: report.component,
-        rootCause: (report.stage2_analysis as Record<string, unknown> | undefined)?.rootCause,
-        bugOntologyTags: report.bug_ontology_tags,
+        ...fixContextOf(report),
         // The detail endpoint already attaches the inventory anchor when
         // available — surface it at the top so callers can branch on the
         // contract without re-walking the JSON.
@@ -1285,7 +1312,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
   triage_issue: {
     scope: 'mcp:read',
     description:
-      'Read-only orchestration tool that combines report detail, evidence, similar bugs, fix context, blast radius, recent pipeline logs, and recommended next actions into a single triage packet. This is the primary entry point for agent-driven bug investigation.',
+      'Read-only orchestration tool that combines report detail, the reporter thread, similar reports (matched on the report summary), the fix context (paste-ready fix prompt, repro steps, root cause), the blast radius of the inventory action the report is filed against, recent pipeline warnings, and recommended next actions into a single triage packet. partial_errors lists any source that failed; notes lists any source that does not apply. This is the primary entry point for agent-driven bug investigation — call it before dispatch_fix.',
     inputSchema: {
       type: 'object',
       required: ['report_id'],
@@ -1298,29 +1325,63 @@ const BASE_TOOLS: Record<string, ToolDef> = {
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       requireString(args.report_id, 'report_id')
-      const pid = (args.project_id as string | undefined) ?? ctx.projectIdHint
+      const reportId = args.report_id as string
+      const reportPath = `/v1/admin/reports/${encodeURIComponent(reportId)}`
       const includeLogs = args.include_logs !== false
 
-      const [reportRes, timelineRes, similarRes, fixCtxRes, blastRes, logsRes] = await Promise.allSettled([
-        apiCall<Record<string, unknown>>(`/v1/admin/reports/${encodeURIComponent(args.report_id as string)}`, { headers: ctx.authHeaders }),
-        apiCall<Record<string, unknown>>(`/v1/admin/reports/${encodeURIComponent(args.report_id as string)}/timeline`, { headers: ctx.authHeaders }),
-        apiCall<unknown>('/v1/admin/reports/similarity', {
-          method: 'POST',
-          headers: ctx.authHeaders,
-          body: JSON.stringify({ report_id: args.report_id }),
-        }).catch(() => null),
-        pid
-          ? apiCall<unknown>(`/v1/admin/reports/${encodeURIComponent(args.report_id as string)}/fix-context`, { headers: ctx.authHeaders }).catch(() => null)
-          : Promise.resolve(null),
-        pid
-          ? apiCall<unknown>(`/v1/admin/reports/${encodeURIComponent(args.report_id as string)}/blast-radius`, { headers: ctx.authHeaders }).catch(() => null)
-          : Promise.resolve(null),
-        includeLogs && pid
-          ? apiCall<unknown>(`/v1/admin/mcp/logs/${encodeURIComponent(pid)}?limit=20&level=warn`, { headers: ctx.authHeaders }).catch(() => null)
-          : Promise.resolve(null),
+      // Every source is a route that exists, and none swallows its own
+      // failure: a rejection lands in partial_errors instead of posing as
+      // "no data" (the old .catch(() => null) made allSettled see success).
+      const [reportRes, timelineRes] = await Promise.allSettled([
+        apiCall<Record<string, unknown>>(reportPath, { headers: ctx.authHeaders }),
+        apiCall<Record<string, unknown>>(`${reportPath}/timeline`, { headers: ctx.authHeaders }),
       ])
 
       const report = reportRes.status === 'fulfilled' ? reportRes.value : null
+      const pid =
+        (args.project_id as string | undefined) ??
+        ctx.projectIdHint ??
+        (typeof report?.project_id === 'string' ? report.project_id : undefined)
+
+      // Similar bugs, fix context and blast radius are keyed off the report.
+      const notes: string[] = []
+      const similarityQuery = report ? similarityQueryOf(report) : null
+      const actionNodeId = report ? inventoryActionNodeIdOf(report) : null
+      if (report && !similarityQuery) notes.push('similar_reports: the report has no summary or description to match on.')
+      if (report && !actionNodeId) {
+        notes.push(
+          'blast_radius: the report is not filed against an inventory action, so there is no graph node to traverse from. ' +
+            'Use get_knowledge_graph with the component as the seed instead.',
+        )
+      }
+      if (includeLogs && !pid) notes.push('pipeline_logs: no project context — pass project_id to include them.')
+      const [similarRes, blastRes, logsRes] = await Promise.allSettled([
+        similarityQuery
+          ? apiCall<{ results?: Array<{ reportId?: string }> }>('/v1/admin/reports/similarity', {
+              method: 'POST',
+              headers: ctx.authHeaders,
+              body: JSON.stringify({ query: similarityQuery, k: 6, threshold: 0.3, ...(pid ? { projectId: pid } : {}) }),
+            })
+          : Promise.resolve(null),
+        actionNodeId
+          ? apiCall<unknown>(`/v1/admin/graph/blast-radius/${encodeURIComponent(actionNodeId)}`, { headers: ctx.authHeaders })
+          : Promise.resolve(null),
+        includeLogs && pid
+          ? apiCall<unknown>(`/v1/admin/mcp/logs/${encodeURIComponent(pid)}?limit=20&level=warn`, { headers: ctx.authHeaders })
+          : Promise.resolve(null),
+      ])
+
+      const partial_errors: string[] = []
+      for (const [label, res] of [
+        ['report', reportRes],
+        ['timeline', timelineRes],
+        ['similarity', similarRes],
+        ['blast_radius', blastRes],
+        ['pipeline_logs', logsRes],
+      ] as const) {
+        if (res.status === 'rejected') partial_errors.push(`${label}: ${res.reason instanceof Error ? res.reason.message : String(res.reason)}`)
+      }
+
       const severity = report?.severity ?? 'unknown'
       const status = report?.status ?? 'unknown'
 
@@ -1352,9 +1413,15 @@ const BASE_TOOLS: Record<string, ToolDef> = {
 
       return {
         report: report ?? { error: String((reportRes as PromiseRejectedResult).reason) },
+        partial_errors,
+        notes,
         evidence_thread: timelineRes.status === 'fulfilled' ? timelineRes.value : null,
-        similar_reports: similarRes.status === 'fulfilled' ? similarRes.value : null,
-        fix_context: fixCtxRes.status === 'fulfilled' ? fixCtxRes.value : null,
+        // The report is its own nearest neighbour — drop it.
+        similar_reports:
+          similarRes.status === 'fulfilled' && similarRes.value
+            ? (similarRes.value.results ?? []).filter((r) => r.reportId !== reportId).slice(0, 5)
+            : null,
+        fix_context: report ? fixContextOf(report) : null,
         blast_radius: blastRes.status === 'fulfilled' ? blastRes.value : null,
         pipeline_logs: logsRes.status === 'fulfilled' ? logsRes.value : null,
         recommended_actions: actions,
@@ -2116,6 +2183,39 @@ async function handleToolsCall(
 }
 
 /**
+ * Tools whose results carry text neither Mushi nor the operator wrote —
+ * reporter descriptions, console logs, comments, timeline bodies, SDK event
+ * names, or LLM output derived from them. Reports come from a public widget
+ * and these results reach agents that also hold dispatch_fix / merge_fix /
+ * reply_to_reporter, so they are wrapped in data delimiters. Must equal the
+ * `returnsUntrusted` entries of packages/mcp/src/catalog.ts — enforced by
+ * packages/mcp/scripts/check-catalog-sync.mjs.
+ */
+const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
+  'get_recent_reports',
+  'get_report_detail',
+  'get_report_timeline',
+  'search_reports',
+  'get_similar_bugs',
+  'get_fix_context',
+  'get_fix_timeline',
+  'get_blast_radius',
+  'get_knowledge_graph',
+  'run_nl_query',
+  'get_graph_neighborhood',
+  'get_graph_node',
+  'suggest_fix',
+  'get_pipeline_logs',
+  'get_report_evidence',
+  'triage_issue',
+  'triage_next_steps',
+  'query_lessons',
+  'list_lessons',
+  'get_product_events_summary',
+  'get_user_paths',
+])
+
+/**
  * Run a tool handler and shape its outcome as a CallToolResult. Shared by
  * the direct `tools/call` path and the tasks/update confirmation path.
  */
@@ -2142,16 +2242,8 @@ async function invokeToolAsResult(
     // Prompt-injection mitigation: tools that return user-authored or
     // LLM-generated text are wrapped in data delimiters so adversarial
     // instructions inside them cannot override the agent's behaviour.
-    const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
-      'get_report_detail',
-      'get_fix_context',
-      'search_reports',
-      'get_similar_bugs',
-      'run_nl_query',
-      'query_lessons',
-      'list_lessons',
-    ])
-    const text = UNTRUSTED_TOOLS.has(name)
+    // A deprecated alias inherits its successor's treatment.
+    const text = UNTRUSTED_TOOLS.has(DEPRECATED_TOOL_ALIASES[name] ?? name)
       ? wrapUntrustedJson(data, name as string)
       : JSON.stringify(data, null, 2)
     const result: CallToolResult = {

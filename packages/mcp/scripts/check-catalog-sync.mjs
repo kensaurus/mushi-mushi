@@ -13,12 +13,18 @@
  *     added to the canonical, or removed from admin). Tools in the canonical that are
  *     missing from the admin copy are reported as warnings.
  *
+ *  3. The hosted UNTRUSTED_TOOLS set names exactly the catalog tools flagged
+ *     `returnsUntrusted`, so both transports wrap the same results.
+ *
+ *  4. Every /v1/ API path either server (or the hosted manifest) calls is a
+ *     route the api function registers.
+ *
  * Run: `node packages/mcp/scripts/check-catalog-sync.mjs`
  *
  * Exit 0 = clean; Exit 1 = hard failures found.
  */
 
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -185,6 +191,124 @@ if (canonicalNotInAdmin.length > 0 && !adminReexportsCanonical) {
   }
 } else if (adminReexportsCanonical) {
   info('Admin catalog re-exports @mushi-mushi/mcp/catalog (full parity)')
+}
+
+// CHECK 3: prompt-injection wrapping — one source of truth
+// The stdio server wraps from the catalog's `returnsUntrusted` flag; the
+// hosted server keeps its own UNTRUSTED_TOOLS set because the Deno bundle
+// cannot import catalog.ts. The two must name exactly the same tools.
+console.log(`\n── Check 3: Untrusted-output wrapping parity ───────────────────────────────`)
+{
+  const flagged = new Set()
+  let pendingName = null
+  for (const line of canonicalContent.split('\n')) {
+    const nameMatch = line.match(/^ {4}name:\s*'([^']+)'/)
+    if (nameMatch) pendingName = nameMatch[1]
+    if (pendingName && /^ {4}returnsUntrusted:\s*true,/.test(line)) flagged.add(pendingName)
+  }
+  const hostedSetSource = hostedContent.match(/const UNTRUSTED_TOOLS[^=]*=\s*new Set\(\[([\s\S]*?)\]\)/)?.[1]
+  if (!hostedSetSource) {
+    fail('Could not find the UNTRUSTED_TOOLS set in packages/server/supabase/functions/mcp/index.ts')
+  } else {
+    const hostedSet = new Set([...hostedSetSource.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]))
+    for (const name of flagged) {
+      if (!hostedSet.has(name)) fail(`"${name}" has returnsUntrusted in catalog.ts but the hosted UNTRUSTED_TOOLS set does not wrap it`)
+    }
+    for (const name of hostedSet) {
+      if (!flagged.has(name)) fail(`Hosted UNTRUSTED_TOOLS wraps "${name}" but catalog.ts does not flag it returnsUntrusted`)
+    }
+    if (flagged.size > 0 && [...flagged].every((n) => hostedSet.has(n)) && hostedSet.size === flagged.size) {
+      info(`${flagged.size} untrusted-output tools wrapped identically on both transports`)
+    }
+  }
+}
+
+// CHECK 4: every API path a tool calls is a route the api function registers
+// Both servers proxy to the api function; a path with no handler 404s at
+// runtime, and a tool that swallows that failure returns null forever
+// (triage_issue shipped three such calls). Route literals are collected from
+// the api sources directly, which also covers routes registered on a nested
+// router the generated route manifest does not list.
+console.log(`\n── Check 4: Tool API paths resolve to api routes ───────────────────────────`)
+{
+  /** String literals that start with /v1/ — `${…}` interpolations become a wildcard. */
+  function v1Literals(source) {
+    const out = []
+    for (let i = 0; i < source.length; i++) {
+      const quote = source[i]
+      if ((quote !== "'" && quote !== '"' && quote !== '`') || !source.startsWith('/v1/', i + 1)) continue
+      let j = i + 1
+      let text = ''
+      while (j < source.length && source[j] !== quote) {
+        if (quote === '`' && source[j] === '$' && source[j + 1] === '{') {
+          // Skip a (possibly nested) interpolation.
+          let depth = 1
+          j += 2
+          while (j < source.length && depth > 0) {
+            if (source[j] === '{') depth++
+            else if (source[j] === '}') depth--
+            j++
+          }
+          text += '\u0000'
+          continue
+        }
+        text += source[j]
+        j++
+      }
+      out.push(text)
+      i = j
+    }
+    return out
+  }
+  const segmentsOf = (path) => path.split('?')[0].replace(/\/+$/, '').split('/').slice(1)
+
+  const routesDir = resolve(ROOT, 'packages/server/supabase/functions/api')
+  const routeSources = [
+    read('packages/server/supabase/functions/api/index.ts'),
+    ...readdirSync(resolve(routesDir, 'routes'))
+      .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+      .map((f) => readFileSync(resolve(routesDir, 'routes', f), 'utf8')),
+  ]
+  /**
+   * Sub-routers mounted with `parent.route('/v1/admin/pdca', r)` register
+   * relative paths (`r.post('/improve-qa-stories')`). Pair every mount prefix
+   * in a file with every relative route in it — a superset, which is fine for
+   * an existence check.
+   */
+  function mountedRoutes(source) {
+    const prefixes = [...source.matchAll(/\.route\(\s*'(\/v1\/[^']*)'/g)].map((m) => m[1])
+    if (prefixes.length === 0) return []
+    const relative = [...source.matchAll(/\.(?:get|post|put|patch|delete|all)\(\s*'(\/[^']*)'/g)]
+      .map((m) => m[1])
+      .filter((p) => !p.startsWith('/v1/'))
+    return prefixes.flatMap((prefix) => relative.map((rel) => `${prefix}${rel === '/' ? '' : rel}`))
+  }
+  const routePatterns = routeSources
+    .flatMap((source) => [...v1Literals(source), ...mountedRoutes(source)])
+    .filter((p) => !p.includes('\u0000'))
+    .map(segmentsOf)
+
+  const matches = (toolSegs) =>
+    routePatterns.some(
+      (routeSegs) =>
+        routeSegs.length === toolSegs.length &&
+        routeSegs.every((seg, k) => seg === toolSegs[k] || seg.startsWith(':') || toolSegs[k].includes('\u0000')),
+    )
+
+  const toolPaths = [
+    ...v1Literals(read('packages/mcp/src/server.ts')).map((p) => ['packages/mcp/src/server.ts', p]),
+    ...v1Literals(hostedContent).map((p) => ['functions/mcp/index.ts', p]),
+    ...Object.entries(JSON.parse(manifestContent)).map(([name, def]) => [
+      `mcp-hosted-tool-manifest.json#${name}`,
+      def.path.replace(/\{[^}]+\}/g, '\u0000'),
+    ]),
+  ]
+  let resolved = 0
+  for (const [where, path] of toolPaths) {
+    if (matches(segmentsOf(path))) resolved++
+    else fail(`${where}: "${path.replace(/\u0000/g, '{…}')}" matches no route registered under packages/server/supabase/functions/api`)
+  }
+  info(`${resolved} tool API paths resolve to registered api routes`)
 }
 
 // ─── Summary ─────────────────────────────────────────────────────────────────

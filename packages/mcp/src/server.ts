@@ -149,6 +149,47 @@ export class MushiApiError extends Error {
   }
 }
 
+/**
+ * The fix-context slice of a report detail row (GET /v1/admin/reports/:id).
+ * The route composes `fix_packet` server-side, so get_fix_context and
+ * triage_issue both read it from the report instead of a separate route.
+ */
+function fixContextOf(report: Record<string, unknown>): Record<string, unknown> {
+  return {
+    // Paste-ready fix prompt composed server-side by composeFixPacket()
+    // (diagnosis + repro + suggested fix + relevant code + blast radius).
+    // Hand this straight to the editing agent — no second LLM key needed.
+    fixPrompt: report.fix_packet ?? null,
+    reproductionSteps: report.reproduction_steps ?? [],
+    component: report.component ?? null,
+    rootCause: (report.stage2_analysis as Record<string, unknown> | null | undefined)?.rootCause ?? null,
+    bugOntologyTags: report.bug_ontology_tags ?? null,
+  };
+}
+
+/** Free text the similarity route can embed for a report, or null when it has none. */
+function similarityQueryOf(report: Record<string, unknown>): string | null {
+  for (const field of ['summary', 'description'] as const) {
+    const value = report[field];
+    if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 2000);
+  }
+  return null;
+}
+
+/**
+ * Graph node id of the inventory action a report is filed against, as
+ * resolved by the report route's get_report_inventory_action RPC.
+ */
+function inventoryActionNodeIdOf(report: Record<string, unknown>): string | null {
+  const anchor = report.inventory_action as { actionNodeId?: unknown } | null | undefined;
+  return typeof anchor?.actionNodeId === 'string' && anchor.actionNodeId ? anchor.actionNodeId : null;
+}
+
+/** True when a text block was already wrapped by a handler (wrappedJson*). */
+function isWrappedUntrusted(text: string): boolean {
+  return text.startsWith('<mushi-data role="');
+}
+
 export interface MushiServerConfig {
   /** Server version — surfaced in MCP handshake. Read from package.json by boot. */
   version: string;
@@ -622,16 +663,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       const { headers } = await projectScopeHeaders(args.project_id);
       const data = await apiCall(`/v1/admin/reports/${args.reportId}`, { headers });
       // Report bodies contain user-authored text — wrap with anti-injection delimiters.
-      const res = wrappedJsonResult({ report: data }, 'report body');
-      return {
-        ...res,
-        resource_links: [
-          {
-            uri: `project://reports/${args.reportId}`,
-            title: `Report ${args.reportId.slice(0, 8)}…`,
-          },
-        ],
-      };
+      return wrappedJsonResult({ report: data }, 'report body');
     },
   );
 
@@ -745,20 +777,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       });
       // fix_packet, report body, and rootCause are user-authored or LLM-generated
       // free text — wrap with anti-injection delimiters.
-      return wrappedJsonResult(
-        {
-          report,
-          // Paste-ready fix prompt composed server-side by composeFixPacket()
-          // (diagnosis + repro + suggested fix + relevant code + blast radius).
-          // Hand this straight to the editing agent — no second LLM key needed.
-          fixPrompt: report.fix_packet ?? null,
-          reproductionSteps: report.reproduction_steps ?? [],
-          component: report.component,
-          rootCause: (report.stage2_analysis as Record<string, unknown> | undefined)?.rootCause,
-          bugOntologyTags: report.bug_ontology_tags,
-        },
-        'fix context',
-      );
+      return wrappedJsonResult({ report, ...fixContextOf(report) }, 'fix context');
     },
   );
 
@@ -1601,6 +1620,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         severity: z.unknown(),
         category: z.unknown(),
         status: z.unknown(),
+        partial_errors: z.array(z.string()),
+        notes: z.array(z.string()),
         report: z.unknown(),
         reporter_thread: z.unknown().nullable(),
         similar_bugs: z.unknown().nullable(),
@@ -1614,32 +1635,56 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     async (args) => {
       const { projectId: pid, headers } = await projectScopeHeaders(args.project_id);
       const includeLogs = args.include_logs !== false;
+      const reportPath = `/v1/admin/reports/${encodeURIComponent(args.report_id)}`;
 
-      const [reportRes, evidenceRes, similarRes, fixCtxRes, blastRes, logsRes] =
-        await Promise.allSettled([
-          apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.report_id}`, { headers }),
-          apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.report_id}/timeline`, {
-            headers,
-          }),
-          apiCall<unknown>(`/v1/admin/reports/similarity`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ report_id: args.report_id }),
-          }).catch(() => null),
-          apiCall<unknown>(`/v1/admin/reports/${args.report_id}/fix-context`, { headers }).catch(
-            () => null,
-          ),
-          apiCall<unknown>(`/v1/admin/reports/${args.report_id}/blast-radius`, { headers }).catch(
-            () => null,
-          ),
-          includeLogs
-            ? apiCall<unknown>(`/v1/admin/mcp/logs/${pid}?limit=20&level=warn`, { headers }).catch(
-                () => null,
-              )
-            : Promise.resolve(null),
-        ]);
+      // Every source is a route that exists (a guard test resolves each path
+      // against the API route manifest), and none swallows its own failure: a
+      // rejection lands in partial_errors instead of posing as "no data".
+      const [reportRes, evidenceRes, logsRes] = await Promise.allSettled([
+        apiCall<Record<string, unknown>>(reportPath, { headers }),
+        apiCall<Record<string, unknown>>(`${reportPath}/timeline`, { headers }),
+        includeLogs
+          ? apiCall<unknown>(`/v1/admin/mcp/logs/${encodeURIComponent(pid)}?limit=20&level=warn`, {
+              headers,
+            })
+          : Promise.resolve(null),
+      ]);
 
       const report = reportRes.status === 'fulfilled' ? reportRes.value : null;
+
+      // Similar bugs, fix context and blast radius are all keyed off the
+      // report itself, so they wait for it.
+      const notes: string[] = [];
+      const similarityQuery = report ? similarityQueryOf(report) : null;
+      const actionNodeId = report ? inventoryActionNodeIdOf(report) : null;
+      if (report && !similarityQuery) {
+        notes.push('similar_bugs: the report has no summary or description to match on.');
+      }
+      if (report && !actionNodeId) {
+        notes.push(
+          'blast_radius: the report is not filed against an inventory action, so there is no graph node ' +
+            'to traverse from. Use get_knowledge_graph with the component as the seed instead.',
+        );
+      }
+      const [similarRes, blastRes] = await Promise.allSettled([
+        similarityQuery
+          ? apiCall<{ results?: Array<{ reportId?: string }> }>('/v1/admin/reports/similarity', {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ query: similarityQuery, k: 6, threshold: 0.3, projectId: pid }),
+            })
+          : Promise.resolve(null),
+        actionNodeId
+          ? apiCall<unknown>(`/v1/admin/graph/blast-radius/${encodeURIComponent(actionNodeId)}`, {
+              headers,
+            })
+          : Promise.resolve(null),
+      ]);
+      // The report is its own nearest neighbour — drop it.
+      const similarBugs =
+        similarRes.status === 'fulfilled' && similarRes.value
+          ? (similarRes.value.results ?? []).filter((r) => r.reportId !== args.report_id).slice(0, 5)
+          : null;
       const severity = report ? (report as Record<string, unknown>).severity : 'unknown';
       const category = report ? (report as Record<string, unknown>).category : 'unknown';
       const status = report ? (report as Record<string, unknown>).status : 'unknown';
@@ -1720,9 +1765,6 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       if (similarRes.status === 'rejected') {
         partial_errors.push(`similarity: ${String(similarRes.reason)}`);
       }
-      if (fixCtxRes.status === 'rejected') {
-        partial_errors.push(`fix_context: ${String(fixCtxRes.reason)}`);
-      }
       if (blastRes.status === 'rejected') {
         partial_errors.push(`blast_radius: ${String(blastRes.reason)}`);
       }
@@ -1736,27 +1778,31 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         category,
         status,
         partial_errors,
+        notes,
         report:
           reportRes.status === 'fulfilled' ? reportRes.value : { error: String(reportRes.reason) },
         reporter_thread: evidenceRes.status === 'fulfilled' ? evidenceRes.value : null,
-        similar_bugs: similarRes.status === 'fulfilled' ? similarRes.value : null,
-        fix_context: fixCtxRes.status === 'fulfilled' ? fixCtxRes.value : null,
+        similar_bugs: similarBugs,
+        fix_context: report ? fixContextOf(report) : null,
         blast_radius: blastRes.status === 'fulfilled' ? blastRes.value : null,
         recent_logs: logsRes.status === 'fulfilled' ? logsRes.value : null,
         recommended_actions: actions,
         triage_summary: `[${severity}] ${category} — status: ${status}. ${actions.length > 0 ? `Recommended: ${actions[0]?.action}.` : 'No action required.'}`,
       };
       const res = jsonResult(result);
-      // resource_links let MCP clients (Cursor, Claude Desktop) show a
-      // "View report" chip inline — navigates to the canonical resource URI.
+      // A spec resource_link content item lets clients render a "Project
+      // dashboard" chip; it names a resource this server actually serves.
       return {
         ...res,
-        resource_links: [
+        content: [
+          ...res.content,
           {
-            uri: `project://reports/${args.report_id}`,
-            title: `Report ${args.report_id.slice(0, 8)}…`,
+            type: 'resource_link' as const,
+            uri: 'project://dashboard',
+            name: 'project_dashboard',
+            title: 'Project dashboard',
+            mimeType: 'application/json',
           },
-          ...(pid ? [{ uri: `project://dashboard`, title: 'Project dashboard' }] : []),
         ],
       };
     },
@@ -2235,32 +2281,6 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
-    'setup_repo_for_mushi',
-    {
-      title: titleOf('setup_repo_for_mushi'),
-      description: descOf('setup_repo_for_mushi'),
-      annotations: annotationsFor('setup_repo_for_mushi'),
-      inputSchema: z.object({
-        projectId: z.string().optional().describe('Project UUID — defaults to configured project'),
-      }),
-    },
-    async (args) => {
-      const pid = args.projectId ?? projectId;
-      if (!pid)
-        throw new MushiApiError(
-          400,
-          'MISSING_PROJECT',
-          'projectId is required for setup_repo_for_mushi',
-        );
-      const data = await apiCall(`/v1/admin/projects/${pid}/repo/bootstrap`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      });
-      return jsonText(data);
-    },
-  );
-
-  server.registerTool(
     'query_lessons',
     {
       title: titleOf('query_lessons'),
@@ -2562,13 +2582,16 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         'Orchestrators can use this to enumerate work items and pick the next Action to fix.',
     },
     async () => {
-      const path = projectId ? `/v1/admin/inventory/${projectId}` : '/v1/admin/inventory';
+      // There is no project-less inventory route (the old fallback 404'd):
+      // resolve the project the same way project-scoped tools do, which
+      // explains itself when the key spans several projects.
+      const pid = await resolveProjectId(undefined);
       return {
         contents: [
           {
             uri: 'inventory://current',
             mimeType: 'application/json',
-            text: JSON.stringify(await apiCall(path), null, 2),
+            text: JSON.stringify(await apiCall(`/v1/admin/inventory/${encodeURIComponent(pid)}`), null, 2),
           },
         ],
       };
@@ -3816,6 +3839,43 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       if (featureFilter !== 'all' && !toolMatchesFeatures(spec.name, featureFilter)) {
         toolRegistry[spec.name]?.remove();
       }
+    }
+  }
+
+  // ── Untrusted-output wrapping, driven by the catalog ──────────────────────
+  // Every tool whose catalog entry sets `returnsUntrusted` gets its text
+  // content wrapped in data delimiters here, after the SDK handler (and its
+  // outputSchema validation) ran. A handler that returns plain jsonText can
+  // therefore never hand reporter-authored text to an agent unwrapped; the
+  // catalog flag, not each handler's choice of helper, decides. Blocks a
+  // handler already wrapped with a specific role are left as they are.
+  {
+    const untrustedTools = new Set(
+      ALL_TOOL_CATALOG.filter((t) => t.returnsUntrusted).map((t) => t.name),
+    );
+    type LowLevelServer = { _requestHandlers: Map<string, (...a: unknown[]) => unknown> };
+    const llUntrustedServer = (server as unknown as { server: LowLevelServer }).server;
+    const sdkToolsCallHandler = llUntrustedServer?._requestHandlers?.get('tools/call');
+    if (typeof sdkToolsCallHandler === 'function') {
+      llUntrustedServer._requestHandlers.set('tools/call', async (...args: unknown[]) => {
+        const result = await sdkToolsCallHandler(...args);
+        const name = (args[0] as { params?: { name?: string } } | undefined)?.params?.name;
+        if (!name || !untrustedTools.has(name) || result === null || typeof result !== 'object') {
+          return result;
+        }
+        const r = result as { content?: unknown; isError?: boolean; [k: string]: unknown };
+        if (r.isError || !Array.isArray(r.content)) return result;
+        return {
+          ...r,
+          content: r.content.map((block: unknown) => {
+            const b = block as { type?: unknown; text?: unknown };
+            if (b?.type !== 'text' || typeof b.text !== 'string' || isWrappedUntrusted(b.text)) {
+              return block;
+            }
+            return { ...b, text: wrapUntrustedJson(b.text, name) };
+          }),
+        };
+      });
     }
   }
 

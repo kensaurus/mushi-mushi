@@ -332,10 +332,6 @@
     "description": "Override a contributor's tier by tier slug (e.g. \"champion\"), bypassing the normal points-threshold logic entirely. This is an admin escape hatch for manual promotions — normal tier transitions happen automatically via point thresholds instead. Destructive: it is a label-only override that does NOT replay the automatic tier-evaluation path, so any host_credit_payload grant (Stripe perk, badge, etc.) normally tied to reaching that tier via points will NOT fire — confirm with the user whether they also need the perk granted another way. The override persists until another set_tier call changes it; the prior override stays in the end_user_activity audit trail either way, logged as tier_override_manual. Requires mcp:write scope.",
     "scope": "mcp:write"
   },
-  "setup_repo_for_mushi": {
-    "description": "Writes the three Mushi bootstrap files into the current repo root: `.cursorrules` (Cursor evolution-loop coding rules), `.mushi/lessons.json` (initial empty lesson cache), and `MUSHI.md` (one-page project contract for agents). Idempotent — safe to re-run after lessons sync. Requires mcp:write scope. Call this once after connecting the repo; subsequently use `mushi sync-lessons` from CI to keep lessons current.",
-    "scope": "mcp:write"
-  },
   "start_skill_pipeline": {
     "description": "Start a new skill pipeline run for a report. Pass root_skill_slug and optionally report_id. Returns run_id, context_packet (full instructions + report context), and step list. Read the context_packet — it contains skill instructions plus full report context (repro steps, root cause, RAG files). After executing each step, call checkin_pipeline_step. The PM watching the console sees progress live.",
     "scope": "mcp:write",
@@ -383,7 +379,7 @@
     "scope": "mcp:write"
   },
   "triage_issue": {
-    "description": "Read-only combined tool: merges report detail, evidence, similar bugs, fix context, blast radius, and recent pipeline logs for a report into a single structured review packet. Returns a prioritised list of recommended next actions (investigate, dispatch_fix, group_with, dismiss). Equivalent to a Sentry \"Analyze with Seer\" flow grounded in user-felt reports. Pass report_id to kick off review. Call this before dispatch_fix.",
+    "description": "Read-only combined tool: merges report detail, the reporter thread, similar bugs (matched on the report summary), the fix context (paste-ready fix prompt, repro steps, root cause), the blast radius of the inventory action the report is filed against, and recent pipeline warnings into a single structured review packet. Returns the packet plus prioritised recommended_actions, partial_errors for any source that failed, and notes for any source that does not apply (e.g. no blast radius when the report is not anchored to an inventory action). Equivalent to a Sentry \"Analyze with Seer\" flow grounded in user-felt reports. Pass report_id to kick off review. Call this before dispatch_fix.",
     "scope": "mcp:read"
   },
   "triage_next_steps": {

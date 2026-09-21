@@ -69,7 +69,6 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   check_sdk_version: 'setup',
   activation_status: 'setup',
   project_integration_health: 'setup',
-  setup_repo_for_mushi: 'setup',
   get_two_way_comms_health: 'setup',
 
   // fixes
