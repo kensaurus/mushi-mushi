@@ -311,6 +311,30 @@ console.log(`\n── Check 4: Tool API paths resolve to api routes ────
   info(`${resolved} tool API paths resolve to registered api routes`)
 }
 
+// CHECK 5: one feature map for both transports, covering every tool
+// An unmapped tool matches no feature filter, so it would vanish from every
+// lean install; a drifted hosted copy would filter differently from stdio.
+console.log(`\n── Check 5: Feature-group map ──────────────────────────────────────────────`)
+{
+  const stdioGroups = read('packages/mcp/src/feature-groups.ts')
+  const hostedGroups = read('packages/server/supabase/functions/mcp/feature-groups.ts')
+  if (stdioGroups !== hostedGroups) {
+    fail('packages/server/supabase/functions/mcp/feature-groups.ts differs from packages/mcp/src/feature-groups.ts — copy the stdio file over it')
+  }
+  const mapSource = stdioGroups.split('export const TOOL_FEATURE_MAP')[1]?.split('\n}')[0] ?? ''
+  const mapped = new Set([...mapSource.matchAll(/^ {2}([a-z_]+):\s*'[a-z]+',/gm)].map((m) => m[1]))
+  const resourceNames = new Set(
+    [...(canonicalContent.split('export const RESOURCE_CATALOG')[1]?.split('\n];')[0] ?? '').matchAll(/name:\s*'([^']+)'/g)].map((m) => m[1]),
+  )
+  let unmapped = 0
+  for (const { name } of canonicalEntries) {
+    if (resourceNames.has(name) || mapped.has(name)) continue
+    fail(`"${name}" has no TOOL_FEATURE_MAP entry — it would be hidden from every feature-filtered install`)
+    unmapped++
+  }
+  if (unmapped === 0 && stdioGroups === hostedGroups) info(`every tool mapped; stdio and hosted feature maps identical`)
+}
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n── Summary ─────────────────────────────────────────────────────────────────`)
