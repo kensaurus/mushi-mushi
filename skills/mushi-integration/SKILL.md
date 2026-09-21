@@ -35,7 +35,8 @@ Send a real test report through the ingest pipeline:
 mushi test
 ```
 
-Expected: `Test report submitted — id: rep_...`
+Expected: `✓ Test report submitted`, followed by the report's `ID`, its `Status`
+and a `View` link into the console.
 
 ---
 
@@ -47,9 +48,9 @@ Confirm the classifier ran:
 mushi reports list --limit 1
 ```
 
-Expected: the newest report reaches `classified` with a severity and category
-within about 30 seconds. Still `pending` after a minute means classification
-failed — see [`mushi-debug`](../mushi-debug/SKILL.md).
+Expected: the newest report's `STATUS` reaches `classified` and its `SEV`
+column is filled within about 30 seconds. Still `pending` after a minute means
+classification failed — see [`mushi-debug`](../mushi-debug/SKILL.md).
 
 **From your editor (MCP):**
 
@@ -71,15 +72,20 @@ Map user stories from a live URL:
 mushi stories map --url https://your-app.com --wait
 ```
 
-`--wait` polls until the crawl finishes (usually 30–90 s). Expected terminal
-output:
+`--wait` polls every 5 s, for up to about three minutes, until the crawl
+finishes (usually 30–90 s). Expected terminal output:
 
 ```
-✓  Crawled 12 pages
-✓  Claude drafted 8 user stories
-✓  Proposal created: prop_...
-Open in console → Inventory → Discovery → Past proposals
+✓ Crawl started — run id: <run-id>
+  Crawling https://your-app.com with firecrawl…
+  Polling for results…
+......
+✓ Done! 12 pages crawled.
+  Proposal id: <proposal-id>
+  Review in the console: Inventory → Discovery → Past proposals
 ```
+
+A failed crawl prints `✗ Crawl failed: <reason>` and exits non-zero.
 
 **Accept the proposal** in the console (**Inventory → Discovery → Past
 proposals → Accept**). The accepted stories then appear under **Inventory**.
@@ -101,10 +107,14 @@ mushi tdd pending
 Expected output from `gen`:
 
 ```
-✓  Test generated: qa_...
-✓  Draft PR opened: https://github.com/.../pull/...
-   Waiting for approval — run: mushi tdd approve qa_...
+Generating TDD test for story: <story-id>…
+✓ Test generated — qa_story id: <qa-story-id>
+  Approval status: pending_review
+  PR: https://github.com/.../pull/...
 ```
+
+The `PR:` line appears only when a GitHub PR was opened (`--no-pr` skips it).
+Approve with `mushi tdd approve <qa-story-id>`.
 
 **Via MCP:**
 
@@ -129,8 +139,9 @@ Check the result:
 mushi qa runs <qa-story-id>
 ```
 
-Expected: a new run that `passed` or `failed`. A failure is fine here — it
-means the test ran and caught real friction.
+Expected: a new run marked `PASS` or `FAIL` (`PEND` while it is still
+running). A failure is fine here — it means the test ran and caught real
+friction.
 
 **Via MCP:**
 

@@ -64,7 +64,8 @@ agent's side (ingest and fix-dispatch readiness) and names the next action.
 1. Console → **Inventory → Discovery → Recent crawls**, expand the failed run
    and read `error_message`.
 2. Common causes:
-   - No Firecrawl key: **Settings → LLM keys → add a Firecrawl key**.
+   - No Firecrawl key: add one in **Settings → Web crawl**
+     (`/settings?tab=firecrawl`) or with `mushi keys add --provider firecrawl`.
    - The URL is behind a login: use the Browserbase provider and configure
      session cookies.
    - Claude quota exhausted: add a backup Anthropic key (step 6).
@@ -130,15 +131,16 @@ again, open an issue with the proposal id and the time you accepted it.
 ### 9. Pipeline health at a glance
 
 ```bash
-mushi deploy check   # pings each edge function
-mushi status         # project overview, autofix agent, billing warnings
+mushi deploy check     # API /health status and latency
+mushi status           # reports by status and severity, fixes, lessons
+mushi billing status   # plan, diagnoses used against the limit, spend cap
 ```
 
 ## Common error messages
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `No Firecrawl API key configured` | Missing BYOK key | Add one in Settings → LLM keys |
+| `No Firecrawl API key configured` | Missing Firecrawl key | Add one in Settings → Web crawl, or `mushi keys add --provider firecrawl` |
 | `All LLM keys exhausted` | Every Anthropic/OpenAI key hit quota | Add a backup key with `mushi keys add` |
 | `Story not found` in test generation | Story id not in an accepted inventory | Accept the inventory proposal first |
 | `byok_keys_provider_slug_check` | Invalid provider slug | Use one of: anthropic, openai, firecrawl, browserbase, cursor |

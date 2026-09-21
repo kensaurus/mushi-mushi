@@ -161,7 +161,8 @@ MUSHI_BYOK_KEY="$ANTHROPIC_API_KEY" mushi keys add --provider anthropic --label 
 | Reports | `/reports` | The bug queue and each diagnosis |
 | Inventory | `/inventory` | Accept story proposals, review map runs |
 | QA Coverage | `/qa-coverage` | Pending generated tests and run history |
-| Settings → LLM keys | `/settings/llm-keys` | The BYOK key pool |
+| Settings → AI keys | `/settings?tab=byok` | The BYOK key pool (Anthropic, OpenAI) |
+| Settings → Web crawl | `/settings?tab=firecrawl` | The Firecrawl key story mapping uses |
 
 ## Environment variables
 
