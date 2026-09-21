@@ -48,11 +48,13 @@ export const appConfig: ApplicationConfig = {
 }
 ```
 
-  Use the factory providers above rather than `provideMushi()` or
-  `...provideMushiAngular()`. The published package is compiled without
-  Angular's ahead-of-time metadata, so listing `MushiService` as a plain class
-  provider needs the JIT compiler and fails at bootstrap in a production
-  build; `provideMushi()` does not return Angular providers at all.
+  These factory providers work with every release of `@mushi-mushi/angular`.
+  Up to 1.0.2 (the current npm release), do not use `provideMushi()` or
+  `...provideMushiAngular()` instead: the package is compiled without
+  Angular's ahead-of-time metadata, so `provideMushiAngular()`'s class
+  provider for `MushiService` needs the JIT compiler and fails at bootstrap in
+  a production build, and `provideMushi()` does not return Angular providers
+  at all.
 
 Report from a component:
 

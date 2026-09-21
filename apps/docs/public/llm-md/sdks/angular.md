@@ -29,14 +29,15 @@ import { MUSHI_CONFIG, MushiService, MushiErrorHandler } from '@mushi-mushi/angu
 | `MUSHI_CONFIG` | `InjectionToken` holding your project ID and public API key |
 | `MushiService` | Starts the web SDK when constructed in the browser; `report({ description, category, metadata })` and `captureError(error, context)` |
 | `MushiErrorHandler` | An `ErrorHandler` that forwards uncaught errors to `MushiService.captureError` |
-| `provideMushi(config)` | Legacy helper that returns `{ service, errorHandler }` objects — not Angular providers, so do not put it in a `providers` array |
-| `provideMushiAngular(config)` | Returns a class provider for `MushiService`, which needs the JIT compiler — avoid in production builds |
+| `provideMushi(config)` | Up to 1.0.2: returns `{ service, errorHandler }` objects, not Angular providers — do not put it in a `providers` array |
+| `provideMushiAngular(config)` | Up to 1.0.2: lists `MushiService` as a class provider, which needs the JIT compiler — avoid in production builds |
 
 ## Setup (standalone bootstrap)
 
-  Register `MushiService` with `useFactory`, as below. The package ships
-  without Angular's ahead-of-time metadata, so a plain class provider asks for
-  the JIT compiler and fails at bootstrap in a production build.
+  Register `MushiService` with `useFactory`, as below; it works with every
+  release. Up to 1.0.2 (the current npm release) the package ships without
+  Angular's ahead-of-time metadata, so a plain class provider asks for the JIT
+  compiler and fails at bootstrap in a production build.
 
 ```ts
 // main.ts
@@ -76,9 +77,9 @@ export class FeedbackButtonComponent {
 
 ## Identifying users
 
-`MushiService` has no identify method. Use the web SDK instance directly (add
-`@mushi-mushi/web` to your own dependencies first, because pnpm will not
-resolve it through the Angular package):
+`MushiService` in 1.0.2 has no identify method. Use the web SDK instance
+directly (add `@mushi-mushi/web` to your own dependencies first, because pnpm
+will not resolve it through the Angular package):
 
 ```ts
 import { Mushi } from '@mushi-mushi/web'
