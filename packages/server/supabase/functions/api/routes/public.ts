@@ -154,26 +154,43 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   //
   // `t` = `<user_id>.<hmac>` signed by the lifecycle-emails cron with
   // LIFECYCLE_UNSUB_SECRET (_shared/lifecycle-unsubscribe.ts). GET serves
-  // the link in the email footer; POST is the RFC 8058 one-click form mail
-  // clients send to the List-Unsubscribe URL. Both write
-  // lifecycle_email_optout and render a tiny HTML page. Fails closed (400)
-  // when the secret is unset or the token does not verify — never a
-  // redirect, never a JSON blob a mail client would render.
+  // the link in the email footer and only CONFIRMS: it renders a one-button
+  // form and writes nothing, because mail scanners and link previewers fetch
+  // header and body URLs automatically (RFC 8058 §1), and a write on GET
+  // would unsubscribe people who never clicked. POST — the button, or the
+  // RFC 8058 one-click request mail clients send to the List-Unsubscribe URL —
+  // writes lifecycle_email_optout. Fails closed (400) when the secret is
+  // unset or the token does not verify — never a redirect, never a JSON blob
+  // a mail client would render.
   // ============================================================
-  const unsubscribePage = (title: string, body: string) =>
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title></head><body style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:480px;margin:64px auto;padding:0 16px;color:#18181b;line-height:1.5"><h1 style="font-size:20px">${title}</h1><p>${body}</p></body></html>`;
+  const unsubscribePage = (title: string, body: string, formHtml = '') =>
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title></head><body style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:480px;margin:64px auto;padding:0 16px;color:#18181b;line-height:1.5"><h1 style="font-size:20px">${title}</h1><p>${body}</p>${formHtml}</body></html>`;
+  const invalidUnsubscribeLink = (c: Context) =>
+    c.html(
+      unsubscribePage(
+        'This unsubscribe link is not valid',
+        'It may have been cut off by your mail client. You can also turn setup emails off in the Mushi console under Settings.',
+      ),
+      400,
+    );
+  app.get('/v1/public/email/unsubscribe', async (c) => {
+    const secret = unsubscribeSecret();
+    const token = c.req.query('t');
+    const userId = secret ? await verifyUnsubscribeToken(token, secret) : null;
+    if (!userId || !token) return invalidUnsubscribeLink(c);
+    const action = `?t=${encodeURIComponent(token)}`;
+    return c.html(
+      unsubscribePage(
+        'Unsubscribe from setup emails?',
+        'Mushi will stop sending setup tips. Account notices you asked for (usage alerts, team invites) still arrive.',
+        `<form method="post" action="${action}"><button type="submit" style="font:inherit;padding:8px 16px;border-radius:6px;border:1px solid #18181b;background:#18181b;color:#fff;cursor:pointer">Unsubscribe</button></form>`,
+      ),
+    );
+  });
   const unsubscribeHandler = async (c: Context) => {
     const secret = unsubscribeSecret();
     const userId = secret ? await verifyUnsubscribeToken(c.req.query('t'), secret) : null;
-    if (!userId) {
-      return c.html(
-        unsubscribePage(
-          'This unsubscribe link is not valid',
-          'It may have been cut off by your mail client. You can also turn setup emails off in the Mushi console under Settings.',
-        ),
-        400,
-      );
-    }
+    if (!userId) return invalidUnsubscribeLink(c);
     const db = getServiceClient();
     const { error } = await db
       .from('lifecycle_email_optout')
@@ -189,7 +206,6 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       ),
     );
   };
-  app.get('/v1/public/email/unsubscribe', unsubscribeHandler);
   app.post('/v1/public/email/unsubscribe', unsubscribeHandler);
 
   app.get('/v1/sdk/latest-version', async (c) => {

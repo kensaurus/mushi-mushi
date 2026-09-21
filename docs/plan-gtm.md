@@ -299,7 +299,7 @@ Decision on the demo: it stays **secondary**. `/connect` installs a read-only MC
 | day-7 stalled | 7–8 d, 0 reports | "What got in the way?" one-question reply email | `activated` |
 | day-7 activated | 7–8 d, ≥ 1 report, no `mcp_setup_done` | "Pull the fix into Cursor" | `mcp_setup_done` |
 
-All four are account-service emails; day-2/day-7 carry `List-Unsubscribe` + signed link `GET /v1/public/email/unsubscribe?t=` (HMAC of user_id with `LIFECYCLE_UNSUB_SECRET`) writing `lifecycle_email_optout`; toggle in `/settings` notifications. No marketing list, no pixels.
+All four are account-service emails; day-2/day-7 carry `List-Unsubscribe` + signed link `/v1/public/email/unsubscribe?t=` (HMAC of user_id with `LIFECYCLE_UNSUB_SECRET`): GET only confirms (mail scanners prefetch links), POST — the button or the RFC 8058 one-click request — writes `lifecycle_email_optout`; toggle in `/settings` notifications. No marketing list, no pixels.
 
 ### 4. Trust pages
 
