@@ -9,6 +9,12 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+// Every test re-imports ./replay — and the real rrweb, about 1 MB — through
+// vi.resetModules(). On a loaded runner that cold import alone can pass the
+// 5 s default; the timed-out test then warns late, inside the next test's
+// console spy, which is why a timeout here showed up as "warn called twice".
+vi.setConfig({ testTimeout: 30_000 });
+
 async function freshReplay() {
   vi.resetModules();
   return import('./replay');
