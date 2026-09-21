@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/inventory
 
 ---
 title: 'User stories · Inventory'
+description: The User stories page manages your inventory.yaml — every page, action and story your app should have — and shows which of them the gates cover.
 ---
 
 # User stories · Inventory

@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/compare/posthog-session-replay-vs-mu
 
 ---
 title: PostHog session replay vs Mushi Mushi
-description: PostHog session replay and error tracking vs Mushi Mushi in 2026 — every session recorded versus the one where a user said it was broken, the free tiers, and why most teams run both.
+description: PostHog session replay vs Mushi Mushi in 2026 — every session recorded versus the one a user flagged as broken, free tiers, and why teams run both.
 ---
 
 # PostHog session replay vs Mushi Mushi

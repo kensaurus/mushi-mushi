@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/adapters
 
 ---
 title: '@mushi-mushi/adapters'
+description: Turn Sentry, Datadog, Bugsnag and other monitoring webhooks into Mushi reports with @mushi-mushi/adapters, deduped against the same queue as user reports.
 ---
 
 # `@mushi-mushi/adapters`

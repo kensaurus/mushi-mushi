@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/svelte
 
 ---
 title: '@mushi-mushi/svelte'
+description: Reference for @mushi-mushi/svelte — initMushi, getMushi and the SvelteKit error hooks that forward client and server errors to your Mushi queue.
 ---
 
 # `@mushi-mushi/svelte`

@@ -18,6 +18,33 @@ export const DOCS_SITE = MUSHI_CANONICAL_URLS.docs
 /** Social preview card shipped in apps/docs/public/social-preview/. */
 export const OG_CARD_URL = `${DOCS_SITE}/social-preview/og-card.png`
 
+/**
+ * The card's real pixel size. og:image:width/height must describe the file,
+ * not the 1200×630 the platforms recommend — og-card.test.ts reads the PNG
+ * header and fails if the file and these numbers drift apart.
+ */
+export const OG_CARD_WIDTH = 1376
+export const OG_CARD_HEIGHT = 768
+
+/**
+ * Landing `<title>` and meta description. Search results cut titles near 60
+ * characters and descriptions near 155, so both stay inside those limits
+ * (structured-data.test.ts enforces it).
+ */
+export const LANDING_META = {
+  title: 'Mushi Mushi — know why your AI-built app broke',
+  description:
+    'Your AI shipped it. Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.',
+} as const
+
+/** One `openGraph.images` / `twitter.images` entry for the card. */
+export const OG_CARD_IMAGE = {
+  url: OG_CARD_URL,
+  width: OG_CARD_WIDTH,
+  height: OG_CARD_HEIGHT,
+  alt: 'Mushi Mushi — know why your AI-built app broke, with the fix ready',
+} as const
+
 const ORGANIZATION_ID = `${PRODUCT_ROOT}#organization`
 
 /**

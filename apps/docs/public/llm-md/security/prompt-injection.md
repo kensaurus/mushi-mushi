@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/security/prompt-injection
 
 ---
 title: Prompt-injection defence
+description: How Mushi defends its LLM pipeline against prompt injection hidden in user bug reports, and the OWASP LLM01 regression suite that runs on every CI push.
 ---
 
 # Prompt-injection defence

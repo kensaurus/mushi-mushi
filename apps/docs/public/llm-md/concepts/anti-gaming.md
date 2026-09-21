@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/anti-gaming
 
 ---
 title: Anti-gaming & reputation
+description: How Mushi keeps bug reports honest — reporter reputation against spam and point farming, and prompt-fatigue limits so real users are not nagged.
 ---
 
 # Anti-gaming & reputation

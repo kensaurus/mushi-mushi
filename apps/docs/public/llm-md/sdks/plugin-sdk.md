@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/plugin-sdk
 
 ---
 title: '@mushi-mushi/plugin-sdk'
+description: Build a Mushi plugin in TypeScript with @mushi-mushi/plugin-sdk — verify webhook signatures, dedupe deliveries and handle lifecycle events in Express.
 ---
 
 # `@mushi-mushi/plugin-sdk`

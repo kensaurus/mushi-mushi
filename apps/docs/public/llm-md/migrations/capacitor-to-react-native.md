@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/capacitor-to-react-native
 
 ---
 title: 'Migration: Capacitor → React Native'
+description: Port an Ionic or Capacitor app to React Native — a full plan with a Mushi API map and CI/CD recipes for Expo EAS or React Native CLI with Fastlane.
 ---
 
 # Capacitor → React Native
@@ -54,7 +55,7 @@ the Capacitor build and the React Native build land in the same inbox.
 | Capacitor (`Mushi.*`) | React Native | Notes |
 |-----------------------|--------------|-------|
 | `Mushi.configure({ projectId, apiKey })` | `` | Provider replaces the imperative call |
-| `Mushi.report({ description, severity })` | `useMushiReport()(...)` hook | Returns `{ submitting, submit }` |
+| `Mushi.report({ description, category })` | `useMushiReport().submitReport(...)` hook | Returns `{ submitReport }`, which takes `{ description, category }` |
 | `Mushi.showWidget()` | `useMushiWidget().open()` | Same effect |
 | `Mushi.setUser({ id, email })` | `useMushi().setUser(...)` | Same |
 | `Mushi.setMetadata({...})` | `useMushi().setMetadata(...)` | Same |

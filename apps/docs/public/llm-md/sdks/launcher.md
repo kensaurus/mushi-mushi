@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/launcher
 
 ---
 title: 'mushi-mushi (launcher)'
+description: npx mushi-mushi detects your framework, installs the matching @mushi-mushi SDK, writes your project ID and API key to .env.local, and prints the snippet.
 ---
 
 # `mushi-mushi` — the one-command launcher

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/drift
 
 ---
 title: Drift scanner
+description: The Drift scanner compares your live routes and components against the last snapshot to find the pages that a refactor silently broke.
 ---
 
 # Drift scanner

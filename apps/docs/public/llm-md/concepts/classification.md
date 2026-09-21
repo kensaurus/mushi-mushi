@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/classification
 
 ---
 title: How Mushi reads a bug report
+description: How Mushi turns a raw bug report and screenshot into a plain-English diagnosis — the fast filter, the text and vision stages, and what gets stored.
 ---
 
 # How Mushi reads a bug report

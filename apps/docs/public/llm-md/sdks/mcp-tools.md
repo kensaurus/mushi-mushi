@@ -1,12 +1,13 @@
-# MCP tools (generated)
+# MCP tools reference
 
-Source: https://kensaur.us/mushi-mushi/docs/sdks/mcp-tools.generated
+Source: https://kensaur.us/mushi-mushi/docs/sdks/mcp-tools
 
 ---
-title: MCP tools (generated)
+title: MCP tools reference
+description: Every tool, resource and prompt the Mushi MCP server exposes to Cursor, Claude Code and other editors, with its read or write scope, from the catalog.
 ---
 
-# MCP tools (generated)
+# MCP tools reference
 
   Auto-generated from `packages/mcp/src/catalog.ts`. Do not edit by hand — run `pnpm gen:mcp-tools-doc`.
 

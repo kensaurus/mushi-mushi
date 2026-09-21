@@ -9,14 +9,6 @@ description: Run npx mushi-mushi, ship, and turn your first user-reported bug in
 
 # Incident loop
 
-{INCIDENT_LOOP_LEDE}
-
-{/* TODO(loop-video): drop the recorded asset in and uncomment. Path is the
-    canonical slot shared with the README hero + Launch Week thumbnail.
-    Storyboard + capture recipe: docs/marketing/STOREFRONTS.md ("Incident loop GIF").
-
-*/}
-
   **Today:** classification in seconds; fix brief via MCP tools. **Target:** sub-10-second end-to-end diagnosis. MCP needs a Mushi account + project key — not a separate OpenAI/Anthropic key.
 
 ## Prerequisites

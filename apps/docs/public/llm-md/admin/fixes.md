@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/fixes
 
 ---
 title: Fix drafts & PRs
+description: The Fixes page tracks every draft pull request Mushi opened from a bug report, from the moment a fix run starts until the PR is ready or the run fails.
 ---
 
 # Fix drafts & PRs

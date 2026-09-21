@@ -9,8 +9,6 @@ description: Wire Mushi's evolution loop into Cursor with one command — get fi
 
 # Cursor integration
 
-{CURSOR_INTEGRATION_LEDE}
-
 **The three-line setup:**
 
 ```bash

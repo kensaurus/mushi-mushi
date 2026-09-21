@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/settings
 
 ---
 title: Settings
+description: The Settings page holds every project option — notifications, your own LLM keys, widget copy, Slack alerts and developer settings.
 ---
 
 # Settings

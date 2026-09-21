@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/launch-week
 
 ---
 title: Launch Week
-description: How Mushi Mushi launches now — one public post per release (Show HN, then Product Hunt, then the growth loop), the gate each release must pass first, and what we publish afterwards. Corrected 2026-09-21.
+description: How Mushi Mushi launches now — one public post per release (Show HN, then Product Hunt), the gate each release must pass, and what we publish after.
 ---
 
 # Launch Week

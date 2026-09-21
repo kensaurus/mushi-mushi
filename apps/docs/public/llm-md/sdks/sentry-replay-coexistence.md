@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/sentry-replay-coexistence
 
 ---
 title: Sentry Replay coexistence
+description: Run Mushi next to Sentry Session Replay — initialise Sentry first so Mushi attaches the Sentry event and replay IDs to every bug report it sends.
 ---
 
 # Sentry Replay coexistence
@@ -23,7 +24,7 @@ Sentry.init({
 
 Mushi.init({
   projectId: '...',
-  apiKey: 'mush_pk_...',
+  apiKey: 'mushi_...',
   preset: 'production-calm',
   sentry: {
     useReplay: true,

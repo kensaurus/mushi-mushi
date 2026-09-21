@@ -9,8 +9,6 @@ description: Set up the Mushi MCP server with npx mushi-mushi setup — read bug
 
 # MCP server
 
-{MCP_QUICKSTART_LEDE}
-
 **Model Context Protocol (MCP)** is how your editor talks to Mushi tools — reports, fix briefs, and optional dispatch without leaving the chat.
 
 [![Add to Cursor](https://img.shields.io/badge/Add%20to-Cursor-0098FF)](https://kensaur.us/mushi-mushi/docs/connect)
@@ -93,7 +91,7 @@ Add to `.cursor/mcp.json` in your repo root:
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
-        "MUSHI_API_KEY": "mushi_live_..."
+        "MUSHI_API_KEY": "mushi_..."
       }
     }
   }
@@ -119,7 +117,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
-        "MUSHI_API_KEY": "mushi_live_..."
+        "MUSHI_API_KEY": "mushi_..."
       }
     }
   }
@@ -139,7 +137,7 @@ one place a static API key header is the right tool:
     "mushi-hosted": {
       "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
       "headers": {
-        "X-Mushi-Api-Key": "mushi_live_…",
+        "X-Mushi-Api-Key": "mushi_…",
         "X-Mushi-Project-Id": "proj_…"
       }
     }

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/cursor-cloud
 
 ---
 title: Cursor Cloud Agent
+description: Dispatch a Cursor Cloud Agent automatically when a Mushi report qualifies — it investigates, drafts a fix and opens a PR that links back to Mushi.
 ---
 
 # Cursor Cloud Agent plugin

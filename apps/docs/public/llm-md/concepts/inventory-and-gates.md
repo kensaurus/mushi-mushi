@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/inventory-and-gates
 
 ---
 title: 'Inventory and gates (v2)'
+description: Mushi v2's inventory.yaml lists every page, story and action in your app, and five composite gates fail the build when a change breaks that contract.
 ---
 
 # Inventory and gates

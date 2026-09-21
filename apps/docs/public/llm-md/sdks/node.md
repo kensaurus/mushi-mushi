@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/node
 
 ---
 title: '@mushi-mushi/node'
+description: Report server errors from Node with @mushi-mushi/node — Express, Fastify and Hono error handlers that tag each report with route, request ID and user.
 ---
 
 # `@mushi-mushi/node`

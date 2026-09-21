@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/zapier
 
 ---
 title: Zapier
+description: Send every Mushi event to Zapier and on to thousands of apps such as Notion, Google Sheets and HubSpot — Catch Hook setup and event filters.
 ---
 
 # Zapier plugin

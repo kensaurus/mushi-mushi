@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/inventory-auth-runner
 
 ---
 title: '@mushi-mushi/inventory-auth-runner'
+description: "@mushi-mushi/inventory-auth-runner logs in with Playwright from your inventory.yaml auth script so Mushi's crawler can reach pages behind a login."
 ---
 
 # `@mushi-mushi/inventory-auth-runner`

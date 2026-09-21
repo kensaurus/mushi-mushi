@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/building
 
 ---
 title: Building a plugin
+description: Build your own Mushi plugin — an HTTP endpoint that receives HMAC-signed webhook events, verified with @mushi-mushi/plugin-sdk in a few lines.
 ---
 
 # Building a plugin

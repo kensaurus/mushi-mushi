@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/users
 
 ---
 title: Users
+description: The Users page is an operator-only directory of every Mushi account with plan, MRR and churn; other visitors see a not-found page instead.
 ---
 
 # Users

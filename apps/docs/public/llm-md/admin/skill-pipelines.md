@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/skill-pipelines
 
 ---
 title: Skill Pipelines
+description: Skill Pipelines recommend agent skills from the cursor-kenji and skills.sh ecosystem for each classified bug and run them during review in Mushi.
 ---
 
 # Skill Pipelines

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations
 
 ---
 title: Migration guides
+description: Step-by-step guides for moving an app onto Mushi from Sentry, Instabug, Shake, LogRocket, BugHerd or Pendo, or between React, Vue and mobile runtimes.
 ---
 
 # Migration guides

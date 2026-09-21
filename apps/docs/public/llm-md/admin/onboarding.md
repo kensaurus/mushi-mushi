@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/onboarding
 
 ---
 title: Onboarding
+description: Get your first real bug report into Mushi in about 10 minutes with the console onboarding checklist, from new project to classified report.
 ---
 
 # Onboarding

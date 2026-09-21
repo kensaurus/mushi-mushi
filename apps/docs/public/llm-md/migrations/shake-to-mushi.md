@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/shake-to-mushi
 
 ---
 title: 'Shake → Mushi'
+description: Replace the Shake bug-reporting SDK with Mushi and keep the same shake-to-report experience — config mapping, identity, and a cut-over checklist.
 ---
 
 # Shake → Mushi
@@ -111,7 +112,7 @@ Sign in to the Mushi admin console; copy projectId + apiKey.</> },
     { id: 'remove-shake', label: 'Uninstall the Shake SDK', content: {`npm uninstall @shakebugs/react-native-shake @softnoesis/shakebug-js
 # For React Native: cd ios && pod deintegrate && pod install`} },
     { id: 'rotate-key', label: 'Revoke your Shake API key', content: <>In the Shake dashboard, rotate the production key so the now-removed SDK can't accidentally re-attach.</> },
-  ]}
+
 />
 
 ## Feature parity

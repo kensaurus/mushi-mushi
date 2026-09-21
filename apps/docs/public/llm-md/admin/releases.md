@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/releases
 
 ---
 title: Releases
+description: The Releases page drafts a changelog for each version from the fixes that shipped, crediting the users whose reports led to each fix.
 ---
 
 # Releases

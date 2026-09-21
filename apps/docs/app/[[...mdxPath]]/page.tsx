@@ -2,7 +2,7 @@
 
 import { generateStaticParamsFor, importPage } from 'nextra/pages'
 import { useMDXComponents as getMDXComponents } from '../../mdx-components'
-import { DOCS_SITE, PRODUCT_ROOT } from '../../lib/structured-data'
+import { DOCS_SITE, LANDING_META, OG_CARD_IMAGE, PRODUCT_ROOT } from '../../lib/structured-data'
 
 export const generateStaticParams = generateStaticParamsFor('mdxPath')
 
@@ -16,29 +16,23 @@ export async function generateMetadata(props: { params: Promise<{ mdxPath?: stri
   if (!params.mdxPath || params.mdxPath.length === 0) {
     return {
       ...metadata,
-      title: 'Mushi Mushi — know why your AI-built app broke, with the fix ready',
-      description:
-        'Your AI shipped it. Mushi tells you why it broke — a plain-English diagnosis and a ready-to-apply fix, right in your editor. Standalone, open source, Sentry optional.',
+      // `absolute` skips the root layout's '%s · Mushi Mushi' template, which
+      // pushed the landing title past 80 characters.
+      title: { absolute: LANDING_META.title },
+      description: LANDING_META.description,
       openGraph: {
-        title: 'Mushi Mushi — know why your AI-built app broke, with the fix ready',
-        description:
-          'Your AI shipped it. Mushi tells you why it broke — a plain-English diagnosis and a ready-to-apply fix, right in your editor. Standalone, open source, Sentry optional.',
-        url: 'https://kensaur.us/mushi-mushi/',
+        title: LANDING_META.title,
+        description: LANDING_META.description,
+        url: PRODUCT_ROOT,
         siteName: 'Mushi Mushi',
         type: 'website',
-        images: [
-          {
-            url: 'https://kensaur.us/mushi-mushi/docs/social-preview/og-card.png',
-            width: 1200,
-            height: 630,
-          },
-        ],
+        images: [OG_CARD_IMAGE],
       },
       twitter: {
         card: 'summary_large_image',
-        title: 'Mushi Mushi — know why your AI-built app broke, with the fix ready',
-        description:
-          'Plain-English diagnosis + a ready-to-apply fix, right in Cursor. Standalone, open source, Sentry optional.',
+        title: LANDING_META.title,
+        description: LANDING_META.description,
+        images: [OG_CARD_IMAGE.url],
       },
       robots: { index: true, follow: true },
       alternates: {

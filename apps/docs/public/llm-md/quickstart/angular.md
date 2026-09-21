@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/angular
 
 ---
 title: Angular quickstart
+description: Add Mushi to an Angular 17+ app — register the Mushi service and error handler as factory providers so uncaught errors and user bug reports reach your queue.
 ---
 
 # Angular quickstart
@@ -14,16 +15,61 @@ Same loop as [React](/quickstart/react) — swap the install and boot call.
 pnpm add @mushi-mushi/angular
 ```
 
-```ts filename="src/app/app.config.ts"
-import { provideMushi } from '@mushi-mushi/angular'
+Angular CLI does not expose `import.meta.env`, so keep the project ID and the
+public API key in an environment file (`ng generate environments` creates one):
 
-export const appConfig = {
+```ts filename="src/environments/environment.ts"
+export const environment = {
+  mushiProjectId: 'YOUR_PROJECT_ID',
+  mushiApiKey: 'mushi_...', // public report:write key, safe to ship in the bundle
+}
+```
+
+Register Mushi with factory providers:
+
+```ts filename="src/app/app.config.ts"
+import { ErrorHandler, type ApplicationConfig } from '@angular/core'
+import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from '@mushi-mushi/angular'
+import { environment } from '../environments/environment'
+
+const mushiConfig: MushiConfig = {
+  projectId: environment.mushiProjectId,
+  apiKey: environment.mushiApiKey,
+}
+
+export const appConfig: ApplicationConfig = {
   providers: [
-    provideMushi({
-      projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
-      apiKey: import.meta.env.VITE_MUSHI_API_KEY,
-    }),
+    { provide: MUSHI_CONFIG, useValue: mushiConfig },
+    { provide: MushiService, useFactory: (config: MushiConfig) => new MushiService(config), deps: [MUSHI_CONFIG] },
+    // Angular resolves ErrorHandler while bootstrapping, which starts the SDK
+    // and routes uncaught errors to Mushi.
+    { provide: ErrorHandler, useFactory: (mushi: MushiService) => new MushiErrorHandler(mushi), deps: [MushiService] },
   ],
+}
+```
+
+  Use the factory providers above rather than `provideMushi()` or
+  `...provideMushiAngular()`. The published package is compiled without
+  Angular's ahead-of-time metadata, so listing `MushiService` as a plain class
+  provider needs the JIT compiler and fails at bootstrap in a production
+  build; `provideMushi()` does not return Angular providers at all.
+
+Report from a component:
+
+```ts filename="src/app/feedback-button.component.ts"
+import { Component, inject } from '@angular/core'
+import { MushiService } from '@mushi-mushi/angular'
+
+@Component({
+  selector: 'app-feedback-button',
+  template: '<button type="button" (click)="reportIssue()">Report a bug</button>',
+})
+export class FeedbackButtonComponent {
+  private readonly mushi = inject(MushiService)
+
+  async reportIssue() {
+    await this.mushi.report({ description: 'Something feels off on this page', category: 'bug' })
+  }
 }
 ```
 

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/code-health
 
 ---
 title: Code health
+description: The Code health page charts bundle size and oversized files from your CI over time, so you notice an app getting heavier before your users do.
 ---
 
 # Code health

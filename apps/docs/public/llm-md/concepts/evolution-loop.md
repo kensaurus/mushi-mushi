@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/evolution-loop
 
 ---
 title: The evolution loop — how Mushi closes the cycle
-description: A walkthrough of the five stages that turn a user-felt bug into a merged fix and a lesson rule — the feedback loop that makes your software improve without Jira, QA teams, or PM bottlenecks.
+description: The five stages that turn a user-felt bug into a merged fix and a lesson rule — the loop that improves your app without Jira, QA teams or PM bottlenecks.
 ---
 
 # The evolution loop

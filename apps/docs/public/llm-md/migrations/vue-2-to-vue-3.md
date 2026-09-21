@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/vue-2-to-vue-3
 
 ---
 title: 'Vue 2 → Vue 3'
+description: Upgrade a Vue 2 app to Vue 3 and move from the vanilla Mushi web SDK to the @mushi-mushi/vue plugin, with an interactive migration checklist.
 ---
 
 # Vue 2 → Vue 3
@@ -65,7 +66,6 @@ npm install vue@^3
 const credentials = {
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
   apiKey:    import.meta.env.VITE_MUSHI_API_KEY,
-}
 
 const app = createApp(App)
 
@@ -81,12 +81,12 @@ app.mount('#app')`} },
 const mushi = useMushi()
 
 async function reportIssue() {
-  await mushi.submitReport({ description: 'Issue from Vue component' })
-}
+  await mushi?.captureEvent({ description: 'Issue from Vue component' })
+
 `} },
     { id: 'remove-vue2-mushi', label: 'Remove any Vue-2-era Mushi error-handler shims', content: <>If you previously did Vue.config.errorHandler = (err) =&gt; Mushi.captureException(err), delete it. The adapter installs its own app.config.errorHandler that calls Mushi automatically.</> },
     { id: 'verify', label: 'Smoke-test: throw an error, verify it lands as a Mushi report', content: <>Throw inside a Vue lifecycle hook. The adapter forwards it to Mushi as a report tagged with source: vue. Confirm it appears in the admin console.</> },
-  ]}
+
 />
 
 ## Common gotchas

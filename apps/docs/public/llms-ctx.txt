@@ -1,0 +1,751 @@
+# Mushi Mushi — getting-started context
+
+> Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor.
+
+Canonical docs: https://kensaur.us/mushi-mushi/docs
+
+The pages a new user or agent needs first, in full, kept under 50 KB. Every
+other page is linked from `llms.txt` and included in `llms-full.txt`.
+
+---
+
+## Incident loop — bug to fix prompt
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/incident-loop
+
+---
+title: Incident loop — bug to fix prompt
+description: Run npx mushi-mushi, ship, and turn your first user-reported bug into a plain-English diagnosis and a paste-ready fix for Cursor or Claude Code.
+---
+
+# Incident loop
+
+  **Today:** classification in seconds; fix brief via MCP tools. **Target:** sub-10-second end-to-end diagnosis. MCP needs a Mushi account + project key — not a separate OpenAI/Anthropic key.
+
+## Prerequisites
+
+1. A Mushi project + API key ([credentials](/concepts/credentials))
+2. At least one report (SDK capture, test report from `npx mushi-mushi`, or Sentry inbound)
+3. MCP wired into Cursor — [MCP quickstart](/quickstart/mcp) or **Connect & Update → Add to Cursor**
+
+## Step 1 — Capture or pick a report
+
+**New project:**
+
+```bash
+npx mushi-mushi
+# wizard writes .env.local + optional test report
+mushi connect --wait
+```
+
+**Existing report:** open Admin → Reports and copy a report UUID, or ask the agent: *"list recent mushi reports"*.
+
+## Step 2 — Pull fix context
+
+In Cursor, ask:
+
+> Use Mushi MCP: call `get_fix_context` for report `` and summarize the root cause in plain English.
+
+`get_fix_context` returns classification, repro steps, blast radius, and inventory spec context in one payload — plus a **`fixPrompt`**: a paste-ready, agent-ready fix brief composed server-side (diagnosis + reproduction + suggested fix + relevant code hints). No second LLM key required to build it. For most bugs you can paste `fixPrompt` straight into Cursor and skip to [Step 4](#step-4--paste-and-ship); Step 3 below adds blast-radius and similar-bug context when you want a deeper plan.
+
+## Step 3 — Generate the fix prompt
+
+Run the MCP prompt **`summarize_report_for_fix`** with the same report ID, or ask:
+
+> Run the Mushi prompt `summarize_report_for_fix` for report ``. Give me a paste-ready Cursor prompt to fix it.
+
+The prompt orchestrates `get_fix_context`, `get_blast_radius`, and `get_similar_bugs` into a structured fix plan.
+
+## Step 4 — Paste and ship
+
+Copy the agent's output into a new Cursor chat (or continue in the same thread) and ask it to implement the fix. Optionally dispatch a draft PR later via `dispatch_fix` when GitHub is linked.
+
+## Troubleshooting
+
+## See also
+
+- [MCP server quickstart](/quickstart/mcp)
+- [Cursor integration](/integrations/cursor)
+- [Fix orchestrator](/concepts/fix-orchestrator) — optional draft PR dispatch
+
+---
+
+## MCP server for bug fixing in Cursor & Claude Code
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/mcp
+
+---
+title: MCP server for bug fixing in Cursor & Claude Code
+description: Set up the Mushi MCP server with npx mushi-mushi setup — read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code, or Codex.
+---
+
+# MCP server
+
+**Model Context Protocol (MCP)** is how your editor talks to Mushi tools — reports, fix briefs, and optional dispatch without leaving the chat.
+
+[![Add to Cursor](https://img.shields.io/badge/Add%20to-Cursor-0098FF)](https://kensaur.us/mushi-mushi/docs/connect)
+[![Add to VS Code](https://img.shields.io/badge/Add%20to-VS%20Code-007ACC?logo=visualstudiocode&logoColor=white)](https://kensaur.us/mushi-mushi/docs/connect)
+[![Try the demo — no signup](https://img.shields.io/badge/Try%20the%20demo-no%20signup-E34234)](https://kensaur.us/mushi-mushi/docs/connect)
+
+  [Connect page](https://kensaur.us/mushi-mushi/docs/connect) — pick your client
+  and install in one click, or try the read-only demo with no signup. Terminal
+  one-liner below if you prefer the CLI.
+
+## OAuth login (recommended — no keys to copy)
+
+The hosted MCP endpoint speaks the standard MCP OAuth flow (authorization
+code + PKCE), so clients that support MCP login connect with **zero manual
+credentials**:
+
+```bash
+# Claude Code
+claude mcp add --transport http mushi "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp"
+claude mcp login mushi   # or run /mcp inside a session and pick "mushi"
+```
+
+Your browser opens the console consent page: sign in, pick the project to
+connect, and click **Approve**. That mints a project API key (label
+`mcp-oauth`) which the client stores for you — revoke it any time from
+**Projects → Keys**. Cursor and VS Code follow the same flow when you add the
+hosted URL as a remote MCP server; do **not** configure an `Authorization`
+header if you want the login flow — a static header tells the client that
+OAuth isn't needed.
+
+## One-liner setup (recommended)
+
+```bash
+npx mushi-mushi setup --ide cursor
+# or: npx mushi-mushi setup --ide claude
+```
+
+For Cursor and Claude Code this writes the **hosted MCP URL with OAuth login**
+by default — no API key lands in your repo, the entry is safe to commit and
+share with your team, and each teammate signs in from the IDE on first use.
+Pass `--stdio` (or `--ci` in headless environments) for the previous local
+subprocess entry with a key.
+
+It reads CLI config at **`~/.config/mushi/config.json`** (written by `mushi login`; legacy `~/.mushirc` auto-migrates on first load), detects the IDE config path, and writes the `mcpServers` block for you. Restart the IDE and ask the agent: **"list mushi tools"**.
+
+## Claude Code plugin
+
+One command installs the hosted MCP hookup plus a `mushi-debugger` subagent
+(report triage → fix context → implement → close the loop):
+
+```
+/plugin marketplace add kensaurus/mushi-mushi
+/plugin install mushi-debugger@mushi-mushi
+```
+
+Then: `/mcp` → pick `mushi` → sign in via the browser. Ask Claude to
+"use mushi-debugger to fix the top report".
+
+## Smithery (hosted MCP)
+
+Install from the [Smithery registry](https://smithery.ai/servers/kensaurus/mushi-mushi) with
+Streamable HTTP at `https://kensaur.us/mushi-mushi/hosted-mcp/`. The server card at
+`/.well-known/mcp/server-card.json` lists every tool for directory scanners.
+
+[![smithery badge](https://smithery.ai/badge/kensaurus/mushi-mushi)](https://smithery.ai/servers/kensaurus/mushi-mushi)
+
+  Run `npx mushi-mushi project create` on a brand-new machine to sign up,
+  mint a project, and write `.env.local` + `.cursor/mcp.json` in one flow.
+
+## Manual setup: Cursor
+
+Add to `.cursor/mcp.json` in your repo root:
+
+```json filename=".cursor/mcp.json"
+{
+  "mcpServers": {
+    "mushi": {
+      "command": "npx",
+      "args": ["-y", "@mushi-mushi/mcp@0.21.0"],
+      "env": {
+        "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
+        "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
+        "MUSHI_API_KEY": "mushi_..."
+      }
+    }
+  }
+}
+```
+
+  
+    Mint a key on **Projects → Generate API key** or use **Connect & Update → Add to Cursor**.
+    The `RevealedKeyCard` includes a ready-made `.cursor/mcp.json` snippet.
+  
+
+## Manual setup: Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
+(macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "mushi": {
+      "command": "npx",
+      "args": ["-y", "@mushi-mushi/mcp@0.21.0"],
+      "env": {
+        "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
+        "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
+        "MUSHI_API_KEY": "mushi_..."
+      }
+    }
+  }
+}
+```
+
+## Hosted Streamable HTTP transport (no subprocess)
+
+Skip the local subprocess — use the hosted MCP endpoint when you're
+running OpenAI Agents SDK, ChatGPT Agent, CrewAI, or any remote orchestrator.
+Headless orchestrators can't drive the browser OAuth flow, so this is the
+one place a static API key header is the right tool:
+
+```json filename=".cursor/mcp.json"
+{
+  "mcpServers": {
+    "mushi-hosted": {
+      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
+      "headers": {
+        "X-Mushi-Api-Key": "mushi_…",
+        "X-Mushi-Project-Id": "proj_…"
+      }
+    }
+  }
+}
+```
+
+## Available tools
+
+| Tool                    | Purpose                                      |
+|-------------------------|----------------------------------------------|
+| `get_recent_reports`    | Filter by status, severity, component        |
+| `get_report_detail`     | Full detail incl. screenshot + classification |
+| `get_fix_context`       | One-shot fix brief — root cause + blast radius + repro |
+| `search_reports`        | Semantic + keyword search across reports     |
+| `dispatch_fix`          | Start the Mushi fix agent for a report       |
+| `triage_next_steps`     | "What should I fix next?" — 5-item plan from the dashboard |
+| `query_knowledge_graph` | Ask "what other reports look like this?"     |
+| `run_nl_query`          | Natural-language → SQL questions about your data |
+
+  The MCP server speaks JSON-RPC 2.0 with `tools/call` semantics, and the
+  agent surface is also discoverable via the
+  [A2A Agent Card](/concepts/architecture#a2a-agent-card) at
+  `/.well-known/agent-card`.
+
+## Cursor rules hook (optional)
+
+After setup, run:
+
+```bash
+npx mushi-mushi setup --ide cursor --with-rules
+```
+
+This writes a `.cursorrules` file that tells Cursor to call `get_fix_context`
+before writing a fix and `submit_fix_result` after — closing the loop from
+inside the editor. Download the template:
+[cursor.cursorrules](/integrations/cursor.cursorrules)
+
+## Smithery registry
+
+Hosted Streamable HTTP endpoint: `https://kensaur.us/mushi-mushi/hosted-mcp/`
+
+Install from the [Smithery server page](https://smithery.ai/servers/kensaurus/mushi-mushi).
+Tool metadata is also published at `/.well-known/mcp/server-card.json` for directory scanners.
+
+[![smithery badge](https://smithery.ai/badge/kensaurus/mushi-mushi)](https://smithery.ai/servers/kensaurus/mushi-mushi)
+
+## Troubleshooting
+
+---
+
+## Quickstart — fix your first bug in 60 seconds
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart
+
+---
+title: Quickstart — fix your first bug in 60 seconds
+description: Install Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.
+---
+
+# Quickstart
+
+Or run the wizard: `npx mushi-mushi` (detects your framework, signs in via browser, writes env vars, optional test report).
+
+## Start here (MCP)
+
+1. [Incident loop](/quickstart/incident-loop) — broken prod → diagnosis → fix in the editor
+2. [MCP server](/quickstart/mcp) — wire Cursor / VS Code / Claude
+
+## Pick your stack
+
+**Web:** [React](/quickstart/react) · [Vue](/quickstart/vue) · [Svelte](/quickstart/svelte) · [Angular](/quickstart/angular) · [Vanilla JS](/quickstart/web)
+
+**Mobile:** [React Native](/quickstart/react-native) · [Capacitor](/quickstart/capacitor) · native previews, installed from the GitHub repo: [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter)
+
+**CLI ↔ console:** [CLI console loop](/quickstart/cli-console-loop)
+
+## How do I install the SDK?
+
+**Option A — wizard (recommended):**
+
+```bash
+npx mushi-mushi
+```
+
+The wizard opens your browser, you click **Approve**, picks or creates a project,
+installs the SDK, and writes `.env.local`.
+
+**Option B — manual:**
+
+See [Project ID & API keys](/concepts/credentials) for env var names per framework.
+
+  The SDK needs only framework-prefixed project id + API key (see
+  [`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example)).
+  The repo's root `.env.example` is for **self-hosting the backend** — you do
+  not need Supabase or an LLM key to use the SDK.
+
+## Troubleshooting
+
+---
+
+## Project ID & API keys
+
+Source: https://kensaur.us/mushi-mushi/docs/concepts/credentials
+
+---
+title: Project ID & API keys
+description: Where to find your Mushi project ID and API key, what the report:write and mcp scopes allow, the one mushi_ key format, and env var names per framework.
+---
+
+# Project ID & API keys
+
+Every SDK, CLI, and MCP call needs a **project ID** plus an **API key**. Both appear after you **create a project** on **Setup → Verify** (API key) or **Projects** (Project ID chip) — not under Settings (BYOK keys are for your own LLM providers).
+
+## API key scopes
+
+Keys are scoped at mint time. Use separate keys for SDK ingest vs IDE/MCP — never give your app's `report:write` key `mcp:write`.
+
+| Scope | Used by | Can do |
+| --- | --- | --- |
+| **`report:write`** | Web/React/RN SDK, CI ingest | Submit bug reports, SDK heartbeat |
+| **`mcp:read`** | Cursor MCP (read-only) | List reports, `get_fix_context`, lessons, docs search |
+| **`mcp:write`** | Cursor MCP (full), CLI fix dispatch | Everything in read + `dispatch_fix`, `merge_fix`, QA triggers |
+
+  MCP brings its own intelligence — you do **not** need a separate OpenAI or Anthropic key for Mushi MCP tools. You still need a Mushi project + MCP-scoped API key.
+
+## Project ID
+
+Your project identifier is a **UUID** assigned at create time:
+
+| Format | Example | Where you see it |
+| --- | --- | --- |
+| **UUID** | `542b34e0-…` | Success panel + Projects page chip — copy immediately after **Create** |
+| **`proj_…` (future)** | `proj_myapp_prod` | Reserved short-form; CLI accepts either shape |
+
+Use the UUID from the success panel for `mushi init --project-id` and SDK env vars.
+
+## API key
+
+Secret used to authenticate ingest and admin API calls. Every key has the same
+format, whichever surface uses it: `mushi_` followed by 32 hex characters
+(for example `mushi_3f9a…`). The console, the CLI and the MCP sign-in all mint
+this one format; if an older guide shows a different prefix, read it as
+`mushi_…`.
+
+| Format | Used by | What tells keys apart |
+| --- | --- | --- |
+| `mushi_…` | Web, React, React Native, Capacitor, native SDKs, Node, CLI, MCP | The **scopes** chosen at mint time (table above), not the prefix |
+
+The SDK key and the MCP key look identical, so label them when you store them.
+An app bundle (web, React Native, Capacitor, native) should carry a
+`report:write`-only key; keep `mcp:*` keys in your editor and CI.
+
+Never commit API keys. The CLI writes SDK keys to `.env.local`, CLI config to **`~/.config/mushi/config.json`** (legacy `~/.mushirc` is auto-migrated on first load), and adds `.cursor/mcp.json` to `.gitignore` when wiring Cursor.
+
+See [`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example) for a copy-paste template.
+
+## API endpoint
+
+Default cloud endpoint (when unset):
+
+```
+https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api
+```
+
+Self-hosted and staging installs override via `apiEndpoint` / `MUSHI_API_ENDPOINT`. The CLI also accepts `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` as an alias.
+
+## Environment variable names
+
+| Stack | Project ID | API key |
+| --- | --- | --- |
+| Vite / Vue / Svelte / Angular / RN | `VITE_MUSHI_PROJECT_ID` | `VITE_MUSHI_API_KEY` |
+| Next.js | `NEXT_PUBLIC_MUSHI_PROJECT_ID` | `NEXT_PUBLIC_MUSHI_API_KEY` |
+| Nuxt | `NUXT_PUBLIC_MUSHI_PROJECT_ID` | `NUXT_PUBLIC_MUSHI_API_KEY` |
+| Node (Express / Fastify / Hono) | `MUSHI_PROJECT_ID` | `MUSHI_API_KEY` |
+| CLI / MCP | `MUSHI_PROJECT_ID` | `MUSHI_API_KEY` |
+
+Run `npx mushi-mushi` to auto-detect your framework and write the correct prefix.
+
+---
+
+## React quickstart
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/react
+
+---
+title: React quickstart
+description: Add the Mushi React SDK in one command — npx mushi-mushi installs the bug-reporting widget, writes env vars, and files your first test report.
+---
+
+# React quickstart
+
+Get a shake-to-report widget into a React app in under five minutes.
+
+  **Coming from Create React App?** Migrate to Vite in an afternoon — see
+  the [CRA → Vite migration guide](/migrations/cra-to-vite). All Mushi React
+  examples below assume Vite + React 19.
+
+## Try it live
+
+## 1. Install
+
+```bash
+pnpm add @mushi-mushi/react
+# or: npm install @mushi-mushi/react
+```
+
+`@mushi-mushi/react` re-exports from `@mushi-mushi/core` and `@mushi-mushi/web`,
+so you only need this one dependency.
+
+## 2. Wrap your app
+
+```tsx filename="src/main.tsx"
+import { MushiProvider } from '@mushi-mushi/react'
+import { App } from './App'
+
+export function Root() {
+  return (
+    <MushiProvider
+      config={{
+        projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+        apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+      }}
+    >
+      <App />
+    </MushiProvider>
+  )
+}
+```
+
+  The web SDK uses your **public** API key (safe to bundle). All sensitive
+  operations are gated server-side by RLS + the gateway. Never ship your
+  service-role key to the browser.
+
+## 3. Trigger reports
+
+Add a hook anywhere in your tree to capture programmatic reports:
+
+```tsx filename="src/components/CrashFallback.tsx"
+import { useMushiSdk } from '@mushi-mushi/react'
+
+export function CrashFallback({ error }: { error: Error }) {
+  const mushi = useMushiSdk()
+  return (
+    <div role="alert">
+      <p>Something broke.</p>
+      <button onClick={() => void mushi?.captureException(error, { severity: 'high' })}>
+        Send a bug report
+      </button>
+    </div>
+  )
+}
+```
+
+`useMushiSdk()` returns `null` until the provider has initialised, hence the
+`?.`. To open the report widget from a button instead, use
+`const { report } = useMushi()` and call `report()`.
+
+Or rely on the built-in widget — no code required. The launcher mounts as
+soon as `` initialises.
+
+## 4. Verify
+
+Open your admin console at [kensaur.us/mushi-mushi/admin](https://kensaur.us/mushi-mushi/admin) (or your self-hosted
+instance) — your first report should appear in the Reports list within a
+second of submission, classified by the LLM pipeline within ~10s.
+
+## Next steps
+
+- [Concepts → Classification pipeline](/concepts/classification)
+- [SDK reference → @mushi-mushi/react](/sdks/react)
+- [Plugins → Receive a webhook in your own service](/plugins/building)
+
+---
+
+## Vanilla JS quickstart
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/web
+
+---
+title: Vanilla JS quickstart
+description: Add Mushi's browser SDK to any site without a framework — install @mushi-mushi/web, call Mushi.init, and file bug reports from your buttons or the widget.
+---
+
+# Vanilla JS quickstart
+
+For non-React apps (or any framework you'd rather drive imperatively).
+
+## Try it live
+
+## 1. Install
+
+```bash
+pnpm add @mushi-mushi/web
+```
+
+## 2. Initialize
+
+```ts filename="src/mushi.ts"
+import { Mushi } from '@mushi-mushi/web'
+
+export const mushi = Mushi.init({
+  projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+  apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+})
+```
+
+## 3. Submit
+
+```ts filename="src/report-button.ts"
+import { mushi } from './mushi'
+
+document.querySelector('#report-bug')?.addEventListener('click', async () => {
+  await mushi.captureEvent({
+    description: 'Login button does nothing on mobile Safari.',
+    severity: 'medium',
+  })
+})
+```
+
+`captureEvent` files the report without opening any UI. To open the widget
+instead, call `mushi.report()`.
+
+The widget launcher mounts automatically on `Mushi.init`. Set
+`widget: { trigger: 'hidden' }` to keep it out of sight and open it only
+from your own buttons.
+
+  See [SDK reference → @mushi-mushi/web](/sdks/web) for the full config
+  surface (PII scrubbing, rate limits, custom triggers, on-device pre-filter).
+
+---
+
+## Pricing — free tier, Pro, and self-host
+
+Source: https://kensaur.us/mushi-mushi/docs/pricing
+
+---
+title: Pricing — free tier, Pro, and self-host
+description: Mushi Mushi pricing — 50 AI bug diagnoses a month free, no card. Open-source Sentry alternative you can self-host for free, or upgrade for teams.
+---
+
+# Pricing
+
+## Plans
+
+  **Annual billing saves two months.** Pay for 10 months, get 12 — about 17% off base fees. Overage is still metered monthly. Enable annual checkout from the Billing page after subscribing, or contact us for Enterprise commits.
+
+  **Overage is capped.** Indie and Pro include a default spend cap. You can lower or raise it in the console. At the cap, Mushi pauses new diagnoses with a graceful message — never a surprise invoice. Email alerts fire at **50%, 80%, and 100%** of your included quota.
+
+  **Free Cloud has a hard stop** — not a soft limit. At 50 diagnoses Mushi stops classifying new reports until the next calendar month. No card, no charge, no bill shock.
+
+## What counts as a diagnosis
+
+One diagnosis = one completed classification pass. Specifically:
+
+- The report passes the fast noise filter (not spam or incomplete junk).
+- It is not a duplicate of an existing group already classified this period.
+- The classifier finishes and writes a plain-English root cause + severity + fix hint.
+
+Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, fix attempts, knowledge-graph writes, and MCP tool calls are **not** counted separately — they are included in the per-diagnosis price.
+
+**What does NOT count:**
+
+- Reports filtered by the fast-filter (noise, spam, incomplete submissions).
+- Reports deduplicated to an existing group (same broken button, same stack trace — they collapse, you only pay once).
+- Inbound adapter events (Sentry alerts, Datadog webhooks) that don't complete a fresh diagnosis.
+- MCP `get_fix_context` calls, fix dispatch, or any read-only operation.
+
+## Pricing estimator
+
+Use the slider below to model your bill. Toggle **Annual** to see the effective monthly base fee. When you hit a tier limit, the estimator suggests the next plan.
+
+## Example bills
+
+Fixed formulas (overage metered on top of base):
+
+```
+Indie:  $15 + max(0, diagnoses − 500) × $0.03   (capped at $50/mo total)
+Pro:    $49 + max(0, diagnoses − 2,000) × $0.025 (capped at $200/mo total)
+```
+
+| Diagnoses / mo | Indie | Pro |
+|---:|---:|---:|
+| 100 | $15.00 | $49.00 |
+| 500 | $15.00 | $49.00 |
+| 1,000 | $30.00 | $49.00 |
+| 2,000 | $45.00 | $49.00 |
+| 3,000 | $50.00 *(cap)* | $74.00 |
+| 5,000 | $50.00 *(cap)* | $124.00 |
+| 8,000 | $50.00 *(cap)* | $199.00 |
+| 10,000 | $50.00 *(cap)* | $200.00 *(cap)* |
+
+A typical vibe-coder project on Indie runs **200–400 diagnoses / month** → **$15–$15** (within included quota).
+
+## Why diagnoses, not events
+
+Sentry meters errors. We meter comprehension — a unit you can actually predict and that maps 1:1 to the value delivered (a plain-English root cause + paste-ready fix). Duplicate errors from the same broken button collapse to one diagnosis. You pay once.
+
+## BYOK and the self-host path
+
+When self-hosting, Mushi uses **your** Anthropic / OpenAI key (BYOK). You pay those vendors directly at list rate; we never mark up tokens. Most teams run the full loop for under $20 / month in LLM costs.
+
+The self-host path is completely free, always will be — [see the guide](/self-hosting).
+
+## Compared to Sentry + Seer
+
+| | Sentry Team + Seer | Mushi Indie |
+|---|---|---|
+| Base plan | $26 / mo | $15 / mo |
+| AI diagnosis | Seer add-on: + $40 / active contributor / mo | Included |
+| Solo dev total | **$66 + / mo** | **$15 / mo** |
+| Catches non-crash friction | Via its User Feedback widget and Session Replay | Yes — shake-to-report with screenshot and console/network tail, then a diagnosis |
+| Bugs in your editor | Sentry MCP server: issues and Seer analysis in Cursor / Claude Code | Mushi MCP server: diagnosis, fix prompt and lessons; no second LLM key |
+
+Sentry prices from [sentry.io/pricing](https://sentry.io/pricing/) and [Sentry's pricing docs](https://docs.sentry.io/pricing/), checked 2026-09-21. Seer is an add-on to the Team, Business or Enterprise plan, billed as its own monthly charge. An active contributor is anyone who opens two or more pull requests in a month to a Seer-enabled repo; the $66 total assumes one of them. Seer is not available in self-hosted Sentry.
+
+Sentry + Seer is strong at code-thrown errors, tracing, breadcrumbs and session replay, and Seer is an AI debugging agent for those issues. Mushi starts from user-felt friction that never triggers an error, ingests Sentry's errors too, and turns each into a plain-English diagnosis and a paste-ready fix prompt in your editor. A diagnosis is an LLM's reading and can be wrong; check it before you merge.
+
+## Frequently asked questions
+
+### What happens when I hit my diagnosis limit?
+
+**Free Cloud:** New plain-English classifications pause until the next calendar month. Reports are still captured.
+
+**Indie / Pro:** You can keep diagnosing into overage until your **spend cap** stops new classification runs. Reports are never dropped.
+
+### When does my quota reset?
+
+Cloud plans reset on your **Stripe billing period** (shown on the Billing page as “Quota resets in N days”). Free Cloud resets on the calendar month (UTC).
+
+### Can I change my spend cap?
+
+Yes. Open **Billing → Spending cap** on your project card. Set any USD cap from $0–100,000 or clear it to use the plan default ($50 Indie, $200 Pro).
+
+### Who receives usage alert emails?
+
+By default, the **project owner**. Override the address under **Usage alert email** on the same card. Alerts fire once per threshold (50%, 80%, 100%) per billing month.
+
+### Is usage per project or per organization?
+
+**Per project.** Each app you connect has its own diagnosis counter and spend cap. Organizations aggregate billing in the console but meter usage per project.
+
+### Can I downgrade mid-cycle?
+
+Downgrades take effect at **period end** via the Stripe portal. Upgrades apply immediately and are pro-rated.
+
+### Do annual plans include overage?
+
+Annual pricing applies to the **base subscription** only. Overage diagnoses are still billed monthly through Stripe Meters at the same per-diagnosis rate.
+
+### How do I estimate before signing up?
+
+Use the interactive estimator above, or run `mushi billing status` after wiring the SDK — it shows diagnoses used, limit, and spend cap for the current period.
+
+## Start free
+
+Prefer the terminal? `npx mushi-mushi` runs the wizard — detect framework, install the SDK, write env vars, connect MCP. See the [incident loop quickstart](/quickstart/incident-loop), or [create your free account in the console](https://kensaur.us/mushi-mushi/admin/signup?src=pricing-text).
+
+---
+
+## @mushi-mushi/mcp
+
+Source: https://kensaur.us/mushi-mushi/docs/sdks/mcp
+
+---
+title: '@mushi-mushi/mcp'
+description: Reference for @mushi-mushi/mcp, the Mushi MCP server for Cursor, Claude Code, VS Code and Windsurf — stdio and hosted HTTP transports, scopes and setup.
+---
+
+# `@mushi-mushi/mcp`
+
+MCP server for Cursor, VS Code, Windsurf, Cline, Claude, Zed, and other MCP
+clients — reports, plain-English reads, and fix briefs in the editor.
+**[→ Connect](/connect)** for a one-click install. Full walkthrough:
+[Quickstart → MCP](/quickstart/mcp).
+
+Speaks **JSON-RPC 2.0** with `tools/call` semantics and supports the
+**SEP-1686 Tasks** envelope so long-running fixes can stream progress back
+into your IDE.
+
+## Two transports
+
+- **stdio (local)** — `npx -y @mushi-mushi/mcp@latest`. The default for
+  Cursor / Claude Desktop / Claude Code / Continue / Cline / Zed /
+  Windsurf. Your client launches the server as a subprocess and pipes
+  JSON-RPC over stdio.
+- **Streamable HTTP (hosted, 2026-05-09 release)** — single endpoint
+  at `/functions/v1/mcp`, dual-era (MCP 2024-11-05 … 2025-11-25 with `initialize`, and the current 2026-07-28 revision with `server/discover`). POST returns
+  `application/json` or `text/event-stream` per content negotiation,
+  GET opens an SSE stream for server-pushed notifications, DELETE
+  terminates the session. Use this when you want to skip the local
+  subprocess (typical for OpenAI Agents SDK, ChatGPT Agent, hosted
+  CrewAI, or any orchestrator that talks remote MCP).
+
+```jsonc
+// .cursor/mcp.json — Streamable HTTP example
+{
+  "mcpServers": {
+    "mushi-mushi-hosted": {
+      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
+      "headers": {
+        "X-Mushi-Api-Key": "mushi_…",
+        "X-Mushi-Project-Id": "proj_…"
+      }
+    }
+  }
+}
+```
+
+Auth on both transports is the same dual-mode (API key with
+`mcp:read|write` OR JWT) used everywhere on `/v1/admin/*`.
+
+## Spec traceability for `dispatch_fix`
+
+The `dispatch_fix` tool now accepts `inventoryActionNodeId` so callers
+that already know the inventory `Action` they want repaired can pin the
+fix directly. The complementary `get_fix_context` tool surfaces the
+linked Action (with `expected_outcome`) so an external orchestrator can
+read the contract before drafting a fix.
+
+```jsonc
+// dispatch_fix tool inputSchema (excerpt)
+{
+  "type": "object",
+  "required": ["reportId"],
+  "properties": {
+    "reportId": { "type": "string" },
+    "projectId": { "type": "string" },
+    "inventoryActionNodeId": { "type": "string" }
+  }
+}
+```
+
+See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
+on npm for the full **76-tool** catalog and
+[Connecting your orchestrator](/concepts/orchestrator-interop) for the
+non-MCP surfaces (REST, A2A, AG-UI SSE).
+
+Discoverable via the [A2A Agent Card](/concepts/architecture#a2a-agent-card).

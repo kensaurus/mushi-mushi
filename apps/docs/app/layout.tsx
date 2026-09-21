@@ -13,7 +13,7 @@ import changelog from '../data/changelog.json'
 import { JsonLd } from '../components/JsonLd'
 import {
   DOCS_SITE,
-  OG_CARD_URL,
+  OG_CARD_IMAGE,
   ORGANIZATION_JSONLD,
   WEBSITE_JSONLD,
 } from '../lib/structured-data'
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     // OG_CARD_URL is fully absolute — a root-relative URL here gets
     // metadataBase.pathname joined on and double-prefixes /mushi-mushi
     // (GSC-visible 404 on every docs page's social preview).
-    images: [{ url: OG_CARD_URL, width: 1200, height: 630 }],
+    images: [OG_CARD_IMAGE],
   },
   robots: { index: true, follow: true },
   // Fully-absolute asset URLs: Next joins metadataBase.pathname onto
@@ -49,9 +49,12 @@ export const metadata: Metadata = {
     ],
     apple: `${DOCS_SITE}/apple-touch-icon.png`,
   },
+  // No `site`: the @mushimushi_dev handle was never registered (see the
+  // sameAs note in lib/structured-data.ts), and naming an account someone
+  // else can claim is worse than naming none.
   twitter: {
     card: 'summary_large_image',
-    site: '@mushimushi_dev',
+    images: [OG_CARD_IMAGE.url],
   },
 }
 

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/anomalies
 
 ---
 title: Anomaly detection
+description: The Anomaly detection page runs statistical detectors over the metrics you send and can file a report in your queue when one behaves unexpectedly.
 ---
 
 # Anomaly detection

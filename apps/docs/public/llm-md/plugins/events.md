@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/events
 
 ---
 title: Webhook events
+description: Reference for every webhook event Mushi plugins receive — the shared envelope, each event's payload, and how to subscribe to only the events you need.
 ---
 
 # Webhook events

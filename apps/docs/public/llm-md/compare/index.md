@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/compare
 
 ---
 title: Compare
-description: Honest, dated comparisons of Mushi Mushi with Sentry, Jam and PostHog session replay, plus a Sentry-alternatives table for solo founders. Every number links to the page it was read from.
+description: Honest, dated comparisons of Mushi Mushi with Sentry, Jam and PostHog, plus Sentry alternatives for solo founders. Every number links to its source.
 ---
 
 # Compare Mushi Mushi with the tools you already know

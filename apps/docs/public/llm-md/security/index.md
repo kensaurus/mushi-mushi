@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/security
 
 ---
 title: Security & compliance
-description: How Mushi Mushi protects bug-report data — residency, bring-your-own keys and storage, retention sweeps, nightly RLS coverage, prompt-injection defence, SOC 2 readiness, status page, and how to report a vulnerability.
+description: How Mushi Mushi protects bug-report data — residency, your own keys and storage, retention sweeps, RLS coverage, prompt-injection defence and SOC 2.
 ---
 
 # Security & compliance

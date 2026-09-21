@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/blog/nine-signups-what-the-data-said
 
 ---
 title: "I shipped a bug tool for 5 months and got 9 signups. Here's what the data said."
-description: Five months after going public, Mushi Mushi had 30 npm packages, an MCP server in every registry, and nine signups. This is what the database, GitHub and the deploy config said when I finally looked, and what changed.
+description: Five months after launch, Mushi Mushi had 30 npm packages, an MCP server in every registry and nine signups. What the data said, and what changed.
 date: 2026-09-21
 ---
 
