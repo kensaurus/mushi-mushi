@@ -91,7 +91,7 @@ var MOVED = {
     '/mushi-mushi/docs/llm-md/sdks/mcp-tools.md',
 };
 var ASSET_EXT =
-  /\.(?:html?|m?js|cjs|css|map|json|txt|xml|md|svg|png|jpe?g|webp|avif|gif|ico|woff2?|ttf|otf|webmanifest|pdf|wasm|mp4|webm|zip|t?gz|ya?ml|cursorrules)$/i;
+  /\.(?:html?|m?js|cjs|css|map|json|txt|xml|md|svg|png|jpe?g|webp|avif|gif|ico|woff2?|ttf|otf|webmanifest|pdf|wasm|mp4|webm|zip|t?gz|ya?ml|cursorrules|pagefind|pf_(?:meta|index|fragment|filter))$/i;
 
 // CloudFront's `request.querystring` is a map of `{ key: { value } }`, not a
 // pre-encoded string — naively concatenating it into a URL yields the literal

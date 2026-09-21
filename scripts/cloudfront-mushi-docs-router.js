@@ -46,9 +46,12 @@ var MOVED = {
 
 // Extensions the static export and public/ actually serve. Anything else
 // after the last dot is part of a page slug and gets `.html` appended.
+// `pagefind` and `pf_*` are the docs search index that `pagefind --site out`
+// writes to _pagefind/ (wasm.en.pagefind, *.pf_meta, *.pf_index,
+// *.pf_fragment, *.pf_filter); appending `.html` to them 404s and search dies.
 // Mirrored in cloudfront-mushi-spa-router.js.
 var ASSET_EXT =
-  /\.(?:html?|m?js|cjs|css|map|json|txt|xml|md|svg|png|jpe?g|webp|avif|gif|ico|woff2?|ttf|otf|webmanifest|pdf|wasm|mp4|webm|zip|t?gz|ya?ml|cursorrules)$/i;
+  /\.(?:html?|m?js|cjs|css|map|json|txt|xml|md|svg|png|jpe?g|webp|avif|gif|ico|woff2?|ttf|otf|webmanifest|pdf|wasm|mp4|webm|zip|t?gz|ya?ml|cursorrules|pagefind|pf_(?:meta|index|fragment|filter))$/i;
 
 // CloudFront exposes querystring as { key: { value } }, not a
 // pre-encoded string — naively concatenating it into a URL yields the literal

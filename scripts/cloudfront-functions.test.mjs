@@ -490,6 +490,12 @@ describe('cloudfront-mushi-docs-router', () => {
     '/mushi-mushi/docs/brand/logo-mark.svg',
     '/mushi-mushi/docs/integrations/cursor.cursorrules',
     '/mushi-mushi/docs/version.json',
+    // Docs search index written by `pagefind --site out --output-subdir _pagefind`.
+    '/mushi-mushi/docs/_pagefind/wasm.en.pagefind',
+    '/mushi-mushi/docs/_pagefind/pagefind.en_d42915f240.pf_meta',
+    '/mushi-mushi/docs/_pagefind/index/en_1a2b3c4.pf_index',
+    '/mushi-mushi/docs/_pagefind/fragment/en_1a2b3c4.pf_fragment',
+    '/mushi-mushi/docs/_pagefind/filter/en_1a2b3c4.pf_filter',
   ]) {
     it(`passes asset ${asset.split('/').pop()} through unchanged`, () => {
       const out = docs(req(asset));
@@ -568,6 +574,24 @@ describe('dotted slugs under /mushi-mushi/* (spa-router, apex)', () => {
   it('spa-router appends .html to a dotted docs slug', () => {
     const out = spa(req('/mushi-mushi/docs/blog/release-1.28.0'));
     assert.equal(out.uri, '/mushi-mushi/docs/blog/release-1.28.0.html');
+  });
+
+  it('spa-router passes the docs search index through', () => {
+    for (const uri of [
+      '/mushi-mushi/docs/_pagefind/wasm.en.pagefind',
+      '/mushi-mushi/docs/_pagefind/pagefind.en_d42915f240.pf_meta',
+      '/mushi-mushi/docs/_pagefind/fragment/en_1a2b3c4.pf_fragment',
+    ]) {
+      assert.equal(spa(req(uri)).uri, uri);
+    }
+  });
+
+  it('spa-router and docs-router share one asset-extension list', () => {
+    const extOf = (file) =>
+      readFileSync(join(__dirname, file), 'utf8').match(/var ASSET_EXT =\s*(\/.+\/i);/)?.[1];
+    const docsExt = extOf('cloudfront-mushi-docs-router.js');
+    assert.ok(docsExt, 'ASSET_EXT not found in the docs router');
+    assert.equal(extOf('cloudfront-mushi-spa-router.js'), docsExt);
   });
 
   it('spa-router still passes admin build assets through', () => {
