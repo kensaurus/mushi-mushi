@@ -15,9 +15,11 @@
 //        a. project_retention_policies.reports_retention_days (explicit
 //           per-tenant override; SOC 2 customers set this).
 //        b. pricing_plans.retention_days for the active subscription
-//           (the implicit plan-level promise).
-//        c. Falls back to the Hobby default (7 days) when the project
-//           has no active subscription at all.
+//           (the implicit plan-level promise), then for the
+//           organization's own plan_id.
+//        c. Falls back to the free window when neither exists.
+//      The resolution lives in _shared/retention-policy.ts so the
+//      console's retention-status endpoint shows the same window.
 //      Legal-hold rows in project_retention_policies are skipped — the
 //      legal_hold flag means "do not delete, regardless of plan".
 //   2. Deletes `reports` rows older than the cutoff in batches of 1000.
@@ -43,7 +45,8 @@ import { log } from '../_shared/logger.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { listPlans, resolvePlanFromSubscription, type PricingPlan } from '../_shared/plans.ts'
+import { listPlans, type PricingPlan } from '../_shared/plans.ts'
+import { resolveProjectRetention } from '../_shared/retention-policy.ts'
 
 // Ambient `Deno` so the file type-checks under both Deno (real Edge Function
 // runtime) and Node/Vitest (the unit tests for `deleteOldReportsBatch`).
@@ -58,7 +61,6 @@ declare const Deno: {
 const rlog = log.child('retention-sweep')
 
 const BATCH_SIZE = 1000
-const HOBBY_FALLBACK_DAYS = 7
 
 interface ProjectRow {
   id: string
@@ -66,18 +68,6 @@ interface ProjectRow {
 
 interface ReportIdRow {
   id: string
-}
-
-interface SubscriptionRow {
-  project_id: string
-  status: string
-  plan_id: string | null
-}
-
-interface RetentionPolicyRow {
-  project_id: string
-  reports_retention_days: number
-  legal_hold: boolean
 }
 
 interface SweepStat {
@@ -129,56 +119,6 @@ const handler = async (req: Request): Promise<Response> => {
     })
     await cron.fail(err)
     throw err
-  }
-}
-
-// Exported so the GET /v1/admin/retention-status endpoint can reuse the
-// same plan-resolution logic when computing "what would the next sweep
-// delete?" without duplicating the precedence rules.
-export async function resolveProjectRetention(
-  db: ReturnType<typeof getServiceClient>,
-  projectId: string,
-): Promise<{ retention_days: number; plan_id: string; source: SweepStat['source']; legal_hold: boolean }> {
-  const { data: policy } = await db
-    .from('project_retention_policies')
-    .select('project_id, reports_retention_days, legal_hold')
-    .eq('project_id', projectId)
-    .maybeSingle<RetentionPolicyRow>()
-
-  if (policy?.legal_hold) {
-    return {
-      retention_days: policy.reports_retention_days ?? HOBBY_FALLBACK_DAYS,
-      plan_id: 'legal_hold',
-      source: 'override',
-      legal_hold: true,
-    }
-  }
-
-  if (policy && policy.reports_retention_days) {
-    return {
-      retention_days: policy.reports_retention_days,
-      plan_id: 'override',
-      source: 'override',
-      legal_hold: false,
-    }
-  }
-
-  const { data: sub } = await db
-    .from('billing_subscriptions')
-    .select('project_id, status, plan_id')
-    .eq('project_id', projectId)
-    .in('status', ['active', 'trialing', 'past_due'])
-    .order('current_period_end', { ascending: false })
-    .limit(1)
-    .maybeSingle<SubscriptionRow>()
-
-  const plan = await resolvePlanFromSubscription(sub)
-
-  return {
-    retention_days: plan.retention_days ?? HOBBY_FALLBACK_DAYS,
-    plan_id: plan.id,
-    source: sub ? 'plan' : 'fallback',
-    legal_hold: false,
   }
 }
 
