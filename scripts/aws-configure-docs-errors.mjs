@@ -21,7 +21,12 @@
  *      source. It also strips the x-amz-* error headers that name the key.
  *
  * Distribution-level CustomErrorResponses are deliberately NOT used: they are
- * per-distribution, and this distribution serves every kensaur.us app.
+ * per-distribution, and this distribution serves every kensaur.us app. The
+ * ErrorDocument is per-bucket, and kensaur.us-mushi-mushi also holds the
+ * admin console, the testers site and /schemas — so a missing object there
+ * gets the docs 404 page too. That coupling stays inside Mushi's own bucket
+ * and still beats the NoSuchKey page; the response headers policy is scoped
+ * to the docs behavior only.
  *
  * Idempotent: reads current state and only writes what differs.
  *

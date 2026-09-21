@@ -70,20 +70,28 @@ function* walk(dir) {
  */
 async function packageExistsOnNpm(name) {
   const url = `https://registry.npmjs.org/${name.replace('/', '%2f')}`
-  const res = await fetch(url, { headers: { accept: 'application/vnd.npm.install-v1+json' } })
-  await res.body?.cancel()
-  if (res.status === 200) return true
-  if (res.status === 404) return false
-  throw new Error(`GET ${url} returned HTTP ${res.status} while checking package existence`)
+  let last = ''
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(url, { headers: { accept: 'application/vnd.npm.install-v1+json' } })
+      await res.body?.cancel()
+      if (res.status === 200) return true
+      if (res.status === 404) return false
+      last = `HTTP ${res.status}`
+    } catch (err) {
+      last = err instanceof Error ? err.message : String(err)
+    }
+    await new Promise((resolve) => setTimeout(resolve, attempt * 2000))
+  }
+  // Only a definite 404 means "new". A registry hiccup must not block a
+  // release over 33 lookups; a package that really is new still fails loudly
+  // at the OIDC publish.
+  console.log(`::warning::could not confirm ${name} on npm (${last}); assuming it exists`)
+  return true
 }
 
 async function shouldBootstrapPackage(pkg) {
-  try {
-    return !(await packageExistsOnNpm(pkg.name))
-  } catch (err) {
-    console.error(err instanceof Error ? err.message : String(err))
-    process.exit(1)
-  }
+  return !(await packageExistsOnNpm(pkg.name))
 }
 
 // Collect publishable package names that are NOT on npm yet.
