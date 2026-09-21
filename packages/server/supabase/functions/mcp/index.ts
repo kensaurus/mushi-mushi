@@ -115,12 +115,10 @@ import { wrapUntrustedJson } from './wrap-untrusted.ts'
 import { searchMushiDocs } from './docs-index.ts'
 import { buildMcpServerCard, MCP_SERVER_CARD_HEADERS } from '../_shared/mcp-server-card.ts'
 import {
-  buildJwksDocument,
-  buildOAuthAuthorizationServerMetadata,
   buildOAuthProtectedResourceMetadata,
   bearerWwwAuthenticateResourceMetadata,
+  mcpOAuthDiscoveryDocument,
   mcpProtectedResourceMetadataUrl,
-  MCP_OAUTH_AS_METADATA_HEADERS,
   MCP_OAUTH_METADATA_HEADERS,
 } from '../_shared/mcp-oauth-metadata.ts'
 import {
@@ -2671,7 +2669,7 @@ async function proxyMcpOauthPost(
 }
 
 function unauthorizedJsonRpc(req: Request, message: string, code = ERR_INVALID_REQUEST): Response {
-  const metadataUrl = mcpProtectedResourceMetadataUrl(new URL(req.url))
+  const metadataUrl = mcpProtectedResourceMetadataUrl(new URL(req.url), req.headers)
   return new Response(
     JSON.stringify({ jsonrpc: '2.0', id: null, error: { code, message } }),
     {
@@ -2704,21 +2702,12 @@ async function handler(req: Request): Promise<Response> {
         req.method,
       )
     }
-    if (url.pathname.includes('oauth-protected-resource')) {
-      const metadata = buildOAuthProtectedResourceMetadata(url)
-      return jsonResponse(metadata, 200, { ...MCP_OAUTH_METADATA_HEADERS, ...CORS_HEADERS }, req.method)
-    }
-    if (url.pathname.includes('jwks.json')) {
-      // Advertised as jwks_uri in the AS metadata; empty on purpose (opaque
-      // API-key tokens, no JWTs). See _shared/mcp-oauth-metadata.ts.
-      return jsonResponse(buildJwksDocument(), 200, { ...MCP_OAUTH_AS_METADATA_HEADERS, ...CORS_HEADERS }, req.method)
-    }
-    if (
-      url.pathname.includes('oauth-authorization-server') ||
-      url.pathname.includes('openid-configuration')
-    ) {
-      const metadata = buildOAuthAuthorizationServerMetadata(url)
-      return jsonResponse(metadata, 200, { ...MCP_OAUTH_AS_METADATA_HEADERS, ...CORS_HEADERS }, req.method)
+    // PRM, AS metadata, OpenID discovery and the (empty) JWKS. Each document
+    // describes the URL this request came in on — see
+    // _shared/mcp-oauth-metadata.ts for why that matters to the MCP SDK.
+    const discoveryDocument = mcpOAuthDiscoveryDocument(url, req.headers)
+    if (discoveryDocument !== null) {
+      return jsonResponse(discoveryDocument, 200, { ...MCP_OAUTH_METADATA_HEADERS, ...CORS_HEADERS }, req.method)
     }
     if (url.pathname.includes('/oauth/authorize')) {
       // Smithery publisher scan short-circuits to the stub; every real MCP
@@ -2761,7 +2750,7 @@ async function handler(req: Request): Promise<Response> {
       // RFC 9728: OAuth clients (Smithery setup) GET the resource URL and expect
       // Protected Resource Metadata — not the SEP-1649 server card. Server card
       // lives at `/.well-known/mcp/server-card.json`.
-      const metadata = buildOAuthProtectedResourceMetadata(url)
+      const metadata = buildOAuthProtectedResourceMetadata(url, req.headers)
       return jsonResponse(metadata, 200, { ...MCP_OAUTH_METADATA_HEADERS, ...CORS_HEADERS }, req.method)
     }
     // Auth + open SSE. We have no server-initiated messages today; emit
