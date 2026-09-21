@@ -8,10 +8,11 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 | Mode | Command | Error-level issues | CI threshold |
 |---|---|---:|---|
 | production | `pnpm exec knip --production --reporter json` | **725** | `--max-issues 725` |
-| default | `pnpm exec knip --reporter json` | **585** | `--max-issues 585 --treat-config-hints-as-errors` |
+| default | `pnpm exec knip --reporter json` | **584** | `--max-issues 584 --treat-config-hints-as-errors` |
 
-> **Re-measured 2026-09-21 on `feat/gtm-phase1-measure` (PR #394), knip 6.34.0: 725 production / 585 default**
-> (724 and 584 fail, 725 and 585 pass). The GTM branch first pushed the counts to 784 / 602. Nothing was
+> **Re-measured 2026-09-21 on `feat/gtm-phase1-measure` (PR #394), knip 6.34.0: 725 production / 584 default**
+> (724 and 583 fail, 725 and 584 pass; measured after merging master's hosted-billing commit
+> `181ca882`, which removed one default-mode finding). The GTM branch first pushed the counts to 784 / 602. Nothing was
 > suppressed to get back under: new module-local constants were un-exported, test-only helpers were tagged
 > `@internal` (knip's documented production-mode treatment for exports used only by tests), and the docs
 > entries became `content/**/_meta.ts!` and `content/**/*.mdx!`. Production mode only follows entries
@@ -105,11 +106,11 @@ react-native 4, wasm-classifier 1).
 | packages/plugin-jira | 1 |  |  |  |  |  |  |  | 1 |
 | packages/react |  |  | 1 |  |  |  |  |  | 1 |
 | packages/react-native | 1 |  |  |  |  | 2 | 2 |  | 5 |
-| packages/server |  |  | 2 |  | 1 |  |  |  | 3 |
+| packages/server |  |  | 1 |  | 1 |  |  |  | 2 |
 | packages/svelte |  |  | 1 |  |  |  |  |  | 1 |
 | packages/wasm-classifier |  |  |  |  |  |  | 1 |  | 1 |
 | packages/web |  |  |  |  |  | 32 | 11 |  | 43 |
-| **total** | **64** | **4** | **19** | **1** | **1** | **296** | **194** | **6** | **585** |
+| **total** | **64** | **4** | **18** | **1** | **1** | **296** | **194** | **6** | **584** |
 
 Warn-level (not counted): optionalPeerDependencies 8.
 

@@ -269,7 +269,7 @@ npx skills add kensaurus/mushi-mushi
 
 Then: `/mushi-setup` (guided SDK install + MCP wiring), `/mushi-debug` (diagnose ingest / MCP / pipeline failures), `/mushi-health` (pass/fail check across CLI, API, edge functions, BYOK keys), `/mushi-integration` (two-way loop, fix dispatch, lessons). The admin **Connect & Update** page (`/connect`) mirrors the same flows with one-click **Add to Cursor** deeplinks.
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~397K TS lines · 1,848 source files · 44 workspace / 36 npm packages · 59 edge functions · 353 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~398K TS lines · 1,850 source files · 44 workspace / 36 npm packages · 59 edge functions · 353 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ---
 
