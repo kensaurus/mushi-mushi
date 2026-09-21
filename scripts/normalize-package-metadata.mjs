@@ -35,7 +35,7 @@
 
 import { readFileSync, writeFileSync, readdirSync, existsSync, statSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { MUSHI_TAGLINE_LEGACY, MUSHI_TAGLINE_V2 } from '../packages/brand/src/index.js'
 
 const __dir = fileURLToPath(new URL('.', import.meta.url))
@@ -255,7 +255,9 @@ function isEntryScript() {
   try {
     return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
   } catch {
-    return false
+    // An unreadable path: fall back to the plain comparison rather than
+    // skip the check.
+    return import.meta.url === pathToFileURL(process.argv[1]).href
   }
 }
 

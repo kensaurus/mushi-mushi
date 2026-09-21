@@ -33,7 +33,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const CHANGESET_DIR = join(ROOT, '.changeset')
@@ -175,7 +175,9 @@ function isEntryScript() {
   try {
     return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
   } catch {
-    return false
+    // An unreadable path: fall back to the plain comparison rather than
+    // skip the check.
+    return import.meta.url === pathToFileURL(process.argv[1]).href
   }
 }
 
