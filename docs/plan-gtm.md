@@ -81,6 +81,7 @@ The hero (`MUSHI_TAGLINE_V2.hero`), README first line, and meta description alre
 - **North-star:** activated external projects per week (org ≠ founder's `kenji` org).
 - **Setup:** `project_created` → `key_minted` → `sdk_first_heartbeat` (already emitted at `_shared/auth.ts:252`).
 - **`activated` (aha):** first `report_received` on the project **and** the owner opens it (`report_opened`) within 7 days of signup. Not signup (9 people did that and 0 came back), not payment (kills it as a leading indicator). Target: top-quartile time-to-value < 5 min via the one-click test report; hard ceiling 24 h.
+  - As measured (`company_funnel_weekly`, migration `20260921000010`): `activated_opened` is this definition; `activated` is its first half (first real report) and stays the headline until console `report_opened` events flow, so the north-star does not read 0 while the console is being wired. The Key step counts a project once its key leaves the console (CLI `.env` write, first SDK heartbeat, or a key minted by hand), not the key every project gets at creation. Signups exclude operators and tester-only accounts.
 - **Habit:** ≥ 1 of {`report_opened`, `fix_context_pulled` (MCP `get_fix_context`), `fix_dispatched`} per week for 3 consecutive weeks.
 - **Validity check (Lenny × Timen):** once ≥ 30 external projects exist, confirm activated projects show ≥ 2× 30-day retention vs non-activated; if not, move `activated` to `fix_context_pulled`.
 

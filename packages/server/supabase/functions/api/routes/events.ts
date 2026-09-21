@@ -21,7 +21,13 @@
  *
  * Identity stitching: an `identify` pseudo-event (never stored) plus
  * `user_id` (+ traits) resolves an end_users row (org-scoped) and backfills
- * end_user_id onto earlier anonymous rows with the same anon_id.
+ * end_user_id onto earlier anonymous rows with the same anon_id. Traits other
+ * than email/name (e.g. identify(id, { plan: 'pro' })) are merged into
+ * end_users.traits for the People filter; until 2026-09-21 they were dropped.
+ *
+ * Automation: a batch whose User-Agent names a headless browser, test driver
+ * or crawler (_shared/automated-agent.ts) is accepted-but-dropped with
+ * reason 'automated_agent', so test runs and crawlers never count as people.
  */
 
 import type { Hono } from 'npm:hono@4';
@@ -32,6 +38,7 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { resolveEndUser } from '../../_shared/end-user-resolver.ts';
 import { hashReporterTokenOrNull } from '../../_shared/reporter-token.ts';
+import { isAutomatedUserAgent } from '../../_shared/automated-agent.ts';
 import {
   EVENT_NAME_RE,
   EVENT_PROPERTY_LIMITS,
@@ -171,6 +178,39 @@ export function sanitizeProperties(
   return { properties: out, dropped };
 }
 
+/** identify() traits stored in their own end_users columns, not in `traits`. */
+const TRAITS_STORED_ELSEWHERE: ReadonlySet<string> = new Set(['email', 'name']);
+
+/** end_users.traits has a CHECK (pg_column_size(traits) <= 2048). */
+export const MAX_PERSON_TRAITS_BYTES = 1024;
+
+/**
+ * Person properties from identify(id, traits) for end_users.traits (the People
+ * tab filter). email and name are stored elsewhere (email only as a hash), so
+ * they never land here; everything else passes the same contract as event
+ * properties (scalars only, no `$` or PII-looking keys, length caps) and a
+ * byte budget, dropping keys past it in input order. Exported for tests.
+ */
+export function extractPersonTraits(
+  input: Record<string, unknown> | null | undefined,
+): Record<string, PropertyValue> {
+  const scalars: Record<string, PropertyValue> = {};
+  for (const [key, value] of Object.entries(input ?? {})) {
+    if (TRAITS_STORED_ELSEWHERE.has(key)) continue;
+    if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      scalars[key] = value;
+    }
+  }
+  const { properties } = sanitizeProperties(scalars);
+  const out: Record<string, PropertyValue> = {};
+  for (const [key, value] of Object.entries(properties)) {
+    const next = { ...out, [key]: value };
+    if (JSON.stringify(next).length > MAX_PERSON_TRAITS_BYTES) break;
+    out[key] = value;
+  }
+  return out;
+}
+
 /** Cached per-project switch + org id (cheap; evicted per isolate lifetime). */
 const projectMeta = new Map<string, { enabled: boolean; orgId: string | null; at: number }>();
 const META_TTL_MS = 60_000;
@@ -244,6 +284,10 @@ export function registerEventRoutes(app: Hono<{ Variables: Variables }>): void {
     }
 
     const batch: EventBatch = parsed.data;
+    if (isAutomatedUserAgent(c.req.header('user-agent'))) {
+      // Accepted-but-dropped: a test runner must not retry, and must not count.
+      return c.json({ ok: true, data: { accepted: 0, dropped: batch.events.length, reason: 'automated_agent' } });
+    }
     const meta = await loadProjectMeta(db, projectId);
     const anonKey = await hashReporterTokenOrNull(batch.anon_id);
     if (!meta.enabled) {
@@ -267,6 +311,18 @@ export function registerEventRoutes(app: Hono<{ Variables: Variables }>): void {
       } catch (err) {
         log.warn('events: resolveEndUser failed', { err: err instanceof Error ? err.message : String(err) });
       }
+    }
+
+    // Person traits: merged (jsonb ||) by merge_end_user_traits, which skips
+    // the write when the row already holds them and refuses a merge that
+    // would break the 2 KB column cap. Non-fatal: events still land.
+    const personTraits = extractPersonTraits(batch.user_traits);
+    if (endUserId && Object.keys(personTraits).length > 0) {
+      const { error: traitErr } = await db.rpc('merge_end_user_traits', {
+        p_end_user_id: endUserId,
+        p_traits: personTraits,
+      });
+      if (traitErr) log.warn('events: trait merge failed', { err: traitErr.message, projectId });
     }
 
     const receivedAtMs = Date.now();
