@@ -110,6 +110,10 @@ screenshots/
 !apps/admin/public/**/*.png
 !apps/admin/public/**/*.gif
 !packages/**/assets/**/*.png
+# The MCP registry icon: packages/mcp/server.json serves it from
+# raw.githubusercontent.com, so an ignored copy 404s in every client that reads
+# the registry entry. Only this file — keep the allow-list narrow.
+!packages/brand/src/logo-mark-512.png
 
 # --- Windows shell artefacts -------------------------------------------------
 # PowerShell/cmd sometimes leave a literal `nul` file when commands redirect to
