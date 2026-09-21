@@ -152,6 +152,29 @@ describe('internal-auth contract', () => {
         source,
         `${fn}/index.ts uses a hand-rolled auth check; replace with requireServiceRoleAuth`,
       ).not.toMatch(/function\s+authorized\s*\(\s*req\s*:\s*Request\s*\)\s*:\s*boolean/)
+
+      // Calling the helper is not enough: its 401 must be returned
+      // unconditionally. Until 2026-09-21 eight functions did
+      // `if (authErr && req.headers.get('x-mushi-admin') !== '1') return authErr`,
+      // so anyone holding the public anon key could skip auth by sending one
+      // header, and this test still passed because the helper was called.
+      for (const [, name] of source.matchAll(/const\s+(\w+)\s*=\s*requireServiceRoleAuth\s*\(/g)) {
+        expect(
+          source,
+          `${fn}/index.ts lets a condition waive requireServiceRoleAuth (\`${name} && …\`); return ${name} unconditionally`,
+        ).not.toMatch(new RegExp(`\\b${name}\\s*&&|&&\\s*${name}\\b`))
+      }
+
+      // No request header may carry trust into an internal function. The same
+      // day's audit found two more bypass shapes the rule above cannot see:
+      // `if (authErr && req.headers.get('x-mushi-trigger') !== 'manual')` and
+      // `if (!isManual) { requireServiceRoleAuth(...) }` keyed on that header.
+      // Any header a caller sets, an attacker sets too; the Authorization
+      // bearer checked by requireServiceRoleAuth is the only credential.
+      expect(
+        source,
+        `${fn}/index.ts reads an x-mushi-* request header; internal functions must authenticate with requireServiceRoleAuth alone`,
+      ).not.toMatch(/headers\.get\(\s*['"`]x-mushi-/i)
     })
   }
 })

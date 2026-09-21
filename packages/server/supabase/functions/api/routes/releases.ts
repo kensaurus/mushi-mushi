@@ -265,7 +265,6 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${serviceKey}`,
-          'x-mushi-admin': '1',
         },
         body: JSON.stringify(body.data),
       })
