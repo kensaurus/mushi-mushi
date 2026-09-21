@@ -33,9 +33,9 @@
  *          fix (a description over the cap, a legacy tagline).
  */
 
-import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from 'node:fs'
+import { readFileSync, writeFileSync, readdirSync, existsSync, statSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { MUSHI_TAGLINE_LEGACY, MUSHI_TAGLINE_V2 } from '../packages/brand/src/index.js'
 
 const __dir = fileURLToPath(new URL('.', import.meta.url))
@@ -246,4 +246,17 @@ function main() {
   process.exit(write ? 0 : 1)
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()
+// Run only as the entry script (the tests import this module). Compare real
+// paths: Node resolves the entry through symlinks and junctions but leaves
+// process.argv[1] as typed, so a plain URL comparison skips main() and exits 0
+// without checking anything when the repo is reached through a link.
+function isEntryScript() {
+  if (!process.argv[1]) return false
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return false
+  }
+}
+
+if (isEntryScript()) main()

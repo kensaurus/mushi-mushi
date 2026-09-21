@@ -3,6 +3,11 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync, symlinkSync, unlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { MUSHI_TAGLINE_LEGACY, MUSHI_TAGLINE_V2 } from '../packages/brand/src/index.js'
 import {
   BANNED_KEYWORDS,
@@ -112,4 +117,36 @@ test('problems --write cannot fix are reported as errors', () => {
 
   const missing = normalizeManifest(legacyManifest({ description: undefined }), 'plugin-example')
   assert.deepEqual(missing.errors, ['description is missing'])
+})
+
+test('the check still runs when invoked through a symlink', (t) => {
+  // Node resolves the entry module through links but leaves argv[1] as typed;
+  // a guard that compares the two unresolved would skip main() and exit 0
+  // having checked nothing.
+  // A directory junction needs no privileges on Windows; elsewhere the type is
+  // ignored and this is an ordinary directory symlink.
+  const scriptsDir = fileURLToPath(new URL('.', import.meta.url))
+  const dir = mkdtempSync(join(tmpdir(), 'pkg-meta-link-'))
+  const link = join(dir, 'scripts')
+  try {
+    try {
+      symlinkSync(scriptsDir, link, 'junction')
+    } catch (err) {
+      t.skip(`directory links unavailable here (${err.code})`)
+      return
+    }
+    const res = spawnSync(process.execPath, [join(link, 'normalize-package-metadata.mjs')], {
+      encoding: 'utf8',
+    })
+    assert.match(`${res.stdout}${res.stderr}`, /package metadata|DRIFT|ERROR/)
+  } finally {
+    // Remove the link itself first so the recursive delete never walks into
+    // the real scripts/ folder through it.
+    try {
+      unlinkSync(link)
+    } catch {
+      // already removed
+    }
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

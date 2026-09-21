@@ -31,9 +31,9 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const CHANGESET_DIR = join(ROOT, '.changeset')
@@ -166,4 +166,17 @@ function main() {
   process.exit(1)
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()
+// Run only as the entry script (the tests import this module). Compare real
+// paths: Node resolves the entry through symlinks and junctions but leaves
+// process.argv[1] as typed, so a plain URL comparison skips main() and the
+// gate exits 0 without checking anything when the repo is reached through a link.
+function isEntryScript() {
+  if (!process.argv[1]) return false
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return false
+  }
+}
+
+if (isEntryScript()) main()

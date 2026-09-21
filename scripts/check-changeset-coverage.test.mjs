@@ -4,6 +4,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync, symlinkSync, unlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { findUncovered, isShippedSource, parseChangesetTargets } from './check-changeset-coverage.mjs'
 
@@ -69,4 +72,38 @@ test('an unresolvable base ref fails loudly instead of passing', () => {
   })
   assert.equal(res.status, 2)
   assert.match(res.stderr, /cannot resolve a merge-base/)
+})
+
+test('the gate still runs when invoked through a symlink', (t) => {
+  // Node resolves the entry module through links but leaves argv[1] as typed;
+  // a guard that compares the two unresolved would skip main() and exit 0.
+  // A directory junction needs no privileges on Windows; elsewhere the type is
+  // ignored and this is an ordinary directory symlink.
+  const scriptsDir = fileURLToPath(new URL('.', import.meta.url))
+  const dir = mkdtempSync(join(tmpdir(), 'changeset-coverage-link-'))
+  const link = join(dir, 'scripts')
+  try {
+    try {
+      symlinkSync(scriptsDir, link, 'junction')
+    } catch (err) {
+      t.skip(`directory links unavailable here (${err.code})`)
+      return
+    }
+    const res = spawnSync(
+      process.execPath,
+      [join(link, 'check-changeset-coverage.mjs'), '--base', 'refs/heads/does-not-exist-anywhere'],
+      { encoding: 'utf8' },
+    )
+    assert.equal(res.status, 2)
+    assert.match(res.stderr, /cannot resolve a merge-base/)
+  } finally {
+    // Remove the link itself first so the recursive delete never walks into
+    // the real scripts/ folder through it.
+    try {
+      unlinkSync(link)
+    } catch {
+      // already removed
+    }
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
