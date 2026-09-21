@@ -6,8 +6,20 @@
 #   2. "Version Packages" PR merged → publishes all bumped packages to npm
 #
 # REQUIREMENTS:
-#   - NPM_TOKEN GitHub secret (Granular Access Token with "Bypass 2FA" enabled)
-#   - npm Trusted Publisher configured per package on npmjs.com (for provenance)
+#   - npm Trusted Publisher configured per package on npmjs.com, pointing at
+#     this file on `master`. Publishing authenticates with GitHub OIDC only:
+#     no npm token is in scope in this workflow. The npm Trusted Publisher
+#     trusts any code this job runs, so a long-lived token here would only add
+#     a second credential to steal.
+#   - A package npm has never seen cannot be created over OIDC. Publish its
+#     first version with the manual "npm Bootstrap" workflow
+#     (npm-bootstrap.yml, behind the `npm-bootstrap` environment), then add
+#     its Trusted Publisher rule. The "Refuse to publish packages npm has
+#     never seen" step below stops the release before anything is published.
+#   - A package whose Trusted Publisher rule is missing fails its publish
+#     here. @mushi-mushi/wasm-classifier's last version was token-published
+#     (npm _npmUser is a person, not npm-oidc-no-reply) and needs its rule
+#     added on npmjs.com before its next release.
 #   - GITHUB_TOKEN auto-provided (needs contents:write + pull-requests:write)
 #
 # SUPPLY-CHAIN HARDENING:
@@ -55,9 +67,9 @@ on:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
+# Read-only by default; each job declares the write scopes it needs.
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   ci:
@@ -155,9 +167,11 @@ jobs:
       id-token: write
     steps:
       # See note on the `ci` job above. Harden-Runner is doubly important
-      # on the publish job because this is where NPM_TOKEN and the OIDC
-      # publish identity are in scope — exactly the credentials a
-      # compromised dep would target for exfiltration.
+      # on the publish job because this is where the OIDC publish identity
+      # is in scope — exactly the credential a compromised dep would target.
+      # Still `audit`: flipping to `block` needs an allowed-endpoints list
+      # taken from a real publish run's egress report, or it breaks the
+      # release it is meant to protect.
       - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
         with:
           egress-policy: audit
@@ -188,22 +202,23 @@ jobs:
         # at the right folder.
         run: node scripts/check-publish-readiness.mjs
 
-      - name: Bootstrap brand-new packages (no provenance first publish)
-        # REASON: NPM_CONFIG_PROVENANCE=true requires a Trusted Publisher rule
-        # to be pre-configured on npmjs.com for EACH package. Brand-new packages
-        # don't have that rule yet — the OIDC exchange fails and `changeset publish`
-        # returns a misleading 404. This step builds all packages (Turbo-cached)
-        # then publishes any not-yet-existing packages directly via NPM_TOKEN
-        # (no provenance) so they exist on the registry before `changeset publish`.
-        # Future releases go through the normal OIDC-provenance path once the
-        # Trusted Publisher rule is added on npmjs.com for the new package.
-        # See: scripts/bootstrap-new-packages.mjs
+      - name: Refuse to publish packages npm has never seen
+        # A brand-new package has no Trusted Publisher rule yet, so the OIDC
+        # exchange fails and `changeset publish` returns a misleading 404 —
+        # after it may already have published the others. This step used to
+        # publish such packages with a long-lived NPM_TOKEN right here, in
+        # the job holding `id-token: write`; that now happens only in the
+        # manual npm-bootstrap.yml. While changesets are still pending this
+        # push only refreshes the Version Packages PR, so it warns instead.
         run: |
-          pnpm turbo run build --output-logs=errors-only
-          node scripts/bootstrap-new-packages.mjs
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: "false"
+          if node scripts/bootstrap-new-packages.mjs --check; then
+            exit 0
+          fi
+          if find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' | grep -q .; then
+            echo "::warning::Bootstrap the package(s) above with npm-bootstrap.yml before merging the Version Packages PR."
+            exit 0
+          fi
+          exit 1
 
       - name: Create Release PR or Publish
         id: changesets
@@ -215,9 +230,15 @@ jobs:
           commit: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # No NODE_AUTH_TOKEN: npm >= 11.5.1 (Node 24) exchanges the job's
+          # OIDC token for a short-lived publish token per package.
           NPM_CONFIG_PROVENANCE: true
 
+      # POST-PUBLISH STEPS: each is independent of the others, so each runs
+      # once the changesets step succeeded even if another post-publish step
+      # failed (`!cancelled()` replaces the implicit `success()`). Release run
+      # 34745513175 lost the signature audit, changelog, MCP registry publish
+      # and catalog sync to a single propagation 404 in the verifier below.
       - name: Verify published tarballs do not contain workspace:*
         if: steps.changesets.outputs.published == 'true'
         env:
@@ -236,7 +257,7 @@ jobs:
       # don't block the release, but tampered/missing signatures will.
       - name: Audit signatures of installed dependencies
         id: audit_sigs
-        if: steps.changesets.outputs.published == 'true'
+        if: ${{ !cancelled() && steps.changesets.outcome == 'success' && steps.changesets.outputs.published == 'true' }}
         # 2026-08-16 (run 31952907617): the race outlasted the 255s window a
         # THIRD time and, because this step is a hard failure, it skipped every
         # post-publish step behind it — the changelog aggregate, the MCP
@@ -318,11 +339,11 @@ jobs:
       # safe — it only changes if per-package CHANGELOGs or pending changesets
       # changed in the same push.
       - name: Aggregate public changelog
-        if: steps.changesets.outputs.published == 'true' || steps.changesets.outputs.hasChangesets == 'true'
+        if: ${{ !cancelled() && steps.changesets.outcome == 'success' && (steps.changesets.outputs.published == 'true' || steps.changesets.outputs.hasChangesets == 'true') }}
         run: pnpm changelog:aggregate
 
       - name: Commit aggregated changelog
-        if: steps.changesets.outputs.published == 'true' || steps.changesets.outputs.hasChangesets == 'true'
+        if: ${{ !cancelled() && steps.changesets.outcome == 'success' && (steps.changesets.outputs.published == 'true' || steps.changesets.outputs.hasChangesets == 'true') }}
         run: |
           if ! git diff --quiet -- CHANGELOG.md apps/docs/data/changelog.json; then
             git config user.name "github-actions[bot]"
@@ -354,14 +375,25 @@ jobs:
         # GitHub OIDC authenticates the `io.github.kensaurus/*` namespace using
         # the job's `id-token: write` permission — no extra secret needed.
         # continue-on-error: a registry hiccup must never fail the npm release.
-        if: steps.changesets.outputs.published == 'true' && contains(steps.changesets.outputs.publishedPackages, '@mushi-mushi/mcp')
+        #
+        # mcp-publisher is pinned to a release and checked against the sha256
+        # from that release's signed checksums file: this job can mint npm
+        # publish tokens, so it must not run whatever `latest` points at
+        # today. Bump MCP_PUBLISHER_VERSION and the hash together (the hash is
+        # the linux_amd64 line of registry_<version>_checksums.txt).
+        # Keep in sync with publish-mcp-registry.yml.
+        if: ${{ !cancelled() && steps.changesets.outcome == 'success' && steps.changesets.outputs.published == 'true' && contains(steps.changesets.outputs.publishedPackages, '@mushi-mushi/mcp') }}
         continue-on-error: true
+        env:
+          MCP_PUBLISHER_VERSION: v1.8.1
+          MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
         run: |
           set -euo pipefail
           node scripts/sync-server-json-version.mjs
-          os=$(uname -s | tr '[:upper:]' '[:lower:]')
-          arch=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${os}_${arch}.tar.gz" | tar xz mcp-publisher
+          curl -fsSL -o mcp-publisher.tar.gz \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
+          echo "${MCP_PUBLISHER_SHA256}  mcp-publisher.tar.gz" | sha256sum -c -
+          tar xzf mcp-publisher.tar.gz mcp-publisher
           ./mcp-publisher login github-oidc
           cd packages/mcp && ../../mcp-publisher publish && cd ../..
           echo "Verifying registry record (propagation may lag)…"
@@ -375,7 +407,7 @@ jobs:
         # Keep the console freshness chips accurate without hand-written
         # migrations. On any failure we warn but do not fail the release —
         # the daily sdk-versions-cron reconcile is the backstop.
-        if: steps.changesets.outputs.published == 'true'
+        if: ${{ !cancelled() && steps.changesets.outcome == 'success' && steps.changesets.outputs.published == 'true' }}
         continue-on-error: true
         env:
           PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
@@ -384,7 +416,7 @@ jobs:
         run: node scripts/sync-sdk-versions.mjs
 
       - name: Published packages summary
-        if: steps.changesets.outputs.published == 'true'
+        if: ${{ !cancelled() && steps.changesets.outcome == 'success' && steps.changesets.outputs.published == 'true' }}
         env:
           PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
         run: |
@@ -402,7 +434,7 @@ jobs:
       # it. Re-running the failed job after the registry catches up is the
       # normal remedy for the propagation race.
       - name: Fail the release if the signature audit did not pass
-        if: steps.audit_sigs.outcome == 'failure'
+        if: ${{ !cancelled() && steps.audit_sigs.outcome == 'failure' }}
         run: |
           echo "::error::npm signature audit failed (see the 'Audit signatures of installed dependencies' step). Packages ARE published; the post-publish steps completed. If this was the known registry-propagation race, re-run this job once npm has caught up."
           exit 1

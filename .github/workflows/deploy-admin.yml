@@ -371,6 +371,7 @@ jobs:
               "/mushi-mushi/*" \
               "/mushi-mushi/hosted-mcp*" \
               "/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp*" \
+              "/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp*" \
               "/quickstart/*" \
               "/concepts/*" \
               "/sdks/*" \

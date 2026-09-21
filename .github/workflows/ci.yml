@@ -162,6 +162,12 @@ jobs:
         # High/Critical finding still fails the job — until pnpm ships
         # the bulk-advisory endpoint. dependency-review + CodeQL keep
         # supply-chain coverage in the meantime.
+        #
+        # The tolerance is dated (AUDIT_OUTAGE_TOLERATED_UNTIL): pnpm 10.33
+        # audits fine again, so if the endpoint breaks after that date the
+        # gate fails and someone decides, instead of skipping forever.
+        env:
+          AUDIT_OUTAGE_TOLERATED_UNTIL: '2026-12-31'
         run: |
           set +e
           output="$(pnpm audit --audit-level=high 2>&1)"
@@ -171,7 +177,11 @@ jobs:
             exit 0
           fi
           if echo "$output" | grep -qE 'ERR_PNPM_AUDIT_BAD_RESPONSE|This endpoint is being retired'; then
-            echo "::warning::pnpm audit endpoint retired by npm (HTTP 410); skipping supply-chain gate. dependency-review + CodeQL still enforce."
+            if [ "$(date -u +%F)" \> "$AUDIT_OUTAGE_TOLERATED_UNTIL" ]; then
+              echo "::error::pnpm audit cannot reach npm's advisory endpoint and the outage tolerance expired on ${AUDIT_OUTAGE_TOLERATED_UNTIL}. Fix the audit client or extend the date deliberately."
+              exit 1
+            fi
+            echo "::warning::pnpm audit endpoint retired by npm (HTTP 410); skipping supply-chain gate until ${AUDIT_OUTAGE_TOLERATED_UNTIL}. dependency-review + CodeQL still enforce."
             exit 0
           fi
           echo "::error::pnpm audit reported High/Critical advisories."

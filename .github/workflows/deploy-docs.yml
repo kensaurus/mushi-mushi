@@ -8,6 +8,9 @@
 # - Syncs immutable assets (JS/CSS) with long cache, HTML with short cache
 # - Deploys two CloudFront Functions for clean-URL routing + security headers
 # - Invalidates CloudFront cache and runs a health check on /mushi-mushi/docs/
+# - Fails if any sitemap URL is not a 200, or if a missing page leaks the raw
+#   S3 NoSuchKey page / lacks security headers (a viewer-response function
+#   cannot fix 4xx; see scripts/aws-configure-docs-errors.mjs)
 #
 # DEPENDENCIES:
 # - S3 bucket: kensaur.us-mushi-mushi (ap-northeast-1)
@@ -325,10 +328,10 @@ jobs:
         # `publish-function` only puts the function in the LIVE stage of
         # the Functions service — it does NOT attach the function to any
         # distribution behavior. Each cache behavior has to opt in via
-        # `FunctionAssociations`. Without this step, the editorial 404
-        # body returned by mushi-mushi-docs-response is silently dropped
-        # and visitors see the raw S3 NoSuchKey XML for missing pages
-        # (regression observed in production after PR #77 deployed).
+        # `FunctionAssociations`. Without this step the docs security
+        # headers and the .txt noindex tag are never applied. (Missing
+        # pages are a different story: viewer-response functions never run
+        # on origin 4xx — see the missing-page smoke check below.)
         # The shell script is idempotent — if both functions are already
         # attached on the right event types, it makes zero AWS mutating
         # API calls (only a GetDistributionConfig + DescribeFunction).
@@ -363,3 +366,70 @@ jobs:
           if [ "$APEX_CODE" != "301" ] && [ "$APEX_CODE" != "302" ] && [ "$APEX_CODE" != "308" ]; then
             echo "::warning::Apex redirect health check returned HTTP $APEX_CODE (expected 301) — CloudFront may still be propagating"
           fi
+
+      - name: Check every sitemap URL returns 200
+        # A sitemap entry that 404s is a dead link handed to every crawler and
+        # answer engine: /sdks/mcp-tools.generated was the one non-200 out of
+        # 191 for months. Redirects count as failures too — the sitemap must
+        # list canonical URLs. Two passes, so a URL still settling after the
+        # invalidation above gets a second chance.
+        run: |
+          set -euo pipefail
+          curl -fsS "https://kensaur.us${{ env.MUSHI_BASE_PATH }}/sitemap.xml" \
+            | grep -oE '<loc>[^<]+</loc>' | sed -E 's#</?loc>##g' > /tmp/sitemap-urls.txt
+          total=$(wc -l < /tmp/sitemap-urls.txt)
+          if [ "$total" -eq 0 ]; then
+            echo "::error::sitemap.xml has no <loc> entries"
+            exit 1
+          fi
+          probe() {
+            xargs -P 8 -n 1 sh -c 'code=$(curl -s -o /dev/null -w "%{http_code}" "$1"); [ "$code" = 200 ] || echo "$code $1"' _ < "$1"
+          }
+          probe /tmp/sitemap-urls.txt > /tmp/sitemap-bad.txt
+          if [ -s /tmp/sitemap-bad.txt ]; then
+            echo "Re-checking $(wc -l < /tmp/sitemap-bad.txt) URL(s) in 60s"
+            sleep 60
+            cut -d' ' -f2- /tmp/sitemap-bad.txt > /tmp/sitemap-retry.txt
+            probe /tmp/sitemap-retry.txt > /tmp/sitemap-bad.txt
+          fi
+          if [ -s /tmp/sitemap-bad.txt ]; then
+            while read -r code url; do
+              echo "::error::sitemap URL ${url} returned HTTP ${code}"
+            done < /tmp/sitemap-bad.txt
+            exit 1
+          fi
+          echo "All ${total} sitemap URLs return 200."
+
+      - name: Smoke-check a missing docs page
+        # CloudFront never runs viewer-response functions when the origin
+        # answers >= 400, so mushi-mushi-docs-response cannot shape a 404. The
+        # body comes from the bucket's website ErrorDocument and the headers
+        # from the docs response headers policy, both set by
+        # scripts/aws-configure-docs-errors.mjs (run by an AWS admin; this
+        # role cannot). Fails while a missing page leaks the raw S3 NoSuchKey
+        # page or ships without the security headers a 200 carries.
+        #
+        # Opt-in until that one-time setup has run: otherwise every docs deploy
+        # would fail here after already publishing. After running the script,
+        # set the repository variable DOCS_ERROR_PAGES_CONFIGURED=true.
+        if: vars.DOCS_ERROR_PAGES_CONFIGURED == 'true'
+        run: |
+          set -euo pipefail
+          url="https://kensaur.us${{ env.MUSHI_BASE_PATH }}/__missing-page-smoke-${GITHUB_RUN_ID}"
+          code=$(curl -sS -D /tmp/missing.headers -o /tmp/missing.body -w '%{http_code}' "$url")
+          failed=0
+          if [ "$code" != "404" ]; then
+            echo "::error::${url} returned HTTP ${code}, expected 404"
+            failed=1
+          fi
+          if grep -q 'NoSuchKey' /tmp/missing.body; then
+            echo "::error::A missing docs page serves the raw S3 NoSuchKey page. Run scripts/aws-configure-docs-errors.mjs (bucket ErrorDocument)."
+            failed=1
+          fi
+          for header in strict-transport-security content-security-policy x-content-type-options; do
+            if ! grep -qi "^${header}:" /tmp/missing.headers; then
+              echo "::error::A missing docs page has no ${header} header. Run scripts/aws-configure-docs-errors.mjs (response headers policy)."
+              failed=1
+            fi
+          done
+          exit "$failed"
