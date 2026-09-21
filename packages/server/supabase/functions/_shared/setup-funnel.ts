@@ -26,12 +26,14 @@
  * NOTES:
  *   - Every call is wrapped in try/catch; errors are logged but never re-thrown.
  *   - Callers MUST NOT await this function when it would block a user-facing
- *     response — use `c.executionCtx.waitUntil(emitFunnelEvent(...))` in Hono
- *     edge functions or fire-and-forget with void.
+ *     response — fire-and-forget with `void`. Every emit registers itself with
+ *     EdgeRuntime.waitUntil (_shared/background.ts keepAlive), so the write
+ *     survives the response being sent.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
+import { keepAlive } from './background.ts'
 
 export type FunnelEventName =
   | 'cli_auth_started'
@@ -65,9 +67,17 @@ export interface FunnelEventPayload {
 
 /**
  * Emit an idempotent setup-funnel event. Never throws — errors are logged
- * and swallowed so callers can fire-and-forget safely.
+ * and swallowed so callers can fire-and-forget safely; the write is kept
+ * alive past the response even when the caller drops the promise.
  */
-export async function emitFunnelEvent(
+export function emitFunnelEvent(
+  db: SupabaseClient,
+  payload: FunnelEventPayload,
+): Promise<void> {
+  return keepAlive(writeFunnelEvent(db, payload))
+}
+
+async function writeFunnelEvent(
   db: SupabaseClient,
   payload: FunnelEventPayload,
 ): Promise<void> {
