@@ -95,6 +95,35 @@ export const WEBSITE_JSONLD = {
   publisher: { '@id': ORGANIZATION_ID },
 } as const
 
+/** RSS feed written by scripts/generate-llms-full.mjs into public/blog/feed.xml. */
+export const BLOG_FEED_URL = `${DOCS_SITE}/blog/feed.xml`
+
+/** The byline every post carries in its body. */
+export const BLOG_AUTHOR_NAME = 'Kenji Sakuramoto'
+
+export interface BlogPostMeta {
+  title: string
+  description?: string
+  url: string
+  datePublished?: Date
+}
+
+/** schema.org BlogPosting for one post under /blog/<slug>. */
+export function blogPostingJsonLd(post: BlogPostMeta): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: post.title,
+    ...(post.description ? { description: post.description } : {}),
+    url: post.url,
+    mainEntityOfPage: post.url,
+    image: OG_CARD_URL,
+    ...(post.datePublished ? { datePublished: post.datePublished.toISOString() } : {}),
+    author: { '@type': 'Person', name: BLOG_AUTHOR_NAME, url: 'https://github.com/kensaurus' },
+    publisher: { '@id': ORGANIZATION_ID },
+  }
+}
+
 /** schema.org SoftwareApplication — landing page only (content/index.mdx). */
 export const SOFTWARE_APPLICATION_JSONLD = {
   '@context': 'https://schema.org',

@@ -28,6 +28,9 @@
  * The twin directory is rebuilt from scratch on every run, so a renamed or
  * deleted page cannot leave a stale twin behind.
  *
+ * Also writes the blog's RSS feed to `apps/docs/public/blog/feed.xml`
+ * (scripts/lib/blog-feed.mjs) from the posts' front matter.
+ *
  * Usage:
  *   node scripts/generate-llms-full.mjs [--dry-run]
  *
@@ -39,6 +42,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync } from 'node:fs';
 import { join, relative, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildRssFeed } from './lib/blog-feed.mjs';
 import { parseFrontmatter } from './lib/frontmatter.mjs';
 import { mdxToPlainMarkdown } from './lib/mdx-prose.mjs';
 
@@ -51,6 +55,9 @@ const LLMS_TXT = join(PUBLIC_DIR, 'llms.txt');
 const LLMS_FULL_TXT = join(PUBLIC_DIR, 'llms-full.txt');
 const LLMS_CTX_TXT = join(PUBLIC_DIR, 'llms-ctx.txt');
 const MD_TWINS_DIR = join(PUBLIC_DIR, 'llm-md');
+const BLOG_FEED = join(PUBLIC_DIR, 'blog', 'feed.xml');
+/** Byline on every post (the posts carry it in their body, not their front matter). */
+const BLOG_AUTHOR = 'Kenji Sakuramoto';
 
 const BASE_URL = 'https://kensaur.us/mushi-mushi/docs';
 const DRY_RUN = process.argv.includes('--dry-run');
@@ -185,6 +192,7 @@ for (const file of files) {
     prose,
     fullUrl,
     title,
+    frontmatter: parseFrontmatter(src).data,
     section: `## ${title}\n\nSource: ${fullUrl}\n\n${prose}`,
   });
 }
@@ -243,11 +251,35 @@ for (const route of CTX_PAGES) {
 }
 const ctxContent = `${ctxHeader}${ctxSections.join('\n\n---\n\n')}\n`;
 
+// ── Build blog/feed.xml ───────────────────────────────────────────────────────
+
+const blogIndex = byUrl.get('/blog');
+const feedXml = buildRssFeed({
+  title: 'Mushi Mushi Blog',
+  link: `${BASE_URL}/blog`,
+  description: blogIndex?.frontmatter.description ?? 'Notes from building Mushi Mushi.',
+  feedUrl: `${BASE_URL}/blog/feed.xml`,
+  author: BLOG_AUTHOR,
+  posts: pages
+    .filter((p) => p.urlPath.startsWith('/blog/'))
+    .map((p) => ({
+      title: p.title,
+      url: p.fullUrl,
+      description: p.frontmatter.description,
+      date: p.frontmatter.date ?? null,
+    })),
+});
+
 if (DRY_RUN) {
   console.log(`[dry-run] Would write ${fullContent.length} chars to ${LLMS_FULL_TXT}`);
   console.log(`[dry-run] Would write ${ctxBytes} bytes (${ctxSections.length} pages) to ${LLMS_CTX_TXT}`);
   console.log(`[dry-run] Would write ${pages.length} .md twins to ${MD_TWINS_DIR}`);
+  console.log(`[dry-run] Would write ${feedXml.length} chars to ${BLOG_FEED}`);
 } else {
+  mkdirSync(dirname(BLOG_FEED), { recursive: true });
+  writeFileSync(BLOG_FEED, feedXml, 'utf8');
+  console.log('✓ Wrote blog/feed.xml');
+
   writeFileSync(LLMS_FULL_TXT, fullContent, 'utf8');
   console.log(`✓ Wrote llms-full.txt (${Math.round(fullContent.length / 1024)} KB, ${files.length} pages)`);
 

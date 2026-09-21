@@ -15,8 +15,10 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { buildRssFeed, escapeXml } from '../../../scripts/lib/blog-feed.mjs'
 import { parseFrontmatter } from '../../../scripts/lib/frontmatter.mjs'
 import { mdxToPlainMarkdown } from '../../../scripts/lib/mdx-prose.mjs'
+import { BLOG_FEED_URL, blogPostingJsonLd } from './structured-data'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PUBLIC_DIR = join(__dirname, '..', 'public')
@@ -110,7 +112,51 @@ describe('mdxToPlainMarkdown', () => {
   })
 })
 
+describe('blog feed and BlogPosting', () => {
+  const feed = buildRssFeed({
+    title: 'Blog',
+    link: 'https://example.test/blog',
+    description: 'Notes & numbers',
+    feedUrl: 'https://example.test/blog/feed.xml',
+    author: 'Kenji Sakuramoto',
+    posts: [
+      { title: 'Old', url: 'https://example.test/blog/old', date: '2026-06-17' },
+      { title: 'Undated', url: 'https://example.test/blog/undated' },
+      { title: "Here's <new>", url: 'https://example.test/blog/new', description: 'A & B', date: '2026-09-21' },
+    ],
+  })
+
+  it('escapes text and orders dated posts newest first, undated last', () => {
+    expect(escapeXml(`<a href="x">'&'</a>`)).toBe('&lt;a href=&quot;x&quot;&gt;&apos;&amp;&apos;&lt;/a&gt;')
+    expect(feed).toContain('<title>Here&apos;s &lt;new&gt;</title>')
+    expect(feed).toContain('<description>A &amp; B</description>')
+    const order = [...feed.matchAll(/<item>\s*<title>([^<]+)<\/title>/g)].map((m) => m[1])
+    expect(order).toEqual(['Here&apos;s &lt;new&gt;', 'Old', 'Undated'])
+  })
+
+  it('uses the newest post for lastBuildDate so regenerating is deterministic', () => {
+    expect(feed).toContain(`<lastBuildDate>${new Date('2026-09-21').toUTCString()}</lastBuildDate>`)
+    expect(feed).toContain('<atom:link href="https://example.test/blog/feed.xml" rel="self" type="application/rss+xml"/>')
+  })
+
+  it('builds BlogPosting JSON-LD with the publish date only when the post has one', () => {
+    const dated = blogPostingJsonLd({
+      title: 'Post',
+      url: 'https://kensaur.us/mushi-mushi/docs/blog/post',
+      datePublished: new Date('2026-09-21'),
+    })
+    expect(dated).toMatchObject({ '@type': 'BlogPosting', headline: 'Post', datePublished: '2026-09-21T00:00:00.000Z' })
+    expect(blogPostingJsonLd({ title: 'Post', url: 'https://x.test' })).not.toHaveProperty('datePublished')
+  })
+})
+
 describe('generated files in public/', () => {
+  it('blog/feed.xml lists the dated posts', () => {
+    const xml = readFileSync(join(PUBLIC_DIR, 'blog', 'feed.xml'), 'utf8')
+    expect(xml).toContain(`<atom:link href="${BLOG_FEED_URL}"`)
+    expect(xml).toContain('<link>https://kensaur.us/mushi-mushi/docs/blog/nine-signups-what-the-data-said</link>')
+  })
+
   it('llms.txt keeps full titles and adds page descriptions', () => {
     const txt = readFileSync(join(PUBLIC_DIR, 'llms.txt'), 'utf8')
     expect(txt).toContain("Here's what the data said.](")
