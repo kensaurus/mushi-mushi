@@ -43,11 +43,11 @@ describe('resolveProjectFaviconDomains', () => {
     ).toEqual(['solo-boss.kensaur.us']);
   });
 
-  it('resolves How to Talk to Girls and Tsumagoi from slug hints', () => {
+  it('resolves Cooler Heads and Tsumagoi from slug hints', () => {
     expect(
       resolveProjectFaviconDomains({
         project_id: 'httg',
-        project_name: 'How to Talk to Girls',
+        project_name: 'Cooler Heads',
         project_slug: 'how-to-talk-to-girls',
         sdk_origin: 'https://kensaur.us/',
       }),
