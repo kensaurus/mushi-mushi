@@ -5,44 +5,47 @@
  * Smithery quality score weights: tool descriptions, inputSchema depth, server metadata,
  * repository/homepage/license links.
  *
- * Tool list is sourced from mcp-discovery-tools.json, NOT mcp-hosted-tool-manifest.json:
- * the latter only covers the subset of tools built at runtime via buildManifestTools()
- * and omits tools hand-coded in mcp/index.ts's BASE_TOOLS (get_fix_context, dispatch_fix,
- * ...), so a card built from it alone under-advertises the real hosted server. Regenerate
- * mcp-discovery-tools.json with `node scripts/sync-mcp-discovery-card.mjs` whenever the
- * canonical catalog (packages/mcp/src/catalog.ts) changes.
+ * Everything tool-shaped comes from mcp-discovery-tools.json, generated from the
+ * canonical stdio catalog and the zod schemas it registers
+ * (`node scripts/sync-mcp-discovery-card.mjs`, CI: --check): titles, annotations,
+ * input and output schemas, resources, prompts and the package version. The card
+ * used to advertise every tool with an empty input schema, no annotations, titles
+ * made by name.replace, version 2.0.0, and API-key auth only — so scanners hid the
+ * OAuth sign-in the product is built around.
  */
 
 import { PUBLIC_CORS_HEADERS } from './cors.ts'
-import manifestRaw from './mcp-discovery-tools.json' with { type: 'json' }
-import { SERVER_INFO_EXTENDED } from './mcp-branding.ts'
+import discoveryRaw from './mcp-discovery-tools.json' with { type: 'json' }
 
 const SMITHERY_SERVER_URL = 'https://smithery.ai/servers/kensaurus/mushi-mushi'
 const PRODUCT_HOMEPAGE = 'https://kensaur.us/mushi-mushi/docs/connect'
 const REPOSITORY = 'https://github.com/kensaurus/mushi-mushi'
+const MCP_QUICKSTART = 'https://kensaur.us/mushi-mushi/docs/quickstart/mcp'
 
-type ManifestEntry = {
+export interface DiscoveryTool {
+  title: string
   description: string
-  scope?: string
-  required?: string[]
+  scope: 'mcp:read' | 'mcp:write'
+  annotations?: Record<string, unknown>
+  inputSchema: Record<string, unknown>
+  outputSchema?: Record<string, unknown>
+  returnsUntrusted?: boolean
 }
 
-/** Map manifest `required` keys to JSON Schema properties Smithery can score. */
-function inputSchemaFromManifest(entry: ManifestEntry): Record<string, unknown> {
-  const required = entry.required ?? []
-  const properties: Record<string, unknown> = {}
-  for (const name of required) {
-    properties[name] = {
-      type: 'string',
-      description: `Required parameter \`${name}\` for ${entry.description.split('.')[0]}.`,
-    }
-  }
-  return {
-    type: 'object',
-    properties,
-    ...(required.length ? { required } : {}),
-    additionalProperties: false,
-  }
+export interface McpDiscovery {
+  /** `@mushi-mushi/mcp@<version>` the metadata was generated from (kept current by sync-mcp-pin). */
+  packagePin: string
+  tools: Record<string, DiscoveryTool>
+  resources: Array<{ name: string; uri: string; title: string; description: string }>
+  prompts: Array<{ name: string; description: string }>
+}
+
+/** Canonical tool metadata, generated from packages/mcp — see the module doc. */
+export const MCP_DISCOVERY = discoveryRaw as McpDiscovery
+
+/** The @mushi-mushi/mcp version this deploy's catalog comes from, e.g. 0.21.0. */
+export function mcpPackageVersion(): string {
+  return MCP_DISCOVERY.packagePin.slice(MCP_DISCOVERY.packagePin.lastIndexOf('@') + 1)
 }
 
 export const MUSHI_SMITHERY_CONFIG_SCHEMA = {
@@ -51,7 +54,8 @@ export const MUSHI_SMITHERY_CONFIG_SCHEMA = {
     mushiApiKey: {
       type: 'string',
       title: 'Mushi API key',
-      description: 'Mint at kensaur.us/mushi-mushi/docs/connect (mcp:read scope)',
+      description:
+        'Optional when your client signs in with OAuth. Otherwise mint one at kensaur.us/mushi-mushi/docs/connect (mcp:read scope).',
       'x-from': { header: 'x-mushi-api-key' },
     },
     mushiProjectId: {
@@ -62,24 +66,32 @@ export const MUSHI_SMITHERY_CONFIG_SCHEMA = {
       'x-to': { header: 'X-Mushi-Project-Id' },
     },
   },
-  required: ['mushiApiKey'],
 } as const
 
-export function buildMcpServerCard(): Record<string, unknown> {
-  const manifest = manifestRaw as Record<string, ManifestEntry>
-  const tools = Object.entries(manifest)
+/** Where the OAuth flow for this deployment is described, as seen by the requesting client. */
+export interface ServerCardOAuth {
+  /** OAuth issuer / authorization server (RFC 8414). */
+  authorizationServer: string
+  /** RFC 9728 Protected Resource Metadata URL. */
+  resourceMetadata: string
+}
+
+export function buildMcpServerCard(oauth?: ServerCardOAuth): Record<string, unknown> {
+  const tools = Object.entries(MCP_DISCOVERY.tools)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, spec]) => ({
       name,
-      title: name.replace(/_/g, ' '),
+      title: spec.title,
       description: spec.description,
-      inputSchema: inputSchemaFromManifest(spec),
+      inputSchema: spec.inputSchema,
+      ...(spec.outputSchema ? { outputSchema: spec.outputSchema } : {}),
+      ...(spec.annotations ? { annotations: spec.annotations } : {}),
     }))
 
   return {
     serverInfo: {
-      name: SERVER_INFO_EXTENDED.title,
-      version: SERVER_INFO_EXTENDED.version,
+      name: 'Mushi Mushi',
+      version: mcpPackageVersion(),
       description:
         'Your AI shipped it. Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key.',
       homepage: PRODUCT_HOMEPAGE,
@@ -88,15 +100,29 @@ export function buildMcpServerCard(): Record<string, unknown> {
     },
     authentication: {
       required: true,
-      schemes: ['apiKey'],
+      // OAuth first: MCP clients discover it from the 401 challenge and sign
+      // the user in; a project API key header remains the fallback.
+      schemes: ['oauth2', 'apiKey'],
+      oauth2: {
+        ...(oauth ?? {}),
+        scopes: ['mcp:read', 'mcp:write'],
+        documentation: MCP_QUICKSTART,
+      },
+      apiKey: { header: 'X-Mushi-Api-Key', alternative: 'Authorization: Bearer mushi_…' },
     },
     configSchema: MUSHI_SMITHERY_CONFIG_SCHEMA,
     tools,
-    resources: [],
-    prompts: [],
+    resources: MCP_DISCOVERY.resources.map(({ name, uri, title, description }) => ({
+      name,
+      uri,
+      title,
+      description,
+      mimeType: 'application/json',
+    })),
+    prompts: MCP_DISCOVERY.prompts,
     links: {
       connect: PRODUCT_HOMEPAGE,
-      docs: 'https://kensaur.us/mushi-mushi/docs/quickstart/mcp',
+      docs: MCP_QUICKSTART,
       smithery: SMITHERY_SERVER_URL,
       repository: REPOSITORY,
     },
@@ -106,5 +132,7 @@ export function buildMcpServerCard(): Record<string, unknown> {
 export const MCP_SERVER_CARD_HEADERS: Record<string, string> = {
   'Content-Type': 'application/json; charset=utf-8',
   'Cache-Control': 'public, max-age=3600, s-maxage=3600',
+  // The oauth2 block names the URL the request came in on.
+  Vary: 'X-Forwarded-Host, X-Amz-Cf-Id, Via',
   ...PUBLIC_CORS_HEADERS,
 }

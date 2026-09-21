@@ -1,401 +1,3268 @@
 {
-  "activation_status": {
-    "description": "Return the unified activation posture — SDK heartbeat, ingested reports, GitHub, MCP readiness, QA stories, and the next best action. Read this before guessing which onboarding step is blocking the user. Also available as the mushi://activation resource for resource-reader clients. Returns { sdkActive, reportsIngested, githubConnected, mcpConnected, qaStoriesCreated, nextBestAction }.",
-    "scope": "mcp:read"
-  },
-  "add_byok_key": {
-    "description": "Add and immediately validate a BYOK API key for anthropic | openai | firecrawl | browserbase | cursor. The raw key is stored encrypted in Supabase Vault and never returned; failed probes remain quarantined. Optional baseUrl is accepted only for allow-listed OpenAI-compatible HTTPS providers. Write; NOT idempotent.",
-    "scope": "mcp:write",
-    "required": [
-      "projectId",
-      "provider",
-      "key"
-    ]
-  },
-  "analyze_codebase_impact": {
-    "description": "Find files that depend on a set of changed paths by walking the reverse import graph. Source paths from: manual list, last push, a GitHub compare range, or a fix PR's files. Returns { changed_paths, source, affected_file_paths, affected_node_ids, meta }. Requires codebase indexing. Read-only. Use to gauge a diff's blast radius before merging; use get_blast_radius for a bug's component impact, or search_codebase to locate files.",
-    "scope": "mcp:read"
-  },
-  "analyze_wiki_knowledge": {
-    "description": "Return the wiki/docs knowledge-graph nodes and their sources for the project. Returns { nodes: [{ id, label, source_url }], sources }. Read-only. Use to see what doc entities exist; pass include_wiki=true to ask_codebase to merge this corpus into a grounded answer.",
-    "scope": "mcp:read"
-  },
-  "approve_qa_story": {
-    "description": "Approve or reject a qa_story currently in pending_review (pass approve=true|false and an optional note). Approved stories are enabled in the QA schedule immediately; rejected ones are disabled. Returns { id, approval_status }. Write; idempotent — re-approving an approved story is a no-op. Use to clear the review queue from list_pending_review_stories.",
-    "scope": "mcp:write",
-    "required": [
-      "projectId",
-      "qaStoryId",
-      "status"
-    ]
-  },
-  "ask_codebase": {
-    "description": "Answer a plain-English question about the connected repo, grounded on pgvector retrieval over project_codebase_files. Returns { answer, citations: [{ path, line }] }. Set include_wiki=true to merge docs/wiki knowledge. Requires codebase indexing + your Anthropic or OpenAI key; consumes LLM budget (write scope). Use for \"how does X work?\"; use search_codebase for raw file matches without synthesis, or get_file_summary for one file.",
-    "scope": "mcp:write"
-  },
-  "award_bonus_points": {
-    "description": "Award ad-hoc bonus points (1-50000, positive only — there is no way to subtract via this tool) to a contributor by their external user id (as passed to Mushi.identify()). Points post immediately to their total and are audit-logged as bonus_manual. Destructive and effectively irreversible: there is no reversal endpoint, so confirm the amount and recipient with the user before calling. Tier re-evaluation (and any host-side reward_webhooks grant tied to crossing a threshold) is NOT immediate — it only runs on the contributor's next tracked activity, not on this call. Requires mcp:write scope. Use this to thank a contributor who found a critical bug or to run a one-off promotional campaign.",
-    "scope": "mcp:write",
-    "required": [
-      "external_user_id",
-      "points",
-      "reason"
-    ]
-  },
-  "check_sdk_version": {
-    "description": "Compare a published @mushi-mushi/* package version against the catalog (GET /v1/sdk/latest-version). Returns { package, current, latest, outdated } and, when outdated, suggestedActions (Sentry-style, max 1) pointing at search_mushi_docs plus the mushi-sdk-upgrade skill. Read-only. Use when Dependabot or mushi upgrade --check reports a drift, or before dispatching a fix that assumes a current SDK. Does not bump the pin — that stays a human/Dependabot change.",
-    "scope": "mcp:read"
-  },
-  "checkin_pipeline_step": {
-    "description": "Report the completion status of a pipeline step (passed, failed, running, or skipped). Optionally include notes, a PR URL, or the Cursor agentId. Updates the live React Flow canvas in the Mushi console so PMs see real-time progress.",
-    "scope": "mcp:write",
-    "required": [
-      "run_id",
-      "step_index",
-      "status"
-    ]
-  },
-  "diagnose_setup": {
-    "description": "Diagnose Mushi setup health and return the single best next action. mode=full (default) runs both SDK-ingest and fix-dispatch preflight checks; mode=ingest runs ingest checks only (project exists, active API key, SDK heartbeat, at least one report); mode=dispatch runs dispatch readiness only (GitHub connected, codebase indexed, LLM key present, autofix enabled). Returns { ready, steps: [{ label, complete, required, hint }], nextAction }. Read-only. The one setup-diagnosis entry point — use this instead of separate connection/ingest checks.",
-    "scope": "mcp:read"
-  },
-  "diff_inventory": {
-    "description": "Diff two ingested inventory commits (fromSha to toSha): added/removed nodes and edges. Returns { added, removed, changed }. Requires inventory_v2. Read-only. Use before merging a PR that touches inventory.yaml to see what changed; use get_inventory for the current snapshot.",
-    "scope": "mcp:read",
-    "required": [
-      "fromSha",
-      "toSha"
-    ]
-  },
-  "dispatch_fix": {
-    "description": "Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent=\"cursor_cloud\" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns { fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not.",
-    "scope": "mcp:write"
-  },
-  "generate_tdd_from_story": {
-    "description": "Generate a full Playwright TypeScript test from a mapped user story id (from accepted inventory) using Claude, and insert a qa_stories row (source=test_gen_from_story). approval_status follows the project automation_mode (auto = enabled immediately; review/approve = pending_review). Optionally opens a draft GitHub PR. Returns { qaStoryId, prUrl, approvalStatus, needsHumanReview }. Write; consumes LLM budget; NOT idempotent. Run map_user_stories first; use test_gen_from_report to build a test from a bug report instead.",
-    "scope": "mcp:write",
-    "required": [
-      "projectId",
-      "storyNodeId"
-    ]
-  },
-  "get_account_overview": {
-    "description": "Return an enriched summary of every Mushi project accessible to this API key: id, name, recent report count (last 30 days), number of connected MCP keys, and last-seen heartbeat timestamp. For project-scoped keys this is a one-item list; for org-scoped (account) keys it lists every owned project. Also includes toolCount, resourceCount, promptCount so agents know how many tools are available. Call this at the start of a multi-repo or multi-app triage session to orient yourself.",
-    "scope": "mcp:read"
-  },
-  "get_backend_health": {
-    "description": "Return the current backend health state for a linked Supabase project: table list (with RLS enabled status), recent API and Postgres error logs, and DB advisor findings. Uses the read-only Supabase MCP client via the stored PAT. Returns { tables, logs, advisors, projectRef } when the backend is linked, or { reason: \"no_supabase_pat\" | \"no_project_ref\" } when it is not configured. This is the read-only fast path — use run_fullstack_audit for the full scorecard including gate results.",
-    "scope": "mcp:read"
-  },
-  "get_blast_radius": {
-    "description": "Return the other components/pages a bug group touches, via knowledge-graph traversal from the report node. Returns { nodes: [{ id, label, type }], edges }. Read-only. Use before dispatch_fix to scope a change safely; use get_knowledge_graph to traverse from an arbitrary seed, or analyze_codebase_impact for file-level import impact.",
-    "scope": "mcp:read"
-  },
-  "get_codebase_domains": {
-    "description": "Extract the business domains, flows, and steps in the repo, each mapped to the file paths that implement it. Returns { domains: [{ name, flows: [{ name, steps, paths }] }] }. Cached per index fingerprint. Requires codebase indexing. Read-only. Use to see what the app does at a product level; use get_codebase_tour for a dependency-ordered code walkthrough instead.",
-    "scope": "mcp:read"
-  },
-  "get_codebase_tour": {
-    "description": "Return a dependency-ordered onboarding tour of the repo (~6-10 stops); each stop lists node ids, file paths, architectural layer, and why it matters. Returns { stops: [{ title, paths, layer, rationale }] }. Cached per index fingerprint. Requires codebase indexing. Read-only. Use to get oriented in an unfamiliar repo; use get_codebase_domains for a business-domain map, or get_file_summary for one file.",
-    "scope": "mcp:read"
-  },
-  "get_file_summary": {
-    "description": "Return a plain-English summary of one indexed file or symbol (lazily generated on first call, then cached until content_hash changes on re-index). Returns { path, summary, symbols }. Requires codebase indexing. Read-only. Use to understand a single file fast; use ask_codebase for cross-file questions, or get_codebase_tour for an onboarding walkthrough.",
-    "scope": "mcp:read"
-  },
-  "get_fix_context": {
-    "description": "Bundle everything an agent needs to fix one bug in a single call: a paste-ready fixPrompt (plain-English diagnosis + reproduction + suggested fix + relevant code + blast radius), plus report detail, repro steps, component, root cause, and ontology tags. Returns { fixPrompt, report, reproduction, component, rootCause, tags }. Read-only; no second LLM key needed. Use before writing a fix; use triage_issue for a multi-report review packet, or suggest_fix for just the Stage-2 hint.",
-    "scope": "mcp:read"
-  },
-  "get_fix_timeline": {
-    "description": "Return the ordered lifecycle of one fix attempt: dispatched, started, branch, commit, PR opened, CI, completed/failed, with timestamps and the PR URL. Returns { events: [{ ts, stage, detail }] }. Read-only. Use to debug \"why did this fix fail?\" after dispatch_fix; use refresh_ci to re-poll GitHub CI, or get_report_timeline for the whole report thread.",
-    "scope": "mcp:read"
-  },
-  "get_graph_neighborhood": {
-    "description": "Return the BFS neighborhood around one graph node by id or label: { nodes: [{ id, label, node_type }], edges: [{ source_node_id, target_node_id, edge_type }] } within a depth budget (default 2, max 4). Read-only. Tuned for \"what touches this action?\"; use get_knowledge_graph to traverse from a component seed, or get_graph_node for a single node's row.",
-    "scope": "mcp:read"
-  },
-  "get_graph_node": {
-    "description": "Fetch one knowledge-graph node row by id. Returns { node: { id, node_type, label, metadata } } including the v2 derived status on Action nodes (ok | stale | broken). Read-only. Use to inspect a single node's status; use get_graph_neighborhood to see what connects to it.",
-    "scope": "mcp:read"
-  },
-  "get_inventory": {
-    "description": "Return the current inventory.yaml snapshot for a project: latest ingest, validation errors, and a per-action status summary. Returns { snapshot, validationErrors, actions: [{ id, status }] }. Requires the inventory_v2 plan. Read-only. Use for the full current state; use diff_inventory to compare two commits, or list_gate_findings for the latest gate results.",
-    "scope": "mcp:read"
-  },
-  "get_knowledge_graph": {
-    "description": "Traverse the knowledge graph from a seed component or page. Returns { nodes: [{ id, label, node_type }], edges: [{ source_node_id, target_node_id, edge_type }] } within a depth budget (default 2, max 4 hops). Read-only. Use to see how a component connects to the rest of the app; use get_blast_radius for a bug's impact area, or get_graph_neighborhood for a tighter BFS around one node.",
-    "scope": "mcp:read"
-  },
-  "get_map_run_status": {
-    "description": "Poll the status and results of a story_map_run started by map_user_stories. Returns { status: pending|running|completed|failed, pages_crawled, proposal_id (once done), cursor_pr_url (if Cursor Cloud refined the draft) }. Read-only. Use to know when a crawl has finished and which inventory_proposals row to review next.",
-    "scope": "mcp:read",
-    "required": [
-      "projectId"
-    ]
-  },
-  "get_mushi_doc": {
-    "description": "Fetch one official Mushi docs page as Markdown, by a url from search_mushi_docs or a route such as \"/quickstart/mcp\". Returns { title, url, markdown, truncated }; markdown is capped at 8,000 characters and says where to read the rest. Only indexed docs pages resolve. Read-only; works without an API key. Use after search_mushi_docs when an excerpt is not enough.",
-    "scope": "mcp:read"
-  },
-  "get_pipeline_logs": {
-    "description": "Pull recent log entries from the Mushi pipeline services: fix-worker, qa-story-runner, pipeline, or all. Accepts project_id, service, since (ISO-8601), limit (max 200), and level (info | warn | error | fatal) filters. Returns structured log rows with timestamp, level, service, message, and a trace_id/report_id when available. Use this when a fix failed, a QA story keeps erroring, or an ingest pipeline went silent.",
-    "scope": "mcp:read"
-  },
-  "get_pipeline_run": {
-    "description": "Fetch a skill pipeline run by id: { status, context_packet, steps: [{ index, slug, status }] }. Read-only. Use to retrieve the context_packet when a pipeline was started from the console or another agent; then checkin_pipeline_step as you complete each step. Use start_skill_pipeline to begin a new run.",
-    "scope": "mcp:read",
-    "required": [
-      "run_id"
-    ]
-  },
-  "get_product_events_summary": {
-    "description": "Summarise the Mushi.track() product events this project received in the trailing windowDays (default 30): event names with counts and distinct users, daily volume, and top properties. Returns { window_days, events_total, persons, identified, anonymous, events_per_day: [{ day, count }], top_events: [{ name, count, persons }] }. Read-only. Use first to learn which event names exist before calling query_funnel or get_user_paths; use run_nl_query for ad-hoc SQL over the same rows.",
-    "scope": "mcp:read"
-  },
-  "get_project_context": {
-    "description": "Return a rich context snapshot for a project: name, repo URL, SDK heartbeat, ingest status, open report count, autofix readiness, your LLM key config, plan tier, and active integration health. Equivalent to a merged preflight + activation + settings read. Agents should call this at the start of a review session to orient themselves.",
-    "scope": "mcp:read"
-  },
-  "get_qa_story_run": {
-    "description": "Fetch the full detail for a single qa_story_run: status, error_message, assertion_failures, latency_ms, provider_session_url (Browserbase replay link when available), and screenshot URLs from qa_story_evidence. Use this to drill into a specific failing run and understand the exact error before deciding whether to improve the story script or fix the app.",
-    "scope": "mcp:read",
-    "required": [
-      "storyId",
-      "runId"
-    ]
-  },
-  "get_recent_reports": {
-    "description": "List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, component, created_at, processing_error }], total }; include_raw=true returns every list column instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed|…), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports.",
-    "scope": "mcp:read"
-  },
-  "get_report_detail": {
-    "description": "Fetch the full record for one bug report by id: description, console logs, network requests, screenshot URL, classification (stage 1/2), and fix history. Returns { report }. Read-only. Use when you have a reportId and need everything about it; for evidence only use get_report_evidence, for the activity thread use get_report_timeline, for a one-call fix bundle use get_fix_context.",
-    "scope": "mcp:read"
-  },
-  "get_report_evidence": {
-    "description": "Return the full evidence package for a single bug report covering all three observability pillars: (1) LOGS — console_logs (error/warn/info/debug entries with timestamps), breadcrumbs (SDK ring buffer: navigation, clicks, network, lifecycle events with category/level), repro_timeline (merged SDK event stream: route/click/request/log/screen), and the reporter's own comments thread; (2) TRACES — network_requests (SDK-captured fetch/XHR with method/status/duration/traceId), backend_spans (server-side spans joined by W3C trace_id: name/duration_ms/parentSpanId/status), and Sentry trace correlation IDs (sentry_trace_id, sentry_event_id) for deeplinks; (3) METRICS — performance_metrics (Web Vitals snapshot: LCP/CLS/INP/TTFB/FCP + INP attribution + page timing + connection info), anomalies (statistical provenance when auto-filed by CI metric regression: baseline_mean/std, score in σ, threshold); plus screenshot_url, browser environment (user agent, URL, viewport, SDK version), and tags. This is the same data an engineer would collect for a root-cause investigation. Faster than calling get_report_detail + report timeline separately.",
-    "scope": "mcp:read"
-  },
-  "get_report_timeline": {
-    "description": "Return the ordered activity timeline for one report (oldest to newest), merging reporter comments, fix events, QA runs, skill-pipeline steps, and Ask Mushi turns into one lane. Returns { events: [{ ts, kind, actor, summary }] }. Read-only. Use to see what happened end-to-end on a report thread; use get_report_detail for the static record or get_fix_timeline to debug one fix attempt.",
-    "scope": "mcp:read",
-    "required": [
-      "reportId"
-    ]
-  },
-  "get_similar_bugs": {
-    "description": "Find existing bugs similar to a component, page, or description via pgvector nearest-neighbour search (same backend as search_reports, tuned for \"have we seen this before?\"). Returns ranked { reports: [{ id, summary, similarity }] }. Read-only. Use to dedupe before filing or group regressions; use search_reports for general free-text search.",
-    "scope": "mcp:read",
-    "required": [
-      "query"
-    ]
-  },
-  "get_skill": {
-    "description": "Fetch one agent skill by slug, including the complete SKILL.md body and the resolved chain of sub-skills. Returns { slug, title, body, chain: [{ slug, title }] }. Read-only. Use to read what a skill instructs before executing a pipeline step; use list_skills to discover slugs.",
-    "scope": "mcp:read",
-    "required": [
-      "slug"
-    ]
-  },
-  "get_two_way_comms_health": {
-    "description": "Summarize SDK ↔ admin two-way reporter health for a host app: last SDK heartbeat, app version/platform last seen, unread reporter messages, recent reporter replies, and pending QA/TDD follow-ups. Use after wiring @mushi-mushi/web in a Vite/Capacitor app to confirm reports land in the console and admin/MCP replies reach the in-app widget.",
-    "scope": "mcp:read"
-  },
-  "get_usage": {
-    "description": "Read-only diagnoses quota and billing summary for the current project: diagnoses used / limit / percentage, spend cap, period start/end, plan name, and whether the project is approaching or over its quota. Use this to answer \"how many diagnoses do I have left?\" or \"am I close to my spend cap?\".",
-    "scope": "mcp:read"
-  },
-  "get_user_paths": {
-    "description": "What did users do next? Rank the events users fired immediately after fromEvent within the trailing windowDays (default 30), most common first, up to limit rows (default 20, max 50). Returns { from_event, total, next: [{ name, count, pct }] }. Read-only. Use to see where users go after a step instead of guessing the funnel order; use query_funnel once you know the ordered steps, or get_product_events_summary for event names.",
-    "scope": "mcp:read"
-  },
-  "improve_qa_story": {
-    "description": "Analyze recently failed qa_story_runs and use Claude to write improved test scripts that address the failures. New tests are created with source=pdca, parent_story_id chained to the original, and approval gated by the original story's automation_mode. Returns { improvedStoryIds }. Write; consumes LLM budget; NOT idempotent. Use to repair flaky/broken tests; use run_qa_story to re-run as-is, or list_qa_story_runs to inspect failures first.",
-    "scope": "mcp:write"
-  },
-  "list_byok_keys": {
-    "description": "List the project's BYOK API keys grouped by provider (anthropic | openai | firecrawl | browserbase | cursor). Returns pooled { keys: [{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at }] } plus read-only { legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, or rate-limited; use add_byok_key to add one.",
-    "scope": "mcp:read"
-  },
-  "list_gate_findings": {
-    "description": "List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead-handler | mock-leak | crawl | status-claim) or minimum severity (low|medium|high|critical). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.",
-    "scope": "mcp:read"
-  },
-  "list_lessons": {
-    "description": "List promoted learning rules (\"lessons\") for the current project, highest-frequency first. Returns { lessons: [{ id, rule_text, severity, frequency, anti_pattern, … }] }. Read-only. Use to browse the full catalog of encoded heuristics; use query_lessons to retrieve only lessons relevant to a specific diff or PR within a token budget.",
-    "scope": "mcp:read"
-  },
-  "list_pending_review_stories": {
-    "description": "List auto-generated QA/TDD stories in approval_status=pending_review — the queue waiting for human sign-off before they run on schedule. Returns { stories: [{ id, title, source, target_url, created_at }] }. Read-only. Use to find what needs review today; then approve_qa_story to approve or reject each.",
-    "scope": "mcp:read",
-    "required": [
-      "projectId"
-    ]
-  },
-  "list_projects": {
-    "description": "List all Mushi projects accessible to this API key. For project-scoped keys returns a single-item list; for org-scoped keys (account mode) returns every project owned by this account. Call this first when MUSHI_PROJECT_ID is not configured — use the returned id with subsequent tool calls. If multiple projects are returned, pass the target projectId explicitly to project-scoped tools. Multi-project tip: run `mushi setup --all-projects` in your terminal to create one named MCP server entry per project in .cursor/mcp.json.",
-    "scope": "mcp:read"
-  },
-  "list_qa_story_runs": {
-    "description": "Return the most recent runs for a given QA story, newest first. Each row includes status (passed/failed/error/running), latency_ms, created_at, error_message headline, and assertion_failures (up to 10). Use this to understand whether a story is currently healthy, what the last failure was, and whether a manual run has completed.",
-    "scope": "mcp:read",
-    "required": [
-      "storyId"
-    ]
-  },
-  "list_skills": {
-    "description": "List the agent skills in the catalog, optionally filtered by category or search text. Returns { skills: [{ slug, title, description, category, chain_slugs }] }. Read-only. Use to find the right skill slug before start_skill_pipeline; use get_skill to read one skill's full instructions.",
-    "scope": "mcp:read"
-  },
-  "list_top_contributors": {
-    "description": "Return the top N contributors for the organization, ranked by points in a time window (30d | 90d | all). Each row includes display name, tier, total points, report count, and anti-fraud flag. Use this to identify your most engaged power users, write them a thank-you message, or decide who deserves a bonus.",
-    "scope": "mcp:read"
-  },
-  "map_user_stories": {
-    "description": "Crawl a live application URL (Firecrawl/Browserbase) and have Claude draft an inventory.yaml of pages and user stories, written to an inventory_proposals row (source=live_crawl). Optionally dispatches a Cursor Cloud agent to refine the draft and open a PR. Returns { runId, status: \"pending\" } immediately — poll get_map_run_status. Write; consumes crawl + LLM budget; NOT idempotent. Use to bootstrap test coverage without hand-writing YAML; then generate_tdd_from_story per accepted story.",
-    "scope": "mcp:write",
-    "required": [
-      "projectId",
-      "baseUrl"
-    ]
-  },
-  "merge_fix": {
-    "description": "Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns { merged, reportStatus }. Write; destructive and irreversible from Mushi's side — once GitHub merges into the target repo's default branch there is no unmerge endpoint, only a manual revert PR outside this tool. Idempotent — re-running an already-merged attempt is a safe no-op. Prerequisite: CI green (check with refresh_ci); confirm the diff and CI status with the user before calling on a PR you have not reviewed. Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging.",
-    "scope": "mcp:write",
-    "required": [
-      "fixId"
-    ]
-  },
-  "query_funnel": {
-    "description": "Where do users drop off? Ordered funnel over Mushi.track() events for this project. Pass 2–8 step event names in order (e.g. [\"landing_view\", \"signup_completed\", \"first_report_received\"]); each step counts distinct users who did the previous step then this one within stepWindow (default 7d), over the trailing windowDays (default 30). Optional breakdown property (e.g. \"utm_source\", \"$surface\") splits every step. Returns { steps: [{ name, entered, converted, pct, median_secs }], breakdown: [{ value, entered, steps }] } (pct is conversion from step 1; breakdown is empty unless requested). Read-only. Use to find the biggest drop-off before changing onboarding; use get_product_events_summary to discover event names, or get_user_paths to see what users did after a step.",
-    "scope": "mcp:read"
-  },
-  "query_lessons": {
-    "description": "Retrieve the learning rules (\"lessons\") most relevant to a given code diff or PR context, packed within a token budget. Uses bi-encoder retrieval + severity-weighted scoring; pass the diff/description as the query and max_tokens (default 2000). Returns ranked { lessons: [{ title, rule, severity }] }. Read-only. Use before writing a fix or opening a PR; use list_lessons to browse all lessons unfiltered.",
-    "scope": "mcp:read"
-  },
-  "refresh_ci": {
-    "description": "Re-poll GitHub for the latest check-run status of a fix attempt's PR and persist it on the fix_attempt row (does not merge or mutate GitHub). Returns { check_run_status, check_run_conclusion, check_run_updated_at }. Write; idempotent. Use right before merge_fix to confirm CI is green; use get_fix_timeline for the full attempt lifecycle.",
-    "scope": "mcp:write",
-    "required": [
-      "fixId"
-    ]
-  },
-  "remove_byok_key": {
-    "description": "Permanently remove one pooled BYOK credential by key id from the authenticated project, including its Vault secret. Write; destructive; idempotent.",
-    "scope": "mcp:write",
-    "required": [
-      "keyId"
-    ]
-  },
-  "reopen_report": {
-    "description": "Move a previously fixed/verified/dismissed report back to the reopened state for regression review, recording an operator note. Returns { report } with status=reopened. Write; idempotent — reopening an already-reopened report is a no-op. Use when a reporter says \"still broken\" after a fix shipped; use transition_status for any other state change.",
-    "scope": "mcp:write",
-    "required": [
-      "reportId"
-    ]
-  },
-  "reply_to_reporter": {
-    "description": "Send a visible message to the end-user who filed a bug report. The reply appears in the in-app Mushi widget as an admin comment and creates an unread notification badge so the reporter sees it immediately. Use this to answer questions, request reproduction steps, or confirm a fix — without leaving the Cursor IDE.",
-    "scope": "mcp:write",
-    "required": [
-      "reportId",
-      "message"
-    ]
-  },
-  "run_fullstack_audit": {
-    "description": "Fan out a full-stack health audit for the current project: DB schema + advisors, API contract gate results (Gates 3–8), recent backend error logs, and RLS gap detection. Returns a PM-readable scorecard with severity-ranked findings and fix hints. Requires the project to have a Supabase PAT configured (Settings → API Keys, slug: supabase) and supabase_project_ref set in project settings for backend analysis. The audit completes synchronously in ~10 s. Triggers a background gate run for orphan_endpoint and unknown_call gates if they have not run today.",
-    "scope": "mcp:write"
-  },
-  "run_nl_query": {
-    "description": "Answer a natural-language question about your project data by generating and running a read-only SQL query (no privileged schemas, rate-limited to 60/hour). Returns { sql, rows }. Use for ad-hoc analytics (\"which components had the most critical bugs this week?\"); use get_recent_reports/search_reports for plain report lookups, or search_mushi_docs for documentation questions.",
-    "scope": "mcp:read"
-  },
-  "run_qa_story": {
-    "description": "Queue an immediate manual run for an enabled + approved qa_story (equivalent to \"Run now\" in the console). Returns { runId } right away; poll list_qa_story_runs or get_qa_story_run for progress and results. Write; NOT idempotent — each call creates a new run; returns 409 if the story is disabled or pending review. Use to verify a flow on demand; use improve_qa_story to repair a failing story.",
-    "scope": "mcp:write",
-    "required": [
-      "projectId",
-      "qaStoryId"
-    ]
-  },
-  "search_codebase": {
-    "description": "Search the indexed repo by plain-English meaning via embeddings. Returns { results: [{ file_path, line_start, line_end, content_preview, similarity, … }], query, mode } ordered by similarity. Requires codebase indexing enabled. Read-only. Use to locate where something lives (\"where do we verify webhooks?\"); use ask_codebase for a synthesized answer with citations, or analyze_codebase_impact to find dependents of a file.",
-    "scope": "mcp:read"
-  },
-  "search_mushi_docs": {
-    "description": "Search the official Mushi documentation (guides, MCP setup, inventory, QA, skills) by keyword — titles, section headings and summaries are indexed. Returns ranked { results: [{ title, url, excerpt, score }] }. Read-only; works without an API key. Use before guessing API shapes, tool names, or RPC names, then get_mushi_doc to read a page; use run_nl_query for questions about your own project data, not the docs.",
-    "scope": "mcp:read"
-  },
-  "search_reports": {
-    "description": "Search reports by meaning and keyword (pgvector similarity server-side; falls back to summary/description substring if embeddings are unavailable). Returns ranked { results: [{ id, summary, similarity }] }. Read-only. Use to find reports by free text (\"checkout flakiness\"); use get_similar_bugs to dedupe a known component/bug, or get_recent_reports to list without a query.",
-    "scope": "mcp:read"
-  },
-  "set_tier": {
-    "description": "Override a contributor's tier by tier slug (e.g. \"champion\"), bypassing the normal points-threshold logic entirely. This is an admin escape hatch for manual promotions — normal tier transitions happen automatically via point thresholds instead. Destructive: it is a label-only override that does NOT replay the automatic tier-evaluation path, so any host_credit_payload grant (Stripe perk, badge, etc.) normally tied to reaching that tier via points will NOT fire — confirm with the user whether they also need the perk granted another way. The override persists until another set_tier call changes it; the prior override stays in the end_user_activity audit trail either way, logged as tier_override_manual. Requires mcp:write scope.",
-    "scope": "mcp:write"
-  },
-  "start_skill_pipeline": {
-    "description": "Start a new skill pipeline run for a report. Pass root_skill_slug and optionally report_id. Returns run_id, context_packet (full instructions + report context), and step list. Read the context_packet — it contains skill instructions plus full report context (repro steps, root cause, RAG files). After executing each step, call checkin_pipeline_step. The PM watching the console sees progress live.",
-    "scope": "mcp:write",
-    "required": [
-      "root_skill_slug"
-    ]
-  },
-  "submit_fix_result": {
-    "description": "Record a fix outcome from an external agent (e.g. your own Cursor/Claude run): branch, PR URL, files changed, lines added/removed. Creates a fix_attempt row then patches it to completed and links it to the report. Returns { fixAttemptId }. Write; NOT idempotent — each call creates a new fix_attempt, so call once per PR. Use after you opened a PR outside Mushi; use dispatch_fix to have Mushi open the PR instead, or merge_fix once CI is green.",
-    "scope": "mcp:write",
-    "required": [
-      "reportId"
-    ]
-  },
-  "suggest_fix": {
-    "description": "Return the Stage-2 suggested-fix slice for one report: root cause, suggested fix, repro steps, summary, and component — faster than get_report_detail when you only need the human-readable hint. Returns { reportId, rootCause, suggestedFix, reproductionSteps, summary, component }. Read-only; reads the existing classification (run triage_issue first if unclassified). Use for a quick \"what should we try?\"; use get_fix_context for the full paste-ready bundle.",
-    "scope": "mcp:read",
-    "required": [
-      "reportId"
-    ]
-  },
-  "test_byok_key": {
-    "description": "Re-test one pooled BYOK credential by key id. A successful provider probe activates the key; auth, quota, and network failures keep it out of the runtime pool. Returns the sanitized validation result and updated key metadata. Write; idempotent.",
-    "scope": "mcp:write",
-    "required": [
-      "keyId"
-    ]
-  },
-  "test_gen_from_report": {
-    "description": "Generate a Playwright regression test from a classified report using your project LLM key, then open a draft GitHub PR with the spec. Requires the inventory_v2 plan plus GitHub and LLM keys configured. Returns { qaStoryId, prUrl }. Write; consumes LLM budget; NOT idempotent — each call opens a new PR. Use to lock in a regression as an E2E test; use generate_tdd_from_story to build a test from a mapped user story instead.",
-    "scope": "mcp:write",
-    "required": [
-      "reportId"
-    ]
-  },
-  "test_notification_channel": {
-    "description": "Send a test notification to a configured notification channel for the project. Supported channel kinds: \"slack\" (posts a test Block Kit message to the configured channel), \"discord\" (posts to the project discord_webhook_url). Returns ok=true if the message was accepted. Use this to verify the integration is working after setup or after changing credentials.",
-    "scope": "mcp:write",
-    "required": [
-      "kind"
-    ]
-  },
-  "transition_status": {
-    "description": "Move a report to a new workflow state, enforcing the same transition rules as the admin UI. Valid targets: classified, grouped, fixing, fixed, verified, reopened, dismissed. Returns { report } with the updated status. Write; idempotent (setting the current status is a no-op); rejects illegal transitions. Use to dismiss a duplicate or mark fixed; use merge_fix to mark fixed via a merged PR, or reopen_report for the reopened path.",
-    "scope": "mcp:write"
-  },
-  "triage_issue": {
-    "description": "Read-only combined tool: merges report detail, the reporter thread, similar bugs (matched on the report summary), the fix context (paste-ready fix prompt, repro steps, root cause), the blast radius of the inventory action the report is filed against, and recent pipeline warnings into a single structured review packet. Returns the packet plus prioritised recommended_actions, partial_errors for any source that failed, and notes for any source that does not apply (e.g. no blast radius when the report is not anchored to an inventory action). Equivalent to a Sentry \"Analyze with Seer\" flow grounded in user-felt reports. Pass report_id to kick off review. Call this before dispatch_fix.",
-    "scope": "mcp:read"
-  },
-  "triage_next_steps": {
-    "description": "Prioritised \"do this next\" list for the project: blocked auto-fixes first (with the unblock action), then in-flight fixes to shepherd to merge, then user-felt classified reports by severity, with robot/cron chores (dependency bumps) last. Returns { steps: [{ priority, action, reason, tool, args }], summary }. Read-only. Call this first when the user asks \"what needs my attention / what should I triage or fix\".",
-    "scope": "mcp:read"
-  },
-  "trigger_judge": {
-    "description": "Queue the Sonnet-as-Judge to grade recent fix quality across accessible projects. Returns { dispatched: number } — one judge-batch job per project; scores land asynchronously in judge_results (read back with run_nl_query). Write; consumes LLM budget. Idempotent within a short window. Use before shipping to vet fix quality; use get_fix_timeline to inspect a single attempt instead.",
-    "scope": "mcp:write"
-  },
-  "use_mushi": {
-    "description": "CALL THIS FIRST if you are new to this Mushi project or unsure which tool to use. Pass your intent as a short natural-language phrase (\"fix the top bug\", \"check what I should work on\", \"run QA tests\", \"set up Mushi\", …). Returns: (1) a curated list of the 5–12 tool names most relevant to that intent, (2) a one-paragraph orientation to the Mushi project and dashboard state, and (3) the single recommended first tool to call. Only tools this connection exposes are recommended; relevant tools hidden by the active feature groups are named with how to enable them. Avoids loading the full tool catalog into context when only a small subset is needed. Read-only; does not call any downstream tools itself.",
-    "scope": "mcp:read"
-  }
+  "packagePin": "@mushi-mushi/mcp@0.21.0",
+  "tools": {
+    "activation_status": {
+      "title": "Activation cockpit status",
+      "description": "Return the unified activation posture — SDK heartbeat, ingested reports, GitHub, MCP readiness, QA stories, and the next best action. Read this before guessing which onboarding step is blocking the user. Also available as the mushi://activation resource for resource-reader clients. Returns { sdkActive, reportsIngested, githubConnected, mcpConnected, qaStoriesCreated, nextBestAction }.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Activation cockpit status",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "description": "Project UUID (defaults to the configured project).",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "add_byok_key": {
+      "title": "Add an API key",
+      "description": "Add and immediately validate a BYOK API key for anthropic | openai | firecrawl | browserbase | cursor. The raw key is stored encrypted in Supabase Vault and never returned; failed probes remain quarantined. Optional baseUrl is accepted only for allow-listed OpenAI-compatible HTTPS providers. Write; NOT idempotent.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Add an API key",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "anthropic",
+              "openai",
+              "firecrawl",
+              "browserbase",
+              "cursor"
+            ],
+            "description": "Provider slug"
+          },
+          "key": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 4096,
+            "description": "The API key value to add"
+          },
+          "label": {
+            "description": "Human-readable label for this key",
+            "type": "string"
+          },
+          "priority": {
+            "description": "Priority for ordering (lower = higher priority)",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "baseUrl": {
+            "description": "Allow-listed OpenAI-compatible HTTPS base URL",
+            "type": "string",
+            "maxLength": 2048,
+            "format": "uri"
+          }
+        },
+        "required": [
+          "projectId",
+          "provider",
+          "key"
+        ]
+      }
+    },
+    "analyze_codebase_impact": {
+      "title": "Diff impact analysis",
+      "description": "Find files that depend on a set of changed paths by walking the reverse import graph. Source paths from: manual list, last push, a GitHub compare range, or a fix PR's files. Returns { changed_paths, source, affected_file_paths, affected_node_ids, meta }. Requires codebase indexing. Read-only. Use to gauge a diff's blast radius before merging; use get_blast_radius for a bug's component impact, or search_codebase to locate files.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Diff impact analysis",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "description": "Project UUID (defaults to configured project)",
+            "type": "string"
+          },
+          "paths": {
+            "description": "Changed repo-relative file paths to analyze",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source": {
+            "description": "Auto-resolve changed paths instead of manual paths",
+            "type": "string",
+            "enum": [
+              "last_push",
+              "compare",
+              "fix"
+            ]
+          },
+          "compare": {
+            "description": "GitHub compare range base...head when source=compare",
+            "type": "string"
+          },
+          "fix_id": {
+            "description": "Fix attempt UUID — uses that PR's changed files when source=fix",
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "changed_paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Resolved set of changed paths analyzed"
+          },
+          "source": {
+            "type": "string",
+            "description": "How changed_paths were resolved (manual, last_push, compare, fix, …)"
+          },
+          "affected_file_paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Indexed files that import or depend on changed paths"
+          },
+          "affected_node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Codebase graph node ids impacted by the change"
+          },
+          "meta": {
+            "description": "Extra resolution metadata when auto-sourced",
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "changed_paths",
+          "source",
+          "affected_file_paths",
+          "affected_node_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "analyze_wiki_knowledge": {
+      "title": "Wiki knowledge graph",
+      "description": "Return the wiki/docs knowledge-graph nodes and their sources for the project. Returns { nodes: [{ id, label, source_url }], sources }. Read-only. Use to see what doc entities exist; pass include_wiki=true to ask_codebase to merge this corpus into a grounded answer.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Wiki knowledge graph",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "description": "Project UUID (defaults to configured project)",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "approve_qa_story": {
+      "title": "Approve or reject a pending QA story",
+      "description": "Approve or reject a qa_story currently in pending_review (pass approve=true|false and an optional note). Approved stories are enabled in the QA schedule immediately; rejected ones are disabled. Returns { id, approval_status }. Write; idempotent — re-approving an approved story is a no-op. Use to clear the review queue from list_pending_review_stories.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Approve or reject a pending QA story",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id"
+          },
+          "qaStoryId": {
+            "type": "string",
+            "description": "QA story id to approve or reject"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected"
+            ],
+            "description": "New approval status"
+          }
+        },
+        "required": [
+          "projectId",
+          "qaStoryId",
+          "status"
+        ]
+      }
+    },
+    "ask_codebase": {
+      "title": "Ask about the indexed codebase",
+      "description": "Answer a plain-English question about the connected repo, grounded on pgvector retrieval over project_codebase_files. Returns { answer, citations: [{ path, line }] }. Set include_wiki=true to merge docs/wiki knowledge. Requires codebase indexing + your Anthropic or OpenAI key; consumes LLM budget (write scope). Use for \"how does X work?\"; use search_codebase for raw file matches without synthesis, or get_file_summary for one file.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Ask about the indexed codebase",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "description": "Project UUID (defaults to configured project)",
+            "type": "string"
+          },
+          "question": {
+            "type": "string",
+            "description": "Plain-English question about the repo"
+          },
+          "thread_id": {
+            "description": "Optional thread UUID to continue a conversation",
+            "type": "string"
+          },
+          "file_path": {
+            "description": "Optional file path focus",
+            "type": "string"
+          },
+          "symbol_name": {
+            "description": "Optional symbol name focus",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ]
+      }
+    },
+    "award_bonus_points": {
+      "title": "Award bonus points",
+      "description": "Award ad-hoc bonus points (1-50000, positive only — there is no way to subtract via this tool) to a contributor by their external user id (as passed to Mushi.identify()). Points post immediately to their total and are audit-logged as bonus_manual. Destructive and effectively irreversible: there is no reversal endpoint, so confirm the amount and recipient with the user before calling. Tier re-evaluation (and any host-side reward_webhooks grant tied to crossing a threshold) is NOT immediate — it only runs on the contributor's next tracked activity, not on this call. Requires mcp:write scope. Use this to thank a contributor who found a critical bug or to run a one-off promotional campaign.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Award bonus points",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "external_user_id": {
+            "type": "string",
+            "description": "The host-app user id as passed to Mushi.identify()"
+          },
+          "points": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50000,
+            "description": "Bonus points to award (max 50,000 per call)"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Human-readable reason, logged to end_user_activity"
+          }
+        },
+        "required": [
+          "external_user_id",
+          "points",
+          "reason"
+        ]
+      }
+    },
+    "check_sdk_version": {
+      "title": "Check SDK freshness",
+      "description": "Compare a published @mushi-mushi/* package version against the catalog (GET /v1/sdk/latest-version). Returns { package, current, latest, outdated } and, when outdated, suggestedActions (Sentry-style, max 1) pointing at search_mushi_docs plus the mushi-sdk-upgrade skill. Read-only. Use when Dependabot or mushi upgrade --check reports a drift, or before dispatching a fix that assumes a current SDK. Does not bump the pin — that stays a human/Dependabot change.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Check SDK freshness",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "package": {
+            "description": "npm package name (default @mushi-mushi/web). Examples: @mushi-mushi/web, @mushi-mushi/node, @mushi-mushi/core.",
+            "type": "string"
+          },
+          "current": {
+            "description": "Installed version from package.json, if known (e.g. 1.27.0).",
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "package": {
+            "type": "string"
+          },
+          "latest": {
+            "type": "string"
+          },
+          "current": {
+            "type": "string"
+          },
+          "outdated": {
+            "type": "boolean"
+          },
+          "suggestedActions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "tool_call"
+                },
+                "toolName": {
+                  "type": "string"
+                },
+                "arguments": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "toolName",
+                "arguments",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "package"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "checkin_pipeline_step": {
+      "title": "Check in a pipeline step",
+      "description": "Report the completion status of a pipeline step (passed, failed, running, or skipped). Optionally include notes, a PR URL, or the Cursor agentId. Updates the live React Flow canvas in the Mushi console so PMs see real-time progress.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Check in a pipeline step",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "Pipeline run UUID"
+          },
+          "step_index": {
+            "type": "number",
+            "description": "Step index (0-based)"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "passed",
+              "failed",
+              "skipped"
+            ],
+            "description": "Step status"
+          },
+          "notes": {
+            "description": "Optional notes or output summary",
+            "type": "string"
+          },
+          "pr_url": {
+            "description": "PR URL opened during this step",
+            "type": "string"
+          },
+          "agent_ref": {
+            "description": "Cursor agentId or external agent reference",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "step_index",
+          "status"
+        ]
+      }
+    },
+    "diagnose_setup": {
+      "title": "Unified setup diagnose",
+      "description": "Diagnose Mushi setup health and return the single best next action. mode=full (default) runs both SDK-ingest and fix-dispatch preflight checks; mode=ingest runs ingest checks only (project exists, active API key, SDK heartbeat, at least one report); mode=dispatch runs dispatch readiness only (GitHub connected, codebase indexed, LLM key present, autofix enabled). Returns { ready, steps: [{ label, complete, required, hint }], nextAction }. Read-only. The one setup-diagnosis entry point — use this instead of separate connection/ingest checks.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Unified setup diagnose",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "description": "full (default) = ingest + dispatch; ingest = SDK pipeline only; dispatch = fix preflight only.",
+            "type": "string",
+            "enum": [
+              "full",
+              "ingest",
+              "dispatch"
+            ]
+          },
+          "project_id": {
+            "description": "Project UUID for dispatch checks (defaults to configured project).",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Alias for project_id.",
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "nextAction": {
+            "type": "string"
+          },
+          "ingest": {},
+          "dispatch": {},
+          "connection": {}
+        },
+        "required": [
+          "mode",
+          "ready",
+          "summary"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "diff_inventory": {
+      "title": "Inventory diff",
+      "description": "Diff two ingested inventory commits (fromSha to toSha): added/removed nodes and edges. Returns { added, removed, changed }. Requires inventory_v2. Read-only. Use before merging a PR that touches inventory.yaml to see what changed; use get_inventory for the current snapshot.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Inventory diff",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to configured project",
+            "type": "string"
+          },
+          "fromSha": {
+            "type": "string",
+            "description": "Older commit SHA (the baseline to diff from)"
+          },
+          "toSha": {
+            "type": "string",
+            "description": "Newer commit SHA (the candidate to diff to)"
+          }
+        },
+        "required": [
+          "fromSha",
+          "toSha"
+        ]
+      }
+    },
+    "dispatch_fix": {
+      "title": "Dispatch Mushi fix agent",
+      "description": "Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent=\"cursor_cloud\" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns { fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Dispatch Mushi fix agent",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "Report UUID to fix"
+          },
+          "agent": {
+            "description": "Override the agent adapter",
+            "type": "string",
+            "enum": [
+              "claude_code",
+              "codex",
+              "rest_worker",
+              "mcp"
+            ]
+          },
+          "idempotencyKey": {
+            "description": "Optional RFC 4122 UUID. Resend the same key to safely retry without dispatching a duplicate fix job (Idempotency-Key IETF draft).",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "inventoryActionNodeId": {
+            "description": "Optional inventory Action node UUID for spec-traceability (§2.10). When provided, the fix-worker embeds the expected_outcome contract in the LLM prompt and runs validateAgainstSpec before opening the PR.",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "reportId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "fixId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fixId",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "generate_tdd_from_story": {
+      "title": "Generate TDD test from user story",
+      "description": "Generate a full Playwright TypeScript test from a mapped user story id (from accepted inventory) using Claude, and insert a qa_stories row (source=test_gen_from_story). approval_status follows the project automation_mode (auto = enabled immediately; review/approve = pending_review). Optionally opens a draft GitHub PR. Returns { qaStoryId, prUrl, approvalStatus, needsHumanReview }. Write; consumes LLM budget; NOT idempotent. Run map_user_stories first; use test_gen_from_report to build a test from a bug report instead.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Generate TDD test from user story",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project UUID that owns the inventory story"
+          },
+          "storyNodeId": {
+            "type": "string",
+            "description": "User story node id/slug from accepted inventory (from map_user_stories or inventory.yaml)"
+          },
+          "automationMode": {
+            "description": "Approval gate for the generated qa_story (default review → pending_review)",
+            "type": "string",
+            "enum": [
+              "auto",
+              "review",
+              "approve"
+            ]
+          },
+          "baseUrl": {
+            "description": "Override the live app URL the Playwright test should target",
+            "type": "string",
+            "format": "uri"
+          },
+          "openPr": {
+            "description": "Open a draft GitHub PR with the generated spec (default true)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId",
+          "storyNodeId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "qaStoryId": {
+            "type": "string",
+            "description": "UUID of the inserted qa_stories row"
+          },
+          "prUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "GitHub PR URL when openPr=true and GitHub is connected"
+          },
+          "approvalStatus": {
+            "type": "string",
+            "description": "pending_review | approved — follows automationMode and project defaults"
+          },
+          "needsHumanReview": {
+            "type": "boolean",
+            "description": "True when the story requires operator approval before scheduled runs"
+          }
+        },
+        "required": [
+          "qaStoryId",
+          "prUrl",
+          "approvalStatus",
+          "needsHumanReview"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "get_account_overview": {
+      "title": "Account overview — all projects",
+      "description": "Return an enriched summary of every Mushi project accessible to this API key: id, name, recent report count (last 30 days), number of connected MCP keys, and last-seen heartbeat timestamp. For project-scoped keys this is a one-item list; for org-scoped (account) keys it lists every owned project. Also includes toolCount, resourceCount, promptCount so agents know how many tools are available. Call this at the start of a multi-repo or multi-app triage session to orient yourself.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Account overview — all projects",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": {}
+          },
+          "total": {
+            "type": "number"
+          },
+          "active_project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "toolCount": {
+            "type": "number"
+          },
+          "resourceCount": {
+            "type": "number"
+          },
+          "promptCount": {
+            "type": "number"
+          },
+          "multi_project_hint": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projects",
+          "total",
+          "active_project_id",
+          "multi_project_hint"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "get_backend_health": {
+      "title": "Get backend health for a project",
+      "description": "Return the current backend health state for a linked Supabase project: table list (with RLS enabled status), recent API and Postgres error logs, and DB advisor findings. Uses the read-only Supabase MCP client via the stored PAT. Returns { tables, logs, advisors, projectRef } when the backend is linked, or { reason: \"no_supabase_pat\" | \"no_project_ref\" } when it is not configured. This is the read-only fast path — use run_fullstack_audit for the full scorecard including gate results.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Get backend health for a project",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "description": "Project ID. Defaults to the configured project.",
+            "type": "string"
+          },
+          "include_logs": {
+            "description": "Whether to include recent backend error logs (default: true).",
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "get_blast_radius": {
+      "title": "Blast radius",
+      "description": "Return the other components/pages a bug group touches, via knowledge-graph traversal from the report node. Returns { nodes: [{ id, label, type }], edges }. Read-only. Use before dispatch_fix to scope a change safely; use get_knowledge_graph to traverse from an arbitrary seed, or analyze_codebase_impact for file-level import impact.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Blast radius",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeId": {
+            "type": "string",
+            "description": "Graph node UUID"
+          }
+        },
+        "required": [
+          "nodeId"
+        ]
+      },
+      "returnsUntrusted": true
+    },
+    "get_codebase_domains": {
+      "title": "Business domain map",
+      "description": "Extract the business domains, flows, and steps in the repo, each mapped to the file paths that implement it. Returns { domains: [{ name, flows: [{ name, steps, paths }] }] }. Cached per index fingerprint. Requires codebase indexing. Read-only. Use to see what the app does at a product level; use get_codebase_tour for a dependency-ordered code walkthrough instead.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Business domain map",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "description": "Project UUID (defaults to configured project)",
+            "type": "string"
+          },
+          "force": {
+            "description": "Bypass cache and regenerate",
+            "type": "boolean"
+          },
+          "scope_prefix": {
+            "description": "Optional subdirectory scope prefix",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "get_codebase_tour": {
+      "title": "Guided codebase tour",
+      "description": "Return a dependency-ordered onboarding tour of the repo (~6-10 stops); each stop lists node ids, file paths, architectural layer, and why it matters. Returns { stops: [{ title, paths, layer, rationale }] }. Cached per index fingerprint. Requires codebase indexing. Read-only. Use to get oriented in an unfamiliar repo; use get_codebase_domains for a business-domain map, or get_file_summary for one file.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Guided codebase tour",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "description": "Project UUID (defaults to configured project)",
+            "type": "string"
+          },
+          "force": {
+            "description": "Bypass cache and regenerate",
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "get_file_summary": {
+      "title": "Plain-English file summary",
+      "description": "Return a plain-English summary of one indexed file or symbol (lazily generated on first call, then cached until content_hash changes on re-index). Returns { path, summary, symbols }. Requires codebase indexing. Read-only. Use to understand a single file fast; use ask_codebase for cross-file questions, or get_codebase_tour for an onboarding walkthrough.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Plain-English file summary",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "description": "Project UUID (defaults to configured project)",
+            "type": "string"
+          },
+          "file_path": {
+            "type": "string",
+            "description": "Indexed file path"
+          },
+          "symbol_name": {
+            "description": "Optional symbol name within the file",
+            "type": "string"
+          },
+          "force": {
+            "description": "Bypass cache and regenerate",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      }
+    },
+    "get_fix_context": {
+      "title": "Fix context bundle",
+      "description": "Bundle everything an agent needs to fix one bug in a single call: a paste-ready fixPrompt (plain-English diagnosis + reproduction + suggested fix + relevant code + blast radius), plus report detail, repro steps, component, root cause, and ontology tags. Returns { fixPrompt, report, reproduction, component, rootCause, tags }. Read-only; no second LLM key needed. Use before writing a fix; use triage_issue for a multi-report review packet, or suggest_fix for just the Stage-2 hint.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Fix context bundle",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "type": "string",
+            "description": "The report UUID to fix"
+          },
+          "project_id": {
+            "description": "Project UUID — required for org-scoped keys with multiple projects.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reportId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "report": {},
+          "fixPrompt": {},
+          "reproductionSteps": {},
+          "component": {},
+          "rootCause": {},
+          "bugOntologyTags": {}
+        },
+        "required": [
+          "report",
+          "fixPrompt",
+          "reproductionSteps",
+          "component",
+          "rootCause",
+          "bugOntologyTags"
+        ],
+        "additionalProperties": false
+      },
+      "returnsUntrusted": true
+    },
+    "get_fix_timeline": {
+      "title": "Fix timeline",
+      "description": "Return the ordered lifecycle of one fix attempt: dispatched, started, branch, commit, PR opened, CI, completed/failed, with timestamps and the PR URL. Returns { events: [{ ts, stage, detail }] }. Read-only. Use to debug \"why did this fix fail?\" after dispatch_fix; use refresh_ci to re-poll GitHub CI, or get_report_timeline for the whole report thread.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Fix timeline",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "fixId": {
+            "type": "string",
+            "description": "fix_attempt UUID"
+          },
+          "project_id": {
+            "description": "Project UUID — required for org-scoped keys with multiple projects.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fixId"
+        ]
+      },
+      "returnsUntrusted": true
+    },
+    "get_graph_neighborhood": {
+      "title": "Graph neighborhood",
+      "description": "Return the BFS neighborhood around one graph node by id or label: { nodes: [{ id, label, node_type }], edges: [{ source_node_id, target_node_id, edge_type }] } within a depth budget (default 2, max 4). Read-only. Tuned for \"what touches this action?\"; use get_knowledge_graph to traverse from a component seed, or get_graph_node for a single node's row.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Graph neighborhood",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "seed": {
+            "type": "string",
+            "description": "Starting graph node id or label to expand around (e.g. an inventory Action id or component name)"
+          },
+          "depth": {
+            "description": "BFS hops to traverse outward. Default 2; clamped to a max of 4.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          }
+        },
+        "required": [
+          "seed"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {},
+            "description": "Graph nodes within the depth budget"
+          },
+          "edges": {
+            "type": "array",
+            "items": {},
+            "description": "Edges connecting the returned nodes"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges"
+        ],
+        "additionalProperties": false
+      },
+      "returnsUntrusted": true
+    },
+    "get_graph_node": {
+      "title": "Graph node detail",
+      "description": "Fetch one knowledge-graph node row by id. Returns { node: { id, node_type, label, metadata } } including the v2 derived status on Action nodes (ok | stale | broken). Read-only. Use to inspect a single node's status; use get_graph_neighborhood to see what connects to it.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Graph node detail",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nodeId": {
+            "type": "string",
+            "description": "The graph_nodes.id of the node to fetch (UUID)."
+          }
+        },
+        "required": [
+          "nodeId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "node": {
+            "description": "Single graph_nodes row including metadata (Action nodes carry v2 status)"
+          }
+        },
+        "required": [
+          "node"
+        ],
+        "additionalProperties": false
+      },
+      "returnsUntrusted": true
+    },
+    "get_inventory": {
+      "title": "Inventory snapshot",
+      "description": "Return the current inventory.yaml snapshot for a project: latest ingest, validation errors, and a per-action status summary. Returns { snapshot, validationErrors, actions: [{ id, status }] }. Requires the inventory_v2 plan. Read-only. Use for the full current state; use diff_inventory to compare two commits, or list_gate_findings for the latest gate results.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Inventory snapshot",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "get_knowledge_graph": {
+      "title": "Knowledge graph traversal",
+      "description": "Traverse the knowledge graph from a seed component or page. Returns { nodes: [{ id, label, node_type }], edges: [{ source_node_id, target_node_id, edge_type }] } within a depth budget (default 2, max 4 hops). Read-only. Use to see how a component connects to the rest of the app; use get_blast_radius for a bug's impact area, or get_graph_neighborhood for a tighter BFS around one node.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Knowledge graph traversal",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "seed": {
+            "type": "string",
+            "description": "Starting graph node id or human-readable label to traverse from"
+          },
+          "depth": {
+            "description": "BFS hops outward from seed — clamped to 4 in the handler (default 2)",
+            "type": "number"
+          }
+        },
+        "required": [
+          "seed"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {},
+            "description": "Graph nodes within the depth budget"
+          },
+          "edges": {
+            "type": "array",
+            "items": {},
+            "description": "Edges connecting the returned nodes"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges"
+        ],
+        "additionalProperties": false
+      },
+      "returnsUntrusted": true
+    },
+    "get_map_run_status": {
+      "title": "Story map run status",
+      "description": "Poll the status and results of a story_map_run started by map_user_stories. Returns { status: pending|running|completed|failed, pages_crawled, proposal_id (once done), cursor_pr_url (if Cursor Cloud refined the draft) }. Read-only. Use to know when a crawl has finished and which inventory_proposals row to review next.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Story map run status",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id"
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    "get_mushi_doc": {
+      "title": "Read a Mushi docs page",
+      "description": "Fetch one official Mushi docs page as Markdown, by a url from search_mushi_docs or a route such as \"/quickstart/mcp\". Returns { title, url, markdown, truncated }; markdown is capped at 8,000 characters and says where to read the rest. Only indexed docs pages resolve. Read-only; works without an API key. Use after search_mushi_docs when an excerpt is not enough.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Read a Mushi docs page",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A url from search_mushi_docs, or a docs route such as \"/quickstart/mcp\"."
+          }
+        },
+        "required": [
+          "page"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "markdown": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "title",
+          "url",
+          "markdown",
+          "truncated"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "get_pipeline_logs": {
+      "title": "Recent pipeline logs",
+      "description": "Pull recent log entries from the Mushi pipeline services: fix-worker, qa-story-runner, pipeline, or all. Accepts project_id, service, since (ISO-8601), limit (max 200), and level (info | warn | error | fatal) filters. Returns structured log rows with timestamp, level, service, message, and a trace_id/report_id when available. Use this when a fix failed, a QA story keeps erroring, or an ingest pipeline went silent.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Recent pipeline logs",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "description": "Project UUID. Defaults to configured project.",
+            "type": "string"
+          },
+          "service": {
+            "description": "Pipeline service to filter (default: all).",
+            "type": "string",
+            "enum": [
+              "fix-worker",
+              "qa-story-runner",
+              "pipeline",
+              "all"
+            ]
+          },
+          "since": {
+            "description": "ISO-8601 timestamp — return only entries after this time.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Max entries to return (default 50, max 200).",
+            "type": "number"
+          },
+          "level": {
+            "description": "Minimum severity level (default: warn).",
+            "type": "string",
+            "enum": [
+              "info",
+              "warn",
+              "error",
+              "fatal"
+            ]
+          }
+        }
+      },
+      "returnsUntrusted": true
+    },
+    "get_pipeline_run": {
+      "title": "Get pipeline run detail",
+      "description": "Fetch a skill pipeline run by id: { status, context_packet, steps: [{ index, slug, status }] }. Read-only. Use to retrieve the context_packet when a pipeline was started from the console or another agent; then checkin_pipeline_step as you complete each step. Use start_skill_pipeline to begin a new run.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Get pipeline run detail",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "Pipeline run UUID"
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      }
+    },
+    "get_product_events_summary": {
+      "title": "Product events summary",
+      "description": "Summarise the Mushi.track() product events this project received in the trailing windowDays (default 30): event names with counts and distinct users, daily volume, and top properties. Returns { window_days, events_total, persons, identified, anonymous, events_per_day: [{ day, count }], top_events: [{ name, count, persons }] }. Read-only. Use first to learn which event names exist before calling query_funnel or get_user_paths; use run_nl_query for ad-hoc SQL over the same rows.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Product events summary",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "windowDays": {
+            "description": "Trailing window in days (default 30).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "project_id": {
+            "description": "Project UUID (defaults to the configured project).",
+            "type": "string"
+          }
+        }
+      },
+      "returnsUntrusted": true
+    },
+    "get_project_context": {
+      "title": "Project context snapshot",
+      "description": "Return a rich context snapshot for a project: name, repo URL, SDK heartbeat, ingest status, open report count, autofix readiness, your LLM key config, plan tier, and active integration health. Equivalent to a merged preflight + activation + settings read. Agents should call this at the start of a review session to orient themselves.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Project context snapshot",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "description": "Project UUID. Defaults to configured project.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "get_qa_story_run": {
+      "title": "QA story run detail",
+      "description": "Fetch the full detail for a single qa_story_run: status, error_message, assertion_failures, latency_ms, provider_session_url (Browserbase replay link when available), and screenshot URLs from qa_story_evidence. Use this to drill into a specific failing run and understand the exact error before deciding whether to improve the story script or fix the app.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "QA story run detail",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "storyId": {
+            "type": "string",
+            "description": "QA story id (uuid)"
+          },
+          "runId": {
+            "type": "string",
+            "description": "Run id (uuid) to fetch detail for"
+          }
+        },
+        "required": [
+          "storyId",
+          "runId"
+        ]
+      }
+    },
+    "get_recent_reports": {
+      "title": "Recent bug reports",
+      "description": "List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, component, created_at, processing_error }], total }; include_raw=true returns every list column instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed|…), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Recent bug reports",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Filter by status. \"new\" also matches queued rows; \"classified\" and \"fixed\" include legacy aliases.",
+            "type": "string",
+            "enum": [
+              "new",
+              "pending",
+              "submitted",
+              "queued",
+              "classified",
+              "grouped",
+              "fixing",
+              "fixed",
+              "dismissed",
+              "triaged",
+              "in_progress",
+              "resolved",
+              "verified",
+              "reopened"
+            ]
+          },
+          "category": {
+            "description": "Filter by category.",
+            "type": "string",
+            "enum": [
+              "bug",
+              "slow",
+              "visual",
+              "confusing",
+              "other"
+            ]
+          },
+          "severity": {
+            "description": "Filter by severity.",
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "limit": {
+            "description": "Max reports to return (default 20, max 100)",
+            "type": "number"
+          },
+          "include_raw": {
+            "description": "Return every column the list route has (breadcrumbs, environment, tags, …) instead of the documented fields. Reporter identifiers are removed either way.",
+            "type": "boolean"
+          },
+          "project_id": {
+            "description": "Project UUID — defaults to the server-configured project. Useful when your key spans several projects; the error you get without it lists their ids.",
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "reports": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "category": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "severity": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "summary": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "component": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "created_at": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "reports",
+          "total"
+        ],
+        "additionalProperties": false
+      },
+      "returnsUntrusted": true
+    },
+    "get_report_detail": {
+      "title": "Report detail",
+      "description": "Fetch the full record for one bug report by id: description, console logs, network requests, screenshot URL, classification (stage 1/2), and fix history. Returns { report }. Read-only. Use when you have a reportId and need everything about it; for evidence only use get_report_evidence, for the activity thread use get_report_timeline, for a one-call fix bundle use get_fix_context.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Report detail",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "type": "string",
+            "description": "The report UUID"
+          },
+          "project_id": {
+            "description": "Project UUID — required for org-scoped keys with multiple projects.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reportId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "report": {}
+        },
+        "required": [
+          "report"
+        ],
+        "additionalProperties": false
+      },
+      "returnsUntrusted": true
+    },
+    "get_report_evidence": {
+      "title": "Bug report evidence",
+      "description": "Return the full evidence package for a single bug report covering all three observability pillars: (1) LOGS — console_logs (error/warn/info/debug entries with timestamps), breadcrumbs (SDK ring buffer: navigation, clicks, network, lifecycle events with category/level), repro_timeline (merged SDK event stream: route/click/request/log/screen), and the reporter's own comments thread; (2) TRACES — network_requests (SDK-captured fetch/XHR with method/status/duration/traceId), backend_spans (server-side spans joined by W3C trace_id: name/duration_ms/parentSpanId/status), and Sentry trace correlation IDs (sentry_trace_id, sentry_event_id) for deeplinks; (3) METRICS — performance_metrics (Web Vitals snapshot: LCP/CLS/INP/TTFB/FCP + INP attribution + page timing + connection info), anomalies (statistical provenance when auto-filed by CI metric regression: baseline_mean/std, score in σ, threshold); plus screenshot_url, browser environment (user agent, URL, viewport, SDK version), and tags. This is the same data an engineer would collect for a root-cause investigation. Faster than calling get_report_detail + report timeline separately.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Bug report evidence",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "description": "Report UUID."
+          }
+        },
+        "required": [
+          "report_id"
+        ]
+      },
+      "returnsUntrusted": true
+    },
+    "get_report_timeline": {
+      "title": "Unified report timeline",
+      "description": "Return the ordered activity timeline for one report (oldest to newest), merging reporter comments, fix events, QA runs, skill-pipeline steps, and Ask Mushi turns into one lane. Returns { events: [{ ts, kind, actor, summary }] }. Read-only. Use to see what happened end-to-end on a report thread; use get_report_detail for the static record or get_fix_timeline to debug one fix attempt.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Unified report timeline",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "type": "string",
+            "description": "The report UUID"
+          }
+        },
+        "required": [
+          "reportId"
+        ]
+      },
+      "returnsUntrusted": true
+    },
+    "get_similar_bugs": {
+      "title": "Similar bugs",
+      "description": "Find existing bugs similar to a component, page, or description via pgvector nearest-neighbour search (same backend as search_reports, tuned for \"have we seen this before?\"). Returns ranked { reports: [{ id, summary, similarity }] }. Read-only. Use to dedupe before filing or group regressions; use search_reports for general free-text search.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Similar bugs",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Component name, page path, or bug description"
+          },
+          "limit": {
+            "description": "Max results (default 5, max 20)",
+            "type": "number"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {}
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "additionalProperties": false
+      },
+      "returnsUntrusted": true
+    },
+    "get_skill": {
+      "title": "Get skill detail",
+      "description": "Fetch one agent skill by slug, including the complete SKILL.md body and the resolved chain of sub-skills. Returns { slug, title, body, chain: [{ slug, title }] }. Read-only. Use to read what a skill instructs before executing a pipeline step; use list_skills to discover slugs.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Get skill detail",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "description": "Skill slug, e.g. \"workflow-fix-and-ship\""
+          }
+        },
+        "required": [
+          "slug"
+        ]
+      }
+    },
+    "get_two_way_comms_health": {
+      "title": "Two-way communication health",
+      "description": "Summarize SDK ↔ admin two-way reporter health for a host app: last SDK heartbeat, app version/platform last seen, unread reporter messages, recent reporter replies, and pending QA/TDD follow-ups. Use after wiring @mushi-mushi/web in a Vite/Capacitor app to confirm reports land in the console and admin/MCP replies reach the in-app widget.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Two-way communication health",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "get_usage": {
+      "title": "Usage & billing summary",
+      "description": "Read-only diagnoses quota and billing summary for the current project: diagnoses used / limit / percentage, spend cap, period start/end, plan name, and whether the project is approaching or over its quota. Use this to answer \"how many diagnoses do I have left?\" or \"am I close to my spend cap?\".",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Usage & billing summary",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "description": "Project ID. Defaults to the configured project.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "get_user_paths": {
+      "title": "Paths users take after an event",
+      "description": "What did users do next? Rank the events users fired immediately after fromEvent within the trailing windowDays (default 30), most common first, up to limit rows (default 20, max 50). Returns { from_event, total, next: [{ name, count, pct }] }. Read-only. Use to see where users go after a step instead of guessing the funnel order; use query_funnel once you know the ordered steps, or get_product_events_summary for event names.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Paths users take after an event",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "fromEvent": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Event name to start from (e.g. \"key_minted\")."
+          },
+          "windowDays": {
+            "description": "Trailing window in days (default 30).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "limit": {
+            "description": "Max distinct paths to return (default 20, max 50).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "project_id": {
+            "description": "Project UUID (defaults to the configured project).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fromEvent"
+        ]
+      },
+      "returnsUntrusted": true
+    },
+    "improve_qa_story": {
+      "title": "Auto-improve a failing QA story",
+      "description": "Analyze recently failed qa_story_runs and use Claude to write improved test scripts that address the failures. New tests are created with source=pdca, parent_story_id chained to the original, and approval gated by the original story's automation_mode. Returns { improvedStoryIds }. Write; consumes LLM budget; NOT idempotent. Use to repair flaky/broken tests; use run_qa_story to re-run as-is, or list_qa_story_runs to inspect failures first.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Auto-improve a failing QA story",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project id (omit to run across all projects)",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "list_byok_keys": {
+      "title": "List your API key pool",
+      "description": "List the project's BYOK API keys grouped by provider (anthropic | openai | firecrawl | browserbase | cursor). Returns pooled { keys: [{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at }] } plus read-only { legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, or rate-limited; use add_byok_key to add one.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "List your API key pool",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id"
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    "list_gate_findings": {
+      "title": "Gate findings",
+      "description": "List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead-handler | mock-leak | crawl | status-claim) or minimum severity (low|medium|high|critical). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Gate findings",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to configured project",
+            "type": "string"
+          },
+          "gate": {
+            "description": "Filter to one gate id: dead-handler | mock-leak | crawl | status-claim",
+            "type": "string"
+          },
+          "severity": {
+            "description": "Minimum severity to include: low | medium | high | critical",
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "runs": {
+            "type": "array",
+            "items": {},
+            "description": "Recent gate_runs rows, newest first"
+          },
+          "findings": {
+            "type": "array",
+            "items": {},
+            "description": "gate_findings rows for those runs"
+          }
+        },
+        "required": [
+          "runs",
+          "findings"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "list_lessons": {
+      "title": "List project lessons",
+      "description": "List promoted learning rules (\"lessons\") for the current project, highest-frequency first. Returns { lessons: [{ id, rule_text, severity, frequency, anti_pattern, … }] }. Read-only. Use to browse the full catalog of encoded heuristics; use query_lessons to retrieve only lessons relevant to a specific diff or PR within a token budget.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "List project lessons",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "severity": {
+            "description": "Filter to one severity level",
+            "type": "string",
+            "enum": [
+              "info",
+              "warn",
+              "critical"
+            ]
+          },
+          "limit": {
+            "description": "Max lessons to return (default 50, max 200)",
+            "type": "number"
+          },
+          "project_id": {
+            "description": "Project UUID — defaults to configured project",
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "lessons": {
+            "type": "array",
+            "items": {},
+            "description": "Promoted lesson rows ordered by frequency"
+          }
+        },
+        "required": [
+          "lessons"
+        ],
+        "additionalProperties": false
+      },
+      "returnsUntrusted": true
+    },
+    "list_pending_review_stories": {
+      "title": "List QA stories pending review",
+      "description": "List auto-generated QA/TDD stories in approval_status=pending_review — the queue waiting for human sign-off before they run on schedule. Returns { stories: [{ id, title, source, target_url, created_at }] }. Read-only. Use to find what needs review today; then approve_qa_story to approve or reject each.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "List QA stories pending review",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id"
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    },
+    "list_projects": {
+      "title": "List accessible projects",
+      "description": "List all Mushi projects accessible to this API key. For project-scoped keys returns a single-item list; for org-scoped keys (account mode) returns every project owned by this account. Call this first when MUSHI_PROJECT_ID is not configured — use the returned id with subsequent tool calls. If multiple projects are returned, pass the target projectId explicitly to project-scoped tools. Multi-project tip: run `mushi setup --all-projects` in your terminal to create one named MCP server entry per project in .cursor/mcp.json.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "List accessible projects",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": {}
+          },
+          "total": {
+            "type": "number"
+          },
+          "_multi_project_hint": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projects"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "list_qa_story_runs": {
+      "title": "Recent QA story runs",
+      "description": "Return the most recent runs for a given QA story, newest first. Each row includes status (passed/failed/error/running), latency_ms, created_at, error_message headline, and assertion_failures (up to 10). Use this to understand whether a story is currently healthy, what the last failure was, and whether a manual run has completed.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Recent QA story runs",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "storyId": {
+            "type": "string",
+            "description": "QA story id (uuid)"
+          },
+          "limit": {
+            "default": 10,
+            "description": "Max runs to return (default 10)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "required": [
+          "storyId"
+        ]
+      }
+    },
+    "list_skills": {
+      "title": "List agent skills",
+      "description": "List the agent skills in the catalog, optionally filtered by category or search text. Returns { skills: [{ slug, title, description, category, chain_slugs }] }. Read-only. Use to find the right skill slug before start_skill_pipeline; use get_skill to read one skill's full instructions.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "List agent skills",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "description": "Filter by category: workflow, debug, test, audit, enhance, …",
+            "type": "string"
+          },
+          "search": {
+            "description": "Free-text search across slug, title, description",
+            "type": "string"
+          },
+          "page": {
+            "description": "Page number (default 1)",
+            "type": "number"
+          },
+          "limit": {
+            "description": "Max results per page (default 200, max 200)",
+            "type": "number"
+          }
+        }
+      }
+    },
+    "list_top_contributors": {
+      "title": "Top contributors leaderboard",
+      "description": "Return the top N contributors for the organization, ranked by points in a time window (30d | 90d | all). Each row includes display name, tier, total points, report count, and anti-fraud flag. Use this to identify your most engaged power users, write them a thank-you message, or decide who deserves a bonus.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Top contributors leaderboard",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "default": 10,
+            "description": "Max rows to return (default 10, max 100)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "range": {
+            "default": "30d",
+            "description": "Time window for points calculation",
+            "type": "string",
+            "enum": [
+              "30d",
+              "90d",
+              "all"
+            ]
+          }
+        }
+      }
+    },
+    "map_user_stories": {
+      "title": "Map user stories from live app",
+      "description": "Crawl a live application URL (Firecrawl/Browserbase) and have Claude draft an inventory.yaml of pages and user stories, written to an inventory_proposals row (source=live_crawl). Optionally dispatches a Cursor Cloud agent to refine the draft and open a PR. Returns { runId, status: \"pending\" } immediately — poll get_map_run_status. Write; consumes crawl + LLM budget; NOT idempotent. Use to bootstrap test coverage without hand-writing YAML; then generate_tdd_from_story per accepted story.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Map user stories from live app",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id to map stories for"
+          },
+          "baseUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Live app URL to crawl"
+          },
+          "maxPages": {
+            "description": "Max pages to crawl (default 20)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "provider": {
+            "description": "Crawl provider (default: firecrawl)",
+            "type": "string",
+            "enum": [
+              "firecrawl",
+              "browserbase"
+            ]
+          },
+          "cursorCloudRefine": {
+            "description": "Dispatch Cursor Cloud agent to refine and open a PR",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId",
+          "baseUrl"
+        ]
+      }
+    },
+    "merge_fix": {
+      "title": "Merge fix PR",
+      "description": "Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns { merged, reportStatus }. Write; destructive and irreversible from Mushi's side — once GitHub merges into the target repo's default branch there is no unmerge endpoint, only a manual revert PR outside this tool. Idempotent — re-running an already-merged attempt is a safe no-op. Prerequisite: CI green (check with refresh_ci); confirm the diff and CI status with the user before calling on a PR you have not reviewed. Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Merge fix PR",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "fixId": {
+            "type": "string",
+            "description": "Fix attempt UUID whose GitHub PR should be squash-merged"
+          },
+          "mergeMethod": {
+            "description": "GitHub merge method (default squash)",
+            "type": "string",
+            "enum": [
+              "squash",
+              "merge",
+              "rebase"
+            ]
+          }
+        },
+        "required": [
+          "fixId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "merged": {
+            "description": "True when GitHub accepted the merge in this call",
+            "type": "boolean"
+          },
+          "alreadyMerged": {
+            "description": "True when the PR was already merged (idempotent no-op)",
+            "type": "boolean"
+          },
+          "reportId": {
+            "type": "string",
+            "description": "Report UUID linked to this fix attempt"
+          },
+          "reportStatus": {
+            "type": "string",
+            "description": "Report workflow status after merge bookkeeping"
+          }
+        },
+        "required": [
+          "reportId",
+          "reportStatus"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "query_funnel": {
+      "title": "Ordered funnel over product events",
+      "description": "Where do users drop off? Ordered funnel over Mushi.track() events for this project. Pass 2–8 step event names in order (e.g. [\"landing_view\", \"signup_completed\", \"first_report_received\"]); each step counts distinct users who did the previous step then this one within stepWindow (default 7d), over the trailing windowDays (default 30). Optional breakdown property (e.g. \"utm_source\", \"$surface\") splits every step. Returns { steps: [{ name, entered, converted, pct, median_secs }], breakdown: [{ value, entered, steps }] } (pct is conversion from step 1; breakdown is empty unless requested). Read-only. Use to find the biggest drop-off before changing onboarding; use get_product_events_summary to discover event names, or get_user_paths to see what users did after a step.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Ordered funnel over product events",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "steps": {
+            "minItems": 2,
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Ordered event names, 2–8 (e.g. [\"landing_view\", \"signup_completed\", \"first_report_received\"])."
+          },
+          "windowDays": {
+            "description": "Trailing window in days (default 30).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "stepWindow": {
+            "description": "Max time allowed between consecutive steps (default 7d).",
+            "type": "string",
+            "enum": [
+              "1h",
+              "1d",
+              "7d",
+              "30d"
+            ]
+          },
+          "breakdown": {
+            "description": "Event property to split every step by (e.g. \"utm_source\", \"$surface\").",
+            "type": "string"
+          },
+          "project_id": {
+            "description": "Project UUID (defaults to the configured project).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "steps"
+        ]
+      }
+    },
+    "query_lessons": {
+      "title": "Query lessons for diff context",
+      "description": "Retrieve the learning rules (\"lessons\") most relevant to a given code diff or PR context, packed within a token budget. Uses bi-encoder retrieval + severity-weighted scoring; pass the diff/description as the query and max_tokens (default 2000). Returns ranked { lessons: [{ title, rule, severity }] }. Read-only. Use before writing a fix or opening a PR; use list_lessons to browse all lessons unfiltered.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Query lessons for diff context",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "diff_text": {
+            "type": "string",
+            "description": "The PR diff, code snippet, or description of the change being made."
+          },
+          "max_tokens": {
+            "description": "Maximum tokens for returned lessons context (default 3000, max 8000).",
+            "type": "number"
+          },
+          "top_k": {
+            "description": "Max number of lessons to return (default 15, max 50).",
+            "type": "number"
+          },
+          "project_id": {
+            "description": "Project UUID. Defaults to configured project.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "diff_text"
+        ]
+      },
+      "returnsUntrusted": true
+    },
+    "refresh_ci": {
+      "title": "Refresh fix CI status",
+      "description": "Re-poll GitHub for the latest check-run status of a fix attempt's PR and persist it on the fix_attempt row (does not merge or mutate GitHub). Returns { check_run_status, check_run_conclusion, check_run_updated_at }. Write; idempotent. Use right before merge_fix to confirm CI is green; use get_fix_timeline for the full attempt lifecycle.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Refresh fix CI status",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "fixId": {
+            "type": "string",
+            "description": "Fix attempt UUID whose PR check-runs should be re-polled"
+          }
+        },
+        "required": [
+          "fixId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "check_run_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "GitHub check run status after refresh"
+          },
+          "check_run_conclusion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "success | failure | neutral | null while pending"
+          },
+          "check_run_updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ISO timestamp when CI status was last persisted"
+          }
+        },
+        "required": [
+          "check_run_status",
+          "check_run_conclusion",
+          "check_run_updated_at"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "remove_byok_key": {
+      "title": "Remove an API key",
+      "description": "Permanently remove one pooled BYOK credential by key id from the authenticated project, including its Vault secret. Write; destructive; idempotent.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Remove an API key",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id"
+          },
+          "keyId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "Pooled BYOK key UUID from list_byok_keys"
+          }
+        },
+        "required": [
+          "projectId",
+          "keyId"
+        ]
+      }
+    },
+    "reopen_report": {
+      "title": "Reopen report (operator)",
+      "description": "Move a previously fixed/verified/dismissed report back to the reopened state for regression review, recording an operator note. Returns { report } with status=reopened. Write; idempotent — reopening an already-reopened report is a no-op. Use when a reporter says \"still broken\" after a fix shipped; use transition_status for any other state change.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Reopen report (operator)",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "type": "string",
+            "description": "Report UUID to move back to reopened status"
+          },
+          "note": {
+            "description": "Operator note recorded on the reopen transition",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reportId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "report": {
+            "description": "Updated report row with status=reopened"
+          }
+        },
+        "required": [
+          "report"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "reply_to_reporter": {
+      "title": "Reply to a reporter",
+      "description": "Send a visible message to the end-user who filed a bug report. The reply appears in the in-app Mushi widget as an admin comment and creates an unread notification badge so the reporter sees it immediately. Use this to answer questions, request reproduction steps, or confirm a fix — without leaving the Cursor IDE.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Reply to a reporter",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "type": "string",
+            "description": "Report id to reply to"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000,
+            "description": "Message text to send to the reporter"
+          },
+          "authorName": {
+            "description": "Display name for the admin sender (default: \"Mushi Admin\")",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reportId",
+          "message"
+        ]
+      }
+    },
+    "run_fullstack_audit": {
+      "title": "Run a full-stack health audit",
+      "description": "Fan out a full-stack health audit for the current project: DB schema + advisors, API contract gate results (Gates 3–8), recent backend error logs, and RLS gap detection. Returns a PM-readable scorecard with severity-ranked findings and fix hints. Requires the project to have a Supabase PAT configured (Settings → API Keys, slug: supabase) and supabase_project_ref set in project settings for backend analysis. The audit completes synchronously in ~10 s. Triggers a background gate run for orphan_endpoint and unknown_call gates if they have not run today.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Run a full-stack health audit",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "description": "Project ID to audit. Defaults to the configured project.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "run_nl_query": {
+      "title": "Ask your data (NL → SQL)",
+      "description": "Answer a natural-language question about your project data by generating and running a read-only SQL query (no privileged schemas, rate-limited to 60/hour). Returns { sql, rows }. Use for ad-hoc analytics (\"which components had the most critical bugs this week?\"); use get_recent_reports/search_reports for plain report lookups, or search_mushi_docs for documentation questions.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Ask your data (NL → SQL)",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "Question in plain English, e.g. \"Which components had the most critical bugs this week?\""
+          }
+        },
+        "required": [
+          "question"
+        ]
+      },
+      "returnsUntrusted": true
+    },
+    "run_qa_story": {
+      "title": "Trigger a manual QA story run",
+      "description": "Queue an immediate manual run for an enabled + approved qa_story (equivalent to \"Run now\" in the console). Returns { runId } right away; poll list_qa_story_runs or get_qa_story_run for progress and results. Write; NOT idempotent — each call creates a new run; returns 409 if the story is disabled or pending review. Use to verify a flow on demand; use improve_qa_story to repair a failing story.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Trigger a manual QA story run",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id"
+          },
+          "qaStoryId": {
+            "type": "string",
+            "description": "qa_story id to run"
+          }
+        },
+        "required": [
+          "projectId",
+          "qaStoryId"
+        ]
+      }
+    },
+    "search_codebase": {
+      "title": "Semantic codebase search",
+      "description": "Search the indexed repo by plain-English meaning via embeddings. Returns { results: [{ file_path, line_start, line_end, content_preview, similarity, … }], query, mode } ordered by similarity. Requires codebase indexing enabled. Read-only. Use to locate where something lives (\"where do we verify webhooks?\"); use ask_codebase for a synthesized answer with citations, or analyze_codebase_impact to find dependents of a file.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Semantic codebase search",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "description": "Project UUID (defaults to configured project)",
+            "type": "string"
+          },
+          "query": {
+            "type": "string",
+            "description": "Plain-English search query against indexed source files"
+          },
+          "k": {
+            "description": "Max hits to return (default 8, max 20)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "scope_prefix": {
+            "description": "Optional repo subdirectory prefix to limit search scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {},
+            "description": "Ranked file/symbol hits with paths, line ranges, and similarity"
+          },
+          "query": {
+            "type": "string",
+            "description": "Normalized query string that was searched"
+          },
+          "mode": {
+            "description": "semantic (embeddings) or name (path/symbol match)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "results",
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "search_mushi_docs": {
+      "title": "Search Mushi documentation",
+      "description": "Search the official Mushi documentation (guides, MCP setup, inventory, QA, skills) by keyword — titles, section headings and summaries are indexed. Returns ranked { results: [{ title, url, excerpt, score }] }. Read-only; works without an API key. Use before guessing API shapes, tool names, or RPC names, then get_mushi_doc to read a page; use run_nl_query for questions about your own project data, not the docs.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Search Mushi documentation",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Keywords to search official Mushi docs (guides, MCP, inventory, QA)."
+          },
+          "limit": {
+            "description": "Max results (default 8).",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "excerpt": {
+                  "type": "string"
+                },
+                "score": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "title",
+                "url",
+                "excerpt",
+                "score"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "query",
+          "results"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "search_reports": {
+      "title": "Search reports",
+      "description": "Search reports by meaning and keyword (pgvector similarity server-side; falls back to summary/description substring if embeddings are unavailable). Returns ranked { results: [{ id, summary, similarity }] }. Read-only. Use to find reports by free text (\"checkout flakiness\"); use get_similar_bugs to dedupe a known component/bug, or get_recent_reports to list without a query.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Search reports",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Natural-language search text or component path"
+          },
+          "limit": {
+            "description": "Max results (default 10, max 50)",
+            "type": "number"
+          },
+          "threshold": {
+            "description": "Similarity threshold 0..1, default 0.2",
+            "type": "number"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {}
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "additionalProperties": false
+      },
+      "returnsUntrusted": true
+    },
+    "set_tier": {
+      "title": "Override contributor tier",
+      "description": "Override a contributor's tier by tier slug (e.g. \"champion\"), bypassing the normal points-threshold logic entirely. This is an admin escape hatch for manual promotions — normal tier transitions happen automatically via point thresholds instead. Destructive: it is a label-only override that does NOT replay the automatic tier-evaluation path, so any host_credit_payload grant (Stripe perk, badge, etc.) normally tied to reaching that tier via points will NOT fire — confirm with the user whether they also need the perk granted another way. The override persists until another set_tier call changes it; the prior override stays in the end_user_activity audit trail either way, logged as tier_override_manual. Requires mcp:write scope.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Override contributor tier",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "external_user_id": {
+            "type": "string",
+            "description": "The host-app user id as passed to Mushi.identify()"
+          },
+          "tier_slug": {
+            "type": "string",
+            "description": "Tier slug to assign, e.g. \"champion\", \"contributor\", \"explorer\""
+          },
+          "reason": {
+            "description": "Optional reason for manual override",
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "external_user_id",
+          "tier_slug"
+        ]
+      }
+    },
+    "start_skill_pipeline": {
+      "title": "Start a skill pipeline",
+      "description": "Start a new skill pipeline run for a report. Pass root_skill_slug and optionally report_id. Returns run_id, context_packet (full instructions + report context), and step list. Read the context_packet — it contains skill instructions plus full report context (repro steps, root cause, RAG files). After executing each step, call checkin_pipeline_step. The PM watching the console sees progress live.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Start a skill pipeline",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "root_skill_slug": {
+            "type": "string",
+            "description": "Root skill slug to run, e.g. \"workflow-fix-and-ship\""
+          },
+          "report_id": {
+            "description": "Report UUID to attach the pipeline to",
+            "type": "string"
+          },
+          "mode": {
+            "description": "handoff (default): get context packet for local agent. cloud: auto-dispatch via Cursor Cloud.",
+            "type": "string",
+            "enum": [
+              "handoff",
+              "cloud"
+            ]
+          },
+          "project_id": {
+            "description": "Project UUID. Falls back to the configured project.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "root_skill_slug"
+        ]
+      }
+    },
+    "submit_fix_result": {
+      "title": "Record a fix outcome",
+      "description": "Record a fix outcome from an external agent (e.g. your own Cursor/Claude run): branch, PR URL, files changed, lines added/removed. Creates a fix_attempt row then patches it to completed and links it to the report. Returns { fixAttemptId }. Write; NOT idempotent — each call creates a new fix_attempt, so call once per PR. Use after you opened a PR outside Mushi; use dispatch_fix to have Mushi open the PR instead, or merge_fix once CI is green.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Record a fix outcome",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "type": "string",
+            "description": "Report UUID to attach this external fix attempt to"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Git branch name where the fix was implemented"
+          },
+          "prUrl": {
+            "description": "GitHub pull request URL, if a PR was opened",
+            "type": "string"
+          },
+          "filesChanged": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Repo-relative paths modified by the fix"
+          },
+          "linesChanged": {
+            "type": "number",
+            "description": "Total lines added + removed across filesChanged"
+          },
+          "summary": {
+            "type": "string",
+            "description": "One-line human summary of what the fix changed"
+          },
+          "idempotencyKey": {
+            "description": "Optional UUID — resend the same key to safely retry without creating duplicate fix rows. Omit it and a stable key is derived from reportId + branch + prUrl, so a retried submission carries the identical key instead of a fresh random one.",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "reportId",
+          "branch",
+          "filesChanged",
+          "linesChanged",
+          "summary"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "description": "True when the fix_attempt row was created and marked completed"
+          },
+          "fixId": {
+            "type": "string",
+            "description": "UUID of the new fix_attempt row"
+          }
+        },
+        "required": [
+          "ok",
+          "fixId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "suggest_fix": {
+      "title": "Suggested fix (from triage)",
+      "description": "Return the Stage-2 suggested-fix slice for one report: root cause, suggested fix, repro steps, summary, and component — faster than get_report_detail when you only need the human-readable hint. Returns { reportId, rootCause, suggestedFix, reproductionSteps, summary, component }. Read-only; reads the existing classification (run triage_issue first if unclassified). Use for a quick \"what should we try?\"; use get_fix_context for the full paste-ready bundle.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Suggested fix (from triage)",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "type": "string",
+            "description": "Report UUID to read the Stage-2 suggested-fix slice for"
+          }
+        },
+        "required": [
+          "reportId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "type": "string",
+            "description": "The report this slice was read from"
+          },
+          "rootCause": {
+            "description": "Stage-2 root-cause hint, or null if not yet classified"
+          },
+          "suggestedFix": {
+            "description": "Stage-2 suggested fix, or null if not yet classified"
+          },
+          "reproductionSteps": {
+            "description": "Reproduction steps recorded on the report (array; [] if none)"
+          },
+          "summary": {
+            "description": "One-line report summary, or null"
+          },
+          "component": {
+            "description": "Component/page the bug was attributed to, or null"
+          },
+          "note": {
+            "description": "Present when no Stage-2 analysis exists — explains why and what to call instead",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reportId",
+          "rootCause",
+          "suggestedFix",
+          "reproductionSteps",
+          "summary",
+          "component"
+        ],
+        "additionalProperties": false
+      },
+      "returnsUntrusted": true
+    },
+    "test_byok_key": {
+      "title": "Test an API key",
+      "description": "Re-test one pooled BYOK credential by key id. A successful provider probe activates the key; auth, quota, and network failures keep it out of the runtime pool. Returns the sanitized validation result and updated key metadata. Write; idempotent.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Test an API key",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id"
+          },
+          "keyId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "Pooled BYOK key id"
+          }
+        },
+        "required": [
+          "projectId",
+          "keyId"
+        ]
+      }
+    },
+    "test_gen_from_report": {
+      "title": "Generate Playwright test from report",
+      "description": "Generate a Playwright regression test from a classified report using your project LLM key, then open a draft GitHub PR with the spec. Requires the inventory_v2 plan plus GitHub and LLM keys configured. Returns { qaStoryId, prUrl }. Write; consumes LLM budget; NOT idempotent — each call opens a new PR. Use to lock in a regression as an E2E test; use generate_tdd_from_story to build a test from a mapped user story instead.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Generate Playwright test from report",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "type": "string",
+            "description": "Report UUID to turn into a Playwright PR"
+          },
+          "projectId": {
+            "description": "Project UUID — defaults to configured project",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reportId"
+        ]
+      }
+    },
+    "test_notification_channel": {
+      "title": "Send a test notification",
+      "description": "Send a test notification to a configured notification channel for the project. Supported channel kinds: \"slack\" (posts a test Block Kit message to the configured channel), \"discord\" (posts to the project discord_webhook_url). Returns ok=true if the message was accepted. Use this to verify the integration is working after setup or after changing credentials.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Send a test notification",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "slack",
+              "discord"
+            ],
+            "description": "Notification channel kind to test"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      }
+    },
+    "transition_status": {
+      "title": "Move report between states",
+      "description": "Move a report to a new workflow state, enforcing the same transition rules as the admin UI. Valid targets: classified, grouped, fixing, fixed, verified, reopened, dismissed. Returns { report } with the updated status. Write; idempotent (setting the current status is a no-op); rejects illegal transitions. Use to dismiss a duplicate or mark fixed; use merge_fix to mark fixed via a merged PR, or reopen_report for the reopened path.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Move report between states",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "type": "string",
+            "description": "Report UUID"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "classified",
+              "triaged",
+              "in_progress",
+              "grouped",
+              "fixing",
+              "fixed",
+              "resolved",
+              "verified",
+              "reopened",
+              "dismissed"
+            ],
+            "description": "Target status (resolved is stored as fixed)"
+          },
+          "reason": {
+            "description": "Reason for the transition (audit trail)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reportId",
+          "status"
+        ]
+      }
+    },
+    "triage_issue": {
+      "title": "Triage issue end-to-end",
+      "description": "Read-only combined tool: merges report detail, the reporter thread, similar bugs (matched on the report summary), the fix context (paste-ready fix prompt, repro steps, root cause), the blast radius of the inventory action the report is filed against, and recent pipeline warnings into a single structured review packet. Returns the packet plus prioritised recommended_actions, partial_errors for any source that failed, and notes for any source that does not apply (e.g. no blast radius when the report is not anchored to an inventory action). Equivalent to a Sentry \"Analyze with Seer\" flow grounded in user-felt reports. Pass report_id to kick off review. Call this before dispatch_fix.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Triage issue end-to-end",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "Report UUID to triage."
+          },
+          "project_id": {
+            "description": "Project UUID. Defaults to configured project.",
+            "type": "string"
+          },
+          "include_logs": {
+            "description": "Include recent pipeline logs in triage packet (default: true).",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "report_id"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "report_id": {
+            "type": "string"
+          },
+          "severity": {},
+          "category": {},
+          "status": {},
+          "partial_errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "report": {},
+          "reporter_thread": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "similar_bugs": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fix_context": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "blast_radius": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recent_logs": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recommended_actions": {
+            "type": "array",
+            "items": {}
+          },
+          "triage_summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "severity",
+          "category",
+          "status",
+          "partial_errors",
+          "notes",
+          "report",
+          "reporter_thread",
+          "similar_bugs",
+          "fix_context",
+          "blast_radius",
+          "recent_logs",
+          "recommended_actions",
+          "triage_summary"
+        ],
+        "additionalProperties": false
+      },
+      "returnsUntrusted": true
+    },
+    "triage_next_steps": {
+      "title": "What should I work on now?",
+      "description": "Prioritised \"do this next\" list for the project: blocked auto-fixes first (with the unblock action), then in-flight fixes to shepherd to merge, then user-felt classified reports by severity, with robot/cron chores (dependency bumps) last. Returns { steps: [{ priority, action, reason, tool, args }], summary }. Read-only. Call this first when the user asks \"what needs my attention / what should I triage or fix\".",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "What should I work on now?",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "description": "Project UUID (defaults to the configured project).",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "priority": {
+                  "type": "number"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "tool": {
+                  "type": "string"
+                },
+                "args": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "priority",
+                "action",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "steps",
+          "summary"
+        ],
+        "additionalProperties": false
+      },
+      "returnsUntrusted": true
+    },
+    "trigger_judge": {
+      "title": "Run Sonnet-as-Judge",
+      "description": "Queue the Sonnet-as-Judge to grade recent fix quality across accessible projects. Returns { dispatched: number } — one judge-batch job per project; scores land asynchronously in judge_results (read back with run_nl_query). Write; consumes LLM budget. Idempotent within a short window. Use before shipping to vet fix quality; use get_fix_timeline to inspect a single attempt instead.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Run Sonnet-as-Judge",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "description": "Max reports to judge in this batch (default 25, max 100)",
+            "type": "number"
+          },
+          "projectId": {
+            "description": "Restrict to one project when the API key owns multiple",
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "dispatched": {
+            "type": "number",
+            "description": "Number of judge-batch jobs dispatched (one per accessible project)"
+          }
+        },
+        "required": [
+          "dispatched"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "use_mushi": {
+      "title": "Mushi — where to start",
+      "description": "CALL THIS FIRST if you are new to this Mushi project or unsure which tool to use. Pass your intent as a short natural-language phrase (\"fix the top bug\", \"check what I should work on\", \"run QA tests\", \"set up Mushi\", …). Returns: (1) a curated list of the 5–12 tool names most relevant to that intent, (2) a one-paragraph orientation to the Mushi project and dashboard state, and (3) the single recommended first tool to call. Only tools this connection exposes are recommended; relevant tools hidden by the active feature groups are named with how to enable them. Avoids loading the full tool catalog into context when only a small subset is needed. Read-only; does not call any downstream tools itself.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Mushi — where to start",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "description": "What you are trying to accomplish with Mushi, e.g. \"fix the top bug\", \"check project health\", \"run QA tests\", \"set up Mushi\". Leave blank for a general orientation.",
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "resources": [
+    {
+      "name": "project_dashboard",
+      "uri": "project://dashboard",
+      "title": "Loop dashboard snapshot",
+      "description": "Loop health snapshot — stage counts, bottleneck, recent activity (same payload the admin console polls)."
+    },
+    {
+      "name": "project_stats",
+      "uri": "project://stats",
+      "title": "Project stats",
+      "description": "Report counts, category breakdown, severity distribution."
+    },
+    {
+      "name": "project_settings",
+      "uri": "project://settings",
+      "title": "Project settings",
+      "description": "Project configuration — autofix agent, plugins enabled, ontology, LLM budgets."
+    },
+    {
+      "name": "privacy_status",
+      "uri": "privacy://status",
+      "title": "Privacy posture",
+      "description": "Returns the privacy posture for this project: storage region, LLM provider, whether your own LLM key is configured, data retention window, and last audit timestamp. Agents should read this before dispatching a fix to confirm that client data stays within the expected boundary. Reads as project data does not leave the project's own LLM account when byok_configured=true."
+    },
+    {
+      "name": "evolution_history",
+      "uri": "evolution://history",
+      "title": "Evolution history",
+      "description": "Returns the project's last 30 days of judge scores, prompt promotions, fixed-bug count, and lesson inductions. Agents can read this to see whether the loop is converging (rising judge scores, falling recurrence) or stalling (flat scores, same bugs re-appearing). Use before review to understand which bug classes the loop has already learned to handle, and which still need human attention."
+    },
+    {
+      "name": "activation_status",
+      "uri": "mushi://activation",
+      "title": "Activation cockpit status",
+      "description": "Unified setup posture — SDK heartbeat, reports, GitHub, MCP readiness, QA stories, and the next best action. Agents should read this before guessing which onboarding step is blocking the user."
+    },
+    {
+      "name": "project_integration_health",
+      "uri": "project://integration-health",
+      "title": "Integration health",
+      "description": "Live health status of every configured integration channel (Sentry, GitHub, LangFuse, PagerDuty, …). Check this before dispatching a fix to fail-fast on broken channels rather than burning LLM budget and discovering the failure mid-run."
+    },
+    {
+      "name": "inventory_current",
+      "uri": "inventory://current",
+      "title": "Current inventory snapshot",
+      "description": "Current inventory snapshot for the active project — all Action nodes with their spec contract (expected_outcome), build-gate status, linked reports, and fix attempts. Subscribe to this resource to receive notifications/resources/updated when the inventory is re-crawled. Orchestrators can use this to enumerate work items and pick the next Action to fix."
+    }
+  ],
+  "prompts": [
+    {
+      "name": "summarize_report_for_fix",
+      "description": "Turn a Mushi report into a one-line root cause, smallest file set, repro steps, and blast-radius warnings."
+    },
+    {
+      "name": "explain_judge_result",
+      "description": "Turn raw Sonnet-as-Judge scores into ship / iterate / dismiss guidance."
+    },
+    {
+      "name": "triage_next_steps",
+      "description": "Five-item priority list drawn from the dashboard + recent classified queue."
+    },
+    {
+      "name": "mushi_setup",
+      "description": "Walk through activation status, integration health, and the single next command to unblock setup."
+    }
+  ]
 }

@@ -4,6 +4,7 @@
  */
 
 import manifest from '../_shared/mcp-hosted-tool-manifest.json' with { type: 'json' };
+import { MCP_DISCOVERY } from '../_shared/mcp-server-card.ts';
 
 export interface ManifestToolDef {
   scope: 'mcp:read' | 'mcp:write';
@@ -36,6 +37,7 @@ type ToolHandler = (
 
 export interface ToolDef {
   scope: 'mcp:read' | 'mcp:write';
+  title?: string;
   description: string;
   inputSchema: Record<string, unknown>;
   annotations?: Record<string, unknown>;
@@ -131,17 +133,28 @@ export function buildManifestTools(deps: {
   const out: Record<string, ToolDef> = {};
 
   for (const [name, spec] of Object.entries(manifest as Record<string, ManifestToolDef>)) {
-    const annotations: Record<string, unknown> = {
-      readOnlyHint: spec.scope === 'mcp:read',
-      openWorldHint: true,
-    };
-    if (spec.hints?.destructive !== undefined) annotations.destructiveHint = spec.hints.destructive;
-    if (spec.hints?.idempotent !== undefined) annotations.idempotentHint = spec.hints.idempotent;
+    // Title, description, annotations and input schema come from the
+    // canonical stdio catalog (mcp-discovery-tools.json). Every manifest tool
+    // used to advertise `{ type: 'object', properties: {} }` while the handler
+    // below enforces spec.required, so a model had to learn the parameters by
+    // failing; and a write tool with no explicit destructiveHint defaults to
+    // destructive in clients, so refresh_ci looked as dangerous as merge_fix.
+    // The seven resource-shaped tools (project_dashboard, …) have no stdio
+    // counterpart and keep the manifest's own metadata.
+    const canonical = MCP_DISCOVERY.tools[name];
+    const annotations: Record<string, unknown> = canonical?.annotations
+      ? { ...canonical.annotations }
+      : { readOnlyHint: spec.scope === 'mcp:read', openWorldHint: true };
+    if (!canonical?.annotations) {
+      if (spec.hints?.destructive !== undefined) annotations.destructiveHint = spec.hints.destructive;
+      if (spec.hints?.idempotent !== undefined) annotations.idempotentHint = spec.hints.idempotent;
+    }
 
     out[name] = {
       scope: spec.scope,
-      description: spec.description,
-      inputSchema: { type: 'object', properties: {} },
+      ...(canonical ? { title: canonical.title } : {}),
+      description: canonical?.description ?? spec.description,
+      inputSchema: canonical?.inputSchema ?? { type: 'object', properties: {} },
       annotations,
       handler: async (args, ctx) => {
         for (const req of spec.required ?? []) {

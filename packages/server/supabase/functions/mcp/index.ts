@@ -120,11 +120,12 @@ import {
 } from './feature-groups.ts'
 import { wrapUntrustedJson } from './wrap-untrusted.ts'
 import { findMushiDoc, mushiDocMarkdownUrl, searchMushiDocs } from './docs-index.ts'
-import { buildMcpServerCard, MCP_SERVER_CARD_HEADERS } from '../_shared/mcp-server-card.ts'
+import { buildMcpServerCard, MCP_DISCOVERY, MCP_SERVER_CARD_HEADERS } from '../_shared/mcp-server-card.ts'
 import {
   buildOAuthProtectedResourceMetadata,
   bearerWwwAuthenticateResourceMetadata,
   mcpOAuthDiscoveryDocument,
+  mcpOAuthIssuer,
   mcpProtectedResourceMetadataUrl,
   MCP_OAUTH_METADATA_HEADERS,
 } from '../_shared/mcp-oauth-metadata.ts'
@@ -263,6 +264,8 @@ type ToolHandler = (
 
 interface ToolDef {
   scope: 'mcp:read' | 'mcp:write'
+  /** Human-readable title; overlaid from the canonical catalog. */
+  title?: string
   description: string
   inputSchema: Record<string, unknown>
   /**
@@ -2116,6 +2119,7 @@ function handleToolsList(ctx: CallContext): { tools: Array<Record<string, unknow
     .filter(([name]) => toolMatchesFeatures(name, ctx.features))
     .map(([name, def]) => ({
       name,
+      ...(def.title ? { title: def.title } : {}),
       description: def.description,
       inputSchema: def.inputSchema,
       ...(def.outputSchema ? { outputSchema: def.outputSchema } : {}),
@@ -2466,6 +2470,22 @@ TOOLS = {
     McpError,
     ERR_INVALID_PARAMS,
   }),
+}
+
+// ── Canonical metadata overlay ─────────────────────────────────────────────
+// Titles, descriptions and annotations come from the stdio catalog (via the
+// generated mcp-discovery-tools.json), so both transports describe every tool
+// the same way — 26 of 30 hand-written BASE_TOOLS descriptions had drifted
+// from catalog.ts. Handlers and hand-written input schemas stay hosted-owned.
+for (const [name, def] of Object.entries(TOOLS)) {
+  const canonical = MCP_DISCOVERY.tools[name]
+  if (!canonical) continue
+  TOOLS[name] = {
+    ...def,
+    title: canonical.title,
+    description: canonical.description,
+    annotations: canonical.annotations ?? def.annotations,
+  }
 }
 
 // ── Deprecated-alias backward-compatibility shims ──────────────────────────
@@ -2832,7 +2852,14 @@ async function handler(req: Request): Promise<Response> {
   if (req.method === 'GET' || req.method === 'HEAD') {
     const url = new URL(req.url)
     if (url.pathname.includes('server-card.json')) {
-      const card = JSON.stringify(buildMcpServerCard(), null, 2)
+      const card = JSON.stringify(
+        buildMcpServerCard({
+          authorizationServer: mcpOAuthIssuer(url, req.headers),
+          resourceMetadata: mcpProtectedResourceMetadataUrl(url, req.headers),
+        }),
+        null,
+        2,
+      )
       return jsonResponse(
         card,
         200,

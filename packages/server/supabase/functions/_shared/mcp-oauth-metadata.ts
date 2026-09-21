@@ -177,6 +177,11 @@ export const MCP_OAUTH_METADATA_HEADERS: Record<string, string> = {
   Vary: 'X-Forwarded-Host, X-Amz-Cf-Id, Via',
 }
 
+/** OAuth issuer (authorization server) for the URL this request came in on — the server card names it. */
+export function mcpOAuthIssuer(url: URL, headers: Headers): string {
+  return mcpResourceBase(url, headers)
+}
+
 /** RFC 9728 Protected Resource Metadata document URL for the resource this request addressed. */
 export function mcpProtectedResourceMetadataUrl(url: URL, headers: Headers): string {
   return `${mcpResourceBase(url, headers)}/.well-known/oauth-protected-resource`

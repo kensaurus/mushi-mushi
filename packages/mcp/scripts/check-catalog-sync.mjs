@@ -385,6 +385,37 @@ console.log(`\n── Check 6: Server instructions + use_mushi intents ───
   }
 }
 
+// CHECK 7: hosted tool metadata comes from the generated catalog copy
+// mcp-discovery-tools.json is regenerated from packages/mcp (its own --check
+// runs in check:catalog-sync); this makes sure the hosted server reads it for
+// titles, descriptions, annotations and manifest input schemas, and reports
+// where a hand-written hosted tool and stdio disagree on outputSchema.
+console.log(`\n── Check 7: Hosted metadata from the generated catalog ──────────────────────`)
+{
+  const manifestTools = read('packages/server/supabase/functions/mcp/manifest-tools.ts')
+  if (!/MCP_DISCOVERY\.tools\[name\]/.test(hostedContent)) {
+    fail('functions/mcp/index.ts no longer overlays titles/descriptions/annotations from MCP_DISCOVERY')
+  }
+  if (!/inputSchema:\s*canonical\?\.inputSchema/.test(manifestTools)) {
+    fail('functions/mcp/manifest-tools.ts no longer takes manifest input schemas from MCP_DISCOVERY')
+  }
+  const discovery = JSON.parse(read('packages/server/supabase/functions/_shared/mcp-discovery-tools.json'))
+  const baseSection = hostedContent.split('const BASE_TOOLS')[1]?.split('/** Full catalog')[0] ?? ''
+  const baseEntries = baseSection.split(/\n {2}(?=[a-z_]+: \{)/).slice(1)
+  let outputDrift = 0
+  for (const entry of baseEntries) {
+    const name = entry.match(/^([a-z_]+): \{/)?.[1]
+    const canonical = name ? discovery.tools?.[name] : undefined
+    if (!canonical) continue
+    const hostedHasOutput = /\n {4}outputSchema:/.test(entry)
+    if (hostedHasOutput !== Boolean(canonical.outputSchema)) {
+      warn(`"${name}": outputSchema ${hostedHasOutput ? 'declared on hosted only' : 'declared on stdio only'}`)
+      outputDrift++
+    }
+  }
+  if (outputDrift === 0) info('hosted BASE_TOOLS and stdio agree on outputSchema presence')
+}
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n── Summary ─────────────────────────────────────────────────────────────────`)

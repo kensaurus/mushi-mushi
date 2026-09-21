@@ -35,6 +35,8 @@ const PINNED_FILES = [
   'packages/vscode-extension/src/extension.ts',
   'apps/docs/public/integrations/claude-hooks.json',
   'apps/docs/content/quickstart/mcp.mdx',
+  // Hosted MCP reports this version in serverInfo and the server card.
+  'packages/server/supabase/functions/_shared/mcp-discovery-tools.json',
 ]
 
 const SPEC_RE = /@mushi-mushi\/mcp@(?:latest|\d+\.\d+\.\d+(?:-[\w.]+)?)/g
