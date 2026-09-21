@@ -208,7 +208,7 @@ describe('untrusted-output wrapping follows the catalog', () => {
   })
 
   it.each([
-    ['get_recent_reports', {}, 'GET /v1/admin/reports', ok({ reports: [{ id: REPORT_ID, description: INJECTION }], total: 1 })],
+    ['get_recent_reports', {}, 'GET /v1/admin/reports', ok({ reports: [{ id: REPORT_ID, summary: INJECTION }], total: 1 })],
     ['get_report_timeline', { reportId: REPORT_ID }, `GET /v1/sync/reports/${REPORT_ID}/timeline`, ok({ events: [{ body: INJECTION }] })],
   ] as const)('%s wraps reporter text that its handler returns as plain JSON', async (name, args, route, response) => {
     const { stub } = routedFetch({ [route]: () => response })

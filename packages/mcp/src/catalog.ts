@@ -68,7 +68,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_recent_reports',
     title: 'Recent bug reports',
     description:
-      'List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, created_at }], total }. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports.',
+      'List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, component, created_at, processing_error }], total }; include_raw=true returns every list column instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed|…), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
@@ -245,10 +245,19 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'search_mushi_docs',
     title: 'Search Mushi documentation',
     description:
-      'Search the official Mushi documentation (guides, MCP setup, inventory, QA, skills) by keyword. Returns ranked { results: [{ title, url, excerpt }] }. Read-only. Use before guessing API shapes, tool names, or RPC names; use run_nl_query for questions about your own project data, not the docs.',
+      'Search the official Mushi documentation (guides, MCP setup, inventory, QA, skills) by keyword — titles, section headings and summaries are indexed. Returns ranked { results: [{ title, url, excerpt, score }] }. Read-only; works without an API key. Use before guessing API shapes, tool names, or RPC names, then get_mushi_doc to read a page; use run_nl_query for questions about your own project data, not the docs.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: false },
     useCase: 'How do I configure MCP scopes / dispatch a fix / wire QA stories?',
+  },
+  {
+    name: 'get_mushi_doc',
+    title: 'Read a Mushi docs page',
+    description:
+      'Fetch one official Mushi docs page as Markdown, by a url from search_mushi_docs or a route such as "/quickstart/mcp". Returns { title, url, markdown, truncated }; markdown is capped at 8,000 characters and says where to read the rest. Only indexed docs pages resolve. Read-only; works without an API key. Use after search_mushi_docs when an excerpt is not enough.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Show me the full MCP quickstart page.',
   },
   // --- Write / agentic ----------------------------------------------------
   {

@@ -119,7 +119,7 @@ import {
   type FeatureFilter,
 } from './feature-groups.ts'
 import { wrapUntrustedJson } from './wrap-untrusted.ts'
-import { searchMushiDocs } from './docs-index.ts'
+import { findMushiDoc, mushiDocMarkdownUrl, searchMushiDocs } from './docs-index.ts'
 import { buildMcpServerCard, MCP_SERVER_CARD_HEADERS } from '../_shared/mcp-server-card.ts'
 import {
   buildOAuthProtectedResourceMetadata,
@@ -135,6 +135,7 @@ import {
 } from '../_shared/mcp-oauth-smithery-stub.ts'
 import { readOAuthParams } from '../_shared/mcp-oauth-helpers.ts'
 import { getServiceClient } from '../_shared/db.ts'
+import { CANONICAL_REPORT_STATUSES } from '../_shared/report-status.ts'
 import { emitProductEvent } from '../_shared/product-events.ts'
 import { attachTraceparent, childTraceparent } from '../_shared/trace.ts'
 import {
@@ -291,6 +292,35 @@ function fixContextOf(report: Record<string, unknown>): Record<string, unknown> 
   }
 }
 
+/** get_mushi_doc returns at most this much Markdown (~2k tokens) and says where the rest is. */
+const MUSHI_DOC_MAX_CHARS = 8000
+
+/** Report status vocabulary the admin list route filters on (_shared/report-status.ts). */
+const REPORT_STATUSES = CANONICAL_REPORT_STATUSES
+const REPORT_CATEGORIES = ['bug', 'slow', 'visual', 'confusing', 'other'] as const
+const REPORT_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const
+
+/** The fields get_recent_reports documents; the list route returns ~30 columns. */
+const REPORT_LIST_FIELDS = ['id', 'status', 'category', 'severity', 'summary', 'component', 'created_at', 'processing_error'] as const
+
+/**
+ * Columns the list route returns so the console can render a reporter's name
+ * and badge. They identify an end user of the customer's app and are never
+ * handed to an agent, even with include_raw. Mirrors packages/mcp/src/server.ts.
+ */
+const REPORTER_IDENTITY_FIELDS = ['end_user_id', 'reporter_token_hash', 'session_id', 'reporter_display_name']
+
+function projectReportListRow(row: Record<string, unknown>, includeRaw: boolean): Record<string, unknown> {
+  if (includeRaw) {
+    return Object.fromEntries(Object.entries(row).filter(([k]) => !REPORTER_IDENTITY_FIELDS.includes(k)))
+  }
+  const out: Record<string, unknown> = {}
+  for (const field of REPORT_LIST_FIELDS) {
+    if (row[field] !== undefined) out[field] = row[field]
+  }
+  return out
+}
+
 /** Free text the similarity route can embed for a report, or null when it has none. */
 function similarityQueryOf(report: Record<string, unknown>): string | null {
   for (const field of ['summary', 'description'] as const) {
@@ -333,14 +363,22 @@ const BASE_TOOLS: Record<string, ToolDef> = {
   get_recent_reports: {
     scope: 'mcp:read',
     description:
-      'List recent bug reports with optional filters (status / category / severity). Use this to survey what the triage queue looks like right now.',
+      'List recent bug reports, newest first. Returns { reports: [{ id, status, category, severity, summary, component, created_at, processing_error }], total }; include_raw=true returns every list column instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Use this to survey what the triage queue looks like right now.',
     inputSchema: {
       type: 'object',
       properties: {
-        status: { type: 'string' },
-        category: { type: 'string' },
-        severity: { type: 'string' },
-        limit: { type: 'number' },
+        status: {
+          type: 'string',
+          enum: [...REPORT_STATUSES],
+          description: 'Filter by status. "new" also matches queued rows; "classified" and "fixed" include legacy aliases.',
+        },
+        category: { type: 'string', enum: [...REPORT_CATEGORIES], description: 'Filter by category.' },
+        severity: { type: 'string', enum: [...REPORT_SEVERITIES], description: 'Filter by severity.' },
+        limit: { type: 'number', description: 'Max reports to return (default 20, max 100).' },
+        include_raw: {
+          type: 'boolean',
+          description: 'Return every column the list route has instead of the documented fields. Reporter identifiers are removed either way.',
+        },
       },
     },
     outputSchema: {
@@ -362,7 +400,14 @@ const BASE_TOOLS: Record<string, ToolDef> = {
       if (typeof args.category === 'string') params.set('category', args.category)
       if (typeof args.severity === 'string') params.set('severity', args.severity)
       params.set('limit', String(Math.min((args.limit as number) ?? 20, 100)))
-      return apiCall(`/v1/admin/reports?${params}`, { headers: ctx.authHeaders })
+      const data = await apiCall<{ reports?: Array<Record<string, unknown>>; total?: number }>(
+        `/v1/admin/reports?${params}`,
+        { headers: ctx.authHeaders },
+      )
+      return {
+        reports: (data.reports ?? []).map((row) => projectReportListRow(row, args.include_raw === true)),
+        total: data.total ?? 0,
+      }
     },
   },
   get_report_detail: {
@@ -1155,8 +1200,8 @@ const BASE_TOOLS: Record<string, ToolDef> = {
   search_mushi_docs: {
     scope: 'mcp:read',
     description:
-      'Search official Mushi docs (guides, MCP setup, inventory, QA, skills) by keyword. ' +
-      'Returns ranked page titles, URLs, and excerpts.',
+      'Search official Mushi docs (guides, MCP setup, inventory, QA, skills) by keyword — titles, section headings and summaries are indexed. ' +
+      'Returns ranked { results: [{ title, url, excerpt, score }] }; read a page with get_mushi_doc.',
     inputSchema: {
       type: 'object',
       required: ['query'],
@@ -1175,11 +1220,11 @@ const BASE_TOOLS: Record<string, ToolDef> = {
             type: 'object',
             properties: {
               title: { type: 'string' },
-              path: { type: 'string' },
+              url: { type: 'string' },
               excerpt: { type: 'string' },
               score: { type: 'number' },
             },
-            required: ['title', 'path', 'excerpt', 'score'],
+            required: ['title', 'url', 'excerpt', 'score'],
           },
         },
       },
@@ -1190,8 +1235,58 @@ const BASE_TOOLS: Record<string, ToolDef> = {
       const query = String(args.query ?? '')
       const limit = Math.min(Number(args.limit ?? 8), 20)
       const hits = searchMushiDocs(query, limit)
-      const results = hits.map(({ title, path, excerpt, score }) => ({ title, path, excerpt, score }))
+      const results = hits.map(({ title, url, excerpt, score }) => ({ title, url, excerpt, score }))
       return { query, results }
+    },
+  },
+  get_mushi_doc: {
+    scope: 'mcp:read',
+    description:
+      'Fetch one official Mushi docs page as Markdown, by a url from search_mushi_docs or a route such as "/quickstart/mcp". ' +
+      'Returns { title, url, markdown, truncated }; markdown is capped at 8,000 characters. Only indexed docs pages resolve.',
+    inputSchema: {
+      type: 'object',
+      required: ['page'],
+      properties: {
+        page: { type: 'string', description: 'A url from search_mushi_docs, or a docs route such as "/quickstart/mcp".' },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        url: { type: 'string' },
+        markdown: { type: 'string' },
+        truncated: { type: 'boolean' },
+      },
+      required: ['title', 'url', 'markdown', 'truncated'],
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (args) => {
+      requireString(args.page, 'page')
+      const entry = findMushiDoc(args.page as string)
+      if (!entry) {
+        throw new McpError(
+          ERR_INVALID_PARAMS,
+          `No docs page matches "${args.page}". Call search_mushi_docs and pass one of the urls it returns.`,
+        )
+      }
+      // The docs site is public: no Mushi credentials go with this request.
+      const res = await fetch(mushiDocMarkdownUrl(entry), {
+        headers: { Accept: 'text/markdown, text/plain;q=0.9' },
+        signal: AbortSignal.timeout(10_000),
+      })
+      if (!res.ok) {
+        throw new McpError(ERR_UPSTREAM_HTTP, `The docs site answered ${res.status} for ${entry.url}.`, { http: res.status })
+      }
+      const text = await res.text()
+      const truncated = text.length > MUSHI_DOC_MAX_CHARS
+      return {
+        title: entry.title,
+        url: entry.url,
+        markdown: truncated ? `${text.slice(0, MUSHI_DOC_MAX_CHARS)}\n\n… (truncated — read the rest at ${entry.url})` : text,
+        truncated,
+      }
     },
   },
 

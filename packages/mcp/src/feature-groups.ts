@@ -152,6 +152,7 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
 
   // docs / orientation
   search_mushi_docs: 'docs',
+  get_mushi_doc: 'docs',
   use_mushi: 'docs',
 }
 

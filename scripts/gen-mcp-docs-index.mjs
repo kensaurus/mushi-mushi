@@ -43,6 +43,8 @@ const OUTPUTS = [
 const checkMode = process.argv.includes('--check')
 const EXCERPT_MAX = 180
 const KEYWORD_MAX = 12
+const HEADING_MAX = 8
+const HEADING_CHARS = 70
 
 // ─── 1. Parse llms.txt ───────────────────────────────────────────────────────
 
@@ -144,6 +146,29 @@ function firstParagraph(src) {
   return null
 }
 
+/** Section headings (## / ###) outside code fences, markup stripped — what a page covers. */
+function headingsOf(src) {
+  const body = src.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, '').replace(/```[\s\S]*?```/g, '')
+  const out = []
+  for (const m of body.matchAll(/^#{2,3}\s+(.+?)\s*#*\s*$/gm)) {
+    const text = stripMarkupToFixpoint(m[1])
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/[`*_]/g, '')
+      .replace(/\{[^}]*\}/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (text.length < 3 || out.includes(text)) continue
+    out.push(truncate(text, HEADING_CHARS))
+    if (out.length >= HEADING_MAX) break
+  }
+  return out
+}
+
+/** The public Markdown twin of a page (scripts/generate-llms-full.mjs writes llm-md/<content path>.md). */
+function markdownTwinOf(file) {
+  return path.relative(CONTENT, file).replace(/\\/g, '/').replace(/\.mdx$/, '.md')
+}
+
 function truncate(text, max) {
   if (text.length <= max) return text
   const cut = text.slice(0, max)
@@ -154,6 +179,13 @@ function truncate(text, max) {
 const STOP = new Set([
   'a', 'an', 'and', 'the', 'of', 'for', 'to', 'in', 'on', 'with', 'your', 'you', 'or', 'is', 'at',
   'by', 'vs', 'from', 'it', 'as', 'how', 'why', 'what', 'into', 'up', 'mushi', 'docs',
+])
+
+/** Stopwords dropped from search queries ("how do I set up the mcp server" → set, up, mcp, server). */
+const QUERY_STOP = new Set([
+  'a', 'an', 'and', 'are', 'can', 'do', 'does', 'for', 'from', 'how', 'i', 'in', 'is', 'it', 'me',
+  'my', 'of', 'on', 'or', 'the', 'to', 'use', 'using', 'what', 'when', 'where', 'which', 'why',
+  'with', 'you', 'your', 'mushi',
 ])
 
 function words(text) {
@@ -201,9 +233,20 @@ for (const [url, meta] of pages) {
   entries.push({
     title: meta.title,
     route,
+    markdown: markdownTwinOf(file),
     keywords: keywordsFor(route, meta.title, meta.aliases, meta.section),
+    headings: headingsOf(src),
     excerpt,
   })
+}
+
+// get_mushi_doc fetches these twins; a missing one would be a dead fetch.
+const missingTwins = entries.filter((e) => !existsSync(path.join(ROOT, 'apps/docs/public/llm-md', e.markdown)))
+if (missingTwins.length > 0) {
+  console.error(`FAIL  ${missingTwins.length} page(s) have no apps/docs/public/llm-md twin:`)
+  for (const e of missingTwins) console.error(`      ${e.markdown}`)
+  console.error('      Run `node scripts/generate-llms-full.mjs` to write the Markdown twins.')
+  process.exit(1)
 }
 
 if (missingSources.length > 0) {
@@ -226,24 +269,32 @@ function render() {
     '// Regenerate: node scripts/gen-mcp-docs-index.mjs   (CI: --check)',
     '',
     '/**',
-    ' * Static index behind the `search_mushi_docs` MCP tool. Every path is a',
-    ' * page that exists in the docs site at generation time, so the tool can',
-    ' * never hand an agent a dead link. Keep this file in lock-step across the',
-    ' * stdio (packages/mcp) and hosted (functions/mcp) servers by regenerating',
-    ' * — never by hand-editing one copy.',
+    ' * Static index behind the `search_mushi_docs` and `get_mushi_doc` MCP tools.',
+    ' * Every url is a page that exists in the docs site at generation time, so',
+    ' * the tools can never hand an agent a dead link, and get_mushi_doc only',
+    ' * fetches pages listed here. Keep this file in lock-step across the stdio',
+    ' * (packages/mcp) and hosted (functions/mcp) servers by regenerating —',
+    ' * never by hand-editing one copy.',
     ' */',
     '',
     'export interface DocIndexEntry {',
     '  title: string',
-    '  path: string',
+    '  /** Public page URL. */',
+    '  url: string',
+    "  /** Route under the docs base, e.g. '/quickstart/mcp'. */",
+    '  route: string',
+    '  /** Public Markdown twin, relative to `${MUSHI_DOCS_BASE}/llm-md/`. */',
+    '  markdown: string',
     '  keywords: string[]',
+    '  /** Section headings, so a query can match what a page covers. */',
+    '  headings: string[]',
     '  excerpt: string',
     '}',
     '',
-    `const BASE = ${q(BASE)}`,
+    `export const MUSHI_DOCS_BASE = ${q(BASE)}`,
     '',
-    'function docPath(suffix: string): string {',
-    "  return suffix === '/' ? BASE : BASE + suffix",
+    'function docUrl(route: string): string {',
+    "  return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route",
     '}',
     '',
     `/** ${entries.length} pages, generated from llms.txt. */`,
@@ -252,39 +303,65 @@ function render() {
   for (const e of entries) {
     lines.push('  {')
     lines.push(`    title: ${q(e.title)},`)
-    lines.push(`    path: docPath(${q(e.route)}),`)
+    lines.push(`    url: docUrl(${q(e.route)}),`)
+    lines.push(`    route: ${q(e.route)},`)
+    lines.push(`    markdown: ${q(e.markdown)},`)
     lines.push(`    keywords: [${e.keywords.map(q).join(', ')}],`)
+    lines.push(`    headings: [${e.headings.map(q).join(', ')}],`)
     lines.push(`    excerpt: ${q(e.excerpt)},`)
     lines.push('  },')
   }
   lines.push(']')
   lines.push('')
   lines.push(
-    ...`export function searchMushiDocs(query: string, limit = 8): Array<DocIndexEntry & { score: number }> {
+    ...`/** Query words that match almost every page and drown out the ones that matter. */
+const QUERY_STOPWORDS = new Set([${[...QUERY_STOP].map(q).join(', ')}])
+
+export function searchMushiDocs(query: string, limit = 8): Array<DocIndexEntry & { score: number }> {
   const q = query.trim().toLowerCase()
   if (!q) {
     return MUSHI_DOCS_INDEX.slice(0, limit).map((e) => ({ ...e, score: 0 }))
   }
-  const terms = q.split(/\\s+/).filter(Boolean)
+  const allTerms = q.split(/[\\s?!,;:()"']+/).filter(Boolean)
+  const meaningful = allTerms.filter((t) => !QUERY_STOPWORDS.has(t))
+  const terms = meaningful.length > 0 ? meaningful : allTerms
   const scored = MUSHI_DOCS_INDEX.map((entry) => {
     const title = entry.title.toLowerCase()
-    const hay = (entry.title + ' ' + entry.keywords.join(' ') + ' ' + entry.excerpt).toLowerCase()
+    const headings = entry.headings.join(' ').toLowerCase()
+    const hay = (entry.title + ' ' + entry.keywords.join(' ') + ' ' + headings + ' ' + entry.excerpt).toLowerCase()
     let score = 0
     for (const term of terms) {
       if (title.includes(term)) score += 4
       if (entry.keywords.some((k) => k === term)) score += 4
       else if (entry.keywords.some((k) => k.includes(term))) score += 2
+      if (headings.includes(term)) score += 2
       if (hay.includes(term)) score += 1
     }
     // Every term matched somewhere → strong signal the page is about the query.
     if (terms.length > 1 && terms.every((t) => hay.includes(t))) score += 3
     // Shallow routes (quickstart, sdks) are the pages agents usually want first.
-    if (score > 0 && entry.path.split('/').length <= BASE.split('/').length + 2) score += 1
+    if (score > 0 && entry.route.split('/').length <= 3) score += 1
     return { ...entry, score }
   })
     .filter((e) => e.score > 0)
     .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
   return scored.slice(0, limit)
+}
+
+/**
+ * Resolve a page by its public URL (as search_mushi_docs returns it) or by
+ * its route ('/quickstart/mcp'). Only indexed pages resolve.
+ */
+export function findMushiDoc(page: string): DocIndexEntry | null {
+  const raw = page.trim().split(/[?#]/)[0] ?? ''
+  const route = raw.startsWith(MUSHI_DOCS_BASE) ? raw.slice(MUSHI_DOCS_BASE.length) || '/' : raw
+  const normalised = route === '/' ? '/' : '/' + route.replace(/^\\/+|\\/+$/g, '')
+  return MUSHI_DOCS_INDEX.find((e) => e.route === normalised) ?? null
+}
+
+/** Public URL of a page's Markdown twin. */
+export function mushiDocMarkdownUrl(entry: DocIndexEntry): string {
+  return MUSHI_DOCS_BASE + '/llm-md/' + entry.markdown
 }
 `.split('\n'),
   )

@@ -134,6 +134,10 @@
       "projectId"
     ]
   },
+  "get_mushi_doc": {
+    "description": "Fetch one official Mushi docs page as Markdown, by a url from search_mushi_docs or a route such as \"/quickstart/mcp\". Returns { title, url, markdown, truncated }; markdown is capped at 8,000 characters and says where to read the rest. Only indexed docs pages resolve. Read-only; works without an API key. Use after search_mushi_docs when an excerpt is not enough.",
+    "scope": "mcp:read"
+  },
   "get_pipeline_logs": {
     "description": "Pull recent log entries from the Mushi pipeline services: fix-worker, qa-story-runner, pipeline, or all. Accepts project_id, service, since (ISO-8601), limit (max 200), and level (info | warn | error | fatal) filters. Returns structured log rows with timestamp, level, service, message, and a trace_id/report_id when available. Use this when a fix failed, a QA story keeps erroring, or an ingest pipeline went silent.",
     "scope": "mcp:read"
@@ -162,7 +166,7 @@
     ]
   },
   "get_recent_reports": {
-    "description": "List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, created_at }], total }. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports.",
+    "description": "List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, component, created_at, processing_error }], total }; include_raw=true returns every list column instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed|…), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports.",
     "scope": "mcp:read"
   },
   "get_report_detail": {
@@ -321,7 +325,7 @@
     "scope": "mcp:read"
   },
   "search_mushi_docs": {
-    "description": "Search the official Mushi documentation (guides, MCP setup, inventory, QA, skills) by keyword. Returns ranked { results: [{ title, url, excerpt }] }. Read-only. Use before guessing API shapes, tool names, or RPC names; use run_nl_query for questions about your own project data, not the docs.",
+    "description": "Search the official Mushi documentation (guides, MCP setup, inventory, QA, skills) by keyword — titles, section headings and summaries are indexed. Returns ranked { results: [{ title, url, excerpt, score }] }. Read-only; works without an API key. Use before guessing API shapes, tool names, or RPC names, then get_mushi_doc to read a page; use run_nl_query for questions about your own project data, not the docs.",
     "scope": "mcp:read"
   },
   "search_reports": {
