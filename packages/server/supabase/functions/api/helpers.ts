@@ -26,6 +26,7 @@ import { scrubPii } from '../_shared/pii-scrubber.ts';
 import { sendBotMessage, sendSlackText } from '../_shared/slack.ts';
 import { upsertProjectSdkObservationAsync } from '../_shared/sdk-observation.ts';
 import { emitProductEvent } from '../_shared/product-events.ts';
+import { runInBackground } from '../_shared/background.ts';
 import {
   isFirstRealReport,
   NON_REAL_REPORT_SOURCES,
@@ -583,12 +584,13 @@ export async function ingestReport(
 
   // Company funnel (mushi-self): the project's first real report = "activated".
   // Console test reports (admin_test_report) and the marketing demo seed never
-  // count. Fire-and-forget; repeat emits are no-ops on the dedup constraint.
+  // count. Background work kept alive past the response (runInBackground);
+  // repeat emits are no-ops on the dedup constraint.
   {
     const reportSource = typeof enrichedMetadata.source === 'string' ? enrichedMetadata.source : null;
     if (!firstReportEmitted.has(projectId) && !(reportSource && NON_REAL_REPORT_SOURCES.has(reportSource))) {
       firstReportEmitted.add(projectId);
-      void (async () => {
+      runInBackground((async () => {
         // Only the project's genuinely first real report counts. The dedup key
         // alone would stamp a "first report" on the first report after deploy
         // for projects that already had reports. (created_at, id) ordering
@@ -622,7 +624,7 @@ export async function ingestReport(
         });
       })().catch((err: unknown) =>
         log.warn('first_report_received emit failed (non-fatal)', { projectId, err: String(err) }),
-      );
+      ), 'first_report_received');
     }
   }
 
@@ -648,8 +650,9 @@ export async function ingestReport(
   //    payload is resolved via resolveEndUser as before. jwt_verified_at stays
   //    null. Used when no token is present or verification fails.
   //
-  // Both paths are fire-and-forget — linkage must never block ingest.
-  void (async () => {
+  // Both paths run in the background — linkage must never block ingest, and
+  // runInBackground keeps the isolate alive until the link is written.
+  runInBackground((async () => {
     try {
       // Attempt verified path first.
       if (options?.userToken) {
@@ -727,7 +730,7 @@ export async function ingestReport(
     } catch (err) {
       log.warn('end_user linkage failed', { reportId, err: String(err) });
     }
-  })();
+  })(), 'end_user linkage');
 
   // Insert into processing queue. Uses upsert with ignoreDuplicates so
   // a retry (after a crash between the reports insert and this line) doesn't
@@ -755,20 +758,25 @@ export async function ingestReport(
     }
   }
 
-  // D5: meter the ingest. Fire-and-forget — billing must never
-  // block ingest. The hourly `usage-aggregator` cron rolls these up and
-  // pushes a Stripe Meter Event per (project, day_utc).
-  void db
-    .from('usage_events')
-    .insert({
-      project_id: projectId,
-      event_name: 'reports_ingested',
-      quantity: 1,
-      metadata: { report_id: reportId },
-    })
-    .then(({ error }) => {
+  // D5: meter the ingest. In the background — billing must never
+  // block ingest, but a dropped row is an unbilled report, so the insert is
+  // kept alive past the response. The hourly `usage-aggregator` cron rolls
+  // these up and pushes a Stripe Meter Event per (project, day_utc).
+  runInBackground(
+    Promise.resolve(
+      db
+        .from('usage_events')
+        .insert({
+          project_id: projectId,
+          event_name: 'reports_ingested',
+          quantity: 1,
+          metadata: { report_id: reportId },
+        }),
+    ).then(({ error }) => {
       if (error) log.warn('Usage event insert failed', { reportId, error: error.message });
-    });
+    }),
+    'usage_events insert',
+  );
 
   // D1: fire `report.created` to all webhook plugins. Fully async —
   // plugin failures must not impact ingest latency or block the pipeline.
@@ -800,8 +808,8 @@ export async function ingestReport(
     await db.from('reports').update({ status: 'queued' }).eq('id', reportId);
     log.warn('Circuit breaker open — report queued', { reportId });
     // Notify Slack so a queued-but-unclassified report is never silent.
-    // Fire-and-forget; channel/webhook fetched from project_settings.
-    void (async () => {
+    // In the background; channel/webhook fetched from project_settings.
+    runInBackground((async () => {
       try {
         const { data: ps } = await db
           .from('project_settings')
@@ -817,7 +825,7 @@ export async function ingestReport(
       } catch (err) {
         log.warn('Circuit-breaker Slack notify failed', { reportId, err: String(err) });
       }
-    })();
+    })(), 'circuit-breaker slack notify');
   }
 
   return { ok: true, reportId };

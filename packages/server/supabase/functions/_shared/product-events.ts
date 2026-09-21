@@ -6,7 +6,11 @@
  *          tool calls that count as "diagnosis consumed" (fix_context_pulled).
  *
  * Mirrors _shared/setup-funnel.ts: never throws, never awaited on a
- * user-facing path (use `void` or `c.executionCtx.waitUntil`).
+ * user-facing path. Every emit registers itself with EdgeRuntime.waitUntil
+ * (_shared/background.ts keepAlive), so `void emitProductEvent(...)` is safe
+ * at any call site: the isolate is not shut down under a pending insert.
+ * Until 2026-09-21 the nine `void` call sites relied on the isolate outliving
+ * the response, which low-traffic functions (stripe-webhooks, mcp) do not.
  *
  * Company-funnel rows default to the mushi-self project
  * (secret MUSHI_SELF_PROJECT_ID). A console user id is resolved to an
@@ -16,6 +20,7 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
+import { keepAlive } from './background.ts'
 import {
   EVENT_PROPERTY_LIMITS,
   isValidEventName,
@@ -90,8 +95,14 @@ export function isSelfFunnelConfigured(): boolean {
 
 /**
  * Emit one product event. Never throws. Returns true when a row was written.
+ * The write is kept alive past the response even when the caller drops the
+ * returned promise.
  */
-export async function emitProductEvent(db: SupabaseClient, payload: ProductEventPayload): Promise<boolean> {
+export function emitProductEvent(db: SupabaseClient, payload: ProductEventPayload): Promise<boolean> {
+  return keepAlive(writeProductEvent(db, payload))
+}
+
+async function writeProductEvent(db: SupabaseClient, payload: ProductEventPayload): Promise<boolean> {
   try {
     const projectId = payload.projectId ?? SELF_PROJECT_ID
     if (!projectId) return false

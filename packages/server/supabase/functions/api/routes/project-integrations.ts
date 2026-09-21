@@ -8,6 +8,17 @@ import { ingestReport } from '../helpers.ts';
 import { emitFunnelEvent } from '../../_shared/setup-funnel.ts';
 import { emitProductEvent } from '../../_shared/product-events.ts';
 import { getDemoReportFixture, materializeDemoReport } from '../../_shared/demo-report-fixtures.ts';
+import { checkIngestQuota } from '../../_shared/quota.ts';
+import { log } from '../../_shared/logger.ts';
+import { classifyIngestRateLimitError } from './ingest-rate-limit.ts';
+
+/**
+ * Console test reports per user per hour. Each one runs the real Stage-1
+ * fast-filter LLM call, and the route is one click in the console, so without
+ * a cap any signed-in user could turn the button into free LLM spend. Ten is
+ * far above what onboarding needs (one, maybe a retry).
+ */
+export const TEST_REPORTS_PER_USER_PER_HOUR = 10;
 
 export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variables }>): void {
   // Lenient UUID matcher (mirrors projects-crud.ts; see note there).
@@ -209,6 +220,10 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
   // "Admin pipeline test". metadata.source = 'admin_test_report' keeps it out
   // of activation (first_report_received) and the growth funnel; the console
   // inbox filters on the same tag.
+  //
+  // Metered like SDK ingest (2026-09-21): a per-user hourly claim
+  // (scoped_rate_limit_claim, scope 'test_report') and the project's monthly
+  // report quota (checkIngestQuota), so the button cannot bypass either.
   app.post('/v1/admin/projects/:id/test-report', jwtAuth, async (c) => {
     const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
@@ -227,6 +242,57 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
       .single();
     if (!project)
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+
+    // Per-user hourly cap. Same outcome classification as SDK ingest: a
+    // breach is a 429, a missing claim function (migration window) fails
+    // open, and any other RPC error fails closed.
+    const { error: rateErr } = await db.rpc('scoped_rate_limit_claim', {
+      p_user_id: userId,
+      p_scope: 'test_report',
+      p_max_per_window: TEST_REPORTS_PER_USER_PER_HOUR,
+      p_window: '1 hour',
+    });
+    const rateOutcome = classifyIngestRateLimitError(rateErr);
+    if (rateOutcome === 'breach' || rateOutcome === 'fail-closed') {
+      if (rateOutcome === 'fail-closed') {
+        log.error('test-report: rate-limit claim failed — failing closed', { err: rateErr?.message });
+      }
+      c.header('Retry-After', rateOutcome === 'breach' ? '3600' : '30');
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'RATE_LIMITED',
+            message:
+              rateOutcome === 'breach'
+                ? `Test report limit reached (${TEST_REPORTS_PER_USER_PER_HOUR} per hour). Try again later.`
+                : 'Test reports are temporarily throttled. Retry in 30 seconds.',
+          },
+        },
+        429,
+      );
+    }
+
+    // A test report is a stored report: it counts against the plan like one.
+    const quota = await checkIngestQuota(db, projectId);
+    if (!quota.allowed) {
+      c.header('Retry-After', String(quota.retryAfterSeconds ?? 3600));
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'QUOTA_EXCEEDED',
+            message: `${quota.plan.display_name} plan quota of ${quota.limit?.toLocaleString() ?? 'n/a'} reports/month exceeded. Upgrade or wait until ${quota.periodResetsAt}.`,
+            used: quota.used,
+            limit: quota.limit,
+            plan: quota.plan,
+            reason: quota.reason,
+            periodResetsAt: quota.periodResetsAt,
+          },
+        },
+        402,
+      );
+    }
 
     const ipAddress =
       c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip');
@@ -247,7 +313,7 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
     }
 
     // Activation funnel (setup_funnel_events) + product_events, both
-    // fire-and-forget and idempotent on their dedup keys. A deduplicated
+    // background writes and idempotent on their dedup keys. A deduplicated
     // ingest returns the existing reportId, so a double click cannot
     // double-count.
     const reportId = result.reportId ?? 'unknown';
