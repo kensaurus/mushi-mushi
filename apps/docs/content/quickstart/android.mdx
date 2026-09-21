@@ -49,6 +49,13 @@ dependencies {
 }
 ```
 
+CI only runs `gradle assembleRelease` on this module, so the local publish is
+the less-travelled path. If it fails for you, `gradle assembleRelease` builds
+`build/outputs/aar/mushi-android-release.aar`; add that file as a dependency
+together with the libraries it needs (`androidx.core:core-ktx`,
+`androidx.appcompat:appcompat`, `androidx.fragment:fragment-ktx`,
+`com.squareup.okhttp3:okhttp`, `com.google.code.gson:gson`).
+
 ## Initialize
 
 `endpoint` is required: use the hosted API below, or your own if you self-host.
