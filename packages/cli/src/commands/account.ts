@@ -198,7 +198,14 @@ Examples:
       console.log(`✓ Set ${key}`)
     } else {
       // Never print the full API key value to the terminal
-      const safe = { ...config, apiKey: config.apiKey ? `${config.apiKey.slice(0, 10)}…` : undefined }
+      const safe = {
+        ...config,
+        apiKey: config.apiKey ? `${config.apiKey.slice(0, 10)}…` : undefined,
+        sdkKey:
+          typeof config.sdkKey?.key === 'string'
+            ? { ...config.sdkKey, key: `${config.sdkKey.key.slice(0, 10)}…` }
+            : undefined,
+      }
       console.log(JSON.stringify(safe, null, 2))
     }
   })

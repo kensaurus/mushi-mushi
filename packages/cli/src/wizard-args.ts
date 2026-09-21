@@ -42,8 +42,9 @@ export const FLAGS_HELP = `Flags (forwarded to the wizard):
   --audit                       health-check an existing install (doctor checks) instead of re-running the wizard
   --cwd <path>                  run in a different directory
   --endpoint <url>              override the Mushi API endpoint (self-hosted)
-  -y, --yes                     no prompts: reuse saved credentials or sign in via a printed browser URL
-                                (works in non-interactive shells, e.g. an AI agent's terminal)
+  -y, --yes                     take the defaults: detected framework, saved credentials, browser sign-in
+                                (required in non-interactive shells such as an AI agent's terminal, where
+                                the sign-in URL is printed and the project is picked by the app's name)
   -v, --version                 print the version and exit
   -h, --help                    show this help
 

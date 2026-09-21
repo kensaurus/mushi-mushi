@@ -41,7 +41,7 @@ const HELP = `mushi-mushi — bug-reporting SDK launcher
 
 Usage:
   npx mushi-mushi               run the setup wizard (interactive)
-  npx mushi-mushi --yes         same, without prompts (CI, AI agents)
+  npx mushi-mushi --yes         same, taking the defaults (required in CI and AI-agent shells)
   npx mushi-mushi init          same, with optional flags
 
 Other commands (setup, status, reports, deploy, test, login, config, ...)
