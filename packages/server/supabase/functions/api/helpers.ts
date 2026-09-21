@@ -26,13 +26,17 @@ import { scrubPii } from '../_shared/pii-scrubber.ts';
 import { sendBotMessage, sendSlackText } from '../_shared/slack.ts';
 import { upsertProjectSdkObservationAsync } from '../_shared/sdk-observation.ts';
 import { emitProductEvent } from '../_shared/product-events.ts';
+import {
+  isFirstRealReport,
+  NON_REAL_REPORT_SOURCES,
+  type OldestReportRow,
+} from '../_shared/first-report.ts';
 
-// Company funnel: projects whose first_report_received emit already ran in
-// this isolate. Bounds the owner lookup to once per project per isolate; the
+// Company funnel: projects whose first_report_received check already ran in
+// this isolate. Bounds the lookups to once per project per isolate; the
 // (project_id, dedup_key) unique constraint on product_events is the real
 // once-per-project guarantee across isolates and retries.
 const firstReportEmitted = new Set<string>();
-const FIRST_REPORT_SKIP_SOURCES = new Set(['admin_test_report', 'mushi-marketing-seed']);
 
 // Fixed namespace for deriving deterministic report ids from non-UUID client
 // ids (RFC 4122 §4.3 name-based v5). Arbitrary but stable — it only has to be
@@ -582,9 +586,24 @@ export async function ingestReport(
   // count. Fire-and-forget; repeat emits are no-ops on the dedup constraint.
   {
     const reportSource = typeof enrichedMetadata.source === 'string' ? enrichedMetadata.source : null;
-    if (!firstReportEmitted.has(projectId) && !(reportSource && FIRST_REPORT_SKIP_SOURCES.has(reportSource))) {
+    if (!firstReportEmitted.has(projectId) && !(reportSource && NON_REAL_REPORT_SOURCES.has(reportSource))) {
       firstReportEmitted.add(projectId);
       void (async () => {
+        // Only the project's genuinely first real report counts. The dedup key
+        // alone would stamp a "first report" on the first report after deploy
+        // for projects that already had reports. (created_at, id) ordering
+        // makes concurrent first reports agree on one winner. 50 is plenty: a
+        // project has at most a handful of test reports before a real one.
+        const { data: oldest, error: oldestErr } = await db
+          .from('reports')
+          .select('id, custom_metadata')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .limit(50);
+        if (oldestErr) throw oldestErr;
+        if (!isFirstRealReport((oldest ?? []) as OldestReportRow[], reportId)) return;
+
         const { data: proj } = await db
           .from('projects')
           .select('owner_id')

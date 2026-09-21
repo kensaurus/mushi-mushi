@@ -9,10 +9,10 @@ description: What Mushi Mushi collects, why, who processes it, how long it is ke
 
 # Privacy Policy
 
-  **Draft** — reviewed by the founder on ____; not legal advice. This page is a
-  complete plain-English draft of how Mushi Mushi handles personal data today.
-  Until the review date above is filled in, treat it as a description of
-  practice, not a finished legal document.
+  **Draft, not yet reviewed by a lawyer.** This page is a complete plain-English
+  description of how Mushi Mushi handles personal data as of 2026-09-21. Treat
+  it as a description of current practice, not a finished legal document.
+  Questions: kensaurus@gmail.com.
 
 **Effective date:** 2026-09-21 · **Version:** 1
 

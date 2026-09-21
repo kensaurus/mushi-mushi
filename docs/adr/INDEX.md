@@ -27,6 +27,7 @@ purpose.
 | [0012](0012-web-push-via-pushforge-with-an-endpoint-allowlist.md) | Web Push on Web Crypto behind an endpoint allowlist | Accepted, library choice reversed | `@pushforge/builder` emits pre-standard `aesgcm`, not RFC 8291 `aes128gcm`, so RFC 8291/8292 are implemented directly; fcm / mozilla / apple / wns hosts only; VAPID as edge secrets |
 | [0013](0013-cloud-coding-agents-run-through-edge-adapters.md) | Cloud coding agents dispatch through edge adapters; `packages/agents` archived | Accepted | Cursor v1 + v0 webhook + poller, GitHub Agent Tasks, Anthropic stub; unknown agent = 400 |
 | [0014](0014-mcp-npm-package-runs-on-sdk-v2.md) | The published MCP package runs on SDK v2; the hosted server stays hand-rolled | Accepted | Splits the decision from 0008 — no bundle cap on npm; `serveStdio` is what serves 2026-07-28; unknown tool now `-32602` |
+| [0015](0015-use-kensaurus-gmail-as-the-product-support-inbox.md) | Use kensaurus@gmail.com as the product support inbox | Accepted | Live inbox is Gmail; do not ship `support@kensaur.us` as the contact |
 
 ## Conventions
 

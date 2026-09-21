@@ -257,8 +257,8 @@ export function pad2(n: number): string {
 }
 
 /** "Bug reports by Mushi" mark: landing URL + channel UTM; `ref` = SHA-256 prefix of the project id. */
-export const BRAND_FOOTER_URL = 'https://kensaur.us/mushi-mushi/';
-export const BRAND_FOOTER_UTM = 'utm_source=widget&utm_medium=powered-by';
+const BRAND_FOOTER_URL = 'https://kensaur.us/mushi-mushi/';
+const BRAND_FOOTER_UTM = 'utm_source=widget&utm_medium=powered-by';
 
 /** Build the brand-footer href. `ref` is omitted until the hash resolves. */
 export function buildBrandFooterHref(ref: string | null): string {

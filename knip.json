@@ -46,8 +46,8 @@
     },
     "apps/docs": {
       "entry": [
-        "content/**/_meta.ts",
-        "content/**/*.mdx"
+        "content/**/_meta.ts!",
+        "content/**/*.mdx!"
       ],
       "project": [
         "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,mdx}!",

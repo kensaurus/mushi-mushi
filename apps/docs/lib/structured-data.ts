@@ -26,7 +26,7 @@ const ORGANIZATION_ID = `${PRODUCT_ROOT}#organization`
  * never reserved, so neither may appear in `sameAs` — a `sameAs` URL that
  * 404s (or points at a stranger) is worse for entity resolution than none.
  */
-export const BLUESKY_PROFILE_URL = 'https://bsky.app/profile/kensaurus.bsky.social'
+const BLUESKY_PROFILE_URL = 'https://bsky.app/profile/kensaurus.bsky.social'
 
 /** schema.org Organization — rendered site-wide from app/layout.tsx. */
 export const ORGANIZATION_JSONLD = {

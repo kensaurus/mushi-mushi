@@ -71,7 +71,7 @@ npx mushi-mushi setup --ide cursor    # then ask Cursor: "what's broken in prod?
 
 For the solo AI-first builder (the _vibe coder_): you ship fast with Cursor, Claude Code, Lovable, or Bolt, then lose afternoons when something breaks in code you didn't fully write. Mushi is the **comprehension layer** — plain-English diagnosis in your editor over MCP, so a bug costs five minutes instead of your afternoon. (Small teams and agencies hit the same pain.)
 
-These are the bugs your monitoring can't see, and the ones you didn't write:
+These are the bugs that never trigger an error alert, in code you didn't write:
 
 - A user added a coupon and the pay button slipped under their keyboard.
 - A new signup tapped _Save_ twice because nothing visibly happened the first time.
@@ -149,9 +149,10 @@ docker compose up -d
 
 The question every team asks, answered once:
 
-> **Sentry tells you what threw. Mushi ingests that — plus the bugs that never
-> throw — explains each one in plain English, and closes the loop with a fix
-> your agent can ship. One queue, one audit trail, with or without Sentry.**
+> **Sentry is built around what the code threw, with a User Feedback widget and
+> replay alongside. Mushi starts from what the user reported, ingests Sentry's
+> errors too, explains each one in plain English, and hands your agent a fix
+> prompt to start from. One queue, with or without Sentry.**
 
 Mushi works standalone. If you already run Sentry, point a Sentry issue-alert
 webhook at `/v1/webhooks/sentry?projectId=<your-project>` and errors land in the
@@ -268,7 +269,7 @@ npx skills add kensaurus/mushi-mushi
 
 Then: `/mushi-setup` (guided SDK install + MCP wiring), `/mushi-debug` (diagnose ingest / MCP / pipeline failures), `/mushi-health` (pass/fail check across CLI, API, edge functions, BYOK keys), `/mushi-integration` (two-way loop, fix dispatch, lessons). The admin **Connect & Update** page (`/connect`) mirrors the same flows with one-click **Add to Cursor** deeplinks.
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~386K TS lines · 1,812 source files · 44 workspace / 36 npm packages · 58 edge functions · 347 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~397K TS lines · 1,848 source files · 44 workspace / 36 npm packages · 59 edge functions · 353 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ---
 

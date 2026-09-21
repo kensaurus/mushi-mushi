@@ -57,7 +57,7 @@ export interface SignupMeta {
 const STASH_KEY = 'mushi_signup_meta'
 const TRACKED_KEY_PREFIX = 'mushi_signup_tracked:'
 /** Value recorded when the user skipped the optional source question. */
-export const SIGNUP_SOURCE_UNSPECIFIED = 'unspecified'
+const SIGNUP_SOURCE_UNSPECIFIED = 'unspecified'
 /** OAuth round-trips take seconds; anything older is an existing account. */
 const OAUTH_FRESH_WINDOW_MS = 15 * 60 * 1000
 /** Email confirmation can lag the signup form by a while — be generous. */
@@ -107,6 +107,7 @@ export function stashSignupMeta(meta: SignupMeta): void {
   }
 }
 
+/** @internal Exported for unit tests only. */
 export function readStashedSignupMeta(): SignupMeta | null {
   try {
     const raw = sessionStorage.getItem(STASH_KEY)
@@ -120,6 +121,7 @@ export function readStashedSignupMeta(): SignupMeta | null {
   }
 }
 
+/** @internal Exported for unit tests only. */
 export function clearStashedSignupMeta(): void {
   try {
     sessionStorage.removeItem(STASH_KEY)

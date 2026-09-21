@@ -18,7 +18,7 @@ export const FUNNEL_WINDOWS: ReadonlyArray<{ value: FunnelWindow; label: string 
 
 /** Mirrors the server cap (`product_funnel` accepts ≤ 8 steps). */
 export const FUNNEL_MAX_STEPS = 8
-export const FUNNEL_MIN_STEPS = 2
+const FUNNEL_MIN_STEPS = 2
 
 /** Same regex the SDK and the ingest route validate event names against. */
 const EVENT_NAME_RE = /^[a-z][a-z0-9_]{1,63}$/
@@ -106,6 +106,7 @@ export interface FunnelStorage {
   removeItem(key: string): void
 }
 
+/** @internal Exported for unit tests only. */
 export function savedFunnelsKey(projectId: string): string {
   return `mushi:funnels:v${STORAGE_VERSION}:${projectId}`
 }

@@ -9,9 +9,10 @@ description: An open-source Sentry alternative for AI-built apps — plain-Engli
 
 # An open-source Sentry alternative built for AI-written code
 
-Sentry tells you what threw. Mushi ingests that — plus the bugs that never
-throw — explains each one in plain English, and closes the loop with a fix
-your agent can ship. One queue, one audit trail, with or without Sentry. If
+Sentry is built around what the code threw, with a User Feedback widget and
+replay alongside. Mushi starts from what the user reported, ingests Sentry's
+errors too, explains each one in plain English, and hands your agent a fix
+prompt to start from. One queue, with or without Sentry. If
 your app was largely written by Cursor, Claude Code, or another agent, that's
 the answer you actually need — you didn't write the code, so a raw stack trace
 costs you an afternoon of archaeology.

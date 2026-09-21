@@ -42,4 +42,22 @@ Owed before the funnel fills: merge PR #394 (deploys admin and docs via GitHub A
 | Growth loop: "Bug reports by Mushi" widget mark (link + `loop_impression`/`loop_click`), runtime `widget.brandFooter` (Free Cloud on, paid/self-host off), console tri-state toggle, RN + Node `track()` | **repository green**, server side deployed | migration `20260921000006`; web bundle 88.96 kB under a raised 92 kB budget |
 | Ingest fix: `/v1/reports` now accepts the user∪classifier category union (feedback/question/feature no longer 400) | **deployed** | found via the seed script; Deno test covers a `feedback` report |
 
-Still owed by the founder: merge PR #394; GitHub OAuth app + Supabase provider; verified Resend sending domain then `update mushi_runtime_config set value='true' where key='lifecycle_emails_enabled'`; Supabase Auth redirect allowlist must include `/onboarding`; review the legal drafts; verify the unverified competitor facts before publishing the compare pages; record the hero GIF (human screen capture); run R1 Show HN per `docs/marketing/launch-week.md`.
+### Resolved 2026-09-21
+
+| Item | Evidence |
+|---|---|
+| GitHub OAuth enabled on the live project | `/auth/v1/settings` → `external.github: true` |
+| Competitor facts on the compare pages verified against primary sources | every fact in `apps/docs/content/compare/_facts.ts` carries its `sourceUrl`; nothing is marked unverified |
+| Does hosted-LLM billing block a new user's first diagnosis? **No, not today.** | `MUSHI_HOSTED_LLM_BILLING` runs in `shadow`: every mushi row in `kensaurus_wallet_ledger` (latest 2026-09-20 17:19Z) is a $0 debit with `metadata.shadow = true`, and `hostedLlmPreflight` returns "allowed" unless the mode is exactly `on` |
+| `first_report_received` could stamp a project that already had reports | emitter now checks the project's oldest reports first (`_shared/first-report.ts`, 7 Deno tests); no bad rows existed in production |
+
+### Still owed by the founder
+
+1. **Merge PR #394.** This redeploys every edge function from master, plus the console and the docs site. The console and the docs site only get the Users & Funnels UI, compare pages, legal pages, hero CTAs and consent bar from this merge.
+2. **Publish the SDKs.** Merging the changesets "Version packages" PR publishes `track()` / `setConsent()` to npm. Until then customers cannot call them.
+3. **Email.** Production has no `RESEND_API_KEY` or `RESEND_FROM_EMAIL`, so no transactional email has ever been sent. Verify a sending domain in Resend, set both secrets, then `update mushi_runtime_config set value='true' where key='lifecycle_emails_enabled'`.
+4. **Supabase Auth redirect allowlist** must include the console's `/onboarding` path, or email-confirm and OAuth sign-ups fall back to the dashboard.
+5. **Legal.** Both pages are marked as drafts. Choose the governing law and venue (terms §14), have them reviewed, then restore the "By creating an account you agree…" line in `LoginPage.tsx`. The tester consent checkboxes (`TesterWelcomeEnroll.tsx`, `apps/testers/app/join/page.tsx`) already point at the draft terms.
+6. **Before switching billing to `on`.** A brand-new owner has no kenji wallet, so `kensaurus_wallet_check` answers `no-wallet` and the preflight would refuse their first diagnosis. Give new mushi owners a free grant first, or treat `no-wallet` as allowed for Free Cloud.
+7. **Hero GIF** (human screen capture of the incident loop), then run R1 Show HN per `docs/marketing/launch-week.md`.
+8. **Uncommitted STT billing work.** The STT billing change in the working tree (`_shared/stt.ts`, `telemetry.ts`, `hosted-llm-billing.ts`, `hosted-model-prices.ts`, `classify-stage2-schema.ts`, `classify-report`) is not in production and not in PR #394.

@@ -43,9 +43,10 @@ Your AI wrote it. Mushi tells you why it broke.</>}
 
 ## One queue. Sentry flows in, fixes flow out.
 
-Sentry tells you what threw. Mushi ingests that — plus the bugs that never
-throw — explains each one in plain English, and closes the loop with a fix your
-agent can ship. With or without Sentry.
+Sentry is built around what the code threw, with a User Feedback widget and
+replay alongside. Mushi starts from what the user reported, ingests Sentry's
+errors too, explains each one in plain English, and hands your agent a fix
+prompt to start from. With or without Sentry.
 
   
 

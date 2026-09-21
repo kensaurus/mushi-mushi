@@ -58,13 +58,15 @@ export function viewEventForRoute(pathname: string): DocsViewEvent | null {
 
 // ─── UTM / referrer → reserved props ─────────────────────────────────────────
 
-export const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'] as const
-export type UtmKey = (typeof UTM_KEYS)[number]
+const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'] as const
+type UtmKey = (typeof UTM_KEYS)[number]
+/** @internal Exported for unit tests only. */
 export type UtmParams = Partial<Record<UtmKey, string>>
 
 const MAX_PARAM = 128
 const MAX_URL = 256
 
+/** @internal Exported for unit tests only. */
 export function parseUtm(search: string): UtmParams {
   const params = new URLSearchParams(search)
   const out: UtmParams = {}
@@ -75,7 +77,7 @@ export function parseUtm(search: string): UtmParams {
   return out
 }
 
-/** Origin + path only — a referrer's query string can carry someone else's tokens. */
+/** Origin + path only — a referrer's query string can carry someone else's tokens. @internal */
 export function sanitizeReferrer(referrer: string): string {
   if (!referrer) return ''
   try {
@@ -86,7 +88,7 @@ export function sanitizeReferrer(referrer: string): string {
   }
 }
 
-/** `?ref=` values ride into the console URL — keep them slug-shaped. */
+/** `?ref=` values ride into the console URL — keep them slug-shaped. @internal */
 export function sanitizeRefSlug(value: string | null | undefined): string | null {
   if (!value) return null
   const slug = value.trim().replace(/[^A-Za-z0-9._-]/g, '').slice(0, 64)
@@ -135,11 +137,13 @@ export type StoredConsent = 'granted' | 'denied'
  * SDK owns the value; we only read it so we can decide whether to load the
  * SDK at all (denied → zero bytes, zero requests) and write it from the
  * consent bar before the SDK exists.
+ * @internal
  */
 export function consentKey(projectId: string): string {
   return `mushi_events_consent_${projectId}`
 }
 
+/** @internal Exported for unit tests only. */
 export function firstTouchKey(projectId: string): string {
   return `mushi_first_touch_${projectId}`
 }
@@ -191,6 +195,7 @@ export function buildFirstTouch(input: {
   }
 }
 
+/** @internal Exported for unit tests only. */
 export function readFirstTouch(store: KeyValueStore | null | undefined, projectId: string): FirstTouch | null {
   try {
     const raw = store?.getItem(firstTouchKey(projectId))

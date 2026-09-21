@@ -47,9 +47,9 @@ the GIF, a screenshot, or the install command.
 >
 > But a button that silently does nothing? A checkout that confuses every new user? A 12-second page that never errors?
 >
-> Those are user-felt bugs. Your monitoring can't see them.
+> Those are user-felt bugs. Unless a user tells you, error monitoring rarely flags them.
 >
-> I built Mushi Mushi for those. OSS, MIT. 🐛
+> I built Mushi Mushi for those. Open source: MIT SDKs, AGPLv3 server. 🐛
 >
 > 👇
 
@@ -138,13 +138,16 @@ What's open: SDKs are MIT, the server is AGPLv3, self-hosting is one command.
 The hosted free tier is 50 diagnoses a month, no card.
 
 How it differs from what you already use, as far as I can tell:
-- Sentry shows what the code threw; Seer, its AI debugging agent, is a
-  separate subscription (third-party write-ups say $40 per active contributor
-  per month since Jan 2026) and isn't in Sentry self-hosted. Mushi's
-  diagnosis is on every plan, and a Sentry issue-alert webhook feeds Mushi
-  if you want both.
-- PostHog gives you replay plus error tracking; you scrub the replay
-  yourself, and there's no fix loop into the editor.
+- Sentry starts from what the code threw (it also has a User Feedback widget and
+  replay); Seer, its AI debugging agent, is an add-on to the Team, Business
+  or Enterprise plan at $40 per active contributor per month, and isn't in
+  Sentry self-hosted. Mushi's diagnosis is on every plan, and a Sentry
+  issue-alert webhook feeds Mushi if you want both.
+- PostHog gives you replay plus error tracking, a "Fix with AI" prompt on
+  each error, and a beta that opens draft PRs for recurring errors (3 a month
+  free, then $15 each). That starts from the exceptions it captured. Mushi
+  starts from what a user reported, with their screenshot, and pulls the fix
+  context into Cursor or Claude Code over MCP.
 - Jam.dev is a human recording a bug in Chrome for a team. Mushi is the end
   user reporting from inside the app, plus the diagnosis.
 
@@ -170,7 +173,7 @@ unless you bring your own key.
   within the hour. Presence is most of what HN rewards.
 - Lead with agreement whenever you can ("You're right that X — here's what I chose…")
 - Never use "we". It is one person.
-- If someone compares to Sentry — agree, then give the canonical answer: "Sentry tells you what threw. Mushi ingests that — plus the bugs that never throw — explains each one in plain English, and closes the loop with a fix your agent can ship. One queue, with or without Sentry." Never say "not a replacement" — instead-of or alongside is their call.
+- If someone compares to Sentry — agree, then give the canonical answer: "Sentry is built around what the code threw, with a User Feedback widget and replay alongside. Mushi starts from what the user reported, ingests Sentry's errors too, explains each one in plain English, and hands your agent a fix prompt to start from. One queue, with or without Sentry." Never say "not a replacement" — instead-of or alongside is their call.
 - If someone asks about LLM cost — show the real `/health` page numbers.
 - If someone asks about users — give the scorecard number, not a feeling.
 - Stay for six hours at minimum. Do not resubmit if it falls off.
@@ -219,7 +222,7 @@ What I do now, in order:
 Happy to share the MCP config and the diagnosis prompt if useful. What do
 other people do with those DMs?
 
-(Link to the tool in a comment if anyone asks; it's open source.)
+(Disclosure: I built the widget and MCP server in steps 1-4; it's open source. Link in a comment if anyone asks.)
 ```
 
 ### r/ClaudeAI — "a subagent for user bug reports"
@@ -242,8 +245,8 @@ Things I got wrong on the way: giving it the whole repo instead of the fix
 context (worse diffs, slower), and letting it refactor. The "smallest change
 plus a failing test" instruction did more than any model choice.
 
-Curious how others scope subagents for debugging. Link to the MCP server in
-a comment if wanted.
+Curious how others scope subagents for debugging. Disclosure: I built the MCP
+server this agent calls; it's open source. Link in a comment if wanted.
 ```
 
 ### r/lovable and r/boltnewbuilders — "it broke for a real user" (check rules first)
@@ -267,8 +270,9 @@ someone else. None of it needs a tool.
    comment, a lessons file).
 
 The expensive steps are 1-3, and the user can't do them for you. That's the
-only place I use a tool (in-app bug reporter that attaches the screenshot and
-console and writes the diagnosis) - link in a comment if anyone wants it.
+only place I use a tool: an in-app bug reporter I built (open source) that
+attaches the screenshot and console and writes the diagnosis. Link in a
+comment if anyone wants it.
 
 What's on your list that isn't on mine?
 ```
@@ -279,12 +283,14 @@ What's on your list that isn't on mine?
 Title: I MIT'd the SDKs and AGPLv3'd the server (open-core) — here's why
 
 TL;DR: people shouldn't need a license lawyer to embed my widget in their app,
-and self-hosters shouldn't fear copyleft or a future bait-and-switch. So it's
-MIT on everything a user installs, AGPLv3 (copyleft; commercial license
-available) on the server — fork it and ship products on it. The only
-commercial boundary is a small source-available enterprise edition (SSO/SCIM,
-audit export, region pinning) that a solo builder never needs. The Langfuse /
-Supabase model. Happy to get told I'm wrong.
+and self-hosters shouldn't fear a future bait-and-switch. So it's MIT on
+everything a user installs and AGPLv3 on the server (copyleft; commercial
+license available): run it, fork it, build on it, and if you offer a modified
+server to others over a network, publish your changes. The only commercial
+boundary is a small source-available enterprise edition (SSO, audit export,
+region pinning) that a solo builder never needs. Open core like Langfuse and
+Supabase, except they chose permissive licenses for the server and I chose
+AGPL. Happy to get told I'm wrong.
 
 The tool: an in-app bug reporter for AI-written apps — the user's report
 arrives with a plain-English diagnosis and a fix prompt for Cursor / Claude
@@ -376,11 +382,12 @@ less emoji. No hashtag spam.
 I spent the last 8 months building the bug-reporting tool I kept wishing Sentry
 had.
 
-Sentry is excellent at one thing: what your code throws. It can't see the button
-that looks clickable but does nothing. Or the checkout that confuses every new
-user. Or the layout that breaks on one Android.
+Sentry is excellent at what your code throws. But nothing throws when a button
+looks clickable and does nothing, when the checkout confuses every new user, or
+when the layout breaks on one Android. No error, no alert, unless you go
+watching replays.
 
-Those are user-felt bugs. Your monitoring can't see them. Users just leave.
+Those are user-felt bugs. Nothing throws, so no error alert fires. Users just leave.
 
 So: Mushi Mushi (虫虫). A 14 KB shake-to-report SDK, a 2-stage LLM pipeline
 (Haiku fast-filter → Sonnet with vision + RAG) that classifies and dedupes, and
@@ -488,10 +495,13 @@ Open source: MIT SDKs, AGPLv3 server, self-host in one command. Hosted free
 tier: 50 diagnoses a month, no card.
 
 How it differs:
-• Sentry shows what the code threw; its AI agent (Seer) is a separate
-  subscription and is not in Sentry self-hosted. Mushi's diagnosis is on
-  every plan, and a Sentry webhook feeds Mushi if you run both.
-• PostHog gives you replay and error tracking; you read the replay yourself.
+• Sentry starts from what the code threw (it also has a user-feedback widget); its AI agent (Seer) is a paid add-on
+  ($40 per active contributor per month) and is not in Sentry self-hosted.
+  Mushi's diagnosis is on every plan, and a Sentry webhook feeds Mushi if
+  you run both.
+• PostHog gives you replay and error tracking, with AI fix prompts and beta
+  draft PRs that start from the exceptions it captured. Mushi starts from
+  what the user reported.
 • Jam is a teammate recording a bug in Chrome. Mushi is the end user
   reporting from inside the app, plus the diagnosis.
 
@@ -524,11 +534,11 @@ Voice-over runs under the same screen-record as the README GIF, longer cut.
 
 > **[0:00]** Sentry catches what your code throws.
 >
-> **[0:03]** But it can't see *this*. *(cuts to a button click that does nothing)*
+> **[0:03]** But *this* never throws. *(cuts to a button click that does nothing)*
 >
 > **[0:06]** Or this. *(cut to a 12-second loading spinner)*
 >
-> **[0:09]** Those are user-felt bugs. Your monitoring can't see them. Users just leave.
+> **[0:09]** Those are user-felt bugs. Nothing throws, so no error alert fires. Users just leave.
 >
 > **[0:12]** I'm Mushi-chan. I fix that.
 >
@@ -564,7 +574,7 @@ Hi {{name}},
 Long-time reader. One pitch, then I'll get out of the way.
 
 I just launched Mushi Mushi — a small OSS bug-reporting tool for the bugs
-Sentry can't see (dead buttons, 12-second loads, confusing checkouts). 14 KB
+that never throw an error (dead buttons, 12-second loads, confusing checkouts). 14 KB
 gzipped on the client, 2-stage LLM pipeline on the server, optionally opens
 fix PRs on your GitHub repo.
 

@@ -211,7 +211,7 @@ Examples:
  * Ingest-only keys lack that scope, so a 401/403 degrades to a hint instead
  * of failing the whole status command.
  */
-export async function formatActivationLine(config: CliConfig): Promise<string> {
+async function formatActivationLine(config: CliConfig): Promise<string> {
   const qs = config.projectId ? `?project_id=${encodeURIComponent(config.projectId)}` : ''
   const result = await apiCall<ActivationData>(`/v1/admin/activation${qs}`, config)
   if (!result.ok) {

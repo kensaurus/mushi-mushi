@@ -91,6 +91,14 @@ export function AlternativesMatrix({ rows }: { rows: readonly AlternativeRow[] }
                 <a href={row.sourceUrl} rel="noopener" className="text-xs font-normal text-mushi-ink-muted">
                   source
                 </a>
+                {row.moreSources?.map((extra) => (
+                  <span key={extra.url} className="text-xs font-normal text-mushi-ink-muted">
+                    {' · '}
+                    <a href={extra.url} rel="noopener" className="text-mushi-ink-muted">
+                      {extra.label}
+                    </a>
+                  </span>
+                ))}
               </th>
               <td>{row.freeTier}</td>
               <td>{row.selfHost}</td>

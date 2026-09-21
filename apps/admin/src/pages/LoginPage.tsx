@@ -596,18 +596,13 @@ export function LoginPage() {
                     : 'Sign in'}
             </Btn>
 
+            {/* Informational notice only. The Terms are still a draft (governing
+                law unconfirmed), so the form must not claim the user agrees to
+                them. Once the founder finalises docs/legal/terms, restore
+                "By creating an account you agree to the Terms and Privacy Policy." */}
             {mode === 'signup' && (
               <p className="text-center text-2xs text-fg-faint leading-relaxed">
-                By creating an account you agree to the{' '}
-                <a
-                  href="https://kensaur.us/mushi-mushi/docs/legal/terms"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline underline-offset-2 hover:text-fg"
-                >
-                  Terms
-                </a>{' '}
-                and{' '}
+                How we handle your data:{' '}
                 <a
                   href="https://kensaur.us/mushi-mushi/docs/legal/privacy"
                   target="_blank"

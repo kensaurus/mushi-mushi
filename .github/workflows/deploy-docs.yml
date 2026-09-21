@@ -101,13 +101,16 @@ jobs:
           echo "::notice::Docs ${DOCS_VERSION} (${SHORT_SHA}) built ${BUILD_DATE}"
 
       - name: Build docs workspace dependencies
-        # The docs site imports `@mushi-mushi/mcp/clients` (resolves to the
-        # package's `./dist/clients.js` export — there is no transpilePackages
-        # fallback). Building docs in isolation fails with "Module not found"
-        # because the workspace dependency's `dist/` is never produced. turbo
-        # `--filter` builds `@mushi-mushi/mcp` plus its upstream `^build` deps in
-        # topological order, so the export target exists before the docs build.
-        run: pnpm exec turbo run build --filter=@mushi-mushi/mcp
+        # The docs site imports workspace packages through their `./dist`
+        # exports (there is no transpilePackages fallback): `@mushi-mushi/mcp`
+        # for `/connect` deeplinks, and `@mushi-mushi/web` + `@mushi-mushi/core`
+        # for the consent-gated first-party analytics (MushiSiteAnalytics).
+        # Building docs in isolation fails with "Module not found" because a
+        # dependency's `dist/` is never produced. `docs^...` builds every
+        # workspace dependency of the docs site (not the site itself) in
+        # topological order — the same shape deploy-admin.yml uses — so a new
+        # workspace import can never silently break this deploy again.
+        run: pnpm exec turbo run build --filter='@mushi-mushi/docs^...'
 
       - name: Regenerate llms.txt
         run: pnpm gen:llms-txt

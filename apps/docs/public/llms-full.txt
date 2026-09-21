@@ -3,7 +3,7 @@
 > Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Generated: 2026-09-20
+Generated: 2026-09-21
 Pages: 202
 
 This file contains the full prose of every documentation page, stripped of
@@ -6804,6 +6804,14 @@ attaches the screen they were looking at and the console/network tail, and
 writes the diagnosis. They answer different questions, and this page is
 mostly about which question you have.
 
+Both now use AI on bugs. PostHog puts a "Fix with AI" prompt on every
+error-tracking issue, and its Self-driving beta opens a draft pull request
+for recurring high-impact errors, with a small free allowance each month and
+a price per PR after that (both in the table below). That path starts from
+the exceptions PostHog captured. Mushi starts from what a user reported and
+the screen they were on, writes a plain-English diagnosis on every plan, and
+hands the fix context to Cursor or Claude Code over MCP.
+
 ## What each one is
 
 ## Side by side
@@ -6827,13 +6835,16 @@ PostHog replacement and does not try to be. See the
 - You want replay for every session, not only reported ones, and product
   analytics, flags and surveys in the same place.
 - Your bugs are found by watching replays rather than by users telling you.
+- You want AI fix prompts, and beta draft pull requests, on the exceptions
+  PostHog already captures.
 
 ## Pick Mushi if
 
-- You want the bug to arrive explained, with the screenshot and a fix prompt,
-  instead of a replay to scrub.
+- You want the bug to start from what the user said and saw, and to arrive
+  explained, with the screenshot and a fix prompt.
 - You fix bugs in Cursor or Claude Code and want the report in the editor.
-- You want the AI layer on the free tier or on your own server.
+- You want the diagnosis on every plan, including self-hosted with your own
+  LLM key.
 
 ## Frequently asked questions
 
@@ -6868,25 +6879,44 @@ every number links to the page it came from.
 
 ## How to read it
 
-**Free tiers.** All six have one, and none of them asks for a card. The caps
-are measured in different units (errors, events, spans, replays, diagnoses),
-so compare them against your own volume rather than each other. A side
-project with a few hundred users rarely reaches any of these limits.
+**Free tiers.** All six have a $0 plan. For highlight.io that now means
+LaunchDarkly's Developer plan: LaunchDarkly bought highlight.io in April
+2025 and shut the hosted service down on 28 February 2026. The caps are
+measured in different units (errors, events, occurrences, spans, replays,
+diagnoses), so compare them against your own volume rather than each other.
+A side project with a few hundred users rarely reaches any of these limits.
 
-**Self-hosting.** Sentry, PostHog, highlight.io and Mushi publish a
-self-hosted path. Sentry's needs a real machine (4 cores, 16 GB RAM per its
-docs) and leaves out Seer. Mushi's is one command and includes the diagnosis
-when you bring your own LLM key. Bugsnag's and Rollbar's on-premise options
-are not stated on their pricing pages; we did not verify them.
+**Self-hosting.** Sentry, PostHog and Mushi publish a free self-hosted path,
+and highlight.io's [open-source repo](https://github.com/highlight/highlight)
+still documents a one-line Docker hobby install sized for small projects
+(the limits are in the table). Sentry's needs a real machine (4 cores, 16 GB
+RAM per its docs) and leaves out Seer. Mushi's deploys with one command onto
+your own Supabase project (the free tier works) and includes the diagnosis
+when you bring your own Anthropic key. Bugsnag sells an
+[on-premise edition](https://docs.bugsnag.com/on-premise/) on its Enterprise
+plan, priced on request. Rollbar is cloud-only.
 
-**AI diagnosis.** This is where the tools split. Sentry's Seer is a separate
-paid subscription on Team and above. PostHog lists AI credits and a PR beta
-on the free tier; we could not verify what it does for exceptions. Mushi's
-diagnosis and fix prompt run on every plan. Bugsnag, Rollbar and highlight.io
-list nothing of the kind on the pages we checked.
+**AI diagnosis and fixes.** Most of these now have something; what differs
+is the price and where it starts. Sentry's Seer is an add-on to Team,
+Business or Enterprise, priced per active contributor
+([Sentry's pricing docs](https://docs.sentry.io/pricing/)).
+[Rollbar Resolve](https://rollbar.com/resolve), in public beta, finds the
+root cause, writes a code change, runs your tests in a sandbox and opens a
+pull request; it runs on AI credits, and the Free plan includes none.
+PostHog puts a "Fix with AI" prompt on every error issue, and its
+Self-driving beta opens draft pull requests for recurring errors, with a
+small free allowance each month and
+[a price per PR after that](https://posthog.com/docs/self-driving/pricing).
+Bugsnag's pricing page lists no AI feature; SmartBear's MCP server, in beta,
+offers AI fix suggestions in the IDE. highlight.io's README lists none.
+Mushi's diagnosis and fix prompt run on every plan, including free and
+self-hosted with your own key, and they start from what a user reported
+and the screen they were on.
 
-**Who it is for.** Sentry, Bugsnag and Rollbar were built for teams that read
-error dashboards. PostHog and highlight.io were built around replay. Mushi
+**Who it is for.** Sentry, Bugsnag and Rollbar were built around error
+monitoring, and each has a free plan a solo developer can use. PostHog was
+built around product analytics, with replay and error tracking alongside;
+highlight.io was built around replay. Mushi
 was built for a builder who did not write most of the code and hears about
 bugs from users; the output is the diagnosis and the fix, in the editor.
 
@@ -6895,8 +6925,9 @@ bugs from users; the output is the diagnosis and the fix, in the editor.
 It does not claim Mushi is cheaper at scale, and it does not claim feature
 parity with Sentry on tracing, profiling or platform coverage. If you need
 those, Sentry is the right answer and Mushi runs alongside it: a Sentry
-issue-alert webhook sends errors into Mushi's queue, and merging the fix
-resolves the Sentry issue. See [Sentry vs Mushi](/compare/sentry-vs-mushi).
+issue-alert webhook sends errors into Mushi's queue, and with the outbound
+Sentry plugin (Indie and above, or self-hosted) merging the fix resolves the
+Sentry issue. See [Sentry vs Mushi](/compare/sentry-vs-mushi).
 
 ## Frequently asked questions
 
@@ -6927,9 +6958,10 @@ import {
 
 # Sentry vs Mushi Mushi
 
-Sentry tells you what threw. Mushi ingests that — plus the bugs that never
-throw — explains each one in plain English, and closes the loop with a fix
-your agent can ship. One queue, with or without Sentry.
+Sentry is built around what the code threw, with a User Feedback widget and
+Session Replay alongside. Mushi starts from what the user reported, ingests
+Sentry's errors too, explains each one in plain English, and hands your agent
+a fix prompt to start from. One queue, with or without Sentry.
 
 That is the whole difference in one paragraph. The rest of this page is the
 detail: what each product captures, what the free tiers include, what the AI
@@ -6956,15 +6988,21 @@ case for an app built with Cursor, Claude Code or Lovable.
 ## Running Mushi alongside Sentry
 
 Keep Sentry where it is. Point a Sentry issue-alert webhook at Mushi and every
-error lands in the same queue as user reports, deduped and diagnosed; when the
-fix merges, Mushi resolves the linked Sentry issue. The setup is three steps
+error lands in the same queue as user reports, deduped and diagnosed; with the
+outbound Sentry plugin (Indie and above, or self-hosted), Mushi resolves the
+linked Sentry issue when the fix merges. The setup is three steps
 on the [Sentry plugin page](/plugins/sentry), and there is a
 [migration guide](/migrations/sentry-to-mushi) for the enrich-or-standalone
 decision.
 
-Two things to know before you compare bills: Seer is not part of Sentry
-self-hosted, so the AI layer is cloud-only on their side; and Mushi's
-diagnosis runs on every plan, including self-hosted with your own LLM key.
+Three things to know before you compare bills. Seer is an add-on to the
+Team, Business or Enterprise plan, priced per active contributor and billed
+as its own monthly charge, separate from pay-as-you-go; the price and what
+counts as an active contributor are in the Sentry table above, from
+[Sentry's pricing docs](https://docs.sentry.io/pricing/). Seer is not
+available in Sentry self-hosted, so the AI layer is cloud-only on their
+side. And Mushi's diagnosis runs on every plan, including self-hosted with
+your own LLM key.
 
 ## Pick Sentry if
 
@@ -9375,9 +9413,10 @@ Your AI wrote it. Mushi tells you why it broke.</>}
 
 ## One queue. Sentry flows in, fixes flow out.
 
-Sentry tells you what threw. Mushi ingests that — plus the bugs that never
-throw — explains each one in plain English, and closes the loop with a fix your
-agent can ship. With or without Sentry.
+Sentry is built around what the code threw, with a User Feedback widget and
+replay alongside. Mushi starts from what the user reported, ingests Sentry's
+errors too, explains each one in plain English, and hands your agent a fix
+prompt to start from. With or without Sentry.
 
   
 
@@ -9786,10 +9825,10 @@ description: What Mushi Mushi collects, why, who processes it, how long it is ke
 
 # Privacy Policy
 
-  **Draft** — reviewed by the founder on ____; not legal advice. This page is a
-  complete plain-English draft of how Mushi Mushi handles personal data today.
-  Until the review date above is filled in, treat it as a description of
-  practice, not a finished legal document.
+  **Draft, not yet reviewed by a lawyer.** This page is a complete plain-English
+  description of how Mushi Mushi handles personal data as of 2026-09-21. Treat
+  it as a description of current practice, not a finished legal document.
+  Questions: kensaurus@gmail.com.
 
 **Effective date:** 2026-09-21 · **Version:** 1
 
@@ -10010,9 +10049,9 @@ description: The agreement for using Mushi Cloud, the admin console, the SDKs, a
 
 # Terms of Service
 
-  **Draft** — reviewed by the founder on ____; not legal advice. This is a
-  complete plain-English draft. The governing-law clause carries a founder
-  placeholder until the review date is filled in.
+  **Draft, not yet reviewed by a lawyer.** This is a complete plain-English
+  draft. The governing-law and venue clause (section 14) has not been confirmed
+  yet. Questions: kensaurus@gmail.com.
 
 **Effective date:** 2026-09-21 · **Version:** 1
 
@@ -10202,12 +10241,10 @@ without proper notice.
 
 ## 14. Governing law and disputes
 
-These terms are governed by the laws of **[Japan / founder to confirm]**,
-without regard to conflict-of-law rules. Disputes go first to good-faith
-discussion by email for 30 days, then to the courts of
-**[Tokyo District Court / founder to confirm]**, which have exclusive
-jurisdiction. Consumers may also bring claims in their home courts where the
-law gives them that right.
+**Not yet confirmed.** The governing law and the court that hears disputes
+will be stated here before these terms take effect. Until then, disputes go
+to good-faith discussion by email (kensaurus@gmail.com). Consumers keep any
+right the law gives them to bring claims in their home courts.
 
 ## 15. Mushi Bounties tester program
 
@@ -11802,8 +11839,8 @@ paste-ready fix you can hand to your editor's agent via MCP.
 | Unhandled exception capture | ✅ best-in-class | ✅ (basic) |
 | Performance / tracing / release health | ✅ | ❌ — keep Sentry |
 | User-triggered bug reports (widget, shake) | ✅ (User Feedback) | ✅ feedback-first |
-| Plain-English AI diagnosis per report | Seer ($40/contributor add-on) | ✅ included, BYOK on self-host |
-| Paste-ready fix prompt via MCP | read-only MCP | ✅ full fix-dispatch loop |
+| Plain-English AI diagnosis per report | Seer (add-on, $40 per active contributor/mo; not in self-hosted) | ✅ included, BYOK on self-host |
+| Paste-ready fix prompt via MCP | Sentry MCP: issue lookup, status updates, and Seer root cause + suggested fix (Seer add-on) | ✅ full fix-dispatch loop |
 | Self-host | complex (Sentry self-hosted) | ✅ Supabase / Docker / Helm |
 | Open source | FSL | MIT SDKs / AGPLv3 server |
 
@@ -13272,12 +13309,14 @@ The self-host path is completely free, always will be — [see the guide](/self-
 | | Sentry Team + Seer | Mushi Indie |
 |---|---|---|
 | Base plan | $26 / mo | $15 / mo |
-| AI diagnosis | + $40 / active contributor | Included |
+| AI diagnosis | Seer add-on: + $40 / active contributor / mo | Included |
 | Solo dev total | **$66 + / mo** | **$15 / mo** |
-| Catches non-crash friction | No — code throws only | Yes — shake-to-report, dead buttons, layout breaks |
-| Editor-native (no dashboard) | No | Yes — paste-ready fix in Cursor / Claude Code |
+| Catches non-crash friction | Via its User Feedback widget and Session Replay | Yes — shake-to-report with screenshot and console/network tail, then a diagnosis |
+| Bugs in your editor | Sentry MCP server: issues and Seer analysis in Cursor / Claude Code | Mushi MCP server: diagnosis, fix prompt and lessons; no second LLM key |
 
-Sentry + Seer is excellent at what it does — code-thrown errors, breadcrumbs, session replay. Mushi is the layer beneath and beside it: user-felt friction that never triggers an error, and the comprehension step that turns any signal into a paste-ready fix prompt.
+Sentry prices from [sentry.io/pricing](https://sentry.io/pricing/) and [Sentry's pricing docs](https://docs.sentry.io/pricing/), checked 2026-09-21. Seer is an add-on to the Team, Business or Enterprise plan, billed as its own monthly charge. An active contributor is anyone who opens two or more pull requests in a month to a Seer-enabled repo; the $66 total assumes one of them. Seer is not available in self-hosted Sentry.
+
+Sentry + Seer is strong at code-thrown errors, tracing, breadcrumbs and session replay, and Seer is an AI debugging agent for those issues. Mushi starts from user-felt friction that never triggers an error, ingests Sentry's errors too, and turns each into a plain-English diagnosis and a paste-ready fix prompt in your editor. A diagnosis is an LLM's reading and can be wrong; check it before you merge.
 
 ## Frequently asked questions
 
@@ -19406,9 +19445,10 @@ description: An open-source Sentry alternative for AI-built apps — plain-Engli
 
 # An open-source Sentry alternative built for AI-written code
 
-Sentry tells you what threw. Mushi ingests that — plus the bugs that never
-throw — explains each one in plain English, and closes the loop with a fix
-your agent can ship. One queue, one audit trail, with or without Sentry. If
+Sentry is built around what the code threw, with a User Feedback widget and
+replay alongside. Mushi starts from what the user reported, ingests Sentry's
+errors too, explains each one in plain English, and hands your agent a fix
+prompt to start from. One queue, with or without Sentry. If
 your app was largely written by Cursor, Claude Code, or another agent, that's
 the answer you actually need — you didn't write the code, so a raw stack trace
 costs you an afternoon of archaeology.

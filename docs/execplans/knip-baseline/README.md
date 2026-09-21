@@ -7,8 +7,18 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 | Mode | Command | Error-level issues | CI threshold |
 |---|---|---:|---|
-| production | `pnpm exec knip --production --reporter json` | **748** | `--max-issues 748` |
-| default | `pnpm exec knip --reporter json` | **587** | `--max-issues 587 --treat-config-hints-as-errors` |
+| production | `pnpm exec knip --production --reporter json` | **725** | `--max-issues 725` |
+| default | `pnpm exec knip --reporter json` | **585** | `--max-issues 585 --treat-config-hints-as-errors` |
+
+> **Re-measured 2026-09-21 on `feat/gtm-phase1-measure` (PR #394), knip 6.34.0: 725 production / 585 default**
+> (724 and 584 fail, 725 and 585 pass). The GTM branch first pushed the counts to 784 / 602. Nothing was
+> suppressed to get back under: new module-local constants were un-exported, test-only helpers were tagged
+> `@internal` (knip's documented production-mode treatment for exports used only by tests), and the docs
+> entries became `content/**/_meta.ts!` and `content/**/*.mdx!`. Production mode only follows entries
+> marked `!`, so before this it could not see the components the MDX pages import and reported them as unused.
+> The only pre-existing file that left the list that way (`PricingTiersTable.tsx`) really is imported, by
+> `pricing.mdx` and `cloud.mdx`; the others were this branch's new compare-page components. The untracked `.claude/worktrees/` checkout, which inflated the default
+> count locally, is now gitignored.
 
 > **Re-measured 2026-09-12, after all workstreams landed and after `pnpm install`.**
 > The first capture read 733 / 579, taken while the SDK v2 migration and the
@@ -50,8 +60,8 @@ Never raise them.
 | workspace | files | dependencies | unlisted | exports | types | duplicates | total |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | . | 3 |  |  |  |  |  | 3 |
-| apps/admin | 64 |  |  | 295 | 160 | 5 | 524 |
-| apps/docs | 1 | 2 |  | 34 | 9 | 1 | 47 |
+| apps/admin | 64 |  |  | 293 | 160 | 5 | 522 |
+| apps/docs |  | 2 |  | 16 | 7 | 1 | 26 |
 | examples/e2e-dogfood | 1 |  |  |  |  |  | 1 |
 | packages/adapters | 1 |  |  |  |  |  | 1 |
 | packages/agents | 8 |  | 1 | 3 | 2 |  | 14 |
@@ -69,7 +79,7 @@ Never raise them.
 | packages/verify | 1 |  |  |  |  |  | 1 |
 | packages/wasm-classifier |  |  |  |  | 1 |  | 1 |
 | packages/web |  |  |  | 39 | 12 |  | 51 |
-| **total** | **94** | **5** | **1** | **434** | **208** | **6** | **748** |
+| **total** | **93** | **5** | **1** | **414** | **206** | **6** | **725** |
 
 Warn-level (not counted): optionalPeerDependencies 8 (agents 1, plugin-sdk 2,
 react-native 4, wasm-classifier 1).
@@ -79,7 +89,7 @@ react-native 4, wasm-classifier 1).
 | workspace | files | dependencies | devDependencies | unlisted | unresolved | exports | types | duplicates | total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | . |  |  |  |  |  | 5 |  |  | 5 |
-| apps/admin | 51 |  |  |  |  | 218 | 160 | 5 | 434 |
+| apps/admin | 51 |  |  |  |  | 216 | 160 | 5 | 432 |
 | apps/docs |  | 2 | 1 |  |  | 14 | 7 | 1 | 25 |
 | examples/e2e-dogfood |  |  | 3 |  |  | 2 |  |  | 5 |
 | examples/realworld |  |  | 1 |  |  |  |  |  | 1 |
@@ -99,7 +109,7 @@ react-native 4, wasm-classifier 1).
 | packages/svelte |  |  | 1 |  |  |  |  |  | 1 |
 | packages/wasm-classifier |  |  |  |  |  |  | 1 |  | 1 |
 | packages/web |  |  |  |  |  | 32 | 11 |  | 43 |
-| **total** | **64** | **4** | **19** | **1** | **1** | **298** | **194** | **6** | **587** |
+| **total** | **64** | **4** | **19** | **1** | **1** | **296** | **194** | **6** | **585** |
 
 Warn-level (not counted): optionalPeerDependencies 8.
 
@@ -124,7 +134,7 @@ Warn-level (not counted): optionalPeerDependencies 8.
    (`@supabase/supabase-js`, `yaml`, `zod` in `packages/server` are read
    through `npm:` specifiers knip cannot see; `@mushi-mushi/tsconfig` in
    inventory-auth-runner is now used since its tsconfig extends it).
-5. **exports / types** — 480 (default) / 626 (production) symbols exported but
+5. **exports / types** — 490 (default) / 620 (production) symbols exported but
    never imported. The two barrels tagged `@public`
    (`packages/core/src/index.ts`, `apps/admin/src/components/ui.tsx`) are entry
    files and never counted; the rest are candidates for the A3 exports pass.
@@ -133,8 +143,9 @@ Warn-level (not counted): optionalPeerDependencies 8.
 
 - `compilers.mdx: true` enables the built-in MDX import extractor (knip only
   auto-enables it when `@mdx-js/*` is a direct dependency; here Nextra brings
-  it transitively). `apps/docs` lists `content/**/*.mdx` and the Nextra
-  `content/**/_meta.ts` files as entries and excludes `playground/**`, which
+  it transitively). `apps/docs` lists `content/**/*.mdx!` and the Nextra
+  `content/**/_meta.ts!` files as entries (the `!` makes them production
+  entries too) and excludes `playground/**`, which
   has its own package.json files but is not a pnpm workspace.
 - `packages/server` excludes `supabase/**` from `project` (Deno). Its
   vitest tests still import `_shared/*.ts`, so those files enter the graph;

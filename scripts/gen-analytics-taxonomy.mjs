@@ -29,7 +29,10 @@ function grab(re, label) {
 }
 
 const nameRe = grab(/export const EVENT_NAME_RE = (\/[^\n]+\/[a-z]*);/, 'EVENT_NAME_RE')
-const piiRe = grab(/export const PII_PROPERTY_KEY_RE = (\/[^\n]+\/[a-z]*);/, 'PII_PROPERTY_KEY_RE')
+// Module-private in the SDK source (only sanitizeEventProperties uses it), but
+// the Deno mirror exports it for the ingest route — so match with or without
+// the `export` keyword.
+const piiRe = grab(/(?:export\s+)?const PII_PROPERTY_KEY_RE = (\/[^\n]+\/[a-z]*);/, 'PII_PROPERTY_KEY_RE')
 const surfaces = grab(/export const MUSHI_SURFACES = \[([^\]]+)\] as const;/, 'MUSHI_SURFACES')
   .split(',').map((s) => s.trim().replace(/^'|'$/g, '')).filter(Boolean)
 const limitsBlock = grab(/export const EVENT_PROPERTY_LIMITS = \{([\s\S]*?)\} as const;/, 'EVENT_PROPERTY_LIMITS')

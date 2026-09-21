@@ -13,6 +13,8 @@
  * (CI runs `--check`). Edge functions cannot import workspace packages.
  */
 
+import type { MushiPropertyValue } from './types';
+
 /** Event names: lowercase, start with a letter, 2–64 chars. */
 export const EVENT_NAME_RE = /^[a-z][a-z0-9_]{1,63}$/;
 
@@ -31,10 +33,10 @@ export const EVENT_PROPERTY_LIMITS = {
 } as const;
 
 /** Property keys the SDK reserves for itself. Host apps cannot set these. */
-export const RESERVED_PROPERTY_PREFIX = '$';
+const RESERVED_PROPERTY_PREFIX = '$';
 
 /** Keys that are dropped unless explicitly allowlisted — they smell like PII. */
-export const PII_PROPERTY_KEY_RE = /(email|phone|password|passwd|token|secret|ssn|address|credit|card|iban)/i;
+const PII_PROPERTY_KEY_RE = /(email|phone|password|passwd|token|secret|ssn|address|credit|card|iban)/i;
 
 export const MUSHI_SURFACES = ['web', 'console', 'docs', 'cli', 'mcp', 'server', 'mobile'] as const;
 export type MushiSurface = (typeof MUSHI_SURFACES)[number];
@@ -80,7 +82,7 @@ export const ACTIVATION_EVENT: MushiEventName = 'first_report_received';
 /** Any of these in a week counts as "diagnosis consumed" for the habit metric. */
 export const HABIT_EVENTS: readonly MushiEventName[] = ['report_opened', 'fix_context_pulled'];
 
-export type MushiPropertyValue = string | number | boolean | null;
+// MushiPropertyValue is defined once, in types.ts (the published surface).
 export type MushiEventProperties = Record<string, MushiPropertyValue>;
 
 export function isValidEventName(name: unknown): name is string {

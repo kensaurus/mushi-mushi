@@ -220,7 +220,6 @@ function render() {
     '// GENERATED — do not edit.',
     '// Source: apps/docs/public/llms.txt + apps/docs/content/**/*.mdx',
     '// Regenerate: node scripts/gen-mcp-docs-index.mjs   (CI: --check)',
-    '/* eslint-disable */',
     '',
     '/**',
     ' * Static index behind the `search_mushi_docs` MCP tool. Every path is a',

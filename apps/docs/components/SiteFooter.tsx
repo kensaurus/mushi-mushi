@@ -27,7 +27,7 @@ const STATUS_PAGE_URL = 'https://updown.io/p/b6lod'
 /** Routes where the portfolio table is hidden (exact, or the `/legal/*` prefix). */
 const PORTFOLIO_HIDDEN_EXACT = new Set(['/', '/pricing', '/connect', '/security'])
 
-export function shouldShowPortfolio(pathname: string | null): boolean {
+function shouldShowPortfolio(pathname: string | null): boolean {
   if (!pathname) return true
   const normalized = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
   if (PORTFOLIO_HIDDEN_EXACT.has(normalized)) return false

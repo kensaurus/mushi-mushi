@@ -27,7 +27,7 @@ interface FunnelBarsProps {
   className?: string
 }
 
-export function formatMedianSecs(secs: number | null | undefined): string {
+function formatMedianSecs(secs: number | null | undefined): string {
   if (secs == null || !Number.isFinite(secs)) return '—'
   if (secs < 60) return `${Math.round(secs)}s`
   const mins = secs / 60

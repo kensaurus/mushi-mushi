@@ -9,9 +9,9 @@ description: The agreement for using Mushi Cloud, the admin console, the SDKs, a
 
 # Terms of Service
 
-  **Draft** — reviewed by the founder on ____; not legal advice. This is a
-  complete plain-English draft. The governing-law clause carries a founder
-  placeholder until the review date is filled in.
+  **Draft, not yet reviewed by a lawyer.** This is a complete plain-English
+  draft. The governing-law and venue clause (section 14) has not been confirmed
+  yet. Questions: kensaurus@gmail.com.
 
 **Effective date:** 2026-09-21 · **Version:** 1
 
@@ -201,12 +201,10 @@ without proper notice.
 
 ## 14. Governing law and disputes
 
-These terms are governed by the laws of **[Japan / founder to confirm]**,
-without regard to conflict-of-law rules. Disputes go first to good-faith
-discussion by email for 30 days, then to the courts of
-**[Tokyo District Court / founder to confirm]**, which have exclusive
-jurisdiction. Consumers may also bring claims in their home courts where the
-law gives them that right.
+**Not yet confirmed.** The governing law and the court that hears disputes
+will be stated here before these terms take effect. Until then, disputes go
+to good-faith discussion by email (kensaurus@gmail.com). Consumers keep any
+right the law gives them to bring claims in their home courts.
 
 ## 15. Mushi Bounties tester program
 

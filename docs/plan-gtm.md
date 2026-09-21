@@ -62,15 +62,15 @@ Mushi Mushi is a shipped, open-source bug-report → plain-English diagnosis →
 
 ## Positioning statement (Dunford order)
 
-Competitive alternatives → Sentry (what the code threw, Seer $40/contributor since Jan 2026), Jam/Marker.io/Userback/BugHerd (screenshots to a ticket), PostHog session replay, and "do nothing: users DM me, I read console.log".
-Unique attributes → user-felt reports + screenshot + console/network, plain-English diagnosis, fix context pulled into Cursor/Claude Code over MCP, dedupe to one row, lessons that persist into the next PR, MIT SDKs + self-host.
+Competitive alternatives → Sentry (what the code threw, Seer $40/active contributor/mo add-on, current pricing since Jan 2026), Jam/Marker.io/Userback/BugHerd (screenshots to a ticket), PostHog session replay, and "do nothing: users DM me, I read console.log".
+Unique attributes → starts from the user's own report (sentence + screenshot + console/network tail), a plain-English diagnosis on the free tier and on self-host with your own key, fix context + lessons that persist into the next PR pulled into Cursor/Claude Code over MCP with no second LLM key. Table stakes, not unique: dedupe (Sentry groups issues), MIT SDKs + self-host (Sentry and PostHog too), an MCP server (Sentry and Jam ship one).
 Value → the afternoon you lose debugging code you did not write becomes a 10-second read and a paste-ready fix.
 Who cares most → solo builders shipping AI-written apps to real users.
 Category → the bug mediator for AI-built apps (ADR 0004; keep).
 
-> **For solo builders shipping AI-written apps to real users, Mushi Mushi is the bug mediator that turns what a user felt into a plain-English diagnosis and a paste-ready fix in their editor, unlike Sentry, which only shows what the code threw.**
+> **For solo builders shipping AI-written apps to real users, Mushi Mushi is the bug mediator that turns what a user felt into a plain-English diagnosis and a paste-ready fix in their editor, unlike Sentry, which starts from what the code threw and sells its AI debugging agent, Seer, as a paid add-on that self-hosted Sentry does not get.**
 
-The hero (`MUSHI_TAGLINE_V2.hero`), README first line, and meta description already carry this. The gap is the CTA and the proof under it, not the sentence.
+The hero (`MUSHI_TAGLINE_V2.hero`), README first line, and meta description already carry the first half of this (who it is for and what it does). The Sentry contrast is worded in one place, the canonical answer in `docs/marketing/VOICE.md`, revised 2026-09-21 so it no longer implies Sentry only sees thrown errors. The gap is the CTA and the proof under it, not the sentence.
 
 ## Monetization verdict
 
@@ -100,7 +100,7 @@ Phase 1 turns every "unmeasured" cell into a number before any copy or UX change
 
 **2026 discovery mechanics.** Developers ask communities (Reddit, HN, Discord) and AI answers (ChatGPT, Perplexity, AI Overviews) that summarize what communities already say; there is no paid shortcut; contribution-not-promotion on Reddit; awesome-lists and MCP registries are what LLMs read when answering "best open-source X"; README is the landing page; stars are vanity, measure installs that complete and weekly active; "a launch gives a spike, the system gives a slope." Benchmarks: Show HN front page 5–30k visits / 50–400 signups, only ~11% of Show HN posts clear 10 points; Product Hunt featured rate ~10%, 1–2% B2B visit→signup, credibility artifact; comparison pages took 78% of clicks from 28% of pages in one test; llms.txt has zero Google effect but coding assistants read it; third-party mentions earn ~6.5× more AI citations than owned pages.
 
-**Competitive reality check (2026).** Sentry Developer plan is free (5k errors, 1 user) and Seer (AI debugging agent) is $40/active contributor/month since Jan 2026; Bugsnag/Rollbar have free tiers; Highlight.io and PostHog bundle session replay + errors. Mushi's defensible angle is not "cheaper Sentry"; it is *user-felt bugs + editor-native fix loop + no second LLM key*, which no comparison page currently states against Seer.
+**Competitive reality check (2026, re-checked against vendor pages 2026-09-21).** Sentry Developer plan is free (5k errors, 1 user) and Seer (AI debugging agent) is a $40/active contributor/month add-on to Team, Business or Enterprise, not in self-hosted (legacy $20 + credits pricing ended Jan 2026); Bugsnag and Rollbar have free tiers (Rollbar is cloud-only and its Resolve beta opens fix PRs on paid AI credits; Bugsnag on-premise is Enterprise-only and its pricing lists no AI); Highlight.io was bought by LaunchDarkly and its hosted service shut down 2026-02-28 (OSS hobby self-host remains); PostHog bundles session replay + errors, with "Fix with AI" prompts and beta draft PRs (3 free/mo, then $15). Mushi's defensible angle is not "cheaper Sentry"; it is *user-felt bugs + editor-native fix loop + no second LLM key*, which no comparison page currently states against Seer.
 
 ### Gap analysis (research vs repo)
 
@@ -262,7 +262,7 @@ Five-second test today: *what* passes (H1), *for whom* is weak (eyebrow only), *
 
 | Constant / file | Change |
 |---|---|
-| `LANDING_HERO.lead` | "For solo builders shipping Cursor- or Claude-written apps to real users. When someone hits a bug, Mushi turns what they felt into a plain-English diagnosis and a paste-ready fix in your editor — where Sentry only shows you what the code threw." |
+| `LANDING_HERO.lead` | "For solo builders shipping Cursor- or Claude-written apps to real users. When someone hits a bug, Mushi turns what they felt into a plain-English diagnosis and a paste-ready fix in your editor. Sentry starts from what the code threw; Mushi starts from what the user felt." (revised 2026-09-21 after the competitor fact check) |
 | `LANDING_HERO.proofLine` | delete; replace with `<LandingProofLine />` (new `components/landing/LandingProofLine.tsx`, registered in `mdx-components.tsx` and `LANDING_PATHS` in `scripts/check-public-voice.mjs:43-56`) rendering `apps/docs/data/proof-stats.json` `{sessions, reports, projects, asOf}` written by new `scripts/marketing/snapshot-proof-stats.mjs` (service-role read, founder-run, same pattern as `sync-docs-screenshots.mjs`) plus latest release from `data/changelog.json[0]`. Never render stars (3), testimonials, or logos until real. |
 | `LANDING_HERO_CTAS` | [0] primary "Start free — first diagnosis in 60 seconds" → `${ADMIN_DEMO_BASE}/signup?src=landing-hero` (same tab: add `sameTab?: true` to the CTA type, branch at `CinematicEditorialHero.tsx:108`); [1] "Try the live demo — no signup" → `/connect`; [2] ghost "Prefer the terminal? `npx mushi-mushi`" → `/quickstart/incident-loop` |
 | `LANDING_SIXTY_SECOND_STEPS.steps[1]` | "Send a test report (or ship and wait)" |
@@ -364,7 +364,7 @@ Reconcile `docs/marketing/launch-week.md`: keep the presence rule (reply < 10 mi
 
 **Show HN title candidates (< 80 chars):** "Show HN: Mushi Mushi – Open-source bug reports that explain why AI-written code broke" · "Show HN: I built a bug reporter that gives a plain-English diagnosis for apps Cursor wrote".
 
-**First-comment outline (human, sober, no mascot):** (1) widget → report with screenshot/console/network → plain-English diagnosis + fix prompt for Cursor/Claude Code; (2) why: I ship apps mostly written by Cursor, a user DM "it's broken" costs an afternoon on code I didn't write; (3) what's open: MIT SDKs, AGPLv3 server, one-command self-host, free 50 diagnoses/mo no card; (4) three factual lines vs Sentry Seer ($40/contributor/mo since Jan 2026, exception-first), PostHog (replay + errors, no fix loop), Jam.dev (human screen-recording for teams, not end-user capture + diagnosis); (5) honest state: 9 signups, 0 external projects with reports, what I want tested is diagnosis quality on a repo I've never seen; (6) links: demo, `npx mushi-mushi`, repo, 2-minute video; (7) known limits: docs EN-only, file references need repo indexing, diagnosis quota.
+**First-comment outline (human, sober, no mascot):** (1) widget → report with screenshot/console/network → plain-English diagnosis + fix prompt for Cursor/Claude Code; (2) why: I ship apps mostly written by Cursor, a user DM "it's broken" costs an afternoon on code I didn't write; (3) what's open: MIT SDKs, AGPLv3 server, one-command self-host, free 50 diagnoses/mo no card; (4) three factual lines vs Sentry Seer ($40/active contributor/mo add-on to Team, Business or Enterprise, not in self-hosted, exception-first), PostHog (replay + errors; "Fix with AI" prompts and beta draft PRs, 3 free/mo then $15, that start from captured exceptions), Jam.dev (human screen-recording for teams, not end-user capture + diagnosis); (5) honest state: 9 signups, 0 external projects with reports, what I want tested is diagnosis quality on a repo I've never seen; (6) links: demo, `npx mushi-mushi`, repo, 2-minute video; (7) known limits: docs EN-only, file references need repo indexing, diagnosis quota.
 
 **PH outline:** tagline ≤ 60 "Bug reports that explain why your AI-built app broke"; description = items 1, 3, 4; gallery = hero GIF (`record-readme-gif.mjs`) + 3 stills (`capture-admin-screenshots.mjs`); maker comment = item 5; topics Developer Tools, Open Source, AI.
 
@@ -389,7 +389,7 @@ New `apps/docs/content/compare/` (`_meta.ts`, `index.mdx` so the sitemap include
 
 | Route | Fact table needs |
 |---|---|
-| `/compare/sentry-vs-mushi` | Developer free 5k errors; Seer $40/contributor/mo (Jan 2026); what each captures; fix loop; self-host; Mushi free 50 diagnoses/mo |
+| `/compare/sentry-vs-mushi` | Developer free 5k errors; Seer $40/active contributor/mo add-on; what each captures; fix loop; self-host; Mushi free 50 diagnoses/mo |
 | `/compare/jam-vs-mushi` | human-recorded team reports vs end-user capture + diagnosis + MCP; pricing tier |
 | `/compare/posthog-session-replay-vs-mushi` | replay + error tracking free tier; "works alongside" stated honestly |
 | `/compare/sentry-alternatives-for-solo-founders` | Sentry, Bugsnag, Rollbar, Highlight.io, PostHog, Mushi: free caps, self-host, AI fix, "pick this if…" |
@@ -521,7 +521,8 @@ Funnel by source · activation cohort (signup week → activated %) · top drop-
 - https://www.youtube.com/watch?v=vNCY9kXXyDQ — Langfuse (May 2026): agent skill + docs search endpoint for coding agents
 - https://posthog.com/founders/first-1000-users · https://newsletter.posthog.com/p/the-stuff-nobody-tells-you-about · https://www.howtheygrow.co/p/how-posthog-grows-the-power-of-being — PostHog: first users by hand, journey posts, no-card signup, ~70% recommendations
 - https://www.infrasity.com/blog/open-source-marketing-strategy (Jun 2026) — 2026 discovery via communities + AI answers; README as landing page; awesome-lists, MCP registries, OSS directories, newsletters; stars are vanity
-- https://tech-insider.org/sentry-vs-bugsnag-vs-rollbar-2026/ · https://last9.io/blog/sentry-pricing/ — Sentry Developer plan free (5k errors), Seer $40/active contributor/mo since Jan 27 2026; Bugsnag/Rollbar free tiers
+- https://tech-insider.org/sentry-vs-bugsnag-vs-rollbar-2026/ · https://last9.io/blog/sentry-pricing/ — Sentry Developer plan free (5k errors), Seer $40/active contributor/mo since Jan 27 2026; Bugsnag/Rollbar free tiers (third-party; superseded by the primary sources below)
+- Primary sources re-checked 2026-09-21 (the compare pages cite these): https://sentry.io/pricing/ · https://docs.sentry.io/pricing/ · https://develop.sentry.dev/self-hosted/ · https://www.bugsnag.com/pricing/ · https://docs.bugsnag.com/on-premise/ · https://rollbar.com/pricing · https://rollbar.com/resolve · https://rollbar.com/blog/sentry-alternatives/ · https://github.com/highlight/highlight · https://launchdarkly.com/pricing/ · https://posthog.com/pricing · https://posthog.com/docs/error-tracking · https://posthog.com/docs/self-driving/pricing
 - `C:\Users\kensa\.claude\skills\plan-gtm\references\benchmarks-2026.md` — every conversion, activation, Show HN, PH, comparison-page, badge, and referral number quoted above, with its primary sources
 - Repo: `docs/marketing/*`, `docs/strategy/NORTH-STAR.md`, `docs/adr/INDEX.md`, live Supabase and GitHub queries listed in Context
 

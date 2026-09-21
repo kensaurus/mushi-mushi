@@ -14,6 +14,7 @@
  */
 
 export const FIRST_DIAGNOSIS_POLL_INTERVAL_MS = 2_000
+/** @internal Exported for unit tests only. */
 export const FIRST_DIAGNOSIS_POLL_TIMEOUT_MS = 90_000
 
 /** Subset of `ReportDetail` the poller reads. Kept loose on purpose — the
@@ -40,6 +41,7 @@ export interface Diagnosis {
   rootCause: string | null
 }
 
+/** @internal Exported for unit tests only. */
 export type ReportReading =
   | { kind: 'queued' }
   | { kind: 'classifying' }
@@ -64,6 +66,7 @@ function readRootCause(stage2: Record<string, unknown> | null | undefined): stri
   return null
 }
 
+/** @internal Exported for unit tests only. */
 export function toDiagnosis(report: PolledReport): Diagnosis {
   const summary = nonEmpty(report.summary)
   return {
@@ -76,7 +79,7 @@ export function toDiagnosis(report: PolledReport): Diagnosis {
   }
 }
 
-/** Classify a polled row into what the screen should say. */
+/** Classify a polled row into what the screen should say. @internal */
 export function readReport(report: PolledReport): ReportReading {
   if (report.status === 'quota_exceeded') {
     return { kind: 'quota_exhausted', message: QUOTA_MESSAGE }
@@ -138,13 +141,13 @@ const QUOTA_CODES = new Set([
 
 const OFFLINE_CODES = new Set(['NETWORK_ERROR', 'OFFLINE', 'FETCH_FAILED'])
 
-export function isQuotaCode(code: string | null | undefined): boolean {
+function isQuotaCode(code: string | null | undefined): boolean {
   if (!code) return false
   if (QUOTA_CODES.has(code)) return true
   return /quota|spend_cap|plan_limit/i.test(code)
 }
 
-export function isOfflineCode(code: string | null | undefined): boolean {
+function isOfflineCode(code: string | null | undefined): boolean {
   if (!code) return false
   return OFFLINE_CODES.has(code) || /network|offline|failed to fetch/i.test(code)
 }

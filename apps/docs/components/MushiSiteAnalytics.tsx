@@ -60,7 +60,7 @@ type Tracker = { track: (name: string, props: EventProps, reserved?: ReservedPro
 /** Bounded like the SDK's own pre-consent buffer. */
 const QUEUE_MAX = 50
 
-export const SITE_ANALYTICS_CONSENT_COPY =
+const SITE_ANALYTICS_CONSENT_COPY =
   'Mushi measures its own funnel with its own SDK — first-party, no ads, no cross-site tracking.'
 
 /**

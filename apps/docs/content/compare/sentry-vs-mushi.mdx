@@ -18,9 +18,10 @@ import {
 
 # Sentry vs Mushi Mushi
 
-Sentry tells you what threw. Mushi ingests that — plus the bugs that never
-throw — explains each one in plain English, and closes the loop with a fix
-your agent can ship. One queue, with or without Sentry.
+Sentry is built around what the code threw, with a User Feedback widget and
+Session Replay alongside. Mushi starts from what the user reported, ingests
+Sentry's errors too, explains each one in plain English, and hands your agent
+a fix prompt to start from. One queue, with or without Sentry.
 
 That is the whole difference in one paragraph. The rest of this page is the
 detail: what each product captures, what the free tiers include, what the AI
@@ -55,15 +56,21 @@ case for an app built with Cursor, Claude Code or Lovable.
 ## Running Mushi alongside Sentry
 
 Keep Sentry where it is. Point a Sentry issue-alert webhook at Mushi and every
-error lands in the same queue as user reports, deduped and diagnosed; when the
-fix merges, Mushi resolves the linked Sentry issue. The setup is three steps
+error lands in the same queue as user reports, deduped and diagnosed; with the
+outbound Sentry plugin (Indie and above, or self-hosted), Mushi resolves the
+linked Sentry issue when the fix merges. The setup is three steps
 on the [Sentry plugin page](/plugins/sentry), and there is a
 [migration guide](/migrations/sentry-to-mushi) for the enrich-or-standalone
 decision.
 
-Two things to know before you compare bills: Seer is not part of Sentry
-self-hosted, so the AI layer is cloud-only on their side; and Mushi's
-diagnosis runs on every plan, including self-hosted with your own LLM key.
+Three things to know before you compare bills. Seer is an add-on to the
+Team, Business or Enterprise plan, priced per active contributor and billed
+as its own monthly charge, separate from pay-as-you-go; the price and what
+counts as an active contributor are in the Sentry table above, from
+[Sentry's pricing docs](https://docs.sentry.io/pricing/). Seer is not
+available in Sentry self-hosted, so the AI layer is cloud-only on their
+side. And Mushi's diagnosis runs on every plan, including self-hosted with
+your own LLM key.
 
 ## Pick Sentry if
 

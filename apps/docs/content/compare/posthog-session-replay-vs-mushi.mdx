@@ -15,6 +15,14 @@ attaches the screen they were looking at and the console/network tail, and
 writes the diagnosis. They answer different questions, and this page is
 mostly about which question you have.
 
+Both now use AI on bugs. PostHog puts a "Fix with AI" prompt on every
+error-tracking issue, and its Self-driving beta opens a draft pull request
+for recurring high-impact errors, with a small free allowance each month and
+a price per PR after that (both in the table below). That path starts from
+the exceptions PostHog captured. Mushi starts from what a user reported and
+the screen they were on, writes a plain-English diagnosis on every plan, and
+hands the fix context to Cursor or Claude Code over MCP.
+
 <FactsChecked reviewedAt={FACTS_REVIEWED_AT} nextReviewDue={NEXT_REVIEW_DUE} />
 
 ## What each one is
@@ -46,13 +54,16 @@ PostHog replacement and does not try to be. See the
 - You want replay for every session, not only reported ones, and product
   analytics, flags and surveys in the same place.
 - Your bugs are found by watching replays rather than by users telling you.
+- You want AI fix prompts, and beta draft pull requests, on the exceptions
+  PostHog already captures.
 
 ## Pick Mushi if
 
-- You want the bug to arrive explained, with the screenshot and a fix prompt,
-  instead of a replay to scrub.
+- You want the bug to start from what the user said and saw, and to arrive
+  explained, with the screenshot and a fix prompt.
 - You fix bugs in Cursor or Claude Code and want the report in the editor.
-- You want the AI layer on the free tier or on your own server.
+- You want the diagnosis on every plan, including self-hosted with your own
+  LLM key.
 
 <StartFree href={signupUrl('posthog-session-replay-vs-mushi')} />
 

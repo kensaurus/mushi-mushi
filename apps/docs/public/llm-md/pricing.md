@@ -77,12 +77,14 @@ The self-host path is completely free, always will be — [see the guide](/self-
 | | Sentry Team + Seer | Mushi Indie |
 |---|---|---|
 | Base plan | $26 / mo | $15 / mo |
-| AI diagnosis | + $40 / active contributor | Included |
+| AI diagnosis | Seer add-on: + $40 / active contributor / mo | Included |
 | Solo dev total | **$66 + / mo** | **$15 / mo** |
-| Catches non-crash friction | No — code throws only | Yes — shake-to-report, dead buttons, layout breaks |
-| Editor-native (no dashboard) | No | Yes — paste-ready fix in Cursor / Claude Code |
+| Catches non-crash friction | Via its User Feedback widget and Session Replay | Yes — shake-to-report with screenshot and console/network tail, then a diagnosis |
+| Bugs in your editor | Sentry MCP server: issues and Seer analysis in Cursor / Claude Code | Mushi MCP server: diagnosis, fix prompt and lessons; no second LLM key |
 
-Sentry + Seer is excellent at what it does — code-thrown errors, breadcrumbs, session replay. Mushi is the layer beneath and beside it: user-felt friction that never triggers an error, and the comprehension step that turns any signal into a paste-ready fix prompt.
+Sentry prices from [sentry.io/pricing](https://sentry.io/pricing/) and [Sentry's pricing docs](https://docs.sentry.io/pricing/), checked 2026-09-21. Seer is an add-on to the Team, Business or Enterprise plan, billed as its own monthly charge. An active contributor is anyone who opens two or more pull requests in a month to a Seer-enabled repo; the $66 total assumes one of them. Seer is not available in self-hosted Sentry.
+
+Sentry + Seer is strong at code-thrown errors, tracing, breadcrumbs and session replay, and Seer is an AI debugging agent for those issues. Mushi starts from user-felt friction that never triggers an error, ingests Sentry's errors too, and turns each into a plain-English diagnosis and a paste-ready fix prompt in your editor. A diagnosis is an LLM's reading and can be wrong; check it before you merge.
 
 ## Frequently asked questions
 

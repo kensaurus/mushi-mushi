@@ -11,7 +11,7 @@ export { MUSHI_TAGLINE_V2 }
 export const LANDING_HERO = {
   eyebrow: MUSHI_TAGLINE_V2.category,
   lead:
-    'For solo builders shipping Cursor- or Claude-written apps to real users. When someone hits a bug, Mushi turns what they felt into a plain-English diagnosis and a paste-ready fix in your editor — where Sentry only shows you what the code threw.',
+    'For solo builders shipping Cursor- or Claude-written apps to real users. When someone hits a bug, Mushi turns what they felt into a plain-English diagnosis and a paste-ready fix in your editor. Sentry starts from what the code threw; Mushi starts from what the user felt.',
   proofLine: 'One queue for every bug. Sentry flows in, fixes flow out. Open source.',
 } as const
 
@@ -94,7 +94,7 @@ export interface LandingFaqItem {
 export const LANDING_FAQ: readonly LandingFaqItem[] = [
   {
     q: 'Is Mushi Mushi a Sentry alternative?',
-    a: 'Your call — both are first-class. Sentry tells you what threw. Mushi ingests that — plus the bugs that never throw — explains each one in plain English, and closes the loop with a fix your agent can ship. One queue, one audit trail, with or without Sentry.',
+    a: "Your call — both are first-class. Sentry is built around what the code threw, with a User Feedback widget and replay alongside. Mushi starts from what the user reported, ingests Sentry's errors too, explains each one in plain English, and hands your agent a fix prompt to start from. One queue, with or without Sentry.",
   },
   {
     q: 'Do I need Sentry to use it?',
@@ -254,8 +254,8 @@ export interface LandingComparisonRow {
 export const LANDING_COMPARISON_ROWS: readonly LandingComparisonRow[] = [
   {
     label: 'What it sees',
-    foil: 'Errors your code throws',
-    mushi: 'Everything: user-felt friction, plus the errors Sentry catches — routed into one queue',
+    foil: 'Errors and performance, plus Session Replay and a User Feedback widget',
+    mushi: 'User reports from the widget with a screenshot, plus the errors Sentry catches, in one queue',
   },
   {
     label: 'What lands in your queue',
@@ -264,32 +264,32 @@ export const LANDING_COMPARISON_ROWS: readonly LandingComparisonRow[] = [
   },
   {
     label: 'Repeat bugs',
-    foil: 'Each one shows up as a new issue',
-    mushi: 'The same broken button collapses to one row',
+    foil: 'Repeat events of the same error group into one issue',
+    mushi: 'Repeat user reports of the same broken button collapse to one row, even when nothing threw',
   },
   {
     label: 'What you learn from fixes',
-    foil: 'None — the next dev repeats the mistake',
+    foil: 'A resolved issue reopens as a regression if it recurs; there is no lessons file for your editor',
     mushi: 'Past fixes become rules your editor sees on the next PR (.mushi/lessons.json)',
   },
   {
     label: 'Closing the loop',
-    foil: 'Assign a ticket and remember to update',
-    mushi: 'A draft PR from your agent; merging it resolves the linked Sentry/Linear issue for you',
+    foil: 'Resolve by hand, from a commit that references the issue, or in a release; Seer, the paid AI debugging add-on, is on Team and above',
+    mushi: 'A draft PR from your agent; merging it resolves the linked Linear issue, and the linked Sentry issue once the Sentry plugin is on (Indie and above, or self-hosted)',
   },
   {
     label: 'Reporter attribution',
-    foil: 'Anonymous',
+    foil: 'The user you set with setUser, or the name and email on a feedback submission; no credit when it is fixed',
     mushi: '"Fixed by Kenji" in the changelog and an SDK toast, once Releases is enabled',
   },
   {
     label: 'From your IDE',
-    foil: 'Copy the issue ID into Cursor',
+    foil: 'Sentry\'s MCP server lets Cursor or Claude Code read issues and ask Seer',
     mushi: 'Cursor reads the report + relevant lessons and proposes the diff',
   },
   {
     label: 'Where it runs',
-    foil: 'Their cloud',
+    foil: 'Their cloud, or yours with getsentry/self-hosted (no Seer)',
     mushi: 'Yours, ours, or both',
   },
 ] as const
