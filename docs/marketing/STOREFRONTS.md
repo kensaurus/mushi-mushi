@@ -69,8 +69,11 @@ Keywords have been populated. Now confirm each package README opens strong:
   matches the dark admin aesthetic).
   > One manual step left: GitHub doesn't expose a stable API for social preview
   > upload. Drop the image into Settings → Social preview by hand once.
-- [ ] **Sponsor link** — already wired in `package.json` → `funding`.
-  Confirm the sponsors tab on GitHub is live.
+- [ ] **Sponsor link** — wired in every `package.json` → `funding`, but
+  GitHub Sponsors is **not enabled** (checked 2026-09-21:
+  `github.com/sponsors/kensaurus` redirects to the profile). Either enable
+  Sponsors or drop `funding` from the manifests
+  (`scripts/normalize-package-metadata.mjs`).
 
 ## 4. Live demo ([kensaur.us/mushi-mushi/](https://kensaur.us/mushi-mushi/))
 
@@ -105,12 +108,17 @@ cared-for.
   automatic verification checkmark). When done, set `BLUESKY_HANDLE=mushimushi.dev`
   in `.env.local`, delete `.cache/bluesky-session.json`, and the next script run
   will mint a fresh session under the brand identity.
+  **Not reserved as of 2026-09-21**: the handle does not resolve and the domain
+  is unregistered, so every public link (README, SUPPORT.md) points at
+  `kensaurus.bsky.social`. Do not link `mushimushi.dev` anywhere until it
+  resolves.
 - [ ] **Self-label as a bot** — the script-posted account should mark itself in
   the bio (`bsky.app → Settings → Edit profile → Description`). E.g. *"Mushi
   Mushi maintainer · some posts via @mushi-mushi/cli."* Bluesky etiquette docs
   recommend this for any account that posts via the API.
 - [ ] X / Twitter: `@mushimushi_dev` (the underscore because `@mushimushi` is
-  probably taken; check both).
+  probably taken; check both). **Not reserved as of 2026-09-21** (the profile
+  404s) — do not reference it in metadata or copy until it exists.
 - [ ] Bio on both: *"Your AI wrote it. Mushi tells you why it broke — plain-English
   diagnosis + a paste-ready fix, in your editor. 🐛 OSS, self-hostable, MIT SDKs."*
 - [ ] Profile image: Mushi-chan's happy cameo
@@ -185,11 +193,21 @@ See [`canonical-urls.md`](./canonical-urls.md). Do not use `api.mushimushi.dev` 
   PR [#428](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/428) **closed** (listed non-resolving hostname). Re-open with row in [`awesome-list-submissions.md`](./awesome-list-submissions.md).
 - [x] **[mcp.so](https://mcp.so/server/mushi-mushi)** — live; refresh Overview via [`mcp-so-listing.md`](./mcp-so-listing.md)
 - [ ] **[smithery.ai](https://smithery.ai/servers/kensaurus/mushi-mushi)** — republish Streamable HTTP URL from [`smithery-external-publish.json`](./smithery-external-publish.json)
-- [ ] **[cursor.directory](https://cursor.directory/plugins/new)** — root
-  [`.mcp.json`](../../.mcp.json) committed (hosted HTTP + stdio, secret-free
-  `${ENV}` placeholders). **Submit** the repo URL at the link above; auto-detection
-  does the rest. 1-liner: *"Mushi gives Cursor a `get_fix_context` tool —
+- [ ] **[cursor.directory](https://cursor.directory/plugins/new)** — **submitted;
+  the page exists but is hidden** ("Flagged by the security agent. Hidden from
+  the directory pending manual review", `noindex`, checked 2026-09-21). The
+  listing is generated from the repo root: root [`.mcp.json`](../../.mcp.json)
+  plus the root [`skills/`](../../skills/). The hidden page rendered those
+  skills with literal key-shaped placeholders, a `--db-url` command, raw SQL
+  against internal tables, `>-` in place of every description, and the old "AI
+  QA platform" copy — the likeliest trigger for the flag. The public skills
+  were rewritten on 2026-09-21; check that `skills/mushi-setup` also has a
+  single-line `description` before requesting review. Founder: sign in as
+  `kensaurus`, set the description and logo, re-sync from the repo, and request
+  manual review. 1-liner: *"Mushi gives Cursor a `get_fix_context` tool —
   paste-ready root cause from user-reported bugs, no dashboard."*
+- [ ] ~~**VS Code Marketplace / Open VSX**~~ — **deferred 2026-09-21**; see
+  [`GTM-DISTRIBUTION.md` → VS Code extension](./GTM-DISTRIBUTION.md#vs-code-extension).
 - [ ] **[awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers)**
   + **awesome-remote-mcp-servers** — exact ready-to-paste PR entries live in
   [`awesome-list-submissions.md`](./awesome-list-submissions.md).

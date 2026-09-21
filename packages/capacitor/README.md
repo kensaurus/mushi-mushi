@@ -11,7 +11,7 @@ LLM-driven bug intake, classification, and autofix platform.
 
 > **Status**: v0.8.x surface stable; API may evolve before a coordinated 1.0 across all packages.
 
-The Capacitor plugin uses a **public ingest key** (`mush_pk_…`) — not the `mushi_…` web key. See [Project ID & API keys](https://kensaur.us/mushi-mushi/docs/concepts/credentials).
+The Capacitor plugin uses the same project API key as the web SDK (`mushi_…`), minted in the console under **Projects → API Keys**. See [Project ID & API keys](https://kensaur.us/mushi-mushi/docs/concepts/credentials).
 
 The npm package vendors the standalone iOS and Android SDK sources for the
 native side, so Capacitor apps do not need a separate Maven or SwiftPM Mushi
@@ -31,7 +31,7 @@ import { Mushi } from '@mushi-mushi/capacitor';
 
 await Mushi.configure({
   projectId: 'proj_...',
-  apiKey: 'mush_pk_...',
+  apiKey: 'mushi_...',
   triggerMode: 'both',
   captureScreenshot: true,
   minDescriptionLength: 20,
@@ -90,7 +90,7 @@ bottom sheet from the standalone SDKs.
 | Field                  | Default                              | Notes |
 |------------------------|--------------------------------------|-------|
 | `projectId`            | _required_                           | Project UUID |
-| `apiKey`               | _required_                           | Public ingest key (`mush_pk_...`) |
+| `apiKey`               | _required_                           | Project API key (`mushi_...`) |
 | `endpoint`             | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`         | Override for self-hosting |
 | `triggerMode`          | `'shake'`                            | `'shake'` / `'button'` / `'both'` / `'none'` |
 | `captureScreenshot`    | `true`                               | Disable for HIPAA-sensitive flows |

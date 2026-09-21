@@ -27,7 +27,7 @@ thing and point to the same install flow.
 | **Connect landing** | `apps/docs/app/connect/page.tsx` | ✅ Public `/connect` with optional keyless demo |
 | **Install badges** | Root `README.md`, `packages/mcp/README.md` | ✅ Point to `https://kensaur.us/mushi-mushi/docs/connect` |
 | **cursor.directory** | Root [`.mcp.json`](../../.mcp.json) | ✅ Auto-detect manifest committed — submit repo URL |
-| **VS Code extension** | `packages/vscode-extension/` | 🔑 Workflow ready — [`publish-vscode-extension.yml`](../../.github/workflows/publish-vscode-extension.yml). Never published: needs `VSCE_PAT` + `OVSX_PAT` repo secrets |
+| **VS Code extension** | `packages/vscode-extension/` | ⏸️ **Deferred (2026-09-21)** — never published, and not mentioned on Show HN. See [VS Code extension](#vs-code-extension) for why and what unblocks it |
 | **Cursor Marketplace plugin** | `packages/cursor-plugin/` | 📋 Checklist ready; submission pending |
 | **npm keywords** | All primary `@mushi-mushi/*` packages | ✅ Aligned to MCP / vibe-coder discovery terms |
 
@@ -247,6 +247,17 @@ When vars are unset, `/connect` shows placeholder keys + “Sign in to mint” C
 
 ## VS Code extension
 
+> **Deferred (2026-09-21).** The extension is not published and is not a launch
+> channel. Reasons: its default hosted MCP URL
+> (`packages/vscode-extension/src/extension.ts`) is the one whose OAuth
+> discovery currently fails, so publishing now would ship that failure; its
+> version (0.17.0) trails `@mushi-mushi/mcp`; and neither `VSCE_PAT` nor
+> `OVSX_PAT` exists. VS Code users are not blocked: picking **VS Code** on
+> `/connect` opens a one-click install dialog that adds the MCP server through
+> VS Code's built-in MCP support, with no extension. Un-defer once hosted MCP sign-in works end to end:
+> point the default at the canonical URL, sync the version to the mcp package,
+> drop `private: true`, add both tokens, then run the workflow below.
+
 Package: [`packages/vscode-extension/`](../../packages/vscode-extension/).
 
 Registers an MCP server definition provider; stdio default runs
@@ -362,7 +373,7 @@ Run on every `@mushi-mushi/mcp` version bump:
 - [ ] `glama.json` tool list matches `packages/mcp/src/catalog.ts` (72 tools)
 - [ ] `node scripts/check-mcp-catalog-sync.mjs` — 0 drift
 - [ ] Connect page + README badges still point to `/connect`
-- [ ] VS Code extension version bumped to match (if publishing extension)
+- [ ] VS Code extension version bumped to match (only once the extension is un-deferred)
 - [ ] cursor.directory listing still accurate (`.mcp.json` diff review)
 
 ---

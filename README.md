@@ -18,7 +18,7 @@ Already shipping an app? One command installs the SDK + env vars + an optional t
 npx mushi-mushi
 ```
 
-**Open source, self-hostable, MIT JS core** — bring your own LLM key, no second key for MCP, no lock-in. [Self-host in minutes](./SELF_HOSTED.md) · [licensing](https://kensaur.us/mushi-mushi/docs/concepts/open-source).
+**Open source and self-hostable: MIT SDKs, AGPLv3 server** — bring your own LLM key, no second key for MCP, no lock-in. [Self-host in minutes](./SELF_HOSTED.md) · [licensing](https://kensaur.us/mushi-mushi/docs/concepts/open-source).
 
 <sub>What is Mushi, exactly? Read the one-page constitution: **[VISION.md](./VISION.md)** — the single source of truth for positioning, the north-star sentence, and who this is for.</sub>
 
@@ -29,13 +29,13 @@ npx mushi-mushi
 
 <sub>Node ≥22 · [CI](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml) · SDK MIT · [enterprise](./packages/server/ee/README.md) · [Smithery](https://smithery.ai/servers/kensaurus/mushi-mushi)</sub>
 
-[Vision](./VISION.md) · [Quick start](#60-second-proof) · [Connect your editor](https://kensaur.us/mushi-mushi/docs/connect) · [Self-host](#self-host-in-under-5-minutes) · [Why not just Sentry?](#why-not-just-sentry) · [Packages](#framework-coverage) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Live demo](https://kensaur.us/mushi-mushi/admin/) · [Operators / platform](./docs/operators/) · [Roadmap](https://kensaur.us/mushi-mushi/docs/roadmap)
+[Vision](./VISION.md) · [Quick start](#60-second-proof) · [Connect your editor](https://kensaur.us/mushi-mushi/docs/connect) · [Self-host](#self-host-in-under-5-minutes) · [Why not just Sentry?](#why-not-just-sentry) · [Packages](#framework-coverage) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Try the read-only demo](https://kensaur.us/mushi-mushi/docs/connect) · [Console (sign in)](https://kensaur.us/mushi-mushi/admin/) · [Operators / platform](./docs/operators/) · [Roadmap](https://kensaur.us/mushi-mushi/docs/roadmap)
 
-<a href="https://kensaur.us/mushi-mushi/admin/reports" title="Open a classified report in the live demo">
+<a href="https://kensaur.us/mushi-mushi/docs/connect" title="Try the read-only demo — no signup">
   <img alt="Report detail — plain-English root cause, confidence chip, paste-ready Cursor fix prompt, and PDCA receipt strip." src="./docs/screenshots/report-detail-dark.png" width="100%" />
 </a>
 
-<sub>↑ the diagnosis: plain-English root cause + a paste-ready fix prompt · click to open the live demo</sub>
+<sub>↑ the diagnosis: plain-English root cause + a paste-ready fix prompt · click to read one in the read-only demo, no signup</sub>
 
 </div>
 
@@ -225,7 +225,11 @@ import { Mushi } from '@mushi-mushi/web';
 Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' });
 ```
 
-iOS (Swift PM, v0.4.0): `.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.4.0")` · Android (Gradle): `dev.mushimushi:mushi-android:0.4.0` · Flutter: `pub add mushi_mushi`.
+**Native SDKs are a preview.** They are not on CocoaPods trunk, Maven Central or pub.dev yet, so install them from this repository:
+
+- **iOS (SwiftPM):** `.package(url: "https://github.com/kensaurus/mushi-mushi.git", branch: "master")`, then add the `MushiMushi` product. There is no version tag to pin to yet.
+- **Flutter:** a git dependency on `packages/flutter` in `pubspec.yaml` — see [`packages/flutter`](./packages/flutter/README.md#install).
+- **Android:** a Gradle composite build from a clone — see [`packages/android`](./packages/android/README.md#install).
 
 </details>
 
@@ -275,7 +279,7 @@ Then: `/mushi-setup` (guided SDK install + MCP wiring), `/mushi-debug` (diagnose
 
 ## Community
 
-Questions, ideas and show-and-tell live in **[GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions)** — post a screenshot of your first diagnosis in the pinned *Show and tell* thread, or ask anything; the maintainer answers on weekdays. Release notes go to Discussions → Announcements. Bugs go in [Issues](https://github.com/kensaurus/mushi-mushi/issues), first reply within 24 hours on weekdays. There is also a quieter [Discord](https://discord.gg/mushimushi).
+Questions, ideas and show-and-tell live in **[GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions)** — post a screenshot of your first diagnosis in the pinned *Show and tell* thread, or ask anything; the maintainer answers on weekdays. Release notes go to Discussions → Announcements. Bugs go in [Issues](https://github.com/kensaurus/mushi-mushi/issues), first reply within 24 hours on weekdays. Security reports follow [`SECURITY.md`](./SECURITY.md); anything else private goes to kensaurus@gmail.com.
 
 ---
 
@@ -294,13 +298,13 @@ Requires Node.js ≥ 22 and pnpm ≥ 10. See individual package READMEs, [`docs/
 
 ## License & branding
 
-This repository is **open-core** — the Supabase / Grafana model. The **SDK packages** are MIT — use them in any product, open or closed. The **server** (the part you self-host or we run for you) is **AGPLv3** — true OSI open source: self-host it, fork it, modify it for your own org. If you offer a **modified** server as a hosted service to third parties, publish your changes or see [COMMERCIAL-LICENSE.md](./COMMERCIAL-LICENSE.md). A small **Enterprise Edition** boundary (`packages/server/ee/`) is source-available but commercial for production use — that's operator/enterprise plumbing only, never the wedge.
+This repository is **open-core** — the Supabase / Grafana model. The **SDK packages** are MIT — use them in any product, open or closed. The **server** (the part you self-host or we run for you) is **AGPLv3** — true OSI open source: self-host it, fork it, modify it for your own org. If you offer a **modified** server as a hosted service to third parties, publish your changes or see [COMMERCIAL-LICENSE.md](./COMMERCIAL-LICENSE.md). A small **Enterprise Edition** boundary (`packages/server/ee/`) is source-available but commercial for production use — that's operator/enterprise plumbing only, never the wedge. The [root `LICENSE`](./LICENSE) states this split before the MIT text, and where a package directory carries its own `LICENSE`, that file governs the package.
 
 | Surface | License | Permitted | Notes |
 | ------- | ------- | --------- | ----- |
 | SDK packages — `core`, `web`, `react`, `vue`, `svelte`, `angular`, `react-native`, `capacitor`, `flutter`, `ios`, `android`, `node`, `cli`, `mcp`, `mcp-ci`, `plugin-*` (13 plugins), `adapters` (11 sources), `inventory-schema`, `inventory-auth-runner`, `eslint-plugin-mushi-mushi`, `brand`, `marketing-ui` | [MIT](./LICENSE) | Use, fork, sell, embed in proprietary products. | Trademarks separate — see below. |
 | Server packages — `@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify` | [AGPLv3](./packages/server/LICENSE) | Use, modify, self-host, fork for your own org. SaaS modifiers publish changes or [commercial license](./COMMERCIAL-LICENSE.md). | OSI-approved copyleft. The cloud runs this exact core. |
-| Enterprise features — SSO/SCIM, audit-log ingest, retention policy CRUD, region pinning, SOC2 evidence | Commercial / paid tier | Available on the Enterprise plan (hosted) or with a commercial license (self-host). | The code may be source-visible, but production use of these specific features is a paid boundary — see [`docs/operators/`](./docs/operators/). |
+| Enterprise features (`packages/server/ee/`) — SSO/SCIM, audit-log ingest, retention policy CRUD, region pinning, SOC2 evidence | [EE license](./packages/server/ee/LICENSE) — commercial / paid tier | Available on the Enterprise plan (hosted) or with a commercial license (self-host). | The code may be source-visible, but production use of these specific features is a paid boundary — see [`docs/operators/`](./docs/operators/). |
 | Trademarks — "Mushi Mushi", "Mushi", 虫, the bug logo | [Trademark policy](./TRADEMARK.md) | Refer to the project, build add-ons, link to the repo. | **Forks must rename.** Hosting a service under the Mushi name requires written permission. |
 | Third-party attributions | [NOTICE](./NOTICE) | — | Upstream projects we depend on and their licenses. |
 
@@ -327,5 +331,5 @@ All apps live under [kensaur.us](https://kensaur.us).
 ---
 
 <div align="center">
-<sub>If Mushi helped, <a href="https://github.com/kensaurus/mushi-mushi/stargazers">star the repo</a> so the next vibe coder finds it. <a href="https://github.com/kensaurus/mushi-mushi/issues/new/choose">Open an issue</a> · <a href="https://bsky.app/profile/mushimushi.dev">Follow on Bluesky</a></sub>
+<sub>If Mushi helped, <a href="https://github.com/kensaurus/mushi-mushi/stargazers">star the repo</a> so the next vibe coder finds it. <a href="https://github.com/kensaurus/mushi-mushi/issues/new/choose">Open an issue</a> · <a href="https://bsky.app/profile/kensaurus.bsky.social">Follow on Bluesky</a></sub>
 </div>

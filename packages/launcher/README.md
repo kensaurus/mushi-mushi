@@ -4,10 +4,9 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Default bug-report launcher UI primitives for web SDKs.
+Plain-English diagnosis + a paste-ready fix, right inside Cursor and Claude Code.
 
-
-**Ship a shake-to-report button. Get AI-classified, deduped, ready-to-fix bug reports.**
+**`mushi-mushi` is the one-command setup wizard.** It adds the Mushi SDK to the app you already have, so the next time a user hits a bug their report arrives explained, not as a stack trace to decode.
 
 One `npx` command. Works with React, Next.js, Vue, Nuxt, Svelte, SvelteKit, Angular, React Native, Expo, Capacitor, and vanilla JS.
 
@@ -18,11 +17,11 @@ One `npx` command. Works with React, Next.js, Vue, Nuxt, Svelte, SvelteKit, Angu
 [![Socket](https://socket.dev/api/badge/npm/package/mushi-mushi)](https://socket.dev/npm/package/mushi-mushi)
 [![Node](https://img.shields.io/node/v/mushi-mushi?color=339933&logo=node.js)](https://nodejs.org)
 
-<a href="https://kensaur.us/mushi-mushi/" title="Open the live admin demo">
+<a href="https://kensaur.us/mushi-mushi/docs/connect" title="Try the read-only demo — no signup">
   <img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/screenshots/report-detail-dark.png" alt="A real user-felt bug inside the Mushi admin — Plan / Do / Check / Act PDCA receipt across the top, the original user description, LLM classification (Confusing UX · Medium · 78% confidence · component = Dashboard/HeroCTA), environment + performance metrics, and a one-click Dispatch-fix CTA." width="860" />
 </a>
 
-<sub>↑ a real user report, fully classified and ready to dispatch as a GitHub PR · <a href="https://kensaur.us/mushi-mushi/">open the live demo</a></sub>
+<sub>↑ a real user report, fully classified and ready to dispatch as a GitHub PR · <a href="https://kensaur.us/mushi-mushi/docs/connect">try the read-only demo, no signup</a></sub>
 
 </div>
 
@@ -34,7 +33,7 @@ Your users open your app, something feels broken — a button that doesn't react
 
 Mushi adds a small **"shake your phone (or click the bug)"** button. The user taps it, scribbles a note, and Mushi captures everything around the moment: a screenshot, the page they were on, what they were trying to do, and the last few seconds of network and console activity. An AI then reads that report, tags it with severity and category in plain English, groups it with similar reports so you see one row per actual bug, and (optionally) hands it off to another AI that opens a draft pull request with a proposed fix. **A human always reviews and merges** — the loop never bypasses you.
 
-Founders, PMs, designers: see the [60-second tour in the GitHub README](https://github.com/kensaurus/mushi-mushi#read-this-first-if-youre-not-a-developer).
+Founders, PMs, designers: see the [plain-language overview in the GitHub README](https://github.com/kensaurus/mushi-mushi#what-this-is).
 
 ---
 
@@ -158,9 +157,9 @@ All of them ship in [`@mushi-mushi/adapters`](https://www.npmjs.com/package/@mus
 | Angular 17+                     | `@mushi-mushi/angular` + `@mushi-mushi/web`       |
 | React Native / Expo             | `@mushi-mushi/react-native`                       |
 | Capacitor / Ionic               | `@mushi-mushi/capacitor`                          |
-| Flutter / Dart                  | `pub add mushi_mushi`                             |
-| iOS native (Swift)              | Swift Package Manager — early dev                 |
-| Android native (Kotlin/Java)    | Gradle `dev.mushimushi:mushi-android` — early dev |
+| Flutter / Dart                  | Git dependency — preview, not on pub.dev yet ([how](https://github.com/kensaurus/mushi-mushi/tree/master/packages/flutter#install)) |
+| iOS native (Swift)              | SwiftPM from the repo — preview, not tagged yet ([how](https://github.com/kensaurus/mushi-mushi/tree/master/packages/ios#install)) |
+| Android native (Kotlin/Java)    | Build from source — preview, not on Maven Central yet ([how](https://github.com/kensaurus/mushi-mushi/tree/master/packages/android#install)) |
 | Node (Express / Fastify / Hono) | `@mushi-mushi/node` (server-side error capture)   |
 | Vanilla JS                      | `@mushi-mushi/web`                                |
 
@@ -189,7 +188,7 @@ User hits widget ──▶ screenshot + console + network + intent
   "Dispatch fix"  ──▶  agent opens a GitHub PR with Playwright replay + visual diff
 ```
 
-See the full architecture in the [root README](https://github.com/kensaurus/mushi-mushi#architecture).
+See the full loop in the [root README](https://github.com/kensaurus/mushi-mushi#the-diagnosis-loop).
 
 ---
 
@@ -228,7 +227,7 @@ npx mushi-mushi --help
 - **Monorepo?** `cd` into the package first, or pass `--cwd apps/web`.
 - **Stale `npx` cache?** `npm cache clean --force` or `npx mushi-mushi@latest`.
 - **Non-interactive terminal (CI)?** Pass `--yes --project-id proj_xxx --api-key mushi_xxx`. The wizard exits with a clear error instead of hanging.
-- **Node version too old?** Requires Node ≥ 18. Upgrade at [nodejs.org](https://nodejs.org/).
+- **Node version too old?** Requires Node ≥ 20. Upgrade at [nodejs.org](https://nodejs.org/).
 - **Full stack traces on error?** `DEBUG=mushi npx mushi-mushi`.
 
 </details>
@@ -298,9 +297,9 @@ Or skip the CLI entirely and drive it from your AI agent via [`@mushi-mushi/mcp`
 
 ## Links
 
-- 🌐 **[Live admin demo](https://kensaur.us/mushi-mushi/)** — click around a real dataset
+- 🌐 **[Read-only demo](https://kensaur.us/mushi-mushi/docs/connect)** — read a real diagnosis in your editor, no signup
 - 📦 **[GitHub](https://github.com/kensaurus/mushi-mushi)** — source, architecture, self-hosting
-- 📚 **[Docs](https://github.com/kensaurus/mushi-mushi#readme)** — quickstart, concepts, API reference
+- 📚 **[Docs](https://kensaur.us/mushi-mushi/docs/)** — quickstart, concepts, API reference
 - 🐛 **[Report a bug](https://github.com/kensaurus/mushi-mushi/issues)** — eat your own dogfood
 
 ## License

@@ -300,7 +300,7 @@ The MCP binary reads these three vars from `process.env` on spawn; that means **
    # Mushi MCP; drop into .env.local (gitignored). The MCP binary picks these up on spawn.
    MUSHI_API_ENDPOINT=https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api
    MUSHI_PROJECT_ID=<your-uuid>
-   MUSHI_API_KEY=mushi_live_…
+   MUSHI_API_KEY=mushi_…
    ```
 
 2. Paste it into your repo's `.env.local` (already gitignored by every Vite / Next.js / Node project scaffold). Confirm `.env.local` is in `.gitignore` if you're in an unusual setup.
@@ -438,7 +438,7 @@ Replace the public endpoint block in your client's MCP config with the three env
       "args": ["/absolute/path/to/mushi-mushi/packages/mcp/dist/index.js"],
       "env": {
         "MUSHI_API_ENDPOINT": "http://localhost:54321/functions/v1/api",
-        "MUSHI_API_KEY": "mushi_live_abc…",
+        "MUSHI_API_KEY": "mushi_abc…",
         "MUSHI_PROJECT_ID": "00000000-0000-0000-0000-000000000000"
       }
     }
