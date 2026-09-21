@@ -35,9 +35,13 @@ const PINNED_FILES = [
   'packages/vscode-extension/src/extension.ts',
   'apps/docs/public/integrations/claude-hooks.json',
   'apps/docs/content/quickstart/mcp.mdx',
-  // Hosted MCP reports this version in serverInfo and the server card.
-  'packages/server/supabase/functions/_shared/mcp-discovery-tools.json',
 ]
+
+// The hosted MCP's generated catalog copy reports this version in serverInfo
+// and the server card. Only its packagePin field is rewritten: the rest of the
+// file is generated tool text, owned by scripts/sync-mcp-discovery-card.mjs.
+const DISCOVERY_JSON = 'packages/server/supabase/functions/_shared/mcp-discovery-tools.json'
+const PACKAGE_PIN_RE = /("packagePin":\s*")@mushi-mushi\/mcp@[^"]*(")/
 
 const SPEC_RE = /@mushi-mushi\/mcp@(?:latest|\d+\.\d+\.\d+(?:-[\w.]+)?)/g
 
@@ -56,6 +60,22 @@ for (const rel of PINNED_FILES) {
   if (!CHECK_MODE) {
     writeFileSync(path, source.replace(SPEC_RE, PIN), 'utf8')
     console.log(`✓ Updated ${rel} → ${PIN}`)
+  }
+}
+
+{
+  const path = resolve(ROOT, DISCOVERY_JSON)
+  const source = readFileSync(path, 'utf8')
+  const field = source.match(PACKAGE_PIN_RE)
+  if (!field) {
+    console.error(`✗ ${DISCOVERY_JSON}: expected a "packagePin": "@mushi-mushi/mcp@<version>" field, found none`)
+    process.exitCode = 1
+  } else if (field[0] !== `${field[1]}${PIN}${field[2]}`) {
+    outOfSync.push(DISCOVERY_JSON)
+    if (!CHECK_MODE) {
+      writeFileSync(path, source.replace(PACKAGE_PIN_RE, `$1${PIN}$2`), 'utf8')
+      console.log(`✓ Updated ${DISCOVERY_JSON} → ${PIN}`)
+    }
   }
 }
 
