@@ -36,7 +36,8 @@ export const CLI_KEY_LABEL = 'cli-login'
  *   - `invalid`     — the backend rejected the key outright
  *   - `unreachable` — the request never got an answer
  *   - `unknown`     — an answer that proves neither (5xx, an unexpected 403…)
- */
+  * @internal Exported for tests only.
+  */
 export type KeyScopeProbeResult = 'ingest-only' | 'mcp' | 'invalid' | 'unreachable' | 'unknown'
 
 export interface KeyScopeProbe {

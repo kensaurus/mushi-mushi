@@ -30,11 +30,13 @@
 import { newUuid, type MushiApiClient, type MushiSessionEventPayload } from '@mushi-mushi/core'
 
 const HEARTBEAT_INTERVAL_MS = 60_000
-/** Background time after which returning to the foreground starts a new session. */
+/** Background time after which returning to the foreground starts a new session.
+ * @internal Exported for tests only.
+ */
 export const RESUME_WINDOW_MS = 30 * 60_000
 
 /** The consent surface of the RN event tracker the session tracker follows. */
-export interface RNSessionConsentSource {
+interface RNSessionConsentSource {
   ready: Promise<void>
   consentState(): 'granted' | 'denied' | 'pending'
   onConsentChange(listener: (state: 'granted' | 'denied') => void): () => void

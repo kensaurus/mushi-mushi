@@ -39,7 +39,7 @@ export interface ConnectOptions {
   probeKeyScope?: ProbeKeyScope
 }
 
-export type SdkEnvKeyResolution =
+type SdkEnvKeyResolution =
   | { ok: true; key: string }
   | { ok: false; reason: string }
 
@@ -48,7 +48,8 @@ export type SdkEnvKeyResolution =
  * order: an explicit --sdk-key, the ingest key saved for this project, the
  * CLI key itself (fine only when it happens to be ingest-only, e.g. a key
  * minted in the console). Anything the probe cannot confirm is refused.
- */
+  * @internal Exported for tests only.
+  */
 export async function resolveSdkEnvKey(opts: {
   sdkKey?: string
   apiKey: string

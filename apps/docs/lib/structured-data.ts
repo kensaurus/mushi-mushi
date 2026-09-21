@@ -16,14 +16,16 @@ export const PRODUCT_ROOT = `${MUSHI_CANONICAL_URLS.home}/`
 export const DOCS_SITE = MUSHI_CANONICAL_URLS.docs
 
 /** Social preview card shipped in apps/docs/public/social-preview/. */
-export const OG_CARD_URL = `${DOCS_SITE}/social-preview/og-card.png`
+const OG_CARD_URL = `${DOCS_SITE}/social-preview/og-card.png`
 
 /**
  * The card's real pixel size. og:image:width/height must describe the file,
  * not the 1200×630 the platforms recommend — docs-meta.test.ts reads the PNG
  * header and fails if the file and these numbers drift apart.
- */
+  * @internal Exported for tests only.
+  */
 export const OG_CARD_WIDTH = 1376
+/** @internal Exported for tests only. */
 export const OG_CARD_HEIGHT = 768
 
 /**

@@ -22,7 +22,7 @@ import { execFileSync } from 'node:child_process'
  * `ws` and `streamable-http` (an alias for `http`); Cursor and VS Code accept
  * the same names for remote servers.
  */
-export const REMOTE_TRANSPORT_TYPES = new Set(['http', 'streamable-http', 'sse', 'ws'])
+const REMOTE_TRANSPORT_TYPES = new Set(['http', 'streamable-http', 'sse', 'ws'])
 
 /**
  * Top-level fields documented for `.cursor-plugin/plugin.json`
@@ -31,7 +31,7 @@ export const REMOTE_TRANSPORT_TYPES = new Set(['http', 'streamable-http', 'sse',
  * so it is accepted. Anything else — `icon`, `categories`, `minCursorVersion`,
  * `mcp` — is silently ignored by Cursor and fails review.
  */
-export const CURSOR_PLUGIN_MANIFEST_FIELDS = new Set([
+const CURSOR_PLUGIN_MANIFEST_FIELDS = new Set([
   'name',
   'displayName',
   'description',
@@ -103,7 +103,8 @@ export function collectMcpServerEntries(doc) {
  *
  * @param {string} url
  * @returns {string | null}
- */
+  * @internal Exported for tests only.
+  */
 export function placeholderUrlReason(url) {
   if (url.includes('${')) return null
   let host
@@ -161,6 +162,7 @@ export function lintMcpConfig(doc, { allowPlaceholderHosts = false } = {}) {
  *
  * @param {unknown} doc
  * @returns {Set<string>}
+ * @internal Exported for tests only.
  */
 export function collectVariableReferences(doc) {
   const names = new Set()

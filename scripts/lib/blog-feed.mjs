@@ -10,7 +10,9 @@
  * a post changed.
  */
 
-/** Escape text for an XML element or attribute value. */
+/** Escape text for an XML element or attribute value.
+ * @internal Exported for tests only.
+ */
 export function escapeXml(value) {
   return String(value)
     .replace(/&/g, '&amp;')

@@ -139,7 +139,8 @@ export async function writeMcpServerEntry(opts: WriteMcpOptions): Promise<WriteM
  * - continue / zed: no documented expansion, so any placeholder would be sent
  *   verbatim. Omit the variable; the server falls back to the key `mushi
  *   login` saved in the CLI config.
- */
+  * @internal Exported for tests only.
+  */
 export function apiKeyPlaceholderFor(client: McpClient): string | null {
   switch (client) {
     case 'cursor':

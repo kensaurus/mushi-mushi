@@ -29,7 +29,7 @@ export function resolveLoginEndpoint(
   return optsEndpoint ?? existingConfigEndpoint ?? envEndpoint?.trim()
 }
 
-export interface McpConfigTarget {
+interface McpConfigTarget {
   /** Directory the file lives in (created on write). */
   dir: string
   /** Absolute path of the file `mushi setup` merges into. */
@@ -39,7 +39,9 @@ export interface McpConfigTarget {
   repoLocal: boolean
 }
 
-/** Where each MCP client reads its server list from. */
+/** Where each MCP client reads its server list from.
+ * @internal Exported for tests only.
+ */
 export function resolveMcpConfigTarget(ide: McpClient, cwd: string, home: string): McpConfigTarget {
   switch (ide) {
     case 'cursor':
@@ -66,12 +68,13 @@ export function resolveMcpConfigTarget(ide: McpClient, cwd: string, home: string
  * …/functions/v1/api → …/functions/v1/mcp. If the configured endpoint does
  * not end in /api (assertEndpoint allows arbitrary paths), no sibling URL can
  * be derived — writing the API URL as an MCP server would break sign-in.
+ * @internal Exported for tests only.
  */
 export function deriveHostedMcpUrl(endpoint: string): string | null {
   return /\/api\/?$/.test(endpoint) ? endpoint.replace(/\/api\/?$/, '/mcp') : null
 }
 
-export interface SetupServerBlock {
+interface SetupServerBlock {
   block: McpServerEntry
   /** True for the URL-only OAuth entry (no key anywhere on disk). */
   hosted: boolean
@@ -86,6 +89,7 @@ export interface SetupServerBlock {
  * opts back into the local subprocess entry (headless environments can't open
  * a browser; --all-projects needs one keyed entry per project, which OAuth's
  * consent-time project pick doesn't cover).
+ * @internal Exported for tests only.
  */
 export function buildSetupServerBlock(opts: {
   ide: McpClient

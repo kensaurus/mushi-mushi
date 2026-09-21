@@ -217,7 +217,10 @@ export function readFirstTouch(store: KeyValueStore | null | undefined, projectI
   }
 }
 
-/** Write-once. An existing record always wins — first touch is never overwritten. */
+/**
+ * Write-once. An existing record always wins — first touch is never overwritten.
+ * @internal Exported for tests only.
+ */
 export function recordFirstTouchOnce(
   store: KeyValueStore | null | undefined,
   projectId: string,

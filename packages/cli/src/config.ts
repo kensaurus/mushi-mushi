@@ -32,7 +32,7 @@ import { tryLoadKeyFromKeychain } from './keychain.js'
  * --write-env` does not need a new browser sign-in just to mint one — the
  * private `apiKey` above carries mcp:read and must never go into app env.
  */
-export interface SavedSdkKey {
+interface SavedSdkKey {
   projectId: string
   key: string
 }

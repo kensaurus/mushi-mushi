@@ -30,7 +30,7 @@ import { getMushiSelf, initMushiSelf, isMushiSelfEnabled } from './mushi-self'
 
 type TrackValue = string | number | boolean | null
 
-export type TrackProps = Record<string, TrackValue>
+type TrackProps = Record<string, TrackValue>
 
 /** The property keys the taxonomy marks `required` for event `E`. */
 type RequiredKey<E extends MushiEventName> = (typeof MUSHI_EVENTS)[E]['required'][number]

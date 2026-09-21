@@ -49,7 +49,7 @@ export type SignupSource =
  * the auth user so the company funnel can count builder signups without
  * the tester marketplace inflating them.
  */
-export type SignupTrack = 'console' | 'tester'
+type SignupTrack = 'console' | 'tester'
 
 export interface SignupMeta {
   /** Self-reported answer from the signup form. */
