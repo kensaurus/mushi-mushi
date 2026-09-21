@@ -4,7 +4,7 @@
   "description": "Every bug in one queue — user reports, Sentry errors, Slack, coding agents. Plain-English diagnosis + a ready fix, in your editor. Open source.",
   "license": "MIT",
   "homepage": "https://kensaur.us/mushi-mushi",
-  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "repository": {
     "type": "git",
     "url": "https://github.com/kensaurus/mushi-mushi.git"
