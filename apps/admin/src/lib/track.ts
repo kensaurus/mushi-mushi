@@ -58,7 +58,13 @@ export function trackSelf<E extends MushiEventName>(event: E, ...args: TrackArgs
     const props: TrackProps = args[0] ?? {}
     const missing = missingRequired(event, props)
     if (missing.length > 0) {
-      debugWarn('track', `${event} is missing required properties: ${missing.join(', ')}`, { event, missing })
+      // debugWarn reads localStorage, which throws when site data is blocked;
+      // a diagnostic must never cost the event itself.
+      try {
+        debugWarn('track', `${event} is missing required properties: ${missing.join(', ')}`, { event, missing })
+      } catch {
+        /* diagnostics only */
+      }
     }
     const sdk = getMushiSelf()
     if (sdk) {

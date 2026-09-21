@@ -100,6 +100,17 @@ describe('trackSelf — taxonomy contract', () => {
     expect(track).toHaveBeenCalledWith('fix_dispatched', { report_id: 'r1' })
   })
 
+  it('still sends when the debug channel itself throws (blocked storage)', () => {
+    const track = vi.fn()
+    mocks.getMushiSelf.mockReturnValue({ track })
+    warn.mockImplementationOnce(() => {
+      throw new Error('SecurityError: localStorage blocked')
+    })
+    const incomplete = { report_id: 'r1' } as unknown as { report_id: string; agent: string }
+    trackSelf('fix_dispatched', incomplete)
+    expect(track).toHaveBeenCalledWith('fix_dispatched', { report_id: 'r1' })
+  })
+
   it('treats a null required property as missing', () => {
     mocks.getMushiSelf.mockReturnValue({ track: vi.fn() })
     const nulled = { report_id: null } as unknown as { report_id: string }
