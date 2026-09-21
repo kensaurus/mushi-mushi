@@ -291,7 +291,7 @@ function render() {
     '  excerpt: string',
     '}',
     '',
-    `export const MUSHI_DOCS_BASE = ${q(BASE)}`,
+    `const MUSHI_DOCS_BASE = ${q(BASE)}`,
     '',
     'function docUrl(route: string): string {',
     "  return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route",

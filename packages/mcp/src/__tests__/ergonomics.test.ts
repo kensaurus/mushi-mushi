@@ -13,8 +13,10 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { createMushiServer, createSetupModeServer, SETUP_MODE_TOOLS } from '../server.js'
-import { MUSHI_DOCS_BASE, MUSHI_DOCS_INDEX, findMushiDoc, searchMushiDocs } from '../docs-index.js'
+import { MUSHI_DOCS_INDEX, findMushiDoc, searchMushiDocs } from '../docs-index.js'
 
+/** The public docs site every indexed url and Markdown twin lives under. */
+const MUSHI_DOCS_BASE = 'https://kensaur.us/mushi-mushi/docs'
 const API_ENDPOINT = 'https://api.test.mushimushi.dev'
 const API_KEY = 'mushi_test_key_0123456789'
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'

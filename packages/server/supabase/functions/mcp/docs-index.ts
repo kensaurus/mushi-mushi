@@ -25,7 +25,7 @@ export interface DocIndexEntry {
   excerpt: string
 }
 
-export const MUSHI_DOCS_BASE = "https://kensaur.us/mushi-mushi/docs"
+const MUSHI_DOCS_BASE = "https://kensaur.us/mushi-mushi/docs"
 
 function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
