@@ -3,11 +3,11 @@
  * PURPOSE: `trackSelf` must never throw and must be a no-op when the
  *          dogfooded SDK is disabled or not loaded. It accepts only taxonomy
  *          events with their required properties (the `@ts-expect-error`
- *          lines are checked by `tsc`), and warns in dev when a cast slips a
- *          required property past the types.
+ *          lines are checked by `tsc`), and reports through the admin debug
+ *          channel when a cast slips a required property past the types.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   getMushiSelf: vi.fn(),
@@ -15,7 +15,10 @@ const mocks = vi.hoisted(() => ({
   isMushiSelfEnabled: vi.fn(),
 }))
 
+const debug = vi.hoisted(() => ({ debugWarn: vi.fn() }))
+
 vi.mock('./mushi-self', () => mocks)
+vi.mock('./debug', () => debug)
 
 import { trackSelf } from './track'
 
@@ -63,15 +66,11 @@ describe('trackSelf', () => {
 })
 
 describe('trackSelf — taxonomy contract', () => {
-  let warn: ReturnType<typeof vi.spyOn>
+  const warn = debug.debugWarn
 
   beforeEach(() => {
     mocks.getMushiSelf.mockReset()
-    warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-  })
-
-  afterEach(() => {
-    warn.mockRestore()
+    warn.mockReset()
   })
 
   it('sends an empty bag for events with no required properties', () => {
@@ -82,12 +81,22 @@ describe('trackSelf — taxonomy contract', () => {
     expect(warn).not.toHaveBeenCalled()
   })
 
-  it('warns in dev when a cast drops a required property, and still sends', () => {
+  it('does not warn when every required property is present', () => {
+    mocks.getMushiSelf.mockReturnValue({ track: vi.fn() })
+    trackSelf('fix_dispatched', { report_id: 'r1', agent: 'claude' })
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it('warns when a cast drops a required property, and still sends', () => {
     const track = vi.fn()
     mocks.getMushiSelf.mockReturnValue({ track })
     const incomplete = { report_id: 'r1' } as unknown as { report_id: string; agent: string }
     trackSelf('fix_dispatched', incomplete)
-    expect(warn).toHaveBeenCalledWith('[track] fix_dispatched is missing required properties: agent')
+    expect(warn).toHaveBeenCalledWith(
+      'track',
+      'fix_dispatched is missing required properties: agent',
+      { event: 'fix_dispatched', missing: ['agent'] },
+    )
     expect(track).toHaveBeenCalledWith('fix_dispatched', { report_id: 'r1' })
   })
 
@@ -95,20 +104,25 @@ describe('trackSelf — taxonomy contract', () => {
     mocks.getMushiSelf.mockReturnValue({ track: vi.fn() })
     const nulled = { report_id: null } as unknown as { report_id: string }
     trackSelf('report_opened', nulled)
-    expect(warn).toHaveBeenCalledWith('[track] report_opened is missing required properties: report_id')
+    expect(warn).toHaveBeenCalledWith(
+      'track',
+      'report_opened is missing required properties: report_id',
+      { event: 'report_opened', missing: ['report_id'] },
+    )
   })
 
   it('rejects off-taxonomy names and missing required properties at compile time', () => {
     mocks.getMushiSelf.mockReturnValue({ track: vi.fn() })
-    // @ts-expect-error — not a MUSHI_EVENTS name
-    trackSelf('pageview')
+    // @ts-expect-error — not a MUSHI_EVENTS name (a bag is passed so the
+    // error is the name, not the argument count)
+    trackSelf('pageview', {})
     // @ts-expect-error — report_opened requires report_id
     trackSelf('report_opened', { project_id: 'p1' })
     // @ts-expect-error — required properties cannot be null
     trackSelf('upgrade_clicked', { plan: null })
     // @ts-expect-error — events with required properties need a bag
     trackSelf('loop_signup')
-    // At runtime the three required-property gaps still reach the dev
+    // At runtime the three required-property gaps still reach the debug
     // warning; the unknown name has no taxonomy entry to check against.
     expect(warn).toHaveBeenCalledTimes(3)
   })

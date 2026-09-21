@@ -11,10 +11,13 @@
  * `test_report_sent` and `loop_signup`.
  *
  * Contract: only taxonomy events, and each event's `required` properties
- * must be present and non-null. The types enforce both at compile time; in
- * dev builds a missing required property also logs a warning, for callers
- * that reach here through a cast. The event is still sent — a funnel row
- * with a gap beats a silently dropped one.
+ * must be present and non-null. The types enforce both at compile time; a
+ * caller that reaches here through a cast is also reported at runtime via
+ * the admin diagnostic channel (`debugWarn`, visible with `?debug=true` /
+ * `mushi:debug`, dev or prod). The event is still sent — a funnel row with a
+ * gap beats a silently dropped one. The warning goes through `debug.ts`
+ * rather than a bare `console.warn` so it adds no residue to
+ * scripts/check-residue-ratchet.mjs.
  *
  * Guarantees: never throws, never blocks UI, no-op when the SDK is disabled
  * (env vars absent), DNT active, or consent denied — the SDK tracker
@@ -22,6 +25,7 @@
  */
 
 import { MUSHI_EVENTS, type MushiEventName } from '@mushi-mushi/core'
+import { debugWarn } from './debug'
 import { getMushiSelf, initMushiSelf, isMushiSelfEnabled } from './mushi-self'
 
 type TrackValue = string | number | boolean | null
@@ -52,11 +56,9 @@ function missingRequired(event: MushiEventName, props: TrackProps): string[] {
 export function trackSelf<E extends MushiEventName>(event: E, ...args: TrackArgs<E>): void {
   try {
     const props: TrackProps = args[0] ?? {}
-    if (import.meta.env.DEV) {
-      const missing = missingRequired(event, props)
-      if (missing.length > 0) {
-        console.warn(`[track] ${event} is missing required properties: ${missing.join(', ')}`)
-      }
+    const missing = missingRequired(event, props)
+    if (missing.length > 0) {
+      debugWarn('track', `${event} is missing required properties: ${missing.join(', ')}`, { event, missing })
     }
     const sdk = getMushiSelf()
     if (sdk) {
