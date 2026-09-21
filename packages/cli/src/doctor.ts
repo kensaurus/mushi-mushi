@@ -7,8 +7,13 @@
  * logic can be unit-tested without spawning a child process.
  */
 
+import { CLOUD_API_ENDPOINT } from './endpoint.js';
 import { fetchIngestSetup } from './heartbeat-wait.js';
 import { apiKeyHeaders, sanitizeCliCredentials, sanitizeEndpoint } from './sanitize-config.js';
+
+/** The one fix for every missing-credential check: the wizard's browser sign-in. */
+const SIGN_IN_HINT =
+  'Run `npx mushi-mushi` in your app folder — browser sign-in saves the API key, project and endpoint.';
 
 export interface DoctorCheck {
   name: string;
@@ -93,25 +98,26 @@ export interface DoctorOptions {
 export function checkCliConfig(config: DoctorCliConfig): DoctorCheck[] {
   return [
     {
+      // No saved endpoint is not a failure: every command falls back to Mushi
+      // Cloud (endpoint.ts), so reporting "No endpoint" first sent people
+      // hunting for a URL they never needed.
       name: 'CLI config file',
-      ok: Boolean(config.endpoint),
+      ok: true,
       detail: config.endpoint
         ? `endpoint=${config.endpoint}`
-        : 'No endpoint — set MUSHI_API_ENDPOINT, run `mushi connect`, or `mushi config endpoint <url>`',
+        : `endpoint=${CLOUD_API_ENDPOINT} (Mushi Cloud default — set MUSHI_API_ENDPOINT for a self-hosted backend)`,
     },
     {
       name: 'API key configured',
       ok: Boolean(config.apiKey),
       detail: config.apiKey
         ? `apiKey=${config.apiKey.slice(0, 8)}…${config.apiKey.slice(-4)}`
-        : 'No API key set — run `mushi login --api-key <key>`',
+        : 'No API key saved.',
     },
     {
       name: 'Project ID configured',
       ok: Boolean(config.projectId),
-      detail: config.projectId
-        ? `projectId=${config.projectId}`
-        : 'No default project — set via `mushi config projectId <uuid>`',
+      detail: config.projectId ? `projectId=${config.projectId}` : 'No default project saved.',
     },
   ];
 }
@@ -158,16 +164,9 @@ export async function checkCliAuthPath(
   doFetch: typeof globalThis.fetch = globalThis.fetch,
 ): Promise<DoctorCheck[]> {
   const checks: DoctorCheck[] = [];
-  if (!config.endpoint) {
-    return [
-      {
-        name: 'Sign-in route reachable',
-        ok: false,
-        detail: 'No endpoint configured — run `npx mushi-mushi` or pass MUSHI_API_ENDPOINT.',
-      },
-    ];
-  }
-  const base = sanitizeEndpoint(config.endpoint);
+  // A sign-in that failed before anything was saved used Mushi Cloud — the
+  // wizard's default — so that is the route to diagnose.
+  const base = sanitizeEndpoint(config.endpoint ?? CLOUD_API_ENDPOINT);
 
   let dateHeader: string | null = null;
   try {
@@ -273,6 +272,11 @@ export async function checkSdkInstall(cwd: string): Promise<DoctorCheck | null> 
       '@mushi-mushi/web',
       '@mushi-mushi/core',
       '@mushi-mushi/react-native',
+      '@mushi-mushi/vue',
+      '@mushi-mushi/svelte',
+      '@mushi-mushi/angular',
+      '@mushi-mushi/capacitor',
+      '@mushi-mushi/node',
     ];
     const installed = sdks.filter((s) => deps[s]);
     return {
@@ -281,7 +285,7 @@ export async function checkSdkInstall(cwd: string): Promise<DoctorCheck | null> 
       detail:
         installed.length > 0
           ? installed.map((s) => `${s}@${deps[s]}`).join(', ')
-          : 'No @mushi-mushi/* package in package.json — run `mushi init` to install',
+          : 'No @mushi-mushi/* package in package.json — run `npx mushi-mushi` to install',
     };
   } catch {
     return null; // Not a JS repo or no package.json — silently skip
@@ -584,19 +588,23 @@ export async function checkHostAppWiring(cwd: string): Promise<DoctorCheck[]> {
           : 'Run `mushi connect --write-env` or add VITE_MUSHI_PROJECT_ID + VITE_MUSHI_API_KEY',
     });
 
-    let mcpPresent = false;
-    try {
-      await access(join(root, '.cursor', 'mcp.json'));
-      mcpPresent = true;
-    } catch {
-      /* no mcp */
+    // Claude Code reads .mcp.json at the repo root; Cursor reads .cursor/mcp.json.
+    let mcpFound: string | null = null;
+    for (const rel of ['.mcp.json', join('.cursor', 'mcp.json')]) {
+      try {
+        await access(join(root, rel));
+        mcpFound = rel;
+        break;
+      } catch {
+        /* try next */
+      }
     }
     checks.push({
-      name: '[host] Cursor MCP config',
-      ok: mcpPresent,
-      detail: mcpPresent
-        ? '.cursor/mcp.json present'
-        : 'Run `mushi connect` to wire MCP for two-way reporter replies',
+      name: '[host] MCP config',
+      ok: mcpFound !== null,
+      detail: mcpFound
+        ? `${mcpFound} present`
+        : 'No .mcp.json (Claude Code) or .cursor/mcp.json (Cursor) — run `npx mushi-mushi setup --ide claude` or `--ide cursor` for two-way reporter replies',
     });
 
     if (isCapHybrid) {
@@ -722,123 +730,197 @@ export async function checkHashRouterCapture(cwd: string): Promise<DoctorCheck[]
 
 // ── Check 8: MCP config health ───────────────────────────────────────────────
 
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeProjectPath(path: string): string {
+  const slashed = path.replace(/\\/g, '/').replace(/\/+$/, '');
+  return process.platform === 'win32' ? slashed.toLowerCase() : slashed;
+}
+
+interface McpConfigSource {
+  path: string;
+  servers: Record<string, unknown>;
+  /** Claude Code files skip a `url` entry that has no `type`. */
+  claudeCode: boolean;
+}
+
+/**
+ * Read `mcpServers` from every file an MCP client may load for this repo:
+ * Claude Code's repo-root `.mcp.json`, Cursor's project and global
+ * `mcp.json`, and Claude Code's `~/.claude.json`, which keeps user-scope
+ * servers at the top level and local-scope ones under `projects[<abs path>]`.
+ */
+async function collectMcpSources(
+  root: string,
+  home: string,
+): Promise<{ sources: McpConfigSource[]; invalid: string[] }> {
+  const { readFile } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+  const sources: McpConfigSource[] = [];
+  const invalid: string[] = [];
+
+  const plainFiles: Array<{ path: string; claudeCode: boolean }> = [
+    { path: join(root, '.mcp.json'), claudeCode: true },
+    { path: join(root, '.cursor', 'mcp.json'), claudeCode: false },
+    { path: join(home, '.cursor', 'mcp.json'), claudeCode: false },
+  ];
+  for (const file of plainFiles) {
+    // Read directly and let a missing file throw rather than an access()
+    // pre-check, which is a TOCTOU race and an extra syscall.
+    let raw: string;
+    try {
+      raw = await readFile(file.path, 'utf8');
+    } catch {
+      continue;
+    }
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      const servers = isJsonObject(parsed) && isJsonObject(parsed.mcpServers) ? parsed.mcpServers : {};
+      sources.push({ path: file.path, servers, claudeCode: file.claudeCode });
+    } catch {
+      invalid.push(file.path);
+    }
+  }
+
+  const claudeJsonPath = join(home, '.claude.json');
+  try {
+    const parsed: unknown = JSON.parse(await readFile(claudeJsonPath, 'utf8'));
+    if (isJsonObject(parsed)) {
+      const servers: Record<string, unknown> = isJsonObject(parsed.mcpServers) ? { ...parsed.mcpServers } : {};
+      const projects = isJsonObject(parsed.projects) ? parsed.projects : {};
+      const wanted = normalizeProjectPath(root);
+      for (const [projectPath, entry] of Object.entries(projects)) {
+        if (normalizeProjectPath(projectPath) === wanted && isJsonObject(entry) && isJsonObject(entry.mcpServers)) {
+          Object.assign(servers, entry.mcpServers);
+        }
+      }
+      sources.push({ path: claudeJsonPath, servers, claudeCode: true });
+    }
+  } catch {
+    // Absent or unreadable: Claude Code may simply not be installed.
+  }
+
+  return { sources, invalid };
+}
+
+/**
+ * Whether one mushi entry can start: hosted entries need a `type` in Claude
+ * Code files; stdio entries need a key from somewhere — the literal value, or
+ * (for a `${…}` placeholder or no key at all) the CLI config the server falls
+ * back to.
+ */
+function assessMushiEntry(
+  source: McpConfigSource,
+  name: string,
+  entry: unknown,
+  cliKeySaved: boolean,
+): { usable: boolean; stdio: boolean; detail: string } {
+  const label = `${name} (${source.path})`;
+  if (!isJsonObject(entry)) return { usable: false, stdio: false, detail: `${label}: not an object` };
+
+  if (typeof entry.url === 'string') {
+    if (source.claudeCode && entry.type !== 'http' && entry.type !== 'sse') {
+      return {
+        usable: false,
+        stdio: false,
+        detail: `${label}: has a url but no "type": "http" — Claude Code skips it`,
+      };
+    }
+    return { usable: true, stdio: false, detail: `${label}: hosted OAuth — sign in from the IDE's MCP panel` };
+  }
+
+  const env = isJsonObject(entry.env) ? entry.env : {};
+  const key = env.MUSHI_API_KEY;
+  const endpoint = env.MUSHI_API_ENDPOINT;
+  if (typeof endpoint === 'string' && !/^https?:\/\//.test(endpoint) && !/^\$\{.+\}$/.test(endpoint)) {
+    return { usable: false, stdio: true, detail: `${label}: MUSHI_API_ENDPOINT is not a URL` };
+  }
+  if (typeof key === 'string' && key.startsWith('mushi_')) {
+    return { usable: true, stdio: true, detail: `${label}: key written inline` };
+  }
+  if (key === undefined || (typeof key === 'string' && /^\$\{.*\}$/.test(key))) {
+    return cliKeySaved
+      ? { usable: true, stdio: true, detail: `${label}: key from MUSHI_API_KEY or the saved CLI config` }
+      : {
+          usable: false,
+          stdio: true,
+          detail: `${label}: reads the key from MUSHI_API_KEY or the CLI config, and neither is set`,
+        };
+  }
+  return { usable: false, stdio: true, detail: `${label}: MUSHI_API_KEY is neither a mushi_ key nor a placeholder` };
+}
+
 export async function checkMcpConfig(
   config: DoctorCliConfig,
   cwd: string,
   doFetch: typeof globalThis.fetch = globalThis.fetch,
+  home?: string,
 ): Promise<DoctorCheck[]> {
   const checks: DoctorCheck[] = [];
-  const { readFile } = await import('node:fs/promises');
-  const { join, resolve } = await import('node:path');
+  const { resolve } = await import('node:path');
   const { homedir } = await import('node:os');
   const root = resolve(cwd);
 
-  // 1. Find the mcp.json — check project-local first, then global ~/.cursor.
-  // Read directly and let a missing file throw (caught below) rather than an
-  // access()+readFile() pre-check, which is a TOCTOU race and an extra syscall.
-  // Skip a candidate if it exists but has an empty mcpServers object (e.g. a
-  // project-local stub that redirects users to the global config). This prevents
-  // the doctor from stopping at an empty file and missing the real global entry.
-  const candidates = [join(root, '.cursor', 'mcp.json'), join(homedir(), '.cursor', 'mcp.json')];
-  let mcpPath: string | null = null;
-  let mcpRaw: string | null = null;
-  for (const candidate of candidates) {
-    try {
-      const raw = await readFile(candidate, 'utf8');
-      // Peek at mcpServers: if this file is a stub with no entries, try the next
-      // candidate rather than stopping here with a false-negative failure.
-      let parsed: { mcpServers?: Record<string, unknown> } = {};
-      try {
-        parsed = JSON.parse(raw) as typeof parsed;
-      } catch {
-        /* malformed — still use this file */
-      }
-      const hasEntries = Object.keys(parsed.mcpServers ?? {}).length > 0;
-      if (!hasEntries && candidates.indexOf(candidate) < candidates.length - 1) {
-        // This file is empty/stub — continue to the next candidate.
-        continue;
-      }
-      mcpRaw = raw;
-      mcpPath = candidate;
-      break;
-    } catch {
-      /* try next */
-    }
-  }
-
-  if (!mcpPath || !mcpRaw) {
+  // 1. Every file Cursor or Claude Code might load for this repo.
+  const { sources, invalid } = await collectMcpSources(root, home ?? homedir());
+  if (invalid.length > 0) {
     checks.push({
-      name: '[mcp] mcp.json present',
+      name: '[mcp] MCP config valid JSON',
       ok: false,
-      detail: 'No .cursor/mcp.json found in cwd or ~/.cursor/. Run `mushi setup` to create it.',
+      detail: `Not valid JSON: ${invalid.join(', ')}`,
     });
+  }
+  if (sources.length === 0) {
+    if (invalid.length === 0) {
+      checks.push({
+        name: '[mcp] MCP config present',
+        ok: false,
+        detail: 'No .mcp.json, .cursor/mcp.json, ~/.cursor/mcp.json or ~/.claude.json found.',
+      });
+    }
     return checks;
   }
   checks.push({
-    name: '[mcp] mcp.json present',
+    name: '[mcp] MCP config present',
     ok: true,
-    detail: `Found at ${mcpPath}`,
+    detail: `Found: ${sources.map((s) => s.path).join(', ')}`,
   });
 
-  // 2. Parse and look for a mushi-* server entry
-  let mcpConfig: { mcpServers?: Record<string, unknown> } = {};
-  try {
-    mcpConfig = JSON.parse(mcpRaw) as { mcpServers?: Record<string, unknown> };
-  } catch {
-    checks.push({
-      name: '[mcp] mcp.json valid JSON',
-      ok: false,
-      detail: 'mcp.json is not valid JSON — regenerate with `mushi setup`.',
-    });
-    return checks;
-  }
-
-  const servers = mcpConfig.mcpServers ?? {};
-  const mushiEntries = Object.entries(servers).filter(
-    ([k]) => k === 'mushi' || k.startsWith('mushi-'),
+  // 2. Look for mushi / mushi-* server entries across all of them.
+  const mushiEntries = sources.flatMap((source) =>
+    Object.entries(source.servers)
+      .filter(([name]) => name === 'mushi' || name.startsWith('mushi-'))
+      .map(([name, entry]) => ({ source, name, entry })),
   );
   if (mushiEntries.length === 0) {
     checks.push({
       name: '[mcp] mushi server entry',
       ok: false,
-      detail: 'No mushi or mushi-* server found in mcpServers. Run `mushi setup` to add one.',
+      detail: 'No mushi or mushi-* server in any MCP config.',
     });
     return checks;
   }
   checks.push({
     name: '[mcp] mushi server entry',
     ok: true,
-    detail: `Found: ${mushiEntries.map(([k]) => k).join(', ')}`,
+    detail: `Found: ${mushiEntries.map(({ name }) => name).join(', ')}`,
   });
 
-  // 3. Check each mushi entry for valid credentials
-  let anyKeyValid = false;
-  let anyEndpointSet = false;
-  for (const [, srv] of mushiEntries) {
-    const s = srv as { command?: string; args?: string[]; env?: Record<string, string> };
-    const env = s.env ?? {};
-    const key = env['MUSHI_API_KEY'] ?? '';
-    const endpoint = env['MUSHI_API_ENDPOINT'] ?? '';
-    if (key.startsWith('mushi_')) anyKeyValid = true;
-    if (endpoint.includes('supabase.co') || endpoint.includes('localhost')) anyEndpointSet = true;
-  }
+  // 3. Each entry must be able to start (hosted type, or a key it can resolve).
+  const assessed = mushiEntries.map(({ source, name, entry }) =>
+    assessMushiEntry(source, name, entry, Boolean(config.apiKey)),
+  );
   checks.push({
-    name: '[mcp] MUSHI_API_KEY set',
-    ok: anyKeyValid,
-    detail: anyKeyValid
-      ? 'At least one mushi server has a valid mushi_* API key'
-      : 'No mushi_* API key found in any mushi server env. Re-run `mushi setup` to regenerate.',
-  });
-  checks.push({
-    name: '[mcp] MUSHI_API_ENDPOINT set',
-    ok: anyEndpointSet,
-    detail: anyEndpointSet
-      ? 'MUSHI_API_ENDPOINT is present and looks valid'
-      : 'MUSHI_API_ENDPOINT missing or not a Supabase URL. Re-run `mushi setup`.',
+    name: '[mcp] mushi entries usable',
+    ok: assessed.every((a) => a.usable),
+    detail: assessed.map((a) => a.detail).join('; '),
   });
 
-  // 4. Probe the API with the configured key to verify connectivity
-  if (anyKeyValid && anyEndpointSet && config.apiKey && config.endpoint) {
+  // 4. Probe the API with the saved key — only meaningful for stdio entries;
+  // hosted entries sign in with their own OAuth-minted key.
+  if (assessed.some((a) => a.stdio && a.usable) && config.apiKey && config.endpoint) {
     try {
       const { endpoint, apiKey } = sanitizeCliCredentials(config);
       const res = await doFetch(`${endpoint}/v1/admin/mcp/account-overview`, {
@@ -888,19 +970,18 @@ export async function checkMcpConfig(
 // ── Fix hints — printed after each failed check so doctor always says HOW to fix ──
 
 const FIX_HINTS: Record<string, string> = {
-  'CLI config file':
-    'Run `mushi connect --endpoint <url> --project-id <uuid> --api-key mushi_xxx` or `mushi config endpoint <url>`.',
-  'API key configured':
-    'Mint a key in the console (Projects → API Keys) then `mushi login --api-key mushi_xxx`.',
-  'Project ID configured':
-    'Copy the project UUID from the console Projects page → `mushi config projectId <uuid>`.',
+  'Mushi set up here':
+    'Run `npx mushi-mushi` in your app folder — it signs you in, installs the SDK and writes the env vars.',
+  'API key configured': SIGN_IN_HINT,
+  'Project ID configured': SIGN_IN_HINT,
   'Endpoint reachable':
     'Check your network and that MUSHI_API_ENDPOINT points at `…/functions/v1/api`.',
   '[ingest]':
     'Open the console Onboarding wizard → Install SDK → submit a test report, or run `mushi connect --wait`.',
   '[server]':
     'Open Settings → Integrations: connect GitHub, index codebase, add Anthropic BYOK key, enable autofix.',
-  '[mcp]': 'Run `mushi setup` to regenerate .cursor/mcp.json with a fresh API key and endpoint.',
+  '[mcp]':
+    'Run `npx mushi-mushi setup --ide cursor` (or `--ide claude`) to rewrite the Mushi MCP entry.',
 };
 
 export function fixHintForCheck(name: string): string | undefined {
@@ -1182,6 +1263,25 @@ export async function runDoctor(
   const runServer = isFull || options.server !== false;
   const runIngest = isFull || options.ingest !== false;
 
+  const sdkCheck = await checkSdkInstall(options.cwd ?? process.cwd());
+
+  // Nothing set up at all — no saved credentials and no SDK in this folder.
+  // Every downstream check would fail with its own hint (ten of them on a
+  // fresh project), so say the one thing that fixes all of them. `--auth`
+  // still runs: it diagnoses a sign-in that failed before anything was saved.
+  if (!config.apiKey && !config.projectId && !sdkCheck?.ok && !options.auth) {
+    return {
+      ready: false,
+      checks: [
+        {
+          name: 'Mushi set up here',
+          ok: false,
+          detail: 'Not set up yet — no saved Mushi credentials and no Mushi SDK in this folder.',
+        },
+      ],
+    };
+  }
+
   // 1. CLI config
   checks.push(...checkCliConfig(config));
 
@@ -1191,7 +1291,6 @@ export async function runDoctor(
   }
 
   // 3. SDK install
-  const sdkCheck = await checkSdkInstall(options.cwd ?? process.cwd());
   if (sdkCheck) checks.push(sdkCheck);
 
   // 3b. SDK actually wired in source — installing the package but never
@@ -1287,6 +1386,9 @@ export function formatDoctorResult(result: DoctorResult): string {
   const WARN = 'WARN';
   const FAIL = 'FAIL';
   const lines: string[] = [];
+  // Several checks share one fix (e.g. missing key + missing project both
+  // mean "sign in"); print it once instead of once per failed check.
+  const printedHints = new Set<string>();
 
   for (const c of result.checks) {
     const icon = !c.ok ? FAIL : c.warn ? WARN : PASS;
@@ -1294,7 +1396,10 @@ export function formatDoctorResult(result: DoctorResult): string {
     if (c.detail) lines.push(`  ${c.detail}`);
     if (!c.ok) {
       const hint = fixHintForCheck(c.name);
-      if (hint) lines.push(`  → Fix: ${hint}`);
+      if (hint && !printedHints.has(hint)) {
+        printedHints.add(hint);
+        lines.push(`  → Fix: ${hint}`);
+      }
     }
   }
 

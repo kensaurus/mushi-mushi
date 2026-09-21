@@ -4,7 +4,7 @@
  */
 
 import type { Command } from 'commander';
-import { loadConfig, saveConfig, type CliConfig } from '../config.js';
+import { CONFIG_PATH, loadConfig, saveConfig, type CliConfig } from '../config.js';
 import { runInit } from '../init.js';
 import { runLogin } from '../login.js';
 import { runMigrate } from '../migrate.js';
@@ -170,7 +170,7 @@ program
 // ─── config ──────────────────────────────────────────────────────────────────
 program
   .command('config')
-  .description('View or update CLI config (stored in ~/.config/mushi/config.json)')
+  .description(`View or update CLI config (stored in ${CONFIG_PATH})`)
   .argument('[key]', 'Config key to set: apiKey | endpoint | projectId')
   .argument('[value]', 'New value')
   .addHelpText('after', `

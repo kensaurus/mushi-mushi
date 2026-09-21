@@ -23,7 +23,26 @@ import {
   type FrameworkId,
   type PackageManager,
 } from './detect.js';
-import { ensureClientId, loadConfig, maybeShowTelemetryNotice, saveConfig } from './config.js';
+import {
+  ensureClientId,
+  loadConfig,
+  maybeShowTelemetryNotice,
+  resolveProfileName,
+  saveConfig,
+  savedSdkKeyFor,
+  type CliConfig,
+} from './config.js';
+import {
+  CLI_KEY_LABEL,
+  CLI_KEY_SCOPES,
+  describeUnsafeSdkKey,
+  probeKeyScope,
+  SDK_KEY_LABEL,
+  SDK_KEY_SCOPES,
+  type ProbeKeyScope,
+} from './key-scopes.js';
+import { trySaveKeyToKeychain } from './keychain.js';
+import { chooseProjectNonInteractive, defaultProjectName } from './login.js';
 import {
   apiKeyHint,
   cliSetupDeepLink,
@@ -67,7 +86,25 @@ export interface InitOptions {
   audit?: boolean;
 }
 
+/**
+ * The keys the wizard ends up with, one per destination. `sdkKey` goes into
+ * the app's env vars, which ship inside the bundle the end user downloads, so
+ * it is report:write only. `cliKey` (report:write + mcp:read) goes to the
+ * private CLI config for `mushi` commands and the MCP server; it is absent
+ * when this run only learned an ingest key (a pasted key, for example).
+ */
+export interface WizardCredentials {
+  projectId: string;
+  sdkKey: string;
+  cliKey?: string;
+}
+
 const ENV_FILES = ['.env.local', '.env'] as const;
+
+/** Both stdin and stdout are terminals, so clack prompts can be answered. */
+function isInteractive(): boolean {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
 
 // Accept both formats:
 //   - UUID v4  (current backend default): xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
@@ -88,6 +125,11 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
   }
 
   ensureInteractiveOrBailOut(options);
+  // Past the guard, a non-interactive run has either --yes or the full flag
+  // set; both mean "take the defaults". Without this, the env-overwrite,
+  // rewards and test-report confirms would each wait on a stdin that never
+  // answers.
+  if (!isInteractive()) options = { ...options, yes: true };
 
   p.intro('Mushi setup');
 
@@ -98,6 +140,12 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
   maybeSuggestAudit(pkg);
   if (!pkg) {
     p.log.warn('No package.json found in this directory.');
+    if (!isInteractive()) {
+      // The prompt below defaults to "no"; without a terminal to ask, take
+      // that default instead of hanging on it.
+      p.cancel('Aborted. Run from your project root, or pass --cwd <path>.');
+      process.exit(1);
+    }
     const cont = await p.confirm({
       message: 'Continue anyway? (Mushi will install into the current folder)',
       initialValue: false,
@@ -136,15 +184,17 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     p.log.info(`Skipped install. Run \`${installCommand(pm, packagesToInstall)}\` yourself.`);
   }
 
+  // Only the ingest key goes into app env; the CLI key stays in the private
+  // CLI config (see planCliConfigUpdate).
   await writeEnvFile(
     cwd,
-    credentials.apiKey,
+    credentials.sdkKey,
     credentials.projectId,
     framework,
     endpoint,
     Boolean(options.yes),
   );
-  persistCliConfig(credentials.apiKey, credentials.projectId, endpoint);
+  persistCliConfig(credentials, endpoint);
   emitWizardFunnelEvent(credentials, endpoint, 'wizard_env_written', { framework: framework.id });
 
   const enableRewards = await maybeEnableRewards(options);
@@ -194,25 +244,24 @@ function maybeSuggestAudit(pkg: ReturnType<typeof readPackageJson>): void {
 }
 
 /**
- * Non-interactive guard. When stdin is not a TTY (CI, shell pipelines,
- * Docker builds) `@clack/prompts` hangs forever on the first prompt. Bail
- * out with a clear error unless the user supplied enough flags to skip
- * every prompt.
+ * Non-interactive guard. When stdin is not a TTY (an AI agent's shell, CI,
+ * Docker builds) `@clack/prompts` hangs forever on the first prompt. `--yes`
+ * is enough to run unattended: it reuses the credentials a previous
+ * `mushi login` saved, or runs browser sign-in, which needs no TTY (the
+ * approval URL is printed and polled). Without `--yes` the only unattended
+ * path is the full flag set.
  */
 function ensureInteractiveOrBailOut(options: InitOptions): void {
-  const isTTY = Boolean(process.stdin.isTTY && process.stdout.isTTY);
-  if (isTTY) return;
-
-  const hasAllFlags = Boolean(
-    (options.framework || options.yes) && options.projectId && options.apiKey,
-  );
-  if (hasAllFlags) return;
+  if (isInteractive()) return;
+  if (options.yes) return;
+  if (options.framework && options.projectId && options.apiKey) return;
 
   process.stderr.write(
     'mushi-mushi: non-interactive terminal detected.\n' +
-      'Pass all of --yes (or --framework), --project-id, and --api-key to run unattended.\n' +
-      'Example: npx mushi-mushi --yes --project-id <uuid-from-console> --api-key mushi_xxx\n' +
-      'Your project ID is the UUID shown in the Projects page of the Mushi admin console.\n',
+      'Re-run with --yes to set up without prompts: it reuses the credentials saved by\n' +
+      '`npx mushi-mushi login`, or prints a sign-in URL and waits while you approve it in a browser.\n' +
+      'Example: npx mushi-mushi --yes\n' +
+      'CI with no browser: npx mushi-mushi --yes --project-id <uuid> --api-key <ingest-only key>\n',
   );
   process.exit(1);
 }
@@ -263,19 +312,23 @@ async function acquireCredentials(
   options: InitOptions,
   consoleBase: string,
   endpoint: string,
-): Promise<{ apiKey: string; projectId: string }> {
-  // 1. Explicit flags win (CI / non-interactive).
+): Promise<WizardCredentials> {
+  const probe: ProbeKeyScope = (e, k, pid) => probeKeyScope(e, k, pid);
+
+  // 1. Explicit flags win (CI / non-interactive). The key is bound for the
+  //    app's env, so it has to be ingest-only.
   if (options.projectId && options.apiKey) {
-    return {
-      projectId: sanitizeSecret(options.projectId),
-      apiKey: sanitizeSecret(options.apiKey),
-    };
+    const projectId = sanitizeSecret(options.projectId);
+    const sdkKey = sanitizeSecret(options.apiKey);
+    await assertUserKeyIsIngestOnly(sdkKey, projectId, endpoint, probe);
+    return { projectId, sdkKey };
   }
 
   // 2. Reuse saved credentials from a prior login.
   const existing = loadConfig();
   // Show one-time telemetry notice before the wizard prompts begin.
   maybeShowTelemetryNotice(existing);
+  let browserTried = false;
   if (!options.projectId && !options.apiKey && existing.projectId && existing.apiKey) {
     const reuse = options.yes
       ? true
@@ -288,10 +341,26 @@ async function acquireCredentials(
       process.exit(0);
     }
     if (reuse) {
-      return {
-        projectId: sanitizeSecret(existing.projectId),
-        apiKey: sanitizeSecret(existing.apiKey),
-      };
+      const saved = await resolveSavedCredentials(
+        { projectId: existing.projectId, apiKey: existing.apiKey, sdkKey: existing.sdkKey },
+        endpoint,
+        probe,
+      );
+      if (saved.kind === 'ready') return saved.credentials;
+      if (saved.kind === 'needs-sdk-key') {
+        p.log.info(
+          'Your saved sign-in key can read bug reports, so it stays in the CLI config. ' +
+            "Approve one browser sign-in to mint a separate ingest-only key for the app's env vars.",
+        );
+        browserTried = true;
+        const creds = await runBrowserSignIn(options, endpoint, consoleBase, {
+          projectId: saved.projectId,
+          cliKey: saved.cliKey,
+        });
+        if (creds) return creds;
+      } else {
+        p.log.warn(`Saved credentials can't be reused (${saved.reason}) — signing in again.`);
+      }
     }
   }
 
@@ -299,7 +368,12 @@ async function acquireCredentials(
   //    the method chooser and go straight to it (it's lower-friction than
   //    pasting a UUID + key); otherwise we offer it as the recommended option.
   //    Any failure falls through to manual entry — the wizard never hard-fails.
-  if (options.yes) {
+  if (browserTried) {
+    p.log.warn(
+      "Browser sign-in didn't complete — switching to manual entry. " +
+        'Run `npx mushi-mushi doctor --auth` to diagnose the sign-in path.',
+    );
+  } else if (options.yes) {
     const creds = await runBrowserSignIn(options, endpoint, consoleBase);
     if (creds) return creds;
     p.log.warn(
@@ -338,20 +412,155 @@ async function acquireCredentials(
   }
 
   // 4. Manual paste fallback.
-  return collectCredentialsManually(options, consoleBase, endpoint);
+  return collectCredentialsManually(options, consoleBase, endpoint, probe);
+}
+
+/**
+ * Refuse a user-supplied key (flag or paste) for the app's env vars unless
+ * the backend confirms it cannot read. `invalid` and `unreachable` pass: the
+ * whoami check in verifyCredentials reports those with a precise message.
+ */
+async function assertUserKeyIsIngestOnly(
+  key: string,
+  projectId: string,
+  endpoint: string,
+  probe: ProbeKeyScope,
+): Promise<void> {
+  const result = await probe(endpoint, key, projectId);
+  if (result.result === 'mcp' || result.result === 'unknown') {
+    throw new Error(
+      `Not writing this API key into your app's env vars: ${describeUnsafeSdkKey(result, endpoint)}. ` +
+        'Use an ingest-only (report:write) key from the console, or leave out --api-key to sign in ' +
+        'with the browser, which mints one.',
+    );
+  }
+}
+
+export type SavedCredentialsResolution =
+  | { kind: 'ready'; credentials: WizardCredentials }
+  /** The saved key is the private CLI key; an SDK key still has to be minted. */
+  | { kind: 'needs-sdk-key'; projectId: string; cliKey: string }
+  | { kind: 'unusable'; reason: string };
+
+/**
+ * Decide what the credentials saved by `mushi login` (or an earlier wizard
+ * run) can be used for. The saved `apiKey` normally carries mcp:read, so it
+ * is never written to app env; the ingest key saved for the same project is,
+ * and so is an `apiKey` the backend confirms is ingest-only.
+ */
+export async function resolveSavedCredentials(
+  saved: Pick<CliConfig, 'sdkKey'> & { projectId: string; apiKey: string },
+  endpoint: string,
+  probe: ProbeKeyScope,
+): Promise<SavedCredentialsResolution> {
+  const projectId = sanitizeSecret(saved.projectId);
+  const apiKey = sanitizeSecret(saved.apiKey);
+
+  const savedSdkKey = savedSdkKeyFor(saved, projectId);
+  if (savedSdkKey) {
+    const sdkProbe = await probe(endpoint, savedSdkKey, projectId);
+    if (sdkProbe.result === 'ingest-only') {
+      return { kind: 'ready', credentials: { projectId, sdkKey: savedSdkKey, cliKey: apiKey } };
+    }
+    // Revoked or otherwise unusable — fall back to what the CLI key allows.
+  }
+
+  const cliProbe = await probe(endpoint, apiKey, projectId);
+  if (cliProbe.result === 'ingest-only') {
+    return { kind: 'ready', credentials: { projectId, sdkKey: apiKey } };
+  }
+  if (cliProbe.result === 'mcp') {
+    return { kind: 'needs-sdk-key', projectId, cliKey: apiKey };
+  }
+  return { kind: 'unusable', reason: describeUnsafeSdkKey(cliProbe, endpoint) };
+}
+
+export interface WizardMintDeps {
+  createProject: typeof createProject;
+  mintProjectKey: typeof mintProjectKey;
+}
+
+export type WizardMintTarget =
+  | { kind: 'existing'; projectId: string }
+  | { kind: 'new'; name: string };
+
+export interface WizardMintResult {
+  projectId: string;
+  /** Name the server gave a project this call created. */
+  createdName?: string;
+  sdkKey: string;
+  cliKey?: string;
+  /** Why the CLI key could not be minted. The SDK key is still usable. */
+  cliKeyError?: string;
+}
+
+/**
+ * Mint one key per destination after browser approval: a report:write key
+ * for the app's env vars and, unless the caller already holds one, a
+ * report:write + mcp:read key for the private CLI config. Throws when the
+ * project cannot be created or the SDK key cannot be minted; a failed CLI
+ * key is reported in `cliKeyError` instead, because the SDK install can
+ * still finish without it. Minting is not idempotent, so nothing retries.
+ */
+export async function mintWizardKeys(
+  deps: WizardMintDeps,
+  args: { endpoint: string; cliToken: string; target: WizardMintTarget; withCliKey: boolean },
+): Promise<WizardMintResult> {
+  let projectId: string;
+  let createdName: string | undefined;
+  let sdkKey: string | null = null;
+
+  if (args.target.kind === 'new') {
+    const created = await deps.createProject(args.endpoint, args.cliToken, args.target.name, {
+      scopes: SDK_KEY_SCOPES,
+    });
+    projectId = created.id;
+    createdName = created.name;
+    sdkKey = created.apiKey;
+  } else {
+    projectId = args.target.projectId;
+  }
+
+  if (!sdkKey) {
+    sdkKey = await deps.mintProjectKey(args.endpoint, args.cliToken, projectId, {
+      scopes: SDK_KEY_SCOPES,
+      label: SDK_KEY_LABEL,
+    });
+  }
+
+  let cliKey: string | undefined;
+  let cliKeyError: string | undefined;
+  if (args.withCliKey) {
+    try {
+      cliKey = await deps.mintProjectKey(args.endpoint, args.cliToken, projectId, {
+        scopes: CLI_KEY_SCOPES,
+        label: CLI_KEY_LABEL,
+      });
+    } catch (err) {
+      cliKeyError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  return { projectId, createdName, sdkKey, cliKey, cliKeyError };
 }
 
 /**
  * Zero-copy-paste browser sign-in: opens the console approval page, waits for
- * the user to click Approve, then lets them pick or create a project and mints
- * the SDK key automatically. Returns null on any failure so the caller can
+ * the user to click Approve, then picks or creates a project and mints the
+ * keys automatically (see mintWizardKeys). Works without a TTY: the approval
+ * URL is printed and polled, and the project is chosen from the app folder
+ * (chooseProjectNonInteractive). Returns null on any failure so the caller can
  * fall back to manual entry (never hard-fails the wizard).
+ *
+ * `preset` is set when the user already has a saved CLI key for a project and
+ * only the ingest key is missing: no project pick, no second CLI key.
  */
 async function runBrowserSignIn(
   options: InitOptions,
   endpoint: string,
   consoleBase: string,
-): Promise<{ apiKey: string; projectId: string } | null> {
+  preset?: { projectId: string; cliKey: string },
+): Promise<WizardCredentials | null> {
   const startSpin = p.spinner();
   startSpin.start('Starting secure browser sign-in…');
   let session;
@@ -384,10 +593,13 @@ async function runBrowserSignIn(
   waitSpin.stop('Approved.');
 
   // Pick or create a project.
-  let projectId = options.projectId ? sanitizeSecret(options.projectId) : undefined;
-  let apiKey: string | undefined;
+  const presetProjectId =
+    preset?.projectId ?? (options.projectId ? sanitizeSecret(options.projectId) : undefined);
+  let target: WizardMintTarget;
 
-  if (!projectId) {
+  if (presetProjectId) {
+    target = { kind: 'existing', projectId: presetProjectId };
+  } else {
     let projects: DeviceProject[] = [];
     const fetchSpin = p.spinner();
     fetchSpin.start('Loading your projects…');
@@ -397,112 +609,146 @@ async function runBrowserSignIn(
         projects.length > 0 ? `Found ${projects.length} project(s).` : 'No projects yet.',
       );
     } catch (err) {
+      if (!isInteractive()) {
+        // Without the list we cannot tell whether this app already has a
+        // project, and creating one blind could duplicate it.
+        fetchSpin.stop('Could not load projects.');
+        p.log.warn(err instanceof Error ? err.message : String(err));
+        return null;
+      }
       fetchSpin.stop('Could not load projects — you can still create a new one.');
       p.log.warn(err instanceof Error ? err.message : String(err));
     }
 
-    const NEW = '__new__';
-    const choice = await p.select<string>({
-      message: 'Choose a project',
-      initialValue: projects[0]?.id ?? NEW,
-      options: [
-        ...projects.map((pr) => ({ value: pr.id, label: pr.name, hint: pr.id.slice(0, 8) })),
-        { value: NEW, label: 'Create a new project', hint: 'mints an SDK key automatically' },
-      ],
-    });
-    if (p.isCancel(choice)) {
-      p.cancel('Aborted.');
-      process.exit(0);
-    }
-
-    if (choice === NEW) {
-      const name = await p.text({
-        message: 'Project name',
-        placeholder: 'My app',
-        validate: (v) => (v && v.trim().length > 0 ? undefined : 'Required'),
+    if (!isInteractive()) {
+      const cwd = options.cwd ?? process.cwd();
+      const choice = chooseProjectNonInteractive(
+        projects,
+        defaultProjectName(readPackageJson(cwd)?.name, cwd),
+      );
+      if (choice.kind === 'existing') {
+        p.log.info(`Using project "${choice.name}" (matches this app — pass --project-id to pick another).`);
+        target = { kind: 'existing', projectId: choice.id };
+      } else {
+        p.log.info(`Creating project "${choice.name}" (no project matches this app — pass --project-id to use an existing one).`);
+        target = { kind: 'new', name: choice.name };
+      }
+    } else {
+      const NEW = '__new__';
+      const choice = await p.select<string>({
+        message: 'Choose a project',
+        initialValue: projects[0]?.id ?? NEW,
+        options: [
+          ...projects.map((pr) => ({ value: pr.id, label: pr.name, hint: pr.id.slice(0, 8) })),
+          { value: NEW, label: 'Create a new project', hint: 'mints an SDK key automatically' },
+        ],
       });
-      if (p.isCancel(name)) {
+      if (p.isCancel(choice)) {
         p.cancel('Aborted.');
         process.exit(0);
       }
-      const createSpin = p.spinner();
-      createSpin.start(`Creating "${name.trim()}"…`);
-      try {
-        // Least-privilege wizard key: SDK ingest + MCP read. Admin writes
-        // require `mushi login --upgrade-scope` (matches login.ts).
-        const created = await createProject(endpoint, cliToken, name.trim(), {
-          scopes: ['report:write', 'mcp:read'],
+
+      if (choice === NEW) {
+        const name = await p.text({
+          message: 'Project name',
+          placeholder: 'My app',
+          validate: (v) => (v && v.trim().length > 0 ? undefined : 'Required'),
         });
-        projectId = created.id;
-        apiKey = created.apiKey ?? undefined;
-        createSpin.stop(`Created project "${created.name}".`);
-      } catch (err) {
-        createSpin.stop('Could not create the project.');
-        p.log.warn(err instanceof Error ? err.message : String(err));
-        return null;
+        if (p.isCancel(name)) {
+          p.cancel('Aborted.');
+          process.exit(0);
+        }
+        target = { kind: 'new', name: name.trim() };
+      } else {
+        target = { kind: 'existing', projectId: choice };
       }
-    } else {
-      projectId = choice;
     }
   }
 
-  // Selecting an existing project (or a create that didn't return a key) mints
-  // a fresh report:write key — raw keys can never be recovered after creation.
-  if (projectId && !apiKey) {
-    const keySpin = p.spinner();
-    keySpin.start('Minting SDK key…');
-    try {
-      // Least-privilege wizard key: SDK ingest + MCP read (see login.ts).
-      apiKey = await mintProjectKey(endpoint, cliToken, projectId, {
-        scopes: ['report:write', 'mcp:read'],
-      });
-      keySpin.stop('SDK key ready.');
-    } catch (err) {
-      keySpin.stop('Could not mint an API key.');
-      p.log.warn(err instanceof Error ? err.message : String(err));
+  // Raw keys can never be recovered after creation, so every run mints fresh
+  // ones: the ingest key for the app's env, plus the CLI key unless the user
+  // already has one saved (preset).
+  const keySpin = p.spinner();
+  keySpin.start(target.kind === 'new' ? `Creating "${target.name}"…` : 'Minting keys…');
+  let minted: WizardMintResult;
+  try {
+    minted = await mintWizardKeys(
+      { createProject, mintProjectKey },
+      { endpoint, cliToken, target, withCliKey: !preset },
+    );
+  } catch (err) {
+    keySpin.stop(target.kind === 'new' ? 'Could not create the project.' : 'Could not mint an API key.');
+    p.log.warn(err instanceof Error ? err.message : String(err));
+    if (target.kind === 'existing') {
       p.log.warn(
         `You're signed in, but key minting failed. Generate one manually in the console Verify tab: ` +
           `${consoleUrl(consoleBase, '/onboarding?tab=verify')}`,
       );
-      return null;
     }
+    return null;
+  }
+  keySpin.stop(
+    minted.createdName
+      ? `Created project "${minted.createdName}" with an ingest-only SDK key.`
+      : 'SDK key ready (ingest-only).',
+  );
+  if (minted.cliKeyError) {
+    p.log.warn(
+      `The CLI/MCP key could not be minted (${minted.cliKeyError}). The SDK install continues; ` +
+        'run `npx mushi-mushi login` later for MCP and admin commands.',
+    );
   }
 
-  if (!projectId || !apiKey) return null;
-  return { apiKey, projectId };
+  return {
+    projectId: minted.projectId,
+    sdkKey: minted.sdkKey,
+    cliKey: preset?.cliKey ?? minted.cliKey,
+  };
 }
 
 async function collectCredentialsManually(
   options: InitOptions,
   consoleBase: string,
   endpoint: string,
-): Promise<{ apiKey: string; projectId: string }> {
+  probe: ProbeKeyScope,
+): Promise<WizardCredentials> {
   const existing = loadConfig();
   let savedProjectId = existing.projectId;
-  let savedApiKey = existing.apiKey;
+  let savedApiKey: string | undefined;
+
+  if (!isInteractive() && !(options.projectId && options.apiKey)) {
+    throw new Error(
+      "Browser sign-in didn't complete and this terminal cannot prompt for a key. " +
+        'Re-run `npx mushi-mushi --yes` and approve the sign-in in the browser, ' +
+        'or pass --project-id and an ingest-only --api-key.',
+    );
+  }
 
   // Never silently adopt saved credentials. Announce the reuse, check they
-  // still authenticate, and fall back to prompting when they don't. Before
-  // this guard, a stale ~/.config/mushi/config.json meant no prompt was ever
-  // shown and the wizard died later in verifyCredentials with a one-line
-  // error — the exact "terminal just returns to the prompt" report.
-  if (!options.projectId && !options.apiKey && savedProjectId && savedApiKey) {
+  // still authenticate AND are ingest-only (they go into the app's env), and
+  // fall back to prompting when they aren't. Before the auth half of this
+  // guard, a stale CLI config meant no prompt was ever shown and the wizard
+  // died later in verifyCredentials with a one-line error — the exact
+  // "terminal just returns to the prompt" report.
+  if (!options.projectId && !options.apiKey && savedProjectId && existing.apiKey) {
+    const projectIdForCheck = sanitizeSecret(savedProjectId);
+    const candidate = savedSdkKeyFor(existing, projectIdForCheck) ?? sanitizeSecret(existing.apiKey);
     p.log.info(
-      `Found saved credentials from a previous sign-in (project ${sanitizeSecret(savedProjectId).slice(0, 8)}…).`,
+      `Found saved credentials from a previous sign-in (project ${projectIdForCheck.slice(0, 8)}…).`,
     );
     const checkSpin = p.spinner();
     checkSpin.start('Checking saved credentials…');
-    const check = await apiCall<{ project_name: string }>('/v1/sync/whoami', {
-      apiKey: sanitizeSecret(savedApiKey),
-      projectId: sanitizeSecret(savedProjectId),
-      endpoint,
-    });
-    if (check.ok) {
-      checkSpin.stop(`Saved credentials still work (${check.data.project_name}).`);
-    } else {
+    const check = await probe(endpoint, candidate, projectIdForCheck);
+    if (check.result === 'ingest-only') {
+      checkSpin.stop('Saved ingest key still works.');
+      savedApiKey = candidate;
+    } else if (check.result === 'mcp') {
+      checkSpin.stop("Saved key can read reports, so it can't go into your app's env — paste an ingest-only key below.");
+    } else if (check.result === 'invalid') {
       checkSpin.stop('Saved credentials no longer authenticate — enter fresh ones below.');
       savedProjectId = undefined;
-      savedApiKey = undefined;
+    } else {
+      checkSpin.stop(`Could not check the saved key (${describeUnsafeSdkKey(check, endpoint)}) — enter one below.`);
     }
   }
 
@@ -547,12 +793,17 @@ async function collectCredentialsManually(
       `Invalid API key. Expected format: mushi_[A-Za-z0-9_-]{10,}. Got: ${redact(apiKey)}`,
     );
   }
+  // A pasted or flag key is headed for the app's env; the saved one was
+  // already confirmed ingest-only above.
+  if (apiKey !== savedApiKey) {
+    await assertUserKeyIsIngestOnly(apiKey, projectId, endpoint, probe);
+  }
 
-  return { projectId, apiKey };
+  return { projectId, sdkKey: apiKey };
 }
 
 async function verifyCredentials(
-  credentials: { apiKey: string; projectId: string },
+  credentials: WizardCredentials,
   options: InitOptions,
   consoleBase: string,
 ): Promise<void> {
@@ -561,10 +812,22 @@ async function verifyCredentials(
   spinner.start('Verifying credentials…');
 
   const result = await apiCall<{ project_name: string; project_id: string }>('/v1/sync/whoami', {
-    apiKey: credentials.apiKey,
+    apiKey: credentials.sdkKey,
     projectId: credentials.projectId,
     endpoint,
   });
+
+  if (!result.ok && (result.error.code === 'NETWORK_ERROR' || result.error.code === 'TIMEOUT')) {
+    // A request that never got an answer says nothing about the key; the
+    // old message sent people to re-copy a key that was fine.
+    spinner.stop(`Could not reach ${endpoint}.`);
+    p.log.error(result.error.message);
+    p.log.warn('Setup did NOT complete: nothing was installed and no env vars were written.');
+    p.log.info(
+      'Check your network, proxy or VPN, or pass --endpoint <url> if you run a self-hosted backend, then re-run `npx mushi-mushi`.',
+    );
+    throw new Error(`Could not reach the Mushi API at ${endpoint} — nothing was changed.`);
+  }
 
   if (!result.ok) {
     spinner.stop('Credentials could not be verified.');
@@ -803,9 +1066,38 @@ function warnIfMissingFromGitignore(cwd: string, envFile: string): void {
   }
 }
 
-function persistCliConfig(apiKey: string, projectId: string, endpoint: string): void {
+/**
+ * The CLI config after a wizard run. The private key slot gets the CLI key;
+ * when this run only learned an ingest key, a key already saved for the same
+ * project is kept (it may carry mcp:read the ingest key lacks). The ingest
+ * key is saved too, bound to its project, so the next run can reuse it
+ * without a browser sign-in.
+ */
+export function planCliConfigUpdate(
+  existing: CliConfig,
+  credentials: WizardCredentials,
+  endpoint: string,
+): CliConfig {
+  const keepSavedKey = existing.projectId === credentials.projectId && Boolean(existing.apiKey);
+  const apiKey = credentials.cliKey ?? (keepSavedKey ? existing.apiKey : credentials.sdkKey);
+  return {
+    ...existing,
+    apiKey,
+    projectId: credentials.projectId,
+    endpoint,
+    sdkKey: { projectId: credentials.projectId, key: credentials.sdkKey },
+  };
+}
+
+function persistCliConfig(credentials: WizardCredentials, endpoint: string): void {
   const existing = loadConfig();
-  saveConfig({ ...existing, apiKey, projectId, endpoint });
+  const next = planCliConfigUpdate(existing, credentials, endpoint);
+  saveConfig(next);
+  // loadConfig() prefers the OS keychain over the file, so a key that changed
+  // here has to land in the keychain too or the next command reads the old one.
+  if (next.apiKey && next.apiKey !== existing.apiKey) {
+    trySaveKeyToKeychain(next.apiKey, resolveProfileName());
+  }
 }
 
 /**
@@ -816,7 +1108,7 @@ function persistCliConfig(apiKey: string, projectId: string, endpoint: string): 
  * Opt out with MUSHI_NO_TELEMETRY=1. Never blocks or fails the wizard.
  */
 function emitWizardFunnelEvent(
-  credentials: { apiKey: string; projectId: string },
+  credentials: WizardCredentials,
   endpoint: string,
   event: 'wizard_env_written',
   metadata: Record<string, unknown> = {},
@@ -826,7 +1118,7 @@ function emitWizardFunnelEvent(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Mushi-Api-Key': credentials.apiKey,
+      'X-Mushi-Api-Key': credentials.sdkKey,
       'X-Mushi-Project': credentials.projectId,
     },
     body: JSON.stringify({ event, source: 'cli', metadata }),
@@ -896,7 +1188,7 @@ function printNextSteps(framework: Framework, consoleBase: string, enableRewards
     [
       '  [ ] 1. Paste the init snippet above into your app entry file',
       '  [ ] 2. Start your dev server',
-      '  [ ] 3. Run: mushi connect --write-env --wire-ide --wait',
+      '  [ ] 3. Wire your editor: npx mushi-mushi setup --ide cursor   (or --ide claude)',
       `  [ ] 4. Open the Verify tab to send a test report: ${consoleUrl(consoleBase, '/onboarding?tab=verify')}`,
     ].join('\n'),
     'Next steps:',
@@ -904,7 +1196,7 @@ function printNextSteps(framework: Framework, consoleBase: string, enableRewards
 }
 
 async function maybeOfferConnect(
-  credentials: { apiKey: string; projectId: string },
+  credentials: WizardCredentials,
   options: InitOptions,
   _consoleBase: string,
 ): Promise<void> {
@@ -920,15 +1212,23 @@ async function maybeOfferConnect(
   const endpoint = resolveCloudEndpoint(options.endpoint);
   try {
     const { runConnect } = await import('./connect.js');
-    await runConnect({
-      apiKey: credentials.apiKey,
-      projectId: credentials.projectId,
-      endpoint,
-      cwd: options.cwd,
-      writeEnv: true,
-      wireIde: true,
-      wait: true,
-    });
+    // persistCliConfig already chose the private key; hand connect the same
+    // one so it does not overwrite it, and the ingest key for the env.
+    const saved = loadConfig();
+    const result = await runConnect(
+      {
+        apiKey: saved.apiKey ?? credentials.sdkKey,
+        sdkKey: credentials.sdkKey,
+        projectId: credentials.projectId,
+        endpoint,
+        cwd: options.cwd,
+        writeEnv: true,
+        wireIde: true,
+        wait: true,
+      },
+      saved,
+    );
+    for (const line of result.messages) p.log.message(line);
   } catch (err) {
     p.log.warn(err instanceof Error ? err.message : String(err));
     p.log.info('You can run manually: mushi connect --write-env --wire-ide --wait');
@@ -952,7 +1252,7 @@ async function maybeEnableRewards(options: InitOptions): Promise<boolean> {
  * Opt-in via prompt (or `--yes` auto-accepts it).
  */
 async function maybeSendTestReport(
-  credentials: { apiKey: string; projectId: string },
+  credentials: WizardCredentials,
   options: InitOptions & { endpoint?: string; consoleBase?: string },
 ): Promise<void> {
   if (options.sendTestReport === false) return;
@@ -984,7 +1284,7 @@ async function maybeSendTestReport(
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
-        'X-Mushi-Api-Key': credentials.apiKey,
+        'X-Mushi-Api-Key': credentials.sdkKey,
         'X-Mushi-Project': credentials.projectId,
       },
       body: JSON.stringify({

@@ -18,6 +18,7 @@ import {
   startDeviceAuth,
 } from './device-auth.js'
 import { printAuthApproved, printAuthBanner, printAuthFailed } from './auth-ui.js'
+import { CLI_KEY_SCOPES, FULL_CLI_KEY_SCOPES } from './key-scopes.js'
 
 export type RunLoginOptions = {
   apiKey?: string
@@ -32,7 +33,7 @@ export type RunLoginOptions = {
 export function getPostLoginBannerMessage(opts: RunLoginOptions): string | null {
   if (opts.suppressPostLoginBanner) return null
   if (opts.upgradeScope) {
-    return "  Key upgraded! Re-run 'mushi setup' to update your .cursor/mcp.json, then restart Cursor."
+    return "  Key upgraded! Re-run 'mushi setup' to update your IDE's MCP config, then restart the IDE."
   }
   return "  Run 'mushi init' to set up the SDK in this project."
 }
@@ -146,6 +147,40 @@ export async function resolveProjectChoice(
   return { kind: 'create', name: newName }
 }
 
+function slugify(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+/**
+ * Name for a project created without a prompt: the package.json name (scope
+ * stripped), else the folder name.
+ */
+export function defaultProjectName(packageName: string | undefined, cwd: string): string {
+  const fromPkg = packageName?.replace(/^@[^/]+\//, '').trim()
+  if (fromPkg) return fromPkg
+  const parts = cwd.replace(/[\\/]+$/, '').split(/[\\/]/)
+  return parts[parts.length - 1] || 'my-app'
+}
+
+export type NonInteractiveProjectChoice =
+  | { kind: 'existing'; id: string; name: string }
+  | { kind: 'new'; name: string }
+
+/**
+ * Project pick for a terminal that cannot prompt (an AI agent's shell, CI).
+ * Reuse the project whose name matches this app; otherwise create one named
+ * after it. Never falls back to "the first project": a non-interactive run
+ * must not silently wire an app to an unrelated project's reports.
+ */
+export function chooseProjectNonInteractive(
+  projects: ReadonlyArray<{ id: string; name: string; slug?: string }>,
+  preferredName: string,
+): NonInteractiveProjectChoice {
+  const wanted = slugify(preferredName)
+  const match = projects.find((p) => slugify(p.name) === wanted || (p.slug !== undefined && slugify(p.slug) === wanted))
+  return match ? { kind: 'existing', id: match.id, name: match.name } : { kind: 'new', name: preferredName }
+}
+
 export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
   const { CLOUD_API_ENDPOINT, resolveCloudEndpoint } = await import('./endpoint.js')
   const endpoint = opts.endpoint ? resolveCloudEndpoint(opts.endpoint) : CLOUD_API_ENDPOINT
@@ -246,24 +281,44 @@ export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
   let chosenProjectId = projectId
   let chosenProjectName: string | undefined
 
-  // Least-privilege default: the everyday key covers SDK ingest + MCP read
+  // Least-privilege default: the everyday key covers CLI ingest + MCP read
   // tools. mcp:write (billing cap, pipeline start, fix merge — the
   // money-moving admin surface) is an explicit opt-in via --upgrade-scope,
-  // so a leaked mcp.json or .env can't merge fixes or change billing.
+  // so a leaked mcp.json can't merge fixes or change billing.
   // Applies to BOTH the create-project auto-mint and the select-project
   // mint below, so the post-login scope output is always accurate.
-  const mintScopes: readonly string[] = opts.upgradeScope
-    ? ['report:write', 'mcp:read', 'mcp:write']
-    : ['report:write', 'mcp:read']
+  // This key only ever lands in the private CLI config + keychain; the SDK
+  // env vars get a separate report:write-only key (see key-scopes.ts).
+  const mintScopes: readonly string[] = opts.upgradeScope ? FULL_CLI_KEY_SCOPES : CLI_KEY_SCOPES
 
   if (!chosenProjectId) {
-    const { createInterface } = await import('node:readline')
-    const rl = createInterface({ input: process.stdin, output: process.stdout })
-    const ask = (q: string): Promise<string> =>
-      new Promise((resolve) => rl.question(q, (a) => resolve(a.trim())))
-
-    const choice = await resolveProjectChoice(projectsList, ask)
-    rl.close()
+    let choice: ProjectChoice
+    if (process.stdin.isTTY) {
+      const { createInterface } = await import('node:readline')
+      const rl = createInterface({ input: process.stdin, output: process.stdout })
+      const ask = (q: string): Promise<string> =>
+        new Promise((resolve) => rl.question(q, (a) => resolve(a.trim())))
+      choice = await resolveProjectChoice(projectsList, ask)
+      rl.close()
+    } else {
+      // No TTY (agent shell, CI): readline would wait on a stdin that never
+      // answers and the process would exit without saving anything. Pick
+      // deterministically from the app in the current folder instead.
+      const { readPackageJson } = await import('./detect.js')
+      const cwd = process.cwd()
+      const nonInteractive = chooseProjectNonInteractive(
+        projectsList,
+        defaultProjectName(readPackageJson(cwd)?.name, cwd),
+      )
+      choice = nonInteractive.kind === 'existing'
+        ? { kind: 'picked', id: nonInteractive.id, name: nonInteractive.name }
+        : { kind: 'create', name: nonInteractive.name }
+      console.log(
+        choice.kind === 'picked'
+          ? `  Using project "${choice.name}" (matches this folder — pass --project-id to pick another).`
+          : `  Creating project "${choice.name}" (no project matches this folder — pass --project-id to use an existing one).`,
+      )
+    }
 
     if (choice.kind === 'empty_name') {
       process.stderr.write('\nerror: Project name is required.\n')
