@@ -335,6 +335,56 @@ console.log(`\n── Check 5: Feature-group map ──────────�
   if (unmapped === 0 && stdioGroups === hostedGroups) info(`every tool mapped; stdio and hosted feature maps identical`)
 }
 
+// CHECK 6: server instructions and the use_mushi router agree across transports
+console.log(`\n── Check 6: Server instructions + use_mushi intents ────────────────────────`)
+{
+  /** The single-quoted string items of the `[ … ].join(' ')` array that follows `anchor`. */
+  const joinedStrings = (source, anchor) => {
+    const body = source.split(anchor)[1]?.split('].join(')[0]
+    return body === undefined ? null : [...body.matchAll(/^\s*'((?:[^'\\]|\\.)*)',?\s*$/gm)].map((m) => m[1]).join(' ')
+  }
+  const stdioInstructions = joinedStrings(canonicalContent, 'export const MUSHI_SERVER_INSTRUCTIONS = [')
+  const hostedInstructions = joinedStrings(hostedContent, 'const SERVER_INSTRUCTIONS = [')
+  if (!stdioInstructions || !hostedInstructions) {
+    fail('Could not read MUSHI_SERVER_INSTRUCTIONS (catalog.ts) or SERVER_INSTRUCTIONS (functions/mcp/index.ts)')
+  } else if (stdioInstructions !== hostedInstructions) {
+    fail('Hosted SERVER_INSTRUCTIONS differs from MUSHI_SERVER_INSTRUCTIONS in catalog.ts — copy the catalog lines over')
+  } else {
+    info(`server instructions identical on both transports (${stdioInstructions.length} chars)`)
+  }
+
+  /** key → tool list for every `key: { label: '…', tools: [ … ]` entry after `anchor`. */
+  const intentTools = (source, anchor) => {
+    const body = source.split(anchor)[1] ?? ''
+    return new Map(
+      [...body.matchAll(/(\w+): \{\s*label: '[^']*',\s*tools: \[([^\]]*)\]/g)].map((m) => [
+        m[1],
+        [...m[2].matchAll(/'([a-z_]+)'/g)].map((t) => t[1]).join(','),
+      ]),
+    )
+  }
+  const stdioIntents = intentTools(canonicalContent, 'export const USE_MUSHI_INTENTS')
+  const hostedIntents = intentTools(hostedContent, 'const INTENTS:')
+  if (stdioIntents.size === 0 || hostedIntents.size === 0) {
+    fail('Could not read USE_MUSHI_INTENTS (catalog.ts) or the hosted use_mushi INTENTS table')
+  } else {
+    let intentFails = 0
+    for (const [key, tools] of stdioIntents) {
+      if (hostedIntents.get(key) !== tools) {
+        fail(`use_mushi intent "${key}" lists different tools on the hosted server`)
+        intentFails++
+      }
+    }
+    for (const key of hostedIntents.keys()) {
+      if (!stdioIntents.has(key)) {
+        fail(`hosted use_mushi intent "${key}" is missing from USE_MUSHI_INTENTS`)
+        intentFails++
+      }
+    }
+    if (intentFails === 0) info(`${stdioIntents.size} use_mushi intents identical on both transports`)
+  }
+}
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n── Summary ─────────────────────────────────────────────────────────────────`)

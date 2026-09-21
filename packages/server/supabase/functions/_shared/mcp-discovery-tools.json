@@ -391,7 +391,7 @@
     "scope": "mcp:write"
   },
   "use_mushi": {
-    "description": "CALL THIS FIRST if you are new to this Mushi project or unsure which tool to use. Pass your intent as a short natural-language phrase (\"fix the top bug\", \"check what I should work on\", \"run QA tests\", \"set up Mushi\", …). Returns: (1) a curated list of the 5–12 tool names most relevant to that intent, (2) a one-paragraph orientation to the Mushi project and dashboard state, and (3) the single recommended first tool to call. Avoids loading the full 68-tool catalog into context when only a small subset is needed. Read-only; does not call any downstream tools itself.",
+    "description": "CALL THIS FIRST if you are new to this Mushi project or unsure which tool to use. Pass your intent as a short natural-language phrase (\"fix the top bug\", \"check what I should work on\", \"run QA tests\", \"set up Mushi\", …). Returns: (1) a curated list of the 5–12 tool names most relevant to that intent, (2) a one-paragraph orientation to the Mushi project and dashboard state, and (3) the single recommended first tool to call. Only tools this connection exposes are recommended; relevant tools hidden by the active feature groups are named with how to enable them. Avoids loading the full tool catalog into context when only a small subset is needed. Read-only; does not call any downstream tools itself.",
     "scope": "mcp:read"
   }
 }

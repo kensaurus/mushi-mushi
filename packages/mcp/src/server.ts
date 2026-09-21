@@ -22,13 +22,15 @@ import {
   TOOL_CATALOG,
   TDD_TOOL_CATALOG,
   CODEBASE_TOOL_CATALOG,
-  USE_MUSHI_INTENTS,
+  MUSHI_SERVER_INSTRUCTIONS,
+  routeUseMushiIntent,
   type McpScope,
 } from './catalog.js';
 import { MUSHI_SERVER_METADATA } from './branding.js';
 import {
   toolMatchesFeatures,
   DEPRECATED_TOOL_ALIASES,
+  TOOL_FEATURE_MAP,
   type FeatureFilter,
 } from './feature-groups.js';
 import { searchMushiDocs } from './docs-index.js';
@@ -534,13 +536,17 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     };
   }
 
-  const server = new McpServer({
-    name: MUSHI_SERVER_METADATA.name,
-    version,
-    title: MUSHI_SERVER_METADATA.title,
-    websiteUrl: MUSHI_SERVER_METADATA.websiteUrl,
-    icons: [...MUSHI_SERVER_METADATA.icons],
-  });
+  const server = new McpServer(
+    {
+      name: MUSHI_SERVER_METADATA.name,
+      version,
+      title: MUSHI_SERVER_METADATA.title,
+      websiteUrl: MUSHI_SERVER_METADATA.websiteUrl,
+      icons: [...MUSHI_SERVER_METADATA.icons],
+    },
+    // Returned in `initialize`; used to be null on stdio.
+    { instructions: MUSHI_SERVER_INSTRUCTIONS },
+  );
 
   /**
    * Pull the catalog entry for a tool and project its hints into the
@@ -3780,33 +3786,43 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       annotations: annotationsFor('use_mushi'),
     },
     async (args) => {
-      const intent = (args.intent ?? '').toLowerCase();
-
-      // Match intent to curated tool subset.
-      let matched = Object.entries(USE_MUSHI_INTENTS).find(([key]) => intent.includes(key));
-      // If no keyword match, default to "status" orientation.
-      if (!matched) matched = ['status', USE_MUSHI_INTENTS['status']!];
-
-      const [, cluster] = matched;
+      // Read the registry at call time: it reflects the scope and feature
+      // filtering applied below, so nothing is recommended that this
+      // connection cannot call, and the count is never a stale literal.
+      const registered = (server as unknown as { _registeredTools: Record<string, unknown> })
+        ._registeredTools;
+      const isAvailable = (tool: string) => Object.prototype.hasOwnProperty.call(registered, tool);
+      const route = routeUseMushiIntent(args.intent ?? '', isAvailable);
 
       // Build project-aware orientation line.
       const projectLine = projectId
         ? `Connected project: \`${projectId}\`. `
-        : 'No project configured — run `mushi_setup` or set MUSHI_PROJECT_ID. ';
+        : 'No project configured — set MUSHI_PROJECT_ID, or pass projectId to project-scoped tools. ';
 
+      const hiddenGroups = [
+        ...new Set(route.hidden.map((t) => TOOL_FEATURE_MAP[t]).filter((g): g is NonNullable<typeof g> => !!g)),
+      ];
       const orientation = [
-        `## Mushi — ${cluster.label}`,
+        `## Mushi — ${route.label}`,
         '',
-        projectLine + cluster.hint,
+        projectLine + route.hint,
         '',
         '### Recommended tools for this intent',
-        cluster.tools.map((t) => `- \`${t}\``).join('\n'),
+        route.tools.length > 0 ? route.tools.map((t) => `- \`${t}\``).join('\n') : '- (none enabled)',
+        ...(route.firstTool ? ['', '### First step', `Call \`${route.firstTool}\` to get started.`] : []),
+        ...(route.hidden.length > 0
+          ? [
+              '',
+              '### Also relevant, not enabled on this connection',
+              route.hidden.map((t) => `- \`${t}\``).join('\n'),
+              hiddenGroups.length > 0
+                ? `Enable them by adding ${hiddenGroups.map((g) => `\`${g}\``).join(', ')} to MUSHI_FEATURES (or set it to \`all\`).`
+                : 'They need a key with more scope.',
+            ]
+          : []),
         '',
-        '### First step',
-        `Call \`${cluster.tools[0]}\` to get started.`,
-        '',
-        '> Tip: call any tool by name — \`use_mushi\` is a read-only helper that ' +
-          'never calls other tools itself. All 71 tools remain available.',
+        '> Tip: `use_mushi` is a read-only helper that never calls other tools itself. ' +
+          `This connection exposes ${Object.keys(registered).length} tools.`,
       ].join('\n');
 
       return { content: [{ type: 'text', text: orientation }] };
