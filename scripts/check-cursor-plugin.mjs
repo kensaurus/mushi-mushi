@@ -94,6 +94,9 @@ if (manifest) {
 
   // The bundle ships the MCP server, so it versions with it. A stale version
   // here is what a marketplace reviewer sees next to the npm badge.
+  // `pnpm version-packages` runs this with --write (as `sync:cursor-plugin`),
+  // so the changesets Version PR that bumps @mushi-mushi/mcp carries the
+  // matching plugin.json bump instead of failing CI on this check.
   const { version: mcpVersion } = JSON.parse(
     readFileSync(resolve(repoRoot, 'packages', 'mcp', 'package.json'), 'utf8'),
   )
@@ -101,8 +104,18 @@ if (manifest) {
     if (writeMode) {
       const abs = resolve(pluginRoot, manifestPath)
       const source = readFileSync(abs, 'utf8')
-      writeFileSync(abs, source.replace(`"version": "${manifest.version}"`, `"version": "${mcpVersion}"`))
-      ok(`plugin.json version ${manifest.version} → ${mcpVersion}`)
+      const next = source.replace(
+        new RegExp(`("version"\\s*:\\s*)"${String(manifest.version ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`),
+        `$1"${mcpVersion}"`,
+      )
+      // A text replace keeps the file's formatting; prove it landed rather
+      // than report a sync that did not happen.
+      if (JSON.parse(next).version !== mcpVersion) {
+        fail(`could not rewrite plugin.json version ${manifest.version} → ${mcpVersion}; edit it by hand`)
+      } else {
+        writeFileSync(abs, next)
+        ok(`plugin.json version ${manifest.version} → ${mcpVersion}`)
+      }
     } else {
       fail(
         `plugin.json version ${manifest.version} ≠ @mushi-mushi/mcp ${mcpVersion} — run node scripts/check-cursor-plugin.mjs --write`,
