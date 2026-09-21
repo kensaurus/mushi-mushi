@@ -1,11 +1,14 @@
 ---
 title: '@mushi-mushi/angular'
+description: API reference for @mushi-mushi/angular — MushiService, MushiErrorHandler and the MUSHI_CONFIG token, wired with factory providers in an Angular 17+ app.
 ---
+
+import { Callout } from 'nextra/components'
 
 # `@mushi-mushi/angular`
 
-Angular DI providers over [`@mushi-mushi/web`](/sdks/web). Shared wrapper notes:
-[Framework wrappers](/sdks/framework-wrappers).
+Angular service and error handler over [`@mushi-mushi/web`](/sdks/web). Shared
+wrapper notes: [Framework wrappers](/sdks/framework-wrappers).
 
 ```bash
 npm install @mushi-mushi/angular
@@ -16,49 +19,44 @@ See [Quickstart → Angular](/quickstart/angular) for the full setup walkthrough
 ## API surface
 
 ```ts
-import { provideMushi, MushiService, MushiReportDirective } from '@mushi-mushi/angular'
+import { MUSHI_CONFIG, MushiService, MushiErrorHandler } from '@mushi-mushi/angular'
 ```
 
 | Export | Purpose |
 | --- | --- |
-| `provideMushi(config)` | App-level provider — call in `bootstrapApplication` or `AppModule.providers` |
-| `MushiService` | Injectable singleton — `submit()`, `identify()`, `submitActivity()` |
-| `MushiReportDirective` | `mushiReport` attribute directive — attaches report trigger to any element |
+| `MUSHI_CONFIG` | `InjectionToken<MushiConfig>` holding your project ID and public API key |
+| `MushiService` | Starts the web SDK when constructed in the browser; `report({ description, category, metadata })` and `captureError(error, context)` |
+| `MushiErrorHandler` | An `ErrorHandler` that forwards uncaught errors to `MushiService.captureError` |
+| `provideMushi(config)` | Legacy helper that returns `{ service, errorHandler }` objects — not Angular providers, so do not put it in a `providers` array |
+| `provideMushiAngular(config)` | Returns a class provider for `MushiService`, which needs the JIT compiler — avoid in production builds |
 
 ## Setup (standalone bootstrap)
 
+<Callout type="warning">
+  Register `MushiService` with `useFactory`, as below. The package ships
+  without Angular's ahead-of-time metadata, so a plain class provider asks for
+  the JIT compiler and fails at bootstrap in a production build.
+</Callout>
+
 ```ts
 // main.ts
+import { ErrorHandler } from '@angular/core'
 import { bootstrapApplication } from '@angular/platform-browser'
-import { provideMushi } from '@mushi-mushi/angular'
+import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from '@mushi-mushi/angular'
 import { AppComponent } from './app/app.component'
+import { environment } from './environments/environment'
 
 bootstrapApplication(AppComponent, {
   providers: [
-    provideMushi({
-      projectId: 'YOUR_PROJECT_ID',
-      apiKey: 'YOUR_PUBLIC_API_KEY',
-    }),
+    { provide: MUSHI_CONFIG, useValue: { projectId: environment.mushiProjectId, apiKey: environment.mushiApiKey } },
+    { provide: MushiService, useFactory: (config: MushiConfig) => new MushiService(config), deps: [MUSHI_CONFIG] },
+    { provide: ErrorHandler, useFactory: (mushi: MushiService) => new MushiErrorHandler(mushi), deps: [MushiService] },
   ],
 })
 ```
 
-## Identifying users
-
-```ts
-// auth.service.ts
-import { Injectable, inject } from '@angular/core'
-import { MushiService } from '@mushi-mushi/angular'
-
-@Injectable({ providedIn: 'root' })
-export class AuthService {
-  private readonly mushi = inject(MushiService)
-
-  onSignIn(user: { id: string; email: string; name: string }) {
-    this.mushi.identify(user.id, { email: user.email, name: user.name })
-  }
-}
-```
+The SDK starts when Angular first resolves `ErrorHandler`, which happens during
+bootstrap. On the server (Angular SSR) `MushiService` skips initialisation.
 
 ## Submitting a report
 
@@ -66,12 +64,24 @@ export class AuthService {
 import { Component, inject } from '@angular/core'
 import { MushiService } from '@mushi-mushi/angular'
 
-@Component({ ... })
+@Component({ selector: 'app-feedback-button', template: '<button (click)="reportIssue()">Report</button>' })
 export class FeedbackButtonComponent {
   private readonly mushi = inject(MushiService)
 
   async reportIssue() {
-    await this.mushi.submit({ title: 'Something feels off', severity: 'p2' })
+    await this.mushi.report({ description: 'Something feels off', category: 'bug' })
   }
 }
+```
+
+## Identifying users
+
+`MushiService` has no identify method. Use the web SDK instance directly (add
+`@mushi-mushi/web` to your own dependencies first, because pnpm will not
+resolve it through the Angular package):
+
+```ts
+import { Mushi } from '@mushi-mushi/web'
+
+Mushi.getInstance()?.setUser({ id: user.id, email: user.email })
 ```

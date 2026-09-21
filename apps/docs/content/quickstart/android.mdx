@@ -1,14 +1,47 @@
 ---
 title: Android (Kotlin) quickstart
+description: Try Mushi's native Kotlin SDK on Android — shake-to-report, a bottom-sheet widget and an offline queue. A preview built from source, not on Maven Central yet.
 ---
+
+import { Callout } from 'nextra/components'
 
 # Android quickstart
 
 `dev.mushimushi:mushi-android` ships shake detection (via `SensorManager`), a
-bottom-sheet capture UI, an offline queue with `WorkManager`-style retry,
-and an optional Sentry breadcrumb bridge.
+bottom-sheet capture UI, a file-backed offline queue, rage-tap and slow-screen
+detection, and an optional Sentry bridge.
 
-## Install
+<Callout type="warning">
+  **Preview — not on Maven Central yet.** A `dependencies { implementation(…) }`
+  line alone will not resolve until the first release is published. Until then,
+  build the library from the repository and consume it from your local Maven
+  repository, as below. `npx mushi-mushi` does not set up native Android projects.
+</Callout>
+
+## Build from source
+
+The library lives in [`packages/android`](https://github.com/kensaurus/mushi-mushi/tree/master/packages/android)
+and has no Gradle wrapper checked in. CI builds it with Gradle 8.9 and JDK 17;
+use the same versions, plus the Android SDK.
+
+```bash
+git clone https://github.com/kensaurus/mushi-mushi.git
+cd mushi-mushi/packages/android
+gradle publishToMavenLocal
+```
+
+Then add `mavenLocal()` to your app's repositories and depend on the version
+from `packages/android/build.gradle.kts`:
+
+```kotlin filename="settings.gradle.kts"
+dependencyResolutionManagement {
+  repositories {
+    google()
+    mavenCentral()
+    mavenLocal() // preview build of dev.mushimushi:mushi-android
+  }
+}
+```
 
 ```kotlin filename="app/build.gradle.kts"
 dependencies {
@@ -18,16 +51,23 @@ dependencies {
 
 ## Initialize
 
+`endpoint` is required: use the hosted API below, or your own if you self-host.
+
 ```kotlin filename="app/src/main/java/com/example/App.kt"
+import android.app.Application
+import dev.mushimushi.sdk.Mushi
+import dev.mushimushi.sdk.config.MushiConfig
+import dev.mushimushi.sdk.config.TriggerMode
+
 class App : Application() {
   override fun onCreate() {
     super.onCreate()
-    Mushi.configure(
-      context = this,
+    Mushi.init(this, MushiConfig(
       projectId = "YOUR_PROJECT_ID",
-      apiKey = "YOUR_PUBLIC_API_KEY",
-      enableShakeToReport = true,
-    )
+      apiKey = "mushi_...",
+      endpoint = "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api",
+      triggerMode = TriggerMode.BOTH, // SHAKE | BUTTON | BOTH | NONE
+    ))
   }
 }
 ```
@@ -40,11 +80,30 @@ class App : Application() {
 </application>
 ```
 
-## Submit a report
+## Open the widget or submit a report
+
+The bottom sheet needs the current activity to be a `FragmentActivity`
+(for example `AppCompatActivity`).
 
 ```kotlin
-Mushi.submitReport(
+// Present the bottom-sheet widget
+button.setOnClickListener { Mushi.showWidget() }
+
+// File a report from code, no UI
+Mushi.report(
   description = "Search results sometimes appear twice.",
-  severity = Severity.MEDIUM,
+  category = "bug",
 )
+
+// Forward a caught error
+try { riskyOperation() } catch (t: Throwable) { Mushi.captureError(t) }
 ```
+
+## Sentry bridge (optional)
+
+With `io.sentry:sentry-android` on the classpath, call
+`MushiSentryBridge.install()` (from `dev.mushimushi.sdk.sentry`) after
+initialising Sentry. It resolves Sentry by reflection and does nothing when
+Sentry is absent.
+
+Full API: [`dev.mushimushi:mushi-android`](/sdks/android).
