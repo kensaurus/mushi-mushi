@@ -1,5 +1,11 @@
 # @mushi-mushi/mcp
 
+## 0.21.1
+
+### Patch Changes
+
+- bacb869: README: the KENSAURUS apps table now lists Cooler Heads (renamed app; talk.kensaur.us unchanged). No code change.
+
 ## 0.21.0
 
 ### Minor Changes
