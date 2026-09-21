@@ -26,7 +26,6 @@
 import type { MushiAnalyticsConfig, MushiApiClient, MushiProductEventPayload } from './types';
 import {
   analyticsBlockReason,
-  dntActive,
   onAnalyticsConsentChange,
   resolveAnalyticsConsent,
   setAnalyticsConsent,
@@ -57,11 +56,10 @@ export interface EventTrackerOptions {
 
 type BufferedEvent = { name: string; ts: string; properties: MushiEventProperties; dedup_key?: string };
 
+// `enabled`, `respectDoNotTrack`, `excludeBots` and `consent` are read from the
+// host's config by the shared gate (analytics-gate.ts), not from here.
 type ResolvedConfig = {
-  enabled: boolean;
-  consent: 'implied' | 'required';
   sampleRate: number;
-  respectDoNotTrack: boolean;
   autoPageviews: boolean;
   flushIntervalMs: number;
   surface: MushiSurface;
@@ -95,10 +93,7 @@ const SPILL_TTL_MS = 24 * 60 * 60 * 1000;
 
 function defaults(): ResolvedConfig {
   return {
-    enabled: true,
-    consent: 'implied',
     sampleRate: 1,
-    respectDoNotTrack: true,
     autoPageviews: false,
     flushIntervalMs: 5_000,
     surface: 'web',
@@ -243,15 +238,18 @@ function stripUndefined<T extends object>(o: T): Partial<T> {
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-/** True when tracking is active for this person (enabled, consented, sampled in, no DNT). */
+/**
+ * True when tracking is active for this person (enabled, consented, sampled
+ * in, no DNT / GPC, not automation). The gate leaves the tracker
+ * uninitialised when it blocks, so `_initialized` covers the first part.
+ */
 export function isEventTrackingActive(): boolean {
-  return _initialized && _config.enabled && _consent === 'granted' && _sampledIn;
+  return _initialized && _consent === 'granted' && _sampledIn;
 }
 
 /** The anonymous id events are keyed on, or null when tracking is off. */
 export function getEventAnonymousId(): string | null {
   if (!_initialized || _consent === 'denied') return null;
-  if (_config.respectDoNotTrack && dntActive()) return null;
   return _anonId;
 }
 
@@ -309,7 +307,7 @@ export function trackEvent(
   properties?: Record<string, unknown>,
   opts?: { dedupKey?: string; ts?: string; reserved?: MushiEventProperties },
 ): boolean {
-  if (!_initialized || !_config.enabled || !_sampledIn) return false;
+  if (!_initialized || !_sampledIn) return false;
   if (!isValidEventName(name)) return false;
   const { properties: props } = sanitizeEventProperties(properties, {
     allowlist: _config.propertyAllowlist,

@@ -9,6 +9,8 @@
  * degrades to lite replay and says so once in the console.
  */
 
+import { createLogger } from '@mushi-mushi/core'
+
 export interface ReplayCaptureOptions {
   enabled: boolean
   /** 'lite' never loads rrweb. Default 'rrweb' (with the lite fallback). */
@@ -171,12 +173,12 @@ export async function createReplayCapture(opts: ReplayCaptureOptions): Promise<R
 
   const rrweb = await loadRrweb(opts.loadRrweb)
   if (!rrweb?.record) {
+    // The documented `replay: 'rrweb'` option must not silently become
+    // click-only replay: say so once per page, through the SDK logger.
     if (!warnedMissingRrweb) {
       warnedMissingRrweb = true
-      // The documented `replay: 'rrweb'` option must not silently become
-      // click-only replay. One line, once per page.
-      console.warn(
-        "[mushi] capture.replay is 'rrweb' but rrweb could not be loaded, so replay is recording clicks only. " +
+      createLogger({ scope: 'mushi' }).warn(
+        "capture.replay is 'rrweb' but rrweb could not be loaded, so replay is recording clicks only. " +
           "Install rrweb and pass capture: { rrweb: () => import('rrweb') }.",
       )
     }
@@ -202,6 +204,19 @@ export async function createReplayCapture(opts: ReplayCaptureOptions): Promise<R
     start() {
       if (recording) return
       recording = true
+      // Options, kept out of the object literal because the unminified build
+      // ships comments written inside expressions (they count against the
+      // size budget):
+      // - maskAllInputs masks every input value.
+      // - maskTextSelector '*' masks rendered DOM text too; without it rrweb
+      //   records every visible label (emails, names) as plaintext. rrweb 2.x
+      //   has no `maskAllText` option (it was silently ignored). Hosts that
+      //   need richer capture can opt out via their own rrweb integration.
+      // - blockSelector: privacy.redactSelectors black elements out of
+      //   screenshots; the replay equivalent is blocking them (a same-size
+      //   placeholder).
+      // - checkoutEveryNms re-emits a full snapshot roughly once per retained
+      //   window, so trimming never leaves incrementals without a base.
       stopFn = record({
         emit(event: unknown) {
           events.push(event)
@@ -212,17 +227,8 @@ export async function createReplayCapture(opts: ReplayCaptureOptions): Promise<R
           trimReplayBuffer(events, maxMs, MAX_EVENTS)
         },
         maskAllInputs: true,
-        // Mask rendered DOM text too — without this, rrweb records every
-        // visible label (emails, names) as plaintext. rrweb 2.x has no
-        // `maskAllText` option (it was silently ignored); a universal
-        // maskTextSelector is how it masks every text node. Hosts that need
-        // richer capture can opt out via their own rrweb integration.
         maskTextSelector: '*',
-        // privacy.redactSelectors black elements out of screenshots; the
-        // replay equivalent is blocking them (a same-size placeholder).
         blockSelector: redactSelectors.join(','),
-        // Re-emit a full snapshot roughly once per retained window so trimming
-        // never leaves incrementals without a base snapshot.
         checkoutEveryNms: maxMs,
         sampling: { mousemove: false, mouseInteraction: true, scroll: 150, media: 800 },
       }) ?? null

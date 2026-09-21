@@ -474,11 +474,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       !replaySampled && onErrorReplayRate > 0 && Math.random() < onErrorReplayRate;
     if ((replayMode === 'rrweb' || replayMode === 'lite') && (replaySampled || replayOnErrorSampled)) {
       const generation = ++replayGeneration;
+      // `loadRrweb` is read from the host's own init config only: a loader is
+      // code, and the console's runtime config must never be able to supply one.
       void createReplayCapture({
         enabled: true,
         mode: replayMode,
-        // Read from the host's own init config only: a loader is code, and
-        // the console's runtime config must never be able to supply one.
         loadRrweb: bootstrapConfig.capture?.rrweb,
         redactSelectors: activeConfig.privacy?.redactSelectors,
       }).then((cap) => {
