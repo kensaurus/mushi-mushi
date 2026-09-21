@@ -516,6 +516,39 @@ describe('cloudfront-mushi-docs-router', () => {
   });
 });
 
+describe('cloudfront-mushi-docs-response', () => {
+  const src = stripSource(
+    readFileSync(join(__dirname, 'cloudfront-mushi-docs-response.js'), 'utf8'),
+  );
+  // eslint-disable-next-line no-new-func
+  const respond = new Function('event', `${src}\nreturn handler(event);`);
+
+  it('adds the security headers to a page response', () => {
+    const out = respond({
+      request: { uri: '/mushi-mushi/docs/admin.html' },
+      response: { statusCode: 200, headers: {} },
+    });
+    assert.match(out.headers['strict-transport-security'].value, /max-age=/);
+    assert.match(out.headers['content-security-policy'].value, /default-src 'self'/);
+    assert.equal(out.headers['x-robots-tag'], undefined);
+  });
+
+  it('tags the .txt RSC payloads noindex', () => {
+    const out = respond({
+      request: { uri: '/mushi-mushi/docs/admin.txt' },
+      response: { statusCode: 200, headers: {} },
+    });
+    assert.equal(out.headers['x-robots-tag'].value, 'noindex, nofollow');
+  });
+
+  it('no longer carries a 404 body it could never serve', () => {
+    // CloudFront does not invoke viewer-response on origin >= 400; the 404
+    // is the bucket ErrorDocument + response headers policy instead
+    // (scripts/aws-configure-docs-errors.mjs).
+    assert.doesNotMatch(src, /FALLBACK_404_HTML|bodyEncoding/);
+  });
+});
+
 describe('dotted slugs under /mushi-mushi/* (spa-router, apex)', () => {
   const spa = loadHandler('cloudfront-mushi-spa-router.js');
   const apex = loadHandler('cloudfront-mushi-apex-redirect.js');
