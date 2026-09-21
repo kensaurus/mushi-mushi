@@ -72,7 +72,7 @@ publishing {
 
             pom {
                 name.set("Mushi Mushi Android SDK")
-                description.set("Native Android SDK for the Mushi Mushi LLM-driven bug intake & autofix platform.")
+                description.set("Native Android SDK for Mushi Mushi. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.")
                 url.set("https://github.com/kensaurus/mushi-mushi")
                 licenses {
                     license {
@@ -82,9 +82,10 @@ publishing {
                 }
                 developers {
                     developer {
-                        id.set("mushimushi")
-                        name.set("Mushi Mushi")
+                        id.set("kensaurus")
+                        name.set("Kenji Sakuramoto")
                         email.set("kensaurus@gmail.com")
+                        url.set("https://github.com/kensaurus")
                     }
                 }
                 scm {

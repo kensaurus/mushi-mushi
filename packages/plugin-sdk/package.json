@@ -68,7 +68,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/plugin-sdk"
   },
-  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "homepage": "https://kensaur.us/mushi-mushi",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
@@ -91,7 +91,7 @@
     "sdk"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19.0"
   },
   "funding": {
     "type": "github",

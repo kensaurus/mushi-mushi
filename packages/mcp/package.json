@@ -3,12 +3,12 @@
   "mcpName": "io.github.kensaurus/mushi-mushi",
   "version": "0.21.0",
   "license": "MIT",
-  "description": "MCP server for Mushi Mushi — triage user-felt bugs, pull evidence (screenshots, console logs, network requests), check blast radius, and dispatch fix PRs, all from your AI coding agent",
+  "description": "MCP server for Cursor, Claude Code and Copilot. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
     },
     "./catalog": {
       "types": "./dist/catalog.d.ts",
@@ -31,8 +31,8 @@
       "import": "./dist/clients.js"
     }
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
   "bin": {
     "mushi-mcp": "./dist/index.js"
   },
@@ -80,7 +80,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/mcp"
   },
-  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "homepage": "https://kensaur.us/mushi-mushi",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
@@ -111,10 +111,11 @@
     "ai-agent",
     "llm",
     "observability",
-    "user-feedback"
+    "user-feedback",
+    "mushi"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19.0"
   },
   "funding": {
     "type": "github",

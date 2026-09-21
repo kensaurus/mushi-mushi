@@ -69,6 +69,13 @@ export const MUSHI_TAGLINE_LEGACY = {
  * is the compressed propagation of its north-star sentence. See
  * docs/marketing/VOICE.md.
  */
+/**
+ * The promise the product makes about every bug — shared verbatim by
+ * `oneLiner` below and by the npm descriptions that
+ * scripts/normalize-package-metadata.mjs composes, so the two cannot drift.
+ */
+const PROMISE = 'Plain-English diagnosis + a ready fix, in your editor'
+
 export const MUSHI_TAGLINE_V2 = {
   /**
    * North star — the full sentence (VISION.md §1.3). Every other field below is
@@ -81,8 +88,12 @@ export const MUSHI_TAGLINE_V2 = {
    * description, npm `description`, og:description fallback. Keep these byte-for-
    * byte identical across surfaces (the consistency check enforces it).
    */
-  oneLiner:
-    'Every bug in one queue — user reports, Sentry errors, Slack, coding agents. Plain-English diagnosis + a ready fix, in your editor. Open source.',
+  oneLiner: `Every bug in one queue — user reports, Sentry errors, Slack, coding agents. ${PROMISE}. Open source.`,
+  /**
+   * The per-bug promise, no trailing period. Package npm descriptions append
+   * it to a role phrase and `category` (scripts/normalize-package-metadata.mjs).
+   */
+  promise: PROMISE,
   /** Hero — README headers, landing H1, docs landing. */
   hero: 'Your AI wrote it. Mushi tells you why it broke.',
   /** Lead paragraph directly under hero. */

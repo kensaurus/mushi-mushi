@@ -2,7 +2,7 @@
   "name": "@mushi-mushi/cli",
   "version": "0.27.1",
   "license": "MIT",
-  "description": "CLI for Mushi Mushi — `mushi init` wizard installs the right SDK for your framework, plus report triage and pipeline health commands",
+  "description": "Mushi CLI: SDK setup, MCP wiring, bug triage. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
   "bin": {
     "mushi": "./dist/index.js"
   },
@@ -27,7 +27,7 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   },
-  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "repository": {
     "type": "git",
     "url": "https://github.com/kensaurus/mushi-mushi.git",
@@ -81,12 +81,14 @@
     "expo",
     "capacitor",
     "sentry-companion",
-    "sentry-alternative",
     "ai-agent"
   ],
   "exports": {
     ".": {
-      "import": "./dist/index.js"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
     },
     "./init": {
       "import": {
@@ -115,6 +117,6 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19.0"
   }
 }
