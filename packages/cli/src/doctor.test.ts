@@ -440,6 +440,15 @@ describe('runDoctor on a folder with nothing set up', () => {
     expect(doFetch).not.toHaveBeenCalled();
   });
 
+  it('--full still runs every check', async () => {
+    const result = await runDoctor(
+      {},
+      { cwd: '/nonexistent-path', fetch: mockFetch(400, { ok: false }), full: true },
+    );
+    expect(result.checks.some((c) => c.name === 'Mushi set up here')).toBe(false);
+    expect(result.checks.some((c) => c.name === 'API key configured')).toBe(true);
+  });
+
   it('still runs the sign-in diagnostics with --auth', async () => {
     const result = await runDoctor(
       {},

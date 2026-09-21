@@ -297,6 +297,17 @@ If you are not signed in yet, setup runs browser sign-in first, then writes the 
 
     const serverName = `mushi-${slug}`
 
+    // writeMcpServerEntry refuses to replace a file it cannot parse; surface
+    // that as a one-line error instead of an unhandled-rejection stack.
+    const writeEntry = async (name: string, serverBlock: McpServerEntry): Promise<void> => {
+      try {
+        await writeMcpServerEntry({ configPath, serverName: name, serverBlock })
+      } catch (err) {
+        process.stderr.write(`error: ${err instanceof Error ? err.message : String(err)}\n`)
+        process.exit(1)
+      }
+    }
+
     const { block: chosenBlock, hosted: useHostedOauth, note } = buildSetupServerBlock({
       ide,
       endpoint: config.endpoint,
@@ -321,7 +332,7 @@ If you are not signed in yet, setup runs browser sign-in first, then writes the 
             inlineKey,
           })
           if (!opts.dryRun) {
-            await writeMcpServerEntry({ configPath, serverName: pServerName, serverBlock: pBlock })
+            await writeEntry(pServerName, pBlock)
           }
         }
         if (opts.dryRun) {
@@ -336,7 +347,7 @@ If you are not signed in yet, setup runs browser sign-in first, then writes the 
           console.log(`[dry-run] Would merge into ${configPath}:`)
           console.log(redactKeyForDisplay(preview))
         } else {
-          await writeMcpServerEntry({ configPath, serverName, serverBlock: chosenBlock })
+          await writeEntry(serverName, chosenBlock)
           console.log(`✓ Written ${configPath}`)
           if (useHostedOauth) {
             console.log('  Hosted MCP with OAuth login — no API key was written to this file.')
@@ -495,17 +506,16 @@ If you are not signed in yet, setup runs browser sign-in first, then writes the 
                   await runLogin({ endpoint: opts.endpoint, upgradeScope: true, suppressPostLoginBanner: true })
                   const fresh = loadConfig()
                   if (fresh.apiKey && target.format === 'mcp-json' && !allProjectsList) {
-                    await writeMcpServerEntry({
-                      configPath,
+                    await writeEntry(
                       serverName,
-                      serverBlock: buildMcpServerBlock({
+                      buildMcpServerBlock({
                         endpoint: fresh.endpoint ?? config.endpoint,
                         projectId: fresh.projectId ?? config.projectId ?? '',
                         apiKey: fresh.apiKey,
                         client: ide,
                         inlineKey,
                       }),
-                    })
+                    )
                     console.log(`✓ Rewrote ${configPath} with the upgraded key`)
                     const reprobe = await fetch(
                       `${(fresh.endpoint ?? config.endpoint)?.replace(/\/$/, '')}/v1/admin/mcp/account-overview`,

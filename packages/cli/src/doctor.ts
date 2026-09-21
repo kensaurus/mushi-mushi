@@ -1269,7 +1269,8 @@ export async function runDoctor(
   // Every downstream check would fail with its own hint (ten of them on a
   // fresh project), so say the one thing that fixes all of them. `--auth`
   // still runs: it diagnoses a sign-in that failed before anything was saved.
-  if (!config.apiKey && !config.projectId && !sdkCheck?.ok && !options.auth) {
+  // `--full` asked for every check, so it gets them.
+  if (!config.apiKey && !config.projectId && !sdkCheck?.ok && !options.auth && !isFull) {
     return {
       ready: false,
       checks: [
