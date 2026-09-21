@@ -252,9 +252,9 @@ When vars are unset, `/connect` shows placeholder keys + “Sign in to mint” C
 > (`packages/vscode-extension/src/extension.ts`) is the one whose OAuth
 > discovery currently fails, so publishing now would ship that failure; its
 > version (0.17.0) trails `@mushi-mushi/mcp`; and neither `VSCE_PAT` nor
-> `OVSX_PAT` exists. VS Code users are not blocked: the **Add to VS Code**
-> button on `/connect` installs the MCP server through VS Code's built-in MCP
-> support with no extension. Un-defer once hosted MCP sign-in works end to end:
+> `OVSX_PAT` exists. VS Code users are not blocked: picking **VS Code** on
+> `/connect` opens a one-click install dialog that adds the MCP server through
+> VS Code's built-in MCP support, with no extension. Un-defer once hosted MCP sign-in works end to end:
 > point the default at the canonical URL, sync the version to the mcp package,
 > drop `private: true`, add both tokens, then run the workflow below.
 

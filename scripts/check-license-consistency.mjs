@@ -67,6 +67,10 @@ if (readme) {
 // ee/ read as MIT, so it must name the split before the MIT text.
 const rootLicense = read('LICENSE')
 if (rootLicense && serverIsAgpl) {
+  const mitAt = rootLicense.indexOf('MIT License')
+  if (mitAt === -1) {
+    failures.push('LICENSE (root) must still carry the MIT License text after the license split')
+  }
   const carveOut = [
     'packages/server/ee/LICENSE',
     'packages/server/',
@@ -74,11 +78,13 @@ if (rootLicense && serverIsAgpl) {
     'packages/verify/',
     'AGPL-3.0-only',
     'COMMERCIAL-LICENSE.md',
-    'MIT License',
   ]
   for (const needle of carveOut) {
-    if (!rootLicense.includes(needle)) {
+    const at = rootLicense.indexOf(needle)
+    if (at === -1) {
       failures.push(`LICENSE (root) must describe the license split before the MIT text — missing "${needle}"`)
+    } else if (mitAt !== -1 && at > mitAt) {
+      failures.push(`LICENSE (root) must name "${needle}" before the MIT text, not after it`)
     }
   }
 }

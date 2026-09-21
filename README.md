@@ -298,7 +298,7 @@ Requires Node.js ≥ 22 and pnpm ≥ 10. See individual package READMEs, [`docs/
 
 ## License & branding
 
-This repository is **open-core** — the Supabase / Grafana model. The **SDK packages** are MIT — use them in any product, open or closed. The **server** (the part you self-host or we run for you) is **AGPLv3** — true OSI open source: self-host it, fork it, modify it for your own org. If you offer a **modified** server as a hosted service to third parties, publish your changes or see [COMMERCIAL-LICENSE.md](./COMMERCIAL-LICENSE.md). A small **Enterprise Edition** boundary (`packages/server/ee/`) is source-available but commercial for production use — that's operator/enterprise plumbing only, never the wedge. The [root `LICENSE`](./LICENSE) states this split before the MIT text, and every package directory carries its own `LICENSE`, which governs that package.
+This repository is **open-core** — the Supabase / Grafana model. The **SDK packages** are MIT — use them in any product, open or closed. The **server** (the part you self-host or we run for you) is **AGPLv3** — true OSI open source: self-host it, fork it, modify it for your own org. If you offer a **modified** server as a hosted service to third parties, publish your changes or see [COMMERCIAL-LICENSE.md](./COMMERCIAL-LICENSE.md). A small **Enterprise Edition** boundary (`packages/server/ee/`) is source-available but commercial for production use — that's operator/enterprise plumbing only, never the wedge. The [root `LICENSE`](./LICENSE) states this split before the MIT text, and where a package directory carries its own `LICENSE`, that file governs the package.
 
 | Surface | License | Permitted | Notes |
 | ------- | ------- | --------- | ----- |

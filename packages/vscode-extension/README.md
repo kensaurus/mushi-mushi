@@ -11,9 +11,9 @@ LLM key**.
 > **Status: deferred (2026-09-21).** This extension is **not published** to the
 > VS Code Marketplace or Open VSX, and will not be until the hosted MCP sign-in
 > it defaults to is fixed. You do not need it to use Mushi in VS Code: open
-> [Connect your editor](https://kensaur.us/mushi-mushi/docs/connect) and use the
-> **Add to VS Code** button, which installs the Mushi MCP server with VS Code's
-> built-in MCP support.
+> [Connect your editor](https://kensaur.us/mushi-mushi/docs/connect), pick
+> **VS Code** and open its one-click install dialog, which adds the Mushi MCP
+> server with VS Code's built-in MCP support.
 
 ## Install (from source)
 
