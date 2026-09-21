@@ -173,7 +173,14 @@
       "js-yaml@3": ">=3.15.2 <4",
       "postcss": "^8.5.18",
       "@connectrpc/connect-node>undici": "^6.27.0",
-      "js-yaml@4": ">=4.3.2 <5"
+      "js-yaml@4": ">=4.3.2 <5",
+      "hono": ">=4.13.5 <5",
+      "fastify": ">=5.12.1 <6",
+      "mermaid": ">=11.16.1 <12",
+      "dompurify": ">=3.4.13 <4",
+      "vitest": ">=4.1.11 <5",
+      "devalue": "5.9.2",
+      "@angular/core": ">=22.1.0 <23"
     }
   }
 }

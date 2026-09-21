@@ -12,6 +12,11 @@ on:
         required: false
         default: 'true'
 
+# Without a permissions block every job got the repository's default
+# GITHUB_TOKEN scopes. Read-only here; a job asks for what it uses.
+permissions:
+  contents: read
+
 jobs:
   mocked-e2e:
     name: Mocked E2E (manual trigger only)
@@ -57,6 +62,9 @@ jobs:
     name: Live Cursor Agent E2E (nightly)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write  # "Notify on failure" opens or comments on the dogfood issue
     if: >
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.live == 'true')
