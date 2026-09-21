@@ -11,8 +11,6 @@ description: Add the Mushi React SDK in one command — npx mushi-mushi installs
 
 Get a shake-to-report widget into a React app in under five minutes.
 
-  {QUICKSTART_ONE_KEY_CALLOUT}
-
   **Coming from Create React App?** Migrate to Vite in an afternoon — see
   the [CRA → Vite migration guide](/migrations/cra-to-vite). All Mushi React
   examples below assume Vite + React 19.
@@ -41,8 +39,6 @@ export function Root() {
       config={{
         projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
         apiKey: import.meta.env.VITE_MUSHI_API_KEY,
-        // optional: pin a region — defaults to auto-routing
-        // region: 'eu',
       }}
     >
       <App />
@@ -60,14 +56,14 @@ export function Root() {
 Add a hook anywhere in your tree to capture programmatic reports:
 
 ```tsx filename="src/components/CrashFallback.tsx"
-import { useMushiReport } from '@mushi-mushi/react'
+import { useMushiSdk } from '@mushi-mushi/react'
 
 export function CrashFallback({ error }: { error: Error }) {
-  const { submit } = useMushiReport()
+  const mushi = useMushiSdk()
   return (
     <div role="alert">
       <p>Something broke.</p>
-      <button onClick={() => submit({ description: error.message, severity: 'high' })}>
+      <button onClick={() => void mushi?.captureException(error, { severity: 'high' })}>
         Send a bug report
       </button>
     </div>
@@ -75,8 +71,12 @@ export function CrashFallback({ error }: { error: Error }) {
 }
 ```
 
-Or rely on the built-in shake-to-report widget — no code required, just
-configure `enableWidget: true` (default) on the provider.
+`useMushiSdk()` returns `null` until the provider has initialised, hence the
+`?.`. To open the report widget from a button instead, use
+`const { report } = useMushi()` and call `report()`.
+
+Or rely on the built-in widget — no code required. The launcher mounts as
+soon as `` initialises.
 
 ## 4. Verify
 

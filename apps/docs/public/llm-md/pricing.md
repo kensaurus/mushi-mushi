@@ -9,8 +9,6 @@ description: Mushi Mushi pricing — 50 AI bug diagnoses a month free, no card. 
 
 # Pricing
 
-{PRICING_LEDE}
-
 ## Plans
 
   **Annual billing saves two months.** Pay for 10 months, get 12 — about 17% off base fees. Overage is still metered monthly. Enable annual checkout from the Billing page after subscribing, or contact us for Enterprise commits.

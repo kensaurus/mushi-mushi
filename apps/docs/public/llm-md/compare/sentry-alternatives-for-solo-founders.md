@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/compare/sentry-alternatives-for-solo
 
 ---
 title: Sentry alternatives for solo founders
-description: Sentry alternatives for solo founders in 2026 — Sentry, Bugsnag, Rollbar, highlight.io, PostHog and Mushi Mushi compared on free-tier caps, self-hosting, AI diagnosis and fixes, with a "pick this if" for each.
+description: Sentry alternatives for solo founders in 2026 — Bugsnag, Rollbar, highlight.io, PostHog and Mushi compared on free tiers, self-hosting and AI fixes.
 ---
 
 # Sentry alternatives for solo founders

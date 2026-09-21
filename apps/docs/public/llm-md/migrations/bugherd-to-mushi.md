@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/bugherd-to-mushi
 
 ---
 title: 'BugHerd → Mushi'
+description: Move from BugHerd to Mushi — map pin-to-element feedback onto Mushi's element selector, screenshot and metadata capture, with an interactive checklist.
 ---
 
 # BugHerd → Mushi
@@ -88,7 +89,7 @@ npm install @mushi-mushi/web`} },
     { id: 'client-comms', label: 'Tell clients about the new widget', content: <>The biggest difference: BugHerd's sidebar is always visible. Mushi's widget is a discreet floating button that expands on click. Send a 1-line email so clients know what to look for.</> },
     { id: 'verify', label: 'Submit a test report from a real page', content: <>Click the floating bug, write a description, confirm the screenshot + element selector are attached, confirm it lands in the Mushi admin console.</> },
     { id: 'remove-bugherd', label: 'Remove the BugHerd script + revoke the API key', content: <>Once clients are on Mushi for ≥ a week, pull the script tag and revoke BugHerd's API key in their dashboard.</> },
-  ]}
+
 />
 
 ## Feature parity

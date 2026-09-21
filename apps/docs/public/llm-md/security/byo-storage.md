@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/security/byo-storage
 
 ---
 title: BYO storage
+description: Keep Mushi screenshots and crash dumps in your own storage bucket instead of Mushi's — credentials in Vault, signed URLs, and the same console view.
 ---
 
 # Bring-your-own storage

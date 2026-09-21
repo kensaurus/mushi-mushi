@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/cli-console-loop
 
 ---
 title: CLI ↔ console setup loop
+description: How npx mushi-mushi creates a project, mints an SDK key and installs the SDK through browser sign-in, and how to recover when the setup loop fails.
 ---
 
 # CLI ↔ console setup loop

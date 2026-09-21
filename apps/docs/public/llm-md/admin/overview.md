@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/overview
 
 ---
 title: Overview (portfolio)
+description: The Overview page is the organization-wide portfolio view — seven-day activity and open tickets for every connected project at a glance.
 ---
 
 # Overview

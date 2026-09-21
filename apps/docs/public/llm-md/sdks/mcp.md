@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/mcp
 
 ---
 title: '@mushi-mushi/mcp'
+description: Reference for @mushi-mushi/mcp, the Mushi MCP server for Cursor, Claude Code, VS Code and Windsurf — stdio and hosted HTTP transports, scopes and setup.
 ---
 
 # `@mushi-mushi/mcp`
@@ -38,7 +39,7 @@ into your IDE.
     "mushi-mushi-hosted": {
       "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
       "headers": {
-        "X-Mushi-Api-Key": "mushi_live_…",
+        "X-Mushi-Api-Key": "mushi_…",
         "X-Mushi-Project-Id": "proj_…"
       }
     }

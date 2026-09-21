@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/repo
 
 ---
 title: Repo graph
+description: The Repo page shows every fix branch in your connected GitHub repository — open PRs, CI status, and what the fix worker did on each branch.
 ---
 
 # Repo graph

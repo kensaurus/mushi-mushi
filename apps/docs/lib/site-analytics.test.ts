@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildFirstTouch,
+  commitFirstTouch,
   consentKey,
   ctaHrefKind,
   decorateSignupHref,
@@ -167,6 +168,35 @@ describe('first touch', () => {
     expect(readFirstTouch(memoryStore({ [firstTouchKey('p')]: '{"nope":1}' }), 'p')).toBeNull()
     expect(readFirstTouch(memoryStore({ [firstTouchKey('p')]: 'not json' }), 'p')).toBeNull()
     expect(readFirstTouch(memoryStore(), 'p')).toBeNull()
+  })
+})
+
+describe('commitFirstTouch (consent gate)', () => {
+  const touch = buildFirstTouch({
+    search: '?utm_source=hn',
+    referrer: '',
+    pathname: '/',
+    now: new Date('2026-09-21T00:00:00.000Z'),
+  })
+
+  it('writes nothing before the visitor accepts', () => {
+    for (const consent of [null, 'pending', 'denied', 'blocked'] as const) {
+      const store = memoryStore()
+      expect(commitFirstTouch(store, 'p', touch, consent)).toBeNull()
+      expect(store.data).toEqual({})
+    }
+  })
+
+  it('records the in-memory candidate once consent is granted', () => {
+    const store = memoryStore()
+    expect(commitFirstTouch(store, 'p', touch, 'granted')).toEqual({ touch, created: true })
+    expect(readFirstTouch(store, 'p')).toEqual(touch)
+  })
+
+  it('keeps an earlier record instead of overwriting it', () => {
+    const earlier = buildFirstTouch({ search: '?utm_source=reddit', referrer: '', pathname: '/pricing' })
+    const store = memoryStore({ [firstTouchKey('p')]: JSON.stringify(earlier) })
+    expect(commitFirstTouch(store, 'p', touch, 'granted')).toEqual({ touch: earlier, created: false })
   })
 })
 

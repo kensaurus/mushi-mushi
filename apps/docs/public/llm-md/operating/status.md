@@ -2,6 +2,10 @@
 
 Source: https://kensaur.us/mushi-mushi/docs/operating/status
 
+---
+description: Mushi Cloud status and uptime — the live status page for the API, hosted MCP, console and docs, what is monitored, and the uptime commitment per plan.
+---
+
 # Status & Uptime
 
   **Status page:** [updown.io/p/b6lod](https://updown.io/p/b6lod) — live

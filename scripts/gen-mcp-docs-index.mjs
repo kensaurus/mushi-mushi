@@ -63,7 +63,8 @@ for (const line of llmsSrc.split('\n')) {
     section = h[1].trim()
     continue
   }
-  const m = line.match(/^- \[([^\]]+)\]\((\S+)\)\s*$/)
+  // llmstxt.org entry: `- [title](url)` with an optional `: notes` suffix.
+  const m = line.match(/^- \[([^\]]+)\]\((\S+)\)(?::\s.*)?\s*$/)
   if (!m) continue
   const [, title, url] = m
   if (!url.startsWith(BASE)) continue
@@ -188,7 +189,11 @@ for (const [url, meta] of pages) {
   const route = routeOf(url)
   const file = mdxFileFor(route)
   if (!file) {
-    missingSources.push(url)
+    // App routes (apps/docs/app/connect/page.tsx) have no MDX to index; any
+    // other link without a source means llms.txt is stale.
+    if (!existsSync(path.join(ROOT, 'apps/docs/app', ...route.split('/').filter(Boolean), 'page.tsx'))) {
+      missingSources.push(url)
+    }
     continue
   }
   const src = readFileSync(file, 'utf8').replace(/\r\n/g, '\n')

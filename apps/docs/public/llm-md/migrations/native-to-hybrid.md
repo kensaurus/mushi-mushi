@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/native-to-hybrid
 
 ---
 title: 'Native iOS / Android → Hybrid'
+description: Should you wrap a native iOS or Android app in Capacitor or React Native? When it pays off, how to do it, and where Mushi's SDKs fit either way.
 ---
 
 # Native iOS / Android → Hybrid
@@ -63,7 +64,7 @@ List every screen, native module, and platform integration. Mark each as: port t
     { id: 'mushi', label: 'Wire Mushi: keep the native SDK AND add the JS one', content: <>If you're wrapping the native app with Capacitor, you can keep your native iOS / Android Mushi SDKs and add @mushi-mushi/web for the WebView surfaces. Both report to the same project — distinguishable on the dashboard via the SDK tag.</> },
     { id: 'screen-rollout', label: 'Roll out screen-by-screen behind a feature flag', content: <>Each screen flips from native to hybrid behind a flag. Monitor crash + complaint rate per flag, roll back individual screens when needed.</> },
     { id: 'sunset', label: 'Sunset native screens once their hybrid versions are stable', content: <>Delete the Swift / Kotlin code only after the hybrid version has been at 100 % rollout for ≥ 30 days.</> },
-  ]}
+
 />
 
 ## Mushi during the migration

@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/compare/jam-vs-mushi
 
 ---
 title: Jam vs Mushi Mushi
-description: Jam.dev vs Mushi Mushi in 2026 — a teammate recording a bug with the Jam extension versus an end user reporting from inside your app, what each hands to Cursor over MCP, and the free tiers side by side.
+description: Jam.dev vs Mushi Mushi in 2026 — a teammate recording a bug in the Jam extension versus a user reporting from your app, MCP handoff and free tiers.
 ---
 
 # Jam vs Mushi Mushi

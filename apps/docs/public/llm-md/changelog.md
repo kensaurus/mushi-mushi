@@ -25,7 +25,7 @@ a curated email feed.
           
             upcoming
           
-        )}
+
         {release.versions?.length ? (
           
             includes {release.versions.join(', ')}
@@ -35,21 +35,14 @@ a curated email feed.
 
       {release.headline && (
         
-          {release.headline}
+
         
-      )}
 
       {release.highlights?.length > 0 && (
         
           {release.highlights.map((h, i) => (
             
               
-                {h.title}
+
               
               {h.description ?  — {h.description} : null}
-            
-          ))}
-        
-      )}
-    
-  ))}

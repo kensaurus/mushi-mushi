@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/orchestrator-interop
 
 ---
 title: 'Connecting your orchestrator (MCP / A2A / REST / AG-UI)'
+description: Connect any agent orchestrator to Mushi — MCP, A2A, REST and AG-UI surfaces for Cursor, Claude, OpenAI Agents, LangGraph, CrewAI and your own agents.
 ---
 
 # Connecting your orchestrator
@@ -73,7 +74,7 @@ your client:
     "mushi-mushi-hosted": {
       "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
       "headers": {
-        "X-Mushi-Api-Key": "mushi_live_…",
+        "X-Mushi-Api-Key": "mushi_…",
         "X-Mushi-Project-Id": "proj_…",
       },
     },
@@ -83,7 +84,7 @@ your client:
 
 The full tool catalog (76 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
-[`MCP tools (generated)`](/sdks/mcp-tools.generated). Tools that move money
+[`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
 `run_nl_query`) require the `mcp:write` scope; everything else is fine on
 `mcp:read`.
@@ -108,7 +109,7 @@ Google's Agent2Agent v1.0.0 spec (March 2026) requires `tasks/{id}` GET
 ```bash
 # Create a Task
 curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks \
-  -H "X-Mushi-Api-Key: mushi_live_…" \
+  -H "X-Mushi-Api-Key: mushi_…" \
   -H "Content-Type: application/json" \
   -d '{
     "skill": "dispatch_fix",
@@ -121,11 +122,11 @@ curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/ta
 
 # Subscribe to live updates
 curl -N https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks/<id>:subscribe \
-  -H "X-Mushi-Api-Key: mushi_live_…"
+  -H "X-Mushi-Api-Key: mushi_…"
 
 # Cancel
 curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks/<id>:cancel \
-  -H "X-Mushi-Api-Key: mushi_live_…"
+  -H "X-Mushi-Api-Key: mushi_…"
 ```
 
 ### Push notifications (A2A v1.0.0 PushNotificationConfig)
@@ -134,7 +135,7 @@ Pull (SSE) is fine for a long-running orchestrator process. If you'd rather rece
 
 ```bash
 curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks \
-  -H "X-Mushi-Api-Key: mushi_live_…" \
+  -H "X-Mushi-Api-Key: mushi_…" \
   -H "Content-Type: application/json" \
   -d '{
     "skill": "dispatch_fix",

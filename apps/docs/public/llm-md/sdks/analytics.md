@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/analytics
 
 ---
 title: Product analytics (track)
-description: Mushi.track() reference — named events, consent, sampling, batching, the property contract, useMushiTrack() for React, the Users & Funnels console page, the POST /v1/sdk/events wire format, and the MCP funnel tools.
+description: Mushi.track() reference — named events, consent, sampling and batching, useMushiTrack() for React, Users & Funnels, and the /v1/sdk/events wire format.
 ---
 
 # Product analytics: `Mushi.track()`

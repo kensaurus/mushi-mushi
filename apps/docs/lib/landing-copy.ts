@@ -94,7 +94,7 @@ export interface LandingFaqItem {
 export const LANDING_FAQ: readonly LandingFaqItem[] = [
   {
     q: 'Is Mushi Mushi a Sentry alternative?',
-    a: "Your call — both are first-class. Sentry is built around what the code threw, with a User Feedback widget and replay alongside. Mushi starts from what the user reported, ingests Sentry's errors too, explains each one in plain English, and hands your agent a fix prompt to start from. One queue, with or without Sentry.",
+    a: "It can be, or it can run alongside Sentry. Sentry is built around what the code threw, with a User Feedback widget and replay alongside. Mushi starts from what the user reported, ingests Sentry's errors too, explains each one in plain English, and hands your agent a fix prompt to start from. One queue, with or without Sentry.",
   },
   {
     q: 'Do I need Sentry to use it?',
@@ -102,7 +102,7 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   },
   {
     q: 'What does `npx mushi-mushi` do?',
-    a: 'It runs a setup wizard that detects your framework (React, Vue, Svelte, Angular, React Native, Capacitor, Flutter, or Node), installs the matching SDK, writes your env vars, and prints the snippet to paste.',
+    a: 'It runs a setup wizard that detects your framework (React, Next.js, Vue, Nuxt, Svelte, Angular, React Native, Expo, Capacitor, or Node), installs the matching SDK, writes your env vars, and prints the snippet to paste.',
   },
   {
     q: 'How do I debug an app that Cursor or Claude Code wrote?',
@@ -114,7 +114,7 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   },
   {
     q: 'Which frameworks are supported?',
-    a: 'Web: React, Vue, Svelte, Angular, and any site via the browser widget. Mobile: React Native, Capacitor, Flutter, iOS, and Android. Server: Node. One wizard installs any of them.',
+    a: 'Web: React, Vue, Svelte, Angular, and any site via the browser widget. Mobile: React Native and Capacitor. Server: Node. One wizard installs any of them. Native iOS, Android, and Flutter SDKs are in preview and install from the GitHub repo.',
   },
 ] as const
 
@@ -234,14 +234,14 @@ export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
     desc: 'Wizard installs the SDK, writes env vars, optional test report.',
   },
   {
-    title: 'iOS · Android · Flutter',
+    title: 'Mobile',
     icon: LANDING_BRAND_MARK,
     iconSlug: 'flutter',
     iconColor: '#02569B',
     href: '/quickstart/mobile',
     cmd: 'npx mushi-mushi',
-    desc: 'Native shake, offline queue, and a Sentry bridge already wired up.',
-    badge: 'Native',
+    desc: 'React Native and Capacitor: shake-to-report and an offline queue. iOS, Android, and Flutter SDKs in preview.',
+    badge: 'Mobile',
   },
 ] as const
 

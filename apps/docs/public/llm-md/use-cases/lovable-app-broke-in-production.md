@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/use-cases/lovable-app-broke-in-produ
 
 ---
 title: Your Lovable app broke in production
-description: A debugging checklist for when a Lovable, Bolt, Cursor or Claude Code app breaks for a real user and you did not write the code — reproduce, read the first error, find the file, ask the agent for the smallest fix, stop the repeat.
+description: What to do when a Lovable, Bolt, Cursor or Claude Code app breaks for a real user — reproduce it, read the first error, and ask the agent for the smallest fix.
 ---
 
 # Your Lovable app broke in production. Now what?

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/vue
 
 ---
 title: Vue 3 quickstart
+description: Add Mushi bug reporting to a Vue 3 app — install @mushi-mushi/vue and register MushiPlugin with your project ID and public API key in main.ts.
 ---
 
 # Vue 3 quickstart

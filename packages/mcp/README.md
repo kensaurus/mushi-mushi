@@ -258,7 +258,7 @@ The same catalog entries power the `/mcp` beginner console in the admin app; so 
 ## Resources
 
 Full list (8). See also the generated catalog at
-[`apps/docs/content/sdks/mcp-tools.generated.mdx`](../../apps/docs/content/sdks/mcp-tools.generated.mdx).
+[`apps/docs/content/sdks/mcp-tools.mdx`](../../apps/docs/content/sdks/mcp-tools.mdx).
 
 | URI | Returns |
 |---|---|
@@ -356,7 +356,7 @@ For teams that live in Cursor / Claude Code / Continue / Cline / Zed / Windsurf:
 | Shipped | Tools, resources, prompts; tool annotations; progress on `dispatch_fix`; scope-aware errors; stdio + Streamable HTTP; `outputSchema` / `structuredContent` on key tools; inventory action anchors on `dispatch_fix` / `get_fix_context` |
 | Waiting on clients | Resource subscriptions / `list_changed` push; sampling / elicitation |
 
-Detail and tool tables: [docs `/sdks/mcp`](https://kensaur.us/mushi-mushi/docs/sdks/mcp) and the generated [MCP tools](https://kensaur.us/mushi-mushi/docs/sdks/mcp-tools.generated) page. Open an issue for a waiting-on-clients row once ≥2 major clients ship support.
+Detail and tool tables: [docs `/sdks/mcp`](https://kensaur.us/mushi-mushi/docs/sdks/mcp) and the generated [MCP tools reference](https://kensaur.us/mushi-mushi/docs/sdks/mcp-tools) page. Open an issue for a waiting-on-clients row once ≥2 major clients ship support.
 
 ## Admin console: `/mcp` page
 

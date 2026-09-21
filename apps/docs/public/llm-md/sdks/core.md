@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/core
 
 ---
 title: '@mushi-mushi/core'
+description: Reference for @mushi-mushi/core — the MushiConfig shape, widget options, PII scrubbing helpers and region resolution shared by every Mushi JavaScript SDK.
 ---
 
 # `@mushi-mushi/core`
@@ -151,7 +152,11 @@ generated copy, so the two scrubbers can't drift.
 ```ts
 import { resolveRegionEndpoint, REGION_ENDPOINTS } from '@mushi-mushi/core'
 
-const url = await resolveRegionEndpoint({ projectId: 'p_…', region: 'eu' })
+const url = await resolveRegionEndpoint({
+  projectId: 'YOUR_PROJECT_ID',
+  apiEndpoint: REGION_ENDPOINTS.us,
+  region: 'eu',
+})
 ```
 
 `REGION_ENDPOINTS` contains the canonical URLs:

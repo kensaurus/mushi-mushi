@@ -298,13 +298,13 @@ if (mcpCatalog !== null) {
 }
 
 /** Generated MCP doc must match built catalog (no stale jargon) */
-const mcpGen = read('apps/docs/content/sdks/mcp-tools.generated.mdx')
+const mcpGen = read('apps/docs/content/sdks/mcp-tools.mdx')
 if (mcpGen !== null) {
   const lower = mcpGen.toLowerCase()
   for (const phrase of MCP_CATALOG_BANNED) {
     if (lower.includes(phrase)) {
       failures.push(
-        `apps/docs/content/sdks/mcp-tools.generated.mdx\n      stale phrase "${phrase}" — run pnpm --filter @mushi-mushi/mcp build && pnpm gen:mcp-tools-doc`,
+        `apps/docs/content/sdks/mcp-tools.mdx\n      stale phrase "${phrase}" — run pnpm --filter @mushi-mushi/mcp build && pnpm gen:mcp-tools-doc`,
       )
     }
   }

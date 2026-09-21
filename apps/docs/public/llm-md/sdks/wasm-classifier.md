@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/wasm-classifier
 
 ---
 title: '@mushi-mushi/wasm-classifier'
+description: "@mushi-mushi/wasm-classifier runs a small on-device model in the browser to drop junk bug reports before they reach your LLM, cutting classification cost."
 ---
 
 # `@mushi-mushi/wasm-classifier`

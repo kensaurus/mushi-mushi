@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/experiments
 
 ---
 title: Experiments
+description: The Experiments page defines and runs A/B tests in Mushi and analyses them with CUPED variance reduction and sequential testing.
 ---
 
 # Experiments

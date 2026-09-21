@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/iterate
 
 ---
 title: Iterate
+description: The Iterate page queues improvement runs on a user flow — an agent tests the screens, finds friction and proposes changes for you to review.
 ---
 
 # Iterate

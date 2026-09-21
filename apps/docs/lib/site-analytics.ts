@@ -195,7 +195,7 @@ export function buildFirstTouch(input: {
   }
 }
 
-/** @internal Exported for unit tests only. */
+/** Read-only: safe before consent (nothing is written, nothing leaves the browser). */
 export function readFirstTouch(store: KeyValueStore | null | undefined, projectId: string): FirstTouch | null {
   try {
     const raw = store?.getItem(firstTouchKey(projectId))
@@ -231,6 +231,23 @@ export function recordFirstTouchOnce(
     /* storage unavailable — treat as created for this page only */
   }
   return { touch, created: true }
+}
+
+/**
+ * Consent gate for the first-touch record. The privacy policy promises that
+ * the docs site stores nothing for analytics until the visitor accepts the
+ * consent bar, so the write happens only on `granted`; any other state
+ * returns null and leaves storage untouched. The caller keeps the candidate
+ * in memory and commits it if consent arrives later in the visit.
+ */
+export function commitFirstTouch(
+  store: KeyValueStore | null | undefined,
+  projectId: string,
+  candidate: FirstTouch,
+  consent: StoredConsent | 'pending' | 'blocked' | null,
+): { touch: FirstTouch; created: boolean } | null {
+  if (consent !== 'granted') return null
+  return recordFirstTouchOnce(store, projectId, candidate)
 }
 
 // ─── CTA links ───────────────────────────────────────────────────────────────

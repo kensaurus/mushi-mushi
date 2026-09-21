@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/web
 
 ---
 title: '@mushi-mushi/web'
+description: Reference for @mushi-mushi/web, the browser SDK — screenshots, console and network capture, the Shadow DOM widget, sampling, beforeSend and privacy.
 ---
 
 # `@mushi-mushi/web`

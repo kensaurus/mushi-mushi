@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/react
 
 ---
 title: '@mushi-mushi/react'
+description: Reference for @mushi-mushi/react — MushiProvider, the useMushi, useMushiSdk and useMushiReport hooks, identifying users, and the rewards hooks and badge.
 ---
 
 # `@mushi-mushi/react`
@@ -14,6 +15,7 @@ React provider + hooks. Wraps `@mushi-mushi/web`.
 import {
   MushiProvider,
   useMushi,
+  useMushiSdk,
   useMushiReport,
   useReputation,
   useTier,
@@ -23,9 +25,10 @@ import {
 
 | Export                  | Purpose                                               |
 | ----------------------- | ----------------------------------------------------- |
-| ``       | App-level boot — accepts the same config as core      |
-| `useMushi()`            | Access the singleton (rate-limit aware, suspense-safe)|
-| `useMushiReport()`      | Returns `{ submit, isSubmitting, lastError }`         |
+| `` | App-level boot — `config` takes the same options as `Mushi.init` |
+| `useMushi()`            | Returns `{ report, pulseTrigger, isReady, … }`; `report()` opens the widget |
+| `useMushiSdk()`         | The SDK instance (`captureEvent`, `captureException`, `identify`), or `null` before init |
+| `useMushiReport()`      | Returns a function that opens the widget, optionally with a category |
 | `useReputation()`       | Current user's point totals (polls on mount)          |
 | `useTier()`             | Current user's tier object (polls on mount)           |
 | `` | Polymorphic tier + points badge component             |
@@ -36,15 +39,16 @@ See [Quickstart → React](/quickstart/react).
 
 ## Identifying users
 
-Call `mushi.identify()` on auth state change — typically inside a
-`useEffect` that watches your auth context:
+Call `identify()` on the SDK instance when auth state changes — typically
+inside a `useEffect` that watches your auth context:
 
 ```tsx filename="lib/auth-watcher.tsx"
-import { useMushi } from '@mushi-mushi/react'
+import { useEffect } from 'react'
+import { useMushiSdk } from '@mushi-mushi/react'
 import { useSession } from './auth'  // your auth hook
 
 export function AuthWatcher() {
-  const sdk = useMushi()
+  const sdk = useMushiSdk()
   const { user } = useSession()
 
   useEffect(() => {
@@ -61,7 +65,8 @@ export function AuthWatcher() {
 }
 ```
 
-Mount `` inside `` so `sdk` is always defined.
+Mount `` inside ``; `sdk` is `null` until the
+provider has initialised, and the effect re-runs once it is ready.
 
 ---
 
@@ -70,12 +75,12 @@ Mount `` inside `` so `sdk` is always defined.
 ```tsx filename="app/layout.tsx"
 import { MushiProvider } from '@mushi-mushi/react'
 
-export default function RootLayout({ children }) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <MushiProvider
-      projectId="YOUR_PROJECT_ID"
-      apiKey="YOUR_PUBLIC_API_KEY"
       config={{
+        projectId: 'YOUR_PROJECT_ID',
+        apiKey: 'mushi_...',
         rewards: {
           enabled: true,
           trackActivity: true,

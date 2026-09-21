@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/capacitor-bottom-dock
 
 ---
 title: Capacitor bottom dock
+description: Keep the Mushi bug-report button clear of tab bars and bottom docks in Capacitor apps with triggerInsetPreset, explicit insets, or widget.anchor.
 ---
 
 # Capacitor bottom dock
@@ -15,7 +16,7 @@ import { Mushi, triggerInsetPresets } from '@mushi-mushi/capacitor'
 
 await Mushi.configure({
   projectId: '...',
-  apiKey: 'mush_pk_...',
+  apiKey: 'mushi_...',
   triggerMode: 'both',
   triggerInsetPreset: 'tabBarSafe',
 })
@@ -26,7 +27,7 @@ Explicit insets win over presets:
 ```ts
 await Mushi.configure({
   projectId: '...',
-  apiKey: 'mush_pk_...',
+  apiKey: 'mushi_...',
   triggerInset: {
     bottom: triggerInsetPresets.dockSafe.bottom + 12,
     trailing: 20,

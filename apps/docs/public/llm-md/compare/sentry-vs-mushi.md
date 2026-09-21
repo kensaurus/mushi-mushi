@@ -4,18 +4,8 @@ Source: https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi
 
 ---
 title: Sentry vs Mushi Mushi
-description: Sentry vs Mushi Mushi in 2026 — what each captures, the Sentry Developer free tier and Seer pricing next to Mushi's free 50 diagnoses a month, self-hosting, and how the two run together.
+description: Sentry vs Mushi Mushi in 2026 — what each captures, Sentry's free tier and Seer pricing next to Mushi's 50 free diagnoses a month, and running both.
 ---
-
-import {
-  SENTRY,
-  MUSHI,
-  SENTRY_PRICING_ROWS,
-  SENTRY_FAQ,
-  FACTS_REVIEWED_AT,
-  NEXT_REVIEW_DUE,
-  signupUrl,
-} from './_facts'
 
 # Sentry vs Mushi Mushi
 

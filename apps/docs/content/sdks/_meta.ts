@@ -25,7 +25,7 @@ export default {
   cli: '@mushi-mushi/cli',
   launcher: 'mushi-mushi (launcher)',
   mcp: '@mushi-mushi/mcp',
-  'mcp-tools.generated': 'MCP tools (generated)',
+  'mcp-tools': 'MCP tools reference',
   'mcp-ci': '@mushi-mushi/mcp-ci',
   skills: 'Agent skills',
   adapters: '@mushi-mushi/adapters',

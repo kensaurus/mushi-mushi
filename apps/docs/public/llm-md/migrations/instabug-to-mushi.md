@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/instabug-to-mushi
 
 ---
 title: 'Instabug (Luciq) → Mushi'
+description: Replace Instabug (Luciq) with Mushi for in-app bug reporting — config mapping, shake-to-report parity, a beta validation pass, and a checklist.
 ---
 
 # Instabug (Luciq) → Mushi
@@ -125,7 +126,7 @@ npm install @mushi-mushi/capacitor && npx cap sync`} },
 # (Whichever ones you had)
 # For React Native, also: cd ios && pod deintegrate && pod install`} },
     { id: 'rotate-token', label: 'Revoke the Instabug/Luciq token in their dashboard', content: <>Don't leave an unused production token live; revoke it once dual-ship is over.</> },
-  ]}
+
 />
 
 ## Feature parity at a glance

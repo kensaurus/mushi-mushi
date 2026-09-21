@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/eslint-plugin
 
 ---
 title: 'eslint-plugin-mushi-mushi'
+description: eslint-plugin-mushi-mushi flags empty event handlers and leftover mock data in production code — the no-dead-handler and no-mock-leak rules and preset.
 ---
 
 # `eslint-plugin-mushi-mushi`

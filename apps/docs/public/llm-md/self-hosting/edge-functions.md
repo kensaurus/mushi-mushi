@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting/edge-functions
 
 ---
 title: Edge Functions deploy
+description: Deploy Mushi's Supabase Edge Functions for a self-hosted install — the minimal ingest and classification set, the full list, and the secrets they need.
 ---
 
 # Edge Functions deploy

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/reports
 
 ---
 title: Reports & triage
+description: The Reports list is Mushi's bug inbox — filter by status, severity, category and component, and start with the recommended action at the top.
 ---
 
 # Reports

@@ -122,7 +122,7 @@ export const SENTRY_PRICING_ROWS: readonly LandingComparisonRow[] = [
 export const SENTRY_FAQ: readonly FaqEntry[] = [
   {
     q: 'Is Mushi a replacement for Sentry?',
-    a: 'Your call. Sentry is built around what the code threw, with a User Feedback widget and Session Replay alongside. Mushi starts from what the user reported, ingests Sentry\'s errors too, explains each one in plain English, and hands your agent a fix prompt to start from. One queue, with or without Sentry.',
+    a: 'It can be, or it can run alongside Sentry. Sentry is built around what the code threw, with a User Feedback widget and Session Replay alongside. Mushi starts from what the user reported, ingests Sentry\'s errors too, explains each one in plain English, and hands your agent a fix prompt to start from. One queue, with or without Sentry.',
   },
   {
     q: 'Can I run Mushi alongside Sentry?',

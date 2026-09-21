@@ -15,6 +15,10 @@
  * sit in a small in-memory queue and replay after init. The SDK is still
  * initialised with `analytics.consent: 'required'` so a stale or spoofed
  * stored value cannot widen anything — it just reads the same key.
+ * The first-touch record (`mushi_first_touch_<projectId>`) is held in memory
+ * and written only on consent too, and until then signup links get no
+ * `ref=` — the consent answer is the only thing stored before an OK
+ * (apps/docs/content/legal/privacy.mdx §11 lists every key).
  *
  * Events (packages/core/src/analytics-taxonomy.ts)
  * -------------------------------------------------
@@ -38,16 +42,18 @@ import { usePathname } from 'next/navigation'
 import {
   SITE_ANALYTICS_ENV,
   buildFirstTouch,
+  commitFirstTouch,
   ctaHrefKind,
   decorateSignupHref,
   dntActive,
   normalizePathname,
+  readFirstTouch,
   readSiteAnalyticsConfig,
   readStoredConsent,
-  recordFirstTouchOnce,
   reservedViewProps,
   viewEventForRoute,
   writeStoredConsent,
+  type FirstTouch,
   type ReservedProps,
   type SiteAnalyticsConfig,
   type StoredConsent,
@@ -129,6 +135,16 @@ export function MushiSiteAnalytics() {
   const lastViewRef = useRef<string | null>(null)
   const firstTouchSourceRef = useRef<string | null>(null)
   const firstTouchPendingRef = useRef(false)
+  /** First-touch candidate held in memory until consent allows the write. */
+  const firstTouchCandidateRef = useRef<FirstTouch | null>(null)
+
+  /** Write the first-touch record — a no-op unless consent is `granted`. */
+  const persistFirstTouch = useCallback((consent: StoredConsent) => {
+    const candidate = firstTouchCandidateRef.current
+    if (!CONFIG || !candidate) return
+    const committed = commitFirstTouch(window.localStorage, CONFIG.projectId, candidate, consent)
+    if (committed) firstTouchSourceRef.current = committed.touch.utm_source ?? null
+  }, [])
 
   const emit = useCallback((name: string, props: EventProps, reserved?: ReservedProps) => {
     const consent = consentRef.current
@@ -158,13 +174,18 @@ export function MushiSiteAnalytics() {
       writeStoredConsent(window.localStorage, CONFIG.projectId, state)
       consentRef.current = state
       setShowBar(false)
-      if (state === 'granted') activate()
-      else queueRef.current = []
+      if (state === 'granted') {
+        persistFirstTouch(state)
+        activate()
+      } else {
+        queueRef.current = []
+        firstTouchCandidateRef.current = null
+      }
     },
-    [activate],
+    [activate, persistFirstTouch],
   )
 
-  // Mount: DNT gate → first touch → stored consent → maybe load the SDK.
+  // Mount: DNT gate → first touch (read only) → stored consent → maybe load the SDK.
   useEffect(() => {
     if (!CONFIG) return
     // `window.doNotTrack` is a legacy vendor field lib.dom does not declare.
@@ -173,17 +194,16 @@ export function MushiSiteAnalytics() {
       return
     }
     const storage = window.localStorage
-    const { touch, created } = recordFirstTouchOnce(
-      storage,
-      CONFIG.projectId,
-      buildFirstTouch({ search: window.location.search, referrer: document.referrer, pathname }),
-    )
-    firstTouchSourceRef.current = touch.utm_source ?? null
-    firstTouchPendingRef.current = created
+    // Reading is fine before consent; the write waits for `granted`.
+    const existing = readFirstTouch(storage, CONFIG.projectId)
+    firstTouchCandidateRef.current =
+      existing ?? buildFirstTouch({ search: window.location.search, referrer: document.referrer, pathname })
+    firstTouchPendingRef.current = existing === null
 
     const stored = readStoredConsent(storage, CONFIG.projectId)
     if (stored === 'granted') {
       consentRef.current = 'granted'
+      persistFirstTouch(stored)
       activate()
     } else if (stored === 'denied') {
       consentRef.current = 'denied'
@@ -194,7 +214,7 @@ export function MushiSiteAnalytics() {
     // `pathname` is deliberately not a dependency: it is only read for the
     // first-touch landing path, and re-running on navigation must not
     // re-record anything (recordFirstTouchOnce is write-once regardless).
-  }, [activate])
+  }, [activate, persistFirstTouch])
 
   // Route views — `usePathname` changes on every client navigation
   // (Nextra catch-all included); dedupe so StrictMode / same-route

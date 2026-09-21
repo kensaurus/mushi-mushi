@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/svelte
 
 ---
 title: Svelte quickstart
+description: Add Mushi bug reporting to a Svelte or SvelteKit app — install @mushi-mushi/svelte and call initMushi from hooks.client.ts or a root layout's onMount.
 ---
 
 # Svelte quickstart

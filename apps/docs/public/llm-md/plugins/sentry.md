@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/sentry
 
 ---
 title: Sentry
+description: Two-way Sentry integration — Sentry errors flow into Mushi's queue, merging a Mushi fix resolves the Sentry issue, and critical reports mirror back.
 ---
 
 # Sentry plugin

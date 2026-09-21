@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/sentry-to-mushi
 
 ---
 title: 'Sentry + Mushi (enrich or standalone)'
+description: Add Mushi alongside Sentry or run it on its own — three setups, the Sentry webhook for errors, and user bug reports with plain-English diagnoses.
 ---
 
 # Sentry + Mushi (enrich or standalone)
@@ -105,7 +106,7 @@ if (eventId) Mushi.setMetadata({ sentryEventId: eventId })`} },
 }`} },
     { id: 'wire-mcp', label: 'Wire the Mushi MCP server into your editor', content: <>Run npx mushi-mushi setup --ide cursor (or claude / continue / zed). Now get_fix_context returns a paste-ready fix for every diagnosed report.</> },
     { id: 'verify', label: 'Submit a test report and check the Sentry link', content: <>Trigger an error, submit a Mushi report, and confirm the sentryEventId metadata opens the right Sentry event.</> },
-  ]}
+
 />
 
 ## When would you actually drop Sentry?

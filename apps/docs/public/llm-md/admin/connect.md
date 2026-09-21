@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/connect
 
 ---
 title: Connect & Update
+description: Connect & Update wires GitHub, the SDK, MCP, the CLI and your editor to a Mushi project, and shows when your installed SDK is out of date.
 ---
 
 # Connect & Update

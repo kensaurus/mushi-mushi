@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/cli
 
 ---
 title: '@mushi-mushi/cli'
+description: Reference for @mushi-mushi/cli — log in, connect a project, run doctor, list reports, dispatch agent fixes and merge their pull requests from the terminal.
 ---
 
 # `@mushi-mushi/cli`

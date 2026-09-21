@@ -2,6 +2,10 @@
 
 Source: https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes
 
+---
+description: Choose where Mushi's bug-report button lives — corner stamp, edge tab, banner, your own button via attach, or fully manual — on web and mobile.
+---
+
 # Where the report button lives
 
 Mushi ships a default bug-report launcher, but you decide where it appears —

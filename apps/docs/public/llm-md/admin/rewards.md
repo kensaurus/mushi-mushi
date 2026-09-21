@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/rewards
 
 ---
 title: Rewards program
+description: Set up the Mushi rewards program from the console — points for reporter activity, the tier ladder, and the perks your app grants at each tier.
 ---
 
 # Rewards program

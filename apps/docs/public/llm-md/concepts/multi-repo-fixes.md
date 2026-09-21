@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/multi-repo-fixes
 
 ---
 title: Multi-repo coordinated fixes
+description: When one bug spans a frontend and a backend repo, Mushi plans the fix across both and opens one cross-linked pull request per repository.
 ---
 
 # Multi-repo coordinated fixes

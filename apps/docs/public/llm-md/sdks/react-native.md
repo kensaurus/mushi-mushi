@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/react-native
 
 ---
 title: '@mushi-mushi/react-native'
+description: Reference for @mushi-mushi/react-native — MushiProvider, hooks, shake-to-report, screenshots, identity and the offline queue for React Native and Expo.
 ---
 
 # `@mushi-mushi/react-native`
@@ -70,16 +71,15 @@ import { useMushiReport, useMushiWidget } from '@mushi-mushi/react-native'
 
 function ChatScreen() {
   const { open } = useMushiWidget()
-  const { submit, submitting } = useMushiReport()
+  const { submitReport } = useMushiReport()
 
   return (
     <Button
-      title={submitting ? 'Sending…' : 'Report bad response'}
+      title="Report bad response"
       onPress={() =>
-        submit({
+        submitReport({
           description: 'AI returned an off-topic answer',
-          severity: 'medium',
-          metadata: { screen: 'chat' },
+          category: 'bug',
         })
       }
     />
