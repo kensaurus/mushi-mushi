@@ -1,9 +1,6 @@
 ---
 name: mushi-debug
-description: >-
-  Debug Mushi Mushi issues — edge function errors, SDK not reporting, API key
-  problems, failed story mapping, failing QA stories, missing inventory, and
-  PDCA loop issues. Use when something isn't working in Mushi.
+description: "Debug a Mushi Mushi install that is not working: SDK reports not arriving, MCP tools failing, LLM key exhaustion, story mapping or generated-test failures, or the auto-improve loop not running. Use when something in Mushi is broken or silent."
 triggers:
   - "mushi not working"
   - "sdk not reporting"
@@ -16,152 +13,143 @@ triggers:
   - "fix mushi"
 ---
 
-# Mushi Mushi — Debug Guide
+# Mushi Mushi — debug guide
 
-## Diagnostic Checklist (run in order)
+Work top to bottom and stop at the first thing that is wrong. Every step uses
+the CLI, the MCP server or the console, so it works the same on Mushi Cloud and
+on a self-hosted install.
 
-### 1. Check SDK connectivity
+## Diagnostic checklist
+
+### 1. Check credentials and connectivity
 
 ```bash
-# Run the doctor command — checks connectivity and key validity
 mushi doctor
 ```
 
-Expected output: all checks green. If `MUSHI_API_KEY` fails, re-run `mushi login`.
+Every line should read `OK`. Each `FAIL` line is followed by a `→ Fix:` hint;
+`mushi doctor --json` carries the same hints. If the key or endpoint is wrong,
+run `mushi login` again (it opens the browser).
 
-### 2. Check Sentry for edge function errors
+Inside an editor, the MCP tool `diagnose_setup` runs a setup diagnosis from the
+agent's side (ingest and fix-dispatch readiness) and names the next action.
 
-Use the Sentry MCP:
-```
-get_sentry_issues project=mushi-be
-```
+### 2. Reports are not arriving
 
-Look for errors in `story-mapper`, `test-gen-from-story`, `pdca-runner`, `inventory-propose`.
+**Symptom:** you click the widget, nothing shows in the console.
+
+1. Send a report from the CLI to split "SDK problem" from "pipeline problem":
+
+   ```bash
+   mushi test
+   ```
+
+2. If `mushi test` arrives but the app's reports do not, the SDK is the
+   problem: check that `Mushi.init` runs once, before the first navigation,
+   with the framework-prefixed env vars the wizard wrote (`VITE_MUSHI_*`,
+   `NEXT_PUBLIC_MUSHI_*`, …), and that your build actually inlines them.
+3. If neither arrives, check the newest report and its status:
+
+   ```bash
+   mushi reports list --limit 1
+   ```
+
+   A report stuck in `pending` for more than a minute means classification
+   failed — see step 7.
 
 ### 3. Story mapping failures
 
-**Symptom**: "Map from live app" shows `failed` status
+**Symptom:** "Map from live app" shows `failed`.
 
-**Diagnose**:
-1. Open the console → Inventory → Discovery → Recent crawls
-2. Expand the failed run to see `error_message`
+1. Console → **Inventory → Discovery → Recent crawls**, expand the failed run
+   and read `error_message`.
+2. Common causes:
+   - No Firecrawl key: **Settings → LLM keys → add a Firecrawl key**.
+   - The URL is behind a login: use the Browserbase provider and configure
+     session cookies.
+   - Claude quota exhausted: add a backup Anthropic key (step 6).
 
-**Common causes**:
-- No Firecrawl API key: go to Settings → API Keys → Add a Firecrawl key
-- URL is behind auth: use Browserbase provider + configure session cookies
-- Claude quota exhausted: add a backup Anthropic key with `mushi keys add`
+### 4. Generated-test failures
 
-### 4. TDD test generation failures
+**Symptom:** `mushi tdd gen <storyId>` returns an error.
 
-**Symptom**: `mushi tdd gen <storyId>` returns error
-
-**Diagnose**:
 ```bash
-# Check that a story exists in the accepted inventory
-mushi tdd pending  # lists qa stories pending review
+mushi tdd pending   # lists generated tests pending review
 ```
 
-**Common causes**:
-- Story id doesn't exist in accepted inventory → accept the inventory proposal first
-- All LLM keys exhausted → `mushi keys list` then add a backup key
+- The story id is not in an accepted inventory → accept the proposal first
+  (**Inventory → Discovery → Past proposals → Accept**).
+- All LLM keys are exhausted → `mushi keys list`, then add a backup key.
 
 ### 5. QA stories not running
 
-**Symptom**: Tests never execute on schedule
+**Symptom:** tests never execute on schedule.
 
-**Diagnose**:
 ```bash
-mushi tdd pending  # check if stories are stuck in pending_review
+mushi qa stories            # every story, its last run, and whether it is disabled
+mushi qa runs <story-id>    # recent runs for one story
+mushi tdd pending           # stories stuck in pending_review
 ```
 
-- If `approval_status = pending_review`: approve them with `mushi tdd approve <id>`
-- If `enabled = false`: toggle enabled in console → QA Coverage → story detail
-- If `automation_mode = approve`: the story requires manual enable
+- `pending_review` → approve with `mushi tdd approve <id>`.
+- Disabled → enable it in **QA Coverage → story detail**.
+- `automation_mode = approve` → the story needs a manual enable.
+- Run one immediately: `mushi qa run <story-id>`.
 
-### 6. API key quota / rate limit
+### 6. LLM key quota or rate limit
 
-**Symptom**: Fix attempts fail with "All LLM keys exhausted"
+**Symptom:** fix attempts fail with "All LLM keys exhausted".
 
-**Diagnose**:
 ```bash
 mushi keys list
 ```
 
-Look for `status=quota_exhausted` with a cooldown time.
+Look for `status=quota_exhausted` and its cooldown. Add a backup key. Pass it
+through `MUSHI_BYOK_KEY` so it stays out of shell history:
 
-**Fix**:
 ```bash
-# Add a backup key
-mushi keys add --provider anthropic --key sk-ant-... --label "backup2" --priority 200
+MUSHI_BYOK_KEY="$ANTHROPIC_API_KEY" mushi keys add --provider anthropic --label backup2 --priority 200
 
-# Or add an OpenAI key as fallback
-mushi keys add --provider openai --key sk-... --label "openai-backup" --priority 300
+# Or an OpenAI key as a fallback provider
+MUSHI_BYOK_KEY="$OPENAI_API_KEY" mushi keys add --provider openai --label openai-backup --priority 300
 ```
 
-### 7. Inventory not showing up
+### 7. Inventory not showing up after you accept a proposal
 
-**Symptom**: Inventory page shows no active inventory after accepting a proposal
+Console → **Inventory**. If the proposal shows `accepted` but no active
+inventory appears, the accept step failed: retry the accept, and if it fails
+again, open an issue with the proposal id and the time you accepted it.
 
-**Check in DB** (Supabase MCP):
-```sql
-SELECT id, status, source, created_at 
-FROM inventory_proposals 
-WHERE project_id = '<your-project-id>'
-ORDER BY created_at DESC LIMIT 5;
+### 8. Auto-improve not rewriting failing tests
 
-SELECT id, status, created_at
-FROM inventories
-WHERE project_id = '<your-project-id>'
-ORDER BY created_at DESC LIMIT 3;
-```
+1. Only generated stories (`source=test_gen_from_story`) with automation mode
+   `auto` or `review` are eligible.
+2. Trigger it by hand and read the output: `mushi tdd improve`.
+3. Rewritten tests land in **QA Coverage** with `source=pdca`.
 
-If `inventories` is empty but `inventory_proposals` has `accepted` rows, the accept flow failed — check Sentry.
+### 9. Pipeline health at a glance
 
-### 8. PDCA auto-improve not triggering
-
-**Symptom**: Failing tests never get rewritten
-
-**Check**:
-1. Cron is registered: run `SELECT jobname, schedule FROM cron.job;` in Supabase SQL editor
-2. The stories have `source=test_gen_from_story` and `automation_mode` in `['auto', 'review']`
-3. Trigger manually: `mushi tdd improve`
-
-### 9. Edge function logs
-
-Use the Supabase MCP:
-```
-get_logs service=api
-get_logs service=postgres
-```
-
-Or via CLI:
 ```bash
-supabase functions logs story-mapper
-supabase functions logs test-gen-from-story
-supabase functions logs pdca-runner
+mushi deploy check   # pings each edge function
+mushi status         # project overview, autofix agent, billing warnings
 ```
 
-## Common Error Messages
+## Common error messages
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `No Firecrawl API key configured` | Missing BYOK key | Add key in Settings → API Keys |
-| `All LLM keys exhausted` | All Anthropic/OpenAI keys hit quota | Add backup key with `mushi keys add` |
-| `Story not found` in test-gen | Story id not in accepted inventory | Accept the inventory proposal first |
-| `byok_keys_provider_slug_check` | Invalid provider slug | Use: anthropic, openai, firecrawl, browserbase, cursor |
-| `relation story_map_runs does not exist` | Migration not applied | Run pending migrations on remote |
+| `No Firecrawl API key configured` | Missing BYOK key | Add one in Settings → LLM keys |
+| `All LLM keys exhausted` | Every Anthropic/OpenAI key hit quota | Add a backup key with `mushi keys add` |
+| `Story not found` in test generation | Story id not in an accepted inventory | Accept the inventory proposal first |
+| `byok_keys_provider_slug_check` | Invalid provider slug | Use one of: anthropic, openai, firecrawl, browserbase, cursor |
+| `relation … does not exist` | A self-hosted database is missing migrations | Apply them as described in [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md) |
 
-## Applying Pending Migrations
+## Self-hosting
 
-If you get "relation does not exist" errors, migrations may not be deployed:
+On your own Supabase project you also own the database, the edge functions and
+their logs. Migrations, function deploys and log access are covered in
+[`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md).
 
-```bash
-cd packages/server
-supabase db push --db-url postgresql://...
-```
-
-Or use the Supabase MCP `apply_migration` for each file in order:
-1. `20260602000000_byok_multikey_pool.sql`
-2. `20260602000001_story_map_runs.sql`
-3. `20260602000002_qa_stories_tdd_columns.sql`
-4. `20260602000003_pdca_qa_improve_cron.sql`
+Still stuck? [Open an issue](https://github.com/kensaurus/mushi-mushi/issues/new/choose)
+with the `mushi doctor --json` output (it masks your API key; check it before
+pasting anyway).
