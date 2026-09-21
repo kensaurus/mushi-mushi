@@ -23,7 +23,7 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   },
-  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "repository": {
     "type": "git",
     "url": "https://github.com/kensaurus/mushi-mushi.git",
@@ -77,13 +77,12 @@
     "capacitor",
     "ionic",
     "sentry-companion",
-    "sentry-alternative",
     "error-tracking",
     "ai-triage",
     "auto-fix"
   ],
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19.0"
   }
 }

@@ -4,7 +4,7 @@
   "description": "Every bug in one queue — user reports, Sentry errors, Slack, coding agents. Plain-English diagnosis + a ready fix, in your editor. Open source.",
   "license": "MIT",
   "homepage": "https://kensaur.us/mushi-mushi",
-  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "repository": {
     "type": "git",
     "url": "https://github.com/kensaurus/mushi-mushi.git"
@@ -47,6 +47,7 @@
     "version-packages": "changeset version && pnpm gen:sdk-version-matrix && pnpm sync:mcp-pin && pnpm sync:server-json && pnpm sync:cursor-plugin && pnpm sync:docs-versions && pnpm install --lockfile-only",
     "check:export-types-order": "node scripts/fix-export-types-order.mjs --check",
     "check:changeset-orphans": "node scripts/check-changeset-orphans.mjs",
+    "check:changeset-coverage": "node scripts/check-changeset-coverage.mjs",
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
     "check:catalog-count": "node scripts/check-catalog-count.mjs",
     "check:server-json": "node scripts/sync-server-json-version.mjs --check",
@@ -146,7 +147,7 @@
     "test:cloudfront": "node --test scripts/cloudfront-functions.test.mjs",
     "test:verify-hosted-mcp": "node --test scripts/verify-hosted-mcp-helpers.test.mjs",
     "test:strip-markup": "node --test scripts/strip-markup.test.mjs",
-    "test:scripts": "node --test scripts/cloudfront-functions.test.mjs scripts/verify-hosted-mcp-helpers.test.mjs scripts/strip-markup.test.mjs scripts/mcp-configs.test.mjs scripts/marketing/queue-policy.test.mjs",
+    "test:scripts": "node --test scripts/cloudfront-functions.test.mjs scripts/verify-hosted-mcp-helpers.test.mjs scripts/strip-markup.test.mjs scripts/mcp-configs.test.mjs scripts/marketing/queue-policy.test.mjs scripts/normalize-package-metadata.test.mjs scripts/check-changeset-coverage.test.mjs",
     "verify:pipeline": "pnpm --filter @mushi-mushi/server test && cd packages/server/supabase && deno check functions/_shared/rag.ts functions/_shared/observability.ts functions/_shared/env-int.ts functions/api/routes/doctor.ts functions/api/routes/project-codebase.ts functions/webhooks-github-indexer/index.ts",
     "check:drift": "pnpm check:catalog-sync && pnpm check:mcp-tools-doc && pnpm check:internal-doc-links && pnpm check:onboarding-drift && pnpm check:env-docs && pnpm check:docs-drift && pnpm check:docs-stats && pnpm check:route-manifest && pnpm check:edge-fn-deploy-docs && pnpm check:admin-docs-coverage && pnpm check:humanize-parity && pnpm check:error-codes",
     "check:mcp-tools-doc": "node scripts/gen-mcp-tools-doc.mjs --check",

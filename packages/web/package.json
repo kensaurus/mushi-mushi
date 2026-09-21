@@ -1,37 +1,80 @@
 {
   "name": "@mushi-mushi/web",
   "version": "1.28.0",
-  "description": "Mushi Mushi browser SDK — embeddable bug reporting widget with Shadow DOM isolation",
+  "description": "Bug report and user feedback widget for the web. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "unpkg": "./dist/mushi.loader.global.js",
+  "jsdelivr": "./dist/mushi.loader.global.js",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./test-utils": {
-      "types": "./dist/test-utils.d.ts",
-      "import": "./dist/test-utils.js",
-      "require": "./dist/test-utils.cjs"
+      "import": {
+        "types": "./dist/test-utils.d.ts",
+        "default": "./dist/test-utils.js"
+      },
+      "require": {
+        "types": "./dist/test-utils.d.cts",
+        "default": "./dist/test-utils.cjs"
+      }
     },
     "./i18n": {
-      "types": "./dist/i18n/index.d.ts",
-      "import": "./dist/i18n/index.js",
-      "require": "./dist/i18n/index.cjs"
+      "import": {
+        "types": "./dist/i18n/index.d.ts",
+        "default": "./dist/i18n/index.js"
+      },
+      "require": {
+        "types": "./dist/i18n/index.d.cts",
+        "default": "./dist/i18n/index.cjs"
+      }
     },
     "./otel": {
-      "types": "./dist/otel.d.ts",
-      "import": "./dist/otel.js",
-      "require": "./dist/otel.cjs"
+      "import": {
+        "types": "./dist/otel.d.ts",
+        "default": "./dist/otel.js"
+      },
+      "require": {
+        "types": "./dist/otel.d.cts",
+        "default": "./dist/otel.cjs"
+      }
     },
     "./headless": {
-      "types": "./dist/headless.d.ts",
-      "import": "./dist/headless.js",
-      "require": "./dist/headless.cjs"
+      "import": {
+        "types": "./dist/headless.d.ts",
+        "default": "./dist/headless.js"
+      },
+      "require": {
+        "types": "./dist/headless.d.cts",
+        "default": "./dist/headless.cjs"
+      }
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "test-utils": [
+        "./dist/test-utils.d.ts"
+      ],
+      "i18n": [
+        "./dist/i18n/index.d.ts"
+      ],
+      "otel": [
+        "./dist/otel.d.ts"
+      ],
+      "headless": [
+        "./dist/headless.d.ts"
+      ]
     }
   },
   "files": [
@@ -53,6 +96,7 @@
   },
   "keywords": [
     "mushi-mushi",
+    "bug-report-widget",
     "bug-translation",
     "vibe-coding",
     "ai-debugging",
@@ -72,7 +116,6 @@
     "svelte",
     "angular",
     "sentry-companion",
-    "sentry-alternative",
     "ai-agent",
     "sdk"
   ],
@@ -133,9 +176,9 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   },
-  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19.0"
   },
   "funding": {
     "type": "github",
