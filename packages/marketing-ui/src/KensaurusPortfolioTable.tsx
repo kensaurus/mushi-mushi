@@ -32,10 +32,10 @@ const PORTFOLIO = [
   },
   {
     id: 'how-to-talk-to-girls',
-    name: 'How to Talk to Girls',
+    name: 'Cooler Heads',
     href: 'https://talk.kensaur.us/',
     icon: 'https://talk.kensaur.us/pwa-192.png',
-    blurb: 'BYOK Claude practice coach for sticky chats.',
+    blurb: 'Practice hard conversations before you have them.',
   },
   {
     id: 'solo-boss',
