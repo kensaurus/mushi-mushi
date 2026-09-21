@@ -10,10 +10,13 @@
  * Privacy:
  *   - `anon_id` is the same opaque per-project reporter token the SDK already
  *     uses for reports and sessions; identify() attaches the host's user id.
- *   - Honours navigator.doNotTrack / globalPrivacyControl unless the host
- *     opts out (`respectDoNotTrack: false`).
+ *   - Everything passes the shared gate in analytics-gate.ts (also used by the
+ *     session tracker): analytics.enabled, DNT / GPC, automation, consent.
+ *   - Nothing leaves the page until consent is 'granted'. That covers the
+ *     identify marker and a previous page's spill, not just track() events.
  *   - `consent: 'required'` buffers up to 50 events in memory until
- *     setConsent('granted'); 'denied' drops the buffer and disables tracking.
+ *     setConsent('granted'); 'denied' drops the buffer, the pending identify
+ *     and the spill, and disables tracking.
  *   - Every string property runs through the caller-supplied PII scrubber and
  *     the shared property contract in analytics-taxonomy.ts.
  *   - `sampleRate` is decided once per person (hash of anon_id), never per
@@ -21,6 +24,12 @@
  */
 
 import type { MushiAnalyticsConfig, MushiApiClient, MushiProductEventPayload } from './types';
+import {
+  analyticsBlockReason,
+  onAnalyticsConsentChange,
+  resolveAnalyticsConsent,
+  setAnalyticsConsent,
+} from './analytics-gate';
 import {
   EVENT_PROPERTY_LIMITS,
   isValidEventName,
@@ -47,11 +56,10 @@ export interface EventTrackerOptions {
 
 type BufferedEvent = { name: string; ts: string; properties: MushiEventProperties; dedup_key?: string };
 
+// `enabled`, `respectDoNotTrack`, `excludeBots` and `consent` are read from the
+// host's config by the shared gate (analytics-gate.ts), not from here.
 type ResolvedConfig = {
-  enabled: boolean;
-  consent: 'implied' | 'required';
   sampleRate: number;
-  respectDoNotTrack: boolean;
   autoPageviews: boolean;
   flushIntervalMs: number;
   surface: MushiSurface;
@@ -77,6 +85,7 @@ let _flushTimer: ReturnType<typeof setInterval> | null = null;
 let _initialized = false;
 let _flushing = false;
 let _pendingIdentify = false;
+let _unsubscribeConsent: (() => void) | null = null;
 
 const CONSENT_BUFFER_MAX = 50;
 const SPILL_MAX = 200;
@@ -84,10 +93,7 @@ const SPILL_TTL_MS = 24 * 60 * 60 * 1000;
 
 function defaults(): ResolvedConfig {
   return {
-    enabled: true,
-    consent: 'implied',
     sampleRate: 1,
-    respectDoNotTrack: true,
     autoPageviews: false,
     flushIntervalMs: 5_000,
     surface: 'web',
@@ -101,18 +107,8 @@ function now(): string {
   return new Date().toISOString();
 }
 
-function storageKey(kind: 'spill' | 'consent'): string {
-  return 'mushi_events_' + kind + '_' + _projectId;
-}
-
-/** True when the browser signals Do Not Track or Global Privacy Control. */
-export function dntActive(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  const nav = navigator as Navigator & { globalPrivacyControl?: boolean; msDoNotTrack?: string };
-  if (nav.globalPrivacyControl === true) return true;
-  const winDnt = typeof window !== 'undefined' ? (window as Window & { doNotTrack?: string }).doNotTrack : undefined;
-  const dnt = nav.doNotTrack ?? nav.msDoNotTrack ?? winDnt;
-  return dnt === '1' || dnt === 'yes';
+function spillKey(): string {
+  return 'mushi_events_spill_' + _projectId;
 }
 
 /** Stable [0,1) from a string (FNV-1a 32-bit). */
@@ -125,30 +121,13 @@ function hashToUnit(s: string): number {
   return (h >>> 0) / 0x100000000;
 }
 
-function readStoredConsent(): 'granted' | 'denied' | null {
-  try {
-    const v = localStorage.getItem(storageKey('consent'));
-    return v === 'granted' || v === 'denied' ? v : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredConsent(v: 'granted' | 'denied'): void {
-  try {
-    localStorage.setItem(storageKey('consent'), v);
-  } catch {
-    /* storage unavailable */
-  }
-}
-
 function readSpill(): BufferedEvent[] {
   try {
-    const raw = localStorage.getItem(storageKey('spill'));
+    const raw = localStorage.getItem(spillKey());
     if (!raw) return [];
     const parsed = JSON.parse(raw) as { at: number; events: BufferedEvent[] };
     if (!parsed || Date.now() - parsed.at > SPILL_TTL_MS) {
-      localStorage.removeItem(storageKey('spill'));
+      localStorage.removeItem(spillKey());
       return [];
     }
     return Array.isArray(parsed.events) ? parsed.events.slice(0, SPILL_MAX) : [];
@@ -160,13 +139,24 @@ function readSpill(): BufferedEvent[] {
 function writeSpill(events: BufferedEvent[]): void {
   try {
     if (events.length === 0) {
-      localStorage.removeItem(storageKey('spill'));
+      localStorage.removeItem(spillKey());
       return;
     }
-    localStorage.setItem(storageKey('spill'), JSON.stringify({ at: Date.now(), events: events.slice(-SPILL_MAX) }));
+    localStorage.setItem(spillKey(), JSON.stringify({ at: Date.now(), events: events.slice(-SPILL_MAX) }));
   } catch {
     /* storage unavailable or full */
   }
+}
+
+/**
+ * Move a previous page's unsent batch into memory. The stored copy is cleared
+ * so a failed flush re-spills each event once instead of appending the whole
+ * replayed batch to the copy that is still in storage.
+ */
+function takeSpill(): BufferedEvent[] {
+  const events = readSpill();
+  if (events.length > 0) writeSpill([]);
+  return events;
 }
 
 function buildPayload(events: BufferedEvent[]): MushiProductEventPayload {
@@ -182,7 +172,9 @@ function buildPayload(events: BufferedEvent[]): MushiProductEventPayload {
 }
 
 async function flushNow(): Promise<void> {
-  if (!_client || _flushing) return;
+  // The consent check lives here, not only in enqueue(): identify() and the
+  // replayed spill reach the buffer without going through enqueue().
+  if (!_client || _flushing || _consent !== 'granted') return;
   if (_buffer.length === 0 && !_pendingIdentify) return;
   _flushing = true;
   const batch = _buffer.splice(0, EVENT_PROPERTY_LIMITS.maxServerBatch);
@@ -215,6 +207,27 @@ function enqueue(ev: BufferedEvent): void {
   if (_buffer.length >= EVENT_PROPERTY_LIMITS.maxClientBatch) void flushNow();
 }
 
+/** React to a consent decision made anywhere in the SDK (see analytics-gate.ts). */
+function applyConsent(state: 'granted' | 'denied'): void {
+  if (state === 'denied') {
+    _consent = 'denied';
+    _buffer = [];
+    _consentBuffer = [];
+    _pendingIdentify = false;
+    writeSpill([]);
+    return;
+  }
+  const wasPending = _consent === 'pending';
+  _consent = 'granted';
+  if (wasPending) {
+    // A spill written under an earlier grant was held back while consent was
+    // pending; it goes out ahead of the events buffered on this page.
+    _buffer.push(...takeSpill(), ..._consentBuffer);
+    _consentBuffer = [];
+  }
+  if (_buffer.length > 0 || _pendingIdentify) void flushNow();
+}
+
 function stripUndefined<T extends object>(o: T): Partial<T> {
   const out: Partial<T> = {};
   for (const [k, v] of Object.entries(o)) {
@@ -225,15 +238,18 @@ function stripUndefined<T extends object>(o: T): Partial<T> {
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-/** True when tracking is active for this person (enabled, consented, sampled in, no DNT). */
+/**
+ * True when tracking is active for this person (enabled, consented, sampled
+ * in, no DNT / GPC, not automation). The gate leaves the tracker
+ * uninitialised when it blocks, so `_initialized` covers the first part.
+ */
 export function isEventTrackingActive(): boolean {
-  return _initialized && _config.enabled && _consent === 'granted' && _sampledIn;
+  return _initialized && _consent === 'granted' && _sampledIn;
 }
 
 /** The anonymous id events are keyed on, or null when tracking is off. */
 export function getEventAnonymousId(): string | null {
   if (!_initialized || _consent === 'denied') return null;
-  if (_config.respectDoNotTrack && dntActive()) return null;
   return _anonId;
 }
 
@@ -245,12 +261,14 @@ export function initEventTracker(opts: EventTrackerOptions): void {
   if (typeof window === 'undefined') return;
   const cfg = opts.config ?? {};
   _config = { ...defaults(), ...stripUndefined(cfg), propertyAllowlist: cfg.propertyAllowlist ?? [] };
-  if (!_config.enabled) return;
-  if (_config.respectDoNotTrack && dntActive()) return; // no events, no anon id persisted
+  // Set before the gate so setConsent() on a blocked page still persists the
+  // visitor's choice under this project's key.
+  _projectId = opts.projectId;
+  // Disabled, DNT / GPC or automation: no events, no anon id exposed.
+  if (analyticsBlockReason(cfg) !== null) return;
 
   _initialized = true;
   _client = opts.client;
-  _projectId = opts.projectId;
   _anonId = opts.anonId;
   _userId = opts.userId ?? null;
   _sdkVersion = opts.sdkVersion;
@@ -261,13 +279,12 @@ export function initEventTracker(opts: EventTrackerOptions): void {
   _sampledIn = rate >= 1 ? true : rate <= 0 ? false : hashToUnit(_anonId ?? 'anon') < rate;
   if (!_sampledIn) return;
 
-  const stored = readStoredConsent();
-  if (_config.consent === 'required') _consent = stored ?? 'pending';
-  else _consent = stored === 'denied' ? 'denied' : 'granted';
-
-  // Replay a previous page's unsent batch.
-  const spill = readSpill();
-  if (spill.length > 0) _buffer.push(...spill);
+  _consent = resolveAnalyticsConsent(_projectId, cfg);
+  // Replay a previous page's unsent batch only under a grant. A stored denial
+  // deletes it; while consent is pending it stays put for applyConsent().
+  if (_consent === 'granted') _buffer.push(...takeSpill());
+  else if (_consent === 'denied') writeSpill([]);
+  _unsubscribeConsent = onAnalyticsConsentChange(applyConsent);
 
   const interval = Math.max(1_000, _config.flushIntervalMs);
   _flushTimer = setInterval(() => { void flushNow(); }, interval);
@@ -290,7 +307,7 @@ export function trackEvent(
   properties?: Record<string, unknown>,
   opts?: { dedupKey?: string; ts?: string; reserved?: MushiEventProperties },
 ): boolean {
-  if (!_initialized || !_config.enabled || !_sampledIn) return false;
+  if (!_initialized || !_sampledIn) return false;
   if (!isValidEventName(name)) return false;
   const { properties: props } = sanitizeEventProperties(properties, {
     allowlist: _config.propertyAllowlist,
@@ -313,37 +330,26 @@ export function trackEvent(
   return true;
 }
 
-/** Grant or deny consent. Granting releases the pending buffer. */
+/**
+ * Grant or deny consent. Persisted per project and broadcast through the
+ * shared gate, so the session tracker follows the same decision. Granting
+ * releases the pending buffer and identify; denying drops them.
+ */
 export function setEventConsent(state: 'granted' | 'denied'): void {
-  writeStoredConsent(state);
-  if (!_initialized) {
-    _consent = state;
-    return;
-  }
-  if (state === 'denied') {
-    _consent = 'denied';
-    _buffer = [];
-    _consentBuffer = [];
-    writeSpill([]);
-    return;
-  }
-  const wasPending = _consent === 'pending';
-  _consent = 'granted';
-  if (wasPending && _consentBuffer.length > 0) {
-    _buffer.push(..._consentBuffer);
-    _consentBuffer = [];
-    void flushNow();
-  }
+  if (!_initialized) _consent = state;
+  setAnalyticsConsent(_projectId, state);
 }
 
-/** Called from identify(): stitches anonymous history to the person. */
+/**
+ * Called from identify(): stitches anonymous history to the person. The
+ * identify marker is held until consent is granted and dropped on denial.
+ */
 export function updateEventIdentity(userId: string | null, traits?: Record<string, unknown> | null): void {
   _userId = userId;
   _userTraits = traits ?? null;
-  if (_initialized && userId) {
-    _pendingIdentify = true;
-    void flushNow();
-  }
+  if (!_initialized || !_sampledIn || !userId || _consent === 'denied') return;
+  _pendingIdentify = true;
+  if (_consent === 'granted') void flushNow();
 }
 
 /** Flush immediately (tests, before navigation). */
@@ -357,6 +363,8 @@ export function destroyEventTracker(): void {
     clearInterval(_flushTimer);
     _flushTimer = null;
   }
+  _unsubscribeConsent?.();
+  _unsubscribeConsent = null;
   _initialized = false;
   _client = null;
   _buffer = [];

@@ -37,7 +37,7 @@ import {
   useMemo,
   type ReactNode,
 } from 'react'
-import { AppState, type NativeEventSubscription } from 'react-native'
+import { AppState, Platform, type NativeEventSubscription } from 'react-native'
 import {
   createApiClient,
   createBreadcrumbBuffer,
@@ -70,6 +70,7 @@ import { MushiBottomSheet } from './components/MushiBottomSheet'
 import { MushiFloatingButton } from './components/MushiFloatingButton'
 import { MushiBanner } from './components/MushiBanner'
 import { createRNEventTracker, type RNAnalyticsConfig, type RNEventTracker } from './analytics/event-tracker'
+import { createRNSessionTracker, type RNSessionTracker } from './analytics/session-tracker'
 import { MUSHI_SDK_PACKAGE, MUSHI_SDK_VERSION } from './version'
 
 export { reporterStatusShort } from './reporter-status'
@@ -151,6 +152,14 @@ export interface MushiRNConfig {
    * There is no DNT signal on native — `enabled: false` is the off switch.
    */
   analytics?: RNAnalyticsConfig
+  /**
+   * Session lifecycle tracking for the console's Activity and Users views:
+   * session start / end on foreground and background, a heartbeat every
+   * minute, and a page view per `setScreen()` change. Default true. Follows
+   * the `analytics` switch and consent: nothing is sent while analytics is
+   * disabled or consent is not granted.
+   */
+  trackSessions?: boolean
 }
 
 // MushiHallOfFameEntry is now defined in and imported from @mushi-mushi/core
@@ -241,6 +250,13 @@ export interface MushiRNInstance {
 }
 
 const MushiContext = createContext<MushiRNInstance | null>(null)
+
+/** Stand-in for navigator.userAgent on session rows, e.g. `@mushi-mushi/react-native/1.2.0 (ios 17.5)`. */
+function nativeUserAgent(): string {
+  const os = Platform?.OS ?? 'native'
+  const version = Platform?.Version
+  return `${MUSHI_SDK_PACKAGE}/${MUSHI_SDK_VERSION} (${version != null ? `${os} ${String(version)}` : os})`
+}
 
 /** Default privacy caption shown beneath the screenshot preview. */
 const DEFAULT_SCREENSHOT_HINT =
@@ -718,10 +734,14 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
     }
   }, [config.rewards?.enabled, config.rewards?.trackActivity, config.rewards?.flushIntervalMs])
 
-  // Product analytics batcher. Declared after userRef/screenRef so the getters
-  // below can read them; the effect runs after the api-client effect above.
+  // Product analytics batcher and session tracker. Declared after
+  // userRef/screenRef so the getters below can read them; the effect runs
+  // after the api-client effect above. Sessions follow the event tracker's
+  // consent, so one analytics switch and one setConsent() govern both.
   const eventTrackerRef = useRef<RNEventTracker | null>(null)
+  const sessionTrackerRef = useRef<RNSessionTracker | null>(null)
   useEffect(() => {
+    const getRoute = () => screenRef.current?.route ?? screenRef.current?.name ?? null
     const tracker = createRNEventTracker({
       projectId: config.projectId,
       client: () => apiClientRef.current,
@@ -730,18 +750,35 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         return reporterTokenRef.current
       },
       getUserId: () => userRef.current?.id ?? null,
-      getRoute: () => screenRef.current?.route ?? screenRef.current?.name ?? null,
+      getRoute,
       sdkVersion: MUSHI_SDK_VERSION,
       config: config.analytics,
       scrub: scrubPii,
     })
     eventTrackerRef.current = tracker
+    const sessions =
+      config.trackSessions === false
+        ? null
+        : createRNSessionTracker({
+            client: () => apiClientRef.current,
+            getReporterToken: async () => {
+              await reporterTokenReadyRef.current
+              return reporterTokenRef.current
+            },
+            getRoute,
+            consent: tracker,
+            sessionId: sessionIdRef.current,
+            sdkVersion: MUSHI_SDK_VERSION,
+            userAgent: nativeUserAgent(),
+          })
+    sessionTrackerRef.current = sessions
     // Flush when the app leaves the foreground — the interval may never fire
     // again if the OS suspends the JS thread.
     let sub: NativeEventSubscription | undefined
     try {
       if (typeof AppState?.addEventListener === 'function') {
         sub = AppState.addEventListener('change', (state) => {
+          sessions?.onAppStateChange(state)
           if (state !== 'active') tracker.flush().catch(() => {})
         })
       }
@@ -750,10 +787,18 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
     }
     return () => {
       sub?.remove()
+      sessions?.destroy()
+      sessionTrackerRef.current = null
       eventTrackerRef.current = null
       tracker.destroy().catch(() => {})
     }
-  }, [config.projectId, config.analytics?.enabled, config.analytics?.consent, config.analytics?.flushIntervalMs])
+  }, [
+    config.projectId,
+    config.analytics?.enabled,
+    config.analytics?.consent,
+    config.analytics?.flushIntervalMs,
+    config.trackSessions,
+  ])
 
   const instance: MushiRNInstance = useMemo(
     () => ({
@@ -810,6 +855,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         const prev = screenRef.current?.name
         screenRef.current = screen
         if (screen.name && screen.name !== prev) {
+          sessionTrackerRef.current?.pageView(screen.route ?? screen.name)
           breadcrumbsRef.current.add({
             category: 'navigation',
             level: 'info',

@@ -154,9 +154,19 @@ export {
   destroyEventTracker,
   getEventAnonymousId,
   isEventTrackingActive,
-  dntActive,
   type EventTrackerOptions,
 } from './event-tracker';
+/** @public — the privacy gate shared by product events and session tracking */
+export {
+  dntActive,
+  isAutomatedBrowser,
+  analyticsBlockReason,
+  resolveAnalyticsConsent,
+  setAnalyticsConsent,
+  onAnalyticsConsentChange,
+  type AnalyticsConsentState,
+  type AnalyticsBlockReason,
+} from './analytics-gate';
 /** @public — analytics vocabulary shared by SDKs, console, docs and server */
 export {
   MUSHI_EVENTS,

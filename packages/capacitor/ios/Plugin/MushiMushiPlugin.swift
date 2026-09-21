@@ -1,6 +1,10 @@
 import Capacitor
 import Foundation
+// SwiftPM builds the vendored SDK as its own `MushiMushi` target; CocoaPods
+// compiles it into this pod's module, where there is nothing to import.
+#if canImport(MushiMushi)
 import MushiMushi
+#endif
 import UIKit
 
 /// Capacitor iOS plugin. Delegates to the native `MushiMushi` SDK so behaviour

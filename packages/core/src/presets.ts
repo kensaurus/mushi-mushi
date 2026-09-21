@@ -42,6 +42,7 @@ const KNOWN_CONFIG_KEYS: readonly string[] = [
   'preset',
   'runtimeConfig',
   'analytics',
+  'trackSessions',
   'sentry',
   'widget',
   'capture',

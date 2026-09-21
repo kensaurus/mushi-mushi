@@ -80,6 +80,14 @@ export interface RNEventTracker {
   destroy(): Promise<void>
   /** Resolves once persisted consent and the previous spill have been read. */
   ready: Promise<void>
+  /**
+   * Current consent: 'granted' | 'denied' | 'pending'. Read it after `ready`
+   * so a persisted choice has been applied. Always 'denied' when analytics is
+   * disabled, which keeps the session tracker behind the same switch.
+   */
+  consentState(): 'granted' | 'denied' | 'pending'
+  /** Follow setConsent() decisions (the session tracker uses this). Returns unsubscribe. */
+  onConsentChange(listener: (state: 'granted' | 'denied') => void): () => void
 }
 
 type BufferedEvent = MushiProductEventPayload['events'][number]
@@ -116,6 +124,7 @@ export function createRNEventTracker(opts: RNEventTrackerOptions): RNEventTracke
   let destroyed = false
   let timer: ReturnType<typeof setInterval> | null = null
   let storage: AsyncStorageLike | null = null
+  const consentListeners = new Set<(state: 'granted' | 'denied') => void>()
 
   const loadStorage = opts.storage ?? defaultStorage
   const resolveClient = (): MushiApiClient | null =>
@@ -149,6 +158,9 @@ export function createRNEventTracker(opts: RNEventTrackerOptions): RNEventTracke
 
   async function flushNow(): Promise<void> {
     if (destroyed && buffer.length === 0) return
+    // A persisted denial is read asynchronously; until it has been, 'implied'
+    // mode looks granted. Wait so an early identify() cannot slip out first.
+    await ready
     if (flushing || consent !== 'granted') return
     if (buffer.length === 0 && !pendingIdentify) return
     const client = resolveClient()
@@ -207,6 +219,8 @@ export function createRNEventTracker(opts: RNEventTrackerOptions): RNEventTracke
           consent = 'denied'
           buffer = []
           consentBuffer = []
+          pendingIdentify = false
+          await writeSpill([])
           return
         }
         if (stored === 'granted' && consent === 'pending') {
@@ -214,8 +228,13 @@ export function createRNEventTracker(opts: RNEventTrackerOptions): RNEventTracke
           buffer.push(...consentBuffer)
           consentBuffer = []
         }
+        // Take the spill: clearing the stored copy means a failed retry
+        // re-spills each event once instead of duplicating the replayed batch.
         const spill = await readSpill()
-        if (spill.length > 0) buffer.unshift(...spill)
+        if (spill.length > 0) {
+          buffer.unshift(...spill)
+          await writeSpill([])
+        }
       })().catch(() => undefined)
     : Promise.resolve()
 
@@ -255,23 +274,41 @@ export function createRNEventTracker(opts: RNEventTrackerOptions): RNEventTracke
         consent = 'denied'
         buffer = []
         consentBuffer = []
+        pendingIdentify = false
         void writeSpill([])
-        return
+      } else {
+        const wasPending = consent === 'pending'
+        consent = 'granted'
+        if (wasPending && consentBuffer.length > 0) {
+          buffer.push(...consentBuffer)
+          consentBuffer = []
+        }
+        if (buffer.length > 0 || pendingIdentify) void flushNow()
       }
-      const wasPending = consent === 'pending'
-      consent = 'granted'
-      if (wasPending && consentBuffer.length > 0) {
-        buffer.push(...consentBuffer)
-        consentBuffer = []
-        void flushNow()
+      for (const listener of [...consentListeners]) {
+        try {
+          listener(state)
+        } catch {
+          /* a listener must not break consent handling */
+        }
       }
     },
     setIdentity(id, traits) {
       userId = id
       userTraits = traits ?? null
-      if (id && enabled) {
+      // Held until consent is granted (flushNow checks), never queued under a denial.
+      if (id && enabled && consent !== 'denied') {
         pendingIdentify = true
         void flushNow()
+      }
+    },
+    consentState() {
+      return enabled ? consent : 'denied'
+    },
+    onConsentChange(listener) {
+      consentListeners.add(listener)
+      return () => {
+        consentListeners.delete(listener)
       }
     },
     async flush() {

@@ -31,8 +31,17 @@ export interface MushiConfig {
    * and keyed on the same opaque per-project reporter token as sessions;
    * honours DNT / GPC. Set `enabled: false` to opt out, or
    * `consent: 'required'` to buffer until `setConsent('granted')`.
+   * Session tracking passes the same gate: `enabled`, DNT / GPC, bot
+   * exclusion and consent all apply to it too.
    */
   analytics?: MushiAnalyticsConfig;
+  /**
+   * Session lifecycle tracking for the console's Activity and Users views
+   * (session start / heartbeat / end, page views). Default true. Runs only
+   * while the `analytics` gate allows tracking; `false` turns it off even
+   * then.
+   */
+  trackSessions?: boolean;
 
   sentry?: MushiSentryConfig;
   widget?: MushiWidgetConfig;
@@ -479,6 +488,22 @@ export interface MushiCaptureConfig {
   screenshotProvider?: () => Promise<string | null>;
   elementSelector?: boolean;
   replay?: 'sentry' | 'rrweb' | 'lite' | 'off';
+  /**
+   * How to load rrweb for `replay: 'rrweb'`. A published SDK cannot import
+   * rrweb itself: its bare `import('rrweb')` is invisible to your bundler, so
+   * rrweb never makes it into your build. Hand the import over and your
+   * bundler code-splits it like any other dynamic import. Install `rrweb`
+   * yourself; the chunk loads only for sessions sampled into replay.
+   *
+   * Without a loader the SDK uses a global `rrweb` (the UMD build from a
+   * script tag) when one exists, and otherwise records lite replay (clicks)
+   * and warns once in the console. Recording masks every input and every
+   * text node.
+   *
+   * @example
+   * capture: { replay: 'rrweb', rrweb: () => import('rrweb') }
+   */
+  rrweb?: () => Promise<{ record?: unknown }>;
   /**
    * Mushi Mushi v2.1 (whitepaper §6 hybrid mode): passive inventory
    * discovery. When enabled the SDK observes navigations and emits a
@@ -1802,6 +1827,13 @@ export interface MushiAnalyticsConfig {
   sampleRate?: number;
   /** Honour navigator.doNotTrack / globalPrivacyControl (default true). */
   respectDoNotTrack?: boolean;
+  /**
+   * Skip tracking in WebDriver-controlled browsers (Playwright, Puppeteer,
+   * Selenium), headless Chrome, Lighthouse and crawler user agents, so test
+   * runs and bots never count as users (default true). Set false to exercise
+   * analytics from an end-to-end test.
+   */
+  excludeBots?: boolean;
   /** Emit `pageview` on history navigation (default false; sessions already record page views). */
   autoPageviews?: boolean;
   /** Flush cadence in ms (default 5000, min 1000). */
