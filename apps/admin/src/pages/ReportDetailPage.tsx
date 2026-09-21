@@ -122,10 +122,15 @@ export function ReportDetailPage() {
 
   // Funnel: `report_opened` is one of the HABIT_EVENTS (diagnosis consumed).
   // Keyed on the report id so refetches / triage saves don't re-fire.
+  // `project_id` + `via` match FirstDiagnosisScreen's emit so every
+  // report_opened row can be joined to its project and told apart by entry
+  // point.
   useEffect(() => {
     if (!serverReport?.id) return
     trackSelf('report_opened', {
       report_id: serverReport.id,
+      project_id: serverReport.project_id,
+      via: 'report_detail',
       ...(serverReport.severity ? { severity: serverReport.severity } : {}),
     })
   }, [serverReport?.id])

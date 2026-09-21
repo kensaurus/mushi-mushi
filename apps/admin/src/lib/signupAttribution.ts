@@ -43,6 +43,14 @@ export type SignupSource =
   | 'search'
   | 'other'
 
+/**
+ * Which product the account signed up for: the builder console or Mushi
+ * Bounties (testers). Mirrors LoginPage's `?as=tester` switch. Stamped on
+ * the auth user so the company funnel can count builder signups without
+ * the tester marketplace inflating them.
+ */
+export type SignupTrack = 'console' | 'tester'
+
 export interface SignupMeta {
   /** Self-reported answer from the signup form. */
   signup_source?: SignupSource
@@ -52,6 +60,8 @@ export interface SignupMeta {
   signup_src?: string
   /** `?ref=` from the widget's "Bug reports by Mushi" growth-loop mark. */
   loop_ref?: string
+  /** Console (builder) or tester signup — see {@link SignupTrack}. */
+  signup_track?: SignupTrack
 }
 
 const STASH_KEY = 'mushi_signup_meta'
@@ -73,6 +83,10 @@ function cleanTag(raw: string | null | undefined): string | undefined {
   return s
 }
 
+function cleanTrack(raw: unknown): SignupTrack | undefined {
+  return raw === 'console' || raw === 'tester' ? raw : undefined
+}
+
 /** Drop empty keys so the auth metadata only carries what the user gave us. */
 export function compactSignupMeta(meta: SignupMeta): SignupMeta {
   const out: SignupMeta = {}
@@ -83,14 +97,23 @@ export function compactSignupMeta(meta: SignupMeta): SignupMeta {
   if (src) out.signup_src = src
   const ref = cleanTag(meta.loop_ref)
   if (ref) out.loop_ref = ref
+  const track = cleanTrack(meta.signup_track)
+  if (track) out.signup_track = track
   return out
 }
 
-/** Read `?src=` / `?ref=` attribution from the login/signup URL. */
-export function readSignupMetaFromSearch(params: URLSearchParams): Pick<SignupMeta, 'signup_src' | 'loop_ref'> {
+/**
+ * Read the login/signup URL's attribution: `?src=` / `?ref=` tags, plus the
+ * signup track from `?as=` (the same `as=tester` rule LoginPage uses to pick
+ * its tester track; anything else is the console).
+ */
+export function readSignupMetaFromSearch(
+  params: URLSearchParams,
+): Pick<SignupMeta, 'signup_src' | 'loop_ref' | 'signup_track'> {
   return compactSignupMeta({
     signup_src: params.get('src') ?? undefined,
     loop_ref: params.get('ref') ?? undefined,
+    signup_track: params.get('as') === 'tester' ? 'tester' : 'console',
   })
 }
 
@@ -158,6 +181,9 @@ function metaFromUser(user: User): SignupMeta {
     signup_source_detail: typeof m.signup_source_detail === 'string' ? m.signup_source_detail : undefined,
     signup_src: typeof m.signup_src === 'string' ? m.signup_src : undefined,
     loop_ref: typeof m.loop_ref === 'string' ? m.loop_ref : undefined,
+    // The tester magic-link path (auth.tsx signInAsTester) predates the
+    // track stamp and marks testers with `signup_intent: 'tester'` instead.
+    signup_track: cleanTrack(m.signup_track) ?? (m.signup_intent === 'tester' ? 'tester' : undefined),
   })
 }
 
@@ -196,12 +222,12 @@ export async function completeSignupAttribution(user: User): Promise<void> {
     if (!isFreshSignup) return
 
     markTracked(user.id)
-    const props: Record<string, string> = {
+    trackSelf('signup_completed', {
       signup_source: meta.signup_source ?? SIGNUP_SOURCE_UNSPECIFIED,
-    }
-    if (meta.signup_source_detail) props.signup_source_detail = meta.signup_source_detail
-    if (meta.signup_src) props.signup_src = meta.signup_src
-    trackSelf('signup_completed', props)
+      ...(meta.signup_source_detail ? { signup_source_detail: meta.signup_source_detail } : {}),
+      ...(meta.signup_src ? { signup_src: meta.signup_src } : {}),
+      ...(meta.signup_track ? { signup_track: meta.signup_track } : {}),
+    })
     if (meta.loop_ref) trackSelf('loop_signup', { ref: meta.loop_ref })
   } catch {
     /* attribution is best-effort; never break the auth flow */
