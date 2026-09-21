@@ -15,11 +15,11 @@
   "workspaces": {
     ".": {
       "entry": [
-        "scripts/*.mjs",
-        "scripts/cloudflare/*.mjs",
-        "scripts/marketing/*.mjs",
-        "scripts/cloudfront-*.js",
-        "scripts/vendor/*.js"
+        "scripts/*.mjs!",
+        "scripts/cloudflare/*.mjs!",
+        "scripts/marketing/*.mjs!",
+        "scripts/cloudfront-*.js!",
+        "scripts/vendor/*.js!"
       ],
       "project": [
         "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,mdx}!",

@@ -7,8 +7,21 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 | Mode | Command | Error-level issues | CI threshold |
 |---|---|---:|---|
-| production | `pnpm exec knip --production --reporter json` | **725** | `--max-issues 725` |
-| default | `pnpm exec knip --reporter json` | **584** | `--max-issues 584 --treat-config-hints-as-errors` |
+| production | `pnpm exec knip --production --reporter json` | **724** | `--max-issues 724` |
+| default | `pnpm exec knip --reporter json` | **579** | `--max-issues 579 --treat-config-hints-as-errors` |
+
+> **Re-measured 2026-09-21 (third pass), knip 6.34.0: 724 production / 579 default**
+> (723 and 578 fail, 724 and 579 pass). The root workspace now marks its tooling scripts as
+> production entries (`scripts/*.mjs!`, `scripts/marketing/*.mjs!`, …). Production mode only
+> follows `!` entries, so before this it never walked the root scripts at all and reported the
+> helpers they import (`scripts/lib/docs-stats.mjs`, `scripts/lib/sdk-version-matrix.mjs`) as
+> unused files — false positives, since both have importers. Walking them surfaced 5 genuinely
+> dead exports in those helpers (`buildReadmeClaimChecks`, `VERSION_MATRIX_GROUPS`,
+> `collectPackageVersions`, `VERSION_MATRIX_START`, `VERSION_MATRIX_END`), each used only inside
+> its own module; they are now module-local. One artifact remains and is counted, not hidden:
+> `scripts/check-release-version.mjs` invokes the `changeset` binary, which comes from a
+> devDependency that production mode cannot see. Putting it in `ignoreBinaries` would trade one
+> counted issue for a config hint, and the default run fails on hints.
 
 > **Re-measured 2026-09-21 on `feat/gtm-phase1-measure` (PR #394), knip 6.34.0: 725 production / 584 default**
 > (724 and 583 fail, 725 and 584 pass; measured after merging master's hosted-billing commit
@@ -58,29 +71,29 @@ Never raise them.
 
 ## Counts per workspace: production
 
-| workspace | files | dependencies | unlisted | exports | types | duplicates | total |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| . | 3 |  |  |  |  |  | 3 |
-| apps/admin | 64 |  |  | 293 | 160 | 5 | 522 |
-| apps/docs |  | 2 |  | 16 | 7 | 1 | 26 |
-| examples/e2e-dogfood | 1 |  |  |  |  |  | 1 |
-| packages/adapters | 1 |  |  |  |  |  | 1 |
-| packages/agents | 8 |  | 1 | 3 | 2 |  | 14 |
-| packages/brand | 1 |  |  |  |  |  | 1 |
-| packages/capacitor | 1 |  |  |  |  |  | 1 |
-| packages/cli |  |  |  | 46 | 16 |  | 62 |
-| packages/core |  |  |  | 4 | 4 |  | 8 |
-| packages/marketing-ui |  | 1 |  | 1 |  |  | 2 |
-| packages/mcp | 9 | 1 |  | 5 |  |  | 15 |
-| packages/mcp-ci |  |  |  | 3 |  |  | 3 |
-| packages/node |  |  |  | 1 | 2 |  | 3 |
-| packages/plugin-jira | 1 |  |  |  |  |  | 1 |
-| packages/react-native | 1 |  |  | 3 | 2 |  | 6 |
-| packages/server | 2 | 1 |  |  |  |  | 3 |
-| packages/verify | 1 |  |  |  |  |  | 1 |
-| packages/wasm-classifier |  |  |  |  | 1 |  | 1 |
-| packages/web |  |  |  | 39 | 12 |  | 51 |
-| **total** | **93** | **5** | **1** | **414** | **206** | **6** | **725** |
+| workspace | files | dependencies | binaries | unlisted | exports | types | duplicates | total |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| . | 1 |  | 1 |  |  |  |  | 2 |
+| apps/admin | 64 |  |  |  | 293 | 160 | 5 | 522 |
+| apps/docs |  | 2 |  |  | 16 | 7 | 1 | 26 |
+| examples/e2e-dogfood | 1 |  |  |  |  |  |  | 1 |
+| packages/adapters | 1 |  |  |  |  |  |  | 1 |
+| packages/agents | 8 |  |  | 1 | 3 | 2 |  | 14 |
+| packages/brand | 1 |  |  |  |  |  |  | 1 |
+| packages/capacitor | 1 |  |  |  |  |  |  | 1 |
+| packages/cli |  |  |  |  | 46 | 16 |  | 62 |
+| packages/core |  |  |  |  | 4 | 4 |  | 8 |
+| packages/marketing-ui |  | 1 |  |  | 1 |  |  | 2 |
+| packages/mcp | 9 | 1 |  |  | 5 |  |  | 15 |
+| packages/mcp-ci |  |  |  |  | 3 |  |  | 3 |
+| packages/node |  |  |  |  | 1 | 2 |  | 3 |
+| packages/plugin-jira | 1 |  |  |  |  |  |  | 1 |
+| packages/react-native | 1 |  |  |  | 3 | 2 |  | 6 |
+| packages/server | 2 | 1 |  |  |  |  |  | 3 |
+| packages/verify | 1 |  |  |  |  |  |  | 1 |
+| packages/wasm-classifier |  |  |  |  |  | 1 |  | 1 |
+| packages/web |  |  |  |  | 39 | 12 |  | 51 |
+| **total** | **91** | **5** | **1** | **1** | **414** | **206** | **6** | **724** |
 
 Warn-level (not counted): optionalPeerDependencies 8 (agents 1, plugin-sdk 2,
 react-native 4, wasm-classifier 1).
@@ -89,7 +102,6 @@ react-native 4, wasm-classifier 1).
 
 | workspace | files | dependencies | devDependencies | unlisted | unresolved | exports | types | duplicates | total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| . |  |  |  |  |  | 5 |  |  | 5 |
 | apps/admin | 51 |  |  |  |  | 216 | 160 | 5 | 432 |
 | apps/docs |  | 2 | 1 |  |  | 14 | 7 | 1 | 25 |
 | examples/e2e-dogfood |  |  | 3 |  |  | 2 |  |  | 5 |
@@ -110,7 +122,7 @@ react-native 4, wasm-classifier 1).
 | packages/svelte |  |  | 1 |  |  |  |  |  | 1 |
 | packages/wasm-classifier |  |  |  |  |  |  | 1 |  | 1 |
 | packages/web |  |  |  |  |  | 32 | 11 |  | 43 |
-| **total** | **64** | **4** | **18** | **1** | **1** | **296** | **194** | **6** | **584** |
+| **total** | **64** | **4** | **18** | **1** | **1** | **291** | **194** | **6** | **579** |
 
 Warn-level (not counted): optionalPeerDependencies 8.
 

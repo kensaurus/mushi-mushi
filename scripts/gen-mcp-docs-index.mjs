@@ -29,6 +29,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { stripMarkupToFixpoint } from './lib/strip-markup.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -107,12 +108,15 @@ function frontmatterDescription(src) {
 }
 
 function stripMdxBody(src) {
-  return src
-    .replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, '')
-    .replace(/^import\s.+from\s+['"].+['"]\s*;?\s*$/gm, '')
-    .replace(/^export\s+(?:default\s+)?(?:const|function|class)\s.*/gm, '')
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/<\/?\w[\w.]*(?:\s[^>]*)?\s*\/?>/g, '')
+  // Markup removal runs to a fixpoint (see lib/strip-markup.mjs): one pass can
+  // splice the text either side of a removed tag into a fresh tag.
+  return stripMarkupToFixpoint(
+    src
+      .replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, '')
+      .replace(/^import\s.+from\s+['"].+['"]\s*;?\s*$/gm, '')
+      .replace(/^export\s+(?:default\s+)?(?:const|function|class)\s.*/gm, '')
+      .replace(/```[\s\S]*?```/g, ''),
+  )
 }
 
 function firstParagraph(src) {

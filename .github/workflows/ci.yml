@@ -188,6 +188,14 @@ jobs:
 
       - run: pnpm test
 
+      # `pnpm test` is turbo, which only reaches workspaces. The root-level
+      # scripts/*.test.mjs suites (CloudFront routing functions, hosted-MCP
+      # verifier helpers, the LLM-surface markup stripper) had no CI step at
+      # all until PR #394, so they could rot unnoticed. They are offline and
+      # take ~1s.
+      - name: Test root scripts
+        run: pnpm test:scripts
+
       # Wave D D2: enforce that the public changelog is in sync with the
       # per-package CHANGELOGs and pending changesets. If a PR touches
       # changesets without regenerating, this fails with an actionable error.
@@ -223,10 +231,10 @@ jobs:
       # docs/execplans/knip-baseline/. Lower them as findings are paid down;
       # never raise them to get a red run green.
       - name: Check dead code (knip, production)
-        run: pnpm exec knip --production --max-issues 725
+        run: pnpm exec knip --production --max-issues 724
 
       - name: Check dead code (knip, default + config hints)
-        run: pnpm exec knip --max-issues 584 --treat-config-hints-as-errors
+        run: pnpm exec knip --max-issues 579 --treat-config-hints-as-errors
 
       - name: Check debug residue and suppression ratchet
         # console.(log|debug|warn), @ts-ignore/@ts-expect-error, eslint-disable
