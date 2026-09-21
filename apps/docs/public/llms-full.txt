@@ -12692,10 +12692,10 @@ telemetry, support mail, and Bounties tester data.
   understanding which onboarding steps fail. We ran a balancing test on the
   product-usage events: they are scoped to your own account, never shared, and
   expire (section 7).
-- **(a) consent** — docs-site analytics. Before you answer the consent bar
-  the docs site loads no analytics code, sends nothing, and stores nothing
-  except your answer; Do Not Track and Global Privacy Control are honoured as
-  a refusal. "No thanks" keeps it that way.
+- **(a) consent** — docs-site analytics. Until you accept the consent bar
+  the docs site loads no analytics code, sends no analytics events, and
+  stores nothing for analytics except your answer; Do Not Track and Global
+  Privacy Control are honoured as a refusal. "No thanks" keeps it that way.
 - **(c) legal obligation** — tax records for paid plans and tester payouts.
 
 ## 4. Data where Mushi is the processor
@@ -12829,17 +12829,24 @@ browser:
 | Console | Supabase auth session (cookie / localStorage) | Keep you signed in | Until sign-out or expiry |
 | Console | `mushi:tour-v1-completed` | Remember that you finished the first-run tour | Until cleared |
 | Console | Theme preference | Light / dark | Until cleared |
+| Console | `mushi:accounts` | Each account signed in on this browser, with its sign-in session, so the account switcher can change accounts without a new sign-in | Until you remove the account or choose **Sign out of all** |
+| Console | `mushi:login:last_email` | The email address on the sign-in form, only when you choose to have it remembered | Until cleared |
+| Console | Active organization and project, collapsed panels, dismissed hints, saved views | Interface state | Until cleared |
 | Console | Mushi SDK keys (see the SDK rows below) | The console runs Mushi's own SDK for bug reports and product analytics | As listed below |
-| Docs | `mushi_events_consent_` | Remember your answer to the analytics consent bar — the only analytics key written before you answer | Until cleared |
+| Docs | `mushi_events_consent_` | Remember your answer to the analytics consent bar — the only analytics key the docs site writes unless you accept | Until cleared |
 | Docs | Release-banner dismissal, theme preference | Hide a banner you closed; light / dark | Until cleared |
+| Docs | `mushi:migration::steps` | Your progress through a migration guide's checklist | Until cleared |
+| Docs | `mushi:docs:auth`, `mushi:docs:bridge-nonce` (session storage) | Only when you sign in from the docs: a short-lived console session so snippets can show your own project | Until the tab closes |
 | Docs, after you accept | `mushi_first_touch_` | Where your first visit came from: `utm_source` / `utm_medium` / `utm_campaign`, the referring page without its query string, the landing path, and the time | Until cleared |
 | Docs, after you accept | Mushi SDK keys (see the SDK rows below) | The docs site loads Mushi's own SDK once you accept | As listed below |
-| **SDK** (your app, the console, the docs after consent) | `mushi:reporter-token:` | A random token so repeat reports and analytics events from the same browser group together. It is not an email or a name, but it links events from the same browser | Until cleared |
+| **SDK** (your app, the console, the docs after consent) | `mushi:reporter-token:` (`mushi_reporter_token` when the SDK starts without a project ID) | A random token so repeat reports and analytics events from the same browser group together. It is not an email or a name, but it links events from the same browser | Until cleared |
 | **SDK** | `mushi_session_id` (session storage) | Group events from one browser tab session | Until the tab closes |
 | **SDK** | `mushi_events_consent_`, `mushi_events_spill_` | The analytics consent state, and analytics events that could not be sent yet (retried on the next visit) | Until cleared or sent |
 | **SDK** | `mushi_fingerprint_hash` | The hashed device fingerprint described in section 2, cached so it is computed once | Until cleared |
-| **SDK** | Offline report queue (IndexedDB `mushi-mushi`, falling back to `mushi_offline_queue`) | Reports that could not be sent yet | Until sent |
+| **SDK** | Offline report queue (IndexedDB `mushi-mushi`, falling back to `mushi_offline_queue`) and its encryption key (IndexedDB `mushi-mushi-keyring`) | Reports that could not be sent yet, encrypted at rest where the browser allows | Until sent; the key until cleared |
 | **SDK** | `mushi:last-run`, cached runtime and SDK-version settings, `mushi_region_v1:` | Technical state: crash-on-last-run detection, cached project settings, and the resolved API endpoint | Until cleared or expired |
+| **SDK** | `mushi:lastShown`, `mushi:lastDismiss`, `mushi:consecDismiss`, `mushi::firstSessionShown` | Only when the app turns on proactive report prompts: when a prompt was last shown or dismissed, so it does not keep asking | Until cleared |
+| **SDK** | `mushi:tester-jwt:` | Only for a Bounties tester who signs in from the widget: the tester session | Until cleared or expired |
 
 The SDK sets no cookies and reads no third-party cookies.
 

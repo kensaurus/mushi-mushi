@@ -20,7 +20,7 @@ export const OG_CARD_URL = `${DOCS_SITE}/social-preview/og-card.png`
 
 /**
  * The card's real pixel size. og:image:width/height must describe the file,
- * not the 1200×630 the platforms recommend — og-card.test.ts reads the PNG
+ * not the 1200×630 the platforms recommend — docs-meta.test.ts reads the PNG
  * header and fails if the file and these numbers drift apart.
  */
 export const OG_CARD_WIDTH = 1376
@@ -29,7 +29,7 @@ export const OG_CARD_HEIGHT = 768
 /**
  * Landing `<title>` and meta description. Search results cut titles near 60
  * characters and descriptions near 155, so both stay inside those limits
- * (structured-data.test.ts enforces it).
+ * (docs-meta.test.ts enforces it).
  */
 export const LANDING_META = {
   title: 'Mushi Mushi — know why your AI-built app broke',
