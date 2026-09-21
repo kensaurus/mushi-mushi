@@ -79,7 +79,7 @@ the GIF, a screenshot, or the install command.
 >
 > So I built one that classifies, dedupes, and opens the fix PR.
 >
-> Try it — click any tile in the live demo, no signup: kensaur.us/mushi-mushi
+> Try it — read a real diagnosis in the read-only demo, no signup: kensaur.us/mushi-mushi/docs/connect
 >
 > 🐛 I'm Mushi-chan and I'm listening.
 >
@@ -123,8 +123,8 @@ Replace the bracketed numbers with the live ones from
 ```
 Hi HN, I'm Kenji, solo on this.
 
-What it is: a bug-report widget for your app (web, React Native, Capacitor,
-Flutter, iOS, Android). A user clicks it or shakes the phone and writes one
+What it is: a bug-report widget for your app (web, React Native, Capacitor).
+A user clicks it or shakes the phone and writes one
 sentence. Mushi attaches the screenshot, the console and network tail, the
 route and what they did before, then writes a plain-English diagnosis of what
 broke and why, scoped to the files involved. The fix prompt lands in Cursor or
@@ -164,7 +164,8 @@ Two-minute video: [link]
 
 Known limits: docs are English only; file references need the repo indexed
 first; the free tier caps diagnoses, not reports; the hosted LLM is mine
-unless you bring your own key.
+unless you bring your own key; the native iOS, Android and Flutter SDKs are a
+preview that installs from the repo, not from their package registries yet.
 ```
 
 ### Responding in comments
@@ -366,7 +367,7 @@ link in a comment. The angle is the data, not the tool.
 
 > All OSS, MIT on the SDKs. `npx mushi-mushi` to start.
 >
-> Live demo (seeded, no signup): kensaur.us/mushi-mushi
+> Read-only demo (seeded, no signup): kensaur.us/mushi-mushi/docs/connect
 > Repo (⭐ helps next devs find me): github.com/kensaurus/mushi-mushi
 >
 > Be nice to Mushi-chan. 🐛
@@ -395,9 +396,9 @@ an optional agentic auto-fix that opens draft GitHub PRs for review. Works with
 or without Sentry — errors route into the same queue as user reports.
 
 OSS, MIT on the SDKs, AGPLv3 on the server (open-core, with a small commercial enterprise edition).
-Live demo with seeded bugs — no signup, one click:
+Read-only demo with seeded bugs — no signup, one click:
 
-https://kensaur.us/mushi-mushi
+https://kensaur.us/mushi-mushi/docs/connect
 
 If it sounds useful, a GitHub star helps the next developer find it:
 https://github.com/kensaurus/mushi-mushi
@@ -455,7 +456,7 @@ the 90-second video.\]
 
 ## Try it
 
-Live demo (seeded, no signup): https://kensaur.us/mushi-mushi
+Read-only demo (seeded, no signup): https://kensaur.us/mushi-mushi/docs/connect
 Quick start: `npx mushi-mushi`
 Repo: https://github.com/kensaurus/mushi-mushi
 
@@ -554,7 +555,7 @@ Voice-over runs under the same screen-record as the README GIF, longer cut.
 >
 > **[1:10]** Sentry handles the crashes. I handle the friction.
 >
-> **[1:15]** OSS, MIT on the SDKs. Live demo at kensaur.us/mushi-mushi — no signup.
+> **[1:15]** OSS, MIT on the SDKs. Read-only demo at kensaur.us/mushi-mushi/docs/connect — no signup.
 >
 > **[1:22]** Star the repo if Mushi-chan helped. 🐛
 
@@ -584,7 +585,7 @@ sponsorship — just a line if you think it's interesting.
 The short version, pickable:
 > **Mushi Mushi** — shake-to-report widget + LLM classifier + optional auto-fix
 > PR. OSS, MIT on the SDKs. Works with or without Sentry — alerts route into the same queue.
-> Live demo: https://kensaur.us/mushi-mushi — Repo: https://github.com/kensaurus/mushi-mushi
+> Read-only demo: https://kensaur.us/mushi-mushi/docs/connect — Repo: https://github.com/kensaurus/mushi-mushi
 
 Thanks for reading. 🐛
 
