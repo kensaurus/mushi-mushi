@@ -473,4 +473,95 @@ describe('cloudfront-mushi-docs-router', () => {
     const out = docs(req('/mushi-mushi/docs/admin'));
     assert.equal(out.uri, '/mushi-mushi/docs/admin.html');
   });
+
+  it('appends .html to a dotted slug instead of treating it as a file (regression)', () => {
+    const out = docs(req('/mushi-mushi/docs/blog/release-1.28.0'));
+    assert.equal(out.uri, '/mushi-mushi/docs/blog/release-1.28.0.html');
+  });
+
+  for (const asset of [
+    '/mushi-mushi/docs/_next/static/chunks/main-abc123.js',
+    '/mushi-mushi/docs/_next/static/css/app.css',
+    '/mushi-mushi/docs/_next/static/media/font.woff2',
+    '/mushi-mushi/docs/admin.txt',
+    '/mushi-mushi/docs/llms.txt',
+    '/mushi-mushi/docs/sitemap.xml',
+    '/mushi-mushi/docs/llm-md/sdks/web.md',
+    '/mushi-mushi/docs/brand/logo-mark.svg',
+    '/mushi-mushi/docs/integrations/cursor.cursorrules',
+    '/mushi-mushi/docs/version.json',
+  ]) {
+    it(`passes asset ${asset.split('/').pop()} through unchanged`, () => {
+      const out = docs(req(asset));
+      assert.equal(out.uri, asset);
+      assert.equal(out.statusCode, undefined);
+    });
+  }
+
+  for (const oldPath of [
+    '/mushi-mushi/docs/sdks/mcp-tools.generated',
+    '/mushi-mushi/docs/sdks/mcp-tools.generated.html',
+  ]) {
+    it(`301 ${oldPath.split('/').pop()} to the dot-free MCP tools slug`, () => {
+      const out = docs(reqWithQs(oldPath, { ref: 'sidebar' }));
+      assert.equal(out.statusCode, 301);
+      assert.equal(out.headers.location.value, '/mushi-mushi/docs/sdks/mcp-tools?ref=sidebar');
+    });
+  }
+
+  it('301 the old llm-md mirror of the MCP tools page', () => {
+    const out = docs(req('/mushi-mushi/docs/llm-md/sdks/mcp-tools.generated.md'));
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, '/mushi-mushi/docs/llm-md/sdks/mcp-tools.md');
+  });
+});
+
+describe('dotted slugs under /mushi-mushi/* (spa-router, apex)', () => {
+  const spa = loadHandler('cloudfront-mushi-spa-router.js');
+  const apex = loadHandler('cloudfront-mushi-apex-redirect.js');
+  const combined = loadHandler('cloudfront-kensaur-default-viewer.js');
+
+  it('spa-router 301s the old MCP tools slug', () => {
+    const out = spa(req('/mushi-mushi/docs/sdks/mcp-tools.generated'));
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, '/mushi-mushi/docs/sdks/mcp-tools');
+  });
+
+  it('spa-router 301s the stale .html object before the asset rule', () => {
+    const out = spa(req('/mushi-mushi/docs/sdks/mcp-tools.generated.html'));
+    assert.equal(out.statusCode, 301);
+  });
+
+  it('spa-router appends .html to a dotted docs slug', () => {
+    const out = spa(req('/mushi-mushi/docs/blog/release-1.28.0'));
+    assert.equal(out.uri, '/mushi-mushi/docs/blog/release-1.28.0.html');
+  });
+
+  it('spa-router still passes admin build assets through', () => {
+    const out = spa(req('/mushi-mushi/admin/assets/index-Bx12.js'));
+    assert.equal(out.uri, '/mushi-mushi/admin/assets/index-Bx12.js');
+  });
+
+  it('spa-router sends a dotted admin route to the SPA shell', () => {
+    const out = spa(req('/mushi-mushi/admin/reports/v1.2'));
+    assert.equal(out.uri, '/mushi-mushi/admin/index.html');
+  });
+
+  it('spa-router sends a testers app slug containing a dot to the shell', () => {
+    const out = spa(req('/mushi-mushi/testers/apps/my.app'));
+    assert.equal(out.uri, '/mushi-mushi/testers/apps/_shell/index.html');
+  });
+
+  it('apex and the combined Default function 301 the old unprefixed slug', () => {
+    for (const fn of [apex, combined]) {
+      const out = fn(req('/sdks/mcp-tools.generated'));
+      assert.equal(out.statusCode, 301);
+      assert.equal(out.headers.location.value, '/mushi-mushi/docs/sdks/mcp-tools');
+    }
+  });
+
+  it('apex keeps passing unknown extensions through (other apps share Default)', () => {
+    const out = apex(req('/some/file.riv'));
+    assert.equal(out.uri, '/some/file.riv');
+  });
 });

@@ -24,6 +24,8 @@ var DOCS_EXACT = [
   '/changelog',
   '/cloud',
   '/use-cases',
+  '/compare',
+  '/legal',
 ];
 
 // Docs nested paths — trailing slash required so /integrations (admin) is not
@@ -42,6 +44,8 @@ var DOCS_NESTED_PREFIXES = [
   '/plugins/',
   '/blog/',
   '/use-cases/',
+  '/compare/',
+  '/legal/',
 ];
 
 // SPA route prefixes under /mushi-mushi/admin/.
@@ -184,7 +188,15 @@ function mushiApexHandler(event) {
     return redirect301('/mushi-mushi/docs' + uri, qs);
   }
 
-  // Static assets: never redirect.
+  // A moved docs page whose old slug contains a dot, so the extension rule
+  // below would pass it through. The apex still sees it from Nextra RSC
+  // payloads; the docs routers carry the full moved-page map.
+  if (uri === '/sdks/mcp-tools.generated') {
+    return redirect301('/mushi-mushi/docs/sdks/mcp-tools', qs);
+  }
+
+  // Static assets: never redirect. Left as "any extension" on purpose: this
+  // runs on the Default behavior in front of other kensaur.us apps.
   if (/\.[a-zA-Z0-9]+$/.test(uri)) {
     return request;
   }

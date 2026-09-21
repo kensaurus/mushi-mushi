@@ -82,6 +82,17 @@ var DOCS_NESTED_PREFIXES = [
   '/legal/',
 ];
 
+// Moved docs pages and real asset extensions. Mirrors
+// cloudfront-mushi-docs-router.js — see there for why.
+var MOVED = {
+  '/mushi-mushi/docs/sdks/mcp-tools.generated': '/mushi-mushi/docs/sdks/mcp-tools',
+  '/mushi-mushi/docs/sdks/mcp-tools.generated.html': '/mushi-mushi/docs/sdks/mcp-tools',
+  '/mushi-mushi/docs/llm-md/sdks/mcp-tools.generated.md':
+    '/mushi-mushi/docs/llm-md/sdks/mcp-tools.md',
+};
+var ASSET_EXT =
+  /\.(?:html?|m?js|cjs|css|map|json|txt|xml|md|svg|png|jpe?g|webp|avif|gif|ico|woff2?|ttf|otf|webmanifest|pdf|wasm|mp4|webm|zip|t?gz|ya?ml|cursorrules)$/i;
+
 // CloudFront's `request.querystring` is a map of `{ key: { value } }`, not a
 // pre-encoded string — naively concatenating it into a URL yields the literal
 // text "[object Object]". Mirrors cloudfront-mushi-apex-redirect.js.
@@ -146,9 +157,25 @@ function handler(event) {
     };
   }
 
-  // 1. Static assets (anything with a file extension): pass through to S3 unchanged.
-  //    Examples: .js .css .png .json .ico .map .woff2 .svg .txt
-  if (/\.[a-zA-Z0-9]+$/.test(uri)) {
+  // 0. Moved docs pages: 301 before the asset rule, which would pass the old
+  //    `.html` / `.md` objects through and serve stale copies.
+  if (Object.prototype.hasOwnProperty.call(MOVED, uri)) {
+    var movedQs = serializeQuerystring(qs);
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: {
+        'location': { value: MOVED[uri] + (movedQs ? '?' + movedQs : '') },
+        'cache-control': { value: 'public, max-age=31536000' },
+      },
+    };
+  }
+
+  // 1. Static assets (a real asset extension): pass through to S3 unchanged.
+  //    Examples: .js .css .png .json .ico .map .woff2 .svg .txt. A dot in a
+  //    page slug (/docs/sdks/mcp-tools.generated, /testers/apps/my.app) is
+  //    not an extension and falls through to the page rules below.
+  if (ASSET_EXT.test(uri)) {
     return request;
   }
 

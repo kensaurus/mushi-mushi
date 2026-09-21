@@ -29,10 +29,11 @@
  *      Must be a redirect, not a URI rewrite: Default origin is the
  *      kensaur homepage bucket; only a new request rematches the
  *      /mushi-mushi* cache behavior.)
- *   3. Static assets (has extension) → pass through
- *   4. Docs routes → /mushi-mushi/docs{uri} (slash-stripped)
- *   5. Admin SPA routes → /mushi-mushi/admin{uri}
- *   6. Unknown → pass through
+ *   3. /sdks/mcp-tools.generated → 301 /mushi-mushi/docs/sdks/mcp-tools
+ *   4. Static assets (has extension) → pass through
+ *   5. Docs routes → /mushi-mushi/docs{uri} (slash-stripped)
+ *   6. Admin SPA routes → /mushi-mushi/admin{uri}
+ *   7. Unknown → pass through
  *
  * CONFLICT: /integrations alone is the admin console route; /integrations/*
  * is docs-only (e.g. /integrations/cursor). Nested docs prefixes use a
@@ -227,7 +228,15 @@ function handler(event) {
     return redirect301('/mushi-mushi/docs' + uri, qs);
   }
 
-  // Static assets: never redirect.
+  // A moved docs page whose old slug contains a dot, so the extension rule
+  // below would pass it through. The apex still sees it from Nextra RSC
+  // payloads; the docs routers carry the full moved-page map.
+  if (uri === '/sdks/mcp-tools.generated') {
+    return redirect301('/mushi-mushi/docs/sdks/mcp-tools', qs);
+  }
+
+  // Static assets: never redirect. Left as "any extension" on purpose: this
+  // runs on the Default behavior in front of other kensaur.us apps.
   if (/\.[a-zA-Z0-9]+$/.test(uri)) {
     return request;
   }
