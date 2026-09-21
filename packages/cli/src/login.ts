@@ -158,7 +158,9 @@ function slugify(value: string): string {
 export function defaultProjectName(packageName: string | undefined, cwd: string): string {
   const fromPkg = packageName?.replace(/^@[^/]+\//, '').trim()
   if (fromPkg) return fromPkg
-  const parts = cwd.replace(/[\\/]+$/, '').split(/[\\/]/)
+  // Split, then drop empty segments (a trailing separator). An anchored
+  // /[\\/]+$/ backtracks quadratically on a long run of separators.
+  const parts = cwd.split(/[\\/]/).filter(Boolean)
   return parts[parts.length - 1] || 'my-app'
 }
 

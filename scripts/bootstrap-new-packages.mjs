@@ -69,7 +69,7 @@ function* walk(dir) {
  * .npmrc only carries setup-node's placeholder token.
  */
 async function packageExistsOnNpm(name) {
-  const url = `https://registry.npmjs.org/${name.replace('/', '%2f')}`
+  const url = `https://registry.npmjs.org/${name.replaceAll('/', '%2f')}`
   let last = ''
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {

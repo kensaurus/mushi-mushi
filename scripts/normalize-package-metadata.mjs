@@ -33,7 +33,7 @@
  *          fix (a description over the cap, a legacy tagline).
  */
 
-import { readFileSync, writeFileSync, readdirSync, existsSync, statSync, realpathSync } from 'node:fs'
+import { closeSync, existsSync, ftruncateSync, openSync, readdirSync, readFileSync, realpathSync, statSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { MUSHI_TAGLINE_LEGACY, MUSHI_TAGLINE_V2 } from '../packages/brand/src/index.js'
@@ -215,20 +215,30 @@ function main() {
     const pkgPath = join(pkgDir, 'package.json')
     if (!existsSync(pkgPath)) continue
 
-    const manifest = JSON.parse(readFileSync(pkgPath, 'utf8'))
-    if (manifest.private) continue // skip non-published workspace packages
-    if (!manifest.name) continue
+    // Read and (with --write) rewrite through one descriptor, so the file that
+    // was normalized is the file that gets written.
+    const fd = openSync(pkgPath, write ? 'r+' : 'r')
+    try {
+      const manifest = JSON.parse(readFileSync(fd, 'utf8'))
+      if (manifest.private) continue // skip non-published workspace packages
+      if (!manifest.name) continue
 
-    const { json, changes, errors } = normalizeManifest(manifest, dir)
+      const { json, changes, errors } = normalizeManifest(manifest, dir)
 
-    for (const e of errors) {
-      errorCount++
-      console.error(`ERROR  ${manifest.name.padEnd(36)} → ${e}`)
-    }
-    if (changes.length) {
-      changedFiles++
-      console.log(`${write ? 'FIX ' : 'DRIFT'}  ${manifest.name.padEnd(36)} → ${changes.join(', ')}`)
-      if (write) writeFileSync(pkgPath, JSON.stringify(json, null, 2) + '\n')
+      for (const e of errors) {
+        errorCount++
+        console.error(`ERROR  ${manifest.name.padEnd(36)} → ${e}`)
+      }
+      if (changes.length) {
+        changedFiles++
+        console.log(`${write ? 'FIX ' : 'DRIFT'}  ${manifest.name.padEnd(36)} → ${changes.join(', ')}`)
+        if (write) {
+          ftruncateSync(fd, 0)
+          writeSync(fd, JSON.stringify(json, null, 2) + '\n', 0, 'utf8')
+        }
+      }
+    } finally {
+      closeSync(fd)
     }
   }
 

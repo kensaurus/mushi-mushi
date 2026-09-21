@@ -193,7 +193,8 @@ export async function verifyPackages(packages, { verify = verifyOne, retry = {},
         for (const l of leaks) log.error(`     ${l.field}["${l.name}"] = "${l.spec}"`)
         return { name, version, leaks }
       } catch (err) {
-        log.error(`FAIL ${name}@${version} — ${err.message}`)
+        // One line per failure: a registry error body must not forge log lines.
+        log.error(`FAIL ${name}@${version} — ${String(err.message).replace(/[\r\n]+/g, ' ')}`)
         return { name, version, error: err.message }
       }
     }),
