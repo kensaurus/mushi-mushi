@@ -5,8 +5,9 @@
 
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, it } from 'node:test';
 import { stripSource, DEFAULT_MAX_BYTES, CF_HARD_LIMIT_BYTES } from './build-cf-function.mjs';
 
@@ -347,6 +348,96 @@ describe('cloudfront-mushi-hosted-mcp', () => {
     assert.equal(out.statusCode, 200);
     assert.match(out.body, /authorization_servers/);
   });
+
+  it('PRM resource matches the identifier the well-known URI was inserted into', () => {
+    const slashless = JSON.parse(
+      wellknown(req('/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp')).body,
+    );
+    const slashed = JSON.parse(
+      wellknown(req('/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp/')).body,
+    );
+    assert.equal(slashless.resource, 'https://kensaur.us/mushi-mushi/hosted-mcp');
+    assert.equal(slashed.resource, 'https://kensaur.us/mushi-mushi/hosted-mcp/');
+  });
+
+  it('serves RFC 8414 AS metadata at the path-inserted URL (regression: 404)', () => {
+    const out = wellknown(
+      req('/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp', '', 'GET'),
+    );
+    assert.equal(out.statusCode, 200);
+    assert.equal(out.headers['content-type'].value, 'application/json');
+    const as = JSON.parse(out.body);
+    assert.equal(as.issuer, 'https://kensaur.us/mushi-mushi/hosted-mcp');
+    assert.deepEqual(as.response_types_supported, ['code']);
+    assert.deepEqual(as.code_challenge_methods_supported, ['S256']);
+  });
+
+  it('404s unknown paths under the well-known behaviors', () => {
+    const out = wellknown(
+      req('/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp/other', '', 'GET'),
+    );
+    assert.equal(out.statusCode, 404);
+    assert.equal(out.headers['cache-control'].value, 'no-store');
+  });
+
+  it('edge documents match scripts/hosted-mcp-oauth-metadata.json', () => {
+    const canonical = JSON.parse(
+      readFileSync(join(__dirname, 'hosted-mcp-oauth-metadata.json'), 'utf8'),
+    );
+    const prm = JSON.parse(
+      wellknown(req('/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp')).body,
+    );
+    const as = JSON.parse(
+      wellknown(req('/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp')).body,
+    );
+    assert.deepEqual(prm, canonical.protectedResourceMetadata);
+    assert.deepEqual(as, canonical.authorizationServerMetadata);
+  });
+});
+
+describe('hosted MCP OAuth discovery through the official MCP SDK', () => {
+  // Run the SDK's own discovery against the edge function, so a document the
+  // SDK would reject (ZodError, resource mismatch) fails here and not in
+  // `claude mcp login`. Resolved through packages/mcp, which depends on it.
+  const wellknown = loadHandler('cloudfront-mushi-hosted-mcp-wellknown.js');
+  const requireFromMcp = createRequire(join(__dirname, '..', 'packages', 'mcp', 'package.json'));
+  const sdkAuth = import(
+    pathToFileURL(requireFromMcp.resolve('@modelcontextprotocol/sdk/client/auth.js')).href
+  );
+
+  /** Only the two CloudFront behaviors answer; every other URL 404s like S3. */
+  async function edgeFetch(input) {
+    const url = new URL(String(input));
+    const behaviors = [
+      '/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp',
+      '/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp',
+    ];
+    if (url.host !== 'kensaur.us' || !behaviors.some((p) => url.pathname.startsWith(p))) {
+      return new Response('<Error><Code>NoSuchKey</Code></Error>', { status: 404 });
+    }
+    const out = wellknown(req(url.pathname));
+    return new Response(out.body, {
+      status: out.statusCode,
+      headers: { 'content-type': out.headers['content-type'].value },
+    });
+  }
+
+  for (const serverUrl of [
+    'https://kensaur.us/mushi-mushi/hosted-mcp',
+    'https://kensaur.us/mushi-mushi/hosted-mcp/',
+  ]) {
+    it(`discovers the authorization server for ${serverUrl}`, async () => {
+      const { discoverOAuthServerInfo, selectResourceURL } = await sdkAuth;
+      const info = await discoverOAuthServerInfo(serverUrl, { fetchFn: edgeFetch });
+      assert.equal(info.authorizationServerUrl, 'https://kensaur.us/mushi-mushi/hosted-mcp');
+      assert.match(
+        String(info.authorizationServerMetadata?.registration_endpoint),
+        /\/functions\/v1\/mcp\/oauth\/register$/,
+      );
+      const resource = await selectResourceURL(serverUrl, {}, info.resourceMetadata);
+      assert.equal(String(resource), 'https://kensaur.us/mushi-mushi/hosted-mcp');
+    });
+  }
 });
 
 describe('cloudfront-mushi-docs-router', () => {
