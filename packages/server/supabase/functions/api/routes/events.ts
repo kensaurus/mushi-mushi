@@ -9,7 +9,15 @@
  *         from packages/core/src/analytics-taxonomy.ts via the generated
  *         Deno file; PII-looking property keys dropped server-side too;
  *         per-project switch project_settings.product_events_enabled;
- *         batch <= 50 events / 64 KB; RLS read-only for org members.
+ *         batch <= 50 events / 64 KB (counted on the streamed body, not the
+ *         Content-Length header); per-project rate limit; client timestamps
+ *         clamped to [received - 25 h, received + 5 min]; server-owned event
+ *         names and the 'server' surface are rejected here (only
+ *         emitProductEvent writes those); RLS read-only for org members.
+ *
+ * The SDK's anon_id is its reporter token — a bearer credential for the
+ * end user's report threads — so it is stored only as sha256(value), the same
+ * digest the report path stores (_shared/reporter-token.ts).
  *
  * Identity stitching: an `identify` pseudo-event (never stored) plus
  * `user_id` (+ traits) resolves an end_users row (org-scoped) and backfills
@@ -23,17 +31,82 @@ import { apiKeyAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { resolveEndUser } from '../../_shared/end-user-resolver.ts';
+import { hashReporterTokenOrNull } from '../../_shared/reporter-token.ts';
 import {
   EVENT_NAME_RE,
   EVENT_PROPERTY_LIMITS,
+  MUSHI_EVENTS,
   MUSHI_SURFACES,
   PII_PROPERTY_KEY_RE,
   RESERVED_PROPERTY_PREFIX,
 } from '../../_shared/analytics-taxonomy.generated.ts';
+import { classifyIngestRateLimitError } from './ingest-rate-limit.ts';
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
 const MAX_BODY_BYTES = 64 * 1024;
+
+/** One claim per batch; the SDK sends at most one batch per 5 s per tab. */
+const EVENT_BATCHES_PER_MINUTE = 600;
+
+/** The SDK spill replays at most 24 h, so anything older or in the future is clock skew or forgery. */
+export const CLIENT_TS_MAX_PAST_MS = 25 * 60 * 60 * 1000;
+export const CLIENT_TS_MAX_FUTURE_MS = 5 * 60 * 1000;
+
+/** Events only emitProductEvent may write (taxonomy surface 'server'). */
+export const SERVER_OWNED_EVENTS: ReadonlySet<string> = new Set(
+  Object.entries(MUSHI_EVENTS)
+    .filter(([, spec]) => (spec as { surface?: string }).surface === 'server')
+    .map(([name]) => name),
+);
+
+/** Surfaces a public SDK key may claim. 'server' is written only by emitProductEvent. */
+export const PUBLIC_SURFACES: ReadonlySet<string> = new Set(MUSHI_SURFACES.filter((s) => s !== 'server'));
+
+/**
+ * Read at most `limit` bytes of a request body. Returns null when the body is
+ * larger. Content-Length alone is not a cap: a chunked request omits it.
+ * Exported for tests.
+ */
+export async function readBodyCapped(req: Request, limit: number): Promise<string | null> {
+  if (!req.body) return '';
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+/**
+ * Keep a client timestamp only when it is plausible; otherwise use the receive
+ * time. A future-dated row would never be pruned by retention and a backdated
+ * one would move funnel steps into closed weeks. Exported for tests.
+ */
+export function clampEventTs(clientTs: string | undefined, receivedAtMs: number): { ts: string; clamped: boolean } {
+  const receivedIso = new Date(receivedAtMs).toISOString();
+  if (!clientTs) return { ts: receivedIso, clamped: false };
+  const t = Date.parse(clientTs);
+  if (!Number.isFinite(t)) return { ts: receivedIso, clamped: true };
+  if (t < receivedAtMs - CLIENT_TS_MAX_PAST_MS || t > receivedAtMs + CLIENT_TS_MAX_FUTURE_MS) {
+    return { ts: receivedIso, clamped: true };
+  }
+  return { ts: new Date(t).toISOString(), clamped: false };
+}
 
 type PropertyValue = string | number | boolean | null;
 
@@ -71,7 +144,7 @@ type EventBatch = z.infer<typeof batchSchema>;
 const SDK_RESERVED_ALLOW = new Set([
   '$surface', '$route', '$referrer', '$session_id', '$sdk_version',
   '$utm_source', '$utm_medium', '$utm_campaign', '$utm_content', '$utm_term',
-  '$first_touch', '$ref',
+  '$first_touch', '$ref', '$client_ts',
 ]);
 
 /** Server-side re-application of the property contract (defence in depth). Exported for tests. */
@@ -127,14 +200,30 @@ export function registerEventRoutes(app: Hono<{ Variables: Variables }>): void {
   app.post('/v1/sdk/events', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;
 
+    const tooLarge = () =>
+      c.json({ ok: false, error: { code: 'PAYLOAD_TOO_LARGE', message: 'Event batch exceeds 64 KB' } }, 413);
     const contentLength = Number(c.req.header('content-length') ?? '0');
-    if (contentLength > MAX_BODY_BYTES) {
-      return c.json({ ok: false, error: { code: 'PAYLOAD_TOO_LARGE', message: 'Event batch exceeds 64 KB' } }, 413);
+    if (contentLength > MAX_BODY_BYTES) return tooLarge();
+
+    const db = getServiceClient();
+    const { error: rateErr } = await db.rpc('scoped_rate_limit_claim', {
+      p_user_id: projectId,
+      p_scope: 'product_events',
+      p_max_per_window: EVENT_BATCHES_PER_MINUTE,
+      p_window: '1 minute',
+    });
+    const rateOutcome = classifyIngestRateLimitError(rateErr);
+    if (rateOutcome === 'breach' || rateOutcome === 'fail-closed') {
+      if (rateOutcome === 'fail-closed') log.error('events: rate-limit claim failed — failing closed', { err: rateErr?.message });
+      c.header('Retry-After', '60');
+      return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: 'Event ingest rate limit exceeded. Retry in 60 seconds.' } }, 429);
     }
 
+    const bodyText = await readBodyCapped(c.req.raw, MAX_BODY_BYTES);
+    if (bodyText === null) return tooLarge();
     let raw: unknown;
     try {
-      raw = await c.req.json();
+      raw = JSON.parse(bodyText);
     } catch {
       return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'JSON body required' } }, 400);
     }
@@ -155,8 +244,8 @@ export function registerEventRoutes(app: Hono<{ Variables: Variables }>): void {
     }
 
     const batch: EventBatch = parsed.data;
-    const db = getServiceClient();
     const meta = await loadProjectMeta(db, projectId);
+    const anonKey = await hashReporterTokenOrNull(batch.anon_id);
     if (!meta.enabled) {
       // Accepted-but-dropped keeps well-behaved clients from retrying.
       return c.json({ ok: true, data: { accepted: 0, dropped: batch.events.length, reason: 'disabled' } });
@@ -172,7 +261,7 @@ export function registerEventRoutes(app: Hono<{ Variables: Variables }>): void {
           traits: batch.user_traits
             ? { email: batch.user_traits.email ?? null, name: batch.user_traits.name ?? null }
             : undefined,
-          reporterTokenHash: batch.anon_id ?? null,
+          reporterTokenHash: anonKey,
         });
         endUserId = resolved?.id ?? null;
       } catch (err) {
@@ -180,7 +269,8 @@ export function registerEventRoutes(app: Hono<{ Variables: Variables }>): void {
       }
     }
 
-    const receivedAt = new Date().toISOString();
+    const receivedAtMs = Date.now();
+    const receivedAt = new Date(receivedAtMs).toISOString();
     const rows: Record<string, unknown>[] = [];
     let dropped = 0;
     let identifyRequested = false;
@@ -190,16 +280,23 @@ export function registerEventRoutes(app: Hono<{ Variables: Variables }>): void {
         identifyRequested = true;
         continue; // pseudo-event: stitching only, never stored
       }
+      // Server milestones (first_report_received, project_created, …) are
+      // written only by emitProductEvent; a public key must not forge them.
+      if (SERVER_OWNED_EVENTS.has(ev.name)) { dropped += 1; continue; }
       const { properties } = sanitizeProperties(ev.properties);
       if (JSON.stringify(properties).length > EVENT_PROPERTY_LIMITS.maxBytes) { dropped += 1; continue; }
       const surface = batch.surface ?? (typeof properties.$surface === 'string' ? properties.$surface : 'web');
+      // Unknown surfaces would violate the DB CHECK and 500 the whole batch.
+      if (!PUBLIC_SURFACES.has(surface)) { dropped += 1; continue; }
+      const { ts, clamped } = clampEventTs(ev.ts, receivedAtMs);
+      if (clamped && ev.ts) properties.$client_ts = ev.ts.slice(0, EVENT_PROPERTY_LIMITS.maxValueLength);
       rows.push({
         project_id: projectId,
         event_name: ev.name,
-        ts: ev.ts ?? receivedAt,
+        ts,
         received_at: receivedAt,
         session_id: batch.session_id ?? null,
-        anon_id: batch.anon_id ?? null,
+        anon_id: anonKey,
         end_user_id: endUserId,
         surface,
         sdk_version: batch.sdk_version ?? null,
@@ -223,12 +320,12 @@ export function registerEventRoutes(app: Hono<{ Variables: Variables }>): void {
     }
 
     // Cross-surface stitching: attach the person to earlier anonymous rows.
-    if ((identifyRequested || endUserId) && endUserId && batch.anon_id) {
+    if ((identifyRequested || endUserId) && endUserId && anonKey) {
       const { error: bfErr } = await db
         .from('product_events')
         .update({ end_user_id: endUserId })
         .eq('project_id', projectId)
-        .eq('anon_id', batch.anon_id)
+        .eq('anon_id', anonKey)
         .is('end_user_id', null);
       if (bfErr) log.warn('events: identify backfill failed', { err: bfErr.message, projectId });
     }

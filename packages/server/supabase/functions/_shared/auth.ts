@@ -493,6 +493,33 @@ export async function apiKeyAuth(c: Context, next: Next) {
 }
 
 /**
+ * Middleware factory: after {@link apiKeyAuth}, require the key to carry a
+ * scope. apiKeyAuth itself accepts ANY active project key, because the public
+ * SDK key (report:write only, shipped in every customer's browser bundle) must
+ * reach the ingest routes. Routes that read or change a project's reports on
+ * the owner's behalf — the CLI/MCP `/v1/sync/*` family — must also sit behind
+ * this, or any key lifted from a public bundle can list every report, change
+ * statuses and reply to end users as the team (live until 2026-09-21).
+ *
+ * `mcp:write` implies `mcp:read`, as everywhere else.
+ */
+export function requireApiKeyScope(scope: McpScope) {
+  return async (c: Context, next: Next) => {
+    const scopes = (c.get('apiKeyScopes') as string[] | undefined) ?? []
+    if (!keyGrantsAnyScope(scopes, [scope])) {
+      return authError(
+        c,
+        'INSUFFICIENT_SCOPE',
+        `API key is missing required scope "${scope}". Public SDK keys (report:write) cannot use this route; ` +
+          'use a key minted for the CLI or MCP, or upgrade this one with `mushi login --upgrade-scope`.',
+        403,
+      )
+    }
+    await next()
+  }
+}
+
+/**
  * Middleware: validate Supabase JWT for admin endpoints.
  * Requires authenticated user.
  */

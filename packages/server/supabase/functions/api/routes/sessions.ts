@@ -5,8 +5,11 @@
  *
  * Auth:   Public SDK API key (same as /v1/sdk/discovery). Sets `projectId`.
  * Safety: Strict Zod validation, per-(project, session_id) upsert/update writes.
- *         No PII stored beyond the opaque reporter_token_hash already used in
- *         reports. Rate-limit: one upsert per event — cheap O(1) writes.
+ *         The SDK sends its raw reporter token (a bearer credential for the
+ *         end user's report threads) in `reporter_token_hash`; only
+ *         sha256(token) is stored — the same digest the report path stores —
+ *         via _shared/reporter-token.ts. Until 2026-09-21 the raw token was
+ *         stored verbatim. Rate-limit: one upsert per event — cheap O(1) writes.
  */
 
 import type { Hono } from 'npm:hono@4';
@@ -15,6 +18,7 @@ import type { Variables } from '../types.ts';
 import { apiKeyAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
+import { hashReporterTokenOrNull } from '../../_shared/reporter-token.ts';
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
@@ -79,7 +83,7 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
         {
           project_id: projectId,
           session_id: event.session_id,
-          reporter_token_hash: event.reporter_token_hash ?? null,
+          reporter_token_hash: await hashReporterTokenOrNull(event.reporter_token_hash),
           user_agent: event.user_agent ?? null,
           entry_route: sanitisedRoute,
           page_view_count: event.page_view_count ?? 1,

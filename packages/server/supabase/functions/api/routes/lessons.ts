@@ -22,7 +22,7 @@ import type { Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
-import { jwtAuth, apiKeyAuth, adminOrApiKey } from '../../_shared/auth.ts'
+import { jwtAuth, apiKeyAuth, adminOrApiKey, requireApiKeyScope } from '../../_shared/auth.ts'
 import {
   assertTargetProjectAccess,
   callerProjectIds,
@@ -515,7 +515,7 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
   // Security: apiKeyAuth validates the key against `project_api_keys`, so
   // only requests with a valid, active key for the exact project can read
   // that project's lessons. No cross-project access is possible.
-  app.get('/v1/sync/lessons', apiKeyAuth, async (c) => {
+  app.get('/v1/sync/lessons', apiKeyAuth, requireApiKeyScope('mcp:read'), async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
 
