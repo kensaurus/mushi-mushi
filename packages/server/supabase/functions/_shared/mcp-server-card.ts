@@ -101,13 +101,20 @@ export function buildMcpServerCard(oauth?: ServerCardOAuth): Record<string, unkn
     authentication: {
       required: true,
       // OAuth first: MCP clients discover it from the 401 challenge and sign
-      // the user in; a project API key header remains the fallback.
-      schemes: ['oauth2', 'apiKey'],
-      oauth2: {
-        ...(oauth ?? {}),
-        scopes: ['mcp:read', 'mcp:write'],
-        documentation: MCP_QUICKSTART,
-      },
+      // the user in; a project API key header remains the fallback. OAuth is
+      // advertised only by a caller that can name the authorization server
+      // and PRM URL for the requesting URL — an oauth2 block with neither
+      // would point scanners at a flow with no issuer.
+      schemes: oauth ? ['oauth2', 'apiKey'] : ['apiKey'],
+      ...(oauth
+        ? {
+            oauth2: {
+              ...oauth,
+              scopes: ['mcp:read', 'mcp:write'],
+              documentation: MCP_QUICKSTART,
+            },
+          }
+        : {}),
       apiKey: { header: 'X-Mushi-Api-Key', alternative: 'Authorization: Bearer mushi_…' },
     },
     configSchema: MUSHI_SMITHERY_CONFIG_SCHEMA,

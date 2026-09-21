@@ -79,6 +79,13 @@ describe('mcp server card', () => {
     expect(card.serverInfo.version).toBe(mcpPackage.version)
   })
 
+  it('does not advertise an oauth2 block with no issuer when the caller cannot name one', async () => {
+    const { buildMcpServerCard } = await import('../../supabase/functions/_shared/mcp-server-card.ts')
+    const card = buildMcpServerCard() as { authentication: { schemes: string[]; oauth2?: unknown } }
+    expect(card.authentication.schemes).toEqual(['apiKey'])
+    expect(card.authentication).not.toHaveProperty('oauth2')
+  })
+
   it('mcp-discovery-tools.json is in sync with the canonical catalog', () => {
     const catalogDist = resolve(REPO_ROOT, 'packages/mcp/dist/catalog.js')
     if (!existsSync(catalogDist)) {
