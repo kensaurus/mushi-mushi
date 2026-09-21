@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-09-21 · **552** routes.
+> Generated: 2026-09-21 · **555** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 98 |
+| `adminOrApiKey` | 101 |
 | `apiKeyAuth` | 47 |
 | `jwtAuth` | 338 |
 | `jwtOrApiKey` | 3 |
@@ -275,6 +275,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/projects/:id/keys/rotate` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-keys.ts` |
 | GET | `/v1/admin/projects/:id/preflight` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
 | GET | `/v1/admin/projects/:id/privacy-status` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/evolution.ts` |
+| POST | `/v1/admin/projects/:id/repo/bootstrap` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/report-agent-context.ts` |
 | GET | `/v1/admin/projects/:id/sdk-config` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PUT | `/v1/admin/projects/:id/sdk-config` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/projects/:id/sdk-diagnostics` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-ci-secrets.ts` |
@@ -352,6 +353,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/reports` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | GET | `/v1/admin/reports/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | PATCH | `/v1/admin/reports/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
+| GET | `/v1/admin/reports/:id/blast-radius` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/report-agent-context.ts` |
+| GET | `/v1/admin/reports/:id/fix-context` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/report-agent-context.ts` |
 | GET | `/v1/admin/reports/:id/replay-url` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | POST | `/v1/admin/reports/:id/reply` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | GET | `/v1/admin/reports/:id/timeline` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
