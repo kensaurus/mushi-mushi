@@ -133,6 +133,98 @@ async function getOrgIdForProject(db: ReturnType<typeof getServiceClient>, proje
   return data?.organization_id ?? null
 }
 
+// ─── Guard: privacy routes that act on an end user by host-asserted id ──
+//
+// GET /v1/sdk/me/export and DELETE /v1/sdk/me take the end user's id from the
+// caller and run under apiKeyAuth, which accepts the PUBLIC SDK key shipped
+// in every browser bundle. end_users are organization-scoped, so before
+// 2026-09-21 any project's public key could export or erase (with cascades to
+// points, payouts and disputes) an end user of ANY project in the same org
+// given only their external id. Now:
+//   - per-project rate limit on the privacy routes;
+//   - when the project has a host identity provider, a verified host JWT
+//     (X-Mushi-Host-Jwt) whose `sub` is that user is required;
+//   - otherwise the end user must have a footprint in THIS key's project, so
+//     one app's key cannot reach users only another app has seen. Callers
+//     outside that scope get the same answer as for an unknown user.
+const PRIVACY_ROUTE_MAX_PER_MINUTE = 30
+const END_USER_FOOTPRINT_TABLES = [
+  'reports',
+  'end_user_activity',
+  'end_user_sessions',
+  'product_events',
+  'sdk_assistant_messages',
+] as const
+
+type EndUserAccess =
+  | { ok: true; endUserId: string | null }
+  | { ok: false; status: 401 | 403 | 429; code: string; message: string }
+
+async function authorizeEndUserPrivacyAccess(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  organizationId: string,
+  externalUserId: string,
+): Promise<EndUserAccess> {
+  const { error: rateErr } = await db.rpc('scoped_rate_limit_claim', {
+    p_user_id: projectId,
+    p_scope: 'sdk_me_privacy',
+    p_max_per_window: PRIVACY_ROUTE_MAX_PER_MINUTE,
+    p_window: '1 minute',
+  })
+  if (rateErr) {
+    return { ok: false, status: 429, code: 'RATE_LIMITED', message: 'Too many privacy requests. Retry in 60 seconds.' }
+  }
+
+  const { data: eu } = await db
+    .from('end_users')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('external_user_id', externalUserId)
+    .maybeSingle()
+  if (!eu) return { ok: true, endUserId: null }
+
+  const { count: providerCount } = await db
+    .from('host_auth_providers')
+    .select('project_id', { count: 'exact', head: true })
+    .eq('project_id', projectId)
+    .eq('enabled', true)
+
+  if ((providerCount ?? 0) > 0) {
+    const token = c.req.header('x-mushi-host-jwt')
+    if (!token) {
+      return {
+        ok: false,
+        status: 401,
+        code: 'HOST_JWT_REQUIRED',
+        message: 'This project verifies end users: send the host JWT for this user in X-Mushi-Host-Jwt.',
+      }
+    }
+    try {
+      const verified = await verifyHostJwt({ token, projectId, endUserId: eu.id })
+      if (verified.sub !== externalUserId) {
+        return { ok: false, status: 403, code: 'HOST_JWT_SUBJECT_MISMATCH', message: 'Host JWT subject does not match userId.' }
+      }
+    } catch {
+      return { ok: false, status: 403, code: 'HOST_JWT_INVALID', message: 'Host JWT failed verification.' }
+    }
+    return { ok: true, endUserId: eu.id }
+  }
+
+  for (const table of END_USER_FOOTPRINT_TABLES) {
+    const { count } = await db
+      .from(table)
+      .select('end_user_id', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .eq('end_user_id', eu.id)
+      .limit(1)
+    if ((count ?? 0) > 0) return { ok: true, endUserId: eu.id }
+  }
+  // Seen only by other projects in the org: indistinguishable from unknown.
+  return { ok: true, endUserId: null }
+}
+
 // ─── Helper: resolve validated org for admin reward routes ───
 async function requireRewardsOrg(
   c: Context,
@@ -424,16 +516,11 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     const organizationId = await getOrgIdForProject(db, projectId)
     if (!organizationId) return c.json({ ok: false, error: { code: 'NO_ORG' } }, 422)
 
-    const { data: eu } = await db
-      .from('end_users')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('external_user_id', userId)
-      .single()
+    const access = await authorizeEndUserPrivacyAccess(c, db, projectId, organizationId, userId)
+    if (!access.ok) return c.json({ ok: false, error: { code: access.code, message: access.message } }, access.status)
+    if (!access.endUserId) return c.json({ ok: true, data: null })
 
-    if (!eu) return c.json({ ok: true, data: null })
-
-    const { data } = await db.rpc('export_end_user_data', { p_end_user_id: eu.id })
+    const { data } = await db.rpc('export_end_user_data', { p_end_user_id: access.endUserId })
     return c.json({ ok: true, data })
   })
 
@@ -449,11 +536,12 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     const organizationId = await getOrgIdForProject(db, projectId)
     if (!organizationId) return c.json({ ok: false, error: { code: 'NO_ORG' } }, 422)
 
-    const { error } = await db
-      .from('end_users')
-      .delete()
-      .eq('organization_id', organizationId)
-      .eq('external_user_id', userId)
+    const access = await authorizeEndUserPrivacyAccess(c, db, projectId, organizationId, userId)
+    if (!access.ok) return c.json({ ok: false, error: { code: access.code, message: access.message } }, access.status)
+    // Unknown (or out of this project's reach): nothing to erase. Idempotent.
+    if (!access.endUserId) return c.json({ ok: true, data: { deleted: false } })
+
+    const { error } = await db.from('end_users').delete().eq('id', access.endUserId)
 
     if (error) return c.json({ ok: false, error: { code: 'DELETE_FAILED', message: error.message } }, 500)
     return c.json({ ok: true, data: { deleted: true } })

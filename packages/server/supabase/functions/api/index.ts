@@ -140,6 +140,9 @@ const SDK_OBSERVATION_HEADERS = [
   'X-Mushi-SDK-Version',
   'X-Mushi-SDK-Package',
   'X-Mushi-User-Token',
+  // Host JWT proving the end user's identity on the privacy routes
+  // (GET /v1/sdk/me/export, DELETE /v1/sdk/me) when the project verifies users.
+  'X-Mushi-Host-Jwt',
 ] as const;
 
 // The SDK does far more than GET here: the browser widget POSTs rewards
