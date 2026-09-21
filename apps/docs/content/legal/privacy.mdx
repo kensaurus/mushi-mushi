@@ -40,10 +40,10 @@ requests personally.
 | Category | Examples | Where it comes from | Why |
 | --- | --- | --- | --- |
 | **Account data** | Email address, display name and avatar from Google or GitHub sign-in, the "how did you hear about us" answer and `?src=` signup source, plan and billing status | You, when you create a console account | Run your account, bill you, understand which channels bring users |
-| **End-user report data** | Screenshot, console and network log excerpts, browser user agent, viewport, page URL, the reporter's free-text description, an opaque reporter token, any end-user identifier (email, user ID) the host app chooses to pass, voice transcripts when the host app turns on voice intake | The SDK in an app that a project owner built | Diagnose the bug and hand the owner a fix |
+| **End-user report data** | Screenshot, console and network log excerpts, browser user agent, viewport, page URL, the reporter's free-text description, an opaque reporter token, a hashed device fingerprint (a SHA-256 of browser, screen and time-zone traits, used to spot abuse), any end-user identifier (email, user ID) the host app chooses to pass, voice transcripts when the host app turns on voice intake | The SDK in an app that a project owner built | Diagnose the bug and hand the owner a fix |
 | **Fix and repo data** | Repository names, file paths and an index of your code, draft pull requests, MCP tool calls from your editor | The GitHub integration and the MCP server, when you connect them | Produce fixes that fit your codebase |
-| **Product usage events** | Console page views, setup-funnel steps (project created, key minted, first report), feature clicks, tagged with your user ID | The console and the docs site, through Mushi's own SDK | Improve activation and find dead ends |
-| **Docs-site analytics** | Anonymous page views and CTA clicks on the docs and landing pages | Only after you accept the consent bar | Measure the funnel from landing to signup |
+| **Product usage events** | Console page views, setup-funnel steps (project created, key minted, first report), feature clicks, and a session heartbeat with your browser user agent, tagged with your user ID | The console, through Mushi's own SDK | Improve activation and find dead ends |
+| **Docs-site analytics** | Views of the landing, quickstart and pricing pages (route, referring page without its query string, `utm_*` tags), clicks on sign-up and demo buttons, a session heartbeat with your browser user agent, and a random browser ID stored in your browser. These are **pseudonymous, not anonymous**: if you later sign in to the console in the same browser, the console links your earlier docs events to your account | The docs and landing pages, through Mushi's own SDK — only after you accept the consent bar | Measure the funnel from landing to signup |
 | **Console error telemetry** | Stack traces, browser and OS, the console route you were on when something broke | Sentry, from the admin console | Fix bugs in the console itself |
 | **Support and security mail** | Whatever you put in an email to us | You | Answer you |
 | **Bounties tester data** | Tester display name, points balance, gift-card redemptions, and KYC details (legal name, jurisdiction, tax ID) once redemptions pass US$599 in a calendar year | You, on the Bounties marketplace | Pay out gift cards and meet US tax reporting rules |
@@ -65,8 +65,10 @@ telemetry, support mail, and Bounties tester data.
   understanding which onboarding steps fail. We ran a balancing test on the
   product-usage events: they are scoped to your own account, never shared, and
   expire (section 7).
-- **(a) consent** — docs-site analytics. Nothing loads before you accept the
-  consent bar, and Do Not Track is honoured as a refusal.
+- **(a) consent** — docs-site analytics. Before you answer the consent bar
+  the docs site loads no analytics code, sends nothing, and stores nothing
+  except your answer; Do Not Track and Global Privacy Control are honoured as
+  a refusal. "No thanks" keeps it that way.
 - **(c) legal obligation** — tax records for paid plans and tester payouts.
 
 ## 4. Data where Mushi is the processor
@@ -126,8 +128,9 @@ reserved.
 | Data | Kept for | Mechanism |
 | --- | --- | --- |
 | End-user reports and everything attached to them | The retention window of your plan: **Free 7 days · Indie 30 days · Pro 90 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
-| Product usage events | **90 days** by default | Nightly delete; Enterprise can extend |
-| Docs-site analytics | 90 days | Same table as above |
+| Product usage events (Mushi's own console analytics) | **730 days (2 years)** | Nightly `prune_product_events` job, using the 730-day retention set on Mushi's own analytics project |
+| Docs-site analytics | 730 days (2 years) | Same table and job as above |
+| Analytics events your app sends with `Mushi.track()` | 90 days by default, or the per-project override (1–3650 days) | Same nightly job |
 | Console error telemetry | 90 days | Sentry retention |
 | Account data | Until you delete your account, then 30 days for backups to roll off | Delete from **Settings**, or email us |
 | Billing records and tester payout records | As long as Japanese and US tax law requires (currently up to 7 years) | Stripe / Tremendous exports |
@@ -199,11 +202,19 @@ browser:
 | Console | Supabase auth session (cookie / localStorage) | Keep you signed in | Until sign-out or expiry |
 | Console | `mushi:tour-v1-completed` | Remember that you finished the first-run tour | Until cleared |
 | Console | Theme preference | Light / dark | Until cleared |
-| Docs | `mushi_events_consent_<projectId>` | Remember your answer to the analytics consent bar | Until cleared |
+| Console | Mushi SDK keys (see the SDK rows below) | The console runs Mushi's own SDK for bug reports and product analytics | As listed below |
+| Docs | `mushi_events_consent_<projectId>` | Remember your answer to the analytics consent bar — the only analytics key written before you answer | Until cleared |
 | Docs | Release-banner dismissal, theme preference | Hide a banner you closed; light / dark | Until cleared |
-| **Your app** (SDK) | `mushi:reporter-token:<projectId>` | An opaque token so repeat reports from the same browser group together. It is not an email or a name | Until cleared |
+| Docs, after you accept | `mushi_first_touch_<projectId>` | Where your first visit came from: `utm_source` / `utm_medium` / `utm_campaign`, the referring page without its query string, the landing path, and the time | Until cleared |
+| Docs, after you accept | Mushi SDK keys (see the SDK rows below) | The docs site loads Mushi's own SDK once you accept | As listed below |
+| **SDK** (your app, the console, the docs after consent) | `mushi:reporter-token:<projectId>` | A random token so repeat reports and analytics events from the same browser group together. It is not an email or a name, but it links events from the same browser | Until cleared |
+| **SDK** | `mushi_session_id` (session storage) | Group events from one browser tab session | Until the tab closes |
+| **SDK** | `mushi_events_consent_<projectId>`, `mushi_events_spill_<projectId>` | The analytics consent state, and analytics events that could not be sent yet (retried on the next visit) | Until cleared or sent |
+| **SDK** | `mushi_fingerprint_hash` | The hashed device fingerprint described in section 2, cached so it is computed once | Until cleared |
+| **SDK** | Offline report queue (IndexedDB `mushi-mushi`, falling back to `mushi_offline_queue`) | Reports that could not be sent yet | Until sent |
+| **SDK** | `mushi:last-run`, cached runtime and SDK-version settings, `mushi_region_v1:<projectId>` | Technical state: crash-on-last-run detection, cached project settings, and the resolved API endpoint | Until cleared or expired |
 
-The SDK sets nothing else and reads no third-party cookies.
+The SDK sets no cookies and reads no third-party cookies.
 
 ## 12. Changes
 
