@@ -41,11 +41,16 @@ function mcpSupabaseFnBase(url: URL): string {
  * True when the request reached this function through the public CloudFront
  * proxy instead of the Supabase URL. The proxy strips its path prefix and its
  * origin request policy forwards only User-Agent and Referer, so the public
- * URL cannot be read off the request. Two signals remain:
- *   - X-Forwarded-Host naming the proxy's host, once the proxy forwards it;
+ * URL cannot be read off the request. Two signals remain, and either one is
+ * enough:
  *   - X-Amz-Cf-Id or a CloudFront `Via` hop, which CloudFront adds to every
  *     origin request whatever the policy. The Supabase URL is fronted by
- *     Cloudflare, not CloudFront, so a direct request carries neither.
+ *     Cloudflare, not CloudFront, so a direct request carries neither;
+ *   - X-Forwarded-Host naming the proxy's host, once the proxy forwards it.
+ * The CloudFront headers are checked first and are not overruled by an
+ * X-Forwarded-Host naming another host: a gateway between CloudFront and the
+ * function may rewrite X-Forwarded-Host to the Supabase host it received, and
+ * that would otherwise hide the proxy on exactly the requests it fronts.
  * This only picks which of our own URLs the discovery documents describe; it
  * is never an auth input, and a caller that forges it misdirects only itself.
  */
@@ -58,10 +63,10 @@ export function isPublicProxyRequest(headers: Headers): boolean {
   } catch {
     return false
   }
-  const forwardedHost = headers.get('x-forwarded-host')?.split(',')[0]?.trim().toLowerCase()
-  if (forwardedHost) return forwardedHost === publicHost
   if (headers.has('x-amz-cf-id')) return true
-  return /\bcloudfront\b/i.test(headers.get('via') ?? '')
+  if (/\bcloudfront\b/i.test(headers.get('via') ?? '')) return true
+  const forwardedHost = headers.get('x-forwarded-host')?.split(',')[0]?.trim().toLowerCase()
+  return forwardedHost === publicHost
 }
 
 /**

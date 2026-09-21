@@ -107,6 +107,25 @@ describe('requests through the CloudFront proxy', () => {
     )
   })
 
+  it('still identify the proxy when a gateway rewrote X-Forwarded-Host to the Supabase host', () => {
+    productionEnv()
+    const headers = new Headers({
+      'x-forwarded-host': 'dxptnwrhwsqckaftyymj.supabase.co',
+      'x-amz-cf-id': 'fixture-cf-request-id',
+      via: '1.1 0123456789abcdef.cloudfront.net (CloudFront)',
+    })
+    expect(meta.isPublicProxyRequest(headers)).toBe(true)
+    const prm = parse(meta.mcpOAuthDiscoveryDocument(runtimeUrl('/.well-known/oauth-protected-resource'), headers))
+    expect(prm.resource).toBe(PUBLIC_BASE)
+    // Either CloudFront header alone is enough.
+    expect(meta.isPublicProxyRequest(new Headers({ 'x-forwarded-host': 'dxptnwrhwsqckaftyymj.supabase.co', 'x-amz-cf-id': 'x' }))).toBe(true)
+    expect(
+      meta.isPublicProxyRequest(
+        new Headers({ 'x-forwarded-host': 'dxptnwrhwsqckaftyymj.supabase.co', via: '1.1 abc.cloudfront.net (CloudFront)' }),
+      ),
+    ).toBe(true)
+  })
+
   it('still fall back to the Supabase URL when no public base is configured', () => {
     env.set('SUPABASE_URL', SUPABASE_URL)
     expect(meta.isPublicProxyRequest(VIA_CLOUDFRONT)).toBe(false)
