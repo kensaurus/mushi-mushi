@@ -35,19 +35,19 @@ const BIN = 'mushi-mushi'
 
 const ISSUES_URL = 'https://github.com/kensaurus/mushi-mushi/issues'
 
+// FLAGS_HELP already ends with the Node requirement and the Docs/Console
+// footer; appending another footer here printed it twice.
 const HELP = `mushi-mushi — bug-reporting SDK launcher
 
 Usage:
   npx mushi-mushi               run the setup wizard (interactive)
+  npx mushi-mushi --yes         same, taking the defaults (required in CI and AI-agent shells)
   npx mushi-mushi init          same, with optional flags
 
 Other commands (setup, status, reports, deploy, test, login, config, ...)
 are forwarded to @mushi-mushi/cli, e.g. \`npx mushi-mushi setup --ide cursor\`.
 
-${FLAGS_HELP}
-
-Docs:    https://github.com/kensaurus/mushi-mushi
-Console: https://kensaur.us/mushi-mushi/`
+${FLAGS_HELP}`
 
 /**
  * Any first arg that isn't `init` and isn't a flag is a `@mushi-mushi/cli`

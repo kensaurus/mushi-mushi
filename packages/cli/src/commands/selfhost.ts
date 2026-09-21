@@ -30,7 +30,7 @@ import type { Command } from 'commander'
 import { execSync, spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { probeEndpointHealth, apiCall } from '../cli-shared.js'
-import { loadConfig } from '../config.js'
+import { CONFIG_PATH, loadConfig } from '../config.js'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -406,7 +406,7 @@ export function registerSelfhostCommands(program: Command): void {
     )
     .option(
       '--endpoint <url>',
-      'Mushi API endpoint to use for the proof step (default: from ~/.config/mushi/config.json)',
+      `Mushi API endpoint to use for the proof step (default: from ${CONFIG_PATH})`,
     )
     .option(
       '--skip-deploy',
@@ -453,7 +453,7 @@ After "up" completes:
     )
     .option(
       '--endpoint <url>',
-      'Mushi API endpoint (default: from ~/.config/mushi/config.json)',
+      `Mushi API endpoint (default: from ${CONFIG_PATH})`,
     )
     .option('--json', 'Machine-readable JSON output')
     .addHelpText(

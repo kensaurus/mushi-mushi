@@ -32,32 +32,47 @@ prefixes, and snippets change; before quoting any of them, look them up:
 - With the Mushi MCP server connected: call the `search_mushi_docs` tool
   (e.g. `search_mushi_docs { query: "expo quickstart" }`). It returns the
   page URL and a one-line excerpt; open the URL for the snippet.
-- Without MCP: fetch `https://kensaur.us/mushi-mushi/llms.txt` (every page,
-  one link per line) and open the matching page, or the plain-markdown twin at
-  `https://kensaur.us/mushi-mushi/docs/llm-md/<path>.md`.
+- Without MCP: fetch `https://kensaur.us/mushi-mushi/docs/llms.txt` (every
+  page, one link per line) and open the matching page, or the plain-markdown
+  twin at `https://kensaur.us/mushi-mushi/docs/llm-md/<path>.md`.
 
 If what you find disagrees with the tables below, the docs win.
 
 ## Step 1 — Run the wizard (SDK install + credentials)
 
+From an agent's terminal (no TTY), always pass `--yes`:
+
 ```bash
-npx mushi-mushi
+npx mushi-mushi --yes
 ```
 
 What it does: detects the framework and package manager, opens a browser
-sign-in (device auth — no copy-paste), lets you pick/create a project,
-installs the matching `@mushi-mushi/*` SDK, writes framework-prefixed env vars
-(e.g. `VITE_MUSHI_PROJECT_ID` / `VITE_MUSHI_API_KEY`, or `NEXT_PUBLIC_MUSHI_*`)
-to `.env.local`, and prints the init snippet to paste.
+sign-in (device auth — no copy-paste) and waits for approval, picks the
+project named after this app (or creates it), installs the matching
+`@mushi-mushi/*` SDK, writes framework-prefixed env vars (e.g.
+`VITE_MUSHI_PROJECT_ID` / `VITE_MUSHI_API_KEY`, or `NEXT_PUBLIC_MUSHI_*`) to
+`.env.local`, and prints the init snippet to paste.
 
-Those two env vars are all the SDK needs — no Supabase, no LLM key
-(the repo-root `.env.example` you may see in the mushi-mushi source repo is
-for self-hosting the backend, not for SDK users).
+Sign-in needs the user once: the command prints a URL and a code, then waits
+up to 10 minutes. If no browser opened on the user's machine, give them that
+URL and code and wait — do not kill the command. Run it in the background if
+your shell would time out first. If the user already ran
+`npx mushi-mushi login`, the wizard reuses that sign-in; the first run still
+asks for one approval to mint the app's ingest-only key.
 
-Non-interactive / CI fallback:
+The env key is ingest-only: it can submit reports and cannot read them, which
+is why it is safe inside a browser bundle. The CLI's own key (which can read
+reports, for MCP) stays in the CLI config and never goes into `.env.local`.
+Those two env vars are all the SDK needs — no Supabase, no LLM key (the
+repo-root `.env.example` you may see in the mushi-mushi source repo is for
+self-hosting the backend, not for SDK users).
+
+Do not paste API keys onto the command line yourself — they land in the
+transcript and in `ps`. The only keyed form is for CI with no browser, using
+an ingest-only (report:write) key from the console:
 
 ```bash
-mushi login --api-key mushi_... --project-id <uuid>
+npx mushi-mushi --yes --project-id <uuid> --api-key <ingest-only key>
 ```
 
 Already installed? Health-check instead of re-running the wizard:
@@ -122,18 +137,24 @@ snippet was lost, each framework page under
 npx mushi-mushi setup --ide cursor    # or: claude | continue | zed
 ```
 
-Multiple projects in one workspace: `mushi setup --all-projects`.
+Cursor gets `.cursor/mcp.json`; Claude Code gets `.mcp.json` at the repo root
+(Claude Code asks the user to approve it on first use). Both default to the
+hosted server: the user signs in from the editor's MCP panel and no key is
+written to the repo, so the file is safe to commit. Preview first with
+`--dry-run` — it signs nothing in and writes nothing.
+
+Multiple projects in one workspace: `npx mushi-mushi setup --all-projects`.
 
 ## Step 4 — Verify end-to-end
 
 ```bash
-mushi doctor --onboarding
+npx mushi-mushi doctor --onboarding
 ```
 
 This prints a single next action if anything is missing (SDK imported but not
 initialized, env var absent, MCP entry stale, heartbeat never received…).
 Every `FAIL` line comes with a `→ Fix:` hint. For a full sweep use
-`mushi doctor --full`.
+`npx mushi-mushi doctor --full`.
 
 Then send a test report: trigger any error in the running app (or use the
 wizard's "send test report" option) and confirm it appears with

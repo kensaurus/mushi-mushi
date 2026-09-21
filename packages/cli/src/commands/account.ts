@@ -4,7 +4,7 @@
  */
 
 import type { Command } from 'commander';
-import { loadConfig, saveConfig, type CliConfig } from '../config.js';
+import { CONFIG_PATH, loadConfig, saveConfig, type CliConfig } from '../config.js';
 import { runInit } from '../init.js';
 import { runLogin } from '../login.js';
 import { runMigrate } from '../migrate.js';
@@ -170,7 +170,7 @@ program
 // ─── config ──────────────────────────────────────────────────────────────────
 program
   .command('config')
-  .description('View or update CLI config (stored in ~/.config/mushi/config.json)')
+  .description(`View or update CLI config (stored in ${CONFIG_PATH})`)
   .argument('[key]', 'Config key to set: apiKey | endpoint | projectId')
   .argument('[value]', 'New value')
   .addHelpText('after', `
@@ -198,7 +198,14 @@ Examples:
       console.log(`✓ Set ${key}`)
     } else {
       // Never print the full API key value to the terminal
-      const safe = { ...config, apiKey: config.apiKey ? `${config.apiKey.slice(0, 10)}…` : undefined }
+      const safe = {
+        ...config,
+        apiKey: config.apiKey ? `${config.apiKey.slice(0, 10)}…` : undefined,
+        sdkKey:
+          typeof config.sdkKey?.key === 'string'
+            ? { ...config.sdkKey, key: `${config.sdkKey.key.slice(0, 10)}…` }
+            : undefined,
+      }
       console.log(JSON.stringify(safe, null, 2))
     }
   })
