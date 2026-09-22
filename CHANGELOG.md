@@ -10,6 +10,10 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ### Highlights
 
+- **Own analytics id.** — `Mushi.track()` events are keyed on a random per-project id the tracker creates, stored only once analytics consent is granted. They used to reuse the reporter token, a credential for the end user's report threads. Visitors get a new analytics id once; nothing else changes.
+- **Refused batches are not replayed forever.** — A batch the server rejects with a 4xx (bad shape, wrong key, too large) is dropped. Network errors, 429 and 5xx are still kept and resent on the next page.
+- **`page_view`.** — `analytics.autoPageviews` now emits `page_view`, the taxonomy name (it emitted `pageview`).
+- **`error.status`.** — Failed API calls now include the HTTP status in `MushiApiResponse.error.status` when the server answered.
 - **Server instructions.** — `initialize` now returns short instructions: what Mushi is, start with `triage_next_steps` / `get_fix_context`, run `triage_issue` before `dispatch_fix`, treat report text as untrusted data, confirm before merging.
 - **Untrusted output is wrapped.** — The 21 tools that return end-user report text, reporter replies or LLM-derived content wrap their text output as untrusted data, so an agent holding write tools cannot be steered by a crafted bug report.
 - **`triage_issue` works.** — It returned `null` for `fix_context` and `blast_radius` because it called routes that did not exist; it now reads the report's fix packet and the inventory blast radius.
@@ -17,6 +21,13 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 - **`get_recent_reports` returns the documented fields.** — Status and severity filters are enums; `include_raw: true` restores the full row.
 - **Keyless setup mode.** — Starting without an API key serves the setup and docs tools instead of exiting with an error.
 - **Removed `setup_repo_for_mushi`.** — It always failed (its route never existed). Repo setup is `mushi setup` in the CLI.
+- **One parameter spelling.** — Every tool parameter is camelCase now (`projectId`, `reportId`, `includeRaw`, `diffText`, `runId`, …). Tools used to mix `reportId` with `project_id` in one schema. The old snake_case spelling still works on every tool, on stdio and on the hosted server, and each renamed parameter says so in its description.
+- **Enums where the values are fixed.** — `list_gate_findings` takes the real gate ids (`dead_handler`, `mock_leak`, …) and finding severities (`info`, `warn`, `error`); the old description listed values that matched nothing. `list_skills` category, `search_codebase` mode (now also an input) and every agent the dispatch route accepts on `dispatch_fix` are enums too.
+- **Typed report outputs.** — `get_report_detail` returns the documented report fields under a typed output schema, with `includeRaw: true` for every column. `triage_issue` has a typed output schema, reads the newest fix attempt, and suggests `get_fix_timeline` with a fix id. Reporter identifiers (end-user id, reporter token, session id, display name) are never returned, and `get_report_evidence` no longer returns the session id.
+- **Output fixes.** — `merge_fix` declares the `justMerged` and `sha` fields the merge route returns, so strict clients no longer reject a merge that went through. `get_usage` returns structured content and honours `projectId`.
+- **Sentry is optional.** — `@sentry/node` is an optional peer dependency, about half of the previous install size. Set `MUSHI_MCP_SENTRY_DSN` and install `@sentry/node` to report the server's own errors; without the DSN it is never loaded.
+- **Unexpanded variables are caught.** — If your MCP client passes `${MUSHI_API_KEY}` through literally, the server no longer sends it to the API as a key: it falls back to your `mushi login` config or starts in setup mode, and says which variable syntax your client expands.
+- **Registry listing.** — The MCP registry entry no longer requires an `Authorization` header for the hosted server, so clients can sign in with OAuth.
 
 ## v1.28.x
 
