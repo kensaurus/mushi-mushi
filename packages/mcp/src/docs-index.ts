@@ -1767,7 +1767,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/self-hosting/edge-functions",
     markdown: "self-hosting/edge-functions.md",
     keywords: ["self-hosting", "self", "hosting", "edge-functions", "edge", "functions", "deploy"],
-    headings: ["Minimal required (ingest + classify)", "Common optional functions", "Function inventory (core pipeline)", "Required secrets", "JWT verification"],
+    headings: ["Minimal required (ingest + classify)", "Checking what is deployed", "Common optional functions", "Function inventory (core pipeline)", "Required secrets", "JWT verification"],
     excerpt: "Deploy Mushi's Supabase Edge Functions for a self-hosted install — the minimal ingest and classification set, the full list, and the secrets they need.",
   },
   {

@@ -222,7 +222,9 @@ describe('event-tracker', () => {
     const client = makeMockClient();
     mod.initEventTracker({ client, projectId: 'p1', anonId: 'anon-1' });
     mod.setEventConsent('denied');
-    expect(mod.trackEvent('landing_view')).toBe(true); // accepted by validation, dropped by consent
+    // `track()` documents "returns true when the event was queued"; a denied
+    // consent queues nothing, so the caller is told so.
+    expect(mod.trackEvent('landing_view')).toBe(false)
     await vi.advanceTimersByTimeAsync(10_000);
     expect(client.postProductEvents).not.toHaveBeenCalled();
     mod.destroyEventTracker();

@@ -6117,11 +6117,11 @@ arrow (`() => {}`). The CI gate fails on any non-test file that matches.
 ```jsx
 // ✗ caught
 <button onClick={() => {}}>Submit</button>
-<button onSubmit={noop}>Submit</button>
+<form onSubmit={noop}><button type="submit">Submit</button></form>
 
 // ✓ allowed
 <button onClick={() => mutate()}>Submit</button>
-<button onSubmit={handleSubmit}>Submit</button>
+<form onSubmit={handleSubmit}><button type="submit">Submit</button></form>
 
 // ✓ allowed in tests + stories
 <button onClick={() => {}} />        // foo.test.tsx, *.stories.tsx
@@ -13266,38 +13266,6 @@ The complete release history, generated automatically from
 publish to npm. Want only the highlights? Subscribe to
 [GitHub Releases](https://github.com/kensaurus/mushi-mushi/releases) for
 a curated email feed.
-
-  {changelog.map((release) => (
-    
-      
-        
-          v{release.majorMinor}
-        
-        {release.pending && (
-          
-            upcoming
-          
-
-        {release.versions?.length ? (
-          
-            includes {release.versions.join(', ')}
-          
-        ) : null}
-      
-
-      {release.headline && (
-        
-
-        
-
-      {release.highlights?.length > 0 && (
-        
-          {release.highlights.map((h, i) => (
-            
-              
-
-              
-              {h.description ?  — {h.description} : null}
 
 ---
 
