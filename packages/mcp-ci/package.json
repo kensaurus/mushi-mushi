@@ -20,10 +20,7 @@
     "dist",
     "action.yml",
     "README.md",
-    "LICENSE",
-    "CONTRIBUTING.md",
-    "CODE_OF_CONDUCT.md",
-    "SECURITY.md"
+    "LICENSE"
   ],
   "repository": {
     "type": "git",
