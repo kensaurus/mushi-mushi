@@ -10,20 +10,16 @@
  *   - triage_issue returned z.unknown() fields and read the OLDEST fix attempt
  *     as "the last one" (the route orders newest first), and pointed
  *     get_fix_timeline at a report id.
- *   - merge_fix declared an output schema without two fields the merge route
- *     returns, so strict clients rejected a merge that had already happened.
+ *   - merge_fix and generate_tdd_from_story declared output schemas without
+ *     fields their routes return, so strict clients rejected a merge or a
+ *     generated test PR that had already happened.
  */
 
 import { describe, it, expect, afterEach } from 'vitest'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { createMushiServer } from '../server.js'
-import {
-  REPORTER_IDENTITY_FIELDS,
-  projectReportDetail,
-  reportEvidenceOf,
-  triageRecommendedActions,
-} from '../report-shapes.js'
+import { projectReportDetail, reportEvidenceOf, triageRecommendedActions } from '../report-shapes.js'
 
 const API_ENDPOINT = 'https://api.test.mushimushi.dev'
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
@@ -110,7 +106,16 @@ async function connect(stub: typeof fetch, projectId: string | null = PROJECT_ID
   return c
 }
 
-const identityKeys = [...REPORTER_IDENTITY_FIELDS]
+/** Everything in DETAIL_ROW that identifies the reporter. */
+const identityKeys = [
+  'end_user_id',
+  'reporter_token_hash',
+  'session_id',
+  'reporter_display_name',
+  'reporter_user_id',
+  'reporter_identity',
+  'tester_id',
+]
 
 describe('projectReportDetail', () => {
   it('returns documented fields only, without reporter identifiers or span sessions', () => {
@@ -218,6 +223,24 @@ describe('report tools over MCP', () => {
     const res = await c.callTool({ name: 'merge_fix', arguments: { fixId: 'fix-1' } })
     expect(res.isError).toBeFalsy()
     expect(res.structuredContent).toMatchObject({ merged: true, justMerged: true, sha: 'abc123' })
+  })
+
+  it('generate_tdd_from_story accepts every field test-gen-from-story returns', async () => {
+    const c = await connect(
+      stubFetch({
+        [`/v1/admin/inventory/${PROJECT_ID}/stories/story-1/generate-test`]: {
+          qaStoryId: 'qa-1',
+          prUrl: null,
+          approvalStatus: 'pending_review',
+          needsHumanReview: true,
+          path: 'e2e/story-1.spec.ts',
+          firecrawlActionsYaml: null,
+        },
+      }).stub,
+    )
+    const res = await c.callTool({ name: 'generate_tdd_from_story', arguments: { projectId: PROJECT_ID, storyNodeId: 'story-1' } })
+    expect(res.isError).toBeFalsy()
+    expect(res.structuredContent).toMatchObject({ qaStoryId: 'qa-1', path: 'e2e/story-1.spec.ts' })
   })
 
   it('get_usage scopes by header (the route ignores ?project_id=) and returns structured content', async () => {

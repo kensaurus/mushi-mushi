@@ -24,8 +24,7 @@ export interface CliConfigSnapshot {
 }
 
 /** The env vars this binary reads credentials and routing from. */
-export const CREDENTIAL_ENV_VARS = ['MUSHI_API_KEY', 'MUSHI_PROJECT_ID', 'MUSHI_API_ENDPOINT'] as const
-export type CredentialEnvVar = (typeof CREDENTIAL_ENV_VARS)[number]
+type CredentialEnvVar = 'MUSHI_API_KEY' | 'MUSHI_PROJECT_ID' | 'MUSHI_API_ENDPOINT'
 
 /**
  * True when `value` is a variable reference the MCP client passed through
@@ -33,7 +32,7 @@ export type CredentialEnvVar = (typeof CREDENTIAL_ENV_VARS)[number]
  * `$VAR`, `%VAR%` or `{{VAR}}`. No Mushi key, UUID or URL has any of these
  * shapes, so a match is never a real value.
  */
-export function isUnexpandedPlaceholder(value: string): boolean {
+function isUnexpandedPlaceholder(value: string): boolean {
   const v = value.trim()
   return (
     /^\$\{[^}]*\}$/.test(v) ||

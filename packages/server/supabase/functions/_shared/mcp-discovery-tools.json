@@ -670,6 +670,21 @@
           "needsHumanReview": {
             "type": "boolean",
             "description": "True when the story requires operator approval before scheduled runs"
+          },
+          "path": {
+            "description": "Repo path of the generated Playwright spec",
+            "type": "string"
+          },
+          "firecrawlActionsYaml": {
+            "description": "Firecrawl actions YAML for the story, when the generator produced one",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [

@@ -116,7 +116,7 @@ function queryValue(token: string, args: Record<string, unknown>, ctx: { project
   return resolveToken(token, args, ctx);
 }
 
-export function interpolatePath(
+function interpolatePath(
   template: string,
   args: Record<string, unknown>,
   ctx: { projectIdHint?: string },

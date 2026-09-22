@@ -17,7 +17,7 @@
 type Row = Record<string, unknown>
 
 /** The fields get_recent_reports documents; the list route returns ~30 columns. */
-export const REPORT_LIST_FIELDS = [
+const REPORT_LIST_FIELDS = [
   'id',
   'status',
   'category',
@@ -33,7 +33,7 @@ export const REPORT_LIST_FIELDS = [
  * report: the host app's user id, the SDK's reporter token and session, a
  * display name, and the end_users / tester rows joined onto the detail.
  */
-export const REPORTER_IDENTITY_FIELDS = [
+const REPORTER_IDENTITY_FIELDS = [
   'end_user_id',
   'reporter_token_hash',
   'session_id',
@@ -48,7 +48,7 @@ export const REPORTER_IDENTITY_FIELDS = [
  * detail route has instead (internal telemetry such as llm_invocations,
  * storage paths and custom_metadata), minus the reporter identity fields.
  */
-export const REPORT_DETAIL_FIELDS = [
+const REPORT_DETAIL_FIELDS = [
   'id',
   'project_id',
   'title',

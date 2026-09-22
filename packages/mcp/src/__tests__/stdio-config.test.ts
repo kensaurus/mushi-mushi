@@ -7,12 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import {
-  isUnexpandedPlaceholder,
-  missingApiKeyReport,
-  resolveStdioCredentials,
-  type CliConfigSnapshot,
-} from '../stdio-config.js'
+import { missingApiKeyReport, resolveStdioCredentials, type CliConfigSnapshot } from '../stdio-config.js'
 
 const DEFAULT_ENDPOINT = 'https://default.example/functions/v1/api'
 const NO_CLI: CliConfigSnapshot = { path: '/home/u/.config/mushi/config.json', found: false }
@@ -23,16 +18,33 @@ const CLI_WITH_KEY: CliConfigSnapshot = {
   projectId: '11111111-1111-4111-8111-111111111111',
 }
 
-describe('isUnexpandedPlaceholder', () => {
+describe('placeholder detection', () => {
+  const keyFrom = (value: string) => resolveStdioCredentials({ MUSHI_API_KEY: value }, NO_CLI, DEFAULT_ENDPOINT)
+
   it.each(['${MUSHI_API_KEY}', '${env:MUSHI_API_KEY}', '$MUSHI_API_KEY', '${input:mushi-api-key}', '${MUSHI_API_KEY:-}', '%MUSHI_API_KEY%', '{{MUSHI_API_KEY}}', '  ${MUSHI_API_KEY}  '])(
     'flags %s',
-    (value) => expect(isUnexpandedPlaceholder(value)).toBe(true),
+    (value) => {
+      const r = keyFrom(value)
+      expect(r.apiKey).toBe('')
+      expect(r.placeholders).toEqual([{ name: 'MUSHI_API_KEY', value: value.trim() }])
+    },
   )
 
-  it.each(['mushi_0123456789abcdef', '11111111-1111-4111-8111-111111111111', 'https://x.supabase.co/functions/v1/api', ''])(
-    'accepts the real value %s',
-    (value) => expect(isUnexpandedPlaceholder(value)).toBe(false),
-  )
+  it.each(['mushi_0123456789abcdef', 'mushi_with$dollar'])('accepts the real key %s', (value) => {
+    const r = keyFrom(value)
+    expect(r.apiKey).toBe(value)
+    expect(r.placeholders).toEqual([])
+  })
+
+  it('accepts real project ids and endpoints', () => {
+    const r = resolveStdioCredentials(
+      { MUSHI_API_KEY: 'mushi_k', MUSHI_PROJECT_ID: '11111111-1111-4111-8111-111111111111', MUSHI_API_ENDPOINT: 'https://x.supabase.co/functions/v1/api' },
+      NO_CLI,
+      DEFAULT_ENDPOINT,
+    )
+    expect(r.placeholders).toEqual([])
+    expect(r.endpoint).toBe('https://x.supabase.co/functions/v1/api')
+  })
 })
 
 describe('resolveStdioCredentials', () => {

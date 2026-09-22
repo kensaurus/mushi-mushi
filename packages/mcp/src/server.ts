@@ -3198,6 +3198,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         needsHumanReview: z
           .boolean()
           .describe('True when the story requires operator approval before scheduled runs'),
+        // test-gen-from-story also returns these; undeclared, a strict client
+        // rejected a generation that had already opened its PR.
+        path: z.string().optional().describe('Repo path of the generated Playwright spec'),
+        firecrawlActionsYaml: z
+          .string()
+          .nullable()
+          .optional()
+          .describe('Firecrawl actions YAML for the story, when the generator produced one'),
       }),
     },
     async ({ projectId, storyNodeId, automationMode, baseUrl, openPr }) => {
