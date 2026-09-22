@@ -24,11 +24,11 @@ Deno.test(
     const parsed = createByokKeySchema.parse({
       projectId: '3a1763bf-5a64-4e42-abde-85dc0219787d',
       provider: 'anthropic',
-      apiKey: '  vendor_key-with.unusual=characters  ',
+      apiKey: '  vendor_key-with.unusual=characters  ', // gitleaks:allow
       priority: 0,
     });
 
-    assertEquals(parsed.apiKey, 'vendor_key-with.unusual=characters');
+    assertEquals(parsed.apiKey, 'vendor_key-with.unusual=characters'); // gitleaks:allow
     assert(
       !createByokKeySchema.safeParse({
         projectId: 'not-a-uuid',

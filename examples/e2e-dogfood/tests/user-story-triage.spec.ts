@@ -84,15 +84,21 @@ test.describe('User story: real user drives glot.it → admin PDCA', () => {
     if (opened) {
       reportId = opened
     } else {
-      // Fallback: POST via the public API with the seeded dogfood key.
-      // Same payload shape as `full-pdca.spec.ts` submitReport().
+      // Fallback: POST via the public API with the key you seeded into the
+      // local stack. Same payload shape as `full-pdca.spec.ts` submitReport().
+      // No default: the literal that used to sit here is also a live cloud
+      // key, so an unset env var used to write into the real project.
+      const apiKey = process.env.MUSHI_API_KEY ?? ''
+      test.skip(
+        !apiKey,
+        'MUSHI_API_KEY must be set to reach the API fallback (the widget hook was absent).',
+      )
       const now = new Date().toISOString()
       const fallback = await page.request.post(
         `${SUPABASE_URL}/functions/v1/api/v1/reports`,
         {
           headers: {
-            'X-Mushi-Api-Key':
-              process.env.MUSHI_API_KEY ?? 'mushi_glotit520f2a00ed694bcbb176b254c9f258c6',
+            'X-Mushi-Api-Key': apiKey,
             'Content-Type': 'application/json',
           },
           data: {

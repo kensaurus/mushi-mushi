@@ -100,7 +100,7 @@ async function connect(stub: typeof fetch): Promise<Client> {
   const server = createMushiServer({
     version: '0.0.0-test',
     apiEndpoint: API_ENDPOINT,
-    apiKey: 'mushi_test_key_0123456789',
+    apiKey: 'mushi_test_key_0123456789', // gitleaks:allow
     projectId: PROJECT_ID,
     fetch: stub,
   })

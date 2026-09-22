@@ -72,7 +72,7 @@ describe('buildSetupServerBlock', () => {
   const base = {
     endpoint: 'https://x.supabase.co/functions/v1/api',
     projectId: 'proj-1',
-    apiKey: 'mushi_secret_key_123',
+    apiKey: 'mushi_secret_key_123', // gitleaks:allow
     stdio: false,
     allProjects: false,
     inlineKey: false,
@@ -108,7 +108,7 @@ describe('buildSetupServerBlock', () => {
 
   it('--inline-key writes the literal key into the stdio entry', () => {
     const result = buildSetupServerBlock({ ...base, ide: 'cursor', stdio: true, inlineKey: true })
-    expect(result.block).toMatchObject({ env: { MUSHI_API_KEY: 'mushi_secret_key_123' } })
+    expect(result.block).toMatchObject({ env: { MUSHI_API_KEY: 'mushi_secret_key_123' } }) // gitleaks:allow
   })
 
   it('continue and zed only get stdio entries', () => {

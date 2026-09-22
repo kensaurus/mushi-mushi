@@ -19,7 +19,7 @@ import { TOOL_CATALOG, TDD_TOOL_CATALOG, CODEBASE_TOOL_CATALOG, RESOURCE_CATALOG
 import { DEPRECATED_TOOL_ALIASES, DEFAULT_FEATURE_GROUPS, parseFeaturesParam } from '../feature-groups.js'
 
 const API_ENDPOINT = 'https://api.test.mushimushi.dev'
-const API_KEY = 'mushi_test_key_0123456789'
+const API_KEY = 'mushi_test_key_0123456789' // gitleaks:allow
 const PROJECT_ID = 'proj_00000000-0000-0000-0000-000000000000'
 
 interface FetchCall {
