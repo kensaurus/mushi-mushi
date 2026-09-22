@@ -69,6 +69,54 @@ describe('readSignupMetaFromSearch', () => {
     expect(readSignupMetaFromSearch(new URLSearchParams('?as=tester'))).toEqual({ signup_track: 'tester' })
     expect(readSignupMetaFromSearch(new URLSearchParams('?as=admin'))).toEqual({ signup_track: 'console' })
   })
+
+  it('reads first touch from ft_src + utm_*, never from ref', () => {
+    // What the docs site appends for a visitor who first came from HN.
+    expect(
+      readSignupMetaFromSearch(
+        new URLSearchParams('?src=landing-hero&ft_src=hn&utm_source=hn&utm_medium=social&utm_campaign=launch'),
+      ),
+    ).toEqual({
+      signup_src: 'landing-hero',
+      signup_first_touch: 'hn',
+      signup_first_touch_medium: 'social',
+      signup_first_touch_campaign: 'launch',
+      signup_track: 'console',
+    })
+  })
+
+  it('falls back to utm_source when a link skips the docs site', () => {
+    expect(readSignupMetaFromSearch(new URLSearchParams('?utm_source=Reddit')).signup_first_touch).toBe('reddit')
+    expect(readSignupMetaFromSearch(new URLSearchParams('?ft_src=hn&utm_source=x')).signup_first_touch).toBe('hn')
+  })
+
+  it('drops a first-touch source the growth route could not filter on', () => {
+    expect(readSignupMetaFromSearch(new URLSearchParams('?ft_src=a/b')).signup_first_touch).toBeUndefined()
+    expect(readSignupMetaFromSearch(new URLSearchParams('?ft_src=-x')).signup_first_touch).toBeUndefined()
+  })
+
+  it('keeps ref only when it is a widget loop ref', () => {
+    // The old collision: the docs site sent ref=<first-touch utm_source>.
+    expect(readSignupMetaFromSearch(new URLSearchParams('?ref=hn')).loop_ref).toBeUndefined()
+    expect(readSignupMetaFromSearch(new URLSearchParams('?ref=widget')).loop_ref).toBeUndefined()
+    expect(readSignupMetaFromSearch(new URLSearchParams('?ref=A1B2C3D4E5F6')).loop_ref).toBeUndefined()
+    expect(
+      readSignupMetaFromSearch(new URLSearchParams('?utm_source=widget&ft_src=widget&ref=a1b2c3d4e5f6')),
+    ).toEqual({ loop_ref: 'a1b2c3d4e5f6', signup_first_touch: 'widget', signup_track: 'console' })
+  })
+})
+
+describe('loop ref shape', () => {
+  const loopRefOf = (ref: string) => readSignupMetaFromSearch(new URLSearchParams({ ref })).loop_ref
+
+  it('is the widget mark hash: 6-64 lowercase hex', () => {
+    expect(loopRefOf('a1b2c3d4e5f6')).toBe('a1b2c3d4e5f6')
+    expect(loopRefOf('abc123')).toBe('abc123')
+    expect(loopRefOf('f'.repeat(64))).toBe('f'.repeat(64))
+    for (const bad of ['abc12', 'f'.repeat(65), 'A1B2C3', 'hn', 'widget', 'glot.it', '']) {
+      expect(loopRefOf(bad), bad).toBeUndefined()
+    }
+  })
 })
 
 describe('compactSignupMeta — track', () => {
@@ -133,6 +181,51 @@ describe('completeSignupAttribution', () => {
       signup_source: 'github',
       signup_track: 'console',
     })
+  })
+
+  it('attaches the first touch to signup_completed and fires no loop_signup for it', async () => {
+    await completeSignupAttribution(
+      freshUser({
+        signup_track: 'console',
+        signup_first_touch: 'hn',
+        signup_first_touch_medium: 'social',
+        signup_first_touch_campaign: 'launch',
+      }),
+    )
+
+    expect(track).toHaveBeenCalledWith('signup_completed', {
+      signup_source: 'unspecified',
+      signup_track: 'console',
+      signup_first_touch: 'hn',
+      signup_first_touch_medium: 'social',
+      signup_first_touch_campaign: 'launch',
+    })
+    expect(track).not.toHaveBeenCalledWith('loop_signup', expect.anything())
+  })
+
+  it('replays a stashed OAuth first touch and loop ref onto the user', async () => {
+    updateUser.mockResolvedValue({ data: { user: null }, error: null } as unknown as Awaited<
+      ReturnType<typeof supabase.auth.updateUser>
+    >)
+    stashSignupMeta(readSignupMetaFromSearch(new URLSearchParams('?ft_src=widget&ref=a1b2c3d4e5f6')))
+
+    await completeSignupAttribution(freshUser({}))
+
+    expect(updateUser).toHaveBeenCalledWith({
+      data: { loop_ref: 'a1b2c3d4e5f6', signup_first_touch: 'widget', signup_track: 'console' },
+    })
+    expect(track).toHaveBeenCalledWith('loop_signup', { ref: 'a1b2c3d4e5f6' })
+  })
+
+  it('fires loop_signup only for a real loop ref', async () => {
+    // An account attributed before 2026-09-22 can carry ref=<utm_source>.
+    await completeSignupAttribution(freshUser({ signup_source: 'hn', loop_ref: 'hn' }))
+    expect(track).toHaveBeenCalledWith('signup_completed', { signup_source: 'hn' })
+    expect(track).not.toHaveBeenCalledWith('loop_signup', expect.anything())
+
+    track.mockReset()
+    await completeSignupAttribution(freshUser({ signup_source: 'friend', loop_ref: 'a1b2c3d4e5f6' }))
+    expect(track).toHaveBeenCalledWith('loop_signup', { ref: 'a1b2c3d4e5f6' })
   })
 })
 
