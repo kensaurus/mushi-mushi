@@ -118,6 +118,19 @@ jobs:
       - name: Regenerate llms.txt
         run: pnpm gen:llms-txt
 
+      - name: Assert the dogfooding keys are set
+        # The docs site tracks its own funnel with the Mushi SDK. Missing keys
+        # used to build a site with no SDK at all and leave the funnel empty
+        # with nothing reporting why. Fail loudly instead.
+        run: |
+          missing=""
+          [ -z "${{ secrets.MUSHI_SELF_PROJECT_ID }}" ] && missing="$missing MUSHI_SELF_PROJECT_ID"
+          [ -z "${{ secrets.MUSHI_SELF_API_KEY }}" ] && missing="$missing MUSHI_SELF_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing dogfooding secret(s):$missing. The docs site would build without the Mushi SDK and the company funnel would record nothing. Set them in GitHub Secrets → Actions, or remove this gate deliberately."
+            exit 1
+          fi
+
       - name: Build docs site
         run: pnpm --filter @mushi-mushi/docs build
         env:

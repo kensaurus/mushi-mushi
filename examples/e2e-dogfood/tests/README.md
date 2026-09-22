@@ -27,8 +27,16 @@ cd ../glot.it && pnpm dev
 The suite POSTs to `POST /v1/reports` with a fixed project/API-key pair
 that must exist in the local DB. Seed them once per cold stack:
 
+Pick any local-only value for `MUSHI_API_KEY`, then seed the hash the server
+will compare against. The hash is derived from the variable, so the two can
+never drift apart:
+
 ```bash
-docker exec supabase_db_server psql -U postgres -d postgres <<'SQL'
+export MUSHI_API_KEY=mushi_local_dogfood_dev_only
+KEY_HASH=$(printf %s "$MUSHI_API_KEY" | sha256sum | cut -d' ' -f1)
+
+docker exec -i supabase_db_server \
+  psql -U postgres -d postgres -v KEY_HASH="$KEY_HASH" <<'SQL'
 insert into projects (id, name, slug)
 values ('542b34e0-019e-41fe-b900-7b637717bb86', 'glot.it local', 'glotit-local')
 on conflict (id) do nothing;
@@ -36,15 +44,17 @@ on conflict (id) do nothing;
 insert into project_api_keys (project_id, key_hash, label, scopes, is_active)
 values (
   '542b34e0-019e-41fe-b900-7b637717bb86',
-  'c5a1f379b2bae2f16ef7496a5f1b91c1226be22b50ad60d1c3cd29a7abaa1e79',
+  :'KEY_HASH',
   'glotit-dev', array['report:write']::text[], true
 ) on conflict do nothing;
 SQL
 ```
 
-The `key_hash` above is `sha256('mushi_glotit520f2a00ed694bcbb176b254c9f258c6')` — the
-default dogfood API key. Override via `MUSHI_API_KEY` + reseed if you
-rotate it.
+`MUSHI_API_KEY` has **no default** in the specs. It used to fall back to a
+hard-coded literal documented as a local seed value, but the same string was
+also minted as a live cloud key — so running the suite without a local stack
+silently wrote reports into the real project. The specs now skip with a clear
+message when the variable is unset.
 
 ## Environment
 
@@ -56,7 +66,7 @@ rotate it.
 | `SUPABASE_SERVICE_ROLE_KEY` | —                                            | Service-role read of `reports` / `fix_attempts` (Plan/Do/Act need) |
 | `MUSHI_API_URL`             | `${SUPABASE_URL}/functions/v1/api`           | Override to a deployed API for preview-env testing                 |
 | `MUSHI_PROJECT_ID`          | `542b34e0-019e-41fe-b900-7b637717bb86`       | Project to ingest against                                          |
-| `MUSHI_API_KEY`             | `mushi_glotit520f2a00ed694bcbb176b254c9f258c6` | API key for `POST /v1/reports`                                     |
+| `MUSHI_API_KEY`             | — (required; suite skips without it)         | API key for `POST /v1/reports`; seed its hash as shown above       |
 | `MUSHI_ADMIN_JWT`           | —                                            | JWT for `/v1/admin/*` calls (Do / Check / Health need this)        |
 | `MUSHI_ADMIN_EMAIL`         | falls back to `TEST_USER_EMAIL`              | Login identity for the admin-polish suite (`byok-no-flash`, `dynamic-title`, `favicon-badge`) |
 | `MUSHI_ADMIN_PASSWORD`      | falls back to `TEST_USER_PASSWORD`           | Paired password; both vars are consumed by `admin-polish.helpers.ts` |

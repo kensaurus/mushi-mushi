@@ -17,7 +17,7 @@ import { resolveReporterAuth } from '../../supabase/functions/api/routes/reporte
 const PROJECT = '00000000-0000-4000-8000-0000000000aa'
 const API_KEY = 'mushi_publickey_in_every_browser'
 const NOW = Date.parse('2026-09-22T09:00:00.000Z')
-const TOKEN = 'mushi_4f5a2d7e-1c3b-4e8a-9f6d-2b7c8e1a0d33'
+const TOKEN = 'mushi_4f5a2d7e-1c3b-4e8a-9f6d-2b7c8e1a0d33' // gitleaks:allow
 
 const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex')
 const DIGEST = sha256(TOKEN)

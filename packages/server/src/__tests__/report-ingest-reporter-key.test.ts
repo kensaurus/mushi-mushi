@@ -65,7 +65,7 @@ function report(reporterToken: string) {
 describe('report ingest stores the reporter key, derived once', () => {
   it('rk1_ || sha256(sha256(raw token))', async () => {
     const { ingestReport } = await import('../../supabase/functions/api/helpers.ts')
-    const token = 'mushi_4f5a2d7e-1c3b-4e8a-9f6d-2b7c8e1a0d33'
+    const token = 'mushi_4f5a2d7e-1c3b-4e8a-9f6d-2b7c8e1a0d33' // gitleaks:allow
     seen.length = 0
     await expect(ingestReport({} as never, '00000000-0000-4000-8000-0000000000aa', report(token))).rejects.toThrow(
       'stop-after-key',

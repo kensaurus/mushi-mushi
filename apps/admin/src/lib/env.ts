@@ -85,7 +85,7 @@ export const CLOUD_SUPABASE_URL =
 // that build without any env still reach a usable cluster. Not a secret, but
 // treating it like one lets us rotate on a predictable SLA.
 // check-no-secrets: ignore-next-line
-const HARDCODED_CLOUD_ANON_KEY_FALLBACK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4cHRud3Jod3NxY2thZnR5eW1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNDk4OTQsImV4cCI6MjA5MTgyNTg5NH0.Vs09uA6QY9CPi6PLZe2lO9kS27JgSWpbzFepMRzoaaM'
+const HARDCODED_CLOUD_ANON_KEY_FALLBACK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4cHRud3Jod3NxY2thZnR5eW1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNDk4OTQsImV4cCI6MjA5MTgyNTg5NH0.Vs09uA6QY9CPi6PLZe2lO9kS27JgSWpbzFepMRzoaaM' // gitleaks:allow
 export const CLOUD_SUPABASE_ANON_KEY =
   (import.meta.env.VITE_CLOUD_SUPABASE_ANON_KEY ?? '').trim() ||
   HARDCODED_CLOUD_ANON_KEY_FALLBACK
