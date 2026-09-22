@@ -524,6 +524,13 @@ export function OrganizationSettingsPage() {
   // Not covered: hard refresh / tab close, where the JS context dies before
   // fetch completes. The durable fix is a server-side grace period.
   useEffect(() => {
+    // Re-arm on every (re)mount. React 18 StrictMode runs effect → cleanup →
+    // effect in dev, so without this the simulated unmount would leave
+    // mountedRef false for the rest of the session and every later flush
+    // would issue its DELETE but silently skip the row restore and reload.
+    // The maps are empty at mount (only a user action fills them), so the
+    // StrictMode cleanup itself flushes nothing.
+    mountedRef.current = true
     const memberTimers = removeTimers.current
     const inviteTimers = cancelTimers.current
     return () => {

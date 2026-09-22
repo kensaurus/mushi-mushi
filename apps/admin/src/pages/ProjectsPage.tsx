@@ -362,6 +362,13 @@ export function ProjectsPage() {
   // dies before fetch can finish. The durable fix for that is a server-side
   // grace period (soft-delete + restore) rather than a client timer.
   useEffect(() => {
+    // Re-arm on every (re)mount. React 18 StrictMode runs effect → cleanup →
+    // effect in dev, so without this the simulated unmount would leave
+    // mountedRef false for the rest of the session and every later flush
+    // would issue its DELETE but silently skip the row restore and reload.
+    // The maps are empty at mount (only a user action fills them), so the
+    // StrictMode cleanup itself flushes nothing.
+    mountedRef.current = true
     const dTimers = deleteTimers.current
     const rTimers = revokeTimers.current
     return () => {
