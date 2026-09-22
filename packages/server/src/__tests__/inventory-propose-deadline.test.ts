@@ -34,7 +34,10 @@ describe('inventory-propose never runs unbounded', () => {
     // 'cron:drift-watch' in created_by made Postgres reject every cron
     // proposal after the model had already been paid for.
     expect(src).toMatch(/created_by: UUID_RE\.test\(triggeredBy \?\? ''\) \? triggeredBy : null/)
-    expect(src).toMatch(/source: triggeredBy \?\? 'api'/)
+    // `source` is a typed column (passive_discovery | live_crawl | manual);
+    // the trigger label rides in the rationale metadata instead.
+    expect(src).toMatch(/source: 'passive_discovery'/)
+    expect(src).toMatch(/__triggered_by: triggeredBy/)
   })
 
   it('caps how many proposals one drift-watch run fires', () => {

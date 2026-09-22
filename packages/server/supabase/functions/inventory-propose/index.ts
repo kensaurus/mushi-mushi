@@ -465,14 +465,20 @@ ${raw ? yamlStringify(raw) : '# (no model output captured)\n'}`
       status: 'draft',
       proposed_yaml: yamlText,
       proposed_parsed: parsedJson as unknown as Record<string, unknown>,
-      rationale_by_story: rationale as unknown as Record<string, unknown>,
+      rationale_by_story: {
+        ...(rationale as unknown as Record<string, unknown>),
+        // Meta keys are `__`-prefixed here (see __validation_errors above).
+        ...(triggeredBy ? { __triggered_by: triggeredBy } : {}),
+      },
       llm_model: modelId,
       observation_count: observations.length,
-      // created_by is a uuid: a cron passes a label ('cron:drift-watch'),
+      // created_by is a uuid, but a cron passes a label ('cron:drift-watch'),
       // which Postgres refused — so every cron proposal was computed, paid
-      // for, and thrown away at the insert. Labels belong in `source`.
+      // for, and thrown away at the insert. `source` is a typed column about
+      // where the observations came from, not who asked, so the label goes
+      // to the rationale metadata and created_by takes a uuid or nothing.
       created_by: UUID_RE.test(triggeredBy ?? '') ? triggeredBy : null,
-      source: triggeredBy ?? 'api',
+      source: 'passive_discovery',
     })
     .select('id')
     .single()
