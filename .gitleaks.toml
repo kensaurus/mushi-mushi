@@ -83,4 +83,21 @@ paths = [
   # to compare against. Never a real value; the real one is a Supabase secret.
   '''packages/server/src/__tests__/voice-intake\.test\.ts''',
   '''packages/server/src/__tests__/voice-intent\.test\.ts''',
+  # Unit tests that hand a stubbed fetch / a fake Hono context an obviously
+  # invented key so the auth path has something to read — 'mushi_abc123_secret',
+  # 'mushi_publickey_in_every_browser', and similar. Flagged by the default
+  # generic-api-key rule on the master scan of f5e94ce9 (run 35737999381);
+  # every finding was a fixture. A real key (mushi_live_/mush_pk_) is never
+  # allowlisted, and these paths are all *.test.ts.
+  '''packages/cli/src/commands/setup\.test\.ts''',
+  '''packages/mcp/src/__tests__/ergonomics\.test\.ts''',
+  '''packages/mcp/src/__tests__/param-casing\.test\.ts''',
+  '''packages/mcp/src/__tests__/report-shapes\.test\.ts''',
+  '''packages/mcp/src/__tests__/stdio-attribution\.test\.ts''',
+  '''packages/mcp/src/__tests__/triage-untrusted\.test\.ts''',
+  '''packages/mcp/src/__tests__/use-mushi-router\.test\.ts''',
+  '''packages/server/src/__tests__/mcp-key-browser-exposure\.test\.ts''',
+  '''packages/server/src/__tests__/reporter-auth\.test\.ts''',
+  '''packages/server/src/__tests__/report-ingest-reporter-key\.test\.ts''',
+  '''packages/server/supabase/functions/api/routes/events-hardening\.test\.ts''',
 ]
