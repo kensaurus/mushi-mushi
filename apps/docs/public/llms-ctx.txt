@@ -1,6 +1,6 @@
 # Mushi Mushi — getting-started context
 
-> Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor.
+> The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
 
@@ -124,7 +124,7 @@ share with your team, and each teammate signs in from the IDE on first use.
 Pass `--stdio` (or `--ci` in headless environments) for the previous local
 subprocess entry with a key.
 
-It reads CLI config at **`~/.config/mushi/config.json`** (written by `mushi login`; legacy `~/.mushirc` auto-migrates on first load), detects the IDE config path, and writes the `mcpServers` block for you. Restart the IDE and ask the agent: **"list mushi tools"**.
+It reads CLI config at **`~/.config/mushi/config.json`**, or **`%APPDATA%\mushi\config.json`** on Windows ([full order](/sdks/cli#config-file); written by `mushi login`; legacy `~/.mushirc` auto-migrates on first load), detects the IDE config path, and writes the `mcpServers` block for you. Restart the IDE and ask the agent: **"list mushi tools"**.
 
 ## Claude Code plugin
 
@@ -363,7 +363,7 @@ The SDK key and the MCP key look identical, so label them when you store them.
 An app bundle (web, React Native, Capacitor, native) should carry a
 `report:write`-only key; keep `mcp:*` keys in your editor and CI.
 
-Never commit API keys. The CLI writes SDK keys to `.env.local`, CLI config to **`~/.config/mushi/config.json`** (legacy `~/.mushirc` is auto-migrated on first load), and adds `.cursor/mcp.json` to `.gitignore` when wiring Cursor.
+Never commit API keys. The CLI writes SDK keys to `.env.local`, CLI config to **`~/.config/mushi/config.json`** on macOS and Linux or **`%APPDATA%\mushi\config.json`** on Windows (`$XDG_CONFIG_HOME/mushi/config.json` on any platform when that variable is set; legacy `~/.mushirc` is auto-migrated on first load), and adds `.cursor/mcp.json` to `.gitignore` when wiring Cursor.
 
 See [`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example) for a copy-paste template.
 
@@ -578,6 +578,43 @@ The widget launcher mounts automatically on `Mushi.init`. Set
 `widget: { trigger: 'hidden' }` to keep it out of sight and open it only
 from your own buttons.
 
+## No bundler: script tag
+
+On a site with no build step (plain HTML, Rails or Django templates,
+WordPress, Webflow), paste one tag into `` instead of installing the
+package:
+
+```html filename="index.html"
+<script async
+  src="https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js"
+  data-project="YOUR_PROJECT_ID"
+  data-key="YOUR_API_KEY"
+></script>
+```
+
+The file is the loader that `@mushi-mushi/web` publishes to npm, served by
+jsDelivr and pinned to major version 1, so minor and patch releases reach
+you without editing the tag. It reads its settings from its own `data-*`
+attributes and calls `Mushi.init` once; including the tag twice does not
+start a second copy. With no `data-project` and `data-key` it does nothing.
+
+| Attribute | Maps to |
+| --- | --- |
+| `data-project` | `projectId` (required) |
+| `data-key` | `apiKey` (required; an SDK key with the `report:write` scope) |
+| `data-trigger` | `widget.trigger` |
+| `data-theme` | `widget.theme` |
+| `data-position` | `widget.position` |
+| `data-trigger-text` | `widget.triggerText` |
+| `data-banner-variant` | `widget.bannerConfig.variant` (`neon`, `brand` or `subtle`) |
+| `data-banner-position` | `widget.bannerConfig.position` (`top` or `bottom`) |
+| `data-endpoint` | `apiEndpoint`, for a self-hosted server |
+| `data-debug` | `debug` when set to `"true"` |
+
+Anything else (capture options, `beforeSend`, `captureEvent` from your own
+code) needs the npm package above. The console's **Script tag** install tab
+prints this tag with your project ID and key filled in.
+
   See [SDK reference → @mushi-mushi/web](/sdks/web) for the full config
   surface (PII scrubbing, rate limits, custom triggers, on-device pre-filter).
 
@@ -711,12 +748,12 @@ Prefer the terminal? `npx mushi-mushi` runs the wizard — detect framework, ins
 
 ---
 
-## @mushi-mushi/mcp
+## Bug report MCP server for Cursor & Claude Code
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/mcp
 
 ---
-title: '@mushi-mushi/mcp'
+title: Bug report MCP server for Cursor & Claude Code
 description: Reference for @mushi-mushi/mcp, the Mushi MCP server for Cursor, Claude Code, VS Code and Windsurf — stdio and hosted HTTP transports, scopes and setup.
 ---
 

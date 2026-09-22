@@ -52,7 +52,7 @@ share with your team, and each teammate signs in from the IDE on first use.
 Pass `--stdio` (or `--ci` in headless environments) for the previous local
 subprocess entry with a key.
 
-It reads CLI config at **`~/.config/mushi/config.json`** (written by `mushi login`; legacy `~/.mushirc` auto-migrates on first load), detects the IDE config path, and writes the `mcpServers` block for you. Restart the IDE and ask the agent: **"list mushi tools"**.
+It reads CLI config at **`~/.config/mushi/config.json`**, or **`%APPDATA%\mushi\config.json`** on Windows ([full order](/sdks/cli#config-file); written by `mushi login`; legacy `~/.mushirc` auto-migrates on first load), detects the IDE config path, and writes the `mcpServers` block for you. Restart the IDE and ask the agent: **"list mushi tools"**.
 
 ## Claude Code plugin
 

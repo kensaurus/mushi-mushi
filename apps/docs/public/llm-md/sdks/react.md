@@ -1,9 +1,9 @@
-# @mushi-mushi/react
+# React & Next.js bug reporting SDK
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/react
 
 ---
-title: '@mushi-mushi/react'
+title: React & Next.js bug reporting SDK
 description: Reference for @mushi-mushi/react — MushiProvider, the useMushi, useMushiSdk and useMushiReport hooks, identifying users, and the rewards hooks and badge.
 ---
 

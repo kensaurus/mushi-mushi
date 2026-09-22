@@ -1,6 +1,6 @@
 # Mushi Mushi — full documentation dump
 
-> Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor.
+> The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
 Generated: 2026-09-22
@@ -33,6 +33,8 @@ Your AI wrote it. Mushi tells you why it broke.</>}
   
 
 ## What this is (and is not)
+
+Mushi Mushi is the bug mediator for AI-built apps, an open-source bug-reporting SDK and queue: plain-English diagnosis + a ready fix, in your editor.
 
 ## Get started with the SDK
 
@@ -167,7 +169,7 @@ share with your team, and each teammate signs in from the IDE on first use.
 Pass `--stdio` (or `--ci` in headless environments) for the previous local
 subprocess entry with a key.
 
-It reads CLI config at **`~/.config/mushi/config.json`** (written by `mushi login`; legacy `~/.mushirc` auto-migrates on first load), detects the IDE config path, and writes the `mcpServers` block for you. Restart the IDE and ask the agent: **"list mushi tools"**.
+It reads CLI config at **`~/.config/mushi/config.json`**, or **`%APPDATA%\mushi\config.json`** on Windows ([full order](/sdks/cli#config-file); written by `mushi login`; legacy `~/.mushirc` auto-migrates on first load), detects the IDE config path, and writes the `mcpServers` block for you. Restart the IDE and ask the agent: **"list mushi tools"**.
 
 ## Claude Code plugin
 
@@ -633,7 +635,7 @@ something goes wrong.
 | Command | When to use | What it does |
 | --- | --- | --- |
 | **`npx mushi-mushi`** / **`mushi init`** | First SDK install in an app repo | Detects framework, opens browser auth, installs SDK, writes `.env.local` |
-| **`mushi login`** | Authenticate the CLI without installing | Browser sign-in only; persists to `~/.config/mushi/config.json` |
+| **`mushi login`** | Authenticate the CLI without installing | Browser sign-in only; persists to the [CLI config file](/sdks/cli#config-file) (`~/.config/mushi/config.json`, or `%APPDATA%\mushi\config.json` on Windows) |
 | **`mushi connect`** | You already have credentials; want env + MCP + proof | Merges env vars, wires `.cursor/mcp.json`, optional `--wait` heartbeat |
 | **`mushi setup`** | MCP-only wiring after login | Writes Cursor/Claude MCP config — **does not** install the SDK |
 
@@ -710,7 +712,8 @@ project picker.
 
 ## How sign-in reliability works
 
-Each machine gets a stable `client_id` (stored in `~/.config/mushi/config.json`).
+Each machine gets a stable `client_id`, stored in the [CLI config file](/sdks/cli#config-file)
+(`~/.config/mushi/config.json`, or `%APPDATA%\mushi\config.json` on Windows).
 The CLI sends it when starting device auth so concurrent logins on the same
 machine behave predictably.
 
@@ -782,8 +785,9 @@ the connection is live.
 | **Local monorepo dev** | [http://localhost:6464](http://localhost:6464) | Run `pnpm dev` from the mushi-mushi repo |
 | **Override** | Set `MUSHI_CONSOLE_URL` | CLI hints + browser opens use this base when set |
 
-The CLI resolves the console in this order: `MUSHI_CONSOLE_URL` → saved
-`~/.config/mushi/config.json` `consoleUrl` → localhost `:6464` probe → hosted default.
+The CLI resolves the console in this order: `MUSHI_CONSOLE_URL` → `consoleUrl`
+saved in the [CLI config file](/sdks/cli#config-file) (`~/.config/mushi/config.json`,
+or `%APPDATA%\mushi\config.json` on Windows) → localhost `:6464` probe → hosted default.
 
 ## Manual paste (fallback / self-hosted)
 
@@ -1403,6 +1407,43 @@ instead, call `mushi.report()`.
 The widget launcher mounts automatically on `Mushi.init`. Set
 `widget: { trigger: 'hidden' }` to keep it out of sight and open it only
 from your own buttons.
+
+## No bundler: script tag
+
+On a site with no build step (plain HTML, Rails or Django templates,
+WordPress, Webflow), paste one tag into `` instead of installing the
+package:
+
+```html filename="index.html"
+<script async
+  src="https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js"
+  data-project="YOUR_PROJECT_ID"
+  data-key="YOUR_API_KEY"
+></script>
+```
+
+The file is the loader that `@mushi-mushi/web` publishes to npm, served by
+jsDelivr and pinned to major version 1, so minor and patch releases reach
+you without editing the tag. It reads its settings from its own `data-*`
+attributes and calls `Mushi.init` once; including the tag twice does not
+start a second copy. With no `data-project` and `data-key` it does nothing.
+
+| Attribute | Maps to |
+| --- | --- |
+| `data-project` | `projectId` (required) |
+| `data-key` | `apiKey` (required; an SDK key with the `report:write` scope) |
+| `data-trigger` | `widget.trigger` |
+| `data-theme` | `widget.theme` |
+| `data-position` | `widget.position` |
+| `data-trigger-text` | `widget.triggerText` |
+| `data-banner-variant` | `widget.bannerConfig.variant` (`neon`, `brand` or `subtle`) |
+| `data-banner-position` | `widget.bannerConfig.position` (`top` or `bottom`) |
+| `data-endpoint` | `apiEndpoint`, for a self-hosted server |
+| `data-debug` | `debug` when set to `"true"` |
+
+Anything else (capture options, `beforeSend`, `captureEvent` from your own
+code) needs the npm package above. The console's **Script tag** install tab
+prints this tag with your project ID and key filled in.
 
   See [SDK reference → @mushi-mushi/web](/sdks/web) for the full config
   surface (PII scrubbing, rate limits, custom triggers, on-device pre-filter).
@@ -2421,18 +2462,32 @@ When an agent follows this contract, Mushi promises:
 
 ## Self-bootstrap (Claude Code and similar)
 
-Agents that run in a repo without Mushi configured can self-bootstrap
-using the `setup_repo_for_mushi` tool (requires `mcp:write` scope):
+Repo setup is a CLI command, not an MCP tool. An agent working in a repo
+without Mushi configured runs it in the terminal:
 
-```
-// In the agent's context: "Set up this repo for Mushi"
-// The agent calls: setup_repo_for_mushi({ repo_root: ".", project_name: "my-app" })
+```bash
+npx mushi-mushi setup --ide claude --with-rules   # Claude Code
+npx mushi-mushi setup --ide cursor --with-rules   # Cursor
+npx mushi-mushi sync-lessons                      # current project lessons
 ```
 
 This writes:
-- `.mushi/lessons.json` — pre-filled with current project lessons
-- `.cursorrules` — evolution-loop coding rules for Cursor
-- `MUSHI.md` — this contract as a human-readable doc in the repo
+- `.mcp.json` (Claude Code) or `.cursor/mcp.json` (Cursor) — the Mushi MCP
+  server entry. For these two clients it is the hosted server URL: the IDE
+  opens a browser sign-in on first use and stores the key itself, so no key
+  lands in the repo. `--stdio` (or its alias `--ci`) writes a local stdio
+  entry instead, which reads the key from the saved CLI config.
+- `.claude/rules/mushi.md` (Claude Code) or `.cursorrules` (Cursor), from
+  `--with-rules` — the evolution-loop coding rules.
+- `.mushi/lessons.json`, from `sync-lessons` — the project's promoted lessons.
+
+If the CLI has no saved credentials, `setup` runs browser sign-in first,
+which needs a person at the keyboard; `--dry-run` prints what it would write
+without signing in or writing anything. `sync-lessons` needs a signed-in CLI
+(or `MUSHI_API_KEY` and `MUSHI_PROJECT_ID` in the environment). Older MCP
+server versions list a `setup_repo_for_mushi` tool: it never worked, since
+the route it called did not exist, and it has been removed. Use
+`mushi setup`.
 
 ## Privacy contract
 
@@ -2455,7 +2510,7 @@ against your own account.
 | Scope | What it grants |
 |-------|---------------|
 | `mcp:read` | All read tools and resources including `privacy://status`, `evolution://history` |
-| `mcp:write` | Everything in `mcp:read` plus `submit_fix_result`, `dispatch_fix`, `setup_repo_for_mushi` |
+| `mcp:write` | Everything in `mcp:read` plus `submit_fix_result`, `dispatch_fix` |
 
 Mint keys in Admin console → Settings → API Keys. Pick the smallest scope
 that works — `mcp:read` is enough for agents that only read context.
@@ -3064,7 +3119,7 @@ The SDK key and the MCP key look identical, so label them when you store them.
 An app bundle (web, React Native, Capacitor, native) should carry a
 `report:write`-only key; keep `mcp:*` keys in your editor and CI.
 
-Never commit API keys. The CLI writes SDK keys to `.env.local`, CLI config to **`~/.config/mushi/config.json`** (legacy `~/.mushirc` is auto-migrated on first load), and adds `.cursor/mcp.json` to `.gitignore` when wiring Cursor.
+Never commit API keys. The CLI writes SDK keys to `.env.local`, CLI config to **`~/.config/mushi/config.json`** on macOS and Linux or **`%APPDATA%\mushi\config.json`** on Windows (`$XDG_CONFIG_HOME/mushi/config.json` on any platform when that variable is set; legacy `~/.mushirc` is auto-migrated on first load), and adds `.cursor/mcp.json` to `.gitignore` when wiring Cursor.
 
 See [`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example) for a copy-paste template.
 
@@ -4922,6 +4977,13 @@ description: Mushi.track() reference — named events, consent, sampling and bat
 
 # Product analytics: `Mushi.track()`
 
+  **Requires `@mushi-mushi/web` ≥ 1.29** (and `@mushi-mushi/core` ≥ 1.29).
+  `track()`, `setConsent()`, `getAnonymousId()` and the `analytics` config
+  ship in that minor release; on 1.28 and earlier they do not exist. The
+  other SDKs get them in the same release: `@mushi-mushi/react` ≥ 1.29 for
+  `useMushiTrack()`, `@mushi-mushi/react-native` ≥ 0.22 and
+  `@mushi-mushi/node` ≥ 1.3.
+
 Every Mushi SDK can record named product events alongside bug reports and
 sessions, so a solo builder can see a signup funnel, a user's path, and
 retention in the same console that holds the bug reports, without a second
@@ -5586,7 +5648,7 @@ Console URL resolution: `MUSHI_CONSOLE_URL` → saved config → localhost `:646
 | ------- | ------- |
 | `mushi init` | Wizard: prerequisite step, framework detect, install SDK, write `.env.local`, whoami verify, optional test report |
 | `mushi connect` | Non-interactive: config + env (default) + Cursor MCP (default) + optional `--wait` heartbeat |
-| `mushi login` | Save credentials to `~/.config/mushi/config.json` (mode `0o600`; legacy `~/.mushirc` auto-migrates) |
+| `mushi login` | Save credentials to the CLI config file: `~/.config/mushi/config.json`, or `%APPDATA%\mushi\config.json` on Windows ([full order](#config-file); legacy `~/.mushirc` auto-migrates) |
 | `mushi setup` | Wire Cursor/Claude MCP from saved config — **not** SDK install (run `login` first) |
 | `mushi whoami` | Verify API key and show project info |
 | `mushi ping` | Backend connectivity probe |
@@ -5793,7 +5855,18 @@ mushi test                           # synthetic report end-to-end
 | `MUSHI_BYOK_KEY` | BYOK key value for `mushi keys add` (keeps key out of shell history) |
 | `MUSHI_NO_UPDATE_CHECK=1` | Skip npm registry version nudge in `mushi init` |
 
-Config file: `~/.config/mushi/config.json` (Unix mode `0o600`; legacy `~/.mushirc` auto-migrates on first load).
+### Config file
+
+The CLI keeps credentials in one `config.json`. The first match wins:
+
+1. `$XDG_CONFIG_HOME/mushi/config.json` when `XDG_CONFIG_HOME` is set, on any platform
+2. `%APPDATA%\mushi\config.json` on Windows
+3. `~/.config/mushi/config.json` otherwise (macOS, Linux)
+
+On macOS and Linux the file is mode `0o600`; on Windows the CLI restricts its
+ACL to your account (and SYSTEM) instead. A legacy `~/.mushirc` auto-migrates
+on first load. `mushi setup --help` prints the path it resolved on your
+machine.
 
 ---
 
@@ -6533,12 +6606,12 @@ beyond `init` — e.g. `mushi report list`, `mushi triage`, or the
 
 ---
 
-## @mushi-mushi/mcp
+## Bug report MCP server for Cursor & Claude Code
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/mcp
 
 ---
-title: '@mushi-mushi/mcp'
+title: Bug report MCP server for Cursor & Claude Code
 description: Reference for @mushi-mushi/mcp, the Mushi MCP server for Cursor, Claude Code, VS Code and Windsurf — stdio and hosted HTTP transports, scopes and setup.
 ---
 
@@ -6927,12 +7000,12 @@ widget: {
 
 ---
 
-## @mushi-mushi/node
+## Node.js server error reporting SDK
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/node
 
 ---
-title: '@mushi-mushi/node'
+title: Node.js server error reporting SDK
 description: Report server errors from Node with @mushi-mushi/node — Express, Fastify and Hono error handlers that tag each report with route, request ID and user.
 ---
 
@@ -7228,12 +7301,12 @@ Mushi.init({
 
 ---
 
-## @mushi-mushi/react
+## React & Next.js bug reporting SDK
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/react
 
 ---
-title: '@mushi-mushi/react'
+title: React & Next.js bug reporting SDK
 description: Reference for @mushi-mushi/react — MushiProvider, the useMushi, useMushiSdk and useMushiReport hooks, identifying users, and the rewards hooks and badge.
 ---
 
@@ -8114,12 +8187,12 @@ server when the verdict is `keep: false` with confidence ≥ 0.85.
 
 ---
 
-## @mushi-mushi/web
+## JavaScript bug reporting SDK for the browser
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/web
 
 ---
-title: '@mushi-mushi/web'
+title: JavaScript bug reporting SDK for the browser
 description: Reference for @mushi-mushi/web, the browser SDK — screenshots, console and network capture, the Shadow DOM widget, sampling, beforeSend and privacy.
 ---
 
@@ -13337,7 +13410,7 @@ The server (`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`)
 
 **For companies that want to offer Mushi as a hosted service to third parties:** AGPLv3 applies. Either publish your server modifications or talk to us about a commercial license.
 
-**For the cloud product at mushimushi.dev:** still running the same code. Now provably the same code.
+**For Mushi Cloud, the hosted product:** still running the same code. Now provably the same code.
 
 ## The honest "open source" claim
 
@@ -13347,7 +13420,7 @@ That's the model we committed to — documented in [Open source & licensing](/co
 
 ---
 
-*Questions? Open an issue or find us on Discord.*
+*Questions? Open an issue or start a thread in [GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions).*
 
 ---
 
@@ -13862,14 +13935,15 @@ contact `kensaurus@gmail.com` for details.
 ## Incident communication
 
 1. Status page updated within **15 minutes** of detection.
-2. Active incidents posted to the `#status` channel in the
-   [Mushi Discord](https://discord.gg/mushimushi).
+2. Active incidents posted in
+   [GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions).
 3. Post-mortems published within **5 business days** for P0/P1 incidents.
 
 ## Reporting availability issues
 
 If you observe degradation not reflected on the status page, email
-`kensaurus@gmail.com` with subject `[availability]` or open a thread in Discord.
+`kensaurus@gmail.com` with subject `[availability]` or open a thread in
+[GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions).
 For security incidents, use `kensaurus@gmail.com` instead (see
 [Security Policy](/security)).
 

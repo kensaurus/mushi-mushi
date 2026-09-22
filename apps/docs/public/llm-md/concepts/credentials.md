@@ -50,7 +50,7 @@ The SDK key and the MCP key look identical, so label them when you store them.
 An app bundle (web, React Native, Capacitor, native) should carry a
 `report:write`-only key; keep `mcp:*` keys in your editor and CI.
 
-Never commit API keys. The CLI writes SDK keys to `.env.local`, CLI config to **`~/.config/mushi/config.json`** (legacy `~/.mushirc` is auto-migrated on first load), and adds `.cursor/mcp.json` to `.gitignore` when wiring Cursor.
+Never commit API keys. The CLI writes SDK keys to `.env.local`, CLI config to **`~/.config/mushi/config.json`** on macOS and Linux or **`%APPDATA%\mushi\config.json`** on Windows (`$XDG_CONFIG_HOME/mushi/config.json` on any platform when that variable is set; legacy `~/.mushirc` is auto-migrated on first load), and adds `.cursor/mcp.json` to `.gitignore` when wiring Cursor.
 
 See [`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example) for a copy-paste template.
 

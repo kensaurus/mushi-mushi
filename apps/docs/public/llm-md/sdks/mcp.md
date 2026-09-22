@@ -1,9 +1,9 @@
-# @mushi-mushi/mcp
+# Bug report MCP server for Cursor & Claude Code
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/mcp
 
 ---
-title: '@mushi-mushi/mcp'
+title: Bug report MCP server for Cursor & Claude Code
 description: Reference for @mushi-mushi/mcp, the Mushi MCP server for Cursor, Claude Code, VS Code and Windsurf — stdio and hosted HTTP transports, scopes and setup.
 ---
 
