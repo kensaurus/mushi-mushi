@@ -9,8 +9,14 @@
 /** Public marketing site — also hosts favicon.svg for the docs app. */
 export const MUSHI_WEBSITE_URL = 'https://kensaur.us/mushi-mushi'
 
-/** 512×512 stamp mark — safe PNG on CDN (Cursor requires png/jpeg reliably). */
-export const MUSHI_ICON_PNG_URL = `${MUSHI_WEBSITE_URL}/integrations/mushi-mark-512.png`
+/**
+ * 512×512 stamp mark — safe PNG on CDN (Cursor requires png/jpeg reliably).
+ * Served from the docs app's `public/integrations/`, which CloudFront exposes
+ * under `/mushi-mushi/docs/`; the site root serves only the favicon, so the
+ * `/mushi-mushi/integrations/...` form this used until 2026-09-22 was a 404 —
+ * which is what every MCP client asking for our icon received.
+ */
+export const MUSHI_ICON_PNG_URL = `${MUSHI_WEBSITE_URL}/docs/integrations/mushi-mark-512.png`
 
 /** SVG favicon from the docs app (scalable; some clients sanitize SVG). */
 export const MUSHI_ICON_SVG_URL = `${MUSHI_WEBSITE_URL}/favicon.svg`
