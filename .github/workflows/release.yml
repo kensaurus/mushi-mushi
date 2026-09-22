@@ -165,6 +165,11 @@ jobs:
       contents: write
       pull-requests: write
       id-token: write
+    # Read by the follow-up jobs below, which run WITHOUT this job's npm
+    # publish identity. Job outputs are set even when a later step fails.
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
+      publishedPackages: ${{ steps.changesets.outputs.publishedPackages }}
     steps:
       # See note on the `ci` job above. Harden-Runner is doubly important
       # on the publish job because this is where the OIDC publish identity
@@ -244,6 +249,28 @@ jobs:
         env:
           PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
         run: node scripts/verify-published-tarballs.mjs
+
+      - name: Check the script-tag loader is live on jsDelivr
+        # The console's "Script tag" install is a jsDelivr URL into the
+        # @mushi-mushi/web tarball. Fetch the version just published (with
+        # retries while jsDelivr picks it up from npm) and fail unless it
+        # serves that version's loader — a missing file there means every
+        # pasted <script> tag silently loads nothing. No-op when
+        # @mushi-mushi/web was not published. The URL itself is kept in
+        # agreement offline by the same script in ci.yml.
+        if: ${{ !cancelled() && steps.changesets.outcome == 'success' && steps.changesets.outputs.published == 'true' }}
+        env:
+          PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
+        run: node scripts/check-loader-cdn-url.mjs --online
+
+      - name: Check MCP publish readiness against the live registry icons
+        # scripts/check-mcp-publish-readiness.mjs --online: the offline gates
+        # plus a HEAD of every server.json icon URL. The registry stores the
+        # URL, not the image, so an icon that 404s ships a broken listing.
+        # Runs here because `pnpm release` has just built packages/mcp/dist.
+        # The quoted name keeps @mushi-mushi/mcp-ci from matching.
+        if: ${{ !cancelled() && steps.changesets.outcome == 'success' && steps.changesets.outputs.published == 'true' && contains(steps.changesets.outputs.publishedPackages, '"@mushi-mushi/mcp"') }}
+        run: node scripts/check-mcp-publish-readiness.mjs --online
 
       # SUPPLY-CHAIN VERIFY (post-publish):
       #   `npm audit signatures` checks every installed dep against npm's
@@ -368,40 +395,9 @@ jobs:
             echo "changelog: no drift to commit"
           fi
 
-      - name: Publish MCP server to the official registry
-        # When @mushi-mushi/mcp ships a new version, register it with the
-        # official MCP registry (registry.modelcontextprotocol.io). Everything
-        # downstream (Glama, PulseMCP, Cursor's directory) auto-syncs from there.
-        # GitHub OIDC authenticates the `io.github.kensaurus/*` namespace using
-        # the job's `id-token: write` permission — no extra secret needed.
-        # continue-on-error: a registry hiccup must never fail the npm release.
-        #
-        # mcp-publisher is pinned to a release and checked against the sha256
-        # from that release's signed checksums file: this job can mint npm
-        # publish tokens, so it must not run whatever `latest` points at
-        # today. Bump MCP_PUBLISHER_VERSION and the hash together (the hash is
-        # the linux_amd64 line of registry_<version>_checksums.txt).
-        # Keep in sync with publish-mcp-registry.yml.
-        if: ${{ !cancelled() && steps.changesets.outcome == 'success' && steps.changesets.outputs.published == 'true' && contains(steps.changesets.outputs.publishedPackages, '@mushi-mushi/mcp') }}
-        continue-on-error: true
-        env:
-          MCP_PUBLISHER_VERSION: v1.8.1
-          MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
-        run: |
-          set -euo pipefail
-          node scripts/sync-server-json-version.mjs
-          curl -fsSL -o mcp-publisher.tar.gz \
-            "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
-          echo "${MCP_PUBLISHER_SHA256}  mcp-publisher.tar.gz" | sha256sum -c -
-          tar xzf mcp-publisher.tar.gz mcp-publisher
-          ./mcp-publisher login github-oidc
-          cd packages/mcp && ../../mcp-publisher publish && cd ../..
-          echo "Verifying registry record (propagation may lag)…"
-          sleep 5
-          curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.kensaurus/mushi-mushi" \
-            | grep -q "io.github.kensaurus/mushi-mushi" \
-            && echo "✓ Mushi MCP server is live in the official registry" \
-            || echo "::warning::MCP registry record not visible yet — re-check in a few minutes."
+      # The MCP registry publish runs in its own job (`mcp-registry` below) so
+      # the third-party mcp-publisher binary never executes while this job's
+      # npm publish identity is live.
 
       - name: Sync published versions to sdk_versions catalog
         # Keep the console freshness chips accurate without hand-written
@@ -438,3 +434,125 @@ jobs:
         run: |
           echo "::error::npm signature audit failed (see the 'Audit signatures of installed dependencies' step). Packages ARE published; the post-publish steps completed. If this was the known registry-propagation race, re-run this job once npm has caught up."
           exit 1
+
+  mcp-registry:
+    name: Publish MCP server to the official registry
+    # When @mushi-mushi/mcp ships a new version, register it with the official
+    # MCP registry (registry.modelcontextprotocol.io). Everything downstream
+    # (Glama, PulseMCP, Cursor's directory) auto-syncs from there.
+    #
+    # Its own job, not a step of `release`: that job holds the npm Trusted
+    # Publisher identity plus contents/pull-requests write, and mcp-publisher
+    # is a third-party binary. Here it gets only what it needs: a read-only
+    # checkout and an OIDC token for `mcp-publisher login github-oidc`
+    # (the io.github.kensaurus/* namespace). No pnpm install, no workspace
+    # code runs in this job. NOTE: an npm Trusted Publisher rule without an
+    # `environment` accepts an OIDC token from any job in this file; pin the
+    # rule to an environment on the publish job to close that too.
+    #
+    # `!cancelled()`: like the in-job step it replaces, it still runs when a
+    # later post-publish step (e.g. the signature-audit gate) turned
+    # `release` red after the packages were published. The quoted name keeps
+    # @mushi-mushi/mcp-ci from matching.
+    needs: release
+    if: ${{ !cancelled() && needs.release.outputs.published == 'true' && contains(needs.release.outputs.publishedPackages, '"@mushi-mushi/mcp"') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: 24
+
+      - name: Publish MCP server to the official registry
+        # continue-on-error: a registry hiccup must never turn a completed npm
+        # release red.
+        #
+        # mcp-publisher is pinned to a release and checked against the sha256
+        # from that release's signed checksums file: it runs with an OIDC
+        # token, so it must not run whatever `latest` points at today. Bump
+        # MCP_PUBLISHER_VERSION and the hash together (the hash is the
+        # linux_amd64 line of registry_<version>_checksums.txt).
+        # Keep in sync with publish-mcp-registry.yml.
+        continue-on-error: true
+        env:
+          MCP_PUBLISHER_VERSION: v1.8.1
+          MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+        run: |
+          set -euo pipefail
+          node scripts/sync-server-json-version.mjs
+          curl -fsSL -o mcp-publisher.tar.gz \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
+          echo "${MCP_PUBLISHER_SHA256}  mcp-publisher.tar.gz" | sha256sum -c -
+          tar xzf mcp-publisher.tar.gz mcp-publisher
+          ./mcp-publisher login github-oidc
+          cd packages/mcp && ../../mcp-publisher publish && cd ../..
+          echo "Verifying registry record (propagation may lag)…"
+          sleep 5
+          curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.kensaurus/mushi-mushi" \
+            | grep -q "io.github.kensaurus/mushi-mushi" \
+            && echo "✓ Mushi MCP server is live in the official registry" \
+            || echo "::warning::MCP registry record not visible yet — re-check in a few minutes."
+
+  sbom:
+    name: SBOMs for published packages
+    # A CycloneDX SBOM per published package, generated from the tarball npm
+    # now serves (scripts/generate-release-sboms.mjs: `npm pack` + `npm sbom`,
+    # both built into npm), uploaded as a workflow artifact and attached to
+    # each package's GitHub release (tag `<name>@<version>`, created by
+    # changesets/action). No OIDC token: it only reads from npm.
+    needs: release
+    if: ${{ !cancelled() && needs.release.outputs.published == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # upload release assets
+    steps:
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: 24
+
+      - name: Generate CycloneDX SBOMs from the published tarballs
+        env:
+          PUBLISHED: ${{ needs.release.outputs.publishedPackages }}
+        run: node scripts/generate-release-sboms.mjs "$RUNNER_TEMP/sbom"
+
+      - name: Upload SBOMs as a workflow artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: sbom-cyclonedx
+          path: ${{ runner.temp }}/sbom/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Attach SBOMs to the GitHub releases
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          jq -c '.[]' "$RUNNER_TEMP/sbom/index.json" | while read -r entry; do
+            tag=$(jq -r '.tag' <<<"$entry")
+            file=$(jq -r '.file' <<<"$entry")
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              gh release upload "$tag" "$RUNNER_TEMP/sbom/$file" --clobber --repo "$GITHUB_REPOSITORY"
+              echo "✓ $file → release $tag"
+            else
+              echo "::warning::No GitHub release named $tag; $file is only in the sbom-cyclonedx artifact."
+            fi
+          done

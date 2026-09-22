@@ -78,10 +78,11 @@ describe('post-publish steps', () => {
   }
 
   for (const name of [
+    'Check the script-tag loader is live on jsDelivr',
+    'Check MCP publish readiness against the live registry icons',
     'Audit signatures of installed dependencies',
     'Aggregate public changelog',
     'Commit aggregated changelog',
-    'Publish MCP server to the official registry',
     'Sync published versions to sdk_versions catalog',
     'Published packages summary',
   ]) {
@@ -92,4 +93,59 @@ describe('post-publish steps', () => {
       assert.match(cond, /^\$\{\{ !cancelled\(\) && steps\.changesets\.outcome == 'success' && /)
     })
   }
+})
+
+/** The text of one top-level job (`  <id>:` … up to the next job). */
+function job(id) {
+  const start = release.indexOf(`\n  ${id}:\n`)
+  assert.ok(start > 0, `job "${id}" not found`)
+  const rest = release.slice(start + 1)
+  const next = rest.slice(1).search(/\n {2}[\w-]+:\n/)
+  return next === -1 ? rest : rest.slice(0, next + 1)
+}
+
+/** A job's YAML without its comment lines, so prose about a tool is not mistaken for running it. */
+const code = (jobText) =>
+  jobText
+    .split('\n')
+    .filter((l) => !l.trim().startsWith('#'))
+    .join('\n')
+
+function permissions(jobText) {
+  const m = jobText.match(/\n {4}permissions:\n((?: {6}[\w-]+: \w+.*\n)+)/)
+  assert.ok(m, 'job has no permissions block')
+  return Object.fromEntries(m[1].trim().split('\n').map((l) => l.trim().replace(/\s+#.*$/, '').split(/:\s*/)))
+}
+
+describe('jobs after the publish', () => {
+  it('the publish job exposes what they need as outputs', () => {
+    const text = job('release')
+    assert.match(text, /\n {6}published: \$\{\{ steps\.changesets\.outputs\.published \}\}/)
+    assert.match(text, /\n {6}publishedPackages: \$\{\{ steps\.changesets\.outputs\.publishedPackages \}\}/)
+  })
+
+  it('mcp-publisher never runs in the job that holds the npm publish identity', () => {
+    assert.doesNotMatch(code(job('release')), /mcp-publisher/)
+    assert.match(code(job('mcp-registry')), /\.\/mcp-publisher login github-oidc/)
+  })
+
+  it('the MCP registry job has only a read-only checkout and an OIDC token', () => {
+    const text = job('mcp-registry')
+    assert.deepEqual(permissions(text), { contents: 'read', 'id-token': 'write' })
+    assert.match(text, /\n {4}needs: release\n/)
+    assert.doesNotMatch(code(text), /pnpm install|pnpm\/action-setup/)
+    // Still runs after a red post-publish gate, and only for @mushi-mushi/mcp itself.
+    assert.match(
+      text,
+      /\n {4}if: \$\{\{ !cancelled\(\) && needs\.release\.outputs\.published == 'true' && contains\(needs\.release\.outputs\.publishedPackages, '"@mushi-mushi\/mcp"'\) \}\}/,
+    )
+    assert.match(text, /continue-on-error: true/)
+  })
+
+  it('the SBOM job attaches release assets without an OIDC token', () => {
+    const text = job('sbom')
+    assert.deepEqual(permissions(text), { contents: 'write' })
+    assert.match(text, /\n {4}if: \$\{\{ !cancelled\(\) && needs\.release\.outputs\.published == 'true' \}\}/)
+    assert.match(text, /scripts\/generate-release-sboms\.mjs/)
+  })
 })
