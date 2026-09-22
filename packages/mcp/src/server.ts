@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
 /**
  * FILE: packages/mcp/src/server.ts
  * PURPOSE: Testable MCP server factory. Exports `createMushiServer()` which

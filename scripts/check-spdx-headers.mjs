@@ -42,11 +42,10 @@ const MANIFEST_FIELDS = ['main', 'module', 'browser', 'unpkg', 'jsdelivr']
 // every run. An entry that gains its header (or stops being an entry) fails as
 // stale, so this list can only shrink — never add to it to get a run green.
 const KNOWN_MISSING = new Set([
-  'packages/mcp/src/branding.ts',
-  'packages/mcp/src/catalog.ts',
-  'packages/mcp/src/clients.ts',
+  // Byte-identical to packages/server/supabase/functions/mcp/feature-groups.ts
+  // (feature-groups.test.ts pins that), and the server package is AGPL — an
+  // MIT identifier cannot go in both copies. The package LICENSE covers it.
   'packages/mcp/src/feature-groups.ts',
-  'packages/mcp/src/server.ts',
 ])
 
 /** Every string leaf of an `exports` value (conditions and subpaths). */
