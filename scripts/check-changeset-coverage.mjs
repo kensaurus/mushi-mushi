@@ -15,7 +15,9 @@
  *
  * "Shipped source" = files under packages/<dir>/src/ that are not tests,
  * snapshots or mocks. README, manifest and test-only edits do not require a
- * release. Packages that are private or listed in .changeset/config.json#ignore
+ * release, and neither does a file whose only changed lines are license-header
+ * comments (`// SPDX-License-Identifier:` / `// Copyright (c)`), which the
+ * bundler drops. Packages that are private or listed in .changeset/config.json#ignore
  * are never publishable, so they are skipped.
  *
  * Base: the merge-base of HEAD and `origin/master` (override: --base <ref>).
@@ -64,15 +66,37 @@ export function isShippedSource(pathInPackage) {
   return true
 }
 
+const LICENSE_HEADER_LINE = /^\s*(\/\/\s*(SPDX-License-Identifier:|Copyright \(c\)).*)?$/
+
+/**
+ * True when a `git diff -U0` patch only adds or removes license-header comment
+ * lines (`// SPDX-License-Identifier: …`, `// Copyright (c) …`) or blank lines.
+ * esbuild drops `//` comments from the bundle, so such a change ships nothing
+ * and needs no release. Any other changed line — code, JSDoc, a different
+ * comment — makes it a real change.
+ */
+export function isLicenseHeaderOnlyPatch(patch) {
+  let changed = 0
+  for (const line of patch.split(/\r?\n/)) {
+    if (line.startsWith('+++') || line.startsWith('---')) continue
+    if (!line.startsWith('+') && !line.startsWith('-')) continue
+    changed++
+    if (!LICENSE_HEADER_LINE.test(line.slice(1))) return false
+  }
+  return changed > 0
+}
+
 /**
  * @param {object} input
  * @param {string[]} input.changedFiles repo-relative, forward-slash paths
  * @param {{ dir: string, name: string, private?: boolean }[]} input.packages
  * @param {Set<string>} input.ignored package names in .changeset/config.json#ignore
  * @param {Set<string>} input.covered package names targeted by pending changesets
+ * @param {(file: string) => boolean} [input.isHeaderOnly] true for a file whose
+ *   change is license-header lines only (see isLicenseHeaderOnlyPatch)
  * @returns {{ name: string, dir: string, files: string[] }[]}
  */
-export function findUncovered({ changedFiles, packages, ignored, covered }) {
+export function findUncovered({ changedFiles, packages, ignored, covered, isHeaderOnly = () => false }) {
   const byDir = new Map(packages.map((p) => [p.dir, p]))
   const hits = new Map()
   for (const file of changedFiles) {
@@ -81,6 +105,7 @@ export function findUncovered({ changedFiles, packages, ignored, covered }) {
     const pkg = byDir.get(m[1])
     if (!pkg || pkg.private || ignored.has(pkg.name) || covered.has(pkg.name)) continue
     if (!isShippedSource(m[2])) continue
+    if (isHeaderOnly(file)) continue
     const entry = hits.get(pkg.name) ?? { name: pkg.name, dir: pkg.dir, files: [] }
     entry.files.push(file)
     hits.set(pkg.name, entry)
@@ -144,6 +169,7 @@ function main() {
     packages: readPackages(),
     ignored: new Set(config.ignore ?? []),
     covered: readCovered(),
+    isHeaderOnly: (file) => isLicenseHeaderOnlyPatch(git(['diff', '-U0', mergeBase, '--', file])),
   })
 
   if (uncovered.length === 0) {

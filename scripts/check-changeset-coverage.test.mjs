@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync, symlinkSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { findUncovered, isShippedSource, parseChangesetTargets } from './check-changeset-coverage.mjs'
+import { findUncovered, isLicenseHeaderOnlyPatch, isShippedSource, parseChangesetTargets } from './check-changeset-coverage.mjs'
 
 const PACKAGES = [
   { dir: 'core', name: '@mushi-mushi/core' },
@@ -106,4 +106,36 @@ test('the gate still runs when invoked through a symlink', (t) => {
     }
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('isLicenseHeaderOnlyPatch accepts SPDX/copyright header edits and nothing else', () => {
+  const header = [
+    'diff --git a/packages/node/src/hono.ts b/packages/node/src/hono.ts',
+    '--- a/packages/node/src/hono.ts',
+    '+++ b/packages/node/src/hono.ts',
+    '@@ -0,0 +1,2 @@',
+    '+// SPDX-License-Identifier: MIT',
+    '+// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi',
+  ].join('\n')
+  assert.equal(isLicenseHeaderOnlyPatch(header), true)
+  assert.equal(isLicenseHeaderOnlyPatch(header.replace(/\n/g, '\r\n')), true)
+  assert.equal(isLicenseHeaderOnlyPatch(`${header}\n+export const x = 1`), false)
+  assert.equal(isLicenseHeaderOnlyPatch(`${header}\n-// a different comment`), false)
+  assert.equal(isLicenseHeaderOnlyPatch(`${header}\n+/** @deprecated */`), false)
+  // An empty patch is not "header only": nothing changed, so nothing to exempt.
+  assert.equal(isLicenseHeaderOnlyPatch(''), false)
+})
+
+test('findUncovered drops files whose change is license headers only', () => {
+  const uncovered = findUncovered({
+    changedFiles: ['packages/mcp/src/server.ts', 'packages/cli/src/init.ts'],
+    packages: PACKAGES,
+    ignored: new Set(),
+    covered: new Set(),
+    isHeaderOnly: (file) => file === 'packages/cli/src/init.ts',
+  })
+  assert.deepEqual(
+    uncovered.map((u) => u.name),
+    ['@mushi-mushi/mcp'],
+  )
 })
