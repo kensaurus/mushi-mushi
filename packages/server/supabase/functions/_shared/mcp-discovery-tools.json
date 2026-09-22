@@ -14,8 +14,8 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "description": "Project UUID (defaults to the configured project).",
+          "projectId": {
+            "description": "Project UUID (defaults to the configured project). (`project_id` is accepted too.)",
             "type": "string"
           }
         }
@@ -37,7 +37,7 @@
         "properties": {
           "projectId": {
             "type": "string",
-            "description": "Project id"
+            "description": "Project id (`project_id` is accepted too.)"
           },
           "provider": {
             "type": "string",
@@ -93,8 +93,8 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "description": "Project UUID (defaults to configured project)",
+          "projectId": {
+            "description": "Project UUID (defaults to configured project) (`project_id` is accepted too.)",
             "type": "string"
           },
           "paths": {
@@ -117,8 +117,8 @@
             "description": "GitHub compare range base...head when source=compare",
             "type": "string"
           },
-          "fix_id": {
-            "description": "Fix attempt UUID — uses that PR's changed files when source=fix",
+          "fixId": {
+            "description": "Fix attempt UUID — uses that PR's changed files when source=fix (`fix_id` is accepted too.)",
             "type": "string"
           }
         }
@@ -183,8 +183,8 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "description": "Project UUID (defaults to configured project)",
+          "projectId": {
+            "description": "Project UUID (defaults to configured project) (`project_id` is accepted too.)",
             "type": "string"
           }
         }
@@ -206,7 +206,7 @@
         "properties": {
           "projectId": {
             "type": "string",
-            "description": "Project id"
+            "description": "Project id (`project_id` is accepted too.)"
           },
           "qaStoryId": {
             "type": "string",
@@ -242,24 +242,24 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "description": "Project UUID (defaults to configured project)",
+          "projectId": {
+            "description": "Project UUID (defaults to configured project) (`project_id` is accepted too.)",
             "type": "string"
           },
           "question": {
             "type": "string",
             "description": "Plain-English question about the repo"
           },
-          "thread_id": {
-            "description": "Optional thread UUID to continue a conversation",
+          "threadId": {
+            "description": "Optional thread UUID to continue a conversation (`thread_id` is accepted too.)",
             "type": "string"
           },
-          "file_path": {
-            "description": "Optional file path focus",
+          "filePath": {
+            "description": "Optional file path focus (`file_path` is accepted too.)",
             "type": "string"
           },
-          "symbol_name": {
-            "description": "Optional symbol name focus",
+          "symbolName": {
+            "description": "Optional symbol name focus (`symbol_name` is accepted too.)",
             "type": "string"
           }
         },
@@ -282,9 +282,9 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "external_user_id": {
+          "externalUserId": {
             "type": "string",
-            "description": "The host-app user id as passed to Mushi.identify()"
+            "description": "The host-app user id as passed to Mushi.identify() (`external_user_id` is accepted too.)"
           },
           "points": {
             "type": "integer",
@@ -299,7 +299,7 @@
           }
         },
         "required": [
-          "external_user_id",
+          "externalUserId",
           "points",
           "reason"
         ]
@@ -396,13 +396,13 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "run_id": {
+          "runId": {
             "type": "string",
-            "description": "Pipeline run UUID"
+            "description": "Pipeline run UUID (`run_id` is accepted too.)"
           },
-          "step_index": {
+          "stepIndex": {
             "type": "number",
-            "description": "Step index (0-based)"
+            "description": "Step index (0-based) (`step_index` is accepted too.)"
           },
           "status": {
             "type": "string",
@@ -418,18 +418,18 @@
             "description": "Optional notes or output summary",
             "type": "string"
           },
-          "pr_url": {
-            "description": "PR URL opened during this step",
+          "prUrl": {
+            "description": "PR URL opened during this step (`pr_url` is accepted too.)",
             "type": "string"
           },
-          "agent_ref": {
-            "description": "Cursor agentId or external agent reference",
+          "agentRef": {
+            "description": "Cursor agentId or external agent reference (`agent_ref` is accepted too.)",
             "type": "string"
           }
         },
         "required": [
-          "run_id",
-          "step_index",
+          "runId",
+          "stepIndex",
           "status"
         ]
       }
@@ -456,12 +456,8 @@
               "dispatch"
             ]
           },
-          "project_id": {
-            "description": "Project UUID for dispatch checks (defaults to configured project).",
-            "type": "string"
-          },
           "projectId": {
-            "description": "Alias for project_id.",
+            "description": "Project UUID for dispatch checks (defaults to configured project). (`project_id` is accepted too.)",
             "type": "string"
           }
         }
@@ -470,7 +466,12 @@
         "type": "object",
         "properties": {
           "mode": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "full",
+              "ingest",
+              "dispatch"
+            ]
           },
           "ready": {
             "type": "boolean"
@@ -507,7 +508,7 @@
         "type": "object",
         "properties": {
           "projectId": {
-            "description": "Project UUID — defaults to configured project",
+            "description": "Project UUID — defaults to configured project (`project_id` is accepted too.)",
             "type": "string"
           },
           "fromSha": {
@@ -543,17 +544,26 @@
             "type": "string",
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-            "description": "Report UUID to fix"
+            "description": "Report UUID to fix (`report_id` is accepted too.)"
           },
           "agent": {
-            "description": "Override the agent adapter",
+            "description": "Which agent runs the fix. Omit for the project default (auto); cursor_cloud and github_cloud_agent dispatch a cloud agent.",
             "type": "string",
             "enum": [
+              "auto",
               "claude_code",
               "codex",
+              "cursor_cloud",
+              "github_cloud_agent",
               "rest_worker",
+              "rest_fix_worker",
+              "llm",
               "mcp"
             ]
+          },
+          "projectId": {
+            "description": "Project UUID — defaults to the configured project. (`project_id` is accepted too.)",
+            "type": "string"
           },
           "idempotencyKey": {
             "description": "Optional RFC 4122 UUID. Resend the same key to safely retry without dispatching a duplicate fix job (Idempotency-Key IETF draft).",
@@ -605,7 +615,7 @@
         "properties": {
           "projectId": {
             "type": "string",
-            "description": "Project UUID that owns the inventory story"
+            "description": "Project UUID that owns the inventory story (`project_id` is accepted too.)"
           },
           "storyNodeId": {
             "type": "string",
@@ -660,6 +670,21 @@
           "needsHumanReview": {
             "type": "boolean",
             "description": "True when the story requires operator approval before scheduled runs"
+          },
+          "path": {
+            "description": "Repo path of the generated Playwright spec",
+            "type": "string"
+          },
+          "firecrawlActionsYaml": {
+            "description": "Firecrawl actions YAML for the story, when the generator produced one",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -740,12 +765,12 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "description": "Project ID. Defaults to the configured project.",
+          "projectId": {
+            "description": "Project ID. Defaults to the configured project. (`project_id` is accepted too.)",
             "type": "string"
           },
-          "include_logs": {
-            "description": "Whether to include recent backend error logs (default: true).",
+          "includeLogs": {
+            "description": "Whether to include recent backend error logs (default: true). (`include_logs` is accepted too.)",
             "type": "boolean"
           }
         }
@@ -788,16 +813,16 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "description": "Project UUID (defaults to configured project)",
+          "projectId": {
+            "description": "Project UUID (defaults to configured project) (`project_id` is accepted too.)",
             "type": "string"
           },
           "force": {
             "description": "Bypass cache and regenerate",
             "type": "boolean"
           },
-          "scope_prefix": {
-            "description": "Optional subdirectory scope prefix",
+          "scopePrefix": {
+            "description": "Optional subdirectory scope prefix (`scope_prefix` is accepted too.)",
             "type": "string"
           }
         }
@@ -816,8 +841,8 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "description": "Project UUID (defaults to configured project)",
+          "projectId": {
+            "description": "Project UUID (defaults to configured project) (`project_id` is accepted too.)",
             "type": "string"
           },
           "force": {
@@ -840,16 +865,16 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "description": "Project UUID (defaults to configured project)",
+          "projectId": {
+            "description": "Project UUID (defaults to configured project) (`project_id` is accepted too.)",
             "type": "string"
           },
-          "file_path": {
+          "filePath": {
             "type": "string",
-            "description": "Indexed file path"
+            "description": "Indexed file path (`file_path` is accepted too.)"
           },
-          "symbol_name": {
-            "description": "Optional symbol name within the file",
+          "symbolName": {
+            "description": "Optional symbol name within the file (`symbol_name` is accepted too.)",
             "type": "string"
           },
           "force": {
@@ -858,13 +883,13 @@
           }
         },
         "required": [
-          "file_path"
+          "filePath"
         ]
       }
     },
     "get_fix_context": {
       "title": "Fix context bundle",
-      "description": "Bundle everything an agent needs to fix one bug in a single call: a paste-ready fixPrompt (plain-English diagnosis + reproduction + suggested fix + relevant code + blast radius), plus report detail, repro steps, component, root cause, and ontology tags. Returns { fixPrompt, report, reproduction, component, rootCause, tags }. Read-only; no second LLM key needed. Use before writing a fix; use triage_issue for a multi-report review packet, or suggest_fix for just the Stage-2 hint.",
+      "description": "Bundle everything an agent needs to fix one bug in a single call: a paste-ready fixPrompt (plain-English diagnosis + reproduction + suggested fix + relevant code + blast radius), plus report detail, repro steps, component, root cause, ontology tags, and the inventory action (with its expected_outcome contract) the report is filed against. Returns { report, fixPrompt, reproductionSteps, component, rootCause, bugOntologyTags, inventoryAction }. Read-only; no second LLM key needed. Use before writing a fix; use triage_issue for a multi-report review packet, or suggest_fix for just the Stage-2 hint.",
       "scope": "mcp:read",
       "annotations": {
         "title": "Fix context bundle",
@@ -877,10 +902,10 @@
         "properties": {
           "reportId": {
             "type": "string",
-            "description": "The report UUID to fix"
+            "description": "The report UUID to fix (`report_id` is accepted too.)"
           },
-          "project_id": {
-            "description": "Project UUID — required for org-scoped keys with multiple projects.",
+          "projectId": {
+            "description": "Project UUID — required for org-scoped keys with multiple projects. (`project_id` is accepted too.)",
             "type": "string"
           }
         },
@@ -891,12 +916,207 @@
       "outputSchema": {
         "type": "object",
         "properties": {
-          "report": {},
-          "fixPrompt": {},
-          "reproductionSteps": {},
-          "component": {},
-          "rootCause": {},
-          "bugOntologyTags": {}
+          "report": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Report UUID"
+              },
+              "project_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "summary": {
+                "description": "One-line summary written by the classifier",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "description": {
+                "description": "What the reporter wrote (untrusted text)",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "description": "Workflow status, e.g. new, classified, fixing, fixed, verified, reopened",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "category": {
+                "description": "bug | slow | visual | confusing | other",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "severity": {
+                "description": "critical | high | medium | low",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "component": {
+                "description": "Component or page the bug was attributed to",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "created_at": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "screenshot_url": {
+                "description": "Signed screenshot URL",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "environment": {
+                "description": "Browser/OS/viewport the SDK captured"
+              },
+              "console_logs": {
+                "description": "Console entries captured with the report"
+              },
+              "network_logs": {
+                "description": "Network requests captured with the report"
+              },
+              "breadcrumbs": {},
+              "stage1_classification": {
+                "description": "Stage-1 (fast) classification"
+              },
+              "stage2_analysis": {
+                "description": "Stage-2 analysis: rootCause, suggestedFix, …"
+              },
+              "reproduction_steps": {},
+              "fix_attempts": {
+                "description": "Latest fix attempts, newest first",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "fix_packet": {
+                "description": "Paste-ready fix prompt composed server-side"
+              },
+              "inventory_action": {
+                "description": "Inventory action the report is filed against, when resolved"
+              },
+              "child_report_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": {}
+          },
+          "fixPrompt": {
+            "description": "Paste-ready fix prompt composed server-side, or null"
+          },
+          "reproductionSteps": {
+            "description": "Reproduction steps recorded on the report ([] if none)"
+          },
+          "component": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Component or page the bug was attributed to"
+          },
+          "rootCause": {
+            "description": "Stage-2 root cause, or null before Stage 2 runs"
+          },
+          "bugOntologyTags": {
+            "description": "Bug ontology tags, or null"
+          },
+          "inventoryAction": {
+            "description": "The inventory action (with its expected_outcome contract) the report is filed against, or null"
+          }
         },
         "required": [
           "report",
@@ -904,7 +1124,8 @@
           "reproductionSteps",
           "component",
           "rootCause",
-          "bugOntologyTags"
+          "bugOntologyTags",
+          "inventoryAction"
         ],
         "additionalProperties": false
       },
@@ -925,10 +1146,10 @@
         "properties": {
           "fixId": {
             "type": "string",
-            "description": "fix_attempt UUID"
+            "description": "fix_attempt UUID (or the dispatch id dispatch_fix returned) (`fix_id` is accepted too.)"
           },
-          "project_id": {
-            "description": "Project UUID — required for org-scoped keys with multiple projects.",
+          "projectId": {
+            "description": "Project UUID — required for org-scoped keys with multiple projects. (`project_id` is accepted too.)",
             "type": "string"
           }
         },
@@ -1038,7 +1259,7 @@
         "type": "object",
         "properties": {
           "projectId": {
-            "description": "Project UUID — defaults to the server-configured project when omitted",
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
             "type": "string"
           }
         }
@@ -1107,7 +1328,7 @@
         "properties": {
           "projectId": {
             "type": "string",
-            "description": "Project id"
+            "description": "Project id (`project_id` is accepted too.)"
           }
         },
         "required": [
@@ -1165,7 +1386,7 @@
     },
     "get_pipeline_logs": {
       "title": "Recent pipeline logs",
-      "description": "Pull recent log entries from the Mushi pipeline services: fix-worker, qa-story-runner, pipeline, or all. Accepts project_id, service, since (ISO-8601), limit (max 200), and level (info | warn | error | fatal) filters. Returns structured log rows with timestamp, level, service, message, and a trace_id/report_id when available. Use this when a fix failed, a QA story keeps erroring, or an ingest pipeline went silent.",
+      "description": "Pull recent log entries from the Mushi pipeline services: fix-worker, qa-story-runner, pipeline, or all. Accepts projectId, service, since (ISO-8601), limit (max 200), and level (info | warn | error | fatal) filters. Returns structured log rows with timestamp, level, service, message, and a trace_id/report_id when available. Use this when a fix failed, a QA story keeps erroring, or an ingest pipeline went silent.",
       "scope": "mcp:read",
       "annotations": {
         "title": "Recent pipeline logs",
@@ -1176,8 +1397,8 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "description": "Project UUID. Defaults to configured project.",
+          "projectId": {
+            "description": "Project UUID. Defaults to configured project. (`project_id` is accepted too.)",
             "type": "string"
           },
           "service": {
@@ -1225,13 +1446,13 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "run_id": {
+          "runId": {
             "type": "string",
-            "description": "Pipeline run UUID"
+            "description": "Pipeline run UUID (`run_id` is accepted too.)"
           }
         },
         "required": [
-          "run_id"
+          "runId"
         ]
       }
     },
@@ -1254,8 +1475,8 @@
             "minimum": 1,
             "maximum": 365
           },
-          "project_id": {
-            "description": "Project UUID (defaults to the configured project).",
+          "projectId": {
+            "description": "Project UUID (defaults to the configured project). (`project_id` is accepted too.)",
             "type": "string"
           }
         }
@@ -1275,8 +1496,8 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "description": "Project UUID. Defaults to configured project.",
+          "projectId": {
+            "description": "Project UUID. Defaults to configured project. (`project_id` is accepted too.)",
             "type": "string"
           }
         }
@@ -1301,7 +1522,7 @@
           },
           "runId": {
             "type": "string",
-            "description": "Run id (uuid) to fetch detail for"
+            "description": "Run id (uuid) to fetch detail for (`run_id` is accepted too.)"
           }
         },
         "required": [
@@ -1312,7 +1533,7 @@
     },
     "get_recent_reports": {
       "title": "Recent bug reports",
-      "description": "List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, component, created_at, processing_error }], total }; include_raw=true returns every list column instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed|…), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports.",
+      "description": "List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, component, created_at, processing_error }], total }; includeRaw=true returns every list column instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed|…), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports.",
       "scope": "mcp:read",
       "annotations": {
         "title": "Recent bug reports",
@@ -1368,12 +1589,12 @@
             "description": "Max reports to return (default 20, max 100)",
             "type": "number"
           },
-          "include_raw": {
-            "description": "Return every column the list route has (breadcrumbs, environment, tags, …) instead of the documented fields. Reporter identifiers are removed either way.",
+          "includeRaw": {
+            "description": "Return every column the list route has (breadcrumbs, environment, tags, …) instead of the documented fields. Reporter identifiers are removed either way. (`include_raw` is accepted too.)",
             "type": "boolean"
           },
-          "project_id": {
-            "description": "Project UUID — defaults to the server-configured project. Useful when your key spans several projects; the error you get without it lists their ids.",
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project. Useful when your key spans several projects; the error you get without it lists their ids. (`project_id` is accepted too.)",
             "type": "string"
           }
         }
@@ -1470,7 +1691,7 @@
     },
     "get_report_detail": {
       "title": "Report detail",
-      "description": "Fetch the full record for one bug report by id: description, console logs, network requests, screenshot URL, classification (stage 1/2), and fix history. Returns { report }. Read-only. Use when you have a reportId and need everything about it; for evidence only use get_report_evidence, for the activity thread use get_report_timeline, for a one-call fix bundle use get_fix_context.",
+      "description": "Fetch the full record for one bug report by id: description, console logs, network requests, screenshot URL, classification (stage 1/2), fix history, the paste-ready fix packet and the inventory action it is filed against. Returns { report } with the documented fields; includeRaw=true returns every column the detail route has instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Read-only. Use when you have a reportId and need everything about it; for evidence only use get_report_evidence, for the activity thread use get_report_timeline, for a one-call fix bundle use get_fix_context.",
       "scope": "mcp:read",
       "annotations": {
         "title": "Report detail",
@@ -1483,10 +1704,14 @@
         "properties": {
           "reportId": {
             "type": "string",
-            "description": "The report UUID"
+            "description": "The report UUID (`report_id` is accepted too.)"
           },
-          "project_id": {
-            "description": "Project UUID — required for org-scoped keys with multiple projects.",
+          "includeRaw": {
+            "description": "Return every column the detail route has (LLM invocation log, storage paths, custom metadata, …) instead of the documented fields. Reporter identifiers are removed either way. (`include_raw` is accepted too.)",
+            "type": "boolean"
+          },
+          "projectId": {
+            "description": "Project UUID — required for org-scoped keys with multiple projects. (`project_id` is accepted too.)",
             "type": "string"
           }
         },
@@ -1497,7 +1722,181 @@
       "outputSchema": {
         "type": "object",
         "properties": {
-          "report": {}
+          "report": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Report UUID"
+              },
+              "project_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "summary": {
+                "description": "One-line summary written by the classifier",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "description": {
+                "description": "What the reporter wrote (untrusted text)",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "description": "Workflow status, e.g. new, classified, fixing, fixed, verified, reopened",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "category": {
+                "description": "bug | slow | visual | confusing | other",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "severity": {
+                "description": "critical | high | medium | low",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "component": {
+                "description": "Component or page the bug was attributed to",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "created_at": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "screenshot_url": {
+                "description": "Signed screenshot URL",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "environment": {
+                "description": "Browser/OS/viewport the SDK captured"
+              },
+              "console_logs": {
+                "description": "Console entries captured with the report"
+              },
+              "network_logs": {
+                "description": "Network requests captured with the report"
+              },
+              "breadcrumbs": {},
+              "stage1_classification": {
+                "description": "Stage-1 (fast) classification"
+              },
+              "stage2_analysis": {
+                "description": "Stage-2 analysis: rootCause, suggestedFix, …"
+              },
+              "reproduction_steps": {},
+              "fix_attempts": {
+                "description": "Latest fix attempts, newest first",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "fix_packet": {
+                "description": "Paste-ready fix prompt composed server-side"
+              },
+              "inventory_action": {
+                "description": "Inventory action the report is filed against, when resolved"
+              },
+              "child_report_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": {}
+          }
         },
         "required": [
           "report"
@@ -1508,7 +1907,7 @@
     },
     "get_report_evidence": {
       "title": "Bug report evidence",
-      "description": "Return the full evidence package for a single bug report covering all three observability pillars: (1) LOGS — console_logs (error/warn/info/debug entries with timestamps), breadcrumbs (SDK ring buffer: navigation, clicks, network, lifecycle events with category/level), repro_timeline (merged SDK event stream: route/click/request/log/screen), and the reporter's own comments thread; (2) TRACES — network_requests (SDK-captured fetch/XHR with method/status/duration/traceId), backend_spans (server-side spans joined by W3C trace_id: name/duration_ms/parentSpanId/status), and Sentry trace correlation IDs (sentry_trace_id, sentry_event_id) for deeplinks; (3) METRICS — performance_metrics (Web Vitals snapshot: LCP/CLS/INP/TTFB/FCP + INP attribution + page timing + connection info), anomalies (statistical provenance when auto-filed by CI metric regression: baseline_mean/std, score in σ, threshold); plus screenshot_url, browser environment (user agent, URL, viewport, SDK version), and tags. This is the same data an engineer would collect for a root-cause investigation. Faster than calling get_report_detail + report timeline separately.",
+      "description": "Return the full evidence package for a single bug report covering all three observability pillars: (1) LOGS — console_logs (error/warn/info/debug entries with timestamps), breadcrumbs (SDK ring buffer: navigation, clicks, network, lifecycle events with category/level), repro_timeline (merged SDK event stream: route/click/request/log/screen), and the reporter's own comments thread; (2) TRACES — network_requests (SDK-captured fetch/XHR with method/status/duration/traceId), backend_spans (server-side spans joined by W3C trace_id: name/duration_ms/parentSpanId/status), and Sentry trace correlation IDs (sentry_trace_id, sentry_event_id) for deeplinks; (3) METRICS — performance_metrics (Web Vitals snapshot: LCP/CLS/INP/TTFB/FCP + INP attribution + page timing + connection info), anomalies (statistical provenance when auto-filed by CI metric regression: baseline_mean/std, score in σ, threshold); plus screenshot_url, browser environment (user agent, URL, viewport, SDK version), and tags. Reporter identifiers (session id, end-user id) are never returned. This is the same data an engineer would collect for a root-cause investigation. Faster than calling get_report_detail + report timeline separately.",
       "scope": "mcp:read",
       "annotations": {
         "title": "Bug report evidence",
@@ -1519,13 +1918,13 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "report_id": {
+          "reportId": {
             "type": "string",
-            "description": "Report UUID."
+            "description": "Report UUID. (`report_id` is accepted too.)"
           }
         },
         "required": [
-          "report_id"
+          "reportId"
         ]
       },
       "returnsUntrusted": true
@@ -1545,7 +1944,7 @@
         "properties": {
           "reportId": {
             "type": "string",
-            "description": "The report UUID"
+            "description": "The report UUID (`report_id` is accepted too.)"
           }
         },
         "required": [
@@ -1646,11 +2045,89 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "description": "Project ID. Defaults to the configured project.",
+          "projectId": {
+            "description": "Project UUID — defaults to the configured project. (`project_id` is accepted too.)",
             "type": "string"
           }
         }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "planId": {
+            "description": "Active plan id, e.g. free_cloud, hobby, pro",
+            "type": "string"
+          },
+          "planDisplayName": {
+            "type": "string"
+          },
+          "diagnosesUsed": {
+            "description": "Diagnoses used this billing period",
+            "type": "number"
+          },
+          "diagnosesLimit": {
+            "description": "Diagnoses included in the plan (null = unlimited)",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "diagnosesUsagePct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "overDiagnosisQuota": {
+            "type": "boolean"
+          },
+          "approachingDiagnosisQuota": {
+            "type": "boolean"
+          },
+          "monthlySpendCapUsd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "periodEnd": {
+            "description": "ISO timestamp the billing period ends",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "freeLimitDiagnoses": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": {}
       }
     },
     "get_user_paths": {
@@ -1683,8 +2160,8 @@
             "minimum": 1,
             "maximum": 50
           },
-          "project_id": {
-            "description": "Project UUID (defaults to the configured project).",
+          "projectId": {
+            "description": "Project UUID (defaults to the configured project). (`project_id` is accepted too.)",
             "type": "string"
           }
         },
@@ -1709,7 +2186,7 @@
         "type": "object",
         "properties": {
           "projectId": {
-            "description": "Project id (omit to run across all projects)",
+            "description": "Project id (omit to run across all projects) (`project_id` is accepted too.)",
             "type": "string"
           }
         }
@@ -1730,7 +2207,7 @@
         "properties": {
           "projectId": {
             "type": "string",
-            "description": "Project id"
+            "description": "Project id (`project_id` is accepted too.)"
           }
         },
         "required": [
@@ -1740,7 +2217,7 @@
     },
     "list_gate_findings": {
       "title": "Gate findings",
-      "description": "List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead-handler | mock-leak | crawl | status-claim) or minimum severity (low|medium|high|critical). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.",
+      "description": "List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead_handler | mock_leak | api_contract | crawl | status_claim | spec_drift | orphan_endpoint | unknown_call | schema_drift | code_health) or finding severity (info | warn | error). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.",
       "scope": "mcp:read",
       "annotations": {
         "title": "Gate findings",
@@ -1752,16 +2229,33 @@
         "type": "object",
         "properties": {
           "projectId": {
-            "description": "Project UUID — defaults to configured project",
+            "description": "Project UUID — defaults to configured project (`project_id` is accepted too.)",
             "type": "string"
           },
           "gate": {
-            "description": "Filter to one gate id: dead-handler | mock-leak | crawl | status-claim",
-            "type": "string"
+            "description": "Only runs of this gate (and their findings).",
+            "type": "string",
+            "enum": [
+              "dead_handler",
+              "mock_leak",
+              "api_contract",
+              "crawl",
+              "status_claim",
+              "spec_drift",
+              "orphan_endpoint",
+              "unknown_call",
+              "schema_drift",
+              "code_health"
+            ]
           },
           "severity": {
-            "description": "Minimum severity to include: low | medium | high | critical",
-            "type": "string"
+            "description": "Only findings with exactly this severity.",
+            "type": "string",
+            "enum": [
+              "info",
+              "warn",
+              "error"
+            ]
           }
         }
       },
@@ -1812,8 +2306,8 @@
             "description": "Max lessons to return (default 50, max 200)",
             "type": "number"
           },
-          "project_id": {
-            "description": "Project UUID — defaults to configured project",
+          "projectId": {
+            "description": "Project UUID — defaults to configured project (`project_id` is accepted too.)",
             "type": "string"
           }
         }
@@ -1849,7 +2343,7 @@
         "properties": {
           "projectId": {
             "type": "string",
-            "description": "Project id"
+            "description": "Project id (`project_id` is accepted too.)"
           }
         },
         "required": [
@@ -1935,8 +2429,26 @@
         "type": "object",
         "properties": {
           "category": {
-            "description": "Filter by category: workflow, debug, test, audit, enhance, …",
-            "type": "string"
+            "description": "Only skills in this category (the slug prefix).",
+            "type": "string",
+            "enum": [
+              "workflow",
+              "debug",
+              "test",
+              "audit",
+              "enhance",
+              "backend",
+              "design",
+              "deploy",
+              "data",
+              "mobile",
+              "docs",
+              "meta",
+              "mushi",
+              "protocol",
+              "iterate",
+              "other"
+            ]
           },
           "search": {
             "description": "Free-text search across slug, title, description",
@@ -2002,7 +2514,7 @@
         "properties": {
           "projectId": {
             "type": "string",
-            "description": "Project id to map stories for"
+            "description": "Project id to map stories for (`project_id` is accepted too.)"
           },
           "baseUrl": {
             "type": "string",
@@ -2050,7 +2562,7 @@
         "properties": {
           "fixId": {
             "type": "string",
-            "description": "Fix attempt UUID whose GitHub PR should be squash-merged"
+            "description": "Fix attempt UUID whose GitHub PR should be squash-merged (`fix_id` is accepted too.)"
           },
           "mergeMethod": {
             "description": "GitHub merge method (default squash)",
@@ -2076,6 +2588,21 @@
           "alreadyMerged": {
             "description": "True when the PR was already merged (idempotent no-op)",
             "type": "boolean"
+          },
+          "justMerged": {
+            "description": "True when this call performed the merge",
+            "type": "boolean"
+          },
+          "sha": {
+            "description": "Merge commit SHA, when GitHub reported one",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "reportId": {
             "type": "string",
@@ -2136,8 +2663,8 @@
             "description": "Event property to split every step by (e.g. \"utm_source\", \"$surface\").",
             "type": "string"
           },
-          "project_id": {
-            "description": "Project UUID (defaults to the configured project).",
+          "projectId": {
+            "description": "Project UUID (defaults to the configured project). (`project_id` is accepted too.)",
             "type": "string"
           }
         },
@@ -2148,7 +2675,7 @@
     },
     "query_lessons": {
       "title": "Query lessons for diff context",
-      "description": "Retrieve the learning rules (\"lessons\") most relevant to a given code diff or PR context, packed within a token budget. Uses bi-encoder retrieval + severity-weighted scoring; pass the diff/description as the query and max_tokens (default 2000). Returns ranked { lessons: [{ title, rule, severity }] }. Read-only. Use before writing a fix or opening a PR; use list_lessons to browse all lessons unfiltered.",
+      "description": "Retrieve the learning rules (\"lessons\") most relevant to a given code diff or PR context, packed within a token budget. Uses bi-encoder retrieval + severity-weighted scoring; pass the diff/description as diffText and a maxTokens budget (default 3000). Returns ranked { lessons: [{ title, rule, severity }] }. Read-only. Use before writing a fix or opening a PR; use list_lessons to browse all lessons unfiltered.",
       "scope": "mcp:read",
       "annotations": {
         "title": "Query lessons for diff context",
@@ -2159,25 +2686,25 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "diff_text": {
+          "diffText": {
             "type": "string",
-            "description": "The PR diff, code snippet, or description of the change being made."
+            "description": "The PR diff, code snippet, or description of the change being made. (`diff_text` is accepted too.)"
           },
-          "max_tokens": {
-            "description": "Maximum tokens for returned lessons context (default 3000, max 8000).",
+          "maxTokens": {
+            "description": "Maximum tokens for returned lessons context (default 3000, max 8000). (`max_tokens` is accepted too.)",
             "type": "number"
           },
-          "top_k": {
-            "description": "Max number of lessons to return (default 15, max 50).",
+          "topK": {
+            "description": "Max number of lessons to return (default 15, max 50). (`top_k` is accepted too.)",
             "type": "number"
           },
-          "project_id": {
-            "description": "Project UUID. Defaults to configured project.",
+          "projectId": {
+            "description": "Project UUID. Defaults to configured project. (`project_id` is accepted too.)",
             "type": "string"
           }
         },
         "required": [
-          "diff_text"
+          "diffText"
         ]
       },
       "returnsUntrusted": true
@@ -2198,7 +2725,7 @@
         "properties": {
           "fixId": {
             "type": "string",
-            "description": "Fix attempt UUID whose PR check-runs should be re-polled"
+            "description": "Fix attempt UUID whose PR check-runs should be re-polled (`fix_id` is accepted too.)"
           }
         },
         "required": [
@@ -2266,7 +2793,7 @@
         "properties": {
           "projectId": {
             "type": "string",
-            "description": "Project id"
+            "description": "Project id (`project_id` is accepted too.)"
           },
           "keyId": {
             "type": "string",
@@ -2297,7 +2824,7 @@
         "properties": {
           "reportId": {
             "type": "string",
-            "description": "Report UUID to move back to reopened status"
+            "description": "Report UUID to move back to reopened status (`report_id` is accepted too.)"
           },
           "note": {
             "description": "Operator note recorded on the reopen transition",
@@ -2337,7 +2864,7 @@
         "properties": {
           "reportId": {
             "type": "string",
-            "description": "Report id to reply to"
+            "description": "Report id to reply to (`report_id` is accepted too.)"
           },
           "message": {
             "type": "string",
@@ -2370,8 +2897,8 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "description": "Project ID to audit. Defaults to the configured project.",
+          "projectId": {
+            "description": "Project ID to audit. Defaults to the configured project. (`project_id` is accepted too.)",
             "type": "string"
           }
         }
@@ -2417,7 +2944,7 @@
         "properties": {
           "projectId": {
             "type": "string",
-            "description": "Project id"
+            "description": "Project id (`project_id` is accepted too.)"
           },
           "qaStoryId": {
             "type": "string",
@@ -2443,8 +2970,8 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "description": "Project UUID (defaults to configured project)",
+          "projectId": {
+            "description": "Project UUID (defaults to configured project) (`project_id` is accepted too.)",
             "type": "string"
           },
           "query": {
@@ -2457,9 +2984,17 @@
             "minimum": 1,
             "maximum": 20
           },
-          "scope_prefix": {
-            "description": "Optional repo subdirectory prefix to limit search scope",
+          "scopePrefix": {
+            "description": "Optional repo subdirectory prefix to limit search scope (`scope_prefix` is accepted too.)",
             "type": "string"
+          },
+          "mode": {
+            "description": "semantic (default): embedding similarity. name: substring match on file path and symbol name.",
+            "type": "string",
+            "enum": [
+              "semantic",
+              "name"
+            ]
           }
         },
         "required": [
@@ -2479,8 +3014,12 @@
             "description": "Normalized query string that was searched"
           },
           "mode": {
-            "description": "semantic (embeddings) or name (path/symbol match)",
-            "type": "string"
+            "description": "Which search ran: semantic or name",
+            "type": "string",
+            "enum": [
+              "semantic",
+              "name"
+            ]
           }
         },
         "required": [
@@ -2618,13 +3157,13 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "external_user_id": {
+          "externalUserId": {
             "type": "string",
-            "description": "The host-app user id as passed to Mushi.identify()"
+            "description": "The host-app user id as passed to Mushi.identify() (`external_user_id` is accepted too.)"
           },
-          "tier_slug": {
+          "tierSlug": {
             "type": "string",
-            "description": "Tier slug to assign, e.g. \"champion\", \"contributor\", \"explorer\""
+            "description": "Tier slug to assign, e.g. \"champion\", \"contributor\", \"explorer\" (`tier_slug` is accepted too.)"
           },
           "reason": {
             "description": "Optional reason for manual override",
@@ -2633,14 +3172,14 @@
           }
         },
         "required": [
-          "external_user_id",
-          "tier_slug"
+          "externalUserId",
+          "tierSlug"
         ]
       }
     },
     "start_skill_pipeline": {
       "title": "Start a skill pipeline",
-      "description": "Start a new skill pipeline run for a report. Pass root_skill_slug and optionally report_id. Returns run_id, context_packet (full instructions + report context), and step list. Read the context_packet — it contains skill instructions plus full report context (repro steps, root cause, RAG files). After executing each step, call checkin_pipeline_step. The PM watching the console sees progress live.",
+      "description": "Start a new skill pipeline run for a report. Pass rootSkillSlug and optionally reportId. Returns run_id, context_packet (full instructions + report context), and step list. Read the context_packet — it contains skill instructions plus full report context (repro steps, root cause, RAG files). After executing each step, call checkin_pipeline_step. The PM watching the console sees progress live.",
       "scope": "mcp:write",
       "annotations": {
         "title": "Start a skill pipeline",
@@ -2652,12 +3191,12 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "root_skill_slug": {
+          "rootSkillSlug": {
             "type": "string",
-            "description": "Root skill slug to run, e.g. \"workflow-fix-and-ship\""
+            "description": "Root skill slug to run, e.g. \"workflow-fix-and-ship\" (`root_skill_slug` is accepted too.)"
           },
-          "report_id": {
-            "description": "Report UUID to attach the pipeline to",
+          "reportId": {
+            "description": "Report UUID to attach the pipeline to (`report_id` is accepted too.)",
             "type": "string"
           },
           "mode": {
@@ -2668,13 +3207,13 @@
               "cloud"
             ]
           },
-          "project_id": {
-            "description": "Project UUID. Falls back to the configured project.",
+          "projectId": {
+            "description": "Project UUID. Falls back to the configured project. (`project_id` is accepted too.)",
             "type": "string"
           }
         },
         "required": [
-          "root_skill_slug"
+          "rootSkillSlug"
         ]
       }
     },
@@ -2694,14 +3233,14 @@
         "properties": {
           "reportId": {
             "type": "string",
-            "description": "Report UUID to attach this external fix attempt to"
+            "description": "Report UUID to attach this external fix attempt to (`report_id` is accepted too.)"
           },
           "branch": {
             "type": "string",
             "description": "Git branch name where the fix was implemented"
           },
           "prUrl": {
-            "description": "GitHub pull request URL, if a PR was opened",
+            "description": "GitHub pull request URL, if a PR was opened (`pr_url` is accepted too.)",
             "type": "string"
           },
           "filesChanged": {
@@ -2768,7 +3307,7 @@
         "properties": {
           "reportId": {
             "type": "string",
-            "description": "Report UUID to read the Stage-2 suggested-fix slice for"
+            "description": "Report UUID to read the Stage-2 suggested-fix slice for (`report_id` is accepted too.)"
           }
         },
         "required": [
@@ -2830,7 +3369,7 @@
         "properties": {
           "projectId": {
             "type": "string",
-            "description": "Project id"
+            "description": "Project id (`project_id` is accepted too.)"
           },
           "keyId": {
             "type": "string",
@@ -2861,10 +3400,10 @@
         "properties": {
           "reportId": {
             "type": "string",
-            "description": "Report UUID to turn into a Playwright PR"
+            "description": "Report UUID to turn into a Playwright PR (`report_id` is accepted too.)"
           },
           "projectId": {
-            "description": "Project UUID — defaults to configured project",
+            "description": "Project UUID — defaults to configured project (`project_id` is accepted too.)",
             "type": "string"
           }
         },
@@ -2917,7 +3456,7 @@
         "properties": {
           "reportId": {
             "type": "string",
-            "description": "Report UUID"
+            "description": "Report UUID (`report_id` is accepted too.)"
           },
           "status": {
             "type": "string",
@@ -2949,7 +3488,7 @@
     },
     "triage_issue": {
       "title": "Triage issue end-to-end",
-      "description": "Read-only combined tool: merges report detail, the reporter thread, similar bugs (matched on the report summary), the fix context (paste-ready fix prompt, repro steps, root cause), the blast radius of the inventory action the report is filed against, and recent pipeline warnings into a single structured review packet. Returns the packet plus prioritised recommended_actions, partial_errors for any source that failed, and notes for any source that does not apply (e.g. no blast radius when the report is not anchored to an inventory action). Equivalent to a Sentry \"Analyze with Seer\" flow grounded in user-felt reports. Pass report_id to kick off review. Call this before dispatch_fix.",
+      "description": "Read-only combined tool: merges report detail, the reporter thread, similar bugs (matched on the report summary), the fix context (paste-ready fix prompt, repro steps, root cause), the blast radius of the inventory action the report is filed against, and recent pipeline warnings into a single structured review packet. Returns the packet plus prioritised recommended_actions, partial_errors for any source that failed, and notes for any source that does not apply (e.g. no blast radius when the report is not anchored to an inventory action). Equivalent to a Sentry \"Analyze with Seer\" flow grounded in user-felt reports. Pass reportId to kick off review. Call this before dispatch_fix.",
       "scope": "mcp:read",
       "annotations": {
         "title": "Triage issue end-to-end",
@@ -2960,93 +3499,474 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "report_id": {
+          "reportId": {
             "type": "string",
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-            "description": "Report UUID to triage."
+            "description": "Report UUID to triage. (`report_id` is accepted too.)"
           },
-          "project_id": {
-            "description": "Project UUID. Defaults to configured project.",
+          "projectId": {
+            "description": "Project UUID. Defaults to configured project. (`project_id` is accepted too.)",
             "type": "string"
           },
-          "include_logs": {
-            "description": "Include recent pipeline logs in triage packet (default: true).",
+          "includeLogs": {
+            "description": "Include recent pipeline logs in triage packet (default: true). (`include_logs` is accepted too.)",
             "type": "boolean"
           }
         },
         "required": [
-          "report_id"
+          "reportId"
         ]
       },
       "outputSchema": {
         "type": "object",
         "properties": {
           "report_id": {
-            "type": "string"
+            "type": "string",
+            "description": "The triaged report UUID"
           },
-          "severity": {},
-          "category": {},
-          "status": {},
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "critical | high | medium | low, or unknown when the report could not be read"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "bug | slow | visual | confusing | other, or unknown"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Workflow status, or unknown"
+          },
           "partial_errors": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "Sources that failed, as \"source: message\""
           },
           "notes": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "Sources that do not apply to this report, and why"
           },
-          "report": {},
+          "report": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Report UUID"
+                  },
+                  "project_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "title": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "summary": {
+                    "description": "One-line summary written by the classifier",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "description": {
+                    "description": "What the reporter wrote (untrusted text)",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "description": "Workflow status, e.g. new, classified, fixing, fixed, verified, reopened",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "category": {
+                    "description": "bug | slow | visual | confusing | other",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "severity": {
+                    "description": "critical | high | medium | low",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "component": {
+                    "description": "Component or page the bug was attributed to",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "created_at": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "screenshot_url": {
+                    "description": "Signed screenshot URL",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "environment": {
+                    "description": "Browser/OS/viewport the SDK captured"
+                  },
+                  "console_logs": {
+                    "description": "Console entries captured with the report"
+                  },
+                  "network_logs": {
+                    "description": "Network requests captured with the report"
+                  },
+                  "breadcrumbs": {},
+                  "stage1_classification": {
+                    "description": "Stage-1 (fast) classification"
+                  },
+                  "stage2_analysis": {
+                    "description": "Stage-2 analysis: rootCause, suggestedFix, …"
+                  },
+                  "reproduction_steps": {},
+                  "fix_attempts": {
+                    "description": "Latest fix attempts, newest first",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "fix_packet": {
+                    "description": "Paste-ready fix prompt composed server-side"
+                  },
+                  "inventory_action": {
+                    "description": "Inventory action the report is filed against, when resolved"
+                  },
+                  "child_report_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "additionalProperties": {}
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "additionalProperties": false
+              }
+            ],
+            "description": "The report (documented fields, no reporter identifiers), or the error reading it"
+          },
           "reporter_thread": {
             "anyOf": [
-              {},
+              {
+                "type": "object",
+                "properties": {
+                  "report_id": {
+                    "type": "string"
+                  },
+                  "timeline": {
+                    "type": "array",
+                    "items": {}
+                  }
+                },
+                "additionalProperties": {}
+              },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The unified report timeline (comments, fixes, QA), or null"
           },
           "similar_bugs": {
             "anyOf": [
-              {},
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "reportId": {
+                      "type": "string"
+                    },
+                    "similarity": {
+                      "type": "number"
+                    },
+                    "description": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "category": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "reportGroupId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "reportId",
+                    "similarity"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Up to five nearest reports by summary, excluding this one; null when not searched"
           },
           "fix_context": {
             "anyOf": [
-              {},
+              {
+                "type": "object",
+                "properties": {
+                  "fixPrompt": {
+                    "description": "Paste-ready fix prompt composed server-side, or null"
+                  },
+                  "reproductionSteps": {
+                    "description": "Reproduction steps recorded on the report ([] if none)"
+                  },
+                  "component": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Component or page the bug was attributed to"
+                  },
+                  "rootCause": {
+                    "description": "Stage-2 root cause, or null before Stage 2 runs"
+                  },
+                  "bugOntologyTags": {
+                    "description": "Bug ontology tags, or null"
+                  }
+                },
+                "required": [
+                  "fixPrompt",
+                  "reproductionSteps",
+                  "component",
+                  "rootCause",
+                  "bugOntologyTags"
+                ],
+                "additionalProperties": false
+              },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Fix-context slice, as get_fix_context returns it"
           },
           "blast_radius": {
             "anyOf": [
-              {},
+              {
+                "type": "object",
+                "properties": {
+                  "affected": {
+                    "type": "array",
+                    "items": {}
+                  }
+                },
+                "additionalProperties": {}
+              },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Downstream nodes of the inventory action the report is filed against, or null"
           },
           "recent_logs": {
             "anyOf": [
-              {},
+              {
+                "type": "object",
+                "properties": {
+                  "entries": {
+                    "type": "array",
+                    "items": {}
+                  }
+                },
+                "additionalProperties": {}
+              },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Recent warn+ pipeline log entries for the project, or null"
           },
           "recommended_actions": {
             "type": "array",
-            "items": {}
+            "items": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "tool": {
+                  "description": "Tool to call next",
+                  "type": "string"
+                },
+                "args": {
+                  "description": "Arguments for that tool",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "action",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            "description": "What to do next, most important first"
           },
           "triage_summary": {
-            "type": "string"
+            "type": "string",
+            "description": "One-line summary"
           }
         },
         "required": [
@@ -3082,8 +4002,8 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "description": "Project UUID (defaults to the configured project).",
+          "projectId": {
+            "description": "Project UUID (defaults to the configured project). (`project_id` is accepted too.)",
             "type": "string",
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -3157,7 +4077,7 @@
             "type": "number"
           },
           "projectId": {
-            "description": "Restrict to one project when the API key owns multiple",
+            "description": "Restrict to one project when the API key owns multiple (`project_id` is accepted too.)",
             "type": "string"
           }
         }

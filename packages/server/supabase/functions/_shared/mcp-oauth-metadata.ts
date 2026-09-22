@@ -124,7 +124,39 @@ function authorizationServerMetadata(url: URL, headers: Headers): Record<string,
     grant_types_supported: ['authorization_code', 'client_credentials'],
     token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
     code_challenge_methods_supported: ['S256'],
+    // RFC 9207: every authorization response (code or error) carries `iss`,
+    // so a client talking to several authorization servers can tell which
+    // one answered (mix-up defence). Issued by api/routes/mcp-oauth.ts and
+    // the Smithery stub via mcpOAuthIssuerForResource.
+    authorization_response_iss_parameter_supported: true,
+    // Not advertised: client_id_metadata_document_supported. Clients register
+    // dynamically (RFC 7591, /oauth/register); URL-shaped client_ids are not
+    // fetched or accepted.
   }
+}
+
+/**
+ * RFC 9207 `iss` for an authorization response. The authorize, approve and
+ * deny endpoints all run on the Supabase origin whichever URL the client
+ * discovered, so the issuer is recovered from the `resource` (RFC 8707) the
+ * client sent with its authorization request: the public proxy base when
+ * that is the resource it connected to, otherwise the Supabase function URL
+ * — the same two identifiers the discovery documents above name as issuer.
+ * `fallbackOrigin` stands in for SUPABASE_URL when that is unset (local runs).
+ */
+export function mcpOAuthIssuerForResource(resource: string | null | undefined, fallbackOrigin: string): string {
+  const publicBase = publicBaseFromEnv()
+  if (publicBase && resource) {
+    try {
+      const requested = new URL(resource.trim())
+      const base = new URL(publicBase)
+      const samePath = requested.pathname.replace(/\/+$/, '') === base.pathname.replace(/\/+$/, '')
+      if (requested.origin === base.origin && samePath) return publicBase
+    } catch {
+      // Not a URL: fall through to the Supabase issuer.
+    }
+  }
+  return mcpSupabaseFnBase(new URL(fallbackOrigin))
 }
 
 /** RFC 8414 Authorization Server Metadata. */

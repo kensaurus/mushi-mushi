@@ -76,7 +76,7 @@ export const MCP_USE_CASES: McpUseCase[] = [
   {
     title: 'Triage across all my apps',
     ask: 'What are my most urgent bugs across all my projects?',
-    calls: ['get_account_overview', 'get_recent_reports (project_id=X)', 'get_recent_reports (project_id=Y)'],
+    calls: ['get_account_overview', 'get_recent_reports (projectId=X)', 'get_recent_reports (projectId=Y)'],
   },
   {
     title: 'New project check-in',
@@ -293,7 +293,7 @@ export function validateMcpJsonSyntax(raw: string): McpJsonCheck {
       details.push(`${name}: MUSHI_API_KEY should start with mushi_.`)
     }
     if (!env.MUSHI_PROJECT_ID) {
-      details.push(`${name}: no MUSHI_PROJECT_ID means account mode; use an org-scoped key or pass project_id in tool calls.`)
+      details.push(`${name}: no MUSHI_PROJECT_ID means account mode; use an org-scoped key or pass projectId in tool calls.`)
     }
     if (Array.isArray(server.args) && server.args.includes('@mushi-mushi/mcp@latest')) {
       details.push(`${name}: uses npm @latest — re-pin it (run "npx mushi-mushi setup" or replace with ${MCP_PIN_SPEC}) to avoid supply-chain and cold-start surprises.`)

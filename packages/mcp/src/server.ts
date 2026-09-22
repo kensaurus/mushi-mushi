@@ -37,6 +37,17 @@ import {
 import { findMushiDoc, mushiDocMarkdownUrl, searchMushiDocs } from './docs-index.js';
 import { wrapUntrustedJson, type UntrustedContentRole } from './wrap-untrusted.js';
 import { installStdoutGuard } from './stdout-guard.js';
+import { normalizeArgAliases, snakeAliasOf } from './arg-aliases.js';
+import {
+  fixContextOf,
+  inventoryActionNodeIdOf,
+  projectReportDetail,
+  projectReportListRow,
+  reportEvidenceOf,
+  similarityQueryOf,
+  triageRecommendedActions,
+  triageSummaryOf,
+} from './report-shapes.js';
 
 // stdout belongs to the JSON-RPC framing. `src/index.ts` installs this too,
 // but the `@mushi-mushi/mcp/server` export path is a supported entrypoint for
@@ -48,6 +59,62 @@ installStdoutGuard();
 
 /** Explicit schema for no-argument MCP tools (avoids ambiguous empty `{}`). */
 const NO_ARG_INPUT = z.object({});
+
+/**
+ * Parameters some tool spelled in snake_case until the casing was unified
+ * (project_id, report_id, include_raw, …). Wherever they appear, their
+ * description names the old spelling, which is still accepted.
+ */
+const RENAMED_PARAMS: ReadonlySet<string> = new Set([
+  'projectId',
+  'reportId',
+  'includeRaw',
+  'includeLogs',
+  'diffText',
+  'maxTokens',
+  'topK',
+  'runId',
+  'stepIndex',
+  'prUrl',
+  'agentRef',
+  'threadId',
+  'filePath',
+  'symbolName',
+  'scopePrefix',
+  'fixId',
+  'externalUserId',
+  'tierSlug',
+  'rootSkillSlug',
+]);
+
+/**
+ * Accept the snake_case spelling of every camelCase parameter a tool declares
+ * (arg-aliases.ts): the object schema is wrapped in a preprocess step that
+ * renames `project_id` to `projectId` before validation, so handlers only ever
+ * see canonical names. Renamed parameters say so in their description.
+ * Schemas with no camelCase key are returned as they are.
+ */
+function acceptSnakeCaseAliases(schema: unknown): unknown {
+  if (!(schema instanceof z.ZodObject)) return schema;
+  const shape = schema.shape as Record<string, z.ZodType>;
+  const declared = Object.keys(shape).filter((key) => /[A-Z]/.test(key));
+  if (declared.length === 0) return schema;
+  const documented: Record<string, z.ZodType> = {};
+  for (const key of declared) {
+    if (!RENAMED_PARAMS.has(key)) continue;
+    const field = shape[key]!;
+    const note = `(\`${snakeAliasOf(key)}\` is accepted too.)`;
+    documented[key] = field.describe(field.description ? `${field.description} ${note}` : note);
+  }
+  const target = Object.keys(documented).length > 0 ? schema.extend(documented) : schema;
+  return z.preprocess(
+    (value) =>
+      value !== null && typeof value === 'object' && !Array.isArray(value)
+        ? normalizeArgAliases(value as Record<string, unknown>, declared)
+        : value,
+    target,
+  );
+}
 
 /**
  * Default per-request timeout for every Mushi API call made by a tool.
@@ -152,42 +219,6 @@ export class MushiApiError extends Error {
   }
 }
 
-/**
- * The fix-context slice of a report detail row (GET /v1/admin/reports/:id).
- * The route composes `fix_packet` server-side, so get_fix_context and
- * triage_issue both read it from the report instead of a separate route.
- */
-function fixContextOf(report: Record<string, unknown>): Record<string, unknown> {
-  return {
-    // Paste-ready fix prompt composed server-side by composeFixPacket()
-    // (diagnosis + repro + suggested fix + relevant code + blast radius).
-    // Hand this straight to the editing agent — no second LLM key needed.
-    fixPrompt: report.fix_packet ?? null,
-    reproductionSteps: report.reproduction_steps ?? [],
-    component: report.component ?? null,
-    rootCause: (report.stage2_analysis as Record<string, unknown> | null | undefined)?.rootCause ?? null,
-    bugOntologyTags: report.bug_ontology_tags ?? null,
-  };
-}
-
-/** Free text the similarity route can embed for a report, or null when it has none. */
-function similarityQueryOf(report: Record<string, unknown>): string | null {
-  for (const field of ['summary', 'description'] as const) {
-    const value = report[field];
-    if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 2000);
-  }
-  return null;
-}
-
-/**
- * Graph node id of the inventory action a report is filed against, as
- * resolved by the report route's get_report_inventory_action RPC.
- */
-function inventoryActionNodeIdOf(report: Record<string, unknown>): string | null {
-  const anchor = report.inventory_action as { actionNodeId?: unknown } | null | undefined;
-  return typeof anchor?.actionNodeId === 'string' && anchor.actionNodeId ? anchor.actionNodeId : null;
-}
-
 /** get_mushi_doc returns at most this much Markdown (~2k tokens) and says where the rest is. */
 const MUSHI_DOC_MAX_CHARS = 8000;
 
@@ -211,35 +242,95 @@ const REPORT_STATUSES = [
 const REPORT_CATEGORIES = ['bug', 'slow', 'visual', 'confusing', 'other'] as const;
 const REPORT_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 
-/** The fields get_recent_reports documents; the list route returns ~30 columns. */
-const REPORT_LIST_FIELDS = [
-  'id',
-  'status',
-  'category',
-  'severity',
-  'summary',
-  'component',
-  'created_at',
-  'processing_error',
+/** gate_runs.gate CHECK constraint (migration 20260612061520). */
+const GATE_IDS = [
+  'dead_handler',
+  'mock_leak',
+  'api_contract',
+  'crawl',
+  'status_claim',
+  'spec_drift',
+  'orphan_endpoint',
+  'unknown_call',
+  'schema_drift',
+  'code_health',
+] as const;
+/** gate_findings.severity CHECK constraint (migration 20260504000000). */
+const GATE_FINDING_SEVERITIES = ['info', 'warn', 'error'] as const;
+/** agent_skills.category — derived from the slug prefix by skill-sync (categoryFromSlug). */
+const SKILL_CATEGORIES = [
+  'workflow',
+  'debug',
+  'test',
+  'audit',
+  'enhance',
+  'backend',
+  'design',
+  'deploy',
+  'data',
+  'mobile',
+  'docs',
+  'meta',
+  'mushi',
+  'protocol',
+  'iterate',
+  'other',
+] as const;
+/** POST /v1/admin/projects/:id/codebase/search `mode`: embeddings, or a file-path/symbol match. */
+const CODEBASE_SEARCH_MODES = ['semantic', 'name'] as const;
+/** ALLOWED_AGENT_OVERRIDES in _shared/agent-adapters.ts — what POST /v1/admin/fixes/dispatch accepts as `agent`. */
+const DISPATCH_AGENTS = [
+  'auto',
+  'claude_code',
+  'codex',
+  'cursor_cloud',
+  'github_cloud_agent',
+  'rest_worker',
+  'rest_fix_worker',
+  'llm',
+  'mcp',
 ] as const;
 
-/**
- * Columns the list route returns so the console can render a reporter's name
- * and badge. They identify an end user of the customer's app and are never
- * handed to an agent, even with include_raw.
- */
-const REPORTER_IDENTITY_FIELDS = ['end_user_id', 'reporter_token_hash', 'session_id', 'reporter_display_name'];
+const nullableString = () => z.string().nullable().optional();
 
-function projectReportListRow(row: Record<string, unknown>, includeRaw: boolean): Record<string, unknown> {
-  if (includeRaw) {
-    return Object.fromEntries(Object.entries(row).filter(([k]) => !REPORTER_IDENTITY_FIELDS.includes(k)));
-  }
-  const out: Record<string, unknown> = {};
-  for (const field of REPORT_LIST_FIELDS) {
-    if (row[field] !== undefined) out[field] = row[field];
-  }
-  return out;
-}
+/**
+ * One report as get_report_detail, get_fix_context and triage_issue return it
+ * (projectReportDetail in report-shapes.ts). Loose, because includeRaw adds
+ * every other non-identity column; reporter identifiers are never present.
+ */
+const REPORT_DETAIL_OUTPUT = z.looseObject({
+  id: z.string().describe('Report UUID'),
+  project_id: nullableString(),
+  title: nullableString(),
+  summary: nullableString().describe('One-line summary written by the classifier'),
+  description: nullableString().describe('What the reporter wrote (untrusted text)'),
+  status: nullableString().describe('Workflow status, e.g. new, classified, fixing, fixed, verified, reopened'),
+  category: nullableString().describe('bug | slow | visual | confusing | other'),
+  severity: nullableString().describe('critical | high | medium | low'),
+  component: nullableString().describe('Component or page the bug was attributed to'),
+  created_at: nullableString(),
+  screenshot_url: nullableString().describe('Signed screenshot URL'),
+  environment: z.unknown().optional().describe('Browser/OS/viewport the SDK captured'),
+  console_logs: z.unknown().optional().describe('Console entries captured with the report'),
+  network_logs: z.unknown().optional().describe('Network requests captured with the report'),
+  breadcrumbs: z.unknown().optional(),
+  stage1_classification: z.unknown().optional().describe('Stage-1 (fast) classification'),
+  stage2_analysis: z.unknown().optional().describe('Stage-2 analysis: rootCause, suggestedFix, …'),
+  reproduction_steps: z.unknown().optional(),
+  fix_attempts: z.array(z.looseObject({ id: z.string(), status: nullableString() })).optional().describe('Latest fix attempts, newest first'),
+  fix_packet: z.unknown().optional().describe('Paste-ready fix prompt composed server-side'),
+  inventory_action: z.unknown().optional().describe('Inventory action the report is filed against, when resolved'),
+  child_report_ids: z.array(z.string()).optional(),
+});
+
+/** fixContextOf (report-shapes.ts) — shared by get_fix_context and triage_issue. */
+const FIX_CONTEXT_SHAPE = {
+  fixPrompt: z.unknown().describe('Paste-ready fix prompt composed server-side, or null'),
+  reproductionSteps: z.unknown().describe('Reproduction steps recorded on the report ([] if none)'),
+  component: z.string().nullable().describe('Component or page the bug was attributed to'),
+  rootCause: z.unknown().describe('Stage-2 root cause, or null before Stage 2 runs'),
+  bugOntologyTags: z.unknown().describe('Bug ontology tags, or null'),
+};
 
 /** True when a text block was already wrapped by a handler (wrappedJson*). */
 function isWrappedUntrusted(text: string): boolean {
@@ -328,7 +419,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   async function apiCall<T = unknown>(path: string, options?: RequestInit): Promise<T> {
     const requestId = crypto.randomUUID().slice(0, 12);
     const started = Date.now();
-    // Every one of the ~90 tool bodies funnels through here, so this is the
+    // Every tool body funnels through here, so this is the
     // only place a timeout has to exist. `AbortSignal.timeout` fires a
     // `TimeoutError` DOMException that fetch surfaces as the rejection reason.
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
@@ -620,12 +711,24 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
 
   // Run every tool handler inside its own toolCallContext, so each API request
   // it makes carries the tool name and one id shared by that call's requests.
+  // The input schema is wrapped so the snake_case spelling of any camelCase
+  // parameter (project_id for projectId) is renamed before zod validates —
+  // see acceptSnakeCaseAliases. The advertised JSON Schema keeps its shape:
+  // zod renders a preprocess pipe as its target object.
   const registerTool = server.registerTool.bind(server);
-  server.registerTool = ((name: string, toolConfig: never, handler: (...args: unknown[]) => unknown) =>
-    registerTool(name, toolConfig, ((...args: unknown[]) =>
-      toolCallContext.run({ tool: name, invocationId: crypto.randomUUID() }, () =>
-        handler(...args),
-      )) as never)) as typeof server.registerTool;
+  server.registerTool = ((
+    name: string,
+    toolConfig: { inputSchema?: unknown } & Record<string, unknown>,
+    handler: (...args: unknown[]) => unknown,
+  ) =>
+    registerTool(
+      name,
+      { ...toolConfig, inputSchema: acceptSnakeCaseAliases(toolConfig.inputSchema) } as never,
+      ((...args: unknown[]) =>
+        toolCallContext.run({ tool: name, invocationId: crypto.randomUUID() }, () =>
+          handler(...args),
+        )) as never,
+    )) as typeof server.registerTool;
 
   /**
    * Pull the catalog entry for a tool and project its hints into the
@@ -693,13 +796,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         category: z.enum(REPORT_CATEGORIES).optional().describe('Filter by category.'),
         severity: z.enum(REPORT_SEVERITIES).optional().describe('Filter by severity.'),
         limit: z.number().optional().describe('Max reports to return (default 20, max 100)'),
-        include_raw: z
+        includeRaw: z
           .boolean()
           .optional()
           .describe(
             'Return every column the list route has (breadcrumbs, environment, tags, …) instead of the documented fields. Reporter identifiers are removed either way.',
           ),
-        project_id: z
+        projectId: z
           .string()
           .optional()
           .describe(
@@ -728,7 +831,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       if (args.category) params.set('category', args.category);
       if (args.severity) params.set('severity', args.severity);
       params.set('limit', String(Math.min(args.limit ?? 20, 100)));
-      const pid = await resolveProjectId(args.project_id);
+      const pid = await resolveProjectId(args.projectId);
       const extraHeaders: Record<string, string> =
         pid !== projectId ? { 'X-Mushi-Project-Id': pid } : {};
       const data = await apiCall<{ reports: Array<Record<string, unknown>>; total: number }>(
@@ -738,8 +841,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         },
       );
       return jsonResult({
-        reports: (data.reports ?? []).map((row) => projectReportListRow(row, args.include_raw === true)),
-        total: data.total,
+        reports: (data.reports ?? []).map((row) => projectReportListRow(row, args.includeRaw === true)),
+        total: data.total ?? 0,
       });
     },
   );
@@ -752,18 +855,24 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       annotations: annotationsFor('get_report_detail'),
       inputSchema: z.object({
         reportId: z.string().describe('The report UUID'),
-        project_id: z
+        includeRaw: z
+          .boolean()
+          .optional()
+          .describe(
+            'Return every column the detail route has (LLM invocation log, storage paths, custom metadata, …) instead of the documented fields. Reporter identifiers are removed either way.',
+          ),
+        projectId: z
           .string()
           .optional()
           .describe('Project UUID — required for org-scoped keys with multiple projects.'),
       }),
-      outputSchema: z.object({ report: z.unknown() }),
+      outputSchema: z.object({ report: REPORT_DETAIL_OUTPUT }),
     },
     async (args) => {
-      const { headers } = await projectScopeHeaders(args.project_id);
-      const data = await apiCall(`/v1/admin/reports/${args.reportId}`, { headers });
+      const { headers } = await projectScopeHeaders(args.projectId);
+      const data = await apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.reportId}`, { headers });
       // Report bodies contain user-authored text — wrap with anti-injection delimiters.
-      return wrappedJsonResult({ report: data }, 'report body');
+      return wrappedJsonResult({ report: projectReportDetail(data, args.includeRaw === true) }, 'report body');
     },
   );
 
@@ -856,28 +965,34 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       annotations: annotationsFor('get_fix_context'),
       inputSchema: z.object({
         reportId: z.string().describe('The report UUID to fix'),
-        project_id: z
+        projectId: z
           .string()
           .optional()
           .describe('Project UUID — required for org-scoped keys with multiple projects.'),
       }),
       outputSchema: z.object({
-        report: z.unknown(),
-        fixPrompt: z.unknown(),
-        reproductionSteps: z.unknown(),
-        component: z.unknown(),
-        rootCause: z.unknown(),
-        bugOntologyTags: z.unknown(),
+        report: REPORT_DETAIL_OUTPUT,
+        ...FIX_CONTEXT_SHAPE,
+        inventoryAction: z
+          .unknown()
+          .describe('The inventory action (with its expected_outcome contract) the report is filed against, or null'),
       }),
     },
     async (args) => {
-      const { headers } = await projectScopeHeaders(args.project_id);
+      const { headers } = await projectScopeHeaders(args.projectId);
       const report = await apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.reportId}`, {
         headers,
       });
       // fix_packet, report body, and rootCause are user-authored or LLM-generated
       // free text — wrap with anti-injection delimiters.
-      return wrappedJsonResult({ report, ...fixContextOf(report) }, 'fix context');
+      return wrappedJsonResult(
+        {
+          report: projectReportDetail(report, false),
+          ...fixContextOf(report),
+          inventoryAction: report.inventory_action ?? null,
+        },
+        'fix context',
+      );
     },
   );
 
@@ -888,15 +1003,15 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('get_fix_timeline'),
       annotations: annotationsFor('get_fix_timeline'),
       inputSchema: z.object({
-        fixId: z.string().describe('fix_attempt UUID'),
-        project_id: z
+        fixId: z.string().describe('fix_attempt UUID (or the dispatch id dispatch_fix returned)'),
+        projectId: z
           .string()
           .optional()
           .describe('Project UUID — required for org-scoped keys with multiple projects.'),
       }),
     },
     async (args) => {
-      const { headers } = await projectScopeHeaders(args.project_id);
+      const { headers } = await projectScopeHeaders(args.projectId);
       return jsonText(await apiCall(`/v1/admin/fixes/${args.fixId}/timeline`, { headers }));
     },
   );
@@ -1052,14 +1167,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       annotations: annotationsFor('list_gate_findings'),
       inputSchema: z.object({
         projectId: z.string().optional().describe('Project UUID — defaults to configured project'),
-        gate: z
-          .string()
-          .optional()
-          .describe('Filter to one gate id: dead-handler | mock-leak | crawl | status-claim'),
+        gate: z.enum(GATE_IDS).optional().describe('Only runs of this gate (and their findings).'),
         severity: z
-          .string()
+          .enum(GATE_FINDING_SEVERITIES)
           .optional()
-          .describe('Minimum severity to include: low | medium | high | critical'),
+          .describe('Only findings with exactly this severity.'),
       }),
       outputSchema: z.object({
         runs: z.array(z.unknown()).describe('Recent gate_runs rows, newest first'),
@@ -1182,14 +1294,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .describe(
             'full (default) = ingest + dispatch; ingest = SDK pipeline only; dispatch = fix preflight only.',
           ),
-        project_id: z
+        projectId: z
           .string()
           .optional()
           .describe('Project UUID for dispatch checks (defaults to configured project).'),
-        projectId: z.string().optional().describe('Alias for project_id.'),
       }),
       outputSchema: z.object({
-        mode: z.string(),
+        mode: z.enum(['full', 'ingest', 'dispatch']),
         ready: z.boolean(),
         summary: z.string(),
         nextAction: z.string().optional(),
@@ -1200,7 +1311,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
     async (args) => {
       const mode = args.mode ?? 'full';
-      const resolvedId = args.project_id ?? args.projectId ?? projectId;
+      const resolvedId = args.projectId ?? projectId;
 
       if (mode === 'ingest') {
         const data = await apiCall<{
@@ -1243,7 +1354,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           throw new MushiApiError(
             400,
             'MISSING_PROJECT',
-            'project_id is required for dispatch mode',
+            'projectId is required for dispatch mode',
           );
         }
         const data = await apiCall<{
@@ -1623,12 +1734,12 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('get_project_context'),
       annotations: annotationsFor('get_project_context'),
       inputSchema: z.object({
-        project_id: z.string().optional().describe('Project UUID. Defaults to configured project.'),
+        projectId: z.string().optional().describe('Project UUID. Defaults to configured project.'),
       }),
     },
     async (args) => {
-      const pid = args.project_id ?? projectId;
-      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT_ID', 'project_id is required');
+      const pid = args.projectId ?? projectId;
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT_ID', 'projectId is required');
 
       const [preflightRes, activationRes] = await Promise.allSettled([
         apiCall<unknown>(`/v1/admin/projects/${pid}/preflight`),
@@ -1656,7 +1767,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('get_pipeline_logs'),
       annotations: annotationsFor('get_pipeline_logs'),
       inputSchema: z.object({
-        project_id: z.string().optional().describe('Project UUID. Defaults to configured project.'),
+        projectId: z.string().optional().describe('Project UUID. Defaults to configured project.'),
         service: z
           .enum(['fix-worker', 'qa-story-runner', 'pipeline', 'all'])
           .optional()
@@ -1673,8 +1784,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       }),
     },
     async (args) => {
-      const pid = args.project_id ?? projectId;
-      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT_ID', 'project_id is required');
+      const pid = args.projectId ?? projectId;
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT_ID', 'projectId is required');
 
       const qs = new URLSearchParams();
       if (args.service && args.service !== 'all') qs.set('service', args.service);
@@ -1694,48 +1805,23 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('get_report_evidence'),
       annotations: annotationsFor('get_report_evidence'),
       inputSchema: z.object({
-        report_id: z.string().describe('Report UUID.'),
+        reportId: z.string().describe('Report UUID.'),
       }),
     },
     async (args) => {
       const [reportRes, timelineRes] = await Promise.allSettled([
-        apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.report_id}`),
-        apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.report_id}/timeline`),
+        apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.reportId}`),
+        apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.reportId}/timeline`),
       ]);
 
       const report = reportRes.status === 'fulfilled' ? reportRes.value : null;
       const timeline = timelineRes.status === 'fulfilled' ? timelineRes.value : null;
 
-      // Return a focused evidence packet — strip the large classification/fix
-      // arrays that belong in get_report_detail, keep only the evidence fields.
-      // Covers all three observability pillars so the AI diagnosis agent has the
-      // full causal picture (see the get_report_evidence catalog description).
-      const r = report as Record<string, unknown> | null;
-      const evidence = r
-        ? {
-            report_id: args.report_id,
-            description: r.description,
-            summary: r.summary,
-            screenshot_url: r.screenshot_url ?? null,
-            environment: r.environment ?? null,
-            // LOGS
-            console_logs: r.console_logs ?? null,
-            breadcrumbs: r.breadcrumbs ?? null,
-            repro_timeline: r.repro_timeline ?? null,
-            // TRACES
-            network_requests: r.network_logs ?? null,
-            backend_spans: r.backend_spans ?? null,
-            sentry_replay_id: r.sentry_replay_id ?? null,
-            sentry_trace_id: r.sentry_trace_id ?? null,
-            sentry_event_id: r.sentry_event_id ?? null,
-            // METRICS
-            performance_metrics: r.performance_metrics ?? null,
-            anomalies: r.anomalies ?? null,
-            // context
-            session_id: r.session_id ?? null,
-            created_at: r.created_at,
-            tags: r.tags ?? null,
-          }
+      // A focused evidence packet (report-shapes.ts): the logs / traces /
+      // metrics the SDK captured, without classification or fix history and
+      // without reporter identifiers (session_id used to ride along here).
+      const evidence = report
+        ? reportEvidenceOf(report, args.reportId)
         : { error: String((reportRes as PromiseRejectedResult).reason) };
 
       return jsonText({
@@ -1754,34 +1840,66 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('triage_issue'),
       annotations: annotationsFor('triage_issue'),
       inputSchema: z.object({
-        report_id: z.string().uuid().describe('Report UUID to triage.'),
-        project_id: z.string().optional().describe('Project UUID. Defaults to configured project.'),
-        include_logs: z
+        reportId: z.string().uuid().describe('Report UUID to triage.'),
+        projectId: z.string().optional().describe('Project UUID. Defaults to configured project.'),
+        includeLogs: z
           .boolean()
           .optional()
           .describe('Include recent pipeline logs in triage packet (default: true).'),
       }),
       outputSchema: z.object({
-        report_id: z.string(),
-        severity: z.unknown(),
-        category: z.unknown(),
-        status: z.unknown(),
-        partial_errors: z.array(z.string()),
-        notes: z.array(z.string()),
-        report: z.unknown(),
-        reporter_thread: z.unknown().nullable(),
-        similar_bugs: z.unknown().nullable(),
-        fix_context: z.unknown().nullable(),
-        blast_radius: z.unknown().nullable(),
-        recent_logs: z.unknown().nullable(),
-        recommended_actions: z.array(z.unknown()),
-        triage_summary: z.string(),
+        report_id: z.string().describe('The triaged report UUID'),
+        severity: z.string().nullable().describe('critical | high | medium | low, or unknown when the report could not be read'),
+        category: z.string().nullable().describe('bug | slow | visual | confusing | other, or unknown'),
+        status: z.string().nullable().describe('Workflow status, or unknown'),
+        partial_errors: z.array(z.string()).describe('Sources that failed, as "source: message"'),
+        notes: z.array(z.string()).describe('Sources that do not apply to this report, and why'),
+        report: z
+          .union([REPORT_DETAIL_OUTPUT, z.object({ error: z.string() })])
+          .describe('The report (documented fields, no reporter identifiers), or the error reading it'),
+        reporter_thread: z
+          .looseObject({ report_id: z.string().optional(), timeline: z.array(z.unknown()).optional() })
+          .nullable()
+          .describe('The unified report timeline (comments, fixes, QA), or null'),
+        similar_bugs: z
+          .array(
+            z.looseObject({
+              reportId: z.string(),
+              similarity: z.number(),
+              description: nullableString(),
+              category: nullableString(),
+              createdAt: nullableString(),
+              reportGroupId: nullableString(),
+            }),
+          )
+          .nullable()
+          .describe('Up to five nearest reports by summary, excluding this one; null when not searched'),
+        fix_context: z.object(FIX_CONTEXT_SHAPE).nullable().describe('Fix-context slice, as get_fix_context returns it'),
+        blast_radius: z
+          .looseObject({ affected: z.array(z.unknown()).optional() })
+          .nullable()
+          .describe('Downstream nodes of the inventory action the report is filed against, or null'),
+        recent_logs: z
+          .looseObject({ entries: z.array(z.unknown()).optional() })
+          .nullable()
+          .describe('Recent warn+ pipeline log entries for the project, or null'),
+        recommended_actions: z
+          .array(
+            z.object({
+              action: z.string(),
+              reason: z.string(),
+              tool: z.string().optional().describe('Tool to call next'),
+              args: z.record(z.string(), z.unknown()).optional().describe('Arguments for that tool'),
+            }),
+          )
+          .describe('What to do next, most important first'),
+        triage_summary: z.string().describe('One-line summary'),
       }),
     },
     async (args) => {
-      const { projectId: pid, headers } = await projectScopeHeaders(args.project_id);
-      const includeLogs = args.include_logs !== false;
-      const reportPath = `/v1/admin/reports/${encodeURIComponent(args.report_id)}`;
+      const { projectId: pid, headers } = await projectScopeHeaders(args.projectId);
+      const includeLogs = args.includeLogs !== false;
+      const reportPath = `/v1/admin/reports/${encodeURIComponent(args.reportId)}`;
 
       // Every source is a route that exists (a guard test resolves each path
       // against the API route manifest), and none swallows its own failure: a
@@ -1814,7 +1932,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       }
       const [similarRes, blastRes] = await Promise.allSettled([
         similarityQuery
-          ? apiCall<{ results?: Array<{ reportId?: string }> }>('/v1/admin/reports/similarity', {
+          ? apiCall<{ results?: Array<{ reportId: string; similarity: number }> }>('/v1/admin/reports/similarity', {
               method: 'POST',
               headers,
               body: JSON.stringify({ query: similarityQuery, k: 6, threshold: 0.3, projectId: pid }),
@@ -1829,77 +1947,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       // The report is its own nearest neighbour — drop it.
       const similarBugs =
         similarRes.status === 'fulfilled' && similarRes.value
-          ? (similarRes.value.results ?? []).filter((r) => r.reportId !== args.report_id).slice(0, 5)
+          ? (similarRes.value.results ?? []).filter((r) => r.reportId !== args.reportId).slice(0, 5)
           : null;
-      const severity = report ? (report as Record<string, unknown>).severity : 'unknown';
-      const category = report ? (report as Record<string, unknown>).category : 'unknown';
-      const status = report ? (report as Record<string, unknown>).status : 'unknown';
-
-      // Build recommended next actions based on report state
-      const actions: Array<{
-        action: string;
-        reason: string;
-        tool?: string;
-        args?: Record<string, unknown>;
-      }> = [];
-
-      // A dispatched-then-skipped/failed fix used to leave the report in
-      // 'classified' with no trace, so this branch recommended dispatch_fix
-      // forever (2026-08-16 audit P0-2). fix-worker now stamps
-      // processing_error ('autofix_blocked: …') and closes the attempt —
-      // surface the blocker instead of re-recommending the same dispatch.
-      const processingError = report
-        ? ((report as Record<string, unknown>).processing_error as string | null)
-        : null;
-      const attempts = report
-        ? (((report as Record<string, unknown>).fix_attempts as Array<Record<string, unknown>>) ??
-          [])
-        : [];
-      const lastAttempt = attempts.length > 0 ? attempts[attempts.length - 1] : null;
-      const lastAttemptStatus = lastAttempt ? String(lastAttempt.status ?? '') : '';
-      const autofixBlocked =
-        (typeof processingError === 'string' && processingError.startsWith('autofix_blocked:')) ||
-        lastAttemptStatus.startsWith('skipped') ||
-        lastAttemptStatus === 'failed';
-
-      if (autofixBlocked && status !== 'fixing' && status !== 'fixed') {
-        const blockReason =
-          (typeof processingError === 'string' && processingError) ||
-          String(lastAttempt?.error ?? 'previous fix attempt was skipped or failed');
-        actions.push({
-          action: 'unblock_autofix',
-          reason: `Auto-fix is blocked: ${blockReason}. Resolve the blocker (settings/integration/budget), then re-dispatch.`,
-          tool: 'diagnose_setup',
-          args: { mode: 'dispatch' },
-        });
-        actions.push({
-          action: 'redispatch_after_unblock',
-          reason: 'Once the blocker above is resolved, dispatch a fresh fix attempt.',
-          tool: 'dispatch_fix',
-          args: { reportId: args.report_id },
-        });
-      } else if (status === 'new' || status === 'classified') {
-        actions.push({
-          action: 'dispatch_fix',
-          reason: 'Report is classified and no fix has been attempted',
-          tool: 'dispatch_fix',
-          args: { reportId: args.report_id },
-        });
-      } else if (status === 'fixing') {
-        actions.push({
-          action: 'check_fix_progress',
-          reason: 'Fix is in progress — check the fix timeline for latest status',
-          tool: 'get_fix_timeline',
-          args: { reportId: args.report_id },
-        });
-      } else if (status === 'fixed') {
-        actions.push({
-          action: 'verify_fix',
-          reason: 'Fix was applied — verify it resolved the issue',
-          tool: 'get_fix_context',
-          args: { reportId: args.report_id },
-        });
-      }
+      const text = (v: unknown): string | null => (typeof v === 'string' ? v : v == null ? null : String(v));
+      const severity = report ? text(report.severity) : 'unknown';
+      const category = report ? text(report.category) : 'unknown';
+      const status = report ? text(report.status) : 'unknown';
+      // Same next-step logic on both transports (report-shapes.ts).
+      const actions = triageRecommendedActions(report, args.reportId);
 
       const partial_errors: string[] = [];
       if (reportRes.status === 'rejected') {
@@ -1919,21 +1974,20 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       }
 
       const result = {
-        report_id: args.report_id,
+        report_id: args.reportId,
         severity,
         category,
         status,
         partial_errors,
         notes,
-        report:
-          reportRes.status === 'fulfilled' ? reportRes.value : { error: String(reportRes.reason) },
+        report: report ? projectReportDetail(report, false) : { error: String((reportRes as PromiseRejectedResult).reason) },
         reporter_thread: evidenceRes.status === 'fulfilled' ? evidenceRes.value : null,
         similar_bugs: similarBugs,
         fix_context: report ? fixContextOf(report) : null,
         blast_radius: blastRes.status === 'fulfilled' ? blastRes.value : null,
         recent_logs: logsRes.status === 'fulfilled' ? logsRes.value : null,
         recommended_actions: actions,
-        triage_summary: `[${severity}] ${category} — status: ${status}. ${actions.length > 0 ? `Recommended: ${actions[0]?.action}.` : 'No action required.'}`,
+        triage_summary: triageSummaryOf(report, actions),
       };
       const res = jsonResult(result);
       // A spec resource_link content item lets clients render a "Project
@@ -2040,7 +2094,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('triage_next_steps'),
       annotations: annotationsFor('triage_next_steps'),
       inputSchema: z.object({
-        project_id: z
+        projectId: z
           .string()
           .uuid()
           .optional()
@@ -2067,7 +2121,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       //   4. robot/cron chores (library-modernizer bumps) last
       // Existed only as an MCP *prompt* until 2026-08-16 (audit P0-3) —
       // most clients never surface prompts, so nobody could reach it.
-      const pid = await resolveProjectId(args.project_id);
+      const pid = await resolveProjectId(args.projectId);
       const extraHeaders: Record<string, string> =
         pid !== projectId ? { 'X-Mushi-Project-Id': pid } : {};
       const data = await apiCall<{ reports: Array<Record<string, unknown>>; total: number }>(
@@ -2109,7 +2163,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           action: `Shepherd in-flight fix: ${label(r)}`,
           reason: 'A fix branch/PR is open — check CI and merge when green.',
           tool: 'get_report_timeline',
-          args: { report_id: r.id },
+          args: { reportId: r.id },
         });
       }
 
@@ -2127,7 +2181,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           action: `Triage [${r.severity}] ${label(r)}`,
           reason: 'User-felt report awaiting triage — review the packet, then dispatch or dismiss.',
           tool: 'triage_issue',
-          args: { report_id: r.id },
+          args: { reportId: r.id },
         });
       }
 
@@ -2161,9 +2215,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       inputSchema: z.object({
         reportId: z.string().uuid().describe('Report UUID to fix'),
         agent: z
-          .enum(['claude_code', 'codex', 'rest_worker', 'mcp'])
+          .enum(DISPATCH_AGENTS)
           .optional()
-          .describe('Override the agent adapter'),
+          .describe('Which agent runs the fix. Omit for the project default (auto); cursor_cloud and github_cloud_agent dispatch a cloud agent.'),
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — defaults to the configured project.'),
         idempotencyKey: z
           .string()
           .uuid()
@@ -2203,6 +2261,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           /* client doesn't support progress — fine */
         }
       }
+      const pid = args.projectId ? await resolveProjectId(args.projectId) : projectId;
       // apiCall unwraps the { ok, data } envelope — this is the inner payload.
       const dispatch = await apiCall<{
         dispatchId?: string;
@@ -2215,7 +2274,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           reportId: args.reportId,
           agent: args.agent,
           inventoryActionNodeId: args.inventoryActionNodeId,
-          ...(projectId ? { projectId } : {}),
+          ...(pid ? { projectId: pid } : {}),
         }),
       });
       // The API's inner payload is { dispatchId, status, createdAt }. The
@@ -2316,6 +2375,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .boolean()
           .optional()
           .describe('True when the PR was already merged (idempotent no-op)'),
+        // The merge route also returns these; declaring them keeps a strict
+        // client from rejecting a merge that already happened.
+        justMerged: z.boolean().optional().describe('True when this call performed the merge'),
+        sha: z.string().nullable().optional().describe('Merge commit SHA, when GitHub reported one'),
         reportId: z.string().describe('Report UUID linked to this fix attempt'),
         reportStatus: z.string().describe('Report workflow status after merge bookkeeping'),
       }),
@@ -2433,28 +2496,28 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('query_lessons'),
       annotations: annotationsFor('query_lessons'),
       inputSchema: z.object({
-        diff_text: z
+        diffText: z
           .string()
           .describe('The PR diff, code snippet, or description of the change being made.'),
-        max_tokens: z
+        maxTokens: z
           .number()
           .optional()
           .describe('Maximum tokens for returned lessons context (default 3000, max 8000).'),
-        top_k: z
+        topK: z
           .number()
           .optional()
           .describe('Max number of lessons to return (default 15, max 50).'),
-        project_id: z.string().optional().describe('Project UUID. Defaults to configured project.'),
+        projectId: z.string().optional().describe('Project UUID. Defaults to configured project.'),
       }),
     },
     async (args) => {
-      const pid = args.project_id ?? projectId;
+      const pid = args.projectId ?? projectId;
       const data = await apiCall<unknown>('/v1/admin/lessons/query', {
         method: 'POST',
         body: JSON.stringify({
-          diff_text: args.diff_text,
-          ...(args.max_tokens !== undefined ? { max_tokens: args.max_tokens } : {}),
-          ...(args.top_k !== undefined ? { top_k: args.top_k } : {}),
+          diff_text: args.diffText,
+          ...(args.maxTokens !== undefined ? { max_tokens: args.maxTokens } : {}),
+          ...(args.topK !== undefined ? { top_k: args.topK } : {}),
           ...(pid ? { project_id: pid } : {}),
         }),
       });
@@ -2475,14 +2538,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .optional()
           .describe('Filter to one severity level'),
         limit: z.number().optional().describe('Max lessons to return (default 50, max 200)'),
-        project_id: z.string().optional().describe('Project UUID — defaults to configured project'),
+        projectId: z.string().optional().describe('Project UUID — defaults to configured project'),
       }),
       outputSchema: z.object({
         lessons: z.array(z.unknown()).describe('Promoted lesson rows ordered by frequency'),
       }),
     },
     async (args) => {
-      const pid = args.project_id ?? projectId;
+      const pid = args.projectId ?? projectId;
       const params = new URLSearchParams();
       if (args.severity) params.set('severity', args.severity);
       params.set('limit', String(Math.min(args.limit ?? 50, 200)));
@@ -2493,7 +2556,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   );
 
-  // --- Resources (stdio only — hosted HTTP exposes these as separate tools) ---
+  // --- Resources (hosted serves the same URIs: functions/mcp/hosted-resources.ts) ---
 
   server.registerResource(
     'project_stats',
@@ -2590,7 +2653,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('award_bonus_points'),
       annotations: annotationsFor('award_bonus_points'),
       inputSchema: z.object({
-        external_user_id: z.string().describe('The host-app user id as passed to Mushi.identify()'),
+        externalUserId: z.string().describe('The host-app user id as passed to Mushi.identify()'),
         points: z
           .number()
           .int()
@@ -2600,7 +2663,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         reason: z.string().max(200).describe('Human-readable reason, logged to end_user_activity'),
       }),
     },
-    async ({ external_user_id, points, reason }) => ({
+    async ({ externalUserId, points, reason }) => ({
       content: [
         {
           type: 'text' as const,
@@ -2608,7 +2671,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
             await apiCall('/v1/admin/rewards/bonus-points', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ external_user_id, points, reason }),
+              body: JSON.stringify({ external_user_id: externalUserId, points, reason }),
             }),
             null,
             2,
@@ -2625,14 +2688,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('set_tier'),
       annotations: annotationsFor('set_tier'),
       inputSchema: z.object({
-        external_user_id: z.string().describe('The host-app user id as passed to Mushi.identify()'),
-        tier_slug: z
+        externalUserId: z.string().describe('The host-app user id as passed to Mushi.identify()'),
+        tierSlug: z
           .string()
           .describe('Tier slug to assign, e.g. "champion", "contributor", "explorer"'),
         reason: z.string().max(200).optional().describe('Optional reason for manual override'),
       }),
     },
-    async ({ external_user_id, tier_slug, reason }) => ({
+    async ({ externalUserId, tierSlug, reason }) => ({
       content: [
         {
           type: 'text' as const,
@@ -2640,7 +2703,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
             await apiCall('/v1/admin/rewards/set-tier', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ external_user_id, tier_slug, reason }),
+              body: JSON.stringify({ external_user_id: externalUserId, tier_slug: tierSlug, reason }),
             }),
             null,
             2,
@@ -2753,14 +2816,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('activation_status'),
       annotations: annotationsFor('activation_status'),
       inputSchema: z.object({
-        project_id: z
+        projectId: z
           .string()
           .optional()
           .describe('Project UUID (defaults to the configured project).'),
       }),
     },
     async (args) => {
-      const pid = args.project_id ?? projectId;
+      const pid = args.projectId ?? projectId;
       const qs = pid ? `?project_id=${encodeURIComponent(pid)}` : '';
       return jsonResult(await apiCall(`/v1/admin/activation${qs}`));
     },
@@ -2811,7 +2874,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .string()
           .optional()
           .describe('Event property to split every step by (e.g. "utm_source", "$surface").'),
-        project_id: z
+        projectId: z
           .string()
           .optional()
           .describe('Project UUID (defaults to the configured project).'),
@@ -2823,7 +2886,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         window: args.stepWindow ?? '7d',
         ...trailingRange(args.windowDays ?? 30),
         breakdown: args.breakdown,
-        project_id: args.project_id ?? projectId,
+        project_id: args.projectId ?? projectId,
       });
       return jsonResult(await apiCall(`/v1/admin/events/funnel?${qs}`));
     },
@@ -2843,7 +2906,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .max(365)
           .optional()
           .describe('Trailing window in days (default 30).'),
-        project_id: z
+        projectId: z
           .string()
           .optional()
           .describe('Project UUID (defaults to the configured project).'),
@@ -2852,7 +2915,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     async (args) => {
       const qs = eventsQuery({
         window: args.windowDays ?? 30,
-        project_id: args.project_id ?? projectId,
+        project_id: args.projectId ?? projectId,
       });
       return jsonResult(await apiCall(`/v1/admin/events/summary?${qs}`));
     },
@@ -2880,7 +2943,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .max(50)
           .optional()
           .describe('Max distinct paths to return (default 20, max 50).'),
-        project_id: z
+        projectId: z
           .string()
           .optional()
           .describe('Project UUID (defaults to the configured project).'),
@@ -2891,7 +2954,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         from_event: args.fromEvent,
         ...trailingRange(args.windowDays ?? 30),
         limit: args.limit ?? 20,
-        project_id: args.project_id ?? projectId,
+        project_id: args.projectId ?? projectId,
       });
       return jsonResult(await apiCall(`/v1/admin/events/paths?${qs}`));
     },
@@ -3135,6 +3198,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         needsHumanReview: z
           .boolean()
           .describe('True when the story requires operator approval before scheduled runs'),
+        // test-gen-from-story also returns these; undeclared, a strict client
+        // rejected a generation that had already opened its PR.
+        path: z.string().optional().describe('Repo path of the generated Playwright spec'),
+        firecrawlActionsYaml: z
+          .string()
+          .nullable()
+          .optional()
+          .describe('Firecrawl actions YAML for the story, when the generator produced one'),
       }),
     },
     async ({ projectId, storyNodeId, automationMode, baseUrl, openPr }) => {
@@ -3443,15 +3514,15 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('run_fullstack_audit'),
       annotations: annotationsFor('run_fullstack_audit'),
       inputSchema: z.object({
-        project_id: z
+        projectId: z
           .string()
           .optional()
           .describe('Project ID to audit. Defaults to the configured project.'),
       }),
     },
-    async ({ project_id }) => {
-      const pid = project_id ?? config.projectId;
-      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT_ID', 'project_id is required');
+    async ({ projectId: requested }) => {
+      const pid = requested ?? config.projectId;
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT_ID', 'projectId is required');
       const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/audit`, {
         method: 'POST',
         body: '{}',
@@ -3467,24 +3538,24 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('get_backend_health'),
       annotations: annotationsFor('get_backend_health'),
       inputSchema: z.object({
-        project_id: z
+        projectId: z
           .string()
           .optional()
           .describe('Project ID. Defaults to the configured project.'),
-        include_logs: z
+        includeLogs: z
           .boolean()
           .optional()
           .describe('Whether to include recent backend error logs (default: true).'),
       }),
     },
-    async ({ project_id, include_logs = true }) => {
-      const pid = project_id ?? config.projectId;
-      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT_ID', 'project_id is required');
+    async ({ projectId: requested, includeLogs = true }) => {
+      const pid = requested ?? config.projectId;
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT_ID', 'projectId is required');
 
       const [schemaRes, advisorsRes, logsRes] = await Promise.allSettled([
         apiCall<unknown>(`/v1/admin/projects/${pid}/backend/schema`),
         apiCall<unknown>(`/v1/admin/projects/${pid}/db-advisors`),
-        include_logs
+        includeLogs
           ? apiCall<unknown>(`/v1/admin/projects/${pid}/backend/logs?service=api`)
           : Promise.resolve(null),
       ]);
@@ -3499,7 +3570,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         logs:
           logsRes.status === 'fulfilled'
             ? logsRes.value
-            : include_logs
+            : includeLogs
               ? { error: String(logsRes.reason) }
               : null,
       };
@@ -3515,27 +3586,34 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('get_usage'),
       annotations: annotationsFor('get_usage'),
       inputSchema: z.object({
-        project_id: z
+        projectId: z
           .string()
           .optional()
-          .describe('Project ID. Defaults to the configured project.'),
+          .describe('Project UUID — defaults to the configured project.'),
+      }),
+      // Loose: the billing stats route returns ~30 fields (plan, report and
+      // diagnosis quotas, spend cap, period); the documented ones are typed.
+      outputSchema: z.looseObject({
+        projectId: z.string().nullable().optional(),
+        planId: z.string().optional().describe('Active plan id, e.g. free_cloud, hobby, pro'),
+        planDisplayName: z.string().optional(),
+        diagnosesUsed: z.number().optional().describe('Diagnoses used this billing period'),
+        diagnosesLimit: z.number().nullable().optional().describe('Diagnoses included in the plan (null = unlimited)'),
+        diagnosesUsagePct: z.number().nullable().optional(),
+        overDiagnosisQuota: z.boolean().optional(),
+        approachingDiagnosisQuota: z.boolean().optional(),
+        monthlySpendCapUsd: z.number().nullable().optional(),
+        periodEnd: z.string().nullable().optional().describe('ISO timestamp the billing period ends'),
+        freeLimitDiagnoses: z.number().optional(),
       }),
     },
-    async ({ project_id }) => {
-      const pid = project_id ?? config.projectId;
-      const path = pid ? `/v1/admin/billing/stats?project_id=${pid}` : '/v1/admin/billing/stats';
-      const data = await apiCall<{
-        planId: string;
-        diagnosesUsed: number;
-        diagnosesLimit: number | null;
-        diagnosesUsagePct: number | null;
-        overDiagnosisQuota: boolean;
-        approachingDiagnosisQuota: boolean;
-        monthlySpendCapUsd: number | null;
-        periodEnd: string | null;
-        freeLimitDiagnoses: number;
-      }>(path);
-      return jsonText(data);
+    async (args) => {
+      // The stats route scopes by the X-Mushi-Project-Id header; a
+      // ?project_id= query string was silently ignored, so asking about
+      // another project returned the configured one's numbers.
+      const headers = args.projectId ? (await projectScopeHeaders(args.projectId)).headers : undefined;
+      const data = await apiCall<Record<string, unknown>>('/v1/admin/billing/stats', { headers });
+      return jsonResult(data);
     },
   );
 
@@ -3547,10 +3625,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('list_skills'),
       annotations: annotationsFor('list_skills'),
       inputSchema: z.object({
-        category: z
-          .string()
-          .optional()
-          .describe('Filter by category: workflow, debug, test, audit, enhance, …'),
+        category: z.enum(SKILL_CATEGORIES).optional().describe('Only skills in this category (the slug prefix).'),
         search: z.string().optional().describe('Free-text search across slug, title, description'),
         page: z.number().optional().describe('Page number (default 1)'),
         limit: z.number().optional().describe('Max results per page (default 200, max 200)'),
@@ -3592,30 +3667,35 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('start_skill_pipeline'),
       annotations: annotationsFor('start_skill_pipeline'),
       inputSchema: z.object({
-        root_skill_slug: z
+        rootSkillSlug: z
           .string()
           .describe('Root skill slug to run, e.g. "workflow-fix-and-ship"'),
-        report_id: z.string().optional().describe('Report UUID to attach the pipeline to'),
+        reportId: z.string().optional().describe('Report UUID to attach the pipeline to'),
         mode: z
           .enum(['handoff', 'cloud'])
           .optional()
           .describe(
             'handoff (default): get context packet for local agent. cloud: auto-dispatch via Cursor Cloud.',
           ),
-        project_id: z
+        projectId: z
           .string()
           .optional()
           .describe('Project UUID. Falls back to the configured project.'),
       }),
     },
     async (args) => {
-      const resolvedProjectId = args.project_id ?? projectId;
-      if (!resolvedProjectId) return jsonText({ error: 'No project_id provided or configured.' });
+      const resolvedProjectId = args.projectId ?? projectId;
+      if (!resolvedProjectId) return jsonText({ error: 'No projectId provided or configured.' });
       // apiCall unwraps to the run row (includes id, chain_slugs, context_packet).
-      // Spread args first so the resolved project_id always wins.
+      // The route reads snake_case body fields.
       const data = await apiCall<Record<string, unknown>>('/v1/admin/skills/pipelines', {
         method: 'POST',
-        body: JSON.stringify({ ...args, project_id: resolvedProjectId }),
+        body: JSON.stringify({
+          root_skill_slug: args.rootSkillSlug,
+          report_id: args.reportId,
+          mode: args.mode,
+          project_id: resolvedProjectId,
+        }),
       });
       return jsonText(data);
     },
@@ -3628,11 +3708,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('get_pipeline_run'),
       annotations: annotationsFor('get_pipeline_run'),
       inputSchema: z.object({
-        run_id: z.string().describe('Pipeline run UUID'),
+        runId: z.string().describe('Pipeline run UUID'),
       }),
     },
     async (args) => {
-      const data = await apiCall<unknown>(`/v1/admin/skills/pipelines/${args.run_id}`);
+      const data = await apiCall<unknown>(`/v1/admin/skills/pipelines/${args.runId}`);
       return jsonText(data);
     },
   );
@@ -3644,21 +3724,21 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('checkin_pipeline_step'),
       annotations: annotationsFor('checkin_pipeline_step'),
       inputSchema: z.object({
-        run_id: z.string().describe('Pipeline run UUID'),
-        step_index: z.number().describe('Step index (0-based)'),
+        runId: z.string().describe('Pipeline run UUID'),
+        stepIndex: z.number().describe('Step index (0-based)'),
         status: z.enum(['running', 'passed', 'failed', 'skipped']).describe('Step status'),
         notes: z.string().optional().describe('Optional notes or output summary'),
-        pr_url: z.string().optional().describe('PR URL opened during this step'),
-        agent_ref: z.string().optional().describe('Cursor agentId or external agent reference'),
+        prUrl: z.string().optional().describe('PR URL opened during this step'),
+        agentRef: z.string().optional().describe('Cursor agentId or external agent reference'),
       }),
     },
     async (args) => {
-      const { run_id, step_index, ...body } = args;
-      await apiCall(`/v1/admin/skills/pipelines/${run_id}/steps/${step_index}/checkin`, {
+      // The route reads snake_case body fields.
+      await apiCall(`/v1/admin/skills/pipelines/${args.runId}/steps/${args.stepIndex}/checkin`, {
         method: 'POST',
-        body: JSON.stringify(body),
+        body: JSON.stringify({ status: args.status, notes: args.notes, pr_url: args.prUrl, agent_ref: args.agentRef }),
       });
-      return jsonText({ ok: true, message: `Step ${step_index} → ${args.status}` });
+      return jsonText({ ok: true, message: `Step ${args.stepIndex} → ${args.status}` });
     },
   );
 
@@ -3671,27 +3751,27 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('ask_codebase', CODEBASE_TOOL_CATALOG),
       annotations: annotationsFor('ask_codebase', CODEBASE_TOOL_CATALOG),
       inputSchema: z.object({
-        project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        projectId: z.string().optional().describe('Project UUID (defaults to configured project)'),
         question: z.string().describe('Plain-English question about the repo'),
-        thread_id: z
+        threadId: z
           .string()
           .optional()
           .describe('Optional thread UUID to continue a conversation'),
-        file_path: z.string().optional().describe('Optional file path focus'),
-        symbol_name: z.string().optional().describe('Optional symbol name focus'),
+        filePath: z.string().optional().describe('Optional file path focus'),
+        symbolName: z.string().optional().describe('Optional symbol name focus'),
       }),
     },
     async (args) => {
-      const pid = args.project_id ?? projectId;
-      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required');
+      const pid = args.projectId ?? projectId;
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required');
       const body: Record<string, unknown> = {
         messages: [{ role: 'user', content: args.question }],
       };
-      if (args.thread_id) body.threadId = args.thread_id;
-      if (args.file_path) {
+      if (args.threadId) body.threadId = args.threadId;
+      if (args.filePath) {
         body.fileFocus = {
-          file_path: args.file_path,
-          symbol_name: args.symbol_name ?? null,
+          file_path: args.filePath,
+          symbol_name: args.symbolName ?? null,
         };
       }
       const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/chat`, {
@@ -3709,17 +3789,17 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('get_file_summary', CODEBASE_TOOL_CATALOG),
       annotations: annotationsFor('get_file_summary', CODEBASE_TOOL_CATALOG),
       inputSchema: z.object({
-        project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
-        file_path: z.string().describe('Indexed file path'),
-        symbol_name: z.string().optional().describe('Optional symbol name within the file'),
+        projectId: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        filePath: z.string().describe('Indexed file path'),
+        symbolName: z.string().optional().describe('Optional symbol name within the file'),
         force: z.boolean().optional().describe('Bypass cache and regenerate'),
       }),
     },
     async (args) => {
-      const pid = args.project_id ?? projectId;
-      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required');
-      const qs = new URLSearchParams({ file_path: args.file_path });
-      if (args.symbol_name) qs.set('symbol_name', args.symbol_name);
+      const pid = args.projectId ?? projectId;
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required');
+      const qs = new URLSearchParams({ file_path: args.filePath });
+      if (args.symbolName) qs.set('symbol_name', args.symbolName);
       if (args.force) qs.set('force', '1');
       const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/summary?${qs}`);
       return jsonText(data);
@@ -3733,13 +3813,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('get_codebase_tour', CODEBASE_TOOL_CATALOG),
       annotations: annotationsFor('get_codebase_tour', CODEBASE_TOOL_CATALOG),
       inputSchema: z.object({
-        project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        projectId: z.string().optional().describe('Project UUID (defaults to configured project)'),
         force: z.boolean().optional().describe('Bypass cache and regenerate'),
       }),
     },
     async (args) => {
-      const pid = args.project_id ?? projectId;
-      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required');
+      const pid = args.projectId ?? projectId;
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required');
       const qs = args.force ? '?force=1' : '';
       const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/tour${qs}`);
       return jsonText(data);
@@ -3753,7 +3833,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('search_codebase', CODEBASE_TOOL_CATALOG),
       annotations: annotationsFor('search_codebase', CODEBASE_TOOL_CATALOG),
       inputSchema: z.object({
-        project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        projectId: z.string().optional().describe('Project UUID (defaults to configured project)'),
         query: z.string().describe('Plain-English search query against indexed source files'),
         k: z
           .number()
@@ -3762,30 +3842,35 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .max(20)
           .optional()
           .describe('Max hits to return (default 8, max 20)'),
-        scope_prefix: z
+        scopePrefix: z
           .string()
           .optional()
           .describe('Optional repo subdirectory prefix to limit search scope'),
+        mode: z
+          .enum(CODEBASE_SEARCH_MODES)
+          .optional()
+          .describe('semantic (default): embedding similarity. name: substring match on file path and symbol name.'),
       }),
       outputSchema: z.object({
         results: z
           .array(z.unknown())
           .describe('Ranked file/symbol hits with paths, line ranges, and similarity'),
         query: z.string().describe('Normalized query string that was searched'),
-        mode: z.string().optional().describe('semantic (embeddings) or name (path/symbol match)'),
+        mode: z.enum(CODEBASE_SEARCH_MODES).optional().describe('Which search ran: semantic or name'),
       }),
     },
     async (args) => {
-      const pid = args.project_id ?? projectId;
-      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required');
-      const data = await apiCall<{ results: unknown[]; query: string; mode?: string }>(
+      const pid = args.projectId ?? projectId;
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required');
+      const data = await apiCall<{ results: unknown[]; query: string; mode?: (typeof CODEBASE_SEARCH_MODES)[number] }>(
         `/v1/admin/projects/${pid}/codebase/search`,
         {
           method: 'POST',
           body: JSON.stringify({
             query: args.query,
             k: args.k ?? 8,
-            scope_prefix: args.scope_prefix ?? undefined,
+            scope_prefix: args.scopePrefix ?? undefined,
+            mode: args.mode,
           }),
         },
       );
@@ -3800,17 +3885,17 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('get_codebase_domains', CODEBASE_TOOL_CATALOG),
       annotations: annotationsFor('get_codebase_domains', CODEBASE_TOOL_CATALOG),
       inputSchema: z.object({
-        project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        projectId: z.string().optional().describe('Project UUID (defaults to configured project)'),
         force: z.boolean().optional().describe('Bypass cache and regenerate'),
-        scope_prefix: z.string().optional().describe('Optional subdirectory scope prefix'),
+        scopePrefix: z.string().optional().describe('Optional subdirectory scope prefix'),
       }),
     },
     async (args) => {
-      const pid = args.project_id ?? projectId;
-      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required');
+      const pid = args.projectId ?? projectId;
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required');
       const qs = new URLSearchParams();
       if (args.force) qs.set('force', '1');
-      if (args.scope_prefix) qs.set('scope_prefix', args.scope_prefix);
+      if (args.scopePrefix) qs.set('scope_prefix', args.scopePrefix);
       const suffix = qs.toString() ? `?${qs}` : '';
       const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/domains${suffix}`);
       return jsonText(data);
@@ -3824,7 +3909,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('analyze_codebase_impact', CODEBASE_TOOL_CATALOG),
       annotations: annotationsFor('analyze_codebase_impact', CODEBASE_TOOL_CATALOG),
       inputSchema: z.object({
-        project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        projectId: z.string().optional().describe('Project UUID (defaults to configured project)'),
         paths: z
           .array(z.string())
           .optional()
@@ -3837,7 +3922,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .string()
           .optional()
           .describe('GitHub compare range base...head when source=compare'),
-        fix_id: z
+        fixId: z
           .string()
           .optional()
           .describe("Fix attempt UUID — uses that PR's changed files when source=fix"),
@@ -3861,13 +3946,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       }),
     },
     async (args) => {
-      const pid = args.project_id ?? projectId;
-      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required');
+      const pid = args.projectId ?? projectId;
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required');
       const qs = new URLSearchParams();
       if (args.paths?.length) qs.set('paths', args.paths.join(','));
       if (args.source === 'last_push') qs.set('ref', 'last_push');
       if (args.compare) qs.set('compare', args.compare);
-      if (args.fix_id) qs.set('fix_id', args.fix_id);
+      if (args.fixId) qs.set('fix_id', args.fixId);
       if (!qs.toString()) {
         throw new MushiApiError(
           400,
@@ -3893,12 +3978,12 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('analyze_wiki_knowledge', CODEBASE_TOOL_CATALOG),
       annotations: annotationsFor('analyze_wiki_knowledge', CODEBASE_TOOL_CATALOG),
       inputSchema: z.object({
-        project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        projectId: z.string().optional().describe('Project UUID (defaults to configured project)'),
       }),
     },
     async (args) => {
-      const pid = args.project_id ?? projectId;
-      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required');
+      const pid = args.projectId ?? projectId;
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required');
       const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/knowledge/graph`);
       return jsonText(data);
     },
@@ -3907,7 +3992,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   // ── use_mushi meta-tool ────────────────────────────────────────────────────
   // Single entry point for orientation and context-cost reduction.
   // Returns a curated tool list for the agent's stated intent so it can skip
-  // loading all 68 tool descriptions up-front (mirrors Sentry's `use_sentry`).
+  // loading every tool description up-front (mirrors Sentry's `use_sentry`).
   server.registerTool(
     'use_mushi',
     {
@@ -4212,7 +4297,6 @@ export function createSetupModeServer(config: SetupModeServerConfig): McpServer 
       },
       inputSchema: z.object({
         mode: z.enum(['full', 'ingest', 'dispatch']).optional(),
-        project_id: z.string().optional(),
         projectId: z.string().optional(),
       }),
     },

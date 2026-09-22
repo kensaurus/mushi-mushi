@@ -44,6 +44,8 @@ var AS_METADATA = JSON.stringify({
   grant_types_supported: ['authorization_code', 'client_credentials'],
   token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
   code_challenge_methods_supported: ['S256'],
+  // RFC 9207: authorization responses carry iss (api/routes/mcp-oauth.ts).
+  authorization_response_iss_parameter_supported: true,
 })
 
 function prmFor(uri) {

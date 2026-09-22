@@ -19,6 +19,14 @@
  *  4. Every /v1/ API path either server (or the hosted manifest) calls is a
  *     route the api function registers.
  *
+ *  5. Both transports share one feature map that covers every tool (and only tools).
+ *
+ *  6. Server instructions and the use_mushi intents match across transports.
+ *
+ *  7. Hosted tools take title, description, annotations, input and output
+ *     schemas from the generated catalog copy (no hand-declared metadata), and
+ *     the shared arg-aliases.ts / report-shapes.ts are byte-identical.
+ *
  * Run: `node packages/mcp/scripts/check-catalog-sync.mjs`
  *
  * Exit 0 = clean; Exit 1 = hard failures found.
@@ -101,6 +109,17 @@ const manifestContent = read('packages/server/supabase/functions/_shared/mcp-hos
 const canonicalEntries = extractEntries(canonicalContent)
 const canonicalMap = new Map(canonicalEntries.map((t) => [t.name, t.scope]))
 
+/** RESOURCE_CATALOG names — MCP resources on both transports, never hosted tools. */
+const resourceNames = new Set(
+  [...(canonicalContent.split('export const RESOURCE_CATALOG')[1]?.split('\n];')[0] ?? '').matchAll(/name:\s*'([^']+)'/g)].map((m) => m[1]),
+)
+/** Tool names across TOOL_CATALOG, TDD_TOOL_CATALOG and CODEBASE_TOOL_CATALOG. */
+const canonicalToolNames = new Set(
+  ['TOOL_CATALOG', 'TDD_TOOL_CATALOG', 'CODEBASE_TOOL_CATALOG'].flatMap((anchor) =>
+    [...(canonicalContent.split(`export const ${anchor}: ToolSpec[] = [`)[1]?.split('\n];')[0] ?? '').matchAll(/^ {4}name:\s*'([^']+)'/gm)].map((m) => m[1]),
+  ),
+)
+
 const adminReexportsCanonical =
   /from\s+['"]@mushi-mushi\/mcp\/catalog['"]/.test(adminContent)
 const adminEntries = adminReexportsCanonical ? canonicalEntries : extractEntries(adminContent)
@@ -147,6 +166,10 @@ for (const hosted of hostedTools) {
   const canonicalScope = canonicalMap.get(hosted.name)
   if (canonicalScope === undefined) {
     fail(`Hosted tool "${hosted.name}" not in canonical catalog — add it to TOOL_CATALOG or TDD_TOOL_CATALOG in packages/mcp/src/catalog.ts`)
+  } else if (!canonicalToolNames.has(hosted.name)) {
+    // project_dashboard & co. were hosted tools until 2026-09-22 while stdio
+    // served them as resources; hosted serves them as resources too now.
+    fail(`Hosted tool "${hosted.name}" is a RESOURCE_CATALOG resource, not a tool — serve it from mcp/hosted-resources.ts, not the tool manifest`)
   } else if (canonicalScope !== hosted.scope) {
     fail(`Hosted "${hosted.name}": scope mismatch — hosted="${hosted.scope}", canonical="${canonicalScope}"`)
   } else {
@@ -155,8 +178,11 @@ for (const hosted of hostedTools) {
 }
 if (hostedOk > 0) info(`${hostedOk} hosted tools match canonical catalog`)
 
-// Informational: canonical entries not in hosted (expected unless --strict-full-parity)
-const canonicalNotInHosted = canonicalEntries.filter((t) => !hostedTools.find((h) => h.name === t.name))
+// Informational: canonical tools not in hosted (expected unless --strict-full-parity).
+// Resource-only names are excluded: they are resources on both transports.
+const canonicalNotInHosted = canonicalEntries.filter(
+  (t) => canonicalToolNames.has(t.name) && !hostedTools.find((h) => h.name === t.name),
+)
 if (canonicalNotInHosted.length > 0) {
   if (strictFullParity) {
     for (const t of canonicalNotInHosted) {
@@ -323,14 +349,17 @@ console.log(`\n── Check 5: Feature-group map ──────────�
   }
   const mapSource = stdioGroups.split('export const TOOL_FEATURE_MAP')[1]?.split('\n}')[0] ?? ''
   const mapped = new Set([...mapSource.matchAll(/^ {2}([a-z_]+):\s*'[a-z]+',/gm)].map((m) => m[1]))
-  const resourceNames = new Set(
-    [...(canonicalContent.split('export const RESOURCE_CATALOG')[1]?.split('\n];')[0] ?? '').matchAll(/name:\s*'([^']+)'/g)].map((m) => m[1]),
-  )
   let unmapped = 0
-  for (const { name } of canonicalEntries) {
-    if (resourceNames.has(name) || mapped.has(name)) continue
+  for (const name of canonicalToolNames) {
+    if (mapped.has(name)) continue
     fail(`"${name}" has no TOOL_FEATURE_MAP entry — it would be hidden from every feature-filtered install`)
     unmapped++
+  }
+  for (const name of mapped) {
+    if (!canonicalToolNames.has(name)) {
+      fail(`TOOL_FEATURE_MAP maps "${name}", which is not a catalog tool${resourceNames.has(name) ? ' (it is a resource)' : ''}`)
+      unmapped++
+    }
   }
   if (unmapped === 0 && stdioGroups === hostedGroups) info(`every tool mapped; stdio and hosted feature maps identical`)
 }
@@ -387,33 +416,55 @@ console.log(`\n── Check 6: Server instructions + use_mushi intents ───
 
 // CHECK 7: hosted tool metadata comes from the generated catalog copy
 // mcp-discovery-tools.json is regenerated from packages/mcp (its own --check
-// runs in check:catalog-sync); this makes sure the hosted server reads it for
-// titles, descriptions, annotations and manifest input schemas, and reports
-// where a hand-written hosted tool and stdio disagree on outputSchema.
+// runs in check:catalog-sync) and carries each tool's title, description,
+// annotations, input schema and output schema. The hosted server must take all
+// of them from there: hand-declared copies drifted (descriptions, parameter
+// spellings, and outputSchema on one transport but not the other).
 console.log(`\n── Check 7: Hosted metadata from the generated catalog ──────────────────────`)
 {
   const manifestTools = read('packages/server/supabase/functions/mcp/manifest-tools.ts')
-  if (!/MCP_DISCOVERY\.tools\[name\]/.test(hostedContent)) {
-    fail('functions/mcp/index.ts no longer overlays titles/descriptions/annotations from MCP_DISCOVERY')
-  }
-  if (!/inputSchema:\s*canonical\?\.inputSchema/.test(manifestTools)) {
-    fail('functions/mcp/manifest-tools.ts no longer takes manifest input schemas from MCP_DISCOVERY')
-  }
-  const discovery = JSON.parse(read('packages/server/supabase/functions/_shared/mcp-discovery-tools.json'))
-  const baseSection = hostedContent.split('const BASE_TOOLS')[1]?.split('/** Full catalog')[0] ?? ''
-  const baseEntries = baseSection.split(/\n {2}(?=[a-z_]+: \{)/).slice(1)
-  let outputDrift = 0
-  for (const entry of baseEntries) {
-    const name = entry.match(/^([a-z_]+): \{/)?.[1]
-    const canonical = name ? discovery.tools?.[name] : undefined
-    if (!canonical) continue
-    const hostedHasOutput = /\n {4}outputSchema:/.test(entry)
-    if (hostedHasOutput !== Boolean(canonical.outputSchema)) {
-      warn(`"${name}": outputSchema ${hostedHasOutput ? 'declared on hosted only' : 'declared on stdio only'}`)
-      outputDrift++
+  const overlay = hostedContent.split('function withCatalogMetadata')[1]?.split('\n}\n')[0] ?? ''
+  if (!overlay) {
+    fail('functions/mcp/index.ts no longer builds hosted tools with withCatalogMetadata (metadata from MCP_DISCOVERY)')
+  } else {
+    for (const field of ['title', 'description', 'annotations', 'inputSchema', 'outputSchema']) {
+      if (!new RegExp(`${field}: canonical\\.${field}`).test(overlay)) {
+        fail(`functions/mcp/index.ts withCatalogMetadata no longer takes ${field} from MCP_DISCOVERY`)
+      }
     }
   }
-  if (outputDrift === 0) info('hosted BASE_TOOLS and stdio agree on outputSchema presence')
+  for (const field of ['inputSchema', 'outputSchema']) {
+    if (!new RegExp(`${field}: canonical\\??\\.${field}`).test(manifestTools)) {
+      fail(`functions/mcp/manifest-tools.ts no longer takes manifest ${field} from MCP_DISCOVERY`)
+    }
+  }
+  // A hand-written hosted tool is scope + handler only. Declaring metadata
+  // next to the handler is how the two transports drifted apart.
+  const baseSection = hostedContent.split('const BASE_TOOLS')[1]?.split('/** Full catalog')[0] ?? ''
+  const baseEntries = baseSection.split(/\n {2}(?=[a-z_]+: \{)/).slice(1)
+  let handDeclared = 0
+  for (const entry of baseEntries) {
+    const name = entry.match(/^([a-z_]+): \{/)?.[1]
+    for (const field of ['title', 'description', 'inputSchema', 'outputSchema', 'annotations']) {
+      if (new RegExp(`\\n {4}${field}:`).test(entry)) {
+        fail(`hosted BASE_TOOLS "${name}" declares its own ${field} — it comes from mcp-discovery-tools.json`)
+        handDeclared++
+      }
+    }
+  }
+  if (handDeclared === 0 && baseEntries.length > 0) {
+    info(`${baseEntries.length} hand-written hosted tools take all metadata (incl. input/output schemas) from the catalog`)
+  }
+
+  // Files both transports run byte-for-byte: the argument alias rule and the
+  // report projections behind get_report_detail / triage_issue / evidence.
+  for (const file of ['arg-aliases.ts', 'report-shapes.ts']) {
+    const stdio = read(`packages/mcp/src/${file}`)
+    const hosted = read(`packages/server/supabase/functions/mcp/${file}`)
+    if (stdio !== hosted) {
+      fail(`packages/server/supabase/functions/mcp/${file} differs from packages/mcp/src/${file} — copy the stdio file over it`)
+    }
+  }
 }
 
 // ─── Summary ─────────────────────────────────────────────────────────────────

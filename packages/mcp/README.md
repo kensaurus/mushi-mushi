@@ -18,20 +18,6 @@ npx mushi-mushi setup --ide cursor
 
 That command reads CLI config at **`~/.config/mushi/config.json`** (legacy `~/.mushirc` auto-migrates), writes `.cursor/mcp.json` with the `mushi-<slug>` server block, and prints "Done; restart Cursor and ask: `list mushi tools`". No copy-pasting environment variables.
 
-### Codebase Understand tools (indexed repos)
-
-When codebase indexing is enabled on a project, these MCP tools ground on `project_codebase_files` (+ wiki chunks when configured):
-
-| Tool | Scope | Purpose |
-|------|-------|---------|
-| `ask_codebase` | write | Plain-English Q&A with file:line citations |
-| `get_file_summary` | read | Lazy plain-English file/symbol summary |
-| `get_codebase_tour` | read | Dependency-ordered onboarding tour |
-| `search_codebase` | read | Semantic (or scoped) embedding search |
-| `get_codebase_domains` | read | Business domain / flow map |
-| `analyze_codebase_impact` | read | Diff impact (paths, last push, compare, fix PR) |
-| `analyze_wiki_knowledge` | read | Wiki/docs knowledge graph |
-
 > **What this is, and what it isn't**
 >
 > - **This package** (`@mushi-mushi/mcp`) is the MCP **server**; runs locally next to your editor, talks to the Mushi API, and presents bug reports as MCP tools/resources to your coding agent. Always install it by its scoped name (`npx -y @mushi-mushi/mcp@latest`); the bare `mushi-mcp` name was never published to npm.
@@ -184,7 +170,9 @@ For custom MCP hosts or tests:
 
 1. **One global MCP config**; keep `mushi` in `~/.cursor/mcp.json` only. Do **not** duplicate `mushi` / `mushi-stdio` in per-project `.cursor/mcp.json` (prevents connection storms). Project repos may ship `{}` or a comment pointing to the global file.
 2. **Windows paths**; use forward slashes in JSON (`C:/Users/...`) or escaped backslashes (`C:\\Users\\...`). Raw `\f`, `\n`, `\t` in paths corrupt JSON.
-3. **Multi-project**; either one HTTP server per project (distinct server name + `X-Mushi-Project-Id`) or one stdio server and pass `project_id` on each tool call.
+3. **Multi-project**; either one HTTP server per project (distinct server name + `X-Mushi-Project-Id`) or one stdio server and pass `projectId` on each tool call.
+
+Tool parameters are camelCase (`projectId`, `reportId`, `includeRaw`). The snake_case spelling of any of them (`project_id`) is accepted too, on both transports, so older prompts and configs keep working.
 4. **After editing global config**; fully restart Cursor (MCP panel must reload).
 
 | Header | Role |
@@ -236,6 +224,20 @@ The endpoint accepts JSON-RPC 2.0 over POST (returns `application/json` or `text
 | `transition_status` | Move a report between workflow states (enforces the same rules as the UI) |
 | `run_nl_query` | Natural-language → read-only SQL against your project data (60/hour rate-limited) |
 
+### Codebase (indexed repos)
+
+When codebase indexing is enabled on a project, these tools ground on `project_codebase_files` (+ wiki chunks when configured):
+
+| Tool | Scope | Purpose |
+|------|-------|---------|
+| `ask_codebase` | write | Plain-English Q&A with file:line citations |
+| `get_file_summary` | read | Lazy plain-English file/symbol summary |
+| `get_codebase_tour` | read | Dependency-ordered onboarding tour |
+| `search_codebase` | read | Semantic (or scoped) embedding search |
+| `get_codebase_domains` | read | Business domain / flow map |
+| `analyze_codebase_impact` | read | Diff impact (paths, last push, compare, fix PR) |
+| `analyze_wiki_knowledge` | read | Wiki/docs knowledge graph |
+
 > Need a tool that isn't here? Open an issue at [github.com/kensaurus/mushi-mushi/issues](https://github.com/kensaurus/mushi-mushi/issues) and tag it `mcp`.
 
 ### Tool annotations (what clients see before invoking)
@@ -258,7 +260,7 @@ The same catalog entries power the `/mcp` beginner console in the admin app; so 
 ## Resources
 
 Full list (8). See also the generated catalog at
-[`apps/docs/content/sdks/mcp-tools.mdx`](../../apps/docs/content/sdks/mcp-tools.mdx).
+[kensaur.us/mushi-mushi/docs/sdks/mcp-tools](https://kensaur.us/mushi-mushi/docs/sdks/mcp-tools).
 
 | URI | Returns |
 |---|---|
@@ -289,6 +291,9 @@ Named templates the MCP client surfaces in its slash-menu. Each one bakes in the
 | `MUSHI_API_KEY` | yes | — | Project API key with `mcp:read` or `mcp:write` scope. Mint one in the admin console → **Projects** (the one-time reveal card has a **Copy as `.env.local`** tab). |
 | `MUSHI_PROJECT_ID` | yes | — | UUID from the admin console URL (`/projects/<uuid>/...`) or the reveal card. |
 | `MUSHI_API_ENDPOINT` | no | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` | Override only if you self-host. Localhost: `http://localhost:54321/functions/v1/api`. |
+| `MUSHI_MCP_SENTRY_DSN` | no | — | Reports this server's own errors to your Sentry project. Needs `@sentry/node` installed next to the server (an optional peer, not installed by default): `npx -p @sentry/node -p @mushi-mushi/mcp mushi-mcp`. |
+
+If a client passes a variable reference through unexpanded (the server receives the literal text `${MUSHI_API_KEY}`), the server treats it as unset: it falls back to the `mushi login` config, or serves setup mode and prints which client syntax to use. Claude Desktop expands no variables; Cursor and VS Code expand `${env:MUSHI_API_KEY}`; Claude Code expands `${MUSHI_API_KEY}`.
 
 ### Storing the key in `.env.local`
 
@@ -476,29 +481,13 @@ Both are complementary; use Sentry for exception noise, Mushi for "the user says
 
 ## See also
 
-- [GTM distribution runbook](../../docs/marketing/GTM-DISTRIBUTION.md); MCP registry, Glama, Connect, cursor.directory, release checklist.
-- [V5.3 whitepaper §2.10](../../MushiMushi_Whitepaper_V5.md); the agentic fix architecture this server feeds into.
-- [`@mushi-mushi/agents`](../agents/README.md); orchestrator that consumes MCP-exposed fix workers.
+- [Fix orchestrator](https://kensaur.us/mushi-mushi/docs/concepts/fix-orchestrator); the agentic fix architecture this server feeds into.
+- [MCP tool reference](https://kensaur.us/mushi-mushi/docs/sdks/mcp-tools); every tool's parameters, generated from the catalog.
+- [`@mushi-mushi/agents`](https://www.npmjs.com/package/@mushi-mushi/agents); orchestrator that consumes MCP-exposed fix workers.
 
 ## License
 
 MIT
-
-## More from KENSAURUS
-
-| | App | What it is |
-|---|---|---|
-| <img src="https://kensaur.us/glot-it/icon-512.png" width="28" height="28" alt=""> | [Glot It](https://kensaur.us/glot-it/?utm_source=github&utm_medium=readme) | Learn Thai — bite-size lessons, smart flashcards, and an AI tutor |
-| <img src="https://kensaur.us/yen-yen/icon.svg" width="28" height="28" alt=""> | [yen-yen](https://kensaur.us/yen-yen/?utm_source=github&utm_medium=readme) | Where did the money go? Now you'll know. A kakeibo for households |
-| <img src="https://kensaur.us/the-wanting-mind/pwa-512x512.png" width="28" height="28" alt=""> | [The Wanting Mind](https://kensaur.us/the-wanting-mind/?utm_source=github&utm_medium=readme) | How the Battle Between Extraction and Generation Is Reshaping Our World — a 147,000-word interactive webbook with 268 concepts, 242 citations, and original illustrations |
-| <img src="https://kensaur.us/help-her-take-photo/assets/apple-touch-icon.png" width="28" height="28" alt=""> | [Help Her Take Photo](https://kensaur.us/help-her-take-photo/?utm_source=github&utm_medium=readme) | Pair phones, direct the pose, nail the photo |
-| <img src="https://talk.kensaur.us/pwa-192.png" width="28" height="28" alt=""> | [Cooler Heads](https://talk.kensaur.us/?utm_source=github&utm_medium=readme) | Practice hard conversations before you have them |
-| <img src="https://solo-boss.kensaur.us/apple-touch-icon.png" width="28" height="28" alt=""> | [一人社長 Solo Boss](https://solo-boss.kensaur.us/?utm_source=github&utm_medium=readme) | Bookkeeping and tax-filing co-pilot for one-person companies in Japan |
-| <img src="https://tsumagoi.kensaur.us/apple-touch-icon.png" width="28" height="28" alt=""> | [Tsumagoi Work&Camp 嬬恋牧場](https://tsumagoi.kensaur.us/?utm_source=github&utm_medium=readme) | Coworking camp at 1,444 m — [Instagram](https://www.instagram.com/tsumagoicamp/) · [Facebook](https://www.facebook.com/profile.php?id=61592113053042) · [Maps](https://maps.app.goo.gl/JCNnTfsdQVHCS1FA7) |
-| <img src="https://github.com/kensaurus.png" width="28" height="28" alt=""> | [cursor-kenji](https://github.com/kensaurus/cursor-kenji) | Ready-made playbooks for your AI coding editor |
-| <img src="https://kensaur.us/favicon.svg" width="28" height="28" alt=""> | [KENSAURUS](https://kensaur.us/?view=portfolio&utm_source=github&utm_medium=readme) | Everything else built under the same roof |
-
-All apps live under [kensaur.us](https://kensaur.us).
 
 
 <!-- mushi-readme-stats-footer -->

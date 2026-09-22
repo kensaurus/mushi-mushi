@@ -109,6 +109,18 @@ import { propagateRequestId } from '../_shared/internal-headers.ts'
 import { recordMcpToolInvocation } from '../_shared/mcp-tool-audit.ts'
 import { claimMcpToolCallRateLimit, buildRateLimitHeaders } from '../_shared/mcp-rate-limit.ts'
 import { buildManifestTools } from './manifest-tools.ts'
+import { HOSTED_RESOURCE_URIS, hostedResourceTarget } from './hosted-resources.ts'
+import { normalizeArgAliases } from './arg-aliases.ts'
+import {
+  fixContextOf,
+  inventoryActionNodeIdOf,
+  projectReportDetail,
+  projectReportListRow,
+  reportEvidenceOf,
+  similarityQueryOf,
+  triageRecommendedActions,
+  triageSummaryOf,
+} from './report-shapes.ts'
 import { SERVER_INFO_EXTENDED, MUSHI_ICON_SVG_INLINE } from '../_shared/mcp-branding.ts'
 import {
   parseFeaturesParam,
@@ -262,37 +274,38 @@ type ToolHandler = (
   },
 ) => Promise<unknown>
 
-interface ToolDef {
+/**
+ * A hand-written hosted tool: its scope and handler. Everything a client sees
+ * about it — title, description, annotations, input and output schemas —
+ * comes from the canonical stdio catalog through the generated
+ * mcp-discovery-tools.json (withCatalogMetadata below), so the two
+ * transports cannot describe a tool differently. Handlers read the canonical
+ * camelCase argument names; handleToolsCall renames snake_case aliases first.
+ */
+interface HostedTool {
   scope: 'mcp:read' | 'mcp:write'
-  /** Human-readable title; overlaid from the canonical catalog. */
+  handler: ToolHandler
+}
+
+interface ToolDef extends HostedTool {
   title?: string
   description: string
   inputSchema: Record<string, unknown>
   /**
-   * MCP 2025-06-18 outputSchema. When present, the dispatcher also emits
-   * `structuredContent` alongside the text content so typed clients
-   * (Claude Desktop, Cursor 0.54+) can pipe results into downstream tools
-   * without re-parsing JSON. Kept in lock-step with the stdio MCP server
-   * (`packages/mcp/src/server.ts`) — please update both at once.
+   * MCP 2025-06-18 outputSchema, from the catalog. When present, the
+   * dispatcher also emits `structuredContent` alongside the text content, so
+   * the handler's result must match it exactly (stdio's zod schemas are
+   * `additionalProperties: false` unless declared loose).
    */
   outputSchema?: Record<string, unknown>
   annotations?: Record<string, unknown>
-  handler: ToolHandler
 }
 
-/**
- * The fix-context slice of a report detail row. The report route composes
- * `fix_packet` server-side, so get_fix_context and triage_issue read it from
- * the report — mirrors fixContextOf in packages/mcp/src/server.ts.
- */
-function fixContextOf(report: Record<string, unknown>): Record<string, unknown> {
-  return {
-    fixPrompt: report.fix_packet ?? null,
-    reproductionSteps: report.reproduction_steps ?? [],
-    component: report.component ?? null,
-    rootCause: (report.stage2_analysis as Record<string, unknown> | null | undefined)?.rootCause ?? null,
-    bugOntologyTags: report.bug_ontology_tags ?? null,
-  }
+/** Scope a request to `projectId` when the caller named one (X-Mushi-Project-Id). */
+function projectHeaders(ctx: { authHeaders: Record<string, string> }, projectId: unknown): Record<string, string> {
+  return typeof projectId === 'string' && projectId
+    ? { ...ctx.authHeaders, 'X-Mushi-Project-Id': projectId }
+    : ctx.authHeaders
 }
 
 /** get_mushi_doc returns at most this much Markdown (~2k tokens) and says where the rest is. */
@@ -302,42 +315,6 @@ const MUSHI_DOC_MAX_CHARS = 8000
 const REPORT_STATUSES = CANONICAL_REPORT_STATUSES
 const REPORT_CATEGORIES = ['bug', 'slow', 'visual', 'confusing', 'other'] as const
 const REPORT_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const
-
-/** The fields get_recent_reports documents; the list route returns ~30 columns. */
-const REPORT_LIST_FIELDS = ['id', 'status', 'category', 'severity', 'summary', 'component', 'created_at', 'processing_error'] as const
-
-/**
- * Columns the list route returns so the console can render a reporter's name
- * and badge. They identify an end user of the customer's app and are never
- * handed to an agent, even with include_raw. Mirrors packages/mcp/src/server.ts.
- */
-const REPORTER_IDENTITY_FIELDS = ['end_user_id', 'reporter_token_hash', 'session_id', 'reporter_display_name']
-
-function projectReportListRow(row: Record<string, unknown>, includeRaw: boolean): Record<string, unknown> {
-  if (includeRaw) {
-    return Object.fromEntries(Object.entries(row).filter(([k]) => !REPORTER_IDENTITY_FIELDS.includes(k)))
-  }
-  const out: Record<string, unknown> = {}
-  for (const field of REPORT_LIST_FIELDS) {
-    if (row[field] !== undefined) out[field] = row[field]
-  }
-  return out
-}
-
-/** Free text the similarity route can embed for a report, or null when it has none. */
-function similarityQueryOf(report: Record<string, unknown>): string | null {
-  for (const field of ['summary', 'description'] as const) {
-    const value = report[field]
-    if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 2000)
-  }
-  return null
-}
-
-/** Graph node id of the inventory action a report is filed against (get_report_inventory_action). */
-function inventoryActionNodeIdOf(report: Record<string, unknown>): string | null {
-  const anchor = report.inventory_action as { actionNodeId?: unknown } | null | undefined
-  return typeof anchor?.actionNodeId === 'string' && anchor.actionNodeId ? anchor.actionNodeId : null
-}
 
 /** Build a query string, skipping undefined/empty values (events/* tools). */
 function eventsQuery(params: Record<string, string | number | undefined>): string {
@@ -362,41 +339,9 @@ function clampWindowDays(raw: unknown): number {
   return Math.min(Math.max(Math.trunc(n), 1), 365)
 }
 
-const BASE_TOOLS: Record<string, ToolDef> = {
+const BASE_TOOLS: Record<string, HostedTool> = {
   get_recent_reports: {
     scope: 'mcp:read',
-    description:
-      'List recent bug reports, newest first. Returns { reports: [{ id, status, category, severity, summary, component, created_at, processing_error }], total }; include_raw=true returns every list column instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Use this to survey what the triage queue looks like right now.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        status: {
-          type: 'string',
-          enum: [...REPORT_STATUSES],
-          description: 'Filter by status. "new" also matches queued rows; "classified" and "fixed" include legacy aliases.',
-        },
-        category: { type: 'string', enum: [...REPORT_CATEGORIES], description: 'Filter by category.' },
-        severity: { type: 'string', enum: [...REPORT_SEVERITIES], description: 'Filter by severity.' },
-        limit: { type: 'number', description: 'Max reports to return (default 20, max 100).' },
-        include_raw: {
-          type: 'boolean',
-          description: 'Return every column the list route has instead of the documented fields. Reporter identifiers are removed either way.',
-        },
-      },
-    },
-    outputSchema: {
-      type: 'object',
-      properties: {
-        reports: {
-          type: 'array',
-          items: { type: 'object', additionalProperties: true },
-          description: 'Array of report rows',
-        },
-        total: { type: 'number', description: 'Total matching rows (before limit)' },
-      },
-      required: ['reports'],
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       const params = new URLSearchParams()
       if (typeof args.status === 'string') params.set('status', args.status)
@@ -405,29 +350,21 @@ const BASE_TOOLS: Record<string, ToolDef> = {
       params.set('limit', String(Math.min((args.limit as number) ?? 20, 100)))
       const data = await apiCall<{ reports?: Array<Record<string, unknown>>; total?: number }>(
         `/v1/admin/reports?${params}`,
-        { headers: ctx.authHeaders },
+        { headers: projectHeaders(ctx, args.projectId) },
       )
       return {
-        reports: (data.reports ?? []).map((row) => projectReportListRow(row, args.include_raw === true)),
+        reports: (data.reports ?? []).map((row) => projectReportListRow(row, args.includeRaw === true)),
         total: data.total ?? 0,
       }
     },
   },
   get_report_detail: {
     scope: 'mcp:read',
-    description:
-      'Full payload for a single report — description, console logs, network requests, screenshot URL, classification, fix history.',
-    inputSchema: {
-      type: 'object',
-      required: ['reportId'],
-      properties: { reportId: { type: 'string' } },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       requireString(args.reportId, 'reportId')
       const report = (await apiCall<Record<string, unknown>>(
         `/v1/admin/reports/${encodeURIComponent(args.reportId as string)}`,
-        { headers: ctx.authHeaders },
+        { headers: projectHeaders(ctx, args.projectId) },
       )) as Record<string, unknown>
       // Company funnel: an agent opening a report counts toward habit, the
       // same as the console's report_opened (docs/plan-gtm.md). The stdio
@@ -443,34 +380,13 @@ const BASE_TOOLS: Record<string, ToolDef> = {
           via: 'hosted',
         },
       })
-      return report
+      // Documented fields (or every non-identity column with includeRaw) —
+      // the same projection stdio returns (report-shapes.ts).
+      return { report: projectReportDetail(report, args.includeRaw === true) }
     },
   },
   search_reports: {
     scope: 'mcp:read',
-    description:
-      'Semantic + keyword search over reports. Uses pgvector similarity server-side — falls back to substring match when embeddings are unavailable.',
-    inputSchema: {
-      type: 'object',
-      required: ['query'],
-      properties: {
-        query: { type: 'string' },
-        limit: { type: 'number' },
-        threshold: { type: 'number' },
-      },
-    },
-    outputSchema: {
-      type: 'object',
-      properties: {
-        results: {
-          type: 'array',
-          items: { type: 'object', additionalProperties: true },
-          description: 'Ranked report rows with similarity scores',
-        },
-      },
-      required: ['results'],
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       requireString(args.query, 'query')
       return apiCall(`/v1/admin/reports/similarity`, {
@@ -487,19 +403,11 @@ const BASE_TOOLS: Record<string, ToolDef> = {
   },
   get_fix_context: {
     scope: 'mcp:read',
-    description:
-      'Bundle the full context an agent needs to fix a bug: report detail, reproduction steps, component, root cause, ontology tags, AND the inventory expected_outcome contract (whitepaper §2.10) when one is declared.',
-    inputSchema: {
-      type: 'object',
-      required: ['reportId'],
-      properties: { reportId: { type: 'string' } },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       requireString(args.reportId, 'reportId')
       const report = (await apiCall<Record<string, unknown>>(
         `/v1/admin/reports/${encodeURIComponent(args.reportId as string)}`,
-        { headers: ctx.authHeaders },
+        { headers: projectHeaders(ctx, args.projectId) },
       )) as Record<string, unknown>
       // Company funnel (mushi-self): "diagnosis consumed by an agent". Rows
       // belong to the self project; the customer project id rides along in
@@ -516,7 +424,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
         },
       })
       return {
-        report,
+        report: projectReportDetail(report, false),
         ...fixContextOf(report),
         // The detail endpoint already attaches the inventory anchor when
         // available — surface it at the top so callers can branch on the
@@ -527,30 +435,15 @@ const BASE_TOOLS: Record<string, ToolDef> = {
   },
   get_fix_timeline: {
     scope: 'mcp:read',
-    description:
-      'Ordered timeline of a fix attempt — dispatched → started → branch → commit → PR opened → CI → completed/failed.',
-    inputSchema: {
-      type: 'object',
-      required: ['fixId'],
-      properties: { fixId: { type: 'string' } },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       requireString(args.fixId, 'fixId')
       return apiCall(`/v1/admin/fixes/${encodeURIComponent(args.fixId as string)}/timeline`, {
-        headers: ctx.authHeaders,
+        headers: projectHeaders(ctx, args.projectId),
       })
     },
   },
   get_inventory: {
     scope: 'mcp:read',
-    description:
-      'Return the current inventory.yaml snapshot for a project: latest ingest, validation errors, and a per-action status summary. Use diff_inventory to compare two commits or list_gate_findings for the latest gate results.',
-    inputSchema: {
-      type: 'object',
-      properties: { projectId: { type: 'string' } },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
       if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for get_inventory')
@@ -559,17 +452,6 @@ const BASE_TOOLS: Record<string, ToolDef> = {
   },
   list_gate_findings: {
     scope: 'mcp:read',
-    description:
-      'List the most recent inventory gate findings for a project, newest run first (dead-handler, mock-leak, crawl, status-claim, agentic-failure). Filter by gate name or minimum severity. Use diff_inventory to compare commits or get_inventory for the full snapshot.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        projectId: { type: 'string' },
-        gate: { type: 'string' },
-        severity: { type: 'string' },
-      },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
       if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for list_gate_findings')
@@ -584,13 +466,6 @@ const BASE_TOOLS: Record<string, ToolDef> = {
   },
   get_graph_node: {
     scope: 'mcp:read',
-    description: 'Fetch one knowledge-graph node row by id (label, type, metadata — includes the derived status on Action nodes). Use get_graph_neighborhood to see what connects to it.',
-    inputSchema: {
-      type: 'object',
-      required: ['nodeId'],
-      properties: { nodeId: { type: 'string' } },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       requireString(args.nodeId, 'nodeId')
       return apiCall(`/v1/admin/graph/node/${encodeURIComponent(args.nodeId as string)}`, {
@@ -600,15 +475,6 @@ const BASE_TOOLS: Record<string, ToolDef> = {
   },
   get_blast_radius: {
     scope: 'mcp:read',
-    description:
-      'Return the blast radius for a codebase node: all downstream dependents and their weighted impact scores. ' +
-      'Use this to understand how far a change (or bug fix) propagates before deciding to dispatch a fix.',
-    inputSchema: {
-      type: 'object',
-      required: ['nodeId'],
-      properties: { nodeId: { type: 'string', description: 'Graph node ID (component, file, or function label)' } },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       requireString(args.nodeId, 'nodeId')
       return apiCall(`/v1/admin/graph/blast-radius/${encodeURIComponent(args.nodeId as string)}`, {
@@ -619,40 +485,17 @@ const BASE_TOOLS: Record<string, ToolDef> = {
 
   get_knowledge_graph: {
     scope: 'mcp:read',
-    description:
-      'Traverse the codebase knowledge graph from a seed node. Returns nodes and edges within the given depth. ' +
-      'Depth 1 = direct dependents; depth 2 = transitive. Max depth 3.',
-    inputSchema: {
-      type: 'object',
-      required: ['seed'],
-      properties: {
-        seed: { type: 'string', description: 'Starting node label (e.g. component name, file path)' },
-        depth: { type: 'number', description: 'Traversal depth (default 2, max 3)' },
-        project_id: { type: 'string', description: 'Project UUID (falls back to key-bound project)' },
-      },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       requireString(args.seed, 'seed')
       const qs = new URLSearchParams()
       qs.set('seed', args.seed as string)
-      qs.set('depth', String(Math.min((args.depth as number) ?? 2, 3)))
-      const pid = (args.project_id as string | undefined) ?? ctx.projectIdHint
-      if (pid) qs.set('projectId', pid)
+      qs.set('depth', String(Math.min((args.depth as number) ?? 2, 4)))
       return apiCall(`/v1/admin/graph/traverse?${qs}`, { headers: ctx.authHeaders })
     },
   },
 
   run_nl_query: {
     scope: 'mcp:read',
-    description:
-      'Natural-language question → SQL query run against your project data. Read-only, rate-limited, no privileged schemas.',
-    inputSchema: {
-      type: 'object',
-      required: ['question'],
-      properties: { question: { type: 'string' } },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       requireString(args.question, 'question')
       return apiCall(`/v1/admin/query`, {
@@ -664,52 +507,16 @@ const BASE_TOOLS: Record<string, ToolDef> = {
   },
   dispatch_fix: {
     scope: 'mcp:write',
-    description:
-      'Dispatch the Mushi agentic fix orchestrator for a classified report. Returns a dispatch id; subscribe to /v1/admin/fixes/dispatch/:id/stream for live progress.',
-    inputSchema: {
-      type: 'object',
-      required: ['reportId'],
-      properties: {
-        reportId: { type: 'string' },
-        projectId: { type: 'string' },
-        // Spec-traceability: callers that already know the inventory
-        // Action they want repaired can pass it directly.
-        inventoryActionNodeId: { type: 'string' },
-        agent: {
-          type: 'string',
-          enum: ['claude_code', 'codex', 'auto', 'rest_fix_worker', 'llm', 'mcp', 'cursor_cloud', 'github_cloud_agent'],
-          description:
-            'Which agent runs the fix. Omit for the project default (auto). Forwarded to POST /v1/admin/fixes/dispatch as `agent`.',
-        },
-      },
-    },
-    outputSchema: {
-      type: 'object',
-      properties: {
-        fixId: { type: 'string', description: 'Dispatch id — poll get_fix_timeline with it (also resolves the fix_attempt once the worker starts)' },
-        status: { type: 'string', description: 'Initial status (queued, running, delegated, …)' },
-        agentId: { type: 'string', description: 'Cursor agent ID when agent=cursor_cloud' },
-        runId: { type: 'string', description: 'Cursor run ID when agent=cursor_cloud' },
-        prUrl: {
-          type: 'string',
-          description: 'Draft PR URL when agent=cursor_cloud and auto_create_pr=true',
-        },
-      },
-    },
-    annotations: { readOnlyHint: false, openWorldHint: true },
     handler: async (args, ctx) => {
       requireString(args.reportId, 'reportId')
       const projectId = (args.projectId as string | undefined) ?? ctx.projectIdHint
       if (!projectId) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for dispatch_fix')
-      const dispatch = await apiCall<{
-        dispatchId?: string
-        status?: string
-        agentId?: string
-        runId?: string
-        prUrl?: string
-      }>(`/v1/admin/fixes/dispatch`, {
+      const dispatch = await apiCall<{ dispatchId?: string; status?: string }>(`/v1/admin/fixes/dispatch`, {
         method: 'POST',
-        headers: ctx.authHeaders,
+        headers:
+          typeof args.idempotencyKey === 'string' && args.idempotencyKey
+            ? { ...ctx.authHeaders, 'Idempotency-Key': args.idempotencyKey }
+            : ctx.authHeaders,
         body: JSON.stringify({
           reportId: args.reportId,
           projectId,
@@ -730,36 +537,17 @@ const BASE_TOOLS: Record<string, ToolDef> = {
           via: 'hosted',
         },
       })
-      // REST returns { dispatchId, status } — map to the declared { fixId, … }
-      // shape or strict clients reject the response after the dispatch already
-      // fired (the stdio server had the identical bug; keep both aligned).
-      // get_fix_timeline accepts the dispatch id, so it is pollable at once.
+      // REST returns { dispatchId, status, createdAt } — map to the declared
+      // { fixId, status } exactly, or strict clients reject the response after
+      // the dispatch already fired. get_fix_timeline accepts the dispatch id.
       return {
         fixId: dispatch?.dispatchId ?? '',
         status: dispatch?.status ?? 'queued',
-        ...(dispatch?.agentId ? { agentId: dispatch.agentId } : {}),
-        ...(dispatch?.runId ? { runId: dispatch.runId } : {}),
-        ...(dispatch?.prUrl ? { prUrl: dispatch.prUrl } : {}),
       }
     },
   },
   transition_status: {
     scope: 'mcp:write',
-    description:
-      'Move a report between workflow states (new → classified → grouped → fixing → fixed → dismissed).',
-    inputSchema: {
-      type: 'object',
-      required: ['reportId', 'status'],
-      properties: {
-        reportId: { type: 'string' },
-        status: {
-          type: 'string',
-          enum: ['pending', 'classified', 'grouped', 'fixing', 'fixed', 'dismissed'],
-        },
-        reason: { type: 'string' },
-      },
-    },
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       requireString(args.reportId, 'reportId')
       requireString(args.status, 'status')
@@ -774,43 +562,17 @@ const BASE_TOOLS: Record<string, ToolDef> = {
   // Phase 1c — token-budget lessons.query
   query_lessons: {
     scope: 'mcp:read',
-    description:
-      'Token-budget retrieval of relevant learning rules (lessons) for a given code diff or PR context. ' +
-      'Returns ranked lessons packed within max_tokens using bi-encoder retrieval + severity-weighted scoring. ' +
-      'Use this before opening a PR, writing a fix, or asking "what mistakes should I avoid in this area of code?"',
-    inputSchema: {
-      type: 'object',
-      required: ['diff_text'],
-      properties: {
-        diff_text: {
-          type: 'string',
-          description: 'The PR diff, code snippet, or description of the change being made.',
-        },
-        max_tokens: {
-          type: 'number',
-          description: 'Maximum tokens to use for the returned lessons context (default 3000, max 8000).',
-        },
-        top_k: {
-          type: 'number',
-          description: 'Max number of lessons to return (default 15, max 50).',
-        },
-        project_id: {
-          type: 'string',
-          description: 'Filter lessons to a specific project UUID. Uses the caller\'s default project if omitted.',
-        },
-      },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: false, openWorldHint: true },
     handler: async (args, ctx) => {
-      requireString(args.diff_text, 'diff_text')
+      requireString(args.diffText, 'diffText')
       return apiCall('/v1/admin/lessons/query', {
         method: 'POST',
         headers: ctx.authHeaders,
+        // The route reads snake_case body fields.
         body: JSON.stringify({
-          diff_text: args.diff_text,
-          max_tokens: (args.max_tokens as number) ?? 3000,
-          top_k: (args.top_k as number) ?? 15,
-          project_id: (args.project_id as string) ?? ctx.projectIdHint,
+          diff_text: args.diffText,
+          max_tokens: (args.maxTokens as number) ?? 3000,
+          top_k: (args.topK as number) ?? 15,
+          project_id: (args.projectId as string) ?? ctx.projectIdHint,
         }),
       })
     },
@@ -819,26 +581,14 @@ const BASE_TOOLS: Record<string, ToolDef> = {
   // Phase 1 — get lessons list
   list_lessons: {
     scope: 'mcp:read',
-    description:
-      'List promoted learning rules (lessons) for the current project. Each lesson represents a named pattern ' +
-      'of mistakes that has been encoded from bug reports. Use this to understand what systemic issues have ' +
-      'been identified and encoded as heuristics.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        severity: { type: 'string', enum: ['info', 'warn', 'critical'] },
-        limit: { type: 'number' },
-        project_id: { type: 'string' },
-      },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       const params = new URLSearchParams()
       if (typeof args.severity === 'string') params.set('severity', args.severity)
       params.set('limit', String(Math.min((args.limit as number) ?? 50, 200)))
-      if (typeof args.project_id === 'string') params.set('projectId', args.project_id)
+      if (typeof args.projectId === 'string') params.set('projectId', args.projectId)
       else if (ctx.projectIdHint) params.set('projectId', ctx.projectIdHint)
-      return apiCall(`/v1/admin/lessons?${params}`, { headers: ctx.authHeaders })
+      const lessons = await apiCall<unknown[]>(`/v1/admin/lessons?${params}`, { headers: ctx.authHeaders })
+      return { lessons: Array.isArray(lessons) ? lessons : [] }
     },
   },
 
@@ -847,17 +597,8 @@ const BASE_TOOLS: Record<string, ToolDef> = {
   // data as a callable MCP tool so both tool-callers and resource-readers work).
   activation_status: {
     scope: 'mcp:read',
-    description:
-      'Return the unified activation posture — SDK heartbeat, reports, GitHub, MCP readiness, QA stories, and the next best action. Returns the same payload as the activation_status resource.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        project_id: { type: 'string', description: 'Project UUID (defaults to key-bound project).' },
-      },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
-      const pid = (args.project_id as string | undefined) ?? ctx.projectIdHint
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
       const qs = pid ? `?project_id=${encodeURIComponent(pid)}` : ''
       return apiCall<unknown>(`/v1/admin/activation${qs}`, { headers: ctx.authHeaders })
     },
@@ -870,30 +611,6 @@ const BASE_TOOLS: Record<string, ToolDef> = {
 
   query_funnel: {
     scope: 'mcp:read',
-    description:
-      'Where do users drop off? Ordered funnel over Mushi.track() events for this project. Pass 2–8 step event names in order; each step counts distinct users who did the previous step then this one within stepWindow (default 7d), over the trailing windowDays (default 30). Optional breakdown property splits every step. Returns { steps: [{ name, entered, converted, pct, median_secs }], breakdown: [{ value, entered, steps }] } (pct is conversion from step 1; breakdown is empty unless requested). Read-only. Use get_product_events_summary to discover event names first.',
-    inputSchema: {
-      type: 'object',
-      required: ['steps'],
-      properties: {
-        steps: {
-          type: 'array',
-          items: { type: 'string' },
-          minItems: 2,
-          maxItems: 8,
-          description: 'Ordered event names, 2–8 (e.g. ["landing_view", "signup_completed", "first_report_received"]).',
-        },
-        windowDays: { type: 'number', description: 'Trailing window in days (default 30, max 365).' },
-        stepWindow: {
-          type: 'string',
-          enum: ['1h', '1d', '7d', '30d'],
-          description: 'Max time allowed between consecutive steps (default 7d).',
-        },
-        breakdown: { type: 'string', description: 'Event property to split every step by (e.g. "utm_source", "$surface").' },
-        project_id: { type: 'string', description: 'Project UUID (defaults to key-bound project).' },
-      },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       const steps = Array.isArray(args.steps) ? args.steps.map((s) => String(s).trim()).filter(Boolean) : []
       if (steps.length < 2 || steps.length > 8) {
@@ -908,7 +625,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
         window: stepWindow,
         ...trailingRange(clampWindowDays(args.windowDays)),
         breakdown: typeof args.breakdown === 'string' ? args.breakdown : undefined,
-        project_id: (args.project_id as string | undefined) ?? ctx.projectIdHint,
+        project_id: (args.projectId as string | undefined) ?? ctx.projectIdHint,
       })
       return apiCall<unknown>(`/v1/admin/events/funnel?${qs}`, { headers: ctx.authHeaders })
     },
@@ -916,20 +633,10 @@ const BASE_TOOLS: Record<string, ToolDef> = {
 
   get_product_events_summary: {
     scope: 'mcp:read',
-    description:
-      'Summarise the Mushi.track() product events this project received in the trailing windowDays (default 30): event names with counts and distinct users, daily volume, and top properties. Returns { window_days, events_total, persons, identified, anonymous, events_per_day: [{ day, count }], top_events: [{ name, count, persons }] }. Read-only. Use first to learn which event names exist before calling query_funnel or get_user_paths.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        windowDays: { type: 'number', description: 'Trailing window in days (default 30, max 365).' },
-        project_id: { type: 'string', description: 'Project UUID (defaults to key-bound project).' },
-      },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       const qs = eventsQuery({
         window: clampWindowDays(args.windowDays),
-        project_id: (args.project_id as string | undefined) ?? ctx.projectIdHint,
+        project_id: (args.projectId as string | undefined) ?? ctx.projectIdHint,
       })
       return apiCall<unknown>(`/v1/admin/events/summary?${qs}`, { headers: ctx.authHeaders })
     },
@@ -937,19 +644,6 @@ const BASE_TOOLS: Record<string, ToolDef> = {
 
   get_user_paths: {
     scope: 'mcp:read',
-    description:
-      'What did users do next? Rank the events users fired immediately after fromEvent within the trailing windowDays (default 30), most common first, up to limit rows (default 20, max 50). Returns { from_event, total, next: [{ name, count, pct }] }. Read-only. Use query_funnel once you know the ordered steps.',
-    inputSchema: {
-      type: 'object',
-      required: ['fromEvent'],
-      properties: {
-        fromEvent: { type: 'string', description: 'Event name to start from (e.g. "key_minted").' },
-        windowDays: { type: 'number', description: 'Trailing window in days (default 30, max 365).' },
-        limit: { type: 'number', description: 'Max distinct paths to return (default 20, max 50).' },
-        project_id: { type: 'string', description: 'Project UUID (defaults to key-bound project).' },
-      },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       const fromEvent = typeof args.fromEvent === 'string' ? args.fromEvent.trim() : ''
       if (!fromEvent) throw new McpError(ERR_INVALID_PARAMS, 'fromEvent is required for get_user_paths')
@@ -959,7 +653,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
         from_event: fromEvent,
         ...trailingRange(clampWindowDays(args.windowDays)),
         limit,
-        project_id: (args.project_id as string | undefined) ?? ctx.projectIdHint,
+        project_id: (args.projectId as string | undefined) ?? ctx.projectIdHint,
       })
       return apiCall<unknown>(`/v1/admin/events/paths?${qs}`, { headers: ctx.authHeaders })
     },
@@ -970,35 +664,9 @@ const BASE_TOOLS: Record<string, ToolDef> = {
   // transports in lock-step.
   diagnose_setup: {
     scope: 'mcp:read',
-    description:
-      'Diagnose Mushi setup health and return the single best next action. mode=full (default) runs both SDK-ingest and fix-dispatch preflight checks; mode=ingest runs ingest checks only; mode=dispatch runs dispatch readiness only. The one setup-diagnosis entry point — use this instead of separate connection/ingest checks.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        mode: { type: 'string', enum: ['full', 'ingest', 'dispatch'], description: 'Which checks to run (default full).' },
-        project_id: { type: 'string', description: 'Project UUID for dispatch checks.' },
-        projectId: { type: 'string', description: 'Alias for project_id.' },
-      },
-    },
-    outputSchema: {
-      type: 'object',
-      properties: {
-        mode: { type: 'string' },
-        ready: { type: 'boolean' },
-        summary: { type: 'string' },
-        nextAction: { type: 'string' },
-        connection: { type: ['object', 'null'], additionalProperties: true },
-        ingest: { type: 'object', additionalProperties: true },
-        dispatch: { type: ['object', 'null'], additionalProperties: true },
-      },
-      required: ['mode', 'ready', 'summary'],
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       const mode = (args.mode as string | undefined) ?? 'full'
-      const resolvedId = (args.project_id as string | undefined) ??
-        (args.projectId as string | undefined) ??
-        ctx.projectIdHint
+      const resolvedId = (args.projectId as string | undefined) ?? ctx.projectIdHint
 
       if (mode === 'ingest') {
         const data = await apiCall<{
@@ -1024,7 +692,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
 
       if (mode === 'dispatch') {
         if (!resolvedId) {
-          throw new McpError(ERR_INVALID_PARAMS, 'project_id is required for dispatch mode')
+          throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for dispatch mode')
         }
         const data = await apiCall<{
           ready: boolean
@@ -1158,43 +826,6 @@ const BASE_TOOLS: Record<string, ToolDef> = {
 
   check_sdk_version: {
     scope: 'mcp:read',
-    description:
-      'Compare a published @mushi-mushi/* package version against the catalog (GET /v1/sdk/latest-version). Returns { package, current, latest, outdated } and, when outdated, suggestedActions (Sentry-style, max 1) pointing at search_mushi_docs plus the mushi-sdk-upgrade skill. Read-only. Use when Dependabot or mushi upgrade --check reports a drift, or before dispatching a fix that assumes a current SDK. Does not bump the pin — that stays a human/Dependabot change.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        package: {
-          type: 'string',
-          description: 'npm package name (default @mushi-mushi/web).',
-        },
-        current: {
-          type: 'string',
-          description: 'Installed version from package.json, if known.',
-        },
-      },
-    },
-    outputSchema: {
-      type: 'object',
-      properties: {
-        package: { type: 'string' },
-        latest: { type: 'string' },
-        current: { type: 'string' },
-        outdated: { type: 'boolean' },
-        suggestedActions: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              type: { type: 'string', const: 'tool_call' },
-              toolName: { type: 'string' },
-              arguments: { type: 'object' },
-              reason: { type: 'string' },
-            },
-          },
-        },
-      },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args) => {
       const pkg = typeof args.package === 'string' && args.package.trim()
         ? args.package.trim()
@@ -1230,38 +861,6 @@ const BASE_TOOLS: Record<string, ToolDef> = {
 
   search_mushi_docs: {
     scope: 'mcp:read',
-    description:
-      'Search official Mushi docs (guides, MCP setup, inventory, QA, skills) by keyword — titles, section headings and summaries are indexed. ' +
-      'Returns ranked { results: [{ title, url, excerpt, score }] }; read a page with get_mushi_doc.',
-    inputSchema: {
-      type: 'object',
-      required: ['query'],
-      properties: {
-        query: { type: 'string', description: 'Keywords to search.' },
-        limit: { type: 'number', description: 'Max results (default 8, max 20).' },
-      },
-    },
-    outputSchema: {
-      type: 'object',
-      properties: {
-        query: { type: 'string' },
-        results: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              title: { type: 'string' },
-              url: { type: 'string' },
-              excerpt: { type: 'string' },
-              score: { type: 'number' },
-            },
-            required: ['title', 'url', 'excerpt', 'score'],
-          },
-        },
-      },
-      required: ['query', 'results'],
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
     handler: async (args) => {
       const query = String(args.query ?? '')
       const limit = Math.min(Number(args.limit ?? 8), 20)
@@ -1272,27 +871,6 @@ const BASE_TOOLS: Record<string, ToolDef> = {
   },
   get_mushi_doc: {
     scope: 'mcp:read',
-    description:
-      'Fetch one official Mushi docs page as Markdown, by a url from search_mushi_docs or a route such as "/quickstart/mcp". ' +
-      'Returns { title, url, markdown, truncated }; markdown is capped at 8,000 characters. Only indexed docs pages resolve.',
-    inputSchema: {
-      type: 'object',
-      required: ['page'],
-      properties: {
-        page: { type: 'string', description: 'A url from search_mushi_docs, or a docs route such as "/quickstart/mcp".' },
-      },
-    },
-    outputSchema: {
-      type: 'object',
-      properties: {
-        title: { type: 'string' },
-        url: { type: 'string' },
-        markdown: { type: 'string' },
-        truncated: { type: 'boolean' },
-      },
-      required: ['title', 'url', 'markdown', 'truncated'],
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args) => {
       requireString(args.page, 'page')
       const entry = findMushiDoc(args.page as string)
@@ -1325,10 +903,6 @@ const BASE_TOOLS: Record<string, ToolDef> = {
 
   list_projects: {
     scope: 'mcp:read',
-    description:
-      'List the Mushi projects accessible to this API key. Returns project id, name, and created date. For multi-project tokens this lists all accessible projects; for single-project keys it returns only the bound project.',
-    inputSchema: { type: 'object', properties: {} },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (_args, ctx) => {
       return apiCall('/v1/admin/mcp/projects', { headers: ctx.authHeaders })
     },
@@ -1336,16 +910,9 @@ const BASE_TOOLS: Record<string, ToolDef> = {
 
   get_project_context: {
     scope: 'mcp:read',
-    description:
-      'Return a rich context snapshot for a project: ingest health, SDK heartbeat, autofix readiness, open-report counts, and active integrations. Combine with get_recent_reports before triaging.',
-    inputSchema: {
-      type: 'object',
-      properties: { project_id: { type: 'string', description: 'Project UUID (falls back to key-bound project)' } },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
-      const pid = (args.project_id as string | undefined) ?? ctx.projectIdHint
-      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'project_id is required')
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required')
       const qs = new URLSearchParams()
       if (pid) qs.set('project_id', pid)
 
@@ -1364,30 +931,9 @@ const BASE_TOOLS: Record<string, ToolDef> = {
 
   get_pipeline_logs: {
     scope: 'mcp:read',
-    description:
-      'Pull recent log entries from the Mushi pipeline services (fix-worker, pipeline, qa-story-runner). Accepts project_id, service, since (ISO timestamp), limit (max 200), level (all/info/warn/error) filters.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        project_id: { type: 'string', description: 'Project UUID (falls back to key-bound project)' },
-        service: {
-          type: 'string',
-          enum: ['all', 'fix-worker', 'pipeline', 'qa-story-runner'],
-          description: 'Filter by service name',
-        },
-        since: { type: 'string', description: 'ISO timestamp — only events after this time' },
-        limit: { type: 'number', description: 'Max entries to return (default 50, max 200)' },
-        level: {
-          type: 'string',
-          enum: ['all', 'info', 'warn', 'error'],
-          description: 'Min severity filter',
-        },
-      },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
-      const pid = (args.project_id as string | undefined) ?? ctx.projectIdHint
-      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'project_id is required')
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required')
       const qs = new URLSearchParams()
       if (args.service && args.service !== 'all') qs.set('service', args.service as string)
       if (args.since) qs.set('since', args.since as string)
@@ -1399,56 +945,20 @@ const BASE_TOOLS: Record<string, ToolDef> = {
 
   get_report_evidence: {
     scope: 'mcp:read',
-    description:
-      'Return the focused evidence package for a single bug report: screenshot URL, console logs, network excerpts, environment info, user comments, and browser/OS data. Lighter than get_report_detail — skips the full classification/fix history.',
-    inputSchema: {
-      type: 'object',
-      required: ['report_id'],
-      properties: { report_id: { type: 'string', description: 'Report UUID' } },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
-      requireString(args.report_id, 'report_id')
+      requireString(args.reportId, 'reportId')
+      const reportPath = `/v1/admin/reports/${encodeURIComponent(args.reportId as string)}`
       const [reportRes, timelineRes] = await Promise.allSettled([
-        apiCall<Record<string, unknown>>(`/v1/admin/reports/${encodeURIComponent(args.report_id as string)}`, { headers: ctx.authHeaders }),
-        apiCall<Record<string, unknown>>(`/v1/admin/reports/${encodeURIComponent(args.report_id as string)}/timeline`, { headers: ctx.authHeaders }),
+        apiCall<Record<string, unknown>>(reportPath, { headers: ctx.authHeaders }),
+        apiCall<Record<string, unknown>>(`${reportPath}/timeline`, { headers: ctx.authHeaders }),
       ])
 
       const report = reportRes.status === 'fulfilled' ? reportRes.value : null
       const timeline = timelineRes.status === 'fulfilled' ? timelineRes.value : null
+      // Same packet as stdio (report-shapes.ts): logs, traces and metrics,
+      // without classification or fix history and without reporter identifiers.
       const evidence = report
-        ? {
-            id: report.id,
-            title: report.title,
-            description: report.description,
-            status: report.status,
-            severity: report.severity,
-            category: report.category,
-            // screenshot_url is a top-level signed column on the reports row
-            screenshot_url: (report.screenshot_url as string | null) ?? null,
-            // console_logs / network_logs are top-level jsonb columns (not nested under .evidence)
-            console_logs: (report.console_logs as unknown[] | null) ?? null,
-            network_requests: (report.network_logs as unknown[] | null) ?? null,
-            // breadcrumbs: Sentry-schema ring buffer {timestamp,category,level,message,data?}
-            breadcrumbs: (report.breadcrumbs as unknown[] | null) ?? null,
-            // performance_metrics: Web Vitals snapshot (LCP, CLS, INP, TTFB, FCP, FID, longTasks)
-            performance_metrics: (report.performance_metrics as Record<string, unknown> | null) ?? null,
-            // backend_spans: client→server trace spans joined by trace_id (if available)
-            backend_spans: (report.backend_spans as unknown[] | null) ?? null,
-            // repro_timeline: merged SDK event stream (route/click/request/log/screen entries)
-            repro_timeline: (report.repro_timeline as unknown[] | null) ?? null,
-            // anomalies: statistical provenance when this report was auto-filed by anomaly detection
-            anomalies: (report.anomalies as unknown[] | null) ?? null,
-            // sentry trace correlation IDs for deeplinks
-            sentry_trace_id: (report.sentry_trace_id as string | null) ?? null,
-            sentry_event_id: (report.sentry_event_id as string | null) ?? null,
-            sentry_release: (report.sentry_release as string | null) ?? null,
-            environment: report.environment ?? null,
-            user_agent: report.user_agent ?? null,
-            user_comments: report.comments ?? null,
-            tags: (report.tags as Record<string, string> | null) ?? null,
-            created_at: report.created_at,
-          }
+        ? reportEvidenceOf(report, args.reportId as string)
         : { error: String((reportRes as PromiseRejectedResult).reason) }
 
       return { evidence, reporter_thread: timeline ?? { error: String((timelineRes as PromiseRejectedResult).reason) } }
@@ -1457,35 +967,24 @@ const BASE_TOOLS: Record<string, ToolDef> = {
 
   triage_issue: {
     scope: 'mcp:read',
-    description:
-      'Read-only orchestration tool that combines report detail, the reporter thread, similar reports (matched on the report summary), the fix context (paste-ready fix prompt, repro steps, root cause), the blast radius of the inventory action the report is filed against, recent pipeline warnings, and recommended next actions into a single triage packet. partial_errors lists any source that failed; notes lists any source that does not apply. This is the primary entry point for agent-driven bug investigation — call it before dispatch_fix.',
-    inputSchema: {
-      type: 'object',
-      required: ['report_id'],
-      properties: {
-        report_id: { type: 'string', description: 'Report UUID to triage' },
-        project_id: { type: 'string', description: 'Project UUID — for log context (falls back to key-bound project)' },
-        include_logs: { type: 'boolean', description: 'Include recent pipeline warnings/errors (default true)' },
-      },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
-      requireString(args.report_id, 'report_id')
-      const reportId = args.report_id as string
+      requireString(args.reportId, 'reportId')
+      const reportId = args.reportId as string
       const reportPath = `/v1/admin/reports/${encodeURIComponent(reportId)}`
-      const includeLogs = args.include_logs !== false
+      const includeLogs = args.includeLogs !== false
+      const headers = projectHeaders(ctx, args.projectId)
 
       // Every source is a route that exists, and none swallows its own
       // failure: a rejection lands in partial_errors instead of posing as
       // "no data" (the old .catch(() => null) made allSettled see success).
       const [reportRes, timelineRes] = await Promise.allSettled([
-        apiCall<Record<string, unknown>>(reportPath, { headers: ctx.authHeaders }),
-        apiCall<Record<string, unknown>>(`${reportPath}/timeline`, { headers: ctx.authHeaders }),
+        apiCall<Record<string, unknown>>(reportPath, { headers }),
+        apiCall<Record<string, unknown>>(`${reportPath}/timeline`, { headers }),
       ])
 
       const report = reportRes.status === 'fulfilled' ? reportRes.value : null
       const pid =
-        (args.project_id as string | undefined) ??
+        (args.projectId as string | undefined) ??
         ctx.projectIdHint ??
         (typeof report?.project_id === 'string' ? report.project_id : undefined)
 
@@ -1493,27 +992,27 @@ const BASE_TOOLS: Record<string, ToolDef> = {
       const notes: string[] = []
       const similarityQuery = report ? similarityQueryOf(report) : null
       const actionNodeId = report ? inventoryActionNodeIdOf(report) : null
-      if (report && !similarityQuery) notes.push('similar_reports: the report has no summary or description to match on.')
+      if (report && !similarityQuery) notes.push('similar_bugs: the report has no summary or description to match on.')
       if (report && !actionNodeId) {
         notes.push(
           'blast_radius: the report is not filed against an inventory action, so there is no graph node to traverse from. ' +
             'Use get_knowledge_graph with the component as the seed instead.',
         )
       }
-      if (includeLogs && !pid) notes.push('pipeline_logs: no project context — pass project_id to include them.')
+      if (includeLogs && !pid) notes.push('recent_logs: no project context — pass projectId to include them.')
       const [similarRes, blastRes, logsRes] = await Promise.allSettled([
         similarityQuery
-          ? apiCall<{ results?: Array<{ reportId?: string }> }>('/v1/admin/reports/similarity', {
+          ? apiCall<{ results?: Array<Record<string, unknown>> }>('/v1/admin/reports/similarity', {
               method: 'POST',
-              headers: ctx.authHeaders,
+              headers,
               body: JSON.stringify({ query: similarityQuery, k: 6, threshold: 0.3, ...(pid ? { projectId: pid } : {}) }),
             })
           : Promise.resolve(null),
         actionNodeId
-          ? apiCall<unknown>(`/v1/admin/graph/blast-radius/${encodeURIComponent(actionNodeId)}`, { headers: ctx.authHeaders })
+          ? apiCall<Record<string, unknown>>(`/v1/admin/graph/blast-radius/${encodeURIComponent(actionNodeId)}`, { headers })
           : Promise.resolve(null),
         includeLogs && pid
-          ? apiCall<unknown>(`/v1/admin/mcp/logs/${encodeURIComponent(pid)}?limit=20&level=warn`, { headers: ctx.authHeaders })
+          ? apiCall<Record<string, unknown>>(`/v1/admin/mcp/logs/${encodeURIComponent(pid)}?limit=20&level=warn`, { headers })
           : Promise.resolve(null),
       ])
 
@@ -1523,91 +1022,39 @@ const BASE_TOOLS: Record<string, ToolDef> = {
         ['timeline', timelineRes],
         ['similarity', similarRes],
         ['blast_radius', blastRes],
-        ['pipeline_logs', logsRes],
+        ['recent_logs', logsRes],
       ] as const) {
         if (res.status === 'rejected') partial_errors.push(`${label}: ${res.reason instanceof Error ? res.reason.message : String(res.reason)}`)
       }
 
-      const severity = report?.severity ?? 'unknown'
-      const status = report?.status ?? 'unknown'
-
-      const actions: Array<{ action: string; reason: string }> = []
-      // Blocked-fix awareness (2026-08-16 audit P0-2): fix-worker stamps
-      // processing_error='autofix_blocked: …' when a dispatch is skipped or
-      // fails — recommend the unblock, not another doomed dispatch.
-      const processingError =
-        typeof report?.processing_error === 'string' ? report.processing_error : null
-      const autofixBlocked = processingError?.startsWith('autofix_blocked:') ?? false
-      if (autofixBlocked && status !== 'fixing' && status !== 'fixed') {
-        actions.push({
-          action: 'diagnose_setup',
-          reason: `Auto-fix is blocked: ${processingError}. Run diagnose_setup (mode=dispatch), resolve the blocker, then re-dispatch.`,
-        })
-      } else if (status === 'new' || status === 'classified' || status === 'triaged' || status === 'reopened') {
-        // Real report statuses — the previous 'open'/'triage' branch matched
-        // values that do not exist in the 14-status vocabulary, so this
-        // recommendation never fired for any live report.
-        actions.push({ action: 'dispatch_fix', reason: 'Report is classified — initiate an automated fix attempt.' })
-      } else if (status === 'fixing') {
-        actions.push({ action: 'get_fix_context', reason: 'Fix is in progress — check fix context for details.' })
-      } else if (status === 'fixed') {
-        actions.push({ action: 'transition_status', reason: 'Fix has been applied — verify, then mark the report verified (or reopen).' })
-      }
-      if (severity === 'critical' || severity === 'high') {
-        actions.push({ action: 'get_blast_radius', reason: 'High severity — check blast radius for affected scope.' })
-      }
-
+      const text = (v: unknown): string | null => (typeof v === 'string' ? v : v == null ? null : String(v))
+      // Same next-step logic and summary as stdio (report-shapes.ts).
+      const actions = triageRecommendedActions(report, reportId)
       return {
-        report: report ?? { error: String((reportRes as PromiseRejectedResult).reason) },
+        report_id: reportId,
+        severity: report ? text(report.severity) : 'unknown',
+        category: report ? text(report.category) : 'unknown',
+        status: report ? text(report.status) : 'unknown',
         partial_errors,
         notes,
-        evidence_thread: timelineRes.status === 'fulfilled' ? timelineRes.value : null,
+        report: report ? projectReportDetail(report, false) : { error: String((reportRes as PromiseRejectedResult).reason) },
+        reporter_thread: timelineRes.status === 'fulfilled' ? timelineRes.value : null,
         // The report is its own nearest neighbour — drop it.
-        similar_reports:
+        similar_bugs:
           similarRes.status === 'fulfilled' && similarRes.value
             ? (similarRes.value.results ?? []).filter((r) => r.reportId !== reportId).slice(0, 5)
             : null,
         fix_context: report ? fixContextOf(report) : null,
         blast_radius: blastRes.status === 'fulfilled' ? blastRes.value : null,
-        pipeline_logs: logsRes.status === 'fulfilled' ? logsRes.value : null,
+        recent_logs: logsRes.status === 'fulfilled' ? logsRes.value : null,
         recommended_actions: actions,
-        triage_summary: report
-          ? `[${severity?.toString().toUpperCase()}] "${report.title ?? report.id}" — status: ${status}. ${actions.length} recommended action(s).`
-          : 'Could not fetch report.',
+        triage_summary: triageSummaryOf(report, actions),
       }
     },
   },
 
   triage_next_steps: {
     scope: 'mcp:read',
-    description:
-      'Prioritised "do this next" list for the project: blocked auto-fixes first (with the unblock action), then in-flight fixes to shepherd to merge, then user-felt classified reports by severity, with robot/cron chores (dependency bumps) last. Returns { steps: [{ priority, action, reason, tool, args }], summary }. Read-only. Call this first when the user asks "what needs my attention / what should I triage or fix".',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        projectId: { type: 'string', description: 'Project UUID (defaults to the configured project).' },
-      },
-    },
-    outputSchema: {
-      type: 'object',
-      properties: {
-        steps: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              priority: { type: 'number' },
-              action: { type: 'string' },
-              reason: { type: 'string' },
-              tool: { type: 'string' },
-              args: { type: 'object' },
-            },
-          },
-        },
-        summary: { type: 'string' },
-      },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       // Mirrors the stdio server's triage_next_steps tool (packages/mcp) —
       // existed only as an MCP prompt on the hosted surface until 2026-08-16,
@@ -1651,7 +1098,8 @@ const BASE_TOOLS: Record<string, ToolDef> = {
           priority: priority++,
           action: `Shepherd in-flight fix: ${label(r)}`,
           reason: 'A fix branch/PR is open — check CI and merge when green.',
-          tool: 'get_fix_timeline',
+          // get_fix_timeline takes a fix id; the report timeline shows the fix lane.
+          tool: 'get_report_timeline',
           args: { reportId: r.id },
         })
       }
@@ -1666,7 +1114,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
           action: `Triage [${r.severity}] ${label(r)}`,
           reason: 'User-felt report awaiting triage — review the packet, then dispatch or dismiss.',
           tool: 'triage_issue',
-          args: { report_id: r.id },
+          args: { reportId: r.id },
         })
       }
 
@@ -1694,33 +1142,10 @@ const BASE_TOOLS: Record<string, ToolDef> = {
 
   get_usage: {
     scope: 'mcp:read',
-    description:
-      'Read-only diagnoses quota and billing summary for the current project: diagnoses used / limit / percentage, spend cap, period start/end, plan name, and whether the project is approaching or over its quota. Use this to answer "how many diagnoses do I have left?" or "am I close to my spend cap?".',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        project_id: { type: 'string', description: 'Project UUID (falls back to key-bound project).' },
-      },
-    },
-    outputSchema: {
-      type: 'object',
-      properties: {
-        planId: { type: 'string' },
-        diagnosesUsed: { type: 'number' },
-        diagnosesLimit: { type: ['number', 'null'] },
-        diagnosesUsagePct: { type: ['number', 'null'] },
-        overDiagnosisQuota: { type: 'boolean' },
-        approachingDiagnosisQuota: { type: 'boolean' },
-        monthlySpendCapUsd: { type: ['number', 'null'] },
-        periodEnd: { type: ['string', 'null'] },
-        freeLimitDiagnoses: { type: 'number' },
-      },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
     handler: async (args, ctx) => {
-      const pid = String(args.project_id ?? ctx.projectIdHint ?? '')
-      const path = pid ? `/v1/admin/billing/stats?project_id=${encodeURIComponent(pid)}` : '/v1/admin/billing/stats'
-      return apiCall(path, { headers: ctx.authHeaders })
+      // The stats route scopes by X-Mushi-Project-Id; a ?project_id= query
+      // string was silently ignored.
+      return apiCall('/v1/admin/billing/stats', { headers: projectHeaders(ctx, args.projectId) })
     },
   },
 
@@ -1730,28 +1155,6 @@ const BASE_TOOLS: Record<string, ToolDef> = {
   // is inlined here (edge functions cannot import from packages/).
   use_mushi: {
     scope: 'mcp:read',
-    description:
-      'CALL THIS FIRST if you are new to this Mushi project or unsure which tool to use. ' +
-      'Pass your intent as a short natural-language phrase ' +
-      '("fix the top bug", "check what I should work on", "run QA tests", "set up Mushi", …). ' +
-      'Returns: (1) a curated list of the 5–12 tool names most relevant to that intent, ' +
-      '(2) a one-paragraph orientation to the Mushi project and dashboard state, and ' +
-      '(3) the single recommended first tool to call. ' +
-      'Only tools this connection exposes are recommended; relevant tools hidden by the active feature groups are named with how to enable them. ' +
-      'Avoids loading the full tool catalog into context when only a small subset is needed. ' +
-      'Read-only; does not call any downstream tools itself.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        intent: {
-          type: 'string',
-          description:
-            'What you are trying to accomplish with Mushi, e.g. "fix the top bug", ' +
-            '"check project health", "run QA tests", "set up Mushi". Leave blank for general orientation.',
-        },
-      },
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
     handler: async (args, ctx) => {
       const intent = String(args.intent ?? '').toLowerCase()
 
@@ -1844,7 +1247,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
 }
 
 /** Full catalog — base hand-authored tools + manifest-generated parity tools. */
-let TOOLS: Record<string, ToolDef> = BASE_TOOLS
+let TOOLS: Record<string, ToolDef> = {}
 
 // JSON-RPC dispatcher
 // ----------------------------------------------------------------------------
@@ -2210,9 +1613,15 @@ async function handleToolsCall(
     }
   }
 
-  const args = (params.arguments as Record<string, unknown> | undefined) ?? {}
+  // Canonical camelCase names: `project_id` becomes `projectId` when the
+  // tool declares `projectId` (arg-aliases.ts — the stdio server applies the
+  // same rule before zod validation). Handlers only read canonical names.
+  const args = normalizeArgAliases(
+    (params.arguments as Record<string, unknown> | undefined) ?? {},
+    Object.keys((def.inputSchema.properties as Record<string, unknown> | undefined) ?? {}),
+  )
 
-  const recordOutcome = (status: 'ok' | 'error', errorCode?: string) => {
+  const recordOutcome =(status: 'ok' | 'error', errorCode?: string) => {
     void recordMcpToolInvocation({
       projectId: ctx.projectIdHint,
       apiKeyId: ctx.apiKeyId,
@@ -2358,41 +1767,26 @@ async function invokeToolAsResult(
   }
 }
 
+/**
+ * The catalog's resources (RESOURCE_CATALOG in packages/mcp, via the generated
+ * mcp-discovery-tools.json) — the same eight URIs stdio registers and the
+ * server card advertises. Hosted listed four of them until 2026-09-22.
+ */
 function handleResourcesList(): Record<string, unknown> {
   return {
-    resources: [
-      { uri: 'project://dashboard', name: 'project_dashboard', description: 'PDCA snapshot', mimeType: 'application/json' },
-      { uri: 'project://stats', name: 'project_stats', description: 'Report stats', mimeType: 'application/json' },
-      { uri: 'project://settings', name: 'project_settings', description: 'Project settings', mimeType: 'application/json' },
-      {
-        uri: 'inventory://current',
-        name: 'inventory_current',
-        description:
-          'Current inventory.yaml snapshot — all pages, user stories, actions, and their ' +
-          'expected_outcome contracts. Subscribable: the MCP server pushes ' +
-          '`notifications/resources/updated` when a new inventory is ingested so orchestrators ' +
-          'never hold a stale contract.',
-        mimeType: 'application/json',
-      },
-    ],
+    resources: MCP_DISCOVERY.resources
+      .filter(({ uri }) => (HOSTED_RESOURCE_URIS as readonly string[]).includes(uri))
+      .map(({ uri, name, title, description }) => ({ uri, name, title, description, mimeType: 'application/json' })),
   }
 }
 
 async function handleResourcesRead(params: Record<string, unknown>, ctx: CallContext): Promise<Record<string, unknown>> {
   const uri = params.uri
   if (typeof uri !== 'string') throw new McpError(ERR_INVALID_PARAMS, 'resources/read requires a string `uri`')
-  const path =
-    uri === 'project://dashboard' ? '/v1/admin/dashboard'
-    : uri === 'project://stats' ? '/v1/admin/stats'
-    : uri === 'project://settings' ? '/v1/admin/settings'
-    : uri === 'inventory://current'
-      ? (ctx.projectIdHint ? `/v1/admin/inventory/${encodeURIComponent(ctx.projectIdHint)}` : null)
-      : null
-  if (uri === 'inventory://current' && !ctx.projectIdHint) {
-    throw new McpError(ERR_INVALID_PARAMS, 'inventory://current requires a project context; set X-Mushi-Project-Id header or pass projectId')
-  }
-  if (!path) throw new McpError(ERR_INVALID_PARAMS, `unknown resource uri: ${uri}`)
-  const data = await apiCall(path, { headers: ctx.authHeaders })
+  const target = hostedResourceTarget(uri, ctx.projectIdHint)
+  if (!target) throw new McpError(ERR_INVALID_PARAMS, `unknown resource uri: ${uri}`)
+  if ('error' in target) throw new McpError(ERR_INVALID_PARAMS, target.error)
+  const data = await apiCall(target.path, { headers: ctx.authHeaders })
   return {
     contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(data, null, 2) }],
   }
@@ -2490,30 +1884,38 @@ async function apiCall<T = unknown>(
   return body as T
 }
 
+// ── Canonical metadata ──────────────────────────────────────────────────────
+// Title, description, annotations and the input and output schemas of every
+// hand-written tool come from the stdio catalog through the generated
+// mcp-discovery-tools.json — the same source manifest tools use. Hosted used
+// to hand-declare them: 26 of 30 descriptions had drifted from catalog.ts,
+// input schemas spelled parameters differently, and outputSchema existed on
+// one transport but not the other for nine tools. check-catalog-sync.mjs
+// fails when a hosted tool is missing from the catalog, so the throw below is
+// a build-time guarantee, not a runtime branch.
+function withCatalogMetadata(name: string, impl: HostedTool): ToolDef {
+  const canonical = MCP_DISCOVERY.tools[name]
+  if (!canonical) {
+    throw new Error(`hosted tool "${name}" is missing from mcp-discovery-tools.json — run scripts/sync-mcp-discovery-card.mjs`)
+  }
+  return {
+    ...impl,
+    title: canonical.title,
+    description: canonical.description,
+    annotations: canonical.annotations,
+    inputSchema: canonical.inputSchema,
+    ...(canonical.outputSchema ? { outputSchema: canonical.outputSchema } : {}),
+  }
+}
+
 TOOLS = {
-  ...BASE_TOOLS,
+  ...Object.fromEntries(Object.entries(BASE_TOOLS).map(([name, impl]) => [name, withCatalogMetadata(name, impl)])),
   ...buildManifestTools({
     apiCall,
     requireString,
     McpError,
     ERR_INVALID_PARAMS,
   }),
-}
-
-// ── Canonical metadata overlay ─────────────────────────────────────────────
-// Titles, descriptions and annotations come from the stdio catalog (via the
-// generated mcp-discovery-tools.json), so both transports describe every tool
-// the same way — 26 of 30 hand-written BASE_TOOLS descriptions had drifted
-// from catalog.ts. Handlers and hand-written input schemas stay hosted-owned.
-for (const [name, def] of Object.entries(TOOLS)) {
-  const canonical = MCP_DISCOVERY.tools[name]
-  if (!canonical) continue
-  TOOLS[name] = {
-    ...def,
-    title: canonical.title,
-    description: canonical.description,
-    annotations: canonical.annotations ?? def.annotations,
-  }
 }
 
 // ── Deprecated-alias backward-compatibility shims ──────────────────────────
@@ -2525,8 +1927,11 @@ for (const [name, def] of Object.entries(TOOLS)) {
 for (const [oldName, newName] of Object.entries(DEPRECATED_TOOL_ALIASES)) {
   const target = TOOLS[newName]
   if (!target) continue // target may not be in this transport build
+  // No outputSchema on a shim: the injected `_deprecated` key is not in the
+  // successor's schema, so structuredContent would fail client validation.
+  const { outputSchema: _successorOutputSchema, ...targetWithoutOutput } = target
   TOOLS[oldName] = {
-    ...target,
+    ...targetWithoutOutput,
     description:
       `⚠️ DEPRECATED — use \`${newName}\` instead. This alias will be removed in the next release.\n\n${target.description}`,
     handler: async (args, ctx) => {

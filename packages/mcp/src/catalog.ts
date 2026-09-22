@@ -68,7 +68,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_recent_reports',
     title: 'Recent bug reports',
     description:
-      'List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, component, created_at, processing_error }], total }; include_raw=true returns every list column instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed|…), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports.',
+      'List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, component, created_at, processing_error }], total }; includeRaw=true returns every list column instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed|…), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
@@ -78,7 +78,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_report_detail',
     title: 'Report detail',
     description:
-      'Fetch the full record for one bug report by id: description, console logs, network requests, screenshot URL, classification (stage 1/2), and fix history. Returns { report }. Read-only. Use when you have a reportId and need everything about it; for evidence only use get_report_evidence, for the activity thread use get_report_timeline, for a one-call fix bundle use get_fix_context.',
+      'Fetch the full record for one bug report by id: description, console logs, network requests, screenshot URL, classification (stage 1/2), fix history, the paste-ready fix packet and the inventory action it is filed against. Returns { report } with the documented fields; includeRaw=true returns every column the detail route has instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Read-only. Use when you have a reportId and need everything about it; for evidence only use get_report_evidence, for the activity thread use get_report_timeline, for a one-call fix bundle use get_fix_context.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
@@ -118,7 +118,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_fix_context',
     title: 'Fix context bundle',
     description:
-      'Bundle everything an agent needs to fix one bug in a single call: a paste-ready fixPrompt (plain-English diagnosis + reproduction + suggested fix + relevant code + blast radius), plus report detail, repro steps, component, root cause, and ontology tags. Returns { fixPrompt, report, reproduction, component, rootCause, tags }. Read-only; no second LLM key needed. Use before writing a fix; use triage_issue for a multi-report review packet, or suggest_fix for just the Stage-2 hint.',
+      'Bundle everything an agent needs to fix one bug in a single call: a paste-ready fixPrompt (plain-English diagnosis + reproduction + suggested fix + relevant code + blast radius), plus report detail, repro steps, component, root cause, ontology tags, and the inventory action (with its expected_outcome contract) the report is filed against. Returns { report, fixPrompt, reproductionSteps, component, rootCause, bugOntologyTags, inventoryAction }. Read-only; no second LLM key needed. Use before writing a fix; use triage_issue for a multi-report review packet, or suggest_fix for just the Stage-2 hint.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
@@ -187,7 +187,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'list_gate_findings',
     title: 'Gate findings',
     description:
-      'List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead-handler | mock-leak | crawl | status-claim) or minimum severity (low|medium|high|critical). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.',
+      'List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead_handler | mock_leak | api_contract | crawl | status_claim | spec_drift | orphan_endpoint | unknown_call | schema_drift | code_health) or finding severity (info | warn | error). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Show me what CI gates failed on the last run.',
@@ -413,7 +413,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     title: 'Recent pipeline logs',
     description:
       'Pull recent log entries from the Mushi pipeline services: fix-worker, qa-story-runner, pipeline, or all. ' +
-      'Accepts project_id, service, since (ISO-8601), limit (max 200), and level ' +
+      'Accepts projectId, service, since (ISO-8601), limit (max 200), and level ' +
       '(info | warn | error | fatal) filters. Returns structured log rows with timestamp, level, service, message, ' +
       'and a trace_id/report_id when available. ' +
       'Use this when a fix failed, a QA story keeps erroring, or an ingest pipeline went silent.',
@@ -438,6 +438,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
       'page timing + connection info), ' +
       'anomalies (statistical provenance when auto-filed by CI metric regression: baseline_mean/std, score in σ, threshold); ' +
       'plus screenshot_url, browser environment (user agent, URL, viewport, SDK version), and tags. ' +
+      'Reporter identifiers (session id, end-user id) are never returned. ' +
       'This is the same data an engineer would collect for a root-cause investigation. ' +
       'Faster than calling get_report_detail + report timeline separately.',
     scope: 'mcp:read',
@@ -455,7 +456,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
       'Returns the packet plus prioritised recommended_actions, partial_errors for any source that failed, and notes for any source that does not apply ' +
       '(e.g. no blast radius when the report is not anchored to an inventory action). ' +
       'Equivalent to a Sentry "Analyze with Seer" flow grounded in user-felt reports. ' +
-      'Pass report_id to kick off review. Call this before dispatch_fix.',
+      'Pass reportId to kick off review. Call this before dispatch_fix.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
@@ -479,7 +480,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'query_lessons',
     title: 'Query lessons for diff context',
     description:
-      'Retrieve the learning rules ("lessons") most relevant to a given code diff or PR context, packed within a token budget. Uses bi-encoder retrieval + severity-weighted scoring; pass the diff/description as the query and max_tokens (default 2000). Returns ranked { lessons: [{ title, rule, severity }] }. Read-only. Use before writing a fix or opening a PR; use list_lessons to browse all lessons unfiltered.',
+      'Retrieve the learning rules ("lessons") most relevant to a given code diff or PR context, packed within a token budget. Uses bi-encoder retrieval + severity-weighted scoring; pass the diff/description as diffText and a maxTokens budget (default 3000). Returns ranked { lessons: [{ title, rule, severity }] }. Read-only. Use before writing a fix or opening a PR; use list_lessons to browse all lessons unfiltered.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
@@ -861,7 +862,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'start_skill_pipeline',
     title: 'Start a skill pipeline',
     description:
-      'Start a new skill pipeline run for a report. Pass root_skill_slug and optionally report_id. ' +
+      'Start a new skill pipeline run for a report. Pass rootSkillSlug and optionally reportId. ' +
       'Returns run_id, context_packet (full instructions + report context), and step list. ' +
       'Read the context_packet — it contains skill instructions plus full report context (repro steps, root cause, RAG files). ' +
       'After executing each step, call checkin_pipeline_step. The PM watching the console sees progress live.',
@@ -931,9 +932,9 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
   // Sentry ships `use_sentry` (a single meta-tool an agent calls to get a
   // recommended subset of tools for a given intent) as the primary context-
   // cost reduction lever.  We do the same: `use_mushi` returns a curated
-  // list of the 6–12 tools most relevant to the caller's stated intent, plus
+  // short list of the tools most relevant to the caller's stated intent, plus
   // a short orientation block.  Agents that call use_mushi first avoid
-  // loading 68 tool descriptions up-front, cutting context cost by ~60% for
+  // loading every tool description up-front, which cuts context cost for
   // narrow tasks (fix a bug, check status, start a pipeline).
   {
     name: 'use_mushi',

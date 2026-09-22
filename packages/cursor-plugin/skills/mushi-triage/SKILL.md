@@ -46,7 +46,7 @@ Identify the report you want to investigate. Note the `id`.
 ### Step 4 — Deep evidence pull
 
 ```
-get_report_evidence { report_id: "<id>" }
+get_report_evidence { reportId: "<id>" }
 ```
 
 Read screenshot URL, console logs, network requests, and user comments. Form a working hypothesis.
@@ -54,7 +54,7 @@ Read screenshot URL, console logs, network requests, and user comments. Form a w
 ### Step 5 — Full triage orchestration
 
 ```
-triage_issue { report_id: "<id>", project_id: "<id>", include_logs: true }
+triage_issue { reportId: "<id>", projectId: "<id>", includeLogs: true }
 ```
 
 This combines report detail, similar bugs, fix context, blast radius, and recent pipeline logs into one packet. Read `recommended_actions` carefully.

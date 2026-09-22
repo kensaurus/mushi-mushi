@@ -29,7 +29,7 @@ export const FEATURE_GROUPS = [
 
 export type FeatureGroup = (typeof FEATURE_GROUPS)[number]
 
-/** Lean default for new Cursor installs (~45 tools vs 70 full). */
+/** Lean default for new installs — a focused subset of the full catalog. */
 export const DEFAULT_FEATURE_GROUPS: readonly FeatureGroup[] = [
   'triage',
   'fixes',
@@ -43,9 +43,10 @@ export const ALL_FEATURE_GROUPS: readonly FeatureGroup[] = FEATURE_GROUPS.filter
 )
 
 /**
- * Map every tool/resource name → feature group. A tool with no entry is
- * listed under no filter but `all`, so every registered tool needs one
- * (enforced by the catalog-parity test and check-catalog-sync.mjs).
+ * Map every tool name → feature group. A tool with no entry is listed under
+ * no filter but `all`, so every registered tool needs one (enforced by the
+ * catalog-parity test and check-catalog-sync.mjs). Resources are not tools and
+ * are not filtered by feature group, so they have no entry.
  */
 export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   // triage
@@ -72,13 +73,11 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   get_inventory: 'inventory',
   diff_inventory: 'inventory',
   list_gate_findings: 'inventory',
-  inventory_current: 'admin',
 
   // setup
   diagnose_setup: 'setup',
   check_sdk_version: 'setup',
   activation_status: 'setup',
-  project_integration_health: 'setup',
   get_two_way_comms_health: 'setup',
 
   // fixes
@@ -102,11 +101,6 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   get_account_overview: 'admin',
   get_project_context: 'admin',
   get_pipeline_logs: 'admin',
-  project_dashboard: 'admin',
-  project_stats: 'admin',
-  project_settings: 'admin',
-  privacy_status: 'admin',
-  evolution_history: 'admin',
 
   // usage / billing / product analytics (Mushi.track() funnels)
   get_usage: 'usage',

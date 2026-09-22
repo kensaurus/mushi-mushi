@@ -41,7 +41,13 @@ import { ALL_SCOPES, type McpScope } from './catalog.js'
 import { DEFAULT_FEATURE_GROUPS, parseFeaturesCsv } from './feature-groups.js'
 import { createMushiServer, createSetupModeServer } from './server.js'
 import { startInventoryPoll } from './inventory-poll.js'
-import * as Sentry from '@sentry/node'
+import { initOptionalSentry } from './optional-sentry.js'
+import {
+  missingApiKeyReport,
+  placeholderFixLines,
+  resolveStdioCredentials,
+  type CliConfigSnapshot,
+} from './stdio-config.js'
 
 const require = createRequire(import.meta.url)
 const VERSION = (require('../package.json') as { version: string }).version
@@ -83,15 +89,7 @@ function resolveCliConfigPath(): string {
  *      stop silently falling back to Mushi Cloud in the MCP server.
  * Mirrors packages/cli/src/config.ts path resolution (XDG / %APPDATA%).
  */
-function readCliConfig(): {
-  apiKey?: string
-  projectId?: string
-  endpoint?: string
-  /** Absolute path we looked at — quoted verbatim in the no-key diagnostic. */
-  path: string
-  /** True when the file existed and parsed (it may still lack an apiKey). */
-  found: boolean
-} {
+function readCliConfig(): CliConfigSnapshot {
   const configPath = resolveCliConfigPath()
   try {
     // Must match the CLI's resolveXdgConfigPath() precedence exactly
@@ -113,22 +111,19 @@ function readCliConfig(): {
 }
 const CLI_CONFIG = readCliConfig()
 
-const API_ENDPOINT =
-  process.env.MUSHI_API_ENDPOINT?.trim() || CLI_CONFIG.endpoint?.trim() || DEFAULT_API_ENDPOINT
-// `||` (not `??`): manifest configs use `${MUSHI_API_KEY:-}` expansion, which
-// yields an EMPTY string when the env var is unset — that must still fall
-// through to the CLI config, not mask it.
-const API_KEY = process.env.MUSHI_API_KEY?.trim() || CLI_CONFIG.apiKey || ''
-const PROJECT_ID = process.env.MUSHI_PROJECT_ID?.trim() || CLI_CONFIG.projectId || ''
+// Env → CLI config → default. An empty value (manifest configs use
+// `${MUSHI_API_KEY:-}`, which expands to '' when unset) and an unexpanded
+// placeholder (`${MUSHI_API_KEY}` from a client that does not expand
+// variables) both fall through — neither is ever sent to the API.
+const CREDENTIALS = resolveStdioCredentials(process.env, CLI_CONFIG, DEFAULT_API_ENDPOINT)
+const API_ENDPOINT = CREDENTIALS.endpoint
+const API_KEY = CREDENTIALS.apiKey
+const PROJECT_ID = CREDENTIALS.projectId
 /**
  * Optional CSV list of granted scopes. When set, the server only registers
  * tools whose catalog scope is in the list — `tools/list` will hide write
  * tools entirely for read-only keys, instead of letting the LLM call them
  * and burn round-trips on `INSUFFICIENT_SCOPE` errors.
- *
- * Optional env for observability correlation with host Sentry:
- *   MUSHI_MCP_SENTRY_DSN — when your IDE host runs Sentry, correlate MCP
- *   api.failed log lines (they include requestId) with host-side events.
  *
  * Examples:
  *   MUSHI_SCOPES=mcp:read              # read-only key
@@ -155,79 +150,38 @@ const FEATURES = process.env.MUSHI_FEATURES?.trim()
   ? parseFeaturesCsv(process.env.MUSHI_FEATURES)
   : DEFAULT_FEATURE_GROUPS
 
-const MCP_SENTRY_DSN = process.env.MUSHI_MCP_SENTRY_DSN?.trim()
-if (MCP_SENTRY_DSN) {
-  Sentry.init({
-    dsn: MCP_SENTRY_DSN,
-    environment: process.env.MUSHI_SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? 'development',
-    tracesSampleRate: 0,
-  })
-}
-
 /**
- * Everything an operator needs to fix a missing key, printed as one block on
- * stderr. The old one-liner named MUSHI_API_KEY and `mushi login` but never
- * said WHICH file was checked or WHERE the env block lives, so the common
- * failures — config written under a different XDG root, a key set in the
- * shell instead of the MCP client's `env` block, a file present but without
- * an `apiKey` field — all looked identical from the client's log pane.
+ * Optional error reporting for the MCP process itself. @sentry/node is an
+ * optional peer: set MUSHI_MCP_SENTRY_DSN (and install @sentry/node) to
+ * correlate MCP api.failed log lines (they include requestId) with host-side
+ * Sentry events. Unset, the SDK is never imported. Awaited at the top level
+ * so `init` runs before any tool call, as it did when the import was static.
  */
-function missingApiKeyReport(): string {
-  const envState = process.env.MUSHI_API_KEY === undefined
-    ? 'not set'
-    : process.env.MUSHI_API_KEY.trim() === ''
-      ? 'set but empty'
-      : 'set'
-  const cliState = !CLI_CONFIG.found
-    ? 'no file at this path'
-    : CLI_CONFIG.apiKey
-      ? 'present'
-      : 'file exists but has no "apiKey" field'
-  return [
-    '',
-    '[mushi-mcp] No API key — serving setup mode: only search_mushi_docs, get_mushi_doc and',
-    '            diagnose_setup are available until a key is configured.',
-    '',
-    '  Sources checked, in precedence order:',
-    `    1. env MUSHI_API_KEY        → ${envState}`,
-    `    2. CLI config file          → ${cliState}`,
-    `       ${CLI_CONFIG.path}`,
-    '',
-    '  Fix either one:',
-    '    • Run `mushi login` (writes the config file above), or',
-    '    • Add the key to the "env" block of your MCP client config',
-    '      (.cursor/mcp.json · claude_desktop_config.json · .vscode/mcp.json):',
-    '',
-    '        { "mcpServers": { "mushi-mushi": {',
-    '            "command": "npx", "args": ["-y", "@mushi-mushi/mcp"],',
-    '            "env": { "MUSHI_API_KEY": "mushi_…", "MUSHI_PROJECT_ID": "<uuid>" } } } }',
-    '',
-    '      A key exported in your shell does NOT reach the server: MCP clients',
-    '      spawn this process with only the env block they are given.',
-    '',
-    '  Other env vars this server reads:',
-    `    MUSHI_API_ENDPOINT  ${process.env.MUSHI_API_ENDPOINT?.trim() ? '= ' + process.env.MUSHI_API_ENDPOINT.trim() : `unset → ${API_ENDPOINT}`}`,
-    `    MUSHI_PROJECT_ID    ${PROJECT_ID ? '= ' + PROJECT_ID : 'unset (account mode)'}`,
-    '    MUSHI_SCOPES        optional CSV: mcp:read,mcp:write',
-    '    MUSHI_FEATURES      optional CSV of tool groups, or "all"',
-    '    MUSHI_MCP_TIMEOUT_MS  optional per-request timeout in ms (default 15000)',
-    '',
-    '  Mint a key: Console → Settings → API keys.',
-    '',
-  ].join('\n')
-}
+await initOptionalSentry(process.env, {
+  warn: (message, meta) => log.warn(message, meta),
+})
 
 async function main() {
+  if (CREDENTIALS.placeholders.length > 0 && API_KEY) {
+    // A placeholder that fell through to a usable key (CLI config) still gets
+    // said out loud; with no key at all, the setup-mode report below says it.
+    // Written straight to stderr for the same reason as that report.
+    process.stderr.write(['', ...placeholderFixLines(CREDENTIALS.placeholders), ''].join('\n'))
+    log.warn('An MCP env value is an unexpanded placeholder — treated as unset.', {
+      vars: CREDENTIALS.placeholders.map((p) => p.name).join(','),
+    })
+  }
   if (!API_KEY) {
     // Written straight to stderr: the structured logger would collapse this
     // into a single escaped-newline JSON line, which is unreadable in the
     // exact place people read it (the client's MCP log pane).
-    const report = missingApiKeyReport()
+    const report = missingApiKeyReport({ env: process.env, cli: CLI_CONFIG, resolved: CREDENTIALS })
     process.stderr.write(report)
     log.warn('No API key found — serving setup mode. Set MUSHI_API_KEY, or run `mushi login`.', {
       cliConfigPath: CLI_CONFIG.path,
       cliConfigFound: CLI_CONFIG.found,
       endpoint: API_ENDPOINT,
+      placeholderKey: CREDENTIALS.placeholders.some((p) => p.name === 'MUSHI_API_KEY'),
     })
     // Exiting 1 here made registry and directory installers see a dead
     // server, and agents see no tools at all. Setup mode lists the docs tools
@@ -237,13 +191,15 @@ async function main() {
     }))
     return
   }
-  if (!process.env.MUSHI_API_KEY && CLI_CONFIG.apiKey) {
+  if (CREDENTIALS.apiKeySource === 'cli-config') {
     log.info('[mushi-mcp] Using API key from the CLI config (~/.config/mushi/config.json)')
   }
   // Always show where traffic goes — IDE logs are the first place people
   // look when tools return the wrong project's data.
   log.info(`[mushi-mcp] Endpoint: ${API_ENDPOINT}`)
-  if (!process.env.MUSHI_API_ENDPOINT?.trim()) {
+  const endpointFromEnv =
+    !!process.env.MUSHI_API_ENDPOINT?.trim() && !CREDENTIALS.placeholders.some((p) => p.name === 'MUSHI_API_ENDPOINT')
+  if (!endpointFromEnv) {
     if (CLI_CONFIG.endpoint?.trim()) {
       log.info(`[mushi-mcp] Using endpoint from CLI config: ${API_ENDPOINT}`)
     } else {
