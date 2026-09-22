@@ -15,6 +15,7 @@
  *          a proxy strips first.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { createLogger } from '@mushi-mushi/core';
@@ -285,6 +286,12 @@ export interface MushiServerConfig {
  * and prompt. Does NOT call `server.connect()` — the caller binds whatever
  * transport they need (stdio for the CLI, InMemoryTransport for tests).
  */
+/**
+ * The tool call an API request belongs to. Set around every tool handler (see
+ * the registerTool wrapper in createMushiServer) and read by apiCall.
+ */
+const toolCallContext = new AsyncLocalStorage<{ tool: string; invocationId: string }>();
+
 export function createMushiServer(config: MushiServerConfig): McpServer {
   const { version, apiEndpoint, apiKey, projectId } = config;
   const doFetch = config.fetch ?? globalThis.fetch;
@@ -325,6 +332,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     // only place a timeout has to exist. `AbortSignal.timeout` fires a
     // `TimeoutError` DOMException that fetch surfaces as the rejection reason.
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    const toolCall = toolCallContext.getStore();
     let res: Response;
     try {
       res = await doFetch(`${apiEndpoint}${path}`, {
@@ -337,6 +345,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           Authorization: `Bearer ${apiKey}`,
           'X-Mushi-Api-Key': apiKey,
           'X-Request-Id': requestId,
+          // Lets the api count stdio tool use once per call and credit the
+          // funnel steps (report opened, fix pulled, fix dispatched) that the
+          // hosted transport already credits. Tool name and a random id only.
+          'X-Mushi-Client': `mcp-stdio/${version}`,
+          ...(toolCall
+            ? { 'X-Mushi-Mcp-Tool': toolCall.tool, 'X-Mushi-Mcp-Invocation': toolCall.invocationId }
+            : {}),
           ...(projectId ? { 'X-Mushi-Project-Id': projectId } : {}),
           ...(options?.headers ?? {}),
         },
@@ -602,6 +617,15 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     // Returned in `initialize`; used to be null on stdio.
     { instructions: config.instructions ?? MUSHI_SERVER_INSTRUCTIONS },
   );
+
+  // Run every tool handler inside its own toolCallContext, so each API request
+  // it makes carries the tool name and one id shared by that call's requests.
+  const registerTool = server.registerTool.bind(server);
+  server.registerTool = ((name: string, toolConfig: never, handler: (...args: unknown[]) => unknown) =>
+    registerTool(name, toolConfig, ((...args: unknown[]) =>
+      toolCallContext.run({ tool: name, invocationId: crypto.randomUUID() }, () =>
+        handler(...args),
+      )) as never)) as typeof server.registerTool;
 
   /**
    * Pull the catalog entry for a tool and project its hints into the

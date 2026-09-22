@@ -44,7 +44,8 @@ export type MushiSurface = (typeof MUSHI_SURFACES)[number];
 /**
  * Mushi's own funnel vocabulary. One entry per line — the generator parses
  * this block line by line, so keep the `name: { surface: '…', required: […] }`
- * shape.
+ * shape. An event with more than one emitter lists every surface:
+ * `surface: ['console', 'mcp']`.
  */
 export const MUSHI_EVENTS = {
   // ── Landing + docs (apps/docs) ───────────────────────────────────────────
@@ -56,9 +57,9 @@ export const MUSHI_EVENTS = {
   signup_click: { surface: 'docs', required: ['href'] },
   // ── Console (apps/admin) ─────────────────────────────────────────────────
   signup_completed: { surface: 'console', required: ['signup_source'] },
-  report_opened: { surface: 'console', required: ['report_id'] },
-  fix_context_pulled: { surface: 'console', required: ['report_id'] },
-  fix_dispatched: { surface: 'console', required: ['report_id', 'agent'] },
+  report_opened: { surface: ['console', 'mcp'], required: ['report_id'] },
+  fix_context_pulled: { surface: ['console', 'mcp'], required: ['report_id'] },
+  fix_dispatched: { surface: ['console', 'mcp'], required: ['report_id', 'agent'] },
   invite_sent: { surface: 'console', required: [] },
   upgrade_clicked: { surface: 'console', required: ['plan'] },
   test_report_sent: { surface: 'console', required: ['project_id'] },
@@ -79,8 +80,12 @@ export const MUSHI_EVENT_NAMES = Object.keys(MUSHI_EVENTS) as MushiEventName[];
 
 /** The aha event: a project receives its first SDK-originated report. */
 export const ACTIVATION_EVENT: MushiEventName = 'first_report_received';
-/** Any of these in a week counts as "diagnosis consumed" for the habit metric. */
-export const HABIT_EVENTS: readonly MushiEventName[] = ['report_opened', 'fix_context_pulled'];
+/**
+ * Any of these in a week counts as "diagnosis consumed" for the habit metric
+ * (docs/plan-gtm.md: report opened, fix context pulled or fix dispatched, from
+ * the console or an MCP client). company_funnel_weekly counts the same set.
+ */
+export const HABIT_EVENTS: readonly MushiEventName[] = ['report_opened', 'fix_context_pulled', 'fix_dispatched'];
 
 // MushiPropertyValue is defined once, in types.ts (the published surface).
 export type MushiEventProperties = Record<string, MushiPropertyValue>;

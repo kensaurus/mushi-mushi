@@ -9,8 +9,9 @@
  *   node scripts/gen-analytics-taxonomy.mjs --check  # exit 1 when stale (CI)
  *
  * The parser is deliberately naive: it reads the `MUSHI_EVENTS` block line by
- * line and expects `name: { surface: 'x', required: [...] },` per line, plus
- * the EVENT_NAME_RE / EVENT_PROPERTY_LIMITS / MUSHI_SURFACES literals.
+ * line and expects `name: { surface: 'x' | ['x', 'y'], required: [...] },` per
+ * line, plus the EVENT_NAME_RE / EVENT_PROPERTY_LIMITS / MUSHI_SURFACES
+ * literals. An entry it cannot parse, or an unknown surface, is an error.
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -42,15 +43,29 @@ for (const line of limitsBlock.split('\n')) {
   if (m) limits[m[1]] = Number(m[2])
 }
 const eventsBlock = grab(/export const MUSHI_EVENTS = \{([\s\S]*?)\} as const;/, 'MUSHI_EVENTS')
+const quotedList = (s) => s.split(',').map((x) => x.trim().replace(/^'|'$/g, '')).filter(Boolean)
 const events = []
 for (const line of eventsBlock.split('\n')) {
-  const m = line.match(/^\s*([a-z][a-z0-9_]*):\s*\{\s*surface:\s*'(\w+)',\s*required:\s*\[([^\]]*)\]\s*\},?/)
-  if (!m) continue
-  const required = m[3].split(',').map((s) => s.trim().replace(/^'|'$/g, '')).filter(Boolean)
-  events.push({ name: m[1], surface: m[2], required })
+  // An entry line that fails the shape must stop the build: a skipped line
+  // would drop the event from the edge-function mirror without a trace.
+  if (!/^\s*[a-z][a-z0-9_]*:\s*\{/.test(line)) continue
+  const m = line.match(
+    /^\s*([a-z][a-z0-9_]*):\s*\{\s*surface:\s*('\w+'|\[[^\]]*\]),\s*required:\s*\[([^\]]*)\]\s*\},?\s*$/,
+  )
+  if (!m) throw new Error(`gen-analytics-taxonomy: cannot parse MUSHI_EVENTS entry: ${line.trim()}`)
+  const surfaceList = quotedList(m[2].replace(/^\[|\]$/g, ''))
+  for (const s of surfaceList) {
+    if (!surfaces.includes(s)) throw new Error(`gen-analytics-taxonomy: ${m[1]} uses unknown surface '${s}'`)
+  }
+  const surface = m[2].startsWith('[') ? surfaceList : surfaceList[0]
+  events.push({ name: m[1], surface, required: quotedList(m[3]) })
 }
 if (events.length === 0) throw new Error('gen-analytics-taxonomy: parsed zero events')
 const activation = grab(/export const ACTIVATION_EVENT: MushiEventName = '(\w+)';/, 'ACTIVATION_EVENT')
+const habit = quotedList(grab(/export const HABIT_EVENTS: readonly MushiEventName\[\] = \[([^\]]*)\];/, 'HABIT_EVENTS'))
+for (const h of habit) {
+  if (!events.some((e) => e.name === h)) throw new Error(`gen-analytics-taxonomy: HABIT_EVENTS names unknown event '${h}'`)
+}
 
 const body = `/**
  * FILE: analytics-taxonomy.generated.ts

@@ -425,9 +425,25 @@ const BASE_TOOLS: Record<string, ToolDef> = {
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       requireString(args.reportId, 'reportId')
-      return apiCall(`/v1/admin/reports/${encodeURIComponent(args.reportId as string)}`, {
-        headers: ctx.authHeaders,
+      const report = (await apiCall<Record<string, unknown>>(
+        `/v1/admin/reports/${encodeURIComponent(args.reportId as string)}`,
+        { headers: ctx.authHeaders },
+      )) as Record<string, unknown>
+      // Company funnel: an agent opening a report counts toward habit, the
+      // same as the console's report_opened (docs/plan-gtm.md). The stdio
+      // transport emits this from the api (_shared/mcp-stdio-usage.ts).
+      void emitProductEvent(getServiceClient(), {
+        userId: ctx.ownerUserId ?? null,
+        eventName: 'report_opened',
+        surface: 'mcp',
+        properties: {
+          report_id: args.reportId as string,
+          project_id:
+            (typeof report?.project_id === 'string' ? report.project_id : ctx.projectIdHint) ?? null,
+          via: 'hosted',
+        },
       })
+      return report
     },
   },
   search_reports: {
@@ -496,6 +512,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
           report_id: args.reportId as string,
           project_id:
             (typeof report.project_id === 'string' ? report.project_id : ctx.projectIdHint) ?? null,
+          via: 'hosted',
         },
       })
       return {
@@ -701,6 +718,17 @@ const BASE_TOOLS: Record<string, ToolDef> = {
             : {}),
           ...(typeof args.agent === 'string' && args.agent ? { agent: args.agent } : {}),
         }),
+      })
+      void emitProductEvent(getServiceClient(), {
+        userId: ctx.ownerUserId ?? null,
+        eventName: 'fix_dispatched',
+        surface: 'mcp',
+        properties: {
+          report_id: args.reportId as string,
+          agent: typeof args.agent === 'string' && args.agent ? args.agent : 'default',
+          project_id: projectId,
+          via: 'hosted',
+        },
       })
       // REST returns { dispatchId, status } — map to the declared { fixId, … }
       // shape or strict clients reject the response after the dispatch already

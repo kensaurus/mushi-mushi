@@ -40,6 +40,7 @@ installStdoutGuard()
 import { ALL_SCOPES, type McpScope } from './catalog.js'
 import { DEFAULT_FEATURE_GROUPS, parseFeaturesCsv } from './feature-groups.js'
 import { createMushiServer, createSetupModeServer } from './server.js'
+import { startInventoryPoll } from './inventory-poll.js'
 import * as Sentry from '@sentry/node'
 
 const require = createRequire(import.meta.url)
@@ -265,7 +266,7 @@ async function main() {
     log.info(
       '[mushi-mcp] Running in account mode (no MUSHI_PROJECT_ID set). ' +
         'Project-scoped tools accept an explicit projectId argument. ' +
-        'Run `get_account_overview` to see accessible projects.',
+        'To list accessible projects, add `admin` to MUSHI_FEATURES and run `list_projects`.',
     )
   }
   log.info('Starting Mushi MCP server', {
@@ -311,45 +312,22 @@ async function main() {
   // Only active when MUSHI_PROJECT_ID is set (single-project mode) and the
   // transport supports server-to-client notifications (all transports do).
   if (PROJECT_ID && API_ENDPOINT) {
-    let lastInventoryAt: string | null = null
-    const POLL_INTERVAL_MS = 60_000
-
-    const pollInventory = async () => {
-      if (lifecycle.isShuttingDown()) return
-      try {
-        const res = await fetch(`${API_ENDPOINT}/v1/admin/inventory/${PROJECT_ID}`, {
-          headers: {
-            'X-Mushi-Api-Key': API_KEY,
-            'X-Mushi-Project-Id': PROJECT_ID,
-          },
-          signal: AbortSignal.timeout(10_000),
-        })
-        if (!res.ok) return
-        const data = await res.json() as { data?: { updatedAt?: string } }
-        const updatedAt = data?.data?.updatedAt ?? null
-        if (updatedAt && updatedAt !== lastInventoryAt) {
-          if (lastInventoryAt !== null && server) {
-            // Only notify after the first successful fetch (not on startup),
-            // and only once a client session exists to receive it.
-            await server.server.sendResourceUpdated({ uri: 'inventory://current' })
-            log.info('inventory://current updated — notified subscribers', { updatedAt })
-          }
-          lastInventoryAt = updatedAt
-        }
-      } catch (pollErr) {
-        log.debug('inventory poll failed', { err: String(pollErr) })
-      }
-    }
-
-    // Start immediately, then repeat. `.unref()` so this background poll
-    // never blocks the process from exiting on its own (belt-and-suspenders
-    // alongside the explicit shutdown() handlers above) — a real MCP client
-    // session keeps stdin open for hours, so unref has no effect on normal
-    // operation, it only matters once nothing else is keeping the loop alive.
-    void pollInventory()
-    const pollTimer = setInterval(() => { void pollInventory() }, POLL_INTERVAL_MS)
-    pollTimer.unref()
-    lifecycle.addCleanup(() => clearInterval(pollTimer))
+    // Stops on its own after a 401/403 (see inventory-poll.ts).
+    const poll = startInventoryPoll({
+      apiEndpoint: API_ENDPOINT,
+      apiKey: API_KEY,
+      projectId: PROJECT_ID,
+      clientVersion: VERSION,
+      isShuttingDown: () => lifecycle.isShuttingDown(),
+      log,
+      onUpdated: async (updatedAt) => {
+        // Only once a client session exists to receive it.
+        if (!server) return
+        await server.server.sendResourceUpdated({ uri: 'inventory://current' })
+        log.info('inventory://current updated — notified subscribers', { updatedAt })
+      },
+    })
+    lifecycle.addCleanup(() => poll.stop())
   }
 }
 

@@ -61,19 +61,28 @@ export const MUSHI_EVENTS = {
     ]
   },
   "report_opened": {
-    "surface": "console",
+    "surface": [
+      "console",
+      "mcp"
+    ],
     "required": [
       "report_id"
     ]
   },
   "fix_context_pulled": {
-    "surface": "console",
+    "surface": [
+      "console",
+      "mcp"
+    ],
     "required": [
       "report_id"
     ]
   },
   "fix_dispatched": {
-    "surface": "console",
+    "surface": [
+      "console",
+      "mcp"
+    ],
     "required": [
       "report_id",
       "agent"
