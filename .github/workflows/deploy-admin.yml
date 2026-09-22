@@ -137,6 +137,20 @@ jobs:
             exit 1
           fi
 
+      - name: Assert the dogfooding keys are set
+        # The console runs the Mushi SDK against the mushi-self project. When
+        # these were missing the build simply produced a console with no SDK
+        # and the /growth funnel stayed empty — the failure was invisible
+        # until someone asked why the numbers were zero. Fail loudly instead.
+        run: |
+          missing=""
+          [ -z "${{ secrets.MUSHI_SELF_PROJECT_ID }}" ] && missing="$missing MUSHI_SELF_PROJECT_ID"
+          [ -z "${{ secrets.MUSHI_SELF_API_KEY }}" ] && missing="$missing MUSHI_SELF_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing dogfooding secret(s):$missing. The console would build without the Mushi SDK and the company funnel would record nothing. Set them in GitHub Secrets → Actions, or remove this gate deliberately."
+            exit 1
+          fi
+
       - name: Build admin console
         run: pnpm --filter @mushi-mushi/admin build
         env:

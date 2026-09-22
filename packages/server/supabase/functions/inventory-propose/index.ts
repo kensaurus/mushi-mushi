@@ -544,7 +544,8 @@ async function handler(req: Request): Promise<Response> {
  * draft younger than 7 days. Operators reviewing one draft don't need a
  * second one stacked on top before they've decided.
  */
-async function handleDriftWatch(db: SupabaseClient, body: ProposeBody): Promise<Response> {
+/** @internal exported for inventory-propose-deadline.test.ts */
+export async function handleDriftWatch(db: SupabaseClient, body: ProposeBody): Promise<Response> {
   const driftRouteThreshold = Number(Deno.env.get('MUSHI_INVENTORY_DRIFT_ROUTES') ?? '5')
   const driftCooldownDays = Number(Deno.env.get('MUSHI_INVENTORY_DRIFT_COOLDOWN_DAYS') ?? '7')
   // One proposal per run by default: each is a Sonnet call, and the cron

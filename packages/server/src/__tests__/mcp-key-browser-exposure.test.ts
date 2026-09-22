@@ -80,7 +80,7 @@ async function run(mw: Middleware[], headers: Record<string, string>): Promise<{
 
 const agentKey = (over: Partial<KeyRow> = {}): KeyRow => ({
   id: 'k1',
-  key_prefix: 'mushi_abc123',
+  key_prefix: 'mushi_abc123', // gitleaks:allow
   project_id: 'p1',
   is_org_scoped: false,
   is_active: true,
@@ -92,7 +92,7 @@ const agentKey = (over: Partial<KeyRow> = {}): KeyRow => ({
   ...over,
 })
 
-const KEY = { 'X-Mushi-Api-Key': 'mushi_abc123_secret' }
+const KEY = { 'X-Mushi-Api-Key': 'mushi_abc123_secret' } // gitleaks:allow
 
 beforeEach(() => {
   keyRow = null

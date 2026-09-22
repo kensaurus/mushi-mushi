@@ -72,41 +72,52 @@ vi.mock('./env', () => ({
   RESOLVED_SUPABASE_ANON_KEY: 'anon',
 }))
 
+/**
+ * Headers of the request for `path`, not of whichever request happened to be
+ * first. Reading `mock.calls[0]` made these tests order-dependent: a request
+ * left in flight by a test that timed out resolves against the *next* test's
+ * fetch mock, and its project header then failed the `none` assertion — a
+ * leak that reads exactly like a real bug. Each test uses a distinct path, so
+ * matching on it is deterministic no matter what else is in the queue.
+ */
+function headersFor(path: string): Record<string, string> {
+  const call = vi.mocked(fetch).mock.calls.find(([url]) => String(url).includes(path))
+  if (!call) throw new Error(`no fetch recorded for ${path}`)
+  return (call[1]?.headers ?? {}) as Record<string, string>
+}
+
 describe('apiFetch scope headers', () => {
   beforeEach(() => {
+    vi.resetModules()
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true, data: {} }), { status: 200 })))
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.resetModules()
+    vi.clearAllMocks()
   })
 
   it('project scope sends org and project headers by default', async () => {
     const { apiFetch } = await import('./supabase')
     await apiFetch('/v1/admin/reports')
-    const fetchMock = vi.mocked(fetch)
-    const headers = (fetchMock.mock.calls[0]?.[1]?.headers ?? {}) as Record<string, string>
+    const headers = headersFor('/v1/admin/reports')
     expect(headers['X-Mushi-Project-Id']).toBeTruthy()
     expect(headers['X-Mushi-Org-Id']).toBeTruthy()
   })
 
   it('enumeration scope sends org header only', async () => {
-    vi.resetModules()
     const { apiFetch } = await import('./supabase')
     await apiFetch('/v1/admin/projects', { scope: 'enumeration' })
-    const fetchMock = vi.mocked(fetch)
-    const headers = (fetchMock.mock.calls[0]?.[1]?.headers ?? {}) as Record<string, string>
+    const headers = headersFor('/v1/admin/projects')
     expect(headers['X-Mushi-Project-Id']).toBeUndefined()
     expect(headers['X-Mushi-Org-Id']).toBeTruthy()
   })
 
   it('none scope sends neither tenant header', async () => {
-    vi.resetModules()
     const { apiFetch } = await import('./supabase')
     await apiFetch('/v1/org', { scope: 'none' })
-    const fetchMock = vi.mocked(fetch)
-    const headers = (fetchMock.mock.calls[0]?.[1]?.headers ?? {}) as Record<string, string>
+    const headers = headersFor('/v1/org')
     expect(headers['X-Mushi-Project-Id']).toBeUndefined()
     expect(headers['X-Mushi-Org-Id']).toBeUndefined()
   })

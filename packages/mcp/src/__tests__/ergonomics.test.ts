@@ -18,7 +18,7 @@ import { MUSHI_DOCS_INDEX, findMushiDoc, searchMushiDocs } from '../docs-index.j
 /** The public docs site every indexed url and Markdown twin lives under. */
 const MUSHI_DOCS_BASE = 'https://kensaur.us/mushi-mushi/docs'
 const API_ENDPOINT = 'https://api.test.mushimushi.dev'
-const API_KEY = 'mushi_test_key_0123456789'
+const API_KEY = 'mushi_test_key_0123456789' // gitleaks:allow
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
 
 interface Call {

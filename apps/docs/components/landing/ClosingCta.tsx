@@ -4,16 +4,17 @@
  * Closing CTA — solo primary path + team operators link (no scroll hijack).
  */
 import Link from 'next/link'
-import { motion, useReducedMotion } from 'motion/react'
+import { motion } from 'motion/react'
 import { LANDING_OPERATOR } from '@/lib/landing-copy'
 import {
   LandingStagger,
   LandingStaggerItem,
   landingStampVariants,
 } from './landing-stagger'
+import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
 
 export function ClosingCta() {
-  const reduced = useReducedMotion()
+  const reduced = usePrefersReducedMotion()
 
   return (
     <LandingStagger

@@ -3,13 +3,14 @@
 /**
  * Diagnosis loop cards — once-in-view stagger (native scroll, no pin).
  */
-import { motion, useReducedMotion } from 'motion/react'
+import { motion } from 'motion/react'
 import { LANDING_PILLARS } from '@/lib/landing-copy'
 import { LandingStagger, LandingStaggerItem } from './landing-stagger'
 import { PillarGlyph } from '../PillarGlyph'
+import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
 
 export function DiagnosisScrollStage() {
-  const reduced = useReducedMotion()
+  const reduced = usePrefersReducedMotion()
 
   return (
     <LandingStagger
