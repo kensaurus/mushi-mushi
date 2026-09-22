@@ -44,7 +44,7 @@ The server (`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`)
 
 **For companies that want to offer Mushi as a hosted service to third parties:** AGPLv3 applies. Either publish your server modifications or talk to us about a commercial license.
 
-**For the cloud product at mushimushi.dev:** still running the same code. Now provably the same code.
+**For Mushi Cloud, the hosted product:** still running the same code. Now provably the same code.
 
 ## The honest "open source" claim
 
@@ -54,4 +54,4 @@ That's the model we committed to — documented in [Open source & licensing](/co
 
 ---
 
-*Questions? Open an issue or find us on Discord.*
+*Questions? Open an issue or start a thread in [GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions).*
