@@ -9,12 +9,10 @@ description: Wire Mushi's evolution loop into Cursor with one command — get fi
 
 # Cursor integration
 
-{CURSOR_INTEGRATION_LEDE}
-
 **The three-line setup:**
 
 ```bash
-npx mushi-mushi login --api-key mushi_xxx --endpoint https://.supabase.co/functions/v1/api
+npx mushi-mushi login --api-key mushi_xxx --endpoint https://<ref>.supabase.co/functions/v1/api
 npx mushi-mushi setup --ide cursor
 # Restart Cursor
 ```
@@ -26,7 +24,7 @@ npx mushi-mushi setup --ide cursor
 ```bash
 npx mushi-mushi login \
   --api-key mushi_xxx \
-  --endpoint https://.supabase.co/functions/v1/api \
+  --endpoint https://<ref>.supabase.co/functions/v1/api \
   --project-id xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
 

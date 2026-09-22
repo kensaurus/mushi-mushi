@@ -2,6 +2,7 @@
 // Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
 export { MushiProvider } from './provider'
 export type { MushiRNConfig, MushiRNInstance } from './provider'
+export type { RNAnalyticsConfig } from './analytics/event-tracker'
 
 export { useMushi } from './hooks/useMushi'
 export { useMushiReport } from './hooks/useMushiReport'

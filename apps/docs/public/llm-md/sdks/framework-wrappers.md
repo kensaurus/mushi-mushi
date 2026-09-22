@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/framework-wrappers
 
 ---
 title: Framework wrappers (Vue / Svelte / Angular)
+description: How the Vue, Svelte and Angular Mushi packages wrap @mushi-mushi/web — how each one boots the SDK once, and where to find capture and widget options.
 ---
 
 # Framework wrappers
@@ -16,7 +17,7 @@ idiomatic shells over [`@mushi-mushi/web`](/sdks/web). Each package depends on
 | --- | --- | --- |
 | [`@mushi-mushi/vue`](/sdks/vue) | `app.use(MushiPlugin, config)` | [Quickstart](/quickstart/vue) |
 | [`@mushi-mushi/svelte`](/sdks/svelte) | `initMushi(config)` | [Quickstart](/quickstart/svelte) |
-| [`@mushi-mushi/angular`](/sdks/angular) | `provideMushi(config)` / `provideMushiAngular` | [Quickstart](/quickstart/angular) |
+| [`@mushi-mushi/angular`](/sdks/angular) | `MUSHI_CONFIG` + `MushiService` / `ErrorHandler` factory providers | [Quickstart](/quickstart/angular) |
 
 For capture, widget triggers, runtime config, and privacy, read the
 [web SDK](/sdks/web). React has its own package: [`@mushi-mushi/react`](/sdks/react).

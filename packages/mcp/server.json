@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.kensaurus/mushi-mushi",
   "title": "Mushi Mushi",
-  "description": "Bug translation for vibe coders: plain-English diagnosis + paste-ready fix in your AI coding agent",
+  "description": "The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
   "version": "0.21.1",
   "icons": [
     {
@@ -56,15 +56,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
-      "headers": [
-        {
-          "name": "Authorization",
-          "description": "Bearer <MUSHI_API_KEY> — a project API key with the mcp:read (and optionally mcp:write) scope.",
-          "isRequired": true,
-          "isSecret": true
-        }
-      ]
+      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp"
     }
   ]
 }

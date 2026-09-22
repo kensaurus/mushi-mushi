@@ -6,6 +6,7 @@ import { log } from '../../_shared/logger.ts';
 import { jwtAuth, adminOrApiKey, apiKeyAuth } from '../../_shared/auth.ts';
 import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
+import { brandFooterDefaultForProject } from '../../_shared/brand-footer.ts';
 import {
   dbError,
   resolveOwnedProject,
@@ -371,6 +372,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'sdk_banner_feature_cta',
       'sdk_banner_message',
       'sdk_banner_label',
+      // "Bug reports by Mushi" widget footer (20260921000006): boolean, or
+      // null to fall back to the plan default. Validated below.
+      'widget_brand_footer',
       // Per-project crawl / TDD generation budget quotas
       'crawl_max_pages_per_day',
       'crawl_max_runs_per_day',
@@ -407,6 +411,16 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
       if (!allowed.includes(key)) continue;
+      if (key === 'widget_brand_footer') {
+        if (value !== null && typeof value !== 'boolean') {
+          return c.json(
+            { error: { code: 'VALIDATION_ERROR', message: 'widget_brand_footer must be a boolean or null' } },
+            400,
+          );
+        }
+        updates[key] = value;
+        continue;
+      }
       if (key === 'voice_intake_enabled') {
         if (typeof value !== 'boolean') {
           return c.json(
@@ -1154,15 +1168,18 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
           'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
-          'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
+          'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, widget_brand_footer',
       )
       .eq('project_id', projectId)
       .maybeSingle();
     if (error) return dbError(c, error);
 
+    // Effective brandFooter (plan default when the column is NULL) so the
+    // console toggle shows what the widget actually renders.
+    const brandFooterDefault = await brandFooterDefaultForProject(db, projectId);
     return c.json({
       ok: true,
-      data: { projectId, ...normalizeSdkConfig(data as SdkConfigRow | null) },
+      data: { projectId, ...normalizeSdkConfig(data as SdkConfigRow | null, { brandFooterDefault }) },
     });
   });
 
@@ -1184,7 +1201,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
           'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
-          'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
+          'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, widget_brand_footer',
       )
       .single();
 
@@ -1198,7 +1215,11 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       projectId,
       updates,
     ).catch(() => {});
-    return c.json({ ok: true, data: { projectId, ...normalizeSdkConfig(data as SdkConfigRow) } });
+    const brandFooterDefault = await brandFooterDefaultForProject(db, projectId);
+    return c.json({
+      ok: true,
+      data: { projectId, ...normalizeSdkConfig(data as SdkConfigRow, { brandFooterDefault }) },
+    });
   });
 
   // ============================================================

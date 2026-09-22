@@ -4,7 +4,7 @@
  *
  * OVERVIEW:
  * - Fingerprints tool args by shape (key + typeof) — never stores values
- * - Fire-and-forget insert into mcp_tool_invocations (hosted transport)
+ * - Fire-and-forget insert into mcp_tool_invocations (hosted and stdio)
  * - Emits audit-channel logs for grep-friendly trails
  *
  * DEPENDENCIES:
@@ -64,8 +64,9 @@ export async function fingerprintToolArgs(
 }
 
 /**
- * Record a tool invocation — structured log always; DB row for hosted only.
- * Never throws; failures are logged and swallowed.
+ * Record a tool invocation — structured log and a DB row, for both transports
+ * (stdio rows arrive through mcp-stdio-usage.ts). Never throws; failures are
+ * logged and swallowed.
  */
 export async function recordMcpToolInvocation(input: McpToolInvocationInput): Promise<void> {
   const argsFingerprint = await fingerprintToolArgs(input.args)
@@ -87,8 +88,6 @@ export async function recordMcpToolInvocation(input: McpToolInvocationInput): Pr
     mcpToolLog.warn('tool.failed', meta)
   }
 
-  if (input.transport !== 'hosted') return
-
   try {
     const db = getServiceClient()
     const { error } = await db.from('mcp_tool_invocations').insert({
@@ -103,7 +102,9 @@ export async function recordMcpToolInvocation(input: McpToolInvocationInput): Pr
       args_fingerprint: argsFingerprint,
       error_code: input.errorCode ?? null,
     })
-    if (error) {
+    // 23505 on the stdio request_id index: another request from the same
+    // stdio tool call already wrote the row (mcp-stdio-usage.ts).
+    if (error && error.code !== '23505') {
       mcpToolLog.error('tool.persist_failed', { ...meta, err: error.message })
     }
   } catch (err) {

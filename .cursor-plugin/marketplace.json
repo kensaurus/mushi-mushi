@@ -1,0 +1,16 @@
+{
+  "name": "mushi-mushi",
+  "owner": {
+    "name": "Mushi Mushi"
+  },
+  "metadata": {
+    "description": "Bug translation for vibe coders: plain-English diagnosis and a paste-ready fix in Cursor."
+  },
+  "plugins": [
+    {
+      "name": "mushi-mushi",
+      "source": "packages/cursor-plugin",
+      "description": "Bug translation for vibe coders: plain-English diagnosis and a paste-ready fix in your AI coding agent."
+    }
+  ]
+}

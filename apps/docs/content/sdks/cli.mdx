@@ -1,5 +1,6 @@
 ---
 title: '@mushi-mushi/cli'
+description: Reference for @mushi-mushi/cli — log in, connect a project, run doctor, list reports, dispatch agent fixes and merge their pull requests from the terminal.
 ---
 
 import { Callout } from 'nextra/components'
@@ -50,7 +51,7 @@ Console URL resolution: `MUSHI_CONSOLE_URL` → saved config → localhost `:646
 | ------- | ------- |
 | `mushi init` | Wizard: prerequisite step, framework detect, install SDK, write `.env.local`, whoami verify, optional test report |
 | `mushi connect` | Non-interactive: config + env (default) + Cursor MCP (default) + optional `--wait` heartbeat |
-| `mushi login` | Save credentials to `~/.config/mushi/config.json` (mode `0o600`; legacy `~/.mushirc` auto-migrates) |
+| `mushi login` | Save credentials to the CLI config file: `~/.config/mushi/config.json`, or `%APPDATA%\mushi\config.json` on Windows ([full order](#config-file); legacy `~/.mushirc` auto-migrates) |
 | `mushi setup` | Wire Cursor/Claude MCP from saved config — **not** SDK install (run `login` first) |
 | `mushi whoami` | Verify API key and show project info |
 | `mushi ping` | Backend connectivity probe |
@@ -257,7 +258,18 @@ mushi test                           # synthetic report end-to-end
 | `MUSHI_BYOK_KEY` | BYOK key value for `mushi keys add` (keeps key out of shell history) |
 | `MUSHI_NO_UPDATE_CHECK=1` | Skip npm registry version nudge in `mushi init` |
 
-Config file: `~/.config/mushi/config.json` (Unix mode `0o600`; legacy `~/.mushirc` auto-migrates on first load).
+### Config file
+
+The CLI keeps credentials in one `config.json`. The first match wins:
+
+1. `$XDG_CONFIG_HOME/mushi/config.json` when `XDG_CONFIG_HOME` is set, on any platform
+2. `%APPDATA%\mushi\config.json` on Windows
+3. `~/.config/mushi/config.json` otherwise (macOS, Linux)
+
+On macOS and Linux the file is mode `0o600`; on Windows the CLI restricts its
+ACL to your account (and SYSTEM) instead. A legacy `~/.mushirc` auto-migrates
+on first load. `mushi setup --help` prints the path it resolved on your
+machine.
 
 ---
 

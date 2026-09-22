@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/prompt-lab
 
 ---
 title: Prompt lab
+description: The Prompt lab lets you edit, test and A/B compare the classification prompts behind Mushi's diagnoses before you promote a new version.
 ---
 
 # Prompt lab

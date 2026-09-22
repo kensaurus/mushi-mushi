@@ -1,7 +1,7 @@
 {
   "name": "@mushi-mushi/react",
   "version": "1.21.0",
-  "description": "React bindings for Mushi Mushi — Provider, hooks, and ErrorBoundary integration",
+  "description": "React and Next.js bug report widget and hooks. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -22,10 +22,7 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE",
-    "CONTRIBUTING.md",
-    "CODE_OF_CONDUCT.md",
-    "SECURITY.md"
+    "LICENSE"
   ],
   "repository": {
     "type": "git",
@@ -38,6 +35,7 @@
   },
   "keywords": [
     "mushi-mushi",
+    "bug-report-widget",
     "bug-translation",
     "vibe-coding",
     "ai-debugging",
@@ -55,7 +53,6 @@
     "session-replay",
     "screenshot",
     "sentry-companion",
-    "sentry-alternative",
     "ai-agent",
     "sdk"
   ],
@@ -109,12 +106,8 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   },
-  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "engines": {
-    "node": ">=20"
-  },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/kensaurus"
+    "node": ">=20.19.0"
   }
 }

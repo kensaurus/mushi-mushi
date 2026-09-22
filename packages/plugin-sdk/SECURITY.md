@@ -245,11 +245,13 @@ difficult and detectable.
 
 | Control | What it does | How to verify |
 |---|---|---|
-| **npm Trusted Publisher (OIDC)** | Every release is published from `.github/workflows/release.yml` on `master` using a short-lived OIDC token. Long-lived `NPM_TOKEN` is not used for publishing. | `npm view @mushi-mushi/<pkg> --json` shows `"trustedPublisher"` populated for recent versions. |
-| **npm provenance attestations** | Every published tarball ships a [Sigstore provenance attestation](https://docs.npmjs.com/generating-provenance-statements) cryptographically linking the tarball to the exact GitHub Actions run that built it. | `npm audit signatures` (run inside any project that depends on `@mushi-mushi/*`) reports `verified registry signatures` and `verified attestations`. The npm web UI shows a "Built and signed on GitHub Actions" badge on each version. |
+| **npm Trusted Publisher (OIDC)** | Every release is published from `.github/workflows/release.yml` on `master` using a short-lived OIDC token. Long-lived `NPM_TOKEN` is not used for publishing (only the manual, environment-gated first publish of a brand-new package in `npm-bootstrap.yml` uses one). | `npm view @mushi-mushi/<pkg> _npmUser` prints `GitHub Actions <npm-oidc-no-reply@github.com>` for a version published over OIDC; a token publish shows a person instead. |
+| **npm provenance attestations** | Every published tarball ships a [Sigstore provenance attestation](https://docs.npmjs.com/generating-provenance-statements) cryptographically linking the tarball to the exact GitHub Actions run that built it. | `npm view @mushi-mushi/<pkg> dist.attestations.provenance` shows the SLSA v1 predicate; `npm audit signatures` in a project that depends on `@mushi-mushi/*` counts them under "verified attestations". The npm web UI shows a "Built and signed on GitHub Actions" badge on each version. |
 | **Pre-publish workspace-protocol guard** | Aborts the publish if `workspace:*` ranges leaked into the tarball (the bug class behind the v0.1.0 incident). | `scripts/check-workspace-protocol.mjs` runs before `changeset publish` in `pnpm release`. |
 | **Post-publish tarball verification** | Re-downloads each just-published tarball and asserts it doesn't contain `workspace:*`. | See the "Verify published tarballs do not contain workspace:*" step in `release.yml`. |
 | **Post-publish `npm audit signatures`** | Re-installs each published version and validates registry signatures + provenance against npm's transparency log. | See the "Audit signatures of installed dependencies" step in `release.yml`. |
+| **CycloneDX SBOM per published package** | After each publish, the `sbom` job in `release.yml` downloads every just-published tarball from npm, resolves its runtime dependencies and writes a CycloneDX 1.5 SBOM with `npm sbom` (`scripts/generate-release-sboms.mjs`). No OIDC token is in scope for it. | Attached to the package's GitHub release (tag `<name>@<version>`) as `<name>-<version>.cdx.json` for releases published after 2026-09-22, and kept 90 days as the run's `sbom-cyclonedx` artifact. |
+| **MCP registry publish in its own job** | The third-party `mcp-publisher` binary (pinned version, sha256-checked) runs in a separate job with only `contents: read` and the OIDC token its registry login needs — never in the job that holds the npm publish identity. | The `mcp-registry` job in `release.yml`; `scripts/release-workflow.test.mjs` pins its permissions. |
 
 ### Build-time controls
 
@@ -261,7 +263,8 @@ difficult and detectable.
 | **Server-side secret scan (Gitleaks)** | Every PR and every push to `master` runs Gitleaks across the diff / full tree. Belt-and-suspenders to the local pre-commit hook (`scripts/check-no-secrets.mjs`) which can be bypassed with `--no-verify`. |
 | **Local pre-commit secret scanner** | `scripts/check-no-secrets.mjs` runs as a git hook installed by `pnpm install`, blocking commits that look like AWS / Stripe / GitHub / Anthropic / OpenAI / Slack / Supabase keys. |
 | **CodeQL `security-extended`** | Semantic analysis of every TypeScript / JavaScript change finds injection sinks, taint flows, prototype pollution, etc. Runs on every PR, push, and weekly cron. |
-| **Dependency review on PRs** | `actions/dependency-review-action` blocks the PR if it adds or upgrades a dep with a high-severity advisory. |
+| **Dependency review on PRs** | `actions/dependency-review-action` blocks the PR if it adds or upgrades a dep with a high-severity advisory, or one licensed GPL, AGPL or SSPL (strong copyleft must not reach the MIT SDKs; weak copyleft such as LGPL / MPL-2.0 is allowed). |
+| **Published-artifact checks on every PR** | CI packs the SDKs and checks what npm would ship: [Are The Types Wrong](https://github.com/arethetypeswrong/arethetypeswrong.github.io) on core / web / react / node / mcp / cli, an install-size budget for the `npx`-launched mcp and cli, and an install + start of the packed CLI and MCP server on Node 20.19 (the `engines` floor) and 22. |
 | **`pnpm audit --prod --audit-level=high`** | Weekly cron + every push to `master` fails on any high/critical advisory in production deps. |
 
 ### Install-time controls (protect the project's own dependency graph)
@@ -277,15 +280,29 @@ difficult and detectable.
 ### Verifying a Mushi Mushi tarball before installing
 
 ```bash
-# 1. Check provenance attestation matches the public GitHub Actions run
-npm view @mushi-mushi/core --json | jq '.signatures, .dist'
+# 1. Provenance: this version was built and published by this repository's
+#    release workflow over OIDC (swap core for any @mushi-mushi/* package)
+npm view @mushi-mushi/core dist.attestations.provenance
+#   { predicateType: 'https://slsa.dev/provenance/v1' }
+npm view @mushi-mushi/core _npmUser
+#   GitHub Actions <npm-oidc-no-reply@github.com>
 
-# 2. Inside your own project after install
+#    Which repository, workflow file and branch built it (needs curl and jq):
+curl -fsS "$(npm view @mushi-mushi/core dist.attestations.url)" \
+  | jq -r '.attestations[] | select(.predicateType == "https://slsa.dev/provenance/v1") | .bundle.dsseEnvelope.payload' \
+  | base64 -d | jq '.predicate.buildDefinition.externalParameters.workflow'
+#   { "ref": "refs/heads/master",
+#     "repository": "https://github.com/kensaurus/mushi-mushi",
+#     "path": ".github/workflows/release.yml" }
+
+# 2. Inside your own project after install: registry signatures and
+#    provenance of everything installed
 npm audit signatures
+#   N packages have verified registry signatures
+#   M packages have verified attestations   (every @mushi-mushi/* package is among M)
 
-# Expected: every @mushi-mushi/* package reports
-#   "verified registry signature"
-#   "verified attestation"
+# 3. The SBOM of a release (releases published after 2026-09-22)
+gh release download "@mushi-mushi/core@<version>" --repo kensaurus/mushi-mushi --pattern '*.cdx.json'
 ```
 
 If `npm audit signatures` reports any `@mushi-mushi/*` package as unsigned

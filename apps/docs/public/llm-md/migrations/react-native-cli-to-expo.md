@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/react-native-cli-to-expo
 
 ---
 title: 'React Native CLI ↔ Expo'
+description: Move between React Native CLI and Expo in either direction — EAS Build and OTA updates, or expo prebuild for full native control — with Mushi intact.
 ---
 
 # React Native CLI ↔ Expo
@@ -45,7 +46,7 @@ npx expo run:ios            # local dev build
 npx eas-cli build --profile development --platform all`} },
     { id: 'mushi', label: 'Mushi: no changes needed', content: <>Your existing &lt;MushiProvider projectId apiKey /&gt; works as-is on Expo. The only change is that expo-sensors (used for shake-to-report) is now installed automatically via the Expo SDK rather than via npx install-expo-modules.</> },
     { id: 'eas-build', label: 'Move CI to EAS Build (optional)', content: <>If you want EAS to handle store submissions: npx eas-cli build:configure, then npx eas-cli build --platform all. Replaces your Fastlane setup.</> },
-  ]}
+
 />
 
 ## Direction B: Expo → bare React Native CLI (`expo prebuild`)
@@ -67,7 +68,7 @@ Prebuild rewrites ios/ and android/. Commit first so you can diff.</> },
     { id: 'remove-expo-cli', label: 'Optionally remove Expo CLI references', content: <>You can keep using Expo SDK packages (recommended) — just stop using npx expo commands and use react-native CLI instead. Update package.json scripts accordingly.</> },
     { id: 'mushi', label: 'Mushi: no changes needed', content: <>Same provider, same API key. Shake-to-report keeps working because expo-sensors stays installed.</> },
     { id: 'ci', label: 'Wire your own CI', content: <>If you were on EAS Build, follow the GitHub Actions + Fastlane recipe from the Cap → RN guide.</> },
-  ]}
+
 />
 
 ## Hybrid (the third option, often the right one)

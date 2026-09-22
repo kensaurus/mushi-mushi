@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/queue
 
 ---
 title: Processing queue
+description: The Processing queue shows reports waiting for classification, retries and dead-letter items, and lets you requeue the ones that failed.
 ---
 
 # Processing queue

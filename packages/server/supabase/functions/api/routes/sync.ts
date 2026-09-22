@@ -24,7 +24,7 @@ import type { Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
-import { apiKeyAuth } from '../../_shared/auth.ts'
+import { apiKeyAuth, requireApiKeyScope } from '../../_shared/auth.ts'
 import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts'
 import { normalizeSyncStatus, isReporterFixedStatus, toStoredStatus } from '../../_shared/report-status.ts'
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts'
@@ -83,7 +83,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
   // ── GET /v1/sync/stats ────────────────────────────────────────────────────
   // Summarised project health: report counts by status and severity, fix and
   // lesson totals. Powers `mushi status` in the CLI.
-  app.get('/v1/sync/stats', apiKeyAuth, async (c) => {
+  app.get('/v1/sync/stats', apiKeyAuth, requireApiKeyScope('mcp:read'), async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
     const projectName = c.get('projectName') as string
@@ -184,7 +184,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
   // ── GET /v1/sync/reports ──────────────────────────────────────────────────
   // List reports for the project. Supports pagination, status/severity filters,
   // and full-text search (ilike on summary and description).
-  app.get('/v1/sync/reports', apiKeyAuth, async (c) => {
+  app.get('/v1/sync/reports', apiKeyAuth, requireApiKeyScope('mcp:read'), async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
 
@@ -233,7 +233,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
 
   // ── GET /v1/sync/reports/:id ──────────────────────────────────────────────
   // Full report detail. Includes environment, tags, breadcrumbs, linked fix.
-  app.get('/v1/sync/reports/:id', apiKeyAuth, async (c) => {
+  app.get('/v1/sync/reports/:id', apiKeyAuth, requireApiKeyScope('mcp:read'), async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
     const id = c.req.param('id')!
@@ -277,7 +277,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
 
   // ── GET /v1/sync/reports/:id/timeline ─────────────────────────────────────
   // Unified developer-facing timeline across comments, fixes, QA, pipelines, Ask Mushi.
-  app.get('/v1/sync/reports/:id/timeline', apiKeyAuth, async (c) => {
+  app.get('/v1/sync/reports/:id/timeline', apiKeyAuth, requireApiKeyScope('mcp:read'), async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
     const id = c.req.param('id')!
@@ -300,7 +300,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
   // ── PATCH /v1/sync/reports/:id ────────────────────────────────────────────
   // Update report status, severity, and/or add an internal note.
   // Maps to `mushi reports triage/resolve/reopen/dismiss` CLI commands.
-  app.patch('/v1/sync/reports/:id', apiKeyAuth, async (c) => {
+  app.patch('/v1/sync/reports/:id', apiKeyAuth, requireApiKeyScope('mcp:write'), async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
     const id = c.req.param('id')!
@@ -407,7 +407,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
   // visible in the widget and fires a reporter_notification for the "New reply"
   // badge. Used by `mushi reports reply <id> "message"` and the reply_to_reporter
   // MCP tool so triage can happen from the Cursor IDE without opening the admin UI.
-  app.post('/v1/sync/reports/:id/reply', apiKeyAuth, async (c) => {
+  app.post('/v1/sync/reports/:id/reply', apiKeyAuth, requireApiKeyScope('mcp:write'), async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
     const id = c.req.param('id')!
@@ -439,7 +439,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
   // ── GET /v1/sync/lessons/:id ──────────────────────────────────────────────
   // Single lesson detail including the full summary paragraph.
   // Used by `mushi lessons show <id>`.
-  app.get('/v1/sync/lessons/:id', apiKeyAuth, async (c) => {
+  app.get('/v1/sync/lessons/:id', apiKeyAuth, requireApiKeyScope('mcp:read'), async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
     const id = c.req.param('id')!
@@ -469,7 +469,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
   //
   // Delegates to the same code-indexer + createEmbedding pipeline as the admin
   // route so both write to `project_codebase_files` with proper embeddings.
-  app.post('/v1/sync/codebase/upload', apiKeyAuth, async (c) => {
+  app.post('/v1/sync/codebase/upload', apiKeyAuth, requireApiKeyScope('mcp:read'), async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
 
@@ -683,7 +683,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
   })
 
   // ── GET /v1/sync/two-way-health ───────────────────────────────────────────
-  app.get('/v1/sync/two-way-health', apiKeyAuth, async (c) => {
+  app.get('/v1/sync/two-way-health', apiKeyAuth, requireApiKeyScope('mcp:read'), async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
     return c.json({ ok: true, data: await computeTwoWayHealth(db, projectId) })

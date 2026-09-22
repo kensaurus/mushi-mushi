@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/connect
 
 ---
 title: Connect & Update
+description: Connect & Update wires GitHub, the SDK, MCP, the CLI and your editor to a Mushi project, and shows when your installed SDK is out of date.
 ---
 
 # Connect & Update
@@ -105,7 +106,7 @@ Copy **Connect SDK + MCP** from the CLI section:
 
 ```bash
 MUSHI_API_KEY=mushi_xxx mushi connect \
-  --project-id  \
+  --project-id <uuid> \
   --endpoint https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api \
   --write-env --wire-ide --wait
 ```

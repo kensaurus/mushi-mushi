@@ -110,8 +110,11 @@ jobs:
       # 2026-07-14: npm retired the legacy audit endpoints pnpm still calls
       # (HTTP 410 / ERR_PNPM_AUDIT_BAD_RESPONSE). Tolerate that specific
       # registry outage only — a real High/Critical advisory still fails —
-      # until pnpm adopts the bulk-advisory endpoint.
+      # until pnpm adopts the bulk-advisory endpoint. The tolerance is dated,
+      # as in ci.yml: past AUDIT_OUTAGE_TOLERATED_UNTIL an outage fails.
       - name: pnpm audit (production deps)
+        env:
+          AUDIT_OUTAGE_TOLERATED_UNTIL: '2026-12-31'
         run: |
           set +e
           output="$(pnpm audit --prod --audit-level=high 2>&1)"
@@ -121,7 +124,11 @@ jobs:
             exit 0
           fi
           if echo "$output" | grep -qE 'ERR_PNPM_AUDIT_BAD_RESPONSE|This endpoint is being retired'; then
-            echo "::warning::pnpm audit endpoint retired by npm (HTTP 410); skipping supply-chain gate. dependency-review + CodeQL still enforce."
+            if [ "$(date -u +%F)" \> "$AUDIT_OUTAGE_TOLERATED_UNTIL" ]; then
+              echo "::error::pnpm audit cannot reach npm's advisory endpoint and the outage tolerance expired on ${AUDIT_OUTAGE_TOLERATED_UNTIL}. Fix the audit client or extend the date deliberately."
+              exit 1
+            fi
+            echo "::warning::pnpm audit endpoint retired by npm (HTTP 410); skipping supply-chain gate until ${AUDIT_OUTAGE_TOLERATED_UNTIL}. dependency-review + CodeQL still enforce."
             exit 0
           fi
           echo "::error::pnpm audit reported High/Critical advisories."

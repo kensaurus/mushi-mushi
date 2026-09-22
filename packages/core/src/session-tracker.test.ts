@@ -157,6 +157,144 @@ describe('trackPageView', () => {
   });
 });
 
+// ─── Privacy gate (shared with the event tracker) ───────────────────────────
+
+type Kinded = { kind: string; route?: string | null; referrer?: string | null };
+
+function kinds(client: MushiApiClient): string[] {
+  return (client.postSessionEvent as ReturnType<typeof vi.fn>).mock.calls.map(([p]: [Kinded]) => p.kind);
+}
+
+function setNavigator(prop: 'webdriver' | 'doNotTrack' | 'globalPrivacyControl', value: unknown) {
+  Object.defineProperty(navigator, prop, { value, configurable: true });
+}
+
+// session-tracker and event-tracker must share one analytics-gate instance,
+// exactly as they do in the SDK bundle, so import both after one reset.
+async function freshTrackers() {
+  vi.resetModules();
+  const session = await import('./session-tracker');
+  const events = await import('./event-tracker');
+  return { session, events };
+}
+
+describe('session tracker privacy gate', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    setNavigator('webdriver', false);
+    setNavigator('doNotTrack', undefined);
+    setNavigator('globalPrivacyControl', undefined);
+  });
+
+  it("sends nothing under consent 'required' until setConsent('granted'), even when it starts first", async () => {
+    const { session, events } = await freshTrackers();
+    const client = makeMockClient();
+    const analytics = { consent: 'required' as const };
+
+    // Same order as Mushi.init(): the session tracker initialises before the event tracker.
+    session.initSessionTracker({ client, projectId: 'p1', analytics });
+    events.initEventTracker({ client, projectId: 'p1', anonId: 'anon-1', config: analytics });
+    history.pushState({}, '', '/pricing');
+    vi.advanceTimersByTime(61_000);
+    expect(client.postSessionEvent).not.toHaveBeenCalled();
+
+    events.setEventConsent('granted');
+    expect(kinds(client)).toEqual(['session_start']);
+    vi.advanceTimersByTime(61_000);
+    expect(kinds(client)).toContain('session_heartbeat');
+
+    session.destroySessionTracker();
+    events.destroyEventTracker();
+  });
+
+  it('stops mid-page when consent is denied', async () => {
+    const { session, events } = await freshTrackers();
+    const client = makeMockClient();
+    session.initSessionTracker({ client, projectId: 'p1' });
+    events.initEventTracker({ client, projectId: 'p1', anonId: 'anon-1' });
+    expect(kinds(client)).toEqual(['session_start']);
+
+    events.setEventConsent('denied');
+    history.pushState({}, '', '/after-denial');
+    session.trackPageView('/manual');
+    vi.advanceTimersByTime(180_000);
+    window.dispatchEvent(new Event('pagehide'));
+    expect(kinds(client)).toEqual(['session_start']);
+
+    session.destroySessionTracker();
+    events.destroyEventTracker();
+  });
+
+  it('honours a stored denial from an earlier visit', async () => {
+    localStorage.setItem('mushi_events_consent_p1', 'denied');
+    const { session } = await freshTrackers();
+    const client = makeMockClient();
+    session.initSessionTracker({ client, projectId: 'p1' });
+    vi.advanceTimersByTime(61_000);
+    expect(client.postSessionEvent).not.toHaveBeenCalled();
+    session.destroySessionTracker();
+  });
+
+  it('is inert under Do Not Track, Global Privacy Control, analytics.enabled:false and automation', async () => {
+    const setups: Array<{ apply: () => void; analytics?: { enabled?: boolean } }> = [
+      { apply: () => setNavigator('doNotTrack', '1') },
+      { apply: () => setNavigator('globalPrivacyControl', true) },
+      { apply: () => undefined, analytics: { enabled: false } },
+      { apply: () => setNavigator('webdriver', true) },
+    ];
+    for (const { apply, analytics } of setups) {
+      apply();
+      const { session } = await freshTrackers();
+      const client = makeMockClient();
+      session.initSessionTracker({ client, projectId: 'p1', analytics });
+      session.trackPageView('/x');
+      vi.advanceTimersByTime(61_000);
+      expect(client.postSessionEvent).not.toHaveBeenCalled();
+      session.destroySessionTracker();
+      setNavigator('doNotTrack', undefined);
+      setNavigator('globalPrivacyControl', undefined);
+      setNavigator('webdriver', false);
+    }
+  });
+
+  it('sends the pathname without the query string and only the referrer origin', async () => {
+    history.replaceState({}, '', '/reset?token=secret&email=a@b.c');
+    Object.defineProperty(document, 'referrer', {
+      value: 'https://mail.example.com/inbox?msg=123',
+      configurable: true,
+    });
+    const { session } = await freshTrackers();
+    const client = makeMockClient();
+    session.initSessionTracker({ client, projectId: 'p1' });
+    const [start] = (client.postSessionEvent as ReturnType<typeof vi.fn>).mock.calls[0] as [Kinded];
+    expect(start.route).toBe('/reset');
+    expect(start.referrer).toBe('https://mail.example.com');
+    session.destroySessionTracker();
+    Object.defineProperty(document, 'referrer', { value: '', configurable: true });
+    history.replaceState({}, '', '/');
+  });
+
+  it('records a page_view for pushState navigation but not for replaceState', async () => {
+    const { session } = await freshTrackers();
+    const client = makeMockClient();
+    session.initSessionTracker({ client, projectId: 'p1' });
+    history.pushState({}, '', '/docs?q=1');
+    history.replaceState({}, '', '/docs#top');
+    const calls = (client.postSessionEvent as ReturnType<typeof vi.fn>).mock.calls.map(([p]: [Kinded]) => p);
+    const views = calls.filter((p) => p.kind === 'page_view');
+    expect(views).toHaveLength(1);
+    expect(views[0].route).toBe('/docs');
+    session.destroySessionTracker();
+    history.replaceState({}, '', '/');
+  });
+});
+
 describe('updateSessionIdentity', () => {
   beforeEach(() => {
     sessionStorage.clear();

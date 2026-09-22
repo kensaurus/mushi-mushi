@@ -1,5 +1,6 @@
 ---
 title: Rewards program
+description: Set up the Mushi rewards program from the console — points for reporter activity, the tier ladder, and the perks your app grants at each tier.
 ---
 
 # Rewards program
@@ -301,8 +302,20 @@ The rewards pipeline stores:
 | Endpoint | Right |
 |----------|-------|
 | `GET /v1/sdk/me/export` | Data portability — returns the full activity log as JSON |
-| `DELETE /v1/sdk/me` | Erasure — deletes all `end_user_activity`, zeroes `end_user_points`, anonymises the `end_users` row |
+| `DELETE /v1/sdk/me` | Erasure — deletes the end user's activity, sessions and analytics events, zeroes `end_user_points`, anonymises the `end_users` row |
 | `POST /v1/sdk/me/consent` | Withdraw / re-grant opt-in; withdrawal stops new award events |
+
+<Callout type="warning">
+  **These three routes need proof of who is asking.** Since 2026-09-22 each
+  one requires either your host JWT (`verifyUserToken`, the same signing key
+  the rewards pipeline uses) or a signed `X-Mushi-User-Token` for that end
+  user; without one the route answers `IDENTITY_PROOF_REQUIRED`, and a token
+  for somebody else answers `IDENTITY_SUBJECT_MISMATCH`. Before that, an
+  `identify()` id alone was enough — and those ids are usually guessable, so
+  one person could export or erase another person's data. Wire
+  `verifyUserToken` (see [Monetary payouts](#monetary-payouts-p2)) before you
+  point users at a privacy screen.
+</Callout>
 
 If you use `consentMode: 'explicit'` (the default), the SDK surfaces a
 one-time prompt before the first `identify()` flush. The user's choice is

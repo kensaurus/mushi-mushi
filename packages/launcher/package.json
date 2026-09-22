@@ -2,7 +2,7 @@
   "name": "mushi-mushi",
   "version": "0.8.1",
   "license": "MIT",
-  "description": "Ship a shake-to-report button and get AI-classified, deduped, ready-to-fix bug reports — one `npx mushi-mushi` command for React, Next.js, Vue, Nuxt, Svelte, SvelteKit, Angular, React Native, Expo, Capacitor, and vanilla JS. Companion to Sentry: catches the user-felt bugs crash trackers can't see. Wires into GitHub, Slack, Jira, Linear, PagerDuty, Langfuse, and any MCP-compatible AI agent (Cursor, Claude Code, Copilot).",
+  "description": "One command adds a bug report widget to any app. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
   "bin": {
     "mushi-mushi": "./dist/index.js"
   },
@@ -23,7 +23,7 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   },
-  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "repository": {
     "type": "git",
     "url": "https://github.com/kensaurus/mushi-mushi.git",
@@ -33,10 +33,6 @@
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/kensaurus"
-  },
   "publishConfig": {
     "access": "public",
     "provenance": true
@@ -44,14 +40,12 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE",
-    "CONTRIBUTING.md",
-    "CODE_OF_CONDUCT.md",
-    "SECURITY.md"
+    "LICENSE"
   ],
   "sideEffects": false,
   "keywords": [
     "mushi-mushi",
+    "bug-report-widget",
     "bug-reporting",
     "user-feedback",
     "user-report",
@@ -76,16 +70,16 @@
     "capacitor",
     "ionic",
     "sentry-companion",
-    "sentry-alternative",
     "error-tracking",
     "ai-triage",
     "ai-agent",
     "auto-fix",
     "llm",
-    "llm-ops"
+    "llm-ops",
+    "mushi"
   ],
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19.0"
   }
 }

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/cost
 
 ---
 title: Cost & usage
+description: The Cost page shows LLM token use and estimated spend per model and pipeline for a Mushi project, so you can see what each diagnosis costs.
 ---
 
 # Cost & usage

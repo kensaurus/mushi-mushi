@@ -13,6 +13,7 @@ import {
 import { ensureRepoDeclaredSdkObservation } from '../../_shared/sdk-repo-scan.ts';
 import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
+import { emitProductEvent } from '../../_shared/product-events.ts';
 import { dbError, enumerateAccessibleProjectIds } from '../shared.ts';
 
 export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -976,6 +977,15 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
 
     if (error) return dbError(c, error);
 
+    // Company funnel (mushi-self): fire-and-forget, never on the response path.
+    void emitProductEvent(db, {
+      userId,
+      eventName: 'project_created',
+      surface: 'server',
+      properties: { project_id: data.id, source: 'console' },
+      dedupKey: `project_created:${data.id}`,
+    });
+
     await db.from('project_settings').insert({ project_id: data.id });
     // Membership is the source-of-truth for "can this user dispatch fixes /
     // see traces / etc". Without this row the owner can read via owner_id but
@@ -1013,6 +1023,13 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       if (!keyInsertErr) {
         autoKey = rawKey;
         autoKeyPrefix = prefix;
+        void emitProductEvent(db, {
+          userId,
+          eventName: 'key_minted',
+          surface: 'server',
+          properties: { project_id: data.id, label: 'sdk-ingest', scopes: 'report:write' },
+          dedupKey: `key_minted:${keyId}`,
+        });
         void logAudit(
           db,
           data.id,

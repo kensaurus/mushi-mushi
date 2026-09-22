@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/feedback
 
 ---
 title: Feedback hub
+description: The Feedback hub lists the support tickets filed from the console — active, shipped and all — with unread replies in one place.
 ---
 
 # Feedback hub

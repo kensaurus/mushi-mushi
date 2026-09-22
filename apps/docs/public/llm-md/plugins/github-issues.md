@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/github-issues
 
 ---
 title: GitHub Issues
+description: Open a labelled GitHub issue for every classified Mushi report, with a link back to the report — target repo, default labels and assignee settings.
 ---
 
 # GitHub Issues plugin

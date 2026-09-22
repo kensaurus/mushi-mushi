@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/cli
 
 ---
 title: '@mushi-mushi/cli'
+description: Reference for @mushi-mushi/cli — log in, connect a project, run doctor, list reports, dispatch agent fixes and merge their pull requests from the terminal.
 ---
 
 # `@mushi-mushi/cli`
@@ -15,11 +16,11 @@ headless merge — all from the terminal.
 npm install -g @mushi-mushi/cli
 
 mushi login
-mushi connect --project-id  --endpoint  --wait
+mushi connect --project-id <uuid> --endpoint <url> --wait
 mushi doctor --server --qa-stories
 mushi reports list --status new
-mushi fix  --agent cursor_cloud --wait
-mushi fixes merge           # squash-merge the PR + mark report Fixed
+mushi fix <reportId> --agent cursor_cloud --wait
+mushi fixes merge <fixId>          # squash-merge the PR + mark report Fixed
 ```
 
   **Two key types:** SDK ingest keys (`report:write`) are minted on **Setup → Verify** or
@@ -50,7 +51,7 @@ Console URL resolution: `MUSHI_CONSOLE_URL` → saved config → localhost `:646
 | ------- | ------- |
 | `mushi init` | Wizard: prerequisite step, framework detect, install SDK, write `.env.local`, whoami verify, optional test report |
 | `mushi connect` | Non-interactive: config + env (default) + Cursor MCP (default) + optional `--wait` heartbeat |
-| `mushi login` | Save credentials to `~/.config/mushi/config.json` (mode `0o600`; legacy `~/.mushirc` auto-migrates) |
+| `mushi login` | Save credentials to the CLI config file: `~/.config/mushi/config.json`, or `%APPDATA%\mushi\config.json` on Windows ([full order](#config-file); legacy `~/.mushirc` auto-migrates) |
 | `mushi setup` | Wire Cursor/Claude MCP from saved config — **not** SDK install (run `login` first) |
 | `mushi whoami` | Verify API key and show project info |
 | `mushi ping` | Backend connectivity probe |
@@ -109,16 +110,16 @@ mushi nudge --phase ga --max 2 --cooldown 24 --dwell 5 --welcome 10
 
 ```bash
 mushi reports list [--status new] [--severity critical]
-mushi reports show 
-mushi reports triage  --status acknowledged --severity high
-mushi reports resolve 
-mushi reports reopen 
-mushi reports dismiss 
-mushi reports reply  "Thanks — we're on it"
+mushi reports show <id>
+mushi reports triage <id> --status acknowledged --severity high
+mushi reports resolve <id>
+mushi reports reopen <id>
+mushi reports dismiss <id>
+mushi reports reply <id> "Thanks — we're on it"
 mushi reports search "checkout button"
 
 mushi lessons list
-mushi lessons show 
+mushi lessons show <id>
 mushi sync-lessons              # pull promoted rules → .mushi/lessons.json
 ```
 
@@ -135,7 +136,7 @@ Dispatch an agentic fix for a classified report.
 mushi fix 00000000-0000-0000-0000-000000000123
 
 # Cursor Cloud Agent — wait for PR
-mushi fix  --agent cursor_cloud --wait
+mushi fix <reportId> --agent cursor_cloud --wait
 
 # CI: fail the pipeline if the fix errors
 mushi fix $REPORT_ID --agent cursor_cloud --wait && echo "Fix PR opened"
@@ -154,17 +155,17 @@ Headless fix lifecycle — pairs with `mushi fix --wait`.
 
 ```bash
 # Stream dispatch SSE events (no browser)
-mushi fixes tail --report-id 
+mushi fixes tail --report-id <reportId>
 
 # Pull latest GitHub Actions status (same as console "Refresh CI status")
-mushi fixes refresh-ci 
-mushi fixes refresh-ci  --json
+mushi fixes refresh-ci <fixId>
+mushi fixes refresh-ci <fixId> --json
 
 # Squash-merge the draft PR and mark the report Fixed
-mushi fixes merge 
-mushi fixes merge  --method squash   # default
-mushi fixes merge  --method merge
-mushi fixes merge  --json
+mushi fixes merge <fixId>
+mushi fixes merge <fixId> --method squash   # default
+mushi fixes merge <fixId> --method merge
+mushi fixes merge <fixId> --json
 ```
 
 **Merge prerequisites:** the fix attempt must be `completed` with an open PR (`pr_url`
@@ -184,16 +185,16 @@ mushi stories map --url https://your-app.com --wait
 mushi stories map --url https://app.com --provider browserbase --cursor-refine
 
 # TDD test generation
-mushi tdd gen  --mode review
+mushi tdd gen <storyId> --mode review
 mushi tdd pending
-mushi tdd approve 
+mushi tdd approve <qaStoryId>
 mushi tdd improve                    # PDCA on failing tests
-mushi tdd run 
+mushi tdd run <qaStoryId>
 
 # QA story ops
 mushi qa stories
-mushi qa runs 
-mushi qa run 
+mushi qa runs <storyId>
+mushi qa run <storyId>
 mushi audit                        # full-stack project health audit
 ```
 
@@ -204,9 +205,9 @@ mushi audit                        # full-stack project health audit
 ```bash
 mushi skills list [--category workflow] [--search "fix bug"]
 mushi skills show workflow-fix-and-ship
-mushi skills sync [--source-id ]
+mushi skills sync [--source-id <id>]
 
-mushi pipeline start  --skill workflow-fix-and-ship [--mode cloud]
+mushi pipeline start <reportId> --skill workflow-fix-and-ship [--mode cloud]
 mushi pipeline watch <runId-or-prefix>
 mushi pipeline checkin <runId-or-prefix> --step 0 --status passed [--notes "Done"]
 ```
@@ -257,7 +258,18 @@ mushi test                           # synthetic report end-to-end
 | `MUSHI_BYOK_KEY` | BYOK key value for `mushi keys add` (keeps key out of shell history) |
 | `MUSHI_NO_UPDATE_CHECK=1` | Skip npm registry version nudge in `mushi init` |
 
-Config file: `~/.config/mushi/config.json` (Unix mode `0o600`; legacy `~/.mushirc` auto-migrates on first load).
+### Config file
+
+The CLI keeps credentials in one `config.json`. The first match wins:
+
+1. `$XDG_CONFIG_HOME/mushi/config.json` when `XDG_CONFIG_HOME` is set, on any platform
+2. `%APPDATA%\mushi\config.json` on Windows
+3. `~/.config/mushi/config.json` otherwise (macOS, Linux)
+
+On macOS and Linux the file is mode `0o600`; on Windows the CLI restricts its
+ACL to your account (and SYSTEM) instead. A legacy `~/.mushirc` auto-migrates
+on first load. `mushi setup --help` prints the path it resolved on your
+machine.
 
 ---
 

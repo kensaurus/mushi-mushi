@@ -36,6 +36,7 @@ import type {
 } from '@mushi-mushi/core';
 import type { MushiLocale } from './i18n';
 import {
+  buildBrandFooterHref,
   CATEGORY_ICONS,
   escapeHtml,
   formatRelativeTime,
@@ -121,6 +122,8 @@ export interface WidgetRenderCtx {
   showMoreNav: boolean;
   /** Host page favicon — shown in header during report flow when available. */
   pageFaviconHref: string | null;
+  /** Anonymous project ref (SHA-256 prefix) for the brand-footer link; null until resolved. */
+  brandRef: string | null;
 }
 
 export function renderStep(ctx: WidgetRenderCtx): string {
@@ -223,9 +226,11 @@ export function renderOutdatedBanner(ctx: WidgetRenderCtx): string {
       </div>
     `;
   }
+/** "Bug reports by Mushi" mark (see MushiWidgetConfig.brandFooter); new-tab link, click wired via data-action. */
 export function renderBrandFooter(ctx: WidgetRenderCtx): string {
-    if (ctx.config.brandFooter === false) return '';
-    return `<div class="mushi-brand-footer">${escapeHtml(ctx.locale.flows.poweredBy.replace('{version}', ctx.sdkVersion))}</div>`;
+    if (ctx.config.brandFooter !== true) return '';
+    const href = buildBrandFooterHref(ctx.brandRef);
+    return `<div class="mushi-brand-footer"><a class="mushi-brand-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" data-action="brand-footer">${escapeHtml(ctx.locale.flows.poweredBy)}<span aria-hidden="true"> \u2197</span></a></div>`;
   }
 
   /**

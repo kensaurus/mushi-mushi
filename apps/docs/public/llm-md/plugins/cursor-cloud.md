@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/cursor-cloud
 
 ---
 title: Cursor Cloud Agent
+description: Dispatch a Cursor Cloud Agent automatically when a Mushi report qualifies — it investigates, drafts a fix and opens a PR that links back to Mushi.
 ---
 
 # Cursor Cloud Agent plugin
@@ -65,10 +66,10 @@ You can also dispatch a Cursor Cloud Agent run outside of the Marketplace plugin
 
 ```bash
 # CLI
-mushi fix  --agent cursor_cloud --wait
+mushi fix <reportId> --agent cursor_cloud --wait
 
 # MCP tool
-dispatch_fix reportId= agent=cursor_cloud
+dispatch_fix reportId=<reportId> agent=cursor_cloud
 ```
 
 See [`mushi fix`](/sdks/cli) and [`@mushi-mushi/mcp`](/sdks/mcp) for details.

@@ -107,6 +107,16 @@ function readIndex(fn: string): string {
   return readFileSync(join(functionsRoot, fn, 'index.ts'), 'utf-8')
 }
 
+/** `[functions.<name>] verify_jwt = …` from supabase/config.toml. */
+function verifyJwtByFunction(): Map<string, boolean> {
+  const toml = readFileSync(resolve(functionsRoot, '../config.toml'), 'utf-8')
+  const out = new Map<string, boolean>()
+  for (const [, name, value] of toml.matchAll(/^\[functions\.([a-z0-9-]+)\]\s*\n\s*verify_jwt\s*=\s*(true|false)/gm)) {
+    out.set(name, value === 'true')
+  }
+  return out
+}
+
 describe('internal-auth contract', () => {
   const fns = listFunctionDirs()
 
@@ -152,6 +162,42 @@ describe('internal-auth contract', () => {
         source,
         `${fn}/index.ts uses a hand-rolled auth check; replace with requireServiceRoleAuth`,
       ).not.toMatch(/function\s+authorized\s*\(\s*req\s*:\s*Request\s*\)\s*:\s*boolean/)
+
+      // Calling the helper is not enough: its 401 must be returned
+      // unconditionally. Until 2026-09-21 eight functions did
+      // `if (authErr && req.headers.get('x-mushi-admin') !== '1') return authErr`,
+      // so anyone holding the public anon key could skip auth by sending one
+      // header, and this test still passed because the helper was called.
+      for (const [, name] of source.matchAll(/const\s+(\w+)\s*=\s*requireServiceRoleAuth\s*\(/g)) {
+        expect(
+          source,
+          `${fn}/index.ts lets a condition waive requireServiceRoleAuth (\`${name} && …\`); return ${name} unconditionally`,
+        ).not.toMatch(new RegExp(`\\b${name}\\s*&&|&&\\s*${name}\\b`))
+      }
+
+      // No request header may carry trust into an internal function. The same
+      // day's audit found two more bypass shapes the rule above cannot see:
+      // `if (authErr && req.headers.get('x-mushi-trigger') !== 'manual')` and
+      // `if (!isManual) { requireServiceRoleAuth(...) }` keyed on that header.
+      // Any header a caller sets, an attacker sets too; the Authorization
+      // bearer checked by requireServiceRoleAuth is the only credential.
+      expect(
+        source,
+        `${fn}/index.ts reads an x-mushi-* request header; internal functions must authenticate with requireServiceRoleAuth alone`,
+      ).not.toMatch(/headers\.get\(\s*['"`]x-mushi-/i)
+    })
+
+    // pg_cron and the api call internal functions with the internal caller
+    // token, which is not a JWT. With the platform default verify_jwt = true
+    // the gateway 401s before requireServiceRoleAuth runs, and pg_cron still
+    // records 'succeeded' because net.http_post only enqueues. Until
+    // 2026-09-22 thirteen functions were deployed that way, including three
+    // cron jobs that never once reached their handler.
+    it(`${fn} is pinned to verify_jwt = false in config.toml`, () => {
+      expect(
+        verifyJwtByFunction().get(fn),
+        `add [functions.${fn}] verify_jwt = false to packages/server/supabase/config.toml (auth is requireServiceRoleAuth inside the handler)`,
+      ).toBe(false)
     })
   }
 })

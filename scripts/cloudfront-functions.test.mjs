@@ -5,8 +5,9 @@
 
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, it } from 'node:test';
 import { stripSource, DEFAULT_MAX_BYTES, CF_HARD_LIMIT_BYTES } from './build-cf-function.mjs';
 
@@ -153,6 +154,21 @@ describe('cloudfront-mushi-apex-redirect', () => {
     assert.equal(out.statusCode, 301);
     assert.equal(out.headers.location.value, '/mushi-mushi/docs/brand/logo-mark.svg');
   });
+
+  // Slashless /mushi-mushi misses the `/mushi-mushi/*` behavior and lands on
+  // Default, where S3's website endpoint answered with a 302. The product root
+  // is canonical with the slash (structured-data.ts PRODUCT_ROOT).
+  it('301 slashless /mushi-mushi to the canonical product root', () => {
+    const out = apex(req('/mushi-mushi'));
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, '/mushi-mushi/');
+  });
+
+  it('keeps the query string on the /mushi-mushi redirect', () => {
+    const out = apex(reqWithQs('/mushi-mushi', { utm_source: 'bsky' }));
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, '/mushi-mushi/?utm_source=bsky');
+  });
 });
 
 describe('cloudfront-kensaur-default-viewer', () => {
@@ -168,6 +184,12 @@ describe('cloudfront-kensaur-default-viewer', () => {
     const out = combined(req('/.well-known/assetlinks.json'));
     assert.equal(out.statusCode, 200);
     assert.match(out.body, /com\.glotit\.app/);
+  });
+
+  it('301s slashless /mushi-mushi before the glot SPA handler sees it', () => {
+    const out = combined(req('/mushi-mushi'));
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, '/mushi-mushi/');
   });
 });
 
@@ -251,6 +273,32 @@ describe('cloudfront-mushi-spa-router', () => {
   it('does not rewrite the /apps/ listing page itself to the shell', () => {
     const out = spa(req('/mushi-mushi/testers/apps/'));
     assert.equal(out.uri, '/mushi-mushi/testers/apps/index.html');
+  });
+
+  // llmstxt.org puts the file at the site root: /mushi-mushi/llms.txt 404'd
+  // (NoSuchKey) because the files live under the docs export.
+  for (const name of ['llms.txt', 'llms-full.txt', 'llms-ctx.txt']) {
+    it(`serves /mushi-mushi/${name} from the docs export in place`, () => {
+      const out = spa(req(`/mushi-mushi/${name}`));
+      assert.equal(out.statusCode, undefined);
+      assert.equal(out.uri, `/mushi-mushi/docs/${name}`);
+    });
+  }
+
+  it('leaves the docs copy of llms.txt and other root .txt files alone', () => {
+    assert.equal(spa(req('/mushi-mushi/docs/llms.txt')).uri, '/mushi-mushi/docs/llms.txt');
+    assert.equal(spa(req('/mushi-mushi/robots.txt')).uri, '/mushi-mushi/robots.txt');
+  });
+
+  it('rewrites the product root with its slash to the landing export', () => {
+    const out = spa(req('/mushi-mushi/'));
+    assert.equal(out.uri, '/mushi-mushi/docs/index.html');
+  });
+
+  it('301s a slashless product root to the canonical slash form', () => {
+    const out = spa(reqWithQs('/mushi-mushi', { ref: 'npm' }));
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, '/mushi-mushi/?ref=npm');
   });
 });
 
@@ -347,6 +395,96 @@ describe('cloudfront-mushi-hosted-mcp', () => {
     assert.equal(out.statusCode, 200);
     assert.match(out.body, /authorization_servers/);
   });
+
+  it('PRM resource matches the identifier the well-known URI was inserted into', () => {
+    const slashless = JSON.parse(
+      wellknown(req('/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp')).body,
+    );
+    const slashed = JSON.parse(
+      wellknown(req('/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp/')).body,
+    );
+    assert.equal(slashless.resource, 'https://kensaur.us/mushi-mushi/hosted-mcp');
+    assert.equal(slashed.resource, 'https://kensaur.us/mushi-mushi/hosted-mcp/');
+  });
+
+  it('serves RFC 8414 AS metadata at the path-inserted URL (regression: 404)', () => {
+    const out = wellknown(
+      req('/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp', '', 'GET'),
+    );
+    assert.equal(out.statusCode, 200);
+    assert.equal(out.headers['content-type'].value, 'application/json');
+    const as = JSON.parse(out.body);
+    assert.equal(as.issuer, 'https://kensaur.us/mushi-mushi/hosted-mcp');
+    assert.deepEqual(as.response_types_supported, ['code']);
+    assert.deepEqual(as.code_challenge_methods_supported, ['S256']);
+  });
+
+  it('404s unknown paths under the well-known behaviors', () => {
+    const out = wellknown(
+      req('/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp/other', '', 'GET'),
+    );
+    assert.equal(out.statusCode, 404);
+    assert.equal(out.headers['cache-control'].value, 'no-store');
+  });
+
+  it('edge documents match scripts/hosted-mcp-oauth-metadata.json', () => {
+    const canonical = JSON.parse(
+      readFileSync(join(__dirname, 'hosted-mcp-oauth-metadata.json'), 'utf8'),
+    );
+    const prm = JSON.parse(
+      wellknown(req('/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp')).body,
+    );
+    const as = JSON.parse(
+      wellknown(req('/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp')).body,
+    );
+    assert.deepEqual(prm, canonical.protectedResourceMetadata);
+    assert.deepEqual(as, canonical.authorizationServerMetadata);
+  });
+});
+
+describe('hosted MCP OAuth discovery through the official MCP SDK', () => {
+  // Run the SDK's own discovery against the edge function, so a document the
+  // SDK would reject (ZodError, resource mismatch) fails here and not in
+  // `claude mcp login`. Resolved through packages/mcp, which depends on it.
+  const wellknown = loadHandler('cloudfront-mushi-hosted-mcp-wellknown.js');
+  const requireFromMcp = createRequire(join(__dirname, '..', 'packages', 'mcp', 'package.json'));
+  const sdkAuth = import(
+    pathToFileURL(requireFromMcp.resolve('@modelcontextprotocol/sdk/client/auth.js')).href
+  );
+
+  /** Only the two CloudFront behaviors answer; every other URL 404s like S3. */
+  async function edgeFetch(input) {
+    const url = new URL(String(input));
+    const behaviors = [
+      '/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp',
+      '/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp',
+    ];
+    if (url.host !== 'kensaur.us' || !behaviors.some((p) => url.pathname.startsWith(p))) {
+      return new Response('<Error><Code>NoSuchKey</Code></Error>', { status: 404 });
+    }
+    const out = wellknown(req(url.pathname));
+    return new Response(out.body, {
+      status: out.statusCode,
+      headers: { 'content-type': out.headers['content-type'].value },
+    });
+  }
+
+  for (const serverUrl of [
+    'https://kensaur.us/mushi-mushi/hosted-mcp',
+    'https://kensaur.us/mushi-mushi/hosted-mcp/',
+  ]) {
+    it(`discovers the authorization server for ${serverUrl}`, async () => {
+      const { discoverOAuthServerInfo, selectResourceURL } = await sdkAuth;
+      const info = await discoverOAuthServerInfo(serverUrl, { fetchFn: edgeFetch });
+      assert.equal(info.authorizationServerUrl, 'https://kensaur.us/mushi-mushi/hosted-mcp');
+      assert.match(
+        String(info.authorizationServerMetadata?.registration_endpoint),
+        /\/functions\/v1\/mcp\/oauth\/register$/,
+      );
+      const resource = await selectResourceURL(serverUrl, {}, info.resourceMetadata);
+      assert.equal(String(resource), 'https://kensaur.us/mushi-mushi/hosted-mcp');
+    });
+  }
 });
 
 describe('cloudfront-mushi-docs-router', () => {
@@ -381,5 +519,207 @@ describe('cloudfront-mushi-docs-router', () => {
   it('appends .html for clean docs paths', () => {
     const out = docs(req('/mushi-mushi/docs/admin'));
     assert.equal(out.uri, '/mushi-mushi/docs/admin.html');
+  });
+
+  it('appends .html to a dotted slug instead of treating it as a file (regression)', () => {
+    const out = docs(req('/mushi-mushi/docs/blog/release-1.28.0'));
+    assert.equal(out.uri, '/mushi-mushi/docs/blog/release-1.28.0.html');
+  });
+
+  for (const asset of [
+    '/mushi-mushi/docs/_next/static/chunks/main-abc123.js',
+    '/mushi-mushi/docs/_next/static/css/app.css',
+    '/mushi-mushi/docs/_next/static/media/font.woff2',
+    '/mushi-mushi/docs/admin.txt',
+    '/mushi-mushi/docs/llms.txt',
+    '/mushi-mushi/docs/sitemap.xml',
+    '/mushi-mushi/docs/llm-md/sdks/web.md',
+    '/mushi-mushi/docs/brand/logo-mark.svg',
+    '/mushi-mushi/docs/integrations/cursor.cursorrules',
+    '/mushi-mushi/docs/version.json',
+    // Docs search index written by `pagefind --site out --output-subdir _pagefind`.
+    '/mushi-mushi/docs/_pagefind/wasm.en.pagefind',
+    '/mushi-mushi/docs/_pagefind/pagefind.en_d42915f240.pf_meta',
+    '/mushi-mushi/docs/_pagefind/index/en_1a2b3c4.pf_index',
+    '/mushi-mushi/docs/_pagefind/fragment/en_1a2b3c4.pf_fragment',
+    '/mushi-mushi/docs/_pagefind/filter/en_1a2b3c4.pf_filter',
+  ]) {
+    it(`passes asset ${asset.split('/').pop()} through unchanged`, () => {
+      const out = docs(req(asset));
+      assert.equal(out.uri, asset);
+      assert.equal(out.statusCode, undefined);
+    });
+  }
+
+  for (const oldPath of [
+    '/mushi-mushi/docs/sdks/mcp-tools.generated',
+    '/mushi-mushi/docs/sdks/mcp-tools.generated.html',
+  ]) {
+    it(`301 ${oldPath.split('/').pop()} to the dot-free MCP tools slug`, () => {
+      const out = docs(reqWithQs(oldPath, { ref: 'sidebar' }));
+      assert.equal(out.statusCode, 301);
+      assert.equal(out.headers.location.value, '/mushi-mushi/docs/sdks/mcp-tools?ref=sidebar');
+    });
+  }
+
+  it('301 the old llm-md mirror of the MCP tools page', () => {
+    const out = docs(req('/mushi-mushi/docs/llm-md/sdks/mcp-tools.generated.md'));
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, '/mushi-mushi/docs/llm-md/sdks/mcp-tools.md');
+  });
+});
+
+describe('cloudfront-mushi-docs-response', () => {
+  const src = stripSource(
+    readFileSync(join(__dirname, 'cloudfront-mushi-docs-response.js'), 'utf8'),
+  );
+  // eslint-disable-next-line no-new-func
+  const respond = new Function('event', `${src}\nreturn handler(event);`);
+
+  it('adds the security headers to a page response', () => {
+    const out = respond({
+      request: { uri: '/mushi-mushi/docs/admin.html' },
+      response: { statusCode: 200, headers: {} },
+    });
+    assert.match(out.headers['strict-transport-security'].value, /max-age=/);
+    assert.match(out.headers['content-security-policy'].value, /default-src 'self'/);
+    assert.equal(out.headers['x-robots-tag'], undefined);
+  });
+
+  it('tags the .txt RSC payloads noindex', () => {
+    const out = respond({
+      request: { uri: '/mushi-mushi/docs/admin.txt' },
+      response: { statusCode: 200, headers: {} },
+    });
+    assert.equal(out.headers['x-robots-tag'].value, 'noindex, nofollow');
+  });
+
+  function respondTo(uri) {
+    return respond({ request: { uri }, response: { statusCode: 200, headers: {} } });
+  }
+
+  // The llm-md twins duplicate every page as Markdown; a canonical Link
+  // header tells a crawler which URL the content belongs to.
+  it('points an llm-md twin at its HTML page with a canonical Link header', () => {
+    const out = respondTo('/mushi-mushi/docs/llm-md/sdks/web.md');
+    assert.equal(
+      out.headers.link.value,
+      '<https://kensaur.us/mushi-mushi/docs/sdks/web>; rel="canonical"',
+    );
+  });
+
+  it('maps a folder index twin to the slashless folder page', () => {
+    const out = respondTo('/mushi-mushi/docs/llm-md/sdks/index.md');
+    assert.equal(
+      out.headers.link.value,
+      '<https://kensaur.us/mushi-mushi/docs/sdks>; rel="canonical"',
+    );
+  });
+
+  it('maps the landing twin to the product root, the landing canonical', () => {
+    const out = respondTo('/mushi-mushi/docs/llm-md/index.md');
+    assert.equal(out.headers.link.value, '<https://kensaur.us/mushi-mushi/>; rel="canonical"');
+  });
+
+  it('adds no Link header to pages, RSC payloads or other .md files', () => {
+    for (const uri of [
+      '/mushi-mushi/docs/sdks/web.html',
+      '/mushi-mushi/docs/sdks/web.txt',
+      '/mushi-mushi/docs/llms.txt',
+    ]) {
+      assert.equal(respondTo(uri).headers.link, undefined, uri);
+    }
+  });
+
+  it('every generated twin gets the canonical its own Source line names', () => {
+    // generate-llms-full.mjs writes `Source: <page URL>` into each twin. The
+    // landing's Source is the docs root, but its HTML canonical is the product
+    // root (app/[[...mdxPath]]/page.tsx), so it is checked separately above.
+    const twinsDir = join(__dirname, '..', 'apps', 'docs', 'public', 'llm-md');
+    const twins = readdirSync(twinsDir, { recursive: true })
+      .map((f) => String(f).replace(/\\/g, '/'))
+      .filter((f) => f.endsWith('.md') && f !== 'index.md');
+    assert.ok(twins.length > 100, `expected the twin tree, found ${twins.length}`);
+    for (const rel of twins) {
+      const source = readFileSync(join(twinsDir, rel), 'utf8').match(/^Source: (\S+)$/m)?.[1];
+      assert.ok(source, `${rel} has no Source line`);
+      const link = respondTo(`/mushi-mushi/docs/llm-md/${rel}`).headers.link?.value;
+      assert.equal(link, `<${source}>; rel="canonical"`, rel);
+    }
+  });
+
+  it('no longer carries a 404 body it could never serve', () => {
+    // CloudFront does not invoke viewer-response on origin >= 400; the 404
+    // is the bucket ErrorDocument + response headers policy instead
+    // (scripts/aws-configure-docs-errors.mjs).
+    assert.doesNotMatch(src, /FALLBACK_404_HTML|bodyEncoding/);
+  });
+});
+
+describe('dotted slugs under /mushi-mushi/* (spa-router, apex)', () => {
+  const spa = loadHandler('cloudfront-mushi-spa-router.js');
+  const apex = loadHandler('cloudfront-mushi-apex-redirect.js');
+  const combined = loadHandler('cloudfront-kensaur-default-viewer.js');
+
+  it('spa-router 301s the old MCP tools slug', () => {
+    const out = spa(req('/mushi-mushi/docs/sdks/mcp-tools.generated'));
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, '/mushi-mushi/docs/sdks/mcp-tools');
+  });
+
+  it('spa-router 301s the stale .html object before the asset rule', () => {
+    const out = spa(req('/mushi-mushi/docs/sdks/mcp-tools.generated.html'));
+    assert.equal(out.statusCode, 301);
+  });
+
+  it('spa-router appends .html to a dotted docs slug', () => {
+    const out = spa(req('/mushi-mushi/docs/blog/release-1.28.0'));
+    assert.equal(out.uri, '/mushi-mushi/docs/blog/release-1.28.0.html');
+  });
+
+  it('spa-router passes the docs search index through', () => {
+    for (const uri of [
+      '/mushi-mushi/docs/_pagefind/wasm.en.pagefind',
+      '/mushi-mushi/docs/_pagefind/pagefind.en_d42915f240.pf_meta',
+      '/mushi-mushi/docs/_pagefind/fragment/en_1a2b3c4.pf_fragment',
+    ]) {
+      assert.equal(spa(req(uri)).uri, uri);
+    }
+  });
+
+  it('spa-router and docs-router share one asset-extension list', () => {
+    const extOf = (file) =>
+      readFileSync(join(__dirname, file), 'utf8').match(/var ASSET_EXT =\s*(\/.+\/i);/)?.[1];
+    const docsExt = extOf('cloudfront-mushi-docs-router.js');
+    assert.ok(docsExt, 'ASSET_EXT not found in the docs router');
+    assert.equal(extOf('cloudfront-mushi-spa-router.js'), docsExt);
+  });
+
+  it('spa-router still passes admin build assets through', () => {
+    const out = spa(req('/mushi-mushi/admin/assets/index-Bx12.js'));
+    assert.equal(out.uri, '/mushi-mushi/admin/assets/index-Bx12.js');
+  });
+
+  it('spa-router sends a dotted admin route to the SPA shell', () => {
+    const out = spa(req('/mushi-mushi/admin/reports/v1.2'));
+    assert.equal(out.uri, '/mushi-mushi/admin/index.html');
+  });
+
+  it('spa-router sends a testers app slug containing a dot to the shell', () => {
+    const out = spa(req('/mushi-mushi/testers/apps/my.app'));
+    assert.equal(out.uri, '/mushi-mushi/testers/apps/_shell/index.html');
+  });
+
+  it('apex and the combined Default function 301 the old unprefixed slug', () => {
+    for (const fn of [apex, combined]) {
+      const out = fn(req('/sdks/mcp-tools.generated'));
+      assert.equal(out.statusCode, 301);
+      assert.equal(out.headers.location.value, '/mushi-mushi/docs/sdks/mcp-tools');
+    }
+  });
+
+  it('apex keeps passing unknown extensions through (other apps share Default)', () => {
+    const out = apex(req('/some/file.riv'));
+    assert.equal(out.uri, '/some/file.riv');
   });
 });

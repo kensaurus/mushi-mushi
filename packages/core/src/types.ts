@@ -26,6 +26,22 @@ export interface MushiConfig {
    * host apps. Set false for fully static/offline deployments.
    */
   runtimeConfig?: boolean | 'auto';
+  /**
+   * Product analytics (`Mushi.track()`, Users & Funnels). Enabled by default
+   * and keyed on the same opaque per-project reporter token as sessions;
+   * honours DNT / GPC. Set `enabled: false` to opt out, or
+   * `consent: 'required'` to buffer until `setConsent('granted')`.
+   * Session tracking passes the same gate: `enabled`, DNT / GPC, bot
+   * exclusion and consent all apply to it too.
+   */
+  analytics?: MushiAnalyticsConfig;
+  /**
+   * Session lifecycle tracking for the console's Activity and Users views
+   * (session start / heartbeat / end, page views). Default true. Runs only
+   * while the `analytics` gate allows tracking; `false` turns it off even
+   * then.
+   */
+  trackSessions?: boolean;
 
   sentry?: MushiSentryConfig;
   widget?: MushiWidgetConfig;
@@ -198,7 +214,21 @@ export interface MushiWidgetConfig {
    *   - `axis`        constrain movement to one axis (`'x'`, `'y'`, or `'both'` default).
    */
   draggable?: boolean | { persist?: boolean; snapToEdge?: boolean; axis?: 'both' | 'x' | 'y' };
-  /** Show the tiny "Powered by Mushi vX" footer inside the widget panel. */
+  /**
+   * Show the "Bug reports by Mushi" mark at the bottom of the widget panel.
+   * It links to the Mushi site (`utm_source=widget&utm_medium=powered-by` plus
+   * an anonymous `ref` derived from a SHA-256 prefix of the project id) and
+   * feeds the `loop_impression` / `loop_click` analytics events.
+   *
+   * Precedence (most specific wins):
+   * 1. An explicit value here — the MIT SDK config is a hard override and
+   *    beats anything the runtime config sends.
+   * 2. `widget.brandFooter` from the runtime config (`GET /v1/sdk/config`):
+   *    Mushi Cloud sends `true` for Free Cloud projects and `false` for paid
+   *    plans; self-hosted servers send nothing. Opt out with one toggle in the
+   *    console project settings.
+   * 3. Default `false`.
+   */
   brandFooter?: boolean;
   /** How the widget should surface SDK freshness warnings. Defaults to auto. */
   outdatedBanner?: 'auto' | 'banner' | 'console-only' | 'off';
@@ -458,6 +488,22 @@ export interface MushiCaptureConfig {
   screenshotProvider?: () => Promise<string | null>;
   elementSelector?: boolean;
   replay?: 'sentry' | 'rrweb' | 'lite' | 'off';
+  /**
+   * How to load rrweb for `replay: 'rrweb'`. A published SDK cannot import
+   * rrweb itself: its bare `import('rrweb')` is invisible to your bundler, so
+   * rrweb never makes it into your build. Hand the import over and your
+   * bundler code-splits it like any other dynamic import. Install `rrweb`
+   * yourself; the chunk loads only for sessions sampled into replay.
+   *
+   * Without a loader the SDK uses a global `rrweb` (the UMD build from a
+   * script tag) when one exists, and otherwise records lite replay (clicks)
+   * and warns once in the console. Recording masks every input and every
+   * text node.
+   *
+   * @example
+   * capture: { replay: 'rrweb', rrweb: () => import('rrweb') }
+   */
+  rrweb?: () => Promise<{ record?: unknown }>;
   /**
    * Mushi Mushi v2.1 (whitepaper §6 hybrid mode): passive inventory
    * discovery. When enabled the SDK observes navigations and emits a
@@ -1481,8 +1527,26 @@ export interface MushiSDKInstance {
    * Manually record a host-defined activity event (e.g. 'lesson_completed').
    * The SDK batches these and flushes to POST /v1/sdk/activity.
    * No-op when rewards are disabled or the user has not opted in.
+   * For product analytics (funnels, paths, people) use `track()` instead.
    */
   recordActivity(action: string, metadata?: Record<string, unknown>): void;
+
+  // ─── Product analytics (Users & Funnels) ──────────────────────────
+
+  /**
+   * Record a product-analytics event, e.g. `track('checkout_started', { plan: 'pro' })`.
+   * Names must match `^[a-z][a-z0-9_]{1,63}$`; properties are flat
+   * (string | number | boolean | null), PII-looking keys are dropped, and
+   * every string value runs through the PII scrubber. Batched to
+   * POST /v1/sdk/events. No-op under DNT/GPC, `analytics.enabled: false`,
+   * or before consent when `analytics.consent === 'required'`.
+   * Returns true when the event was queued.
+   */
+  track(event: string, properties?: Record<string, MushiPropertyValue>): boolean;
+  /** Grant or deny analytics consent (persisted per project in localStorage). */
+  setConsent(state: 'granted' | 'denied'): void;
+  /** The anonymous id analytics events are keyed on, or null when tracking is off. */
+  getAnonymousId(): string | null;
 
   /**
    * Briefly animate the bug-report trigger button to draw the user's
@@ -1597,6 +1661,8 @@ export interface MushiApiClient {
   postDiscoveryEvent(event: MushiDiscoveryEventPayload): Promise<MushiApiResponse<{ accepted: boolean }>>;
   /** POST /v1/sdk/session — lightweight session lifecycle event (best-effort). */
   postSessionEvent(payload: MushiSessionEventPayload): Promise<MushiApiResponse<{ accepted: boolean }>>;
+  /** POST /v1/sdk/events — batched product-analytics events (Mushi.track()). */
+  postProductEvents(payload: MushiProductEventPayload): Promise<MushiApiResponse<{ accepted: number; dropped: number }>>;
   listReporterReports(reporterToken: string): Promise<MushiApiResponse<{ reports: MushiReporterReport[] }>>;
   listReporterComments(
     reportId: string,
@@ -1749,10 +1815,56 @@ export interface MushiSessionEventPayload {
   sdk_version?: string;
 }
 
+export type MushiPropertyValue = string | number | boolean | null;
+
+/** Configuration for `Mushi.track()` product analytics. */
+export interface MushiAnalyticsConfig {
+  /** Master switch (default true). */
+  enabled?: boolean;
+  /** 'implied' (default) sends immediately; 'required' buffers until setConsent('granted'). */
+  consent?: 'implied' | 'required';
+  /** 0..1, decided once per person (default 1). */
+  sampleRate?: number;
+  /** Honour navigator.doNotTrack / globalPrivacyControl (default true). */
+  respectDoNotTrack?: boolean;
+  /**
+   * Skip tracking in WebDriver-controlled browsers (Playwright, Puppeteer,
+   * Selenium), headless Chrome, Lighthouse and crawler user agents, so test
+   * runs and bots never count as users (default true). Set false to exercise
+   * analytics from an end-to-end test.
+   */
+  excludeBots?: boolean;
+  /** Emit `pageview` on history navigation (default false; sessions already record page views). */
+  autoPageviews?: boolean;
+  /** Flush cadence in ms (default 5000, min 1000). */
+  flushIntervalMs?: number;
+  /** Property keys allowed through the PII key filter. */
+  propertyAllowlist?: string[];
+  /** Which surface these events come from (default 'web'). */
+  surface?: 'web' | 'console' | 'docs' | 'cli' | 'mcp' | 'server' | 'mobile';
+}
+
+/** Wire shape for POST /v1/sdk/events. */
+export interface MushiProductEventPayload {
+  anon_id?: string | null;
+  user_id?: string | null;
+  user_traits?: Record<string, unknown> | null;
+  session_id?: string | null;
+  sdk_version?: string | null;
+  surface?: MushiAnalyticsConfig['surface'];
+  events: Array<{
+    name: string;
+    ts?: string;
+    properties?: Record<string, MushiPropertyValue>;
+    dedup_key?: string;
+  }>;
+}
+
 export interface MushiApiResponse<T> {
   ok: boolean;
   data?: T;
-  error?: { code: string; message: string };
+  /** `status` is the HTTP status when the server answered; absent for network errors. */
+  error?: { code: string; message: string; status?: number };
 }
 
 export interface MushiRuntimeSdkConfig {

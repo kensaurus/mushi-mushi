@@ -1,248 +1,111 @@
-# content-plan.md — the compounding content engine
+# content-plan.md — four journey posts, one per release
 
-One post per week for 8 weeks, cross-posted to dev.to + personal blog +
-Hashnode + LinkedIn. Each post is a natural fit for a HN re-submit 2–3 weeks
-later. This is the AFFiNE 6k → 33k star pattern in miniature.
+Rewritten 2026-09-21. The June plan listed eight feature posts; one was
+written. The pattern that actually lands for a project with no audience is
+PostHog's: honest founder-journey posts with real numbers, one per release,
+and "depth-first: if a post works, write the next one about the same thing".
+These four replace the eight. The two feature posts that were worth keeping
+are in the backlog at the bottom.
 
-Pick the order by **which one you most want to write**. Enthusiasm reads.
+Every post is hand-written, first person, sober. No mascot, no emoji, no
+"we". The numbers come from [`scorecard.md`](./scorecard.md) or the
+post-mortem for that release, never from memory. If a number is not measured,
+the post says so.
 
-Every post follows the same shape:
+Every post has the same shape:
 
-1. **One-sentence hook** using the Sentry contrast.
-2. **The problem** — concrete, not abstract.
-3. **What we built** — with real code or real numbers.
-4. **What we got wrong** — honesty is the moat.
-5. **Try it** — link to live demo + repo + npm, and the star CTA.
+1. **The numbers, first.** Flat, sourced, no adjectives.
+2. **What I found when I looked.** Two or three concrete things.
+3. **What it means.** One paragraph.
+4. **What changed / what happens next.** Concrete, dated.
+5. **One question to the reader.** Not a CTA; a question you actually want
+   answered, pointing at Discussions.
 
-Every post title gets the *"weirdly-specific over vague-clever"* test. Clever
-titles under-perform by roughly 40% on dev.to (source: dev.to growth report).
-
----
-
-## Post 1 — "We built the auto-fix PR loop in a weekend — here's the JSON-RPC wire format"
-
-- **Angle:** technical meat. MCP / agents / Cursor / Claude Code audiences will
-  eat this.
-- **Publish:** dev.to + personal blog. Submit to HN in the maker-share slot.
-- **Core show:** the actual JSON-RPC request/response for `dispatch_fix`,
-  screenshots of a PR opening in 40 seconds, Langfuse trace of what the agent
-  thought, the `validateResult` gating logic that catches hallucinated fixes.
-- **Outline:**
-  1. Hook: "Sentry sees what your code threw. Mushi sees what your users felt
-     — and optionally opens the fix PR."
-  2. Why I wanted this loop (the weekend where I had 3 user bugs and triaged
-     none because context-switching is expensive).
-  3. The four MCP tool calls: `list_reports`, `classify_report`,
-     `dispatch_fix`, `summarize_intelligence`. Paste the actual `tools/list`
-     response JSON.
-  4. Sandbox abstraction: why e2b / modal / cloudflare interchangeable
-     (never runs `pnpm install` in prod).
-  5. `validateResult` gating: the LLM-as-Judge that catches "I fixed the wrong
-     file" before the PR opens.
-  6. What broke (the `tools/call` streaming bug, the retry budget).
-  7. Code you can paste into your own Cursor config today.
-  8. CTA + star.
-- **Headline alternates:** *"MCP JSON-RPC + a sandboxed agent = a fix PR from
-  a user bug report, in 40 seconds"*, *"I gave my coding agent a mailbox
-  full of real users' bugs — here's the wire format"*.
-
-## Post 2 — "Sentry + Mushi Mushi: the 2-tool stack for user-felt bugs"
-
-- **Angle:** companion, not replacement. Guaranteed hate-reads from Sentry
-  power users = engagement. Target dev.to first, then r/programming.
-- **Publish:** dev.to on Tuesday (mid-week for max compounding).
-- **Core show:** side-by-side table of "Sentry sees X / Mushi sees Y", the
-  bidirectional correlation `sentryEventId` field, one real merged PR that
-  Sentry missed and Mushi caught.
-- **Outline:**
-  1. Hook: "Sentry sees what your code threw. Mushi sees what your users felt."
-  2. The 6-row gap table (dead button, 12s load, confusing checkout, Android-only
-     layout break, dead-end empty state, rage-click on a disabled button).
-  3. How the two tools stream-link (the `sentryEventId` breadcrumb).
-  4. The workflow: alert from Sentry → breadcrumb link → Mushi shows the user
-     who hit it, the shake-report they left, and the classified category.
-  5. A real shipped example (redacted).
-  6. What I'd still use Sentry for alone.
-  7. CTA + star.
-- **Headline alternates:** *"Your Sentry dashboard has a blind spot. I
-  measured it."*, *"The bug that Sentry will never see (and why that's fine)"*.
-
-## Post 3 — "Designing a dark-only admin for PDCA: every page is Decide / Act / Verify"
-
-- **Angle:** design-led, pairs well with the `PageHero` screenshots already in
-  the README. Appeals to the UI-tool crowd (Raycast, Linear, Arc, Cron). Good
-  on dev.to + designer-inclusive X followers.
-- **Publish:** dev.to + uxdesign.cc cross-post.
-- **Core show:** the before/after of collapsing 7 admin pages into a consistent
-  Decide/Act/Verify row, the rationale for dark-only (admin is a war room, not
-  a landing page), the per-page mental-model boxes.
-- **Outline:**
-  1. Hook: "Admin dashboards fail because they don't tell you what to do next."
-  2. PDCA as a navigational primitive (Plan → Do → Check → Act).
-  3. Every page = Decide (what to look at) / Act (one primary action) /
-     Verify (did it work).
-  4. Why dark-only: match the mental state (focus) and reduce micro-decisions
-     (no light-mode toggle cost).
-  5. `PageHero` component: screenshots + the 40-line React.
-  6. What I'd redo.
-  7. CTA + star.
-
-## Post 4 — "LLM-as-Judge in production: scoring your own classifier weekly"
-
-- **Angle:** deeply technical. Will trend on r/MachineLearning and HN if timed
-  mid-morning Tuesday. Langfuse / Anthropic crowd will boost.
-- **Publish:** dev.to + personal blog + HN direct-submit.
-- **Core show:** the real Judge prompt, a week of scores in a line chart, a
-  case where the Judge caught a prompt-drift regression, the auto-promote
-  threshold.
-- **Outline:**
-  1. Hook: "If your LLM classifier isn't grading itself, you're flying blind."
-  2. Classifier pipeline recap (Haiku → Sonnet + vision + RAG).
-  3. The Judge prompt (paste in full — this is the gold).
-  4. Weekly schedule via pg_cron + Supabase Edge Function.
-  5. Score distribution chart — real data, real 4.1 → 4.3 improvement after
-     the last prompt change.
-  6. Auto-promote: when the candidate prompt beats the baseline on two
-     consecutive weeks, it gets promoted.
-  7. The regression we caught (the one where the classifier started
-     mis-categorising every iOS report after a Haiku version bump).
-  8. CTA + star.
-
-## Post 5 — "The 60-second bug report: shake-to-report, screenshot, console, network, offline queue"
-
-- **Angle:** mobile-dev gold. Reddit r/reactnative, r/iOSProgramming, Expo
-  Discord. Visual — record a phone shake.
-- **Publish:** dev.to + Expo community.
-- **Core show:** the phone-shake detection math, the Shadow DOM bottom sheet,
-  offline queue with retry + jitter, full context object JSON.
-- **Outline:**
-  1. Hook: "A user shakes their phone. 60 seconds later, there's a fix PR on
-     your repo. Here's every link in the chain."
-  2. Shake detection (accelerometer thresholds, debouncing).
-  3. Bottom-sheet widget (~14 KB gzipped, Shadow DOM so no CSS leak).
-  4. Auto-capture: screenshot (html2canvas on web, native on RN), console ring
-     buffer (last 50), network ring buffer (last 20), current route, user intent.
-  5. Offline queue: AsyncStorage on RN, IndexedDB on web, retry with jitter.
-  6. Server-side: 200ms fast-filter, 1.8s deep-classify (p50).
-  7. Example: paste the full report JSON for a single shake-to-report.
-  8. CTA + star.
-
-## Post 6 — "Why I went AGPLv3 open-core (and MIT'd the SDKs)"
-
-- **Angle:** license philosophy. **Always** triggers HN discussion and brings
-  a different (older, more senior) crowd.
-- **Publish:** dev.to + HN direct-submit. Do this one **after** you have real
-  user traction, because the license debate benefits from "here's a real tool
-  it applies to".
-- **Core show:** the open-core decision — a genuinely open AGPLv3 core, a
-  commercial license for SaaS modifiers, a narrow source-available enterprise
-  edition as the only paid boundary, and the honest journey there (BSL →
-  AGPLv3 open-core + commercial).
-- **Outline:**
-  1. Hook: "I didn't want a license lawyer to be the first thing between you
-     and a widget in your app — and I didn't want copyleft to scare off
-     self-hosters either."
-  2. The MIT surface: everything a user installs.
-  3. The AGPLv3 surface: the server + agents + verify — copyleft; self-host
-     and fork freely, modified SaaS publishes changes or takes a commercial license.
-  4. The one commercial boundary: a small source-available enterprise edition
-     (`packages/server/ee/` — SSO/SCIM, audit export, region pinning) that a
-     solo builder never needs.
-  5. The model: Grafana / Supabase open-core. A genuinely open AGPL core earns
-     trust; a narrow paid boundary funds the maintainer.
-  6. What I got wrong on the way here (started at BSL "source-available", briefly
-     considered Apache, landed on AGPLv3 + commercial — and why the final stop is
-     the honest one).
-  7. CTA + star.
-
-## Post 7 — "A tiny cron job that keeps the whole pipeline honest"
-
-- **Angle:** the `pg_cron` self-healing story. Short, sharp, Postgres-inclusive
-  crowd. Supabase community will boost.
-- **Publish:** dev.to + Supabase community forum + Postgres subreddit.
-- **Core show:** the actual SQL for pg_cron scheduling the nightly re-classify
-  of low-confidence reports, the metrics before/after, the "forgot the
-  completion check" war story.
-- **Outline:**
-  1. Hook: "The quiet bit of infrastructure that makes the whole pipeline
-     self-correcting."
-  2. What low-confidence reports are (classifier said <0.7 on severity).
-  3. The cron: every 6h, re-classify any report whose `confidence < 0.7` and
-     `updated_at < now() - interval '24 hours'`.
-  4. The SQL (paste in full).
-  5. The bug I introduced (no completion check — the job kept re-scheduling
-     itself forever, ran 12× per day for three days).
-  6. The fix (idempotency key + a `completed_at` guard).
-  7. The before/after confidence histogram.
-  8. CTA + star.
-
-## Post 8 — "Bug of the week" — running series, start mid-cycle
-
-- **Angle:** micro-content. Not a long post — a Bluesky / X thread + a
-  pinned dev.to list post that aggregates them.
-- **Publish:** Bluesky / X weekly, dev.to aggregator refreshed monthly.
-- **Core show:** one weirdly-specific real bug Mushi-chan caught, plus a
-  one-line quip. Builds the brand voice without needing a new long post.
-- **Format (reuse weekly):**
-
-```
-Bug of the week — <one-line description>
-
-<screenshot or redacted admin screenshot>
-
-What Sentry saw: <nothing / 200 OK / 404>
-What Mushi-chan heard: "<the actual user sentence>"
-Classified: <Severity / Category / Confidence>
-Dispatched: <PR link>
-
-🐛
-```
-
-  - Low effort, high compound. Builds Mushi-chan's reputation as a bug-having
-    friend, not a vendor.
-  - After 8–10 weeks, the aggregator dev.to post is a goldmine of social
-    proof and unintentionally the best marketing you'll produce.
+Location: `apps/docs/content/blog/<slug>.mdx` + `blog/_meta.ts` + a card in
+`blog/index.mdx`. Mirror: `docs/marketing/posts/<nn>-<slug>.md` with
+`canonical_url` set to the docs URL. Publish the mirror with
+`node scripts/marketing/post-devto.mjs <slug> --publish`. One Bluesky item
+per post with a real `scheduled_for`.
 
 ---
 
-## YouTube short — 90-second demo
+## Post 1 — "I shipped a bug tool for 5 months and got 9 signups. Here's what the data said."
 
-Already scripted in [snippets.md](./snippets.md). Record **once**, in one of
-the first two weeks after launch. Upload to:
+- **Publish:** day 7, before the Show HN. **Status: written** (2026-09-21,
+  `blog/nine-signups-what-the-data-said.mdx`, mirror `posts/02-nine-signups.md`).
+- **Numbers used:** signups by month, external projects and their report count,
+  reports, sessions, stars, 14-day views/uniques, external issues/PRs, package
+  and registry counts.
+- **Findings:** the June launch runbook never ran; GitHub OAuth was off in
+  production the whole time; the deployed console never had its own SDK key so
+  dogfooding was silently off.
+- **What changed:** north star = activated external projects/week; measured
+  with our own SDK; first run rebuilt to a diagnosis in under a minute.
 
-- YouTube Shorts
-- Bluesky native video
-- X / Twitter native video
-- LinkedIn native (native uploads out-perform links by ~5×)
-- dev.to embedded in the launch-week retro post
+## Post 2 — "Show HN, by the numbers: what N visitors did on a no-signup demo"
 
-**Recording tips:**
+- **Publish:** day 21, the Friday after R1.
+- **Numbers:** `gh api repos/kensaurus/mushi-mushi/traffic/referrers`, HN
+  points / comments / peak rank, `landing_view` → `connect_demo_click` →
+  `signup_completed` → `first_report_received` from `product_events`, signups
+  by `signup_source`, activated external projects that week.
+- **Findings:** where people dropped between the demo and the install; which
+  comment thread drove the most signups; the one thing that did not work.
+- **Also posted as:** the r/webdev and r/reactjs threads (numbers inline, link
+  in a comment).
 
-- Phone for the shake-to-report scene (more realistic than simulator).
-- Screen record for the admin flow (OBS or the macOS built-in — 1080p).
-- Voice-over in one take, lightly edited. Mushi-chan sounds like a person
-  talking to a person, not a narrator.
-- Background music only if you really want it. Lo-fi beats = AI cliché;
-  avoid. A single well-placed silence beats music.
-- Export twice: portrait (Shorts / TikTok / Reels) and landscape (LinkedIn /
-  Twitter / the dev.to embed).
+## Post 3 — "Nobody wanted a Sentry alternative. Here's what solo builders asked for instead."
 
-The 90-second video does the heavy lifting for months — it lives in every
-README, every pinned tweet, every LinkedIn post, every Product Hunt
-re-submit. Treat it like a core asset.
+- **Publish:** around day 50, after at least ten real conversations (the HN
+  DMs, Discussions threads, support email).
+- **Numbers:** how many conversations, what each person was using before, how
+  many installed, how many sent a report. Quotes only with permission.
+- **Findings:** the questions people actually asked versus the comparison we
+  expected to have. If the answer is that they did want a Sentry alternative,
+  the title changes; the post is written from the conversations, not the
+  other way round.
+- **Also posted as:** the R3 normal HN submission and dev.to.
+
+## Post 4 — "The first stranger's bug: what Mushi's diagnosis got right and wrong on a repo I'd never seen"
+
+- **Publish:** around day 80, when the first external project has a real
+  report and its owner agrees to the write-up.
+- **Numbers:** time from report to diagnosis, what the diagnosis said, what the
+  fix actually was, how many files it pointed at correctly.
+- **Fallback if no stranger's bug exists by then:** "90 days in the open:
+  activated projects, not stars", built from twelve scorecard rows.
 
 ---
+
+## Backlog (kept from the June plan)
+
+- **"60 seconds from 'this is broken' to a draft PR"** — written
+  (`posts/01-auto-fix-loop.md`, docs mirror `blog/auto-fix-loop.mdx`). Re-run
+  on dev.to only after R1 with the canonical URL fixed; not a launch post.
+- **"Sentry + Mushi: the 2-tool stack"** — the alongside story with the
+  `sentryEventId` correlation and one real merged fix Sentry missed. Write
+  after there is one real example from an external project; until then the
+  [Sentry vs Mushi](https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi)
+  compare page covers it.
+
+Retired: the dark-only admin design post, the LLM-as-Judge post, the
+shake-to-report internals post, the AGPLv3 post (already exists as
+`blog/agplv3-relicense.mdx`), the pg_cron post, and "Bug of the week". Any of
+them can come back once there is an audience to read them; none of them
+moves the activation number today.
+
+---
+
+## The 90-second video
+
+Still needed, and it gates R1 (the "npx mushi-mushi on a fresh app in under
+five minutes" recording doubles as the source). Record once, in one take,
+screen only; the Cursor session must be filmed live, not staged. Export
+portrait and landscape. It lives in the README, the landing hero slots, the
+Show HN comment and the Product Hunt gallery. If budget exists, pay an editor
+for the 20–30 s cut; never buy anything else.
 
 ## Pacing
 
-Shipping *one* post a week is the goal. Shipping zero is fine for a specific
-week if you're heads-down on a feature. Shipping three to catch up is a trap
-— readers prefer consistency to volume.
-
-Research (dev.to creator report, Pragmatic Engineer): posts at weeks 2–4
-after launch get the most stars-per-view. The audience is warm from the
-launch spike and the algorithm surfaces you to adjacent readers.
-
-If you can only ship two posts in the 8-week window, make them **Post 1
-(auto-fix loop)** and **Post 2 (Sentry companion)**. Those do the most
-category-defining work.
+One post per release. Zero in a week is fine. Two in a week is a sign the
+numbers are being written around rather than reported.

@@ -23,7 +23,7 @@ Resolution order: env → saved `consoleUrl` in `~/.config/mushi/config.json` �
 
 | Command | Use when |
 | --- | --- |
-| `npx mushi-mushi` / `mushi init` | First SDK install — framework detect, packages, `.env.local` |
+| `npx mushi-mushi` / `mushi init` | First SDK install — framework detect, packages, `.env.local` (from an agent terminal: `npx mushi-mushi --yes`) |
 | `mushi connect --project-id <uuid> --endpoint <url> --write-env --wire-ide --wait` | Have ID + key; want env + Cursor MCP + heartbeat proof |
 | `mushi login` | Save credentials before other commands |
 | `mushi setup` | MCP-only wiring from saved config (not SDK install) |
@@ -53,9 +53,17 @@ You need:
 # Recommended — wizard handles framework + env
 npx mushi-mushi
 
+# From an agent terminal (no TTY): no prompts; prints a sign-in URL + code
+# and waits for the user to approve it in the browser
+npx mushi-mushi --yes
+
 # Or manual
 npm install @mushi-mushi/web
 ```
+
+The key the wizard writes to `.env.local` is ingest-only (`report:write`):
+it ships in the app bundle, so it can submit reports but never read them.
+The CLI's own key (with `mcp:read`) stays in the CLI config.
 
 ### 3. Initialize in your app
 
@@ -79,7 +87,8 @@ Mushi.init({
 ```bash
 npm install -g @mushi-mushi/cli
 
-mushi login --api-key mushi_... --project-id <uuid>
+mushi login   # browser sign-in; never paste a key on an agent's command line
+# CI only: mushi login --api-key <key> --project-id <uuid>
 # endpoint defaults to Mushi Cloud when omitted after login
 
 mushi stories map --url https://your-app.vercel.app --wait
@@ -121,7 +130,8 @@ Console: **Settings → API Key Pool** (not the same as SDK ingest keys on Verif
 After `mushi login`:
 
 ```bash
-mushi setup                    # writes .cursor/mcp.json
+mushi setup                    # merges into .cursor/mcp.json
+mushi setup --ide claude       # merges into .mcp.json at the repo root (Claude Code)
 # or full wiring:
 mushi connect --project-id <uuid> --endpoint <url> --write-env --wire-ide --wait
 ```

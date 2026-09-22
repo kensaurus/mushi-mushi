@@ -256,6 +256,16 @@ export function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n);
 }
 
+/** "Bug reports by Mushi" mark: landing URL + channel UTM; `ref` = SHA-256 prefix of the project id. */
+const BRAND_FOOTER_URL = 'https://kensaur.us/mushi-mushi/';
+const BRAND_FOOTER_UTM = 'utm_source=widget&utm_medium=powered-by';
+
+/** Build the brand-footer href. `ref` is omitted until the hash resolves. */
+export function buildBrandFooterHref(ref: string | null): string {
+  const base = `${BRAND_FOOTER_URL}?${BRAND_FOOTER_UTM}`;
+  return ref && /^[0-9a-f]{6,64}$/.test(ref) ? `${base}&ref=${ref}` : base;
+}
+
 export const TOTAL_STEPS = 3;
 export const STEP_NUMBER: Record<Exclude<WidgetStep, 'success'>, number> = {
   category: 1,
@@ -335,6 +345,9 @@ export interface WidgetCallbacks {
   ): void | Promise<WidgetSubmitOutcome | void>;
   onOpen(): void;
   onClose(): void;
+  /** "Bug reports by Mushi" mark: impression once per widget instance, click per activation → loop_* events. */
+  onBrandFooterImpression?(): void;
+  onBrandFooterClick?(): void;
   onScreenshotRequest(): void;
   onScreenshotRemove?(): void;
   /** Optional markup pass (highlight / blur / arrow) before submit. */

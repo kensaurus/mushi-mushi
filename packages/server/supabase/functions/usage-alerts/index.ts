@@ -20,7 +20,7 @@
  *
  * ENVIRONMENT:
  * - RESEND_API_KEY           — Resend API key for transactional email
- * - RESEND_FROM_EMAIL        — sender address (default: noreply@mushi-mushi.dev)
+ * - RESEND_FROM_EMAIL        — verified sender address (required; no default — see _shared/email.ts)
  * - MUSHI_CONSOLE_URL        — link in emails (default: https://app.mushi-mushi.dev)
  */
 
@@ -30,32 +30,23 @@ import { withSentry } from '../_shared/sentry.ts'
 import { log } from '../_shared/logger.ts'
 import { listPlans } from '../_shared/plans.ts'
 import { notifyOperator } from '../_shared/operator-notify.ts'
+import { sendTransactionalEmail } from '../_shared/email.ts'
 
 const aLog = log.child('usage-alerts')
 
-const RESEND_API = 'https://api.resend.com/emails'
 const CONSOLE_URL = Deno.env.get('MUSHI_CONSOLE_URL') ?? 'https://app.mushi-mushi.dev'
 
-/** Send a transactional email via Resend. Fail-soft. */
+/**
+ * Send a transactional email via the shared Resend sender. Fail-soft: a
+ * missing RESEND_FROM_EMAIL / RESEND_API_KEY or a Resend error is logged and
+ * the alert is skipped. The caller still stamps the once-per-month dedup
+ * column (unchanged behavior), so the warning is the only signal — keep the
+ * sender configured.
+ */
 async function sendEmail(to: string, subject: string, html: string): Promise<void> {
-  const apiKey = Deno.env.get('RESEND_API_KEY')
-  const from = Deno.env.get('RESEND_FROM_EMAIL') ?? 'Mushi Mushi <noreply@mushi-mushi.dev>'
-  if (!apiKey) {
-    aLog.warn('RESEND_API_KEY not set — skipping email alert', { to, subject })
-    return
-  }
-  try {
-    const res = await fetch(RESEND_API, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to: [to], subject, html }),
-    })
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      aLog.warn('Resend API error', { status: res.status, body: text.slice(0, 200) })
-    }
-  } catch (err) {
-    aLog.warn('sendEmail failed', { err: String(err) })
+  const result = await sendTransactionalEmail({ to, subject, html })
+  if (!result.ok) {
+    aLog.warn('usage alert email skipped', { reason: result.reason, error: result.error, subject })
   }
 }
 

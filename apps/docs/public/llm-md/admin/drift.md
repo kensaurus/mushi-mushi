@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/drift
 
 ---
 title: Drift scanner
+description: The Drift scanner compares your live routes and components against the last snapshot to find the pages that a refactor silently broke.
 ---
 
 # Drift scanner
@@ -118,11 +119,11 @@ After major route additions:
 ## API
 
 ```bash
-POST /v1/admin/drift/scan             { "project_id": "", "max_paths": 50 }
-GET  /v1/admin/drift?project_id=&limit=100
-GET  /v1/admin/drift/snapshots?project_id=
-PATCH /v1/admin/drift/            { "status": "dismissed" }
-POST  /v1/admin/drift//create-lesson
+POST /v1/admin/drift/scan             { "project_id": "<pid>", "max_paths": 50 }
+GET  /v1/admin/drift?project_id=<pid>&limit=100
+GET  /v1/admin/drift/snapshots?project_id=<pid>
+PATCH /v1/admin/drift/<id>            { "status": "dismissed" }
+POST  /v1/admin/drift/<id>/create-lesson
 ```
 
 ---

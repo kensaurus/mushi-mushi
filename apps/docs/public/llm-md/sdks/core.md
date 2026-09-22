@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/core
 
 ---
 title: '@mushi-mushi/core'
+description: Reference for @mushi-mushi/core — the MushiConfig shape, widget options, PII scrubbing helpers and region resolution shared by every Mushi JavaScript SDK.
 ---
 
 # `@mushi-mushi/core`
@@ -31,7 +32,7 @@ interface MushiConfig {
   /** Session-replay sampling (0–1). Decision at init. Default 1. */
   replaySampleRate?: number
   /** Drop or mutate any report after PII scrub. Prefer over beforeSendFeedback. */
-  beforeSend?: (report: MushiReport) => MushiReport | null | Promise
+  beforeSend?: (report: MushiReport) => MushiReport | null | Promise<MushiReport | null>
 }
 ```
 
@@ -82,6 +83,7 @@ it in your own `beforeSend` hook, server code, or logs. It runs entirely in
 your process — scrubbed values never leave the client.
 
 ```ts
+import { scrubPii, scrubUrl, createPiiScrubber } from '@mushi-mushi/core'
 
 // Free text → typed placeholders
 scrubPii('email jake@x.com or call +1 415 555 0100')
@@ -148,8 +150,13 @@ generated copy, so the two scrubbers can't drift.
 ### Region resolution
 
 ```ts
+import { resolveRegionEndpoint, REGION_ENDPOINTS } from '@mushi-mushi/core'
 
-const url = await resolveRegionEndpoint({ projectId: 'p_…', region: 'eu' })
+const url = await resolveRegionEndpoint({
+  projectId: 'YOUR_PROJECT_ID',
+  apiEndpoint: REGION_ENDPOINTS.us,
+  region: 'eu',
+})
 ```
 
 `REGION_ENDPOINTS` contains the canonical URLs:

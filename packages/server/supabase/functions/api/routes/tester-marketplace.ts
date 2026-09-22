@@ -64,6 +64,7 @@ const rlog = log.child('tester-marketplace-routes')
 // Wave 9: Import centralized sanctions module (replaces inline OFAC set).
 import { checkSanctions } from '../../_shared/sanctions.ts'
 import { hashTesterTin, normalizeTin } from '../../_shared/tin-hash.ts'
+import { reporterKey } from '../../_shared/reporter-token.ts'
 
 // ─── Helper: forward submission event to developer's Sentry DSN ──────────────
 // Parses the DSN to extract the store endpoint and sends a minimal Sentry
@@ -308,9 +309,9 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     const requestId = c.req.param('id')!
     const body = await c.req.json().catch(() => ({})) as { visitorId?: string }
     const visitor = body.visitorId?.trim() || c.req.header('x-forwarded-for') || 'anon'
-    const enc = new TextEncoder()
-    const hashBuf = await crypto.subtle.digest('SHA-256', enc.encode(`roadmap:${visitor}`))
-    const tokenHash = Array.from(new Uint8Array(hashBuf)).map((b) => b.toString(16).padStart(2, '0')).join('')
+    // Same key shape as reporter votes in this table, so the reporter-key
+    // backfill leaves these rows alone.
+    const tokenHash = await reporterKey(`roadmap:${visitor}`)
 
     const supabase = getServiceClient()
     const { data: project } = await supabase.from('projects').select('id').eq('slug', slug).maybeSingle()

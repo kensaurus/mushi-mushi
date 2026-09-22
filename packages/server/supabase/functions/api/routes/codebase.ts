@@ -7,7 +7,7 @@ import { AguiEmitter } from '../../_shared/agui.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { reportError } from '../../_shared/sentry.ts';
-import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
+import { apiKeyAuth, jwtAuth, adminOrApiKey, requireApiKeyScope } from '../../_shared/auth.ts';
 import {
   requireFeature,
   resolveActiveEntitlement,
@@ -51,7 +51,7 @@ export function registerCodebaseRoutes(app: Hono<{ Variables: Variables }>): voi
   // indexing should use the GitHub App webhook path.
   // ============================================================
 
-  app.post('/v1/admin/codebase/upload', apiKeyAuth, async (c) => {
+  app.post('/v1/admin/codebase/upload', apiKeyAuth, requireApiKeyScope('mcp:read'), async (c) => {
     const projectId = c.get('projectId') as string;
     const body = (await c.req.json().catch(() => ({}))) as {
       projectId?: string;

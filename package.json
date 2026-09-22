@@ -4,7 +4,7 @@
   "description": "Every bug in one queue — user reports, Sentry errors, Slack, coding agents. Plain-English diagnosis + a ready fix, in your editor. Open source.",
   "license": "MIT",
   "homepage": "https://kensaur.us/mushi-mushi",
-  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "repository": {
     "type": "git",
     "url": "https://github.com/kensaurus/mushi-mushi.git"
@@ -44,9 +44,10 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "changeset": "changeset",
-    "version-packages": "changeset version && pnpm gen:sdk-version-matrix && pnpm sync:mcp-pin && pnpm sync:server-json && pnpm sync:docs-versions && pnpm install --lockfile-only",
+    "version-packages": "changeset version && pnpm gen:sdk-version-matrix && pnpm sync:mcp-pin && pnpm sync:server-json && pnpm sync:cursor-plugin && pnpm sync:docs-versions && pnpm install --lockfile-only",
     "check:export-types-order": "node scripts/fix-export-types-order.mjs --check",
     "check:changeset-orphans": "node scripts/check-changeset-orphans.mjs",
+    "check:changeset-coverage": "node scripts/check-changeset-coverage.mjs",
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
     "check:catalog-count": "node scripts/check-catalog-count.mjs",
     "check:server-json": "node scripts/sync-server-json-version.mjs --check",
@@ -72,9 +73,10 @@
     "check:residue": "node scripts/check-residue-ratchet.mjs",
     "check:env-source-parity": "node scripts/check-env-source-parity.mjs",
     "check:ia-labels": "node scripts/check-ia-labels.mjs",
-    "check:catalog-sync": "node scripts/check-mcp-catalog-sync.mjs && node scripts/sync-mcp-tool-count.mjs --check && node scripts/check-mcp-prose-tool-count.mjs && node scripts/sync-mcp-discovery-card.mjs --check && node scripts/sync-mcp-pin.mjs --check",
+    "check:catalog-sync": "node scripts/check-mcp-catalog-sync.mjs && node scripts/sync-mcp-tool-count.mjs --check && node scripts/check-mcp-prose-tool-count.mjs && node scripts/sync-mcp-discovery-card.mjs --check && node scripts/sync-mcp-pin.mjs --check && node scripts/gen-analytics-taxonomy.mjs --check && node scripts/gen-mcp-docs-index.mjs --check",
     "sync:mcp-pin": "node scripts/sync-mcp-pin.mjs",
     "sync:server-json": "node scripts/sync-server-json-version.mjs",
+    "sync:cursor-plugin": "node scripts/check-cursor-plugin.mjs --write",
     "sync:docs-versions": "node scripts/check-docs-versions.mjs --write",
     "sync:mcp-tool-count": "node scripts/sync-mcp-tool-count.mjs",
     "sync:mcp-discovery-card": "node scripts/sync-mcp-discovery-card.mjs",
@@ -106,6 +108,11 @@
     "check:publish-readiness": "node scripts/check-publish-readiness.mjs",
     "check:license-headers": "node scripts/check-license-headers.mjs",
     "check:spdx-headers": "node scripts/check-spdx-headers.mjs",
+    "check:loader-cdn-url": "node scripts/check-loader-cdn-url.mjs",
+    "check:site-urls": "node scripts/check-site-urls.mjs",
+    "check:doc-snippets": "node scripts/check-doc-snippets.mjs",
+    "check:package-types": "node scripts/check-package-types.mjs",
+    "check:install-size": "node scripts/check-install-size.mjs",
     "bootstrap:new-package": "node scripts/bootstrap-new-package.mjs",
     "sync:helm-migrations": "node scripts/sync-helm-migrations.mjs",
     "check:helm-migrations": "node scripts/sync-helm-migrations.mjs --check",
@@ -130,6 +137,7 @@
     "check:docs-drift": "node scripts/check-docs-versions.mjs && node scripts/check-docs-links.mjs",
     "check:bundle-docs": "node scripts/check-bundle-docs.mjs",
     "gen:llms-txt": "node scripts/gen-llms-txt.mjs",
+    "gen:og-card": "node scripts/gen-og-card.mjs",
     "sync:public-schemas": "node scripts/sync-public-schemas.mjs",
     "check:public-schemas": "node scripts/sync-public-schemas.mjs --check",
     "gen:mcp-tools-doc": "node scripts/gen-mcp-tools-doc.mjs",
@@ -144,6 +152,8 @@
     "e2e": "pnpm --filter @mushi-mushi/e2e-dogfood e2e",
     "test:cloudfront": "node --test scripts/cloudfront-functions.test.mjs",
     "test:verify-hosted-mcp": "node --test scripts/verify-hosted-mcp-helpers.test.mjs",
+    "test:strip-markup": "node --test scripts/strip-markup.test.mjs",
+    "test:scripts": "node --test scripts/cloudfront-functions.test.mjs scripts/verify-hosted-mcp-helpers.test.mjs scripts/strip-markup.test.mjs scripts/mcp-configs.test.mjs scripts/marketing/queue-policy.test.mjs scripts/normalize-package-metadata.test.mjs scripts/check-changeset-coverage.test.mjs scripts/aws-configure-docs-errors.test.mjs scripts/verify-published-tarballs.test.mjs scripts/release-workflow.test.mjs scripts/check-loader-cdn-url.test.mjs scripts/check-site-urls.test.mjs scripts/check-doc-snippets.test.mjs scripts/check-spdx-headers.test.mjs scripts/check-install-size.test.mjs",
     "verify:pipeline": "pnpm --filter @mushi-mushi/server test && cd packages/server/supabase && deno check functions/_shared/rag.ts functions/_shared/observability.ts functions/_shared/env-int.ts functions/api/routes/doctor.ts functions/api/routes/project-codebase.ts functions/webhooks-github-indexer/index.ts",
     "check:drift": "pnpm check:catalog-sync && pnpm check:mcp-tools-doc && pnpm check:internal-doc-links && pnpm check:onboarding-drift && pnpm check:env-docs && pnpm check:docs-drift && pnpm check:docs-stats && pnpm check:route-manifest && pnpm check:edge-fn-deploy-docs && pnpm check:admin-docs-coverage && pnpm check:humanize-parity && pnpm check:error-codes",
     "check:mcp-tools-doc": "node scripts/gen-mcp-tools-doc.mjs --check",
@@ -152,6 +162,7 @@
     "e2e:realworld": "pnpm --filter mushi-realworld e2e:gate"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@changesets/cli": "^2.31.0",
     "jiti": "^2.7.0",
     "knip": "^6.34.0",
@@ -171,7 +182,14 @@
       "js-yaml@3": ">=3.15.2 <4",
       "postcss": "^8.5.18",
       "@connectrpc/connect-node>undici": "^6.27.0",
-      "js-yaml@4": ">=4.3.2 <5"
+      "js-yaml@4": ">=4.3.2 <5",
+      "hono": ">=4.13.5 <5",
+      "fastify": ">=5.12.1 <6",
+      "mermaid": ">=11.16.1 <12",
+      "dompurify": ">=3.4.13 <4",
+      "vitest": ">=4.1.11 <5",
+      "devalue": "5.9.2",
+      "@angular/core": ">=22.1.0 <23"
     }
   }
 }

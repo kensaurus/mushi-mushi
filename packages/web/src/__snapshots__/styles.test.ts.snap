@@ -921,6 +921,19 @@ exports[`getWidgetStyles > matches stable CSS snapshot markers 1`] = `
       text-align: center;
       text-transform: uppercase;
     }
+    .mushi-brand-link {
+      color: inherit;
+      text-decoration: none;
+      text-underline-offset: 3px;
+    }
+    .mushi-brand-link:hover { color: #5C5852; text-decoration: underline; }
+    .mushi-brand-link:focus-visible {
+      outline: 2px solid #E03C2C;
+      outline-offset: 2px;
+      border-radius: 2px;
+      color: #E03C2C;
+      text-decoration: underline;
+    }
 
     .mushi-step-indicator {
       display: flex;

@@ -3,6 +3,7 @@
  * Hero/category strings live in @mushi-mushi/brand and landing-copy.ts.
  */
 import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
+import { ADMIN_DEMO_BASE } from '../data/admin-screenshots'
 
 export interface PublicFaqItem {
   q: string
@@ -41,6 +42,47 @@ export const DIAGNOSIS_PLAIN =
   'A diagnosis is one completed plain-English root cause — the moment Mushi finishes reading a report and can hand your editor a paste-ready fix prompt. Noise filtered out or duplicate reports collapsed to one row do not count. You pay for comprehension, not volume.'
 
 export const PRICING_LEDE = DIAGNOSIS_PLAIN
+
+/**
+ * Primary /pricing CTA — rendered under the lede and again at the foot
+ * (<PricingCta />). `?src=pricing` is what the console reads as the signup
+ * source; <MushiSiteAnalytics /> adds `ref=` from the first-touch utm_source
+ * at click time.
+ */
+export const PRICING_CTA = {
+  label: 'Start free — 50 diagnoses/mo, no card',
+  href: `${ADMIN_DEMO_BASE}/signup?src=pricing`,
+  note: 'Upgrade from Billing when you need more. No sales call.',
+} as const
+
+export interface PricingTierCta {
+  label: string
+  href: string
+  /** Absolute URL to another app / site, or a `mailto:` — rendered as a plain `<a>`. */
+  external: boolean
+}
+
+/**
+ * "Get started" column of <PricingTiersTable />, keyed by PRICING_TIERS id.
+ * Paid tiers deliberately start on Free — there is no checkout before a
+ * project exists; Billing upgrades from inside the console.
+ */
+export const PRICING_TIER_CTAS: Readonly<Record<string, PricingTierCta>> = {
+  'self-host': { label: 'Read the guide', href: '/self-hosting', external: false },
+  free: { label: 'Start free', href: `${ADMIN_DEMO_BASE}/signup?src=pricing-free`, external: true },
+  indie: {
+    label: 'Start free, upgrade later',
+    href: `${ADMIN_DEMO_BASE}/signup?src=pricing-indie`,
+    external: true,
+  },
+  pro: {
+    label: 'Start free, upgrade later',
+    href: `${ADMIN_DEMO_BASE}/signup?src=pricing-pro`,
+    external: true,
+  },
+  // docs/adr/0015 — kensaurus@gmail.com is the product inbox.
+  enterprise: { label: 'Email us', href: 'mailto:kensaurus@gmail.com', external: true },
+}
 
 export const CLOUD_INTRO = {
   lead: 'Mushi Cloud at kensaur.us/mushi-mushi is the managed product. Same open-source code — we host it, you get a metered diagnosis bill.',

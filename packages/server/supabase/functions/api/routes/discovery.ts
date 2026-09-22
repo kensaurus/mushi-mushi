@@ -50,6 +50,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 import { buildMcpServerCard, MCP_SERVER_CARD_HEADERS } from '../../_shared/mcp-server-card.ts';
+import { DEPLOY_INFO } from '../../_shared/deploy-info.ts';
 
 export function registerPreRegionDiscoveryRoutes(app: Hono<{ Variables: Variables }>): void {
   // Pure liveness ping — intentionally NEVER touches the DB or checks
@@ -59,7 +60,20 @@ export function registerPreRegionDiscoveryRoutes(app: Hono<{ Variables: Variable
   // of them expect it to reflect downstream Postgres health, so changing its
   // semantics would turn transient DB blips into false "the whole platform
   // is down" alarms. See `/health/ready` below for the readiness signal.
-  app.get('/health', (c) => c.json({ status: 'ok', version: '1.0.0', region: currentRegion() }));
+  // version = the commit the deploy script stamped into _shared/deploy-info.ts
+  // ('dev' for local serve); it used to be a hardcoded '1.0.0' that never
+  // changed. `region` is the data-routing label (currentRegion); the Supabase
+  // runtime's own SB_REGION says where the function actually runs.
+  // /v1/health is the path API clients guess first.
+  const health = () => ({
+    status: 'ok',
+    version: DEPLOY_INFO.sha,
+    deployed_at: DEPLOY_INFO.deployedAt,
+    region: currentRegion(),
+    hosting_region: Deno.env.get('SB_REGION') ?? null,
+  });
+  app.get('/health', (c) => c.json(health()));
+  app.get('/v1/health', (c) => c.json(health()));
 
   // Readiness check — Kubernetes-style liveness/readiness split. Answers "can
   // this instance actually serve a real request right now", not just "is the

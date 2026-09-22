@@ -1,5 +1,6 @@
 ---
 title: 'Create React App → Vite'
+description: Migrate a Create React App project to Vite — run the codemod, rename REACT_APP_ env vars to VITE_, and keep your Mushi React setup working.
 ---
 
 # Create React App → Vite
@@ -43,9 +44,9 @@ import { Callout } from 'nextra/components'
     { id: 'review-diff', label: 'Review the diff carefully', content: <>The codemod handles index.html relocation, package.json scripts, and most env-var rewrites. Read every changed file before committing.</> },
     { id: 'env-prefix', label: 'Rename env vars: REACT_APP_* → VITE_*', content: <pre className="text-xs">{`# .env.local
 - REACT_APP_MUSHI_PROJECT_ID=proj_xxx
-- REACT_APP_MUSHI_API_KEY=mushi_pk_xxx
+- REACT_APP_MUSHI_API_KEY=mushi_xxx
 + VITE_MUSHI_PROJECT_ID=proj_xxx
-+ VITE_MUSHI_API_KEY=mushi_pk_xxx
++ VITE_MUSHI_API_KEY=mushi_xxx
 
 # In code
 - process.env.REACT_APP_MUSHI_PROJECT_ID

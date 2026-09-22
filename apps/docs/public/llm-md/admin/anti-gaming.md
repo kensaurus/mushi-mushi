@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/anti-gaming
 
 ---
 title: Anti-gaming
+description: The Anti-gaming page flags reporters whose patterns look abusive — near-duplicate spam, reward farming or synthetic sessions — for you to review.
 ---
 
 # Anti-gaming

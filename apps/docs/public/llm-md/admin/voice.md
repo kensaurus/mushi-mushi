@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/voice
 
 ---
 title: Voice intake
+description: Report a bug by voice from the Mushi console — say what is wrong, confirm the transcript, and a draft pull request is started for you.
 ---
 
 # Voice intake

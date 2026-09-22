@@ -9,7 +9,7 @@ description: Where Mushi Mushi is headed — upcoming SDK platforms, diagnosis s
 
 # Roadmap
 
-Mushi is built in the open. The whitepaper documents the full architectural target — code catches up release by release.
+Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi-mushi/blob/master/VISION.md) documents the full architectural target — code catches up release by release.
 
   **Currently shipping:** v1.25.x (Wave D complete; Wave E in progress). See the [Changelog](/changelog) for what landed.
 
@@ -49,7 +49,7 @@ Mushi is built in the open. The whitepaper documents the full architectural targ
 
 ## Completed highlights (Wave C, v0.8.0)
 
-- **Native SDKs** — iOS (Swift, CocoaPods + SPM), Android (Kotlin, Maven Central), Flutter (pub.dev), Capacitor
+- **Native SDKs** — iOS (Swift), Android (Kotlin) and Flutter implementations in the repo, plus the Capacitor plugin on npm. The three native SDKs are previews: publishing to CocoaPods / SwiftPM release tags, Maven Central and pub.dev is still open
 - **A2A discovery** — `a2a-push-notify` edge function; agents can subscribe to Mushi events as A2A peers
 - **SOC 2 readiness module** — retention policies, DSAR, RLS coverage snapshots, quarterly evidence pack
 - **Data residency** — US / EU / JP region pinning at project creation

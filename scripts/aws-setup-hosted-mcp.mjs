@@ -1,7 +1,8 @@
 /**
  * FILE: scripts/aws-setup-hosted-mcp.mjs
  * PURPOSE: Idempotently wire kensaur.us/mushi-mushi/hosted-mcp → Supabase MCP
- *          + origin RFC 9728 PRM for Smithery publisher OAuth discovery.
+ *          + origin RFC 9728 PRM and RFC 8414 AS metadata (path-inserted
+ *          well-known URIs) for MCP client and Smithery OAuth discovery.
  *
  * RUN: node scripts/aws-setup-hosted-mcp.mjs
  * ENV: AWS credentials (OIDC role locally or AWS_ACCESS_KEY_ID), optional
@@ -19,6 +20,9 @@ const SUPABASE_ORIGIN_ID = 'supabase-hosted-mcp'
 const S3_ORIGIN_ID = 'kensaur.us/mushi-mushi'
 const HOSTED_MCP_PATTERN = '/mushi-mushi/hosted-mcp*'
 const WELLKNOWN_PATTERN = '/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp*'
+// The MCP SDK fetches this URL first when discovering the authorization
+// server; without a behavior it falls through to the default S3 origin (404).
+const AS_WELLKNOWN_PATTERN = '/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp*'
 const ROUTER_FN = 'mushi-mushi-hosted-mcp-router'
 const WELLKNOWN_FN = 'mushi-mushi-hosted-mcp-wellknown'
 
@@ -83,7 +87,7 @@ const routerArn = publishFunction(
 )
 const wellknownArn = publishFunction(
   WELLKNOWN_FN,
-  'Origin RFC 9728 PRM for Smithery (kensaur.us)',
+  'Origin RFC 9728 PRM + RFC 8414 AS metadata (kensaur.us)',
   'scripts/cloudfront-mushi-hosted-mcp-wellknown.js',
 )
 console.log(`  ${ROUTER_FN}: ${routerArn}`)
@@ -161,8 +165,10 @@ const existing = new Set(config.CacheBehaviors.Items.map((cb) => cb.PathPattern)
 const toAdd = []
 let needsUpdate = false
 
-if (!existing.has(WELLKNOWN_PATTERN)) {
-  toAdd.push(hostedMcpBehavior(mushiBehavior, WELLKNOWN_PATTERN, S3_ORIGIN_ID, wellknownArn, s3Orp))
+for (const pattern of [WELLKNOWN_PATTERN, AS_WELLKNOWN_PATTERN]) {
+  if (!existing.has(pattern)) {
+    toAdd.push(hostedMcpBehavior(mushiBehavior, pattern, S3_ORIGIN_ID, wellknownArn, s3Orp))
+  }
 }
 
 if (!existing.has(HOSTED_MCP_PATTERN)) {
@@ -201,7 +207,8 @@ const result = JSON.parse(
 )
 console.log(`SUCCESS — status ${result.Distribution?.Status ?? 'InProgress'}`)
 console.log('Invalidate + verify (~5 min propagation):')
-console.log('  aws cloudfront create-invalidation --distribution-id', DIST_ID, '--paths "/mushi-mushi/hosted-mcp*" "/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp*" --region us-east-1')
+console.log('  aws cloudfront create-invalidation --distribution-id', DIST_ID, '--paths "/mushi-mushi/hosted-mcp*" "/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp*" "/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp*" --region us-east-1')
 console.log('  curl -sS https://kensaur.us/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp')
+console.log('  curl -sS https://kensaur.us/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp')
 console.log('  curl -sS https://kensaur.us/mushi-mushi/hosted-mcp/')
 console.log('Smithery publish URL: https://kensaur.us/mushi-mushi/hosted-mcp/')

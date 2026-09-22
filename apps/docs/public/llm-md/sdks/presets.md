@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/presets
 
 ---
 title: SDK presets
+description: Mushi SDK presets such as production-calm set sensible widget and capture defaults in one line, and any explicit Mushi.init option still wins.
 ---
 
 # SDK presets
@@ -13,7 +14,7 @@ Presets are additive defaults. Any explicit `Mushi.init()` option wins.
 ```ts
 Mushi.init({
   projectId: '...',
-  apiKey: 'mush_pk_...',
+  apiKey: 'mushi_...',
   preset: 'production-calm',
 })
 ```
@@ -30,7 +31,7 @@ For bottom navs or chat composers, pair a preset with `widget.anchor`:
 ```ts
 Mushi.init({
   projectId: '...',
-  apiKey: 'mush_pk_...',
+  apiKey: 'mushi_...',
   preset: 'production-calm',
   widget: {
     anchor: {

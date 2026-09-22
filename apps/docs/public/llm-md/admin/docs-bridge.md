@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/docs-bridge
 
 ---
 title: Docs bridge
+description: The docs bridge is the console's silent sign-in relay that lets the Mushi docs site fill live snippets with your project details when you are signed in.
 ---
 
 # Docs bridge

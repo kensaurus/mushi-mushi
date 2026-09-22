@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/cli-auth
 
 ---
 title: CLI device auth
+description: The page that mushi login opens so you can approve a CLI device code while signed in to the console, and how the device authorization flow works.
 ---
 
 # CLI device auth

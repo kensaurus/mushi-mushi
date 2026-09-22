@@ -1,6 +1,6 @@
 ---
 title: Blog
-description: Notes from building Mushi Mushi — open-source licensing, launch weeks, and how AI-built apps get debugged in practice.
+description: Notes from building Mushi Mushi — the real numbers behind the funnel, open-source licensing, launches, and how AI-built apps get debugged in practice.
 ---
 
 # Mushi Mushi Blog
@@ -13,13 +13,23 @@ import { Cards } from 'nextra/components'
 
 <Cards>
   <Cards.Card
+    title="I shipped a bug tool for 5 months and got 9 signups. Here's what the data said."
+    href="/blog/nine-signups-what-the-data-said"
+    description="Nine signups, four external projects, zero reports from any of them. The three things the database and the deploy config revealed, and the one number we track now."
+  />
+  <Cards.Card
     title="The honest open source story (AGPLv3 + dual licensing)"
     href="/blog/agplv3-relicense"
     description="How Mushi's server license evolved — BSL → AGPLv3 — what it means for self-hosters, SaaS modifiers, and enterprise, and how this lines up with the Supabase/Grafana playbook."
   />
   <Cards.Card
-    title="Launch Week is coming"
+    title="60 seconds from “this is broken” to a draft PR"
+    href="/blog/auto-fix-loop"
+    description="The report → classify → dedupe → judge → draft-PR loop end to end, and why the human stays in it."
+  />
+  <Cards.Card
+    title="Launch Week 1 (June 2026)"
     href="/blog/launch-week-1"
-    description="Five features, five days. What we're shipping, why the order matters, and how to follow along."
+    description="Five features, five days. The features shipped; the public posts did not. Kept as written, with a correction on top."
   />
 </Cards>

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/fine-tuning
 
 ---
 title: Fine-tuning
+description: The Fine-tuning page exports your best-scored classifications, trains a fine-tuned model, benchmarks it offline and promotes it to production.
 ---
 
 # Fine-tuning

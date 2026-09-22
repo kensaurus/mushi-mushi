@@ -173,7 +173,7 @@ export function formatCompact(n) {
   return String(n)
 }
 
-export function buildReadmeClaimChecks(stats) {
+function buildReadmeClaimChecks(stats) {
   const checks = []
   const add = (file, pattern, expected, label) =>
     checks.push({ file, pattern, expected, label })

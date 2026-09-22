@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/knowledge-graph
 
 ---
 title: Knowledge graph
+description: How Mushi links reports, components, fixes and developers in a per-project knowledge graph, with pgvector for similarity and Apache AGE for traversal.
 ---
 
 # Knowledge graph

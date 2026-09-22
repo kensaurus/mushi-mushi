@@ -9,11 +9,7 @@ description: Hosted Mushi Mushi — bug reports, plain-English diagnoses, and fi
 
 # Mushi Cloud
 
-{CLOUD_INTRO.lead}
-
 ## Plans
-
-{CLOUD_INTRO.diagnosisNote}
 
 ## Sign-up flow
 
@@ -25,8 +21,6 @@ description: Hosted Mushi Mushi — bug reports, plain-English diagnoses, and fi
 5. Stripe Checkout → on success, your subscription becomes active. Overage bills through Stripe meter events.
 
 ## Why metered on diagnoses
-
-{CLOUD_INTRO.meteredWhy}
 
 ## Spend controls
 

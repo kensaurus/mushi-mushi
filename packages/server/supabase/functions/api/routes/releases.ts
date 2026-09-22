@@ -29,6 +29,7 @@ import {
   resolveOwnedProject,
 } from '../shared.ts'
 import { log } from '../../_shared/logger.ts'
+import { reporterKey } from '../../_shared/reporter-token.ts'
 
 async function assertReleaseRowAccess(
   c: Parameters<typeof assertTargetProjectAccess>[0],
@@ -265,7 +266,6 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${serviceKey}`,
-          'x-mushi-admin': '1',
         },
         body: JSON.stringify(body.data),
       })
@@ -445,8 +445,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
   // ─── SDK: get credits for the current user ────────────────────────────────
   app.get('/v1/sdk/me/credits', apiKeyAuth, async (c) => {
     const db = getServiceClient()
-    const apiKey = c.req.header('x-mushi-api-key') ?? ''
-    const projectKey = c.req.header('x-mushi-project') ?? ''
+    const projectId = c.get('projectId') as string
     const reporterToken = c.req.header('x-mushi-reporter-token') ?? ''
     const externalUserId = c.req.header('x-mushi-user-id') ?? ''
 
@@ -454,33 +453,51 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
       return c.json({ ok: true, data: [] })
     }
 
-    // Find end_user
+    // end_users are organization-scoped. Until 2026-09-22 the user-id lookup
+    // ran across every organization, and the reporter-token lookup filtered
+    // end_users on a column that table does not have, so it always came back
+    // empty.
+    const { data: project } = await db
+      .from('projects')
+      .select('organization_id')
+      .eq('id', projectId)
+      .maybeSingle()
+    const organizationId = (project?.organization_id as string | undefined) ?? null
+    if (!organizationId) return c.json({ ok: true, data: [] })
+
     let endUserId: string | null = null
     if (externalUserId) {
       const { data } = await db
         .from('end_users')
         .select('id')
+        .eq('organization_id', organizationId)
         .eq('external_user_id', externalUserId)
         .maybeSingle()
-      endUserId = data?.id as string ?? null
+      endUserId = (data?.id as string | undefined) ?? null
     }
 
+    // An anonymous reporter reaches its end user through the reports it filed.
     if (!endUserId && reporterToken) {
       const { data } = await db
-        .from('end_users')
-        .select('id')
-        .eq('reporter_token_hash', reporterToken)
+        .from('reports')
+        .select('end_user_id')
+        .eq('project_id', projectId)
+        .eq('reporter_token_hash', await reporterKey(reporterToken))
+        .not('end_user_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle()
-      endUserId = data?.id as string ?? null
+      endUserId = (data?.end_user_id as string | undefined) ?? null
     }
 
     if (!endUserId) return c.json({ ok: true, data: [] })
 
-    // Get unread credits from published releases
+    // Unread credits from this project's published releases
     const { data } = await db
       .from('release_credits')
       .select('id, contribution_type, display_name_at_time, releases!inner(id, version, title, body_md, published_at)')
       .eq('end_user_id', endUserId)
+      .eq('releases.project_id', projectId)
       .is('notified_at', null) // unread only for the "new" toast
 
     return c.json({ ok: true, data: data ?? [] })

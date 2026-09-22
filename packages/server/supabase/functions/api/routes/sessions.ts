@@ -5,8 +5,18 @@
  *
  * Auth:   Public SDK API key (same as /v1/sdk/discovery). Sets `projectId`.
  * Safety: Strict Zod validation, per-(project, session_id) upsert/update writes.
- *         No PII stored beyond the opaque reporter_token_hash already used in
- *         reports. Rate-limit: one upsert per event — cheap O(1) writes.
+ *         The SDK sends its raw reporter token (a bearer credential for the
+ *         end user's report threads) in `reporter_token_hash`; only the
+ *         one-way reporter key is stored — the same key the report path
+ *         stores — via _shared/reporter-token.ts. Until 2026-09-21 the raw
+ *         token was stored verbatim. Rate-limit: per project and per client IP
+ *         (ingest-budget.ts); one upsert per event.
+ *
+ * Automation: a session whose User-Agent names a headless browser, test
+ * driver or crawler (_shared/automated-agent.ts) is stored with is_bot = true
+ * and its page views are not recorded, so the activity RPCs can leave it out
+ * of every count. Until 2026-09-21 a local Playwright run against a
+ * production key made up 203 of one project's 212 weekly sessions.
  */
 
 import type { Hono } from 'npm:hono@4';
@@ -15,6 +25,17 @@ import type { Variables } from '../types.ts';
 import { apiKeyAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
+import { reporterKeyOrNull } from '../../_shared/reporter-token.ts';
+import { isAutomatedUserAgent } from '../../_shared/automated-agent.ts';
+import { claimIngestBudget, clientIp } from './ingest-budget.ts';
+
+/**
+ * One request per session event: a tab sends session_start, a heartbeat a
+ * minute and one page_view per navigation. The per-IP budget stops one host
+ * spending the project's (the key is public).
+ */
+const SESSION_EVENTS_PER_MINUTE = 3000;
+const SESSION_EVENTS_PER_IP_PER_MINUTE = 600;
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
@@ -44,6 +65,18 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
   app.post('/v1/sdk/session', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;
 
+    const budget = await claimIngestBudget(
+      getServiceClient(),
+      projectId,
+      clientIp((name) => c.req.header(name)),
+      { scope: 'sdk_sessions', perProjectPerMinute: SESSION_EVENTS_PER_MINUTE, perIpPerMinute: SESSION_EVENTS_PER_IP_PER_MINUTE },
+      (scope, err) => log.error('sessions: rate-limit claim failed — failing closed', { err, scope }),
+    );
+    if (budget === 'limited') {
+      c.header('Retry-After', '60');
+      return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: 'Session ingest rate limit exceeded. Retry in 60 seconds.' } }, 429);
+    }
+
     let raw: unknown;
     try {
       raw = await c.req.json();
@@ -69,6 +102,9 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
     const event: SessionEvent = parsed.data;
     const db = getServiceClient();
     const ts = event.ts ?? new Date().toISOString();
+    // The SDK copies navigator.userAgent into every event; fall back to the
+    // request header for clients that omit it.
+    const automated = isAutomatedUserAgent(event.user_agent ?? c.req.header('user-agent'));
 
     // Sanitise route: strip query strings and fragments to avoid storing PII
     // in URL parameters (mirrors the discovery_events route sanitisation).
@@ -79,12 +115,15 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
         {
           project_id: projectId,
           session_id: event.session_id,
-          reporter_token_hash: event.reporter_token_hash ?? null,
+          reporter_token_hash: await reporterKeyOrNull(event.reporter_token_hash),
           user_agent: event.user_agent ?? null,
           entry_route: sanitisedRoute,
           page_view_count: event.page_view_count ?? 1,
           started_at: ts,
           last_seen_at: ts,
+          // Only sent when true: the column defaults to false, so human
+          // sessions keep writing even before migration 20260921000010 lands.
+          ...(automated ? { is_bot: true } : {}),
         },
         { onConflict: 'project_id,session_id', ignoreDuplicates: true },
       );
@@ -114,7 +153,7 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
           .update({ last_seen_at: ts, page_view_count: event.page_view_count ?? 1 })
           .eq('project_id', projectId)
           .eq('session_id', event.session_id),
-        sanitisedRoute
+        sanitisedRoute && !automated
           ? db.from('session_page_views').insert({
               project_id: projectId,
               session_id: event.session_id,
@@ -128,7 +167,7 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
       if (pgvErr) log.warn('page_view insert failed', { err: pgvErr.message });
     }
 
-    return c.json({ ok: true, data: { accepted: true } });
+    return c.json({ ok: true, data: { accepted: true, ...(automated ? { automated: true } : {}) } });
   });
 }
 

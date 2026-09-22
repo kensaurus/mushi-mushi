@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/msteams
 
 ---
 title: Microsoft Teams
+description: Send Adaptive Cards to a Microsoft Teams channel when Mushi classifies a report or a fix lands — incoming webhook setup and severity filters.
 ---
 
 # Microsoft Teams plugin

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/inventory-and-gates
 
 ---
 title: 'Inventory and gates (v2)'
+description: Mushi v2's inventory.yaml lists every page, story and action in your app, and five composite gates fail the build when a change breaks that contract.
 ---
 
 # Inventory and gates
@@ -44,7 +45,11 @@ individual gates, so a transient monitor hiccup doesn't block merges permanently
 Most teams will never hand-author `inventory.yaml`. Turn on the v2.1 SDK option:
 
 ```ts
-
+<MushiProvider config={{
+  projectId: '…',
+  apiKey: '…',
+  capture: { discoverInventory: true },
+}}>
 ```
 
 The SDK quietly observes routes, `data-testid`s, and outbound API paths in

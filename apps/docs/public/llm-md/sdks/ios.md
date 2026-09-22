@@ -4,20 +4,19 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/ios
 
 ---
 title: 'MushiMushi (iOS)'
+description: API reference for MushiMushi, Mushi's native Swift SDK — configure, report, captureError, breadcrumbs and PII scrubbing. Preview, via SwiftPM from master.
 ---
 
 # `MushiMushi` (iOS / macOS / tvOS)
 
-Native Swift SDK. SwiftPM-first, CocoaPods supported.
+Native Swift SDK with no third-party dependencies.
+
+  **Preview.** Not on CocoaPods and no release tag yet — add the package with
+  Swift Package Manager on the `master` branch.
 
 ```swift
 // Swift Package Manager — Package.swift
-.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.4.0")
-```
-
-```ruby
-# CocoaPods — Podfile
-pod 'MushiMushi', '~> 0.4'
+.package(url: "https://github.com/kensaurus/mushi-mushi.git", branch: "master")
 ```
 
 See [Quickstart → iOS](/quickstart/ios) for the full setup walkthrough.
@@ -26,53 +25,54 @@ See [Quickstart → iOS](/quickstart/ios) for the full setup walkthrough.
 
 | Method | Purpose |
 | --- | --- |
-| `Mushi.shared.configure(projectId:apiKey:...)` | Boot the SDK — call in `AppDelegate.application(_:didFinishLaunchingWithOptions:)` or `@main App.init()` |
-| `Mushi.shared.identify(userId:traits:)` | Link reports to a user |
-| `Mushi.shared.submitReport(description:severity:)` | Programmatic report submission |
-| `Mushi.shared.showReportSheet()` | Show the capture UI imperatively |
-| `MushiReportButton` | SwiftUI `View` that triggers the report sheet on tap or shake |
+| `Mushi.shared.configure(with: MushiConfig(...))` | Boot the SDK — call in `App.init()` or `application(_:didFinishLaunchingWithOptions:)` |
+| `Mushi.shared.report(description:category:metadata:)` | Submit a report from code, no UI |
+| `Mushi.shared.captureError(_:context:)` | Report a Swift `Error` with its name, message and cause |
+| `Mushi.shared.showWidget(category:metadata:)` | Present the bottom-sheet widget |
+| `Mushi.shared.setUser(_:)` | Attach app user identity to subsequent reports |
+| `Mushi.shared.setMetadata(_:value:)` | Attach or clear a metadata key on subsequent reports |
+| `Mushi.shared.addBreadcrumb(category:level:message:data:)` | Add to the 50-entry breadcrumb ring buffer |
+| `Mushi.shared.attachTo(_:)` | Open the widget when a `UIControl` is tapped |
 
 ## Setup
 
+`MushiConfig` requires `projectId`, `apiKey` and `endpoint`. Everything else
+has a default.
+
 ```swift
-// AppDelegate.swift
 import MushiMushi
 
-func application(
-    _ application: UIApplication,
-    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-) -> Bool {
-    Mushi.shared.configure(
-        projectId: "YOUR_PROJECT_ID",
-        apiKey: "YOUR_PUBLIC_API_KEY",
-        enableShakeToReport: true
-    )
-    return true
-}
+Mushi.shared.configure(with: MushiConfig(
+    projectId: "YOUR_PROJECT_ID",
+    apiKey: "mushi_...",
+    endpoint: "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api",
+    triggerMode: .shake,       // .shake | .button | .both | .none
+    captureScreenshot: true,
+    minDescriptionLength: 20
+))
 ```
 
 ## Identifying users
 
 ```swift
 // After sign-in
-Mushi.shared.identify(
-    userId: user.id,
-    traits: ["email": user.email, "name": user.displayName ?? ""]
-)
+Mushi.shared.setUser(["id": user.id, "email": user.email])
 ```
 
 ## Offline queue
 
-Reports are persisted to an SQLite database via `FMDB`. The queue survives app crashes and relaunches. Flush happens automatically when connectivity resumes.
+Reports that fail to send are appended to
+`Application Support/MushiMushi/queue.ndjson`, capped by
+`offlineQueueMaxBytes` (oldest entries trimmed first), and flushed on a timer
+and when the network comes back.
 
 ## Screenshot capture
 
-Uses `UIGraphicsImageRenderer` — no third-party code required. Sensitive views can be excluded with the `MushiExcludeFromCapture` modifier (SwiftUI) or by setting `accessibilityElementsHidden = true` before capture.
+Screenshots are taken with `UIGraphicsImageRenderer` when `captureScreenshot`
+is `true`. Turn it off for flows that show sensitive data.
 
-## Sentry bridge
+## Sentry
 
-```swift
-Mushi.shared.attachSentryBridge(options: SentrySDK.currentHub()?.getClient()?.options)
-```
-
-Forwards each Mushi report as a Sentry breadcrumb and tags the active scope with `report_id` so a single Sentry issue links back to the Mushi report.
+There is no Sentry bridge in the Swift package. Keep initialising Sentry in the
+host app and pass context to Mushi with `setMetadata` or
+`report(..., metadata:)`.

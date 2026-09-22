@@ -8,7 +8,9 @@ export default defineConfig([
     dts: true,
     clean: true,
     target: 'node18',
-    external: ['@modelcontextprotocol/server', '@modelcontextprotocol/core', 'zod', '@mushi-mushi/core'],
+    // @sentry/node is an optional peer, imported only when MUSHI_MCP_SENTRY_DSN is
+    // set (src/optional-sentry.ts) — it must stay a runtime import, never bundled.
+    external: ['@modelcontextprotocol/server', '@modelcontextprotocol/core', 'zod', '@mushi-mushi/core', '@sentry/node'],
     banner: {
       js: '#!/usr/bin/env node',
     },
@@ -28,6 +30,6 @@ export default defineConfig([
     dts: true,
     clean: false,
     target: 'node18',
-    external: ['@modelcontextprotocol/server', '@modelcontextprotocol/core', 'zod', '@mushi-mushi/core'],
+    external: ['@modelcontextprotocol/server', '@modelcontextprotocol/core', 'zod', '@mushi-mushi/core', '@sentry/node'],
   },
 ]);

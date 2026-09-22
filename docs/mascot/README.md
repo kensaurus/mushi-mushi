@@ -1,8 +1,8 @@
 # Mushi-chan mascot kit 🐛
 
 The four canonical expressions of Mushi-chan, generated as a consistent
-character set and used across the README, the GitHub social preview, the
-admin console first-run tour, and Bluesky / X posts.
+character set and used across the README, the admin console first-run tour,
+and Bluesky / X posts.
 
 | File | When to use |
 | --- | --- |
@@ -28,4 +28,4 @@ character-consistency anchors. To regenerate (e.g. for a new pose) keep:
 - The exact phrase: *"round chubby kawaii ladybug-like mascot Mushi-chan with red dome shell + 5 black spots, two tiny rounded antennae, big round shiny pure-black eyes with white highlights, soft cream-pink belly, deep-burgundy soft outline, pastel cel-shading."*
 - A 1024×1024 transparent canvas request.
 
-The 1280×640 GitHub social preview lives in [`../social-preview/og-card.png`](../social-preview/og-card.png).
+The 1200×630 GitHub social preview lives in [`../social-preview/og-card.png`](../social-preview/og-card.png) (rendered by `scripts/gen-og-card.mjs`; it uses the 虫 stamp, not Mushi-chan).

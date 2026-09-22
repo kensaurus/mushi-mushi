@@ -9,6 +9,6 @@ contact_links:
   - name: 🔒 Report a security vulnerability
     url: https://github.com/kensaurus/mushi-mushi/security/policy
     about: Please disclose security issues privately via our coordinated-disclosure process — never in a public issue.
-  - name: 💬 Questions & updates
-    url: https://bsky.app/profile/mushimushi.dev
-    about: Follow along and ask quick questions on Bluesky.
+  - name: 💬 Questions, ideas & show-and-tell
+    url: https://github.com/kensaurus/mushi-mushi/discussions
+    about: Ask a question, share what you built, or float an idea in GitHub Discussions — first reply within 24 hours on weekdays.

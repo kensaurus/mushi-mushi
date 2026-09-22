@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting/observability
 
 ---
 title: Langfuse + Sentry
+description: Wire Langfuse LLM tracing and Sentry error tracking into a self-hosted Mushi server — the Edge Function secrets and what each trace records.
 ---
 
 # Observability

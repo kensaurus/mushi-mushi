@@ -39,8 +39,15 @@ import { installStdoutGuard } from './stdout-guard.js'
 installStdoutGuard()
 import { ALL_SCOPES, type McpScope } from './catalog.js'
 import { DEFAULT_FEATURE_GROUPS, parseFeaturesCsv } from './feature-groups.js'
-import { createMushiServer } from './server.js'
-import * as Sentry from '@sentry/node'
+import { createMushiServer, createSetupModeServer } from './server.js'
+import { startInventoryPoll } from './inventory-poll.js'
+import { initOptionalSentry } from './optional-sentry.js'
+import {
+  missingApiKeyReport,
+  placeholderFixLines,
+  resolveStdioCredentials,
+  type CliConfigSnapshot,
+} from './stdio-config.js'
 
 const require = createRequire(import.meta.url)
 const VERSION = (require('../package.json') as { version: string }).version
@@ -82,15 +89,7 @@ function resolveCliConfigPath(): string {
  *      stop silently falling back to Mushi Cloud in the MCP server.
  * Mirrors packages/cli/src/config.ts path resolution (XDG / %APPDATA%).
  */
-function readCliConfig(): {
-  apiKey?: string
-  projectId?: string
-  endpoint?: string
-  /** Absolute path we looked at — quoted verbatim in the no-key diagnostic. */
-  path: string
-  /** True when the file existed and parsed (it may still lack an apiKey). */
-  found: boolean
-} {
+function readCliConfig(): CliConfigSnapshot {
   const configPath = resolveCliConfigPath()
   try {
     // Must match the CLI's resolveXdgConfigPath() precedence exactly
@@ -112,22 +111,19 @@ function readCliConfig(): {
 }
 const CLI_CONFIG = readCliConfig()
 
-const API_ENDPOINT =
-  process.env.MUSHI_API_ENDPOINT?.trim() || CLI_CONFIG.endpoint?.trim() || DEFAULT_API_ENDPOINT
-// `||` (not `??`): manifest configs use `${MUSHI_API_KEY:-}` expansion, which
-// yields an EMPTY string when the env var is unset — that must still fall
-// through to the CLI config, not mask it.
-const API_KEY = process.env.MUSHI_API_KEY?.trim() || CLI_CONFIG.apiKey || ''
-const PROJECT_ID = process.env.MUSHI_PROJECT_ID?.trim() || CLI_CONFIG.projectId || ''
+// Env → CLI config → default. An empty value (manifest configs use
+// `${MUSHI_API_KEY:-}`, which expands to '' when unset) and an unexpanded
+// placeholder (`${MUSHI_API_KEY}` from a client that does not expand
+// variables) both fall through — neither is ever sent to the API.
+const CREDENTIALS = resolveStdioCredentials(process.env, CLI_CONFIG, DEFAULT_API_ENDPOINT)
+const API_ENDPOINT = CREDENTIALS.endpoint
+const API_KEY = CREDENTIALS.apiKey
+const PROJECT_ID = CREDENTIALS.projectId
 /**
  * Optional CSV list of granted scopes. When set, the server only registers
  * tools whose catalog scope is in the list — `tools/list` will hide write
  * tools entirely for read-only keys, instead of letting the LLM call them
  * and burn round-trips on `INSUFFICIENT_SCOPE` errors.
- *
- * Optional env for observability correlation with host Sentry:
- *   MUSHI_MCP_SENTRY_DSN — when your IDE host runs Sentry, correlate MCP
- *   api.failed log lines (they include requestId) with host-side events.
  *
  * Examples:
  *   MUSHI_SCOPES=mcp:read              # read-only key
@@ -154,87 +150,56 @@ const FEATURES = process.env.MUSHI_FEATURES?.trim()
   ? parseFeaturesCsv(process.env.MUSHI_FEATURES)
   : DEFAULT_FEATURE_GROUPS
 
-const MCP_SENTRY_DSN = process.env.MUSHI_MCP_SENTRY_DSN?.trim()
-if (MCP_SENTRY_DSN) {
-  Sentry.init({
-    dsn: MCP_SENTRY_DSN,
-    environment: process.env.MUSHI_SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? 'development',
-    tracesSampleRate: 0,
-  })
-}
-
 /**
- * Everything an operator needs to fix a missing key, printed as one block on
- * stderr. The old one-liner named MUSHI_API_KEY and `mushi login` but never
- * said WHICH file was checked or WHERE the env block lives, so the common
- * failures — config written under a different XDG root, a key set in the
- * shell instead of the MCP client's `env` block, a file present but without
- * an `apiKey` field — all looked identical from the client's log pane.
+ * Optional error reporting for the MCP process itself. @sentry/node is an
+ * optional peer: set MUSHI_MCP_SENTRY_DSN (and install @sentry/node) to
+ * correlate MCP api.failed log lines (they include requestId) with host-side
+ * Sentry events. Unset, the SDK is never imported. Awaited at the top level
+ * so `init` runs before any tool call, as it did when the import was static.
  */
-function missingApiKeyReport(): string {
-  const envState = process.env.MUSHI_API_KEY === undefined
-    ? 'not set'
-    : process.env.MUSHI_API_KEY.trim() === ''
-      ? 'set but empty'
-      : 'set'
-  const cliState = !CLI_CONFIG.found
-    ? 'no file at this path'
-    : CLI_CONFIG.apiKey
-      ? 'present'
-      : 'file exists but has no "apiKey" field'
-  return [
-    '',
-    '[mushi-mcp] FATAL: no API key — the MCP server cannot serve a single tool call.',
-    '',
-    '  Sources checked, in precedence order:',
-    `    1. env MUSHI_API_KEY        → ${envState}`,
-    `    2. CLI config file          → ${cliState}`,
-    `       ${CLI_CONFIG.path}`,
-    '',
-    '  Fix either one:',
-    '    • Run `mushi login` (writes the config file above), or',
-    '    • Add the key to the "env" block of your MCP client config',
-    '      (.cursor/mcp.json · claude_desktop_config.json · .vscode/mcp.json):',
-    '',
-    '        { "mcpServers": { "mushi-mushi": {',
-    '            "command": "npx", "args": ["-y", "@mushi-mushi/mcp"],',
-    '            "env": { "MUSHI_API_KEY": "mushi_…", "MUSHI_PROJECT_ID": "<uuid>" } } } }',
-    '',
-    '      A key exported in your shell does NOT reach the server: MCP clients',
-    '      spawn this process with only the env block they are given.',
-    '',
-    '  Other env vars this server reads:',
-    `    MUSHI_API_ENDPOINT  ${process.env.MUSHI_API_ENDPOINT?.trim() ? '= ' + process.env.MUSHI_API_ENDPOINT.trim() : `unset → ${API_ENDPOINT}`}`,
-    `    MUSHI_PROJECT_ID    ${PROJECT_ID ? '= ' + PROJECT_ID : 'unset (account mode)'}`,
-    '    MUSHI_SCOPES        optional CSV: mcp:read,mcp:write',
-    '    MUSHI_FEATURES      optional CSV of tool groups, or "all"',
-    '    MUSHI_MCP_TIMEOUT_MS  optional per-request timeout in ms (default 15000)',
-    '',
-    '  Mint a key: Console → Settings → API keys.',
-    '',
-  ].join('\n')
-}
+await initOptionalSentry(process.env, {
+  warn: (message, meta) => log.warn(message, meta),
+})
 
 async function main() {
+  if (CREDENTIALS.placeholders.length > 0 && API_KEY) {
+    // A placeholder that fell through to a usable key (CLI config) still gets
+    // said out loud; with no key at all, the setup-mode report below says it.
+    // Written straight to stderr for the same reason as that report.
+    process.stderr.write(['', ...placeholderFixLines(CREDENTIALS.placeholders), ''].join('\n'))
+    log.warn('An MCP env value is an unexpanded placeholder — treated as unset.', {
+      vars: CREDENTIALS.placeholders.map((p) => p.name).join(','),
+    })
+  }
   if (!API_KEY) {
     // Written straight to stderr: the structured logger would collapse this
     // into a single escaped-newline JSON line, which is unreadable in the
     // exact place people read it (the client's MCP log pane).
-    process.stderr.write(missingApiKeyReport())
-    log.fatal('No API key found — set MUSHI_API_KEY, or run `mushi login`.', {
+    const report = missingApiKeyReport({ env: process.env, cli: CLI_CONFIG, resolved: CREDENTIALS })
+    process.stderr.write(report)
+    log.warn('No API key found — serving setup mode. Set MUSHI_API_KEY, or run `mushi login`.', {
       cliConfigPath: CLI_CONFIG.path,
       cliConfigFound: CLI_CONFIG.found,
       endpoint: API_ENDPOINT,
+      placeholderKey: CREDENTIALS.placeholders.some((p) => p.name === 'MUSHI_API_KEY'),
     })
-    process.exit(1)
+    // Exiting 1 here made registry and directory installers see a dead
+    // server, and agents see no tools at all. Setup mode lists the docs tools
+    // and a diagnose_setup that says how to connect.
+    serveUntilClosed(serveStdio(() => createSetupModeServer({ version: VERSION, missingKeyReport: report }), {
+      onerror: (err) => log.error('stdio transport error', { err: String(err) }),
+    }))
+    return
   }
-  if (!process.env.MUSHI_API_KEY && CLI_CONFIG.apiKey) {
+  if (CREDENTIALS.apiKeySource === 'cli-config') {
     log.info('[mushi-mcp] Using API key from the CLI config (~/.config/mushi/config.json)')
   }
   // Always show where traffic goes — IDE logs are the first place people
   // look when tools return the wrong project's data.
   log.info(`[mushi-mcp] Endpoint: ${API_ENDPOINT}`)
-  if (!process.env.MUSHI_API_ENDPOINT?.trim()) {
+  const endpointFromEnv =
+    !!process.env.MUSHI_API_ENDPOINT?.trim() && !CREDENTIALS.placeholders.some((p) => p.name === 'MUSHI_API_ENDPOINT')
+  if (!endpointFromEnv) {
     if (CLI_CONFIG.endpoint?.trim()) {
       log.info(`[mushi-mcp] Using endpoint from CLI config: ${API_ENDPOINT}`)
     } else {
@@ -257,7 +222,7 @@ async function main() {
     log.info(
       '[mushi-mcp] Running in account mode (no MUSHI_PROJECT_ID set). ' +
         'Project-scoped tools accept an explicit projectId argument. ' +
-        'Run `get_account_overview` to see accessible projects.',
+        'To list accessible projects, add `admin` to MUSHI_FEATURES and run `list_projects`.',
     )
   }
   log.info('Starting Mushi MCP server', {
@@ -292,20 +257,57 @@ async function main() {
     },
   )
 
-  // Graceful shutdown: real MCP clients (Cursor, Claude Desktop, …) manage
-  // the child process lifecycle by killing it directly, so this path was
-  // never exercised by hand-testing. External test harnesses that pipe
-  // requests over stdio then close the pipe and wait for a natural exit
-  // (Docker introspection checks, e.g. Glama's build test) do rely on it —
-  // without an explicit stdin-EOF/signal handler the process leaks forever
-  // once `pollTimer` below is scheduled, since a bare `setInterval` keeps
-  // the event loop alive indefinitely.
+  const lifecycle = serveUntilClosed(handle)
+
+  // Inventory change notifications (P1.7):
+  // Poll the inventory endpoint every 60 seconds and send
+  // notifications/resources/updated when the `updated_at` timestamp changes.
+  // This gives orchestrators (LangGraph, Claude, etc.) a push signal so they
+  // can re-fetch inventory://current without constant polling.
+  //
+  // Only active when MUSHI_PROJECT_ID is set (single-project mode) and the
+  // transport supports server-to-client notifications (all transports do).
+  if (PROJECT_ID && API_ENDPOINT) {
+    // Stops on its own after a 401/403 (see inventory-poll.ts).
+    const poll = startInventoryPoll({
+      apiEndpoint: API_ENDPOINT,
+      apiKey: API_KEY,
+      projectId: PROJECT_ID,
+      clientVersion: VERSION,
+      isShuttingDown: () => lifecycle.isShuttingDown(),
+      log,
+      onUpdated: async (updatedAt) => {
+        // Only once a client session exists to receive it.
+        if (!server) return
+        await server.server.sendResourceUpdated({ uri: 'inventory://current' })
+        log.info('inventory://current updated — notified subscribers', { updatedAt })
+      },
+    })
+    lifecycle.addCleanup(() => poll.stop())
+  }
+}
+
+/**
+ * Graceful shutdown: real MCP clients (Cursor, Claude Desktop, …) manage
+ * the child process lifecycle by killing it directly, so this path was
+ * never exercised by hand-testing. External test harnesses that pipe
+ * requests over stdio then close the pipe and wait for a natural exit
+ * (Docker introspection checks, e.g. Glama's build test) do rely on it —
+ * without an explicit stdin-EOF/signal handler the process leaks forever
+ * once the inventory poll is scheduled, since a bare `setInterval` keeps
+ * the event loop alive indefinitely. Shared by the normal and setup-mode
+ * servers.
+ */
+function serveUntilClosed(handle: ReturnType<typeof serveStdio>): {
+  isShuttingDown: () => boolean
+  addCleanup: (fn: () => void) => void
+} {
   let shuttingDown = false
-  let pollTimer: ReturnType<typeof setInterval> | undefined
+  const cleanups: Array<() => void> = []
   const shutdown = (exitCode: number) => {
     if (shuttingDown) return
     shuttingDown = true
-    if (pollTimer) clearInterval(pollTimer)
+    for (const fn of cleanups) fn()
     void handle.close().finally(() => process.exit(exitCode))
   }
   // Let the crash guards close the transport instead of a bare process.exit.
@@ -325,55 +327,7 @@ async function main() {
     log.fatal('stdout write error', { err: String(err) })
     shutdown(1)
   })
-
-  // Inventory change notifications (P1.7):
-  // Poll the inventory endpoint every 60 seconds and send
-  // notifications/resources/updated when the `updated_at` timestamp changes.
-  // This gives orchestrators (LangGraph, Claude, etc.) a push signal so they
-  // can re-fetch inventory://current without constant polling.
-  //
-  // Only active when MUSHI_PROJECT_ID is set (single-project mode) and the
-  // transport supports server-to-client notifications (all transports do).
-  if (PROJECT_ID && API_ENDPOINT) {
-    let lastInventoryAt: string | null = null
-    const POLL_INTERVAL_MS = 60_000
-
-    const pollInventory = async () => {
-      if (shuttingDown) return
-      try {
-        const res = await fetch(`${API_ENDPOINT}/v1/admin/inventory/${PROJECT_ID}`, {
-          headers: {
-            'X-Mushi-Api-Key': API_KEY,
-            'X-Mushi-Project-Id': PROJECT_ID,
-          },
-          signal: AbortSignal.timeout(10_000),
-        })
-        if (!res.ok) return
-        const data = await res.json() as { data?: { updatedAt?: string } }
-        const updatedAt = data?.data?.updatedAt ?? null
-        if (updatedAt && updatedAt !== lastInventoryAt) {
-          if (lastInventoryAt !== null && server) {
-            // Only notify after the first successful fetch (not on startup),
-            // and only once a client session exists to receive it.
-            await server.server.sendResourceUpdated({ uri: 'inventory://current' })
-            log.info('inventory://current updated — notified subscribers', { updatedAt })
-          }
-          lastInventoryAt = updatedAt
-        }
-      } catch (pollErr) {
-        log.debug('inventory poll failed', { err: String(pollErr) })
-      }
-    }
-
-    // Start immediately, then repeat. `.unref()` so this background poll
-    // never blocks the process from exiting on its own (belt-and-suspenders
-    // alongside the explicit shutdown() handlers above) — a real MCP client
-    // session keeps stdin open for hours, so unref has no effect on normal
-    // operation, it only matters once nothing else is keeping the loop alive.
-    void pollInventory()
-    pollTimer = setInterval(() => { void pollInventory() }, POLL_INTERVAL_MS)
-    pollTimer.unref()
-  }
+  return { isShuttingDown: () => shuttingDown, addCleanup: (fn) => cleanups.push(fn) }
 }
 
 /**

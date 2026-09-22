@@ -1,6 +1,7 @@
 {
   "mcpServers": {
     "mushi": {
+      "type": "http",
       "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp"
     }
   }

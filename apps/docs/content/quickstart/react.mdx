@@ -46,8 +46,6 @@ export function Root() {
       config={{
         projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
         apiKey: import.meta.env.VITE_MUSHI_API_KEY,
-        // optional: pin a region — defaults to auto-routing
-        // region: 'eu',
       }}
     >
       <App />
@@ -55,6 +53,47 @@ export function Root() {
   )
 }
 ```
+
+### Next.js App Router
+
+`<MushiProvider>` uses React context, so it goes in a client component, not
+straight into `app/layout.tsx`:
+
+```tsx filename="app/providers.tsx"
+'use client'
+import { MushiProvider } from '@mushi-mushi/react'
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <MushiProvider
+      config={{
+        projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
+        apiKey: process.env.NEXT_PUBLIC_MUSHI_API_KEY!,
+      }}
+    >
+      {children}
+    </MushiProvider>
+  )
+}
+```
+
+```tsx filename="app/layout.tsx"
+import { Providers } from './providers'
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  )
+}
+```
+
+`npx mushi-mushi` writes this `providers.tsx` for you when it detects Next.js.
+Keep callbacks such as `beforeSend` inside `providers.tsx`, because a Server
+Component cannot pass functions to a client one.
 
 <Callout type="info" emoji="🔐">
   The web SDK uses your **public** API key (safe to bundle). All sensitive
@@ -67,14 +106,14 @@ export function Root() {
 Add a hook anywhere in your tree to capture programmatic reports:
 
 ```tsx filename="src/components/CrashFallback.tsx"
-import { useMushiReport } from '@mushi-mushi/react'
+import { useMushiSdk } from '@mushi-mushi/react'
 
 export function CrashFallback({ error }: { error: Error }) {
-  const { submit } = useMushiReport()
+  const mushi = useMushiSdk()
   return (
     <div role="alert">
       <p>Something broke.</p>
-      <button onClick={() => submit({ description: error.message, severity: 'high' })}>
+      <button onClick={() => void mushi?.captureException(error, { severity: 'high' })}>
         Send a bug report
       </button>
     </div>
@@ -82,8 +121,12 @@ export function CrashFallback({ error }: { error: Error }) {
 }
 ```
 
-Or rely on the built-in shake-to-report widget — no code required, just
-configure `enableWidget: true` (default) on the provider.
+`useMushiSdk()` returns `null` until the provider has initialised, hence the
+`?.`. To open the report widget from a button instead, use
+`const { report } = useMushi()` and call `report()`.
+
+Or rely on the built-in widget — no code required. The launcher mounts as
+soon as `<MushiProvider>` initialises.
 
 ## 4. Verify
 

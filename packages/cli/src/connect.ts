@@ -6,15 +6,24 @@
 import { appendFile, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import type { CliConfig } from './config.js'
-import { CONFIG_PATH, saveConfig } from './config.js'
+import { CONFIG_PATH, saveConfig, savedSdkKeyFor } from './config.js'
 import { assertEndpoint } from './endpoint.js'
 import { requireUuid } from './cli-shared.js'
 import { detectFramework, envVarsToWrite, readPackageJson } from './detect.js'
 import { waitForIngestReady } from './heartbeat-wait.js'
+import { describeUnsafeSdkKey, probeKeyScope, type ProbeKeyScope } from './key-scopes.js'
 import { buildMcpServerBlock, buildMcpServerName, writeMcpServerEntry } from './mcp-config.js'
 
 export interface ConnectOptions {
+  /** Private CLI key: saved to the CLI config and used for the heartbeat poll. */
   apiKey: string
+  /**
+   * Ingest-only (report:write) key for the SDK env vars. Falls back to the
+   * key saved for this project, then to `apiKey` — whichever is used must
+   * prove it is ingest-only before it is written, because SDK env vars ship
+   * inside the app bundle.
+   */
+  sdkKey?: string
   projectId: string
   endpoint: string
   cwd?: string
@@ -26,6 +35,33 @@ export interface ConnectOptions {
   wait?: boolean
   waitTimeoutSec?: number
   json?: boolean
+  /** Test seam for the key-scope probe. */
+  probeKeyScope?: ProbeKeyScope
+}
+
+type SdkEnvKeyResolution =
+  | { ok: true; key: string }
+  | { ok: false; reason: string }
+
+/**
+ * Choose the key for the SDK env vars and prove it cannot read. Candidates in
+ * order: an explicit --sdk-key, the ingest key saved for this project, the
+ * CLI key itself (fine only when it happens to be ingest-only, e.g. a key
+ * minted in the console). Anything the probe cannot confirm is refused.
+  * @internal Exported for tests only.
+  */
+export async function resolveSdkEnvKey(opts: {
+  sdkKey?: string
+  apiKey: string
+  projectId: string
+  endpoint: string
+  baseConfig: CliConfig
+  probe: ProbeKeyScope
+}): Promise<SdkEnvKeyResolution> {
+  const candidate = opts.sdkKey ?? savedSdkKeyFor(opts.baseConfig, opts.projectId) ?? opts.apiKey
+  const probe = await opts.probe(opts.endpoint, candidate, opts.projectId)
+  if (probe.result === 'ingest-only') return { ok: true, key: candidate }
+  return { ok: false, reason: describeUnsafeSdkKey(probe, opts.endpoint) }
 }
 
 export interface ConnectResult {
@@ -59,24 +95,6 @@ async function mergeEnvFile(path: string, lines: string[]): Promise<boolean> {
   return true
 }
 
-/** Ensure .cursor/mcp.json (contains API keys) is not committed. */
-async function ensureMcpJsonGitignored(cwd: string, messages: string[]): Promise<void> {
-  const gitignorePath = join(cwd, '.gitignore')
-  const patterns = ['.cursor/mcp.json', '.cursor/']
-  let content: string | null = null
-  try { content = await readFile(gitignorePath, 'utf8') } catch { /* no .gitignore */ }
-  if (content === null) {
-    messages.push(
-      '⚠ No .gitignore found — .cursor/mcp.json contains your API key. Add `.cursor/mcp.json` before committing.',
-    )
-    return
-  }
-  const covered = patterns.some((p) => content!.split('\n').some((line) => line.trim() === p || line.trim() === `${p}/`))
-  if (covered) return
-  await appendFile(gitignorePath, '\n# Mushi — keep MCP credentials out of git\n.cursor/mcp.json\n', 'utf8')
-  messages.push('✓ Added .cursor/mcp.json to .gitignore (contains API key)')
-}
-
 export async function runConnect(
   opts: ConnectOptions,
   baseConfig: CliConfig = {},
@@ -86,20 +104,41 @@ export async function runConnect(
   const projectId = requireUuid(opts.projectId, 'projectId')
   const messages: string[] = []
 
+  const writeEnv = opts.writeEnv !== false
+  const sdkEnvKey = writeEnv
+    ? await resolveSdkEnvKey({
+        sdkKey: opts.sdkKey,
+        apiKey: opts.apiKey,
+        projectId,
+        endpoint,
+        baseConfig,
+        probe: opts.probeKeyScope ?? probeKeyScope,
+      })
+    : null
+
   const config: CliConfig = {
     ...baseConfig,
     apiKey: opts.apiKey,
     projectId,
     endpoint,
+    ...(sdkEnvKey?.ok ? { sdkKey: { projectId, key: sdkEnvKey.key } } : {}),
   }
   saveConfig(config)
   messages.push(`✓ Credentials saved to ${CONFIG_PATH}`)
 
   let envPath: string | null = null
-  if (opts.writeEnv !== false) {
+  let envRefused = false
+  if (sdkEnvKey && !sdkEnvKey.ok) {
+    envRefused = true
+    messages.push(
+      `✗ Did not write SDK env vars: ${sdkEnvKey.reason}. ` +
+        'Pass an ingest-only key with --sdk-key <key> (console → Projects → API keys, scope report:write), ' +
+        'or run `npx mushi-mushi`, which mints one.',
+    )
+  } else if (sdkEnvKey?.ok) {
     const pkg = readPackageJson(cwd)
     const framework = detectFramework(cwd, pkg)
-    const lines = envVarsToWrite(opts.apiKey, projectId, framework).split('\n')
+    const lines = envVarsToWrite(sdkEnvKey.key, projectId, framework).split('\n')
     envPath = join(cwd, '.env.local')
     const wrote = await mergeEnvFile(envPath, lines)
     messages.push(
@@ -125,12 +164,14 @@ export async function runConnect(
       endpoint,
       projectId,
       apiKey: opts.apiKey,
-      inlineKey: false, // use ${MUSHI_API_KEY} placeholder; caller must export the key
+      client: 'cursor',
+      inlineKey: false, // no secret in the file; the MCP server reads the saved CLI key
     })
+    // No .gitignore entry: the block carries a placeholder, not the key, so
+    // the file is safe to commit and share.
     await writeMcpServerEntry({ configPath: mcpPath, serverName, serverBlock })
-    await ensureMcpJsonGitignored(cwd, messages)
     messages.push(`✓ Wired ${mcpPath} — restart Cursor and run "list mushi tools"`)
-    messages.push(`  Set MUSHI_API_KEY="${opts.apiKey}" in your shell / .env.local before restarting the IDE.`)
+    messages.push(`  The MCP server reads the key saved in ${CONFIG_PATH} (export MUSHI_API_KEY before launching Cursor to override it).`)
   }
 
   let heartbeat: ConnectResult['heartbeat'] = null
@@ -170,6 +211,6 @@ export async function runConnect(
     }
   }
 
-  const ok = !opts.wait || Boolean(heartbeat?.ok)
+  const ok = !envRefused && (!opts.wait || Boolean(heartbeat?.ok))
   return { ok, envPath, mcpPath, heartbeat, messages }
 }

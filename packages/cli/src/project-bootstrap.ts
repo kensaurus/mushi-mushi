@@ -59,6 +59,7 @@ export async function writeProjectBootstrapFiles(opts: {
     endpoint: opts.endpoint,
     projectId: opts.projectId,
     apiKey: opts.apiKey,
+    client: 'cursor',
   })
   const { created: mcpCreated } = await writeMcpServerEntry({
     configPath: mcpPath,

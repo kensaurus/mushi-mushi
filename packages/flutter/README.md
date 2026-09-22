@@ -2,16 +2,13 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Flutter SDK for Mushi bug reporting.
-
-
-[![pub package](https://img.shields.io/pub/v/mushi_mushi.svg)](https://pub.dev/packages/mushi_mushi)
-
 Flutter SDK for [Mushi Mushi](https://kensaur.us/mushi-mushi) — the open-source,
 LLM-driven bug intake, classification, and autofix platform.
 
-> **Status**: V0.3.0 Surface stable; minor changes still possible
-> before V1.0.
+> **Status: preview.** The API surface is stable at 0.3.0, but the package is
+> **not published to pub.dev yet** — `flutter pub add mushi_mushi` and
+> `mushi_mushi: ^0.3.0` will not resolve. Install it from this repository as a
+> git dependency (below) until the pub.dev release lands.
 
 ## Features
 
@@ -27,8 +24,14 @@ LLM-driven bug intake, classification, and autofix platform.
 
 ```yaml
 dependencies:
-  mushi_mushi: ^0.3.0
+  mushi_mushi:
+    git:
+      url: https://github.com/kensaurus/mushi-mushi.git
+      path: packages/flutter
+      # ref: <commit-sha>   # pin a commit for reproducible builds
 ```
+
+Then run `flutter pub get`.
 
 ## Quickstart
 
@@ -39,7 +42,7 @@ import 'package:mushi_mushi/mushi_mushi.dart';
 void main() {
   Mushi.instance.configure(const MushiConfig(
     projectId: 'proj_...',
-    apiKey: 'mush_pk_...',
+    apiKey: 'mushi_...',
     triggerMode: MushiTriggerMode.both,
     captureScreenshot: true,
     minDescriptionLength: 20,
@@ -111,7 +114,7 @@ Mushi.instance.onReportSubmitted = (payload) async {
 | Field                  | Default                              | Notes |
 |------------------------|--------------------------------------|-------|
 | `projectId`            | _required_                           | Project UUID from Mushi admin |
-| `apiKey`               | _required_                           | Public ingest key (`mush_pk_...`) |
+| `apiKey`               | _required_                           | Project API key (`mushi_...`) |
 | `endpoint`             | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`         | Override for self-hosting |
 | `triggerMode`          | `shake`                              | `shake` / `button` / `both` / `none` |
 | `captureScreenshot`    | `true`                               | Requires a `RepaintBoundary` boundary key |

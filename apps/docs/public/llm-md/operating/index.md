@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/operating
 
 ---
 title: Operating (maintainers)
+description: Runbooks for maintainers running Mushi Cloud or publishing the open-source packages — deployment, releases and status. Not needed to use the SDK.
 ---
 
 # Operating Mushi
