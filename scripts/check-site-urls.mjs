@@ -56,12 +56,7 @@ const DOCS_METADATA_ROUTES = {
 // Printed on every run; an entry whose URL is fixed or removed fails as stale,
 // so the list only shrinks. Never add to it to get a run green.
 // Key: "<repo-relative file> <url>".
-const KNOWN_DEAD = new Map([
-  [
-    'packages/mcp/README.md https://kensaur.us/mushi-mushi/integrations/mushi-mark-512.png',
-    'live 404 (2026-09-22): nothing deploys /mushi-mushi/integrations/; the same URL is MUSHI_ICON_PNG_URL in packages/mcp/src/branding.ts',
-  ],
-])
+const KNOWN_DEAD = new Map()
 
 // Characters that end a URL in markdown, HTML attributes and code spans.
 const URL_RE = /https?:\/\/(?:www\.)?kensaur\.us(\/mushi-mushi(?:[/?#][^\s)"'<>`\]*]*)?)?(?![\w/])/g
