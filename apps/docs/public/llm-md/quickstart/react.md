@@ -47,6 +47,47 @@ export function Root() {
 }
 ```
 
+### Next.js App Router
+
+`` uses React context, so it goes in a client component, not
+straight into `app/layout.tsx`:
+
+```tsx filename="app/providers.tsx"
+'use client'
+import { MushiProvider } from '@mushi-mushi/react'
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <MushiProvider
+      config={{
+        projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
+        apiKey: process.env.NEXT_PUBLIC_MUSHI_API_KEY!,
+      }}
+    >
+      {children}
+    </MushiProvider>
+  )
+}
+```
+
+```tsx filename="app/layout.tsx"
+import { Providers } from './providers'
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  )
+}
+```
+
+`npx mushi-mushi` writes this `providers.tsx` for you when it detects Next.js.
+Keep callbacks such as `beforeSend` inside `providers.tsx`, because a Server
+Component cannot pass functions to a client one.
+
   The web SDK uses your **public** API key (safe to bundle). All sensitive
   operations are gated server-side by RLS + the gateway. Never ship your
   service-role key to the browser.

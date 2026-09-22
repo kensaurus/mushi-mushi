@@ -1326,7 +1326,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/react",
     markdown: "quickstart/react.md",
     keywords: ["quickstart", "react"],
-    headings: ["Try it live", "1. Install", "2. Wrap your app", "3. Trigger reports", "4. Verify", "Next steps"],
+    headings: ["Try it live", "1. Install", "2. Wrap your app", "Next.js App Router", "3. Trigger reports", "4. Verify", "Next steps"],
     excerpt: "Add the Mushi React SDK in one command — npx mushi-mushi installs the bug-reporting widget, writes env vars, and files your first test report.",
   },
   {
