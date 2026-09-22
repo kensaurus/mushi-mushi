@@ -5,7 +5,9 @@
  * No scroll hijacking (see docs/MOTION.md).
  */
 import { type ReactNode } from 'react'
-import { motion, useReducedMotion, type Variants } from 'motion/react'
+import { motion, type Variants } from 'motion/react'
+
+import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
 
 const STAMP_EASE = [0.22, 1, 0.36, 1] as const
 
@@ -50,7 +52,7 @@ export function LandingStagger({
   as = 'div',
   rootProps,
 }: LandingStaggerProps) {
-  const reduced = useReducedMotion()
+  const reduced = usePrefersReducedMotion()
   const Comp = as === 'section' ? motion.section : motion.div
 
   if (reduced) {
@@ -83,7 +85,7 @@ export function LandingStaggerItem({
   children: ReactNode
   className?: string
 }) {
-  const reduced = useReducedMotion()
+  const reduced = usePrefersReducedMotion()
   if (reduced) return <div className={className}>{children}</div>
   return (
     <motion.div className={className} variants={landingRevealItem}>

@@ -22,7 +22,7 @@ async function connect(features: FeatureFilter): Promise<Client> {
   const server = createMushiServer({
     version: '0.0.0-test',
     apiEndpoint: 'https://api.test.mushimushi.dev',
-    apiKey: 'mushi_test_key_0123456789',
+    apiKey: 'mushi_test_key_0123456789', // gitleaks:allow
     projectId: '11111111-1111-4111-8111-111111111111',
     fetch: (async () => {
       throw new Error('use_mushi must not call the API')

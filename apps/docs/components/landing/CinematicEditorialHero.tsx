@@ -7,7 +7,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { motion, useReducedMotion } from 'motion/react'
+import { motion } from 'motion/react'
 import { LANDING_HERO, LANDING_HERO_CTAS } from '@/lib/landing-copy'
 import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
 import { landingStampVariants } from './landing-stagger'
@@ -45,9 +45,11 @@ export function CinematicEditorialHero({
   lead,
 }: CinematicEditorialHeroProps) {
   const reducedMotion = usePrefersReducedMotion()
-  const motionReduced = useReducedMotion()
   const showCanvas = useShowDesktopCanvas(reducedMotion)
-  const skipEnter = reducedMotion || motionReduced
+  // Was `reducedMotion || useReducedMotion()`. Motion's hook reads matchMedia
+  // during render, so it disagrees with the server on the hydration pass; the
+  // OR masked that here but left the hazard one edit away from mattering.
+  const skipEnter = reducedMotion
 
   return (
     <header className="docs-editorial-hero landing-cinematic-hero not-prose">

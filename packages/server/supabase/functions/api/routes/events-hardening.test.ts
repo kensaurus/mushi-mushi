@@ -93,7 +93,7 @@ Deno.test('reporter credentials are stored as the one-way key the SQL backfill w
   const digest = 'f795dd18f54c10ffd14db9abfa22bfd021659d37820bc476b327794fbbc17158'
   // Pinned against Postgres public.mushi_reporter_key(raw) — the
   // 20260922000019 backfill must produce the same key.
-  const key = 'rk1_7d3a51b170c46c3051da354b21341b0190a9c6d0544aac23ce2fd51966595e83'
+  const key = 'rk1_7d3a51b170c46c3051da354b21341b0190a9c6d0544aac23ce2fd51966595e83' // gitleaks:allow
   assertEquals(await reporterKey(raw), key)
   // The report path gets the raw token, the signed thread path gets its
   // digest: both must land on the same row.

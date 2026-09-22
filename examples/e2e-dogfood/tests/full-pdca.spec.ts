@@ -34,16 +34,19 @@ const LIVE_GITHUB = process.env.E2E_LIVE_GITHUB === '1'
 // Mushi API contract that every SDK version speaks (0.2.x → 0.3.x). We hit
 // `POST /v1/reports` directly rather than driving the glot.it SDK so the
 // suite is pinned to the *backend* contract, not to whichever SDK release
-// the dogfood app happens to be tracking. Credentials default to the
-// seeded glot.it project (see `packages/server/scripts/seed-dogfood.ts`
-// for how `supabase start` provisions these for a fresh local stack).
+// the dogfood app happens to be tracking.
+//
+// `MUSHI_API_KEY` has no default on purpose. It used to fall back to a
+// hard-coded literal described as a local seed value — but the same string
+// was also minted as a live cloud key, so a developer who ran this suite
+// without a local stack silently wrote reports into the real project. The
+// suite now skips loudly instead; see this folder's README for the one-time
+// seed that mints a local key from whatever value you export.
 const MUSHI_API_URL =
   process.env.MUSHI_API_URL ?? `${SUPABASE_URL}/functions/v1/api`
 const MUSHI_PROJECT_ID =
   process.env.MUSHI_PROJECT_ID ?? '542b34e0-019e-41fe-b900-7b637717bb86'
-const MUSHI_API_KEY =
-  process.env.MUSHI_API_KEY ??
-  'mushi_glotit520f2a00ed694bcbb176b254c9f258c6'
+const MUSHI_API_KEY = process.env.MUSHI_API_KEY ?? ''
 
 // A single, stable marker string so we can find the report we created
 // without racing against other dogfood tests running concurrently.
@@ -69,6 +72,10 @@ test.describe('Full PDCA dogfood', () => {
   test.skip(
     !SUPABASE_SERVICE_KEY,
     'SUPABASE_SERVICE_ROLE_KEY must be set (service-role read-only access to the dev DB).',
+  )
+  test.skip(
+    !MUSHI_API_KEY,
+    'MUSHI_API_KEY must be set to the key you seeded into the local stack (see README).',
   )
 
   test('Plan — report ingest round-trips through fast-filter', async ({ request }) => {
