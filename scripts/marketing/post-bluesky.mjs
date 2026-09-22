@@ -24,6 +24,9 @@
 //   node scripts/marketing/post-bluesky.mjs                  # post next due item
 //   node scripts/marketing/post-bluesky.mjs --all            # post every due item
 //   node scripts/marketing/post-bluesky.mjs --dry            # show what would post
+//   node scripts/marketing/post-bluesky.mjs --allow-stale    # also post items more than
+//                                                            # MAX_STALE_DAYS overdue (refused
+//                                                            # by default; see queue-policy.mjs)
 //   node scripts/marketing/post-bluesky.mjs --text "..."     # one-off ad-hoc post
 //   node scripts/marketing/post-bluesky.mjs --text "..." --image=path --alt="…"
 //                                                            # ad-hoc post with image
@@ -46,6 +49,10 @@
 //     },
 //     ...
 //   ]
+// Retire an item without deleting it with `"disabled": true` plus a
+// `"disabled_reason"`; disabled items never post. Items scheduled more than
+// MAX_STALE_DAYS ago are refused unless --allow-stale is passed — the queue is
+// run by hand, and a post written for a past moment should not fire late.
 // The script flips `posted_at` on each item it sends and writes the file
 // back so re-runs are idempotent. Image dimensions are extracted from
 // the file header so Bluesky reserves the right slot in the feed (no
@@ -54,18 +61,19 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve, dirname, extname } from 'node:path'
 import { loadEnv, need, maybe, parseArgs, REPO_ROOT, step, ok, warn, err, sleep, announceDryRun } from './lib.mjs'
+import { MAX_STALE_DAYS, classifyQueue } from './queue-policy.mjs'
 
 loadEnv()
 const args = parseArgs()
 announceDryRun(args)
 
-// Bluesky uses handle (e.g. mushimushi.dev) + app password (4 dash-grouped
+// Bluesky uses handle (e.g. kensaurus.bsky.social) + app password (4 dash-grouped
 // blocks, generated at bsky.app → Settings → App passwords). We accept
 // either BLUESKY_APP_PASSWORD (canonical) or BSKY_API_KEY (the alias the
 // user dropped into .env) so the script works with either name.
 const HANDLE = need(
   'BLUESKY_HANDLE',
-  'Set BLUESKY_HANDLE=mushimushi.dev (or whichever handle you reserved) in .env.local.',
+  'Set BLUESKY_HANDLE=kensaurus.bsky.social (the full handle; mushimushi.dev is not reserved) in .env.local.',
 )
 const APP_PASSWORD =
   maybe('BLUESKY_APP_PASSWORD') ??
@@ -345,17 +353,6 @@ function loadQueue() {
   return JSON.parse(readFileSync(QUEUE_PATH, 'utf8'))
 }
 
-function dueItems(queue) {
-  const now = Date.now()
-  return queue
-    .map((item, index) => ({ ...item, index }))
-    .filter(
-      (item) =>
-        !item.posted_at &&
-        (!item.scheduled_for || new Date(item.scheduled_for).getTime() <= now),
-    )
-}
-
 function saveQueue(queue) {
   writeFileSync(QUEUE_PATH, JSON.stringify(queue, null, 2) + '\n')
 }
@@ -408,7 +405,28 @@ if (typeof args.text === 'string') {
 }
 
 const queue = loadQueue()
-const due = dueItems(queue)
+const { due, stale, disabled, invalid } = classifyQueue(queue, {
+  allowStale: args['allow-stale'] === true,
+})
+if (disabled.length > 0) {
+  step(`Skipping ${disabled.length} disabled item(s):`)
+  for (const item of disabled) {
+    console.log(`  [${item.index}] ${item.disabled_reason ?? '(no disabled_reason given)'}`)
+  }
+}
+if (invalid.length > 0) {
+  warn(
+    `Skipping ${invalid.length} item(s) whose scheduled_for is not a date: ` +
+      invalid.map((item) => `[${item.index}] ${item.scheduled_for}`).join(', '),
+  )
+}
+if (stale.length > 0) {
+  warn(
+    `Refusing ${stale.length} item(s) scheduled more than ${MAX_STALE_DAYS} days ago: ` +
+      stale.map((item) => `[${item.index}] ${item.scheduled_for}`).join(', ') +
+      '. Reschedule or disable them in queue.json, or pass --allow-stale to post anyway.',
+  )
+}
 if (due.length === 0) {
   ok('Nothing due in the queue. Add items to docs/marketing/social/queue.json.')
   process.exit(0)

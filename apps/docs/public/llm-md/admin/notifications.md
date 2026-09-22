@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/notifications
 
 ---
 title: Notifications
+description: The Notifications page lists every alert Mushi sent to reporters and team members for a project, so you can debug delivery or audit messages.
 ---
 
 # Notifications

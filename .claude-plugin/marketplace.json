@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Mushi Mushi — bug capture with plain-English AI diagnosis and paste-ready fixes, wired into Claude Code",
-    "version": "1.0.0"
+    "version": "1.0.1"
   },
   "plugins": [
     {

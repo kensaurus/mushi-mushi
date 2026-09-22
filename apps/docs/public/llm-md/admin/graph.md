@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/graph
 
 ---
 title: Knowledge graph
+description: The Knowledge graph page draws your project's bugs, components and fixes as an interactive graph, so you can see which areas cluster problems.
 ---
 
 # Knowledge graph

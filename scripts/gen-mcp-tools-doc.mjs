@@ -11,6 +11,10 @@
  * concatenated descriptions (leaking `undefined`, `' +`, and `scope:` into the
  * output) and produced MDX that acorn could not parse. Reading the compiled
  * catalog is the single source of truth and stays correct as fields evolve.
+ *
+ * Output slug is `/sdks/mcp-tools`. It used to be `mcp-tools.generated.mdx`,
+ * whose `.generated` route read as a file extension to the docs CDN router,
+ * so the page 404'd everywhere it was linked. Keep slugs dot-free.
  */
 
 import { writeFileSync, readFileSync, existsSync } from 'node:fs'
@@ -20,7 +24,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const CATALOG_DIST = path.join(ROOT, 'packages/mcp/dist/catalog.js')
-const OUT = path.join(ROOT, 'apps/docs/content/sdks/mcp-tools.generated.mdx')
+const OUT = path.join(ROOT, 'apps/docs/content/sdks/mcp-tools.mdx')
 const CHECK_MODE = process.argv.includes('--check')
 
 let catalog
@@ -70,12 +74,13 @@ function esc(cell) {
 }
 
 const body = `---
-title: MCP tools (generated)
+title: MCP tools reference
+description: Every tool, resource and prompt the Mushi MCP server exposes to Cursor, Claude Code and other editors, with its read or write scope, from the catalog.
 ---
 
 import { Callout } from 'nextra/components'
 
-# MCP tools (generated)
+# MCP tools reference
 
 <Callout type="warning">
   Auto-generated from \`packages/mcp/src/catalog.ts\`. Do not edit by hand — run \`pnpm gen:mcp-tools-doc\`.
@@ -122,7 +127,7 @@ if (CHECK_MODE) {
     process.exit(1)
   }
   console.log(
-    `✓ mcp-tools.generated.mdx in sync (${tools.length} tools, ${resources.length} resources, ${prompts.length} prompts)`,
+    `✓ mcp-tools.mdx in sync (${tools.length} tools, ${resources.length} resources, ${prompts.length} prompts)`,
   )
   process.exit(0)
 }

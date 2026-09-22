@@ -13,7 +13,10 @@ export default defineConfig([
   {
     entry: { index: 'src/index.ts' },
     format: ['esm'],
-    dts: false,
+    // The bin module exports nothing, but it is also the package's "." export
+    // (packages/launcher resolves the CLI through it), so emit the empty
+    // declaration file that export's "types" condition points at.
+    dts: true,
     clean: true,
     target: 'node20',
     banner: { js: '#!/usr/bin/env node' },

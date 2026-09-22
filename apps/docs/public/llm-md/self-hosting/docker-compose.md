@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose
 
 ---
 title: Self-host in minutes (Docker Compose)
+description: Self-host the whole Mushi stack with one Docker Compose file — Postgres, auth, storage, edge functions, the admin console and a Caddy reverse proxy.
 ---
 
 # Self-host in minutes

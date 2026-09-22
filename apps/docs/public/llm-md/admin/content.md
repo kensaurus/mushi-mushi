@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/content
 
 ---
 title: Content quality
+description: The Content quality page queues AI-generated copy, release notes and knowledge snippets that scored poorly or were flagged, so you can fix them.
 ---
 
 # Content quality

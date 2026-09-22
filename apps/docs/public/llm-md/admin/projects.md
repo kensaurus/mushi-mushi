@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/projects
 
 ---
 title: Projects
+description: Create a Mushi project, mint an API key, copy the install snippet for your framework and send a test report, all from the Projects page.
 ---
 
 # Projects

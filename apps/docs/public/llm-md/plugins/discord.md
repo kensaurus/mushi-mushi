@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/discord
 
 ---
 title: Discord
+description: Post Mushi report and fix events to a Discord channel through a webhook — create the webhook, install the plugin, and choose which events to send.
 ---
 
 # Discord plugin

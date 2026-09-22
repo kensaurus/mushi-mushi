@@ -17,7 +17,10 @@
  *                                    from search entirely. Asset/link URLs inside that
  *                                    HTML are absolute (/mushi-mushi/docs/_next/…), so
  *                                    serving the same bytes at the bare root resolves
- *                                    correctly against S3.
+ *                                    correctly against S3. The slashless
+ *                                    /mushi-mushi 301s to /mushi-mushi/.
+ *            /mushi-mushi/llms{,-full,-ctx}.txt -> INTERNAL REWRITE to the
+ *                                    docs export's copies (llmstxt.org root).
  *            /mushi-mushi/<docs-path> -> 301 to /mushi-mushi/docs/<docs-path>
  *                                    when the suffix is a docs content route
  *                                    (e.g. /mushi-mushi/quickstart/incident-loop)
@@ -59,6 +62,9 @@ var DOCS_EXACT = [
   '/launch-week',
   '/changelog',
   '/cloud',
+  '/use-cases',
+  '/compare',
+  '/legal',
 ];
 
 var DOCS_NESTED_PREFIXES = [
@@ -74,7 +80,28 @@ var DOCS_NESTED_PREFIXES = [
   '/self-hosting/',
   '/plugins/',
   '/blog/',
+  '/use-cases/',
+  '/compare/',
+  '/legal/',
 ];
+
+// Moved docs pages and real asset extensions. Mirrors
+// cloudfront-mushi-docs-router.js — see there for why.
+var MOVED = {
+  '/mushi-mushi/docs/sdks/mcp-tools.generated': '/mushi-mushi/docs/sdks/mcp-tools',
+  '/mushi-mushi/docs/sdks/mcp-tools.generated.html': '/mushi-mushi/docs/sdks/mcp-tools',
+  '/mushi-mushi/docs/llm-md/sdks/mcp-tools.generated.md':
+    '/mushi-mushi/docs/llm-md/sdks/mcp-tools.md',
+};
+var ASSET_EXT =
+  /\.(?:html?|m?js|cjs|css|map|json|txt|xml|md|svg|png|jpe?g|webp|avif|gif|ico|woff2?|ttf|otf|webmanifest|pdf|wasm|mp4|webm|zip|t?gz|ya?ml|cursorrules|pagefind|pf_(?:meta|index|fragment|filter))$/i;
+
+// llmstxt.org files at the product root. llmstxt.org puts them at the root of
+// the site an agent was given, and for Mushi that is /mushi-mushi/, but the
+// files are generated into the docs export (apps/docs/public), so
+// /mushi-mushi/llms.txt was an S3 NoSuchKey. Served in place (rewrite, not a
+// redirect) because some agent fetchers do not follow redirects.
+var LLMS_ROOT = /^\/mushi-mushi\/(llms(?:-full|-ctx)?\.txt)$/;
 
 // CloudFront's `request.querystring` is a map of `{ key: { value } }`, not a
 // pre-encoded string — naively concatenating it into a URL yields the literal
@@ -140,9 +167,33 @@ function handler(event) {
     };
   }
 
-  // 1. Static assets (anything with a file extension): pass through to S3 unchanged.
-  //    Examples: .js .css .png .json .ico .map .woff2 .svg .txt
-  if (/\.[a-zA-Z0-9]+$/.test(uri)) {
+  // 0. Moved docs pages: 301 before the asset rule, which would pass the old
+  //    `.html` / `.md` objects through and serve stale copies.
+  if (Object.prototype.hasOwnProperty.call(MOVED, uri)) {
+    var movedQs = serializeQuerystring(qs);
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: {
+        'location': { value: MOVED[uri] + (movedQs ? '?' + movedQs : '') },
+        'cache-control': { value: 'public, max-age=31536000' },
+      },
+    };
+  }
+
+  // 0b. Root llms*.txt -> the docs export's copy. Must run before rule 1,
+  //     which passes every .txt through unchanged.
+  var llms = LLMS_ROOT.exec(uri);
+  if (llms) {
+    request.uri = '/mushi-mushi/docs/' + llms[1];
+    return request;
+  }
+
+  // 1. Static assets (a real asset extension): pass through to S3 unchanged.
+  //    Examples: .js .css .png .json .ico .map .woff2 .svg .txt. A dot in a
+  //    page slug (/docs/sdks/mcp-tools.generated, /testers/apps/my.app) is
+  //    not an extension and falls through to the page rules below.
+  if (ASSET_EXT.test(uri)) {
     return request;
   }
 
@@ -258,10 +309,25 @@ function handler(event) {
   //    We REWRITE (not redirect) so the canonical homepage URL stays
   //    /mushi-mushi/ while the bytes come from the already-deployed
   //    /mushi-mushi/docs/index.html. The HTML's asset + nav URLs are absolute
-  //    (/mushi-mushi/docs/_next/…), so they resolve against S3 unchanged. Both
-  //    the no-trailing-slash and trailing-slash forms are handled so a typed
-  //    `kensaur.us/mushi-mushi` and a linked `/mushi-mushi/` both land here.
-  if (uri === '/mushi-mushi' || uri === '/mushi-mushi/') {
+  //    (/mushi-mushi/docs/_next/…), so they resolve against S3 unchanged.
+  //    The slashless form 301s to the slash form: the landing's canonical is
+  //    `/mushi-mushi/` (apps/docs/lib/structured-data.ts PRODUCT_ROOT), and
+  //    serving the same page at two URLs splits it. In practice a slashless
+  //    request misses the `/mushi-mushi/*` behavior and is answered by the
+  //    Default behavior's function (cloudfront-mushi-apex-redirect.js), which
+  //    301s it the same way; this branch covers any behavior that does match.
+  if (uri === '/mushi-mushi') {
+    var rootQs = serializeQuerystring(qs);
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: {
+        'location': { value: '/mushi-mushi/' + (rootQs ? '?' + rootQs : '') },
+        'cache-control': { value: 'public, max-age=31536000' },
+      },
+    };
+  }
+  if (uri === '/mushi-mushi/') {
     request.uri = '/mushi-mushi/docs/index.html';
     return request;
   }

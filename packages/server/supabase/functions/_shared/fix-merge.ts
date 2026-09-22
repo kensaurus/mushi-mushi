@@ -16,6 +16,7 @@ import { dispatchPluginEventDetached } from './plugins.ts';
 import { notifyTeamFixEvent } from './team-notify.ts';
 import { notifyReportStatusTransition } from './report-status-notify.ts';
 import { resolveExternalIssue } from './integrations.ts';
+import { emitProductEvent } from './product-events.ts';
 
 type Db = ReturnType<typeof getServiceClient>;
 
@@ -174,6 +175,18 @@ export async function finalizeFixMerge(
   }
 
   if (justMerged) {
+    // Company funnel (mushi-self): fire-and-forget, deduped per fix attempt.
+    void emitProductEvent(db, {
+      eventName: 'fix_merged',
+      surface: 'server',
+      properties: {
+        project_id: attempt.project_id,
+        report_id: attempt.report_id,
+        pr_number: meta.prNumber ?? attempt.pr_number ?? null,
+      },
+      dedupKey: `fix_merged:${attempt.id}`,
+    });
+
     dispatchPluginEventDetached(db, attempt.project_id, 'fix.applied', {
       report: { id: attempt.report_id },
       fix: {

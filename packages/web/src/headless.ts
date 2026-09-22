@@ -21,8 +21,8 @@
  * import { createHeadlessCapture } from '@mushi-mushi/web/headless'
  *
  * const capture = createHeadlessCapture({
- *   projectId: 'proj_…',
- *   apiKey: 'mushi_pk_…',
+ *   projectId: '542b34e0-…', // project UUID
+ *   apiKey: 'mushi_3f9a…', // every key is `mushi_` + 32 hex
  * })
  *
  * window.onerror = (msg, _src, _line, _col, err) => {

@@ -1,11 +1,16 @@
 import type { Command } from 'commander';
+import { loadConfig } from '../config.js';
 import { runConnect } from '../connect.js';
 
 export function registerConnectCommand(program: Command): void {
   program
     .command('connect')
     .description('Save credentials, merge env vars, wire Cursor MCP, optionally wait for SDK heartbeat')
-    .option('--api-key <key>', 'Mushi API key (mushi_…) — or set MUSHI_API_KEY to keep it out of shell history')
+    .option('--api-key <key>', 'Mushi API key (mushi_…) saved to the CLI config — or set MUSHI_API_KEY to keep it out of shell history')
+    .option(
+      '--sdk-key <key>',
+      'Ingest-only (report:write) key for the SDK env vars — or set MUSHI_SDK_KEY. Default: the key saved for this project, else --api-key if it is ingest-only',
+    )
     .requiredOption('--project-id <id>', 'Project UUID')
     .requiredOption('--endpoint <url>', 'Supabase edge function URL')
     .option('--cwd <path>', 'Target repo')
@@ -19,9 +24,15 @@ export function registerConnectCommand(program: Command): void {
     .addHelpText('after', `
 Examples:
   MUSHI_API_KEY=mushi_xxx mushi connect --project-id <uuid> --endpoint https://<ref>.supabase.co/functions/v1/api --wait
-  mushi connect --api-key mushi_xxx --project-id <uuid> --endpoint <url> --no-ide`)
+  mushi connect --api-key mushi_xxx --project-id <uuid> --endpoint <url> --no-ide
+  MUSHI_API_KEY=mushi_cli MUSHI_SDK_KEY=mushi_ingest mushi connect --project-id <uuid> --endpoint <url>
+
+SDK env vars (VITE_ / NEXT_PUBLIC_ / EXPO_PUBLIC_ …) ship inside your app bundle,
+so connect only writes a key the backend confirms is ingest-only (report:write).
+A key that can read reports is refused for .env.local; it still works for the CLI and MCP.`)
     .action(async (opts: {
       apiKey?: string
+      sdkKey?: string
       projectId: string
       endpoint: string
       cwd?: string
@@ -40,6 +51,7 @@ Examples:
       }
       const result = await runConnect({
         apiKey,
+        sdkKey: process.env.MUSHI_SDK_KEY?.trim() || opts.sdkKey,
         projectId: opts.projectId,
         endpoint: opts.endpoint,
         cwd: opts.cwd,
@@ -48,7 +60,7 @@ Examples:
         wait: opts.wait,
         waitTimeoutSec: parseInt(opts.waitTimeout, 10) || 120,
         json: opts.json,
-      })
+      }, loadConfig())
       if (opts.json) {
         console.log(JSON.stringify(result, null, 2))
       } else {

@@ -37,6 +37,7 @@
 // Using zod@3 (not zod@4) for consistency with classify-report / fast-filter
 // which also pin to npm:zod@3 — avoids dual-version bloat in the edge bundle.
 import { z } from 'npm:zod@3'
+import { REPORT_CATEGORY_UNION } from './report-category.ts'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -155,7 +156,11 @@ export const ApiReportBodySchema = z
   .object({
     projectId: z.string().min(1).optional(),
     description: z.string().max(5_000).optional(),
-    category: z.enum(['bug', 'feedback', 'question', 'feature', 'other']).optional(),
+    // Union of the USER and CLASSIFIER vocabularies (_shared/report-category.ts):
+    // ingestReport() keeps the user's word in reports.user_category and maps
+    // user-only values onto the classifier enum, so nothing that passes here
+    // can fail the downstream check any more.
+    category: z.enum(REPORT_CATEGORY_UNION).optional(),
     severity: z.enum(['low', 'medium', 'high', 'critical']).optional(),
     environment: z
       .object({

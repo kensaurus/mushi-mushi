@@ -127,6 +127,27 @@ export function useMushiReady(): boolean {
 }
 
 /**
+ * Product-analytics hook: returns a stable `track(event, properties)` for
+ * funnels, paths and people in the Mushi console. No-op (returns false)
+ * until the SDK is ready, under DNT/GPC, or when `analytics.enabled` is false.
+ *
+ * @example
+ * const track = useMushiTrack();
+ * <button onClick={() => track('checkout_started', { plan: 'pro' })}>Buy</button>
+ */
+export function useMushiTrack(): (event: string, properties?: Record<string, string | number | boolean | null>) => boolean {
+  const { sdk } = useMushiContext();
+
+  return useCallback(
+    (event: string, properties?: Record<string, string | number | boolean | null>) => {
+      if (!sdk) return false;
+      return sdk.track(event, properties);
+    },
+    [sdk],
+  );
+}
+
+/**
  * Convenience hook for programmatic report triggering.
  * Returns a function that opens the widget with an optional pre-selected category.
  */

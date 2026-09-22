@@ -4,14 +4,14 @@
  */
 
 import type { Command } from 'commander';
-import { loadConfig, saveConfig } from '../config.js';
+import { CONFIG_PATH, loadConfig, saveConfig, type CliConfig } from '../config.js';
 import { runInit } from '../init.js';
 import { runLogin } from '../login.js';
 import { runMigrate } from '../migrate.js';
 import type { FrameworkId } from '../detect.js';
 import { assertEndpoint } from '../endpoint.js';
 import { apiCall, die, requireConfig, pad, probeEndpointHealth } from '../cli-shared.js';
-import type { WhoamiData, StatsData } from '../cli-types.js';
+import type { WhoamiData, StatsData, ActivationData } from '../cli-types.js';
 
 export function registerAccountCommands(program: Command): void {
 // ─── init ────────────────────────────────────────────────────────────────────
@@ -164,12 +164,13 @@ program
     console.log('')
     console.log(`Fixes:   ${d.fixes_count} total · ${d.fixes_merged} merged`)
     console.log(`Lessons: ${d.lessons_count} active rules`)
+    console.log(await formatActivationLine(config))
   })
 
 // ─── config ──────────────────────────────────────────────────────────────────
 program
   .command('config')
-  .description('View or update CLI config (stored in ~/.config/mushi/config.json)')
+  .description(`View or update CLI config (stored in ${CONFIG_PATH})`)
   .argument('[key]', 'Config key to set: apiKey | endpoint | projectId')
   .argument('[value]', 'New value')
   .addHelpText('after', `
@@ -197,9 +198,45 @@ Examples:
       console.log(`✓ Set ${key}`)
     } else {
       // Never print the full API key value to the terminal
-      const safe = { ...config, apiKey: config.apiKey ? `${config.apiKey.slice(0, 10)}…` : undefined }
+      const safe = {
+        ...config,
+        apiKey: config.apiKey ? `${config.apiKey.slice(0, 10)}…` : undefined,
+        sdkKey:
+          typeof config.sdkKey?.key === 'string'
+            ? { ...config.sdkKey, key: `${config.sdkKey.key.slice(0, 10)}…` }
+            : undefined,
+      }
       console.log(JSON.stringify(safe, null, 2))
     }
   })
 
+}
+
+/**
+ * `Activation: <ingest|dispatch|loop> · first report <date|none yet>` for
+ * `mushi status`. Reads GET /v1/admin/activation (adminOrApiKey, mcp:read).
+ * Ingest-only keys lack that scope, so a 401/403 degrades to a hint instead
+ * of failing the whole status command.
+ */
+async function formatActivationLine(config: CliConfig): Promise<string> {
+  const qs = config.projectId ? `?project_id=${encodeURIComponent(config.projectId)}` : ''
+  const result = await apiCall<ActivationData>(`/v1/admin/activation${qs}`, config)
+  if (!result.ok) {
+    const code = result.error.code.toUpperCase()
+    const status = result.httpStatus ?? 0
+    if (status === 401 || status === 403 || /SCOPE|UNAUTHORIZED|FORBIDDEN|TOKEN/.test(code)) {
+      return 'Activation: (needs mcp:read — run `mushi login --upgrade-scope`)'
+    }
+    return `Activation: unavailable (${result.error.code})`
+  }
+  const d = result.data
+  const stats = d.stats ?? {}
+  const firstAt = stats.first_report_at ?? stats.firstReportAt ?? null
+  const reportCount = typeof stats.reportCount === 'number' ? stats.reportCount : 0
+  const firstReport = firstAt
+    ? String(firstAt).slice(0, 10)
+    : reportCount > 0
+      ? 'received'
+      : 'none yet'
+  return `Activation: ${d.phase ?? 'ingest'} · first report ${firstReport}`
 }

@@ -13,9 +13,13 @@ import {
 const HOSTED = 'https://kensaur.us/mushi-mushi/hosted-mcp'
 const ORIGIN_PRM =
   'https://kensaur.us/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp'
+// RFC 8414 path-inserted AS metadata: the first URL the MCP SDK tries.
+const ORIGIN_AS =
+  'https://kensaur.us/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp'
 
 const checks = [
   ['origin PRM', ORIGIN_PRM],
+  ['origin AS metadata (RFC 8414)', ORIGIN_AS],
   ['resource PRM', `${HOSTED}/`],
   ['AS metadata', `${HOSTED}/.well-known/oauth-authorization-server`],
   ['OIDC fallback', `${HOSTED}/.well-known/openid-configuration`],

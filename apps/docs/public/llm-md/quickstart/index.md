@@ -9,8 +9,6 @@ description: Install Mushi with npx mushi-mushi, connect Cursor or Claude Code o
 
 # Quickstart
 
-{QUICKSTART_HUB_LEDE}
-
 Or run the wizard: `npx mushi-mushi` (detects your framework, signs in via browser, writes env vars, optional test report).
 
 ## Start here (MCP)
@@ -22,7 +20,7 @@ Or run the wizard: `npx mushi-mushi` (detects your framework, signs in via brows
 
 **Web:** [React](/quickstart/react) · [Vue](/quickstart/vue) · [Svelte](/quickstart/svelte) · [Angular](/quickstart/angular) · [Vanilla JS](/quickstart/web)
 
-**Mobile:** [React Native](/quickstart/react-native) · [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter) · [Capacitor](/quickstart/capacitor)
+**Mobile:** [React Native](/quickstart/react-native) · [Capacitor](/quickstart/capacitor) · native previews, installed from the GitHub repo: [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter)
 
 **CLI ↔ console:** [CLI console loop](/quickstart/cli-console-loop)
 
@@ -36,8 +34,6 @@ npx mushi-mushi
 
 The wizard opens your browser, you click **Approve**, picks or creates a project,
 installs the SDK, and writes `.env.local`.
-
-  {QUICKSTART_ONE_KEY_CALLOUT}
 
 **Option B — manual:**
 

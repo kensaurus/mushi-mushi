@@ -1,4 +1,27 @@
-import { PRICING_TIERS } from '@/lib/public-copy'
+import Link from 'next/link'
+import { PRICING_TIERS, PRICING_TIER_CTAS } from '@/lib/public-copy'
+
+/** "Get started" cell — tracked CTA per tier (`cta_click.cta_id = pricing-tier-<id>`). */
+function TierCta({ tierId }: { tierId: string }) {
+  const cta = PRICING_TIER_CTAS[tierId]
+  if (!cta) return <>—</>
+  const tracking = {
+    'data-mushi-cta': `pricing-tier-${tierId}`,
+    'data-mushi-location': 'pricing-table',
+  } as const
+  if (cta.external) {
+    return (
+      <a className="docs-pricing-tier-cta" href={cta.href} {...tracking}>
+        {cta.label}
+      </a>
+    )
+  }
+  return (
+    <Link className="docs-pricing-tier-cta" href={cta.href} {...tracking}>
+      {cta.label}
+    </Link>
+  )
+}
 
 /** Full plan table for /pricing — sourced from PRICING_TIERS SSOT. */
 export function PricingTiersTable() {
@@ -13,6 +36,7 @@ export function PricingTiersTable() {
           <th>Retention</th>
           <th>Seats</th>
           <th>What you get</th>
+          <th>Get started</th>
         </tr>
       </thead>
       <tbody>
@@ -27,6 +51,9 @@ export function PricingTiersTable() {
             <td>{tier.retention ?? '—'}</td>
             <td>{tier.seats ?? '—'}</td>
             <td>{tier.highlights}</td>
+            <td>
+              <TierCta tierId={tier.id} />
+            </td>
           </tr>
         ))}
       </tbody>

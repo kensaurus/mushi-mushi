@@ -34,6 +34,9 @@ import { IconGauge } from '../components/icons'
 import { HEARTBEAT_HINT, heartbeatStateFromTimestamp } from '../lib/heartbeat'
 import { SpringChromeEnter } from '../components/motion/SpringChromeEnter'
 import { useAdminMode } from '../lib/mode'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { FirstDiagnosisInline } from '../components/onboarding/FirstDiagnosisScreen'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -140,6 +143,12 @@ export function OverviewPage() {
     reload,
   } = usePageData<ProjectCard[]>('/v1/admin/portfolio')
 
+  // Only read when the portfolio is empty: decides between "send your
+  // first test report here" (project exists) and "create a project".
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
+  const emptyStateProject = data && data.length === 0 && !setup.loading ? setup.activeProject : null
+
   const portfolioTotals = data && data.length > 0 ? summarizePortfolio(data) : null
 
   return (
@@ -212,12 +221,25 @@ export function OverviewPage() {
         />
       )}
       {data && data.length === 0 && (
-        <Card className="px-4 py-8 text-center text-sm text-fg-faint">
-          <p className="font-medium text-fg-muted">No projects connected yet</p>
-          <p className="mt-1 text-xs">
-            <Link to="/connect" className="text-brand hover:underline">Connect your first project →</Link>
-          </p>
-        </Card>
+        // A project with no traffic yet gets the one-click first diagnosis
+        // right here; a brand-new org with no project gets the wizard link.
+        emptyStateProject ? (
+          <FirstDiagnosisInline
+            projectId={emptyStateProject.project_id}
+            projectName={emptyStateProject.project_name}
+            onDiagnosed={() => {
+              setup.reload()
+              reload()
+            }}
+          />
+        ) : (
+          <Card className="px-4 py-8 text-center text-sm text-fg-faint">
+            <p className="font-medium text-fg-muted">No projects connected yet</p>
+            <p className="mt-1 text-xs">
+              <Link to="/onboarding" className="text-brand hover:underline">Create your first project →</Link>
+            </p>
+          </Card>
+        )
       )}
       {data && data.length > 0 && (
         <PanelErrorBoundary label="Portfolio">

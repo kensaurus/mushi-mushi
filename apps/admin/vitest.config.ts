@@ -11,5 +11,13 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    // These tests run in ~1 s each on an idle machine, but `turbo run test`
+    // starts a vitest per workspace: under that contention apiFetchScope and
+    // validators were measured past the 5 s default and failed on timeout
+    // while passing in isolation — and a test that times out mid-way leaves
+    // module state behind, so the next one fails on a stale tenant header.
+    // 30 s is far above anything here, so a genuinely hung test still fails.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 })

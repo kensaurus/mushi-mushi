@@ -64,6 +64,12 @@ jobs:
           results_file: results.sarif
           results_format: sarif
           publish_results: true
+          # The default `archive` mode reads a `git archive` tarball, which
+          # honours .gitattributes export-ignore — and `.github/` is
+          # export-ignored, so Token-Permissions, Dangerous-Workflow,
+          # Packaging and Signed-Releases scored -1 ("no workflows found").
+          # `git` mode clones the repository and sees the workflows.
+          file_mode: git
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1

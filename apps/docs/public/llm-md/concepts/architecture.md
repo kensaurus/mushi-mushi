@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/architecture
 
 ---
 title: Architecture
+description: How Mushi is built — a Hono gateway in front of Supabase, the edge functions behind it, and the relational, vector and graph stores that hold each report.
 ---
 
 # Architecture

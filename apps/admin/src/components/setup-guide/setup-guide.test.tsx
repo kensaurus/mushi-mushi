@@ -74,7 +74,11 @@ function project(steps: SetupStep[], extra: Partial<SetupProject> = {}): SetupPr
   }
 }
 
-/** The four required steps in backend order, with the first N complete. */
+/**
+ * The backend's activation steps in order, with the first N complete. Three
+ * are required; `sdk_installed` became optional in 2026-09 because the first
+ * report may be the onboarding test fixture (no SDK needed).
+ */
 function requiredChain(completeCount: number): SetupStep[] {
   const ids: SetupStepId[] = [
     'project_created',
@@ -82,7 +86,7 @@ function requiredChain(completeCount: number): SetupStep[] {
     'sdk_installed',
     'first_report_received',
   ]
-  return ids.map((id, i) => step(id, i < completeCount, true))
+  return ids.map((id, i) => step(id, i < completeCount, id !== 'sdk_installed'))
 }
 
 describe('buildSetupGuideModel — step states', () => {
@@ -91,10 +95,11 @@ describe('buildSetupGuideModel — step states', () => {
     const byId = new Map(model.steps.map((s) => [s.id, s]))
 
     expect(byId.get('api_key_generated')?.state).toBe('next')
-    expect(byId.get('sdk_installed')?.state).toBe('blocked')
-    expect(byId.get('sdk_installed')?.blockedBy).toBe('Label api_key_generated')
-    expect(byId.get('sdk_installed')?.stateLabel).toContain('Label api_key_generated')
     expect(byId.get('first_report_received')?.state).toBe('blocked')
+    expect(byId.get('first_report_received')?.blockedBy).toBe('Label api_key_generated')
+    expect(byId.get('first_report_received')?.stateLabel).toContain('Label api_key_generated')
+    // Optional steps are never blocked, even when their natural prerequisite is open.
+    expect(byId.get('sdk_installed')?.state).toBe('available')
   })
 
   it('unblocks the chain one link at a time', () => {
@@ -102,9 +107,10 @@ describe('buildSetupGuideModel — step states', () => {
     const byId = new Map(model.steps.map((s) => [s.id, s]))
 
     expect(byId.get('api_key_generated')?.state).toBe('done')
-    expect(byId.get('sdk_installed')?.state).toBe('next')
-    expect(byId.get('first_report_received')?.state).toBe('blocked')
-    expect(model.nextStepId).toBe('sdk_installed')
+    // A key is enough to send the test report — the SDK is not on the required path.
+    expect(byId.get('first_report_received')?.state).toBe('next')
+    expect(byId.get('sdk_installed')?.state).toBe('available')
+    expect(model.nextStepId).toBe('first_report_received')
   })
 
   it('never marks an optional step blocked — the real gate is preflight, which this surface does not fetch', () => {
@@ -117,7 +123,8 @@ describe('buildSetupGuideModel — step states', () => {
     const model = buildSetupGuideModel(project(steps), { now: NOW })
     const optional = model.steps.filter((s) => !s.required)
 
-    expect(optional).toHaveLength(3)
+    // sdk_installed (optional since 2026-09) plus the three integrations.
+    expect(optional).toHaveLength(4)
     expect(optional.every((s) => s.state === 'available')).toBe(true)
     expect(optional.every((s) => s.stateLabel === 'Optional')).toBe(true)
   })
@@ -142,10 +149,10 @@ describe('buildSetupGuideModel — step states', () => {
     const model = buildSetupGuideModel(project(steps), { now: NOW })
 
     expect(model.requiredComplete).toBe(2)
-    expect(model.requiredTotal).toBe(4)
-    expect(model.percent).toBe(50)
+    expect(model.requiredTotal).toBe(3)
+    expect(model.percent).toBe(67)
     expect(model.optionalComplete).toBe(1)
-    expect(model.optionalTotal).toBe(2)
+    expect(model.optionalTotal).toBe(3)
   })
 })
 
@@ -284,13 +291,14 @@ describe('formatters', () => {
 
   it('summarises required progress, then optional progress', () => {
     expect(setupGuideSummary(buildSetupGuideModel(project(requiredChain(2)), { now: NOW }))).toBe(
-      'Setup 2/4',
+      'Setup 2/3',
     )
+    // requiredChain(4) also completes the optional sdk_installed step → 1/2 extras.
     const finished = buildSetupGuideModel(
       project([...requiredChain(4), step('slack_connected', false, false)]),
       { now: NOW },
     )
-    expect(setupGuideSummary(finished)).toBe('Setup done · 0/1 extras')
+    expect(setupGuideSummary(finished)).toBe('Setup done · 1/2 extras')
   })
 })
 
@@ -358,7 +366,7 @@ describe('resolveSetupGuideView', () => {
 
 describe('SetupGuidePanel — accessibility wiring', () => {
   const model = buildSetupGuideModel(
-    project([...requiredChain(2), step('slack_connected', false, false)], { report_count: 0 }),
+    project([...requiredChain(1), step('slack_connected', false, false)], { report_count: 0 }),
     { now: NOW },
   )
 
@@ -405,8 +413,8 @@ describe('SetupGuidePanel — accessibility wiring', () => {
   it('exposes progress as a labelled progressbar, not just a coloured bar', () => {
     const html = render('expanded')
     expect(html).toContain('role="progressbar"')
-    expect(html).toContain('aria-valuenow="50"')
-    expect(html).toContain('aria-label="2 of 4 required steps complete"')
+    expect(html).toContain('aria-valuenow="33"')
+    expect(html).toContain('aria-label="1 of 3 required steps complete"')
   })
 
   it('states every step status in text, so state never rests on colour alone', () => {

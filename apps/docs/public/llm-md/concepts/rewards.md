@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/rewards
 
 ---
 title: Rewards & contributor identity
+description: How Mushi's rewards program works — reporters earn points for reports and triage, climb project-defined tiers, and get perks from your app via webhooks.
 ---
 
 # Rewards & contributor identity

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/nextjs-static-export
 
 ---
 title: Next.js static export
+description: Use Mushi in a Next.js static export — keep the public env vars in NEXT_PUBLIC_* or set runtimeConfig to false, and initialise on the client only.
 ---
 
 # Next.js static export

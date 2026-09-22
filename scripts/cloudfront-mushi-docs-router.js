@@ -18,8 +18,11 @@
  * - Bare `/…/docs` (no slash)     -> 301 `{uri}/`{qs}
  * - Docs root trailing slash      -> rewrite to `index.html`
  * - Other trailing slash          -> 301 slashless{qs}
- * - URI has any file extension    -> pass through (assets, JSON, images)
- * - Clean URL with no extension   -> append `.html`
+ * - Moved page (MOVED below)      -> 301 new path{qs}
+ * - URI ends in an asset extension -> pass through (ASSET_EXT below)
+ * - Anything else                 -> append `.html` (a dot in a slug is not
+ *                                    an extension: /sdks/mcp-tools.generated
+ *                                    used to pass through and 404)
  *
  * ASSOCIATIONS:
  * - Attached to the `/mushi-mushi/docs/*` cache behavior (S3 origin) on viewer-request.
@@ -29,6 +32,26 @@
  * - The deploy-docs.yml workflow creates / updates / publishes this function
  *   idempotently on every docs deploy.
  */
+
+// Pages that moved, keyed by exact request URI. The MCP tools reference was
+// `sdks/mcp-tools.generated`; the old HTML and llm-md objects are still in S3
+// (the sync never deletes), so redirect them rather than serve stale copies.
+// Mirrored in cloudfront-mushi-spa-router.js.
+var MOVED = {
+  '/mushi-mushi/docs/sdks/mcp-tools.generated': '/mushi-mushi/docs/sdks/mcp-tools',
+  '/mushi-mushi/docs/sdks/mcp-tools.generated.html': '/mushi-mushi/docs/sdks/mcp-tools',
+  '/mushi-mushi/docs/llm-md/sdks/mcp-tools.generated.md':
+    '/mushi-mushi/docs/llm-md/sdks/mcp-tools.md',
+};
+
+// Extensions the static export and public/ actually serve. Anything else
+// after the last dot is part of a page slug and gets `.html` appended.
+// `pagefind` and `pf_*` are the docs search index that `pagefind --site out`
+// writes to _pagefind/ (wasm.en.pagefind, *.pf_meta, *.pf_index,
+// *.pf_fragment, *.pf_filter); appending `.html` to them 404s and search dies.
+// Mirrored in cloudfront-mushi-spa-router.js.
+var ASSET_EXT =
+  /\.(?:html?|m?js|cjs|css|map|json|txt|xml|md|svg|png|jpe?g|webp|avif|gif|ico|woff2?|ttf|otf|webmanifest|pdf|wasm|mp4|webm|zip|t?gz|ya?ml|cursorrules|pagefind|pf_(?:meta|index|fragment|filter))$/i;
 
 // CloudFront exposes querystring as { key: { value } }, not a
 // pre-encoded string — naively concatenating it into a URL yields the literal
@@ -115,12 +138,17 @@ function handler(event) {
     return redirect301(uri.slice(0, -1), qs);
   }
 
-  // 3. Has a file extension: pass through (assets, JSON, sitemap, etc.)
-  if (/\.[a-zA-Z0-9]+$/.test(uri)) {
+  // 3. Moved pages: 301 to where they live now.
+  if (Object.prototype.hasOwnProperty.call(MOVED, uri)) {
+    return redirect301(MOVED[uri], qs);
+  }
+
+  // 4. Real asset extension: pass through (assets, JSON, sitemap, etc.)
+  if (ASSET_EXT.test(uri)) {
     return request;
   }
 
-  // 4. Clean URL with no extension: append `.html` so S3 finds the static export.
+  // 5. Page route (including dotted slugs): append `.html` so S3 finds the static export.
   request.uri = uri + '.html';
   return request;
 }

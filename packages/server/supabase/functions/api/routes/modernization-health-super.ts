@@ -16,6 +16,7 @@ import {
   type FeatureFlag,
 } from '../../_shared/entitlements.ts';
 import { requireSuperAdmin } from '../../_shared/super-admin.ts';
+import { isOperatorUser } from '../../_shared/operator-gate.ts';
 import { checkIngestQuota } from '../../_shared/quota.ts';
 import { currentRegion, lookupProjectRegion, regionEndpoint } from '../../_shared/region.ts';
 import { getStorageAdapter, invalidateStorageCache } from '../../_shared/storage.ts';
@@ -339,6 +340,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
           featureFlags: {} as Record<FeatureFlag, boolean>,
           gatedRoutes: GATED_ROUTES.map((r) => ({ ...r, allowed: false })),
           isSuperAdmin: false,
+          operator: isOperatorUser(userId),
           hasProject: false,
         },
       });
@@ -379,6 +381,9 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
           allowed: flags[r.flag] === true,
         })),
         isSuperAdmin,
+        // Founder/operator flag (secret MUSHI_OPERATOR_USER_IDS) — drives the
+        // /growth nav item; the route itself re-checks via requireOperator.
+        operator: isOperatorUser(userId),
         hasProject: true,
         userEmail: userEmail ?? null,
       },

@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/blog
 
 ---
 title: Blog
-description: Notes from building Mushi Mushi — open-source licensing, launch weeks, and how AI-built apps get debugged in practice.
+description: Notes from building Mushi Mushi — the real numbers behind the funnel, open-source licensing, launches, and how AI-built apps get debugged in practice.
 ---
 
 # Mushi Mushi Blog

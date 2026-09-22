@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/runtime-config
 
 ---
 title: Runtime config
+description: How the Mushi SDK fetches widget and capture settings from the console at startup, how they merge with your init options, and when to turn it off.
 ---
 
 # Runtime config

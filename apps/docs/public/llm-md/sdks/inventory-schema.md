@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/inventory-schema
 
 ---
 title: '@mushi-mushi/inventory-schema'
+description: The Zod schema, JSON Schema and TypeScript types for inventory.yaml — the contract that Mushi's gates, crawler, ESLint plugin and CLI all read.
 ---
 
 # `@mushi-mushi/inventory-schema`

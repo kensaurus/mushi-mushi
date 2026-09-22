@@ -11,8 +11,11 @@ Use this checklist before submitting the Mushi Mushi plugin to the Cursor Market
 - [ ] All CI checks pass on main: typecheck, test, build, catalog sync, smoke, plugin manifest
 
 ### Plugin bundle (`packages/cursor-plugin/`)
-- [x] `.cursor-plugin/plugin.json` — version matches `@mushi-mushi/mcp` npm version (`0.17.0`)
-- [ ] `mcp.json` — hosted URL reflects live Supabase edge function URL
+- [x] `.cursor-plugin/plugin.json` — version matches `@mushi-mushi/mcp` npm version (`0.21.0`); `check-cursor-plugin.mjs` fails on drift, `--write` syncs it
+- [x] `.cursor-plugin/plugin.json` — only fields from Cursor's [manifest reference](https://cursor.com/docs/reference/plugins) (`logo`, `mcpServers`, `variables`; no `icon`, `categories`, `minCursorVersion` or `mcp`)
+- [x] `mcp.json` — hosted `mushi` entry uses the live edge function URL with `"type": "http"` and no static headers (OAuth sign-in); the check fails on placeholder hosts such as `your-project`
+- [x] Every `${VAR}` in `mcp.json` is declared under `variables` in `plugin.json`
+- [x] `mcp.json` — hosted URL is the direct edge-function URL `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp` (the "Hosted HTTP MCP" row in docs/marketing/canonical-urls.md), and its OAuth discovery works (switched 2026-09-21 in 4cc40d93; checked 2026-09-22: an unauthenticated `initialize` gets `401` with `resource_metadata`, and that protected-resource document names this same URL as its `resource`). The CloudFront proxy `https://kensaur.us/mushi-mushi/hosted-mcp` is a separate resource with its own discovery documents, used by Smithery.
 - [ ] `skills/mushi-triage/SKILL.md` — workflow steps are accurate and up to date
 - [ ] `rules/mushi-mcp.mdc` — write-tool list matches current catalog `mcp:write` tools
 - [ ] All three command files exist and reference current tool names
@@ -33,7 +36,7 @@ Use this checklist before submitting the Mushi Mushi plugin to the Cursor Market
    - **Name**: Mushi Mushi
    - **Description**: User-felt bug triage, evidence, and fix dispatch — powered by real user reports.
    - **Categories**: Monitoring, Debugging, Productivity
-   - **Icon**: `https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/packages/brand/src/logo-mark-512.png`
+   - **Icon**: `https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/packages/brand/src/logo-mark-512.png` (committed and allow-listed in `.gitignore`; confirm it returns 200 with `node scripts/check-mcp-publish-readiness.mjs --online`)
    - **Homepage**: `https://kensaur.us/mushi-mushi`
    - **Privacy policy**: `https://kensaur.us/mushi-mushi/privacy`
 5. Wait for Cursor review (typically days to weeks).

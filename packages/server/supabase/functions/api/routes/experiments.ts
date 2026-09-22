@@ -13,22 +13,59 @@
 //   POST /v1/admin/experiments/:id/launch           — set status = 'running'
 //   POST /v1/admin/experiments/:id/stop             — set status = 'stopped'
 //
-// SDK (no JWT, api-key auth):
+// SDK (project API key):
 //   POST /v1/sdk/experiment/assign  — assign a reporter token to a variant
 //   POST /v1/sdk/experiment/convert — record a conversion event
 //
+// Access: requireProjectAccess only checks a project_id it is handed, and the
+// :id routes carry none, so every :id handler resolves the experiment's
+// project and runs the same fail-closed check (experimentAccess). The SDK
+// routes are bound to the key's project. Until 2026-09-22 any signed-in
+// account could read, edit, launch, stop or delete another organization's
+// experiments by id, create one in any project, and anyone at all could
+// write assignments and conversions.
+//
 // Phase 5 — Mushi closed-loop evolution
 
-import { Hono } from 'npm:hono@4'
+import { Hono, type Context } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
 import { requireAuth } from '../middleware/auth.ts'
 import { requireProjectAccess } from '../middleware/project.ts'
+import { apiKeyAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
-import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
+import { reporterKey } from '../../_shared/reporter-token.ts'
+import { assertTargetProjectAccess, ownedProjectIds, resolveOwnedProject } from '../shared.ts'
 import { dbError } from '../shared.ts'
 import type { Variables } from '../types.ts'
 
 function db() { return getServiceClient() }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function notFound(c: Context) {
+  return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Not found' } }, 404)
+}
+
+/** null when the caller may act on this experiment, else the refusal. */
+async function experimentAccess(c: Context<{ Variables: Variables }>, experimentId: string): Promise<Response | null> {
+  if (!UUID_RE.test(experimentId)) return notFound(c)
+  const { data } = await db().from('experiments').select('project_id').eq('id', experimentId).maybeSingle()
+  if (!data?.project_id) return notFound(c)
+  const access = await assertTargetProjectAccess(c, db(), c.get('userId') as string, data.project_id as string)
+  return access.ok ? null : access.response
+}
+
+const sdkAssignSchema = z.object({
+  experiment_id: z.string().uuid(),
+  reporter_token: z.string().min(1).max(256),
+  end_user_id: z.string().uuid().nullish(),
+})
+
+const sdkConvertSchema = z.object({
+  experiment_id: z.string().uuid(),
+  reporter_token: z.string().min(1).max(256),
+  conversion_value: z.number().finite().nullish(),
+})
 
 const experimentPatchSchema = z
   .object({
@@ -267,18 +304,24 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
       }, 400)
     }
     const { project_id, name, description, hypothesis, traffic_split, bandit_enabled } = parsed.data
+    const access = await assertTargetProjectAccess(c, db(), c.get('userId') as string, project_id)
+    if (!access.ok) return access.response
     const { data, error } = await db().from('experiments').insert({ project_id, name, description, hypothesis, traffic_split, bandit_enabled }).select().single()
     if (error) return dbError(c, error)
     return c.json({ ok: true, data }, 201)
   })
 
   admin.get('/:id', async (c) => {
+    const denied = await experimentAccess(c, c.req.param('id')!)
+    if (denied) return denied
     const { data, error } = await db().from('experiments').select('*, experiment_variants(*)').eq('id', c.req.param('id')!).single()
     if (error) return c.json({ ok: false, error: { code: 'ERROR', message: 'Not found' } }, 404)
     return c.json({ ok: true, data })
   })
 
   admin.patch('/:id', async (c) => {
+    const denied = await experimentAccess(c, c.req.param('id')!)
+    if (denied) return denied
     const body = await c.req.json()
     const parsed = experimentPatchSchema.safeParse(body)
     if (!parsed.success) {
@@ -293,11 +336,15 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
   })
 
   admin.delete('/:id', async (c) => {
+    const denied = await experimentAccess(c, c.req.param('id')!)
+    if (denied) return denied
     await db().from('experiments').delete().eq('id', c.req.param('id')!).eq('status', 'draft')
     return c.json({ ok: true })
   })
 
   admin.post('/:id/variants', async (c) => {
+    const denied = await experimentAccess(c, c.req.param('id')!)
+    if (denied) return denied
     const body = await c.req.json()
     const { name, description, config, traffic_weight } = body
     const { data, error } = await db().from('experiment_variants').insert({ experiment_id: c.req.param('id')!, name, description, config, traffic_weight }).select().single()
@@ -306,6 +353,8 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
   })
 
   admin.patch('/:id/variants/:vid', async (c) => {
+    const denied = await experimentAccess(c, c.req.param('id')!)
+    if (denied) return denied
     const body = await c.req.json()
     const parsed = variantPatchSchema.safeParse(body)
     if (!parsed.success) {
@@ -320,11 +369,15 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
   })
 
   admin.delete('/:id/variants/:vid', async (c) => {
+    const denied = await experimentAccess(c, c.req.param('id')!)
+    if (denied) return denied
     await db().from('experiment_variants').delete().eq('id', c.req.param('vid')!).eq('experiment_id', c.req.param('id')!)
     return c.json({ ok: true })
   })
 
   admin.post('/:id/analyze', async (c) => {
+    const denied = await experimentAccess(c, c.req.param('id')!)
+    if (denied) return denied
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const res = await fetch(`${supabaseUrl}/functions/v1/experiment-analyzer`, {
@@ -337,25 +390,42 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
   })
 
   admin.post('/:id/launch', async (c) => {
+    const denied = await experimentAccess(c, c.req.param('id')!)
+    if (denied) return denied
     await db().from('experiments').update({ status: 'running', start_at: new Date().toISOString() }).eq('id', c.req.param('id')!)
     return c.json({ ok: true })
   })
 
   admin.post('/:id/stop', async (c) => {
+    const denied = await experimentAccess(c, c.req.param('id')!)
+    if (denied) return denied
     await db().from('experiments').update({ status: 'stopped', end_at: new Date().toISOString() }).eq('id', c.req.param('id')!)
     return c.json({ ok: true })
   })
 
   parent.route('/v1/admin/experiments', admin)
 
-  // SDK endpoints (no JWT — api-key auth via X-Mushi-Api-Key)
+  // SDK endpoints (project API key via X-Mushi-Api-Key, bound to its project)
   const sdk = new Hono<{ Variables: Variables }>()
+  sdk.use('*', apiKeyAuth)
 
-  // Assign reporter to variant (deterministic by reporter_token hash or bandit)
+  // Assign reporter to variant (deterministic by reporter key, or bandit).
+  // reporter_token is stored as the one-way reporter key, never as sent.
   sdk.post('/assign', async (c) => {
-    const body = await c.req.json()
-    const { experiment_id, reporter_token, end_user_id } = body
-    if (!experiment_id || !reporter_token) return c.json({ ok: false, error: { code: 'ERROR', message: 'experiment_id and reporter_token required' } }, 400)
+    const parsed = sdkAssignSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) return c.json({ ok: false, error: { code: 'ERROR', message: 'experiment_id and reporter_token required' } }, 400)
+    const { experiment_id } = parsed.data
+    const projectId = c.get('projectId') as string
+    const reporter_token = await reporterKey(parsed.data.reporter_token)
+
+    // Load experiment variants — only this key's project
+    const { data: exp } = await db()
+      .from('experiments')
+      .select('*, experiment_variants(*)')
+      .eq('id', experiment_id)
+      .eq('project_id', projectId)
+      .maybeSingle()
+    if (!exp || exp.status !== 'running') return c.json({ ok: false, error: { code: 'ERROR', message: 'Experiment not running' } }, 404)
 
     // Check existing assignment
     const { data: existing } = await db()
@@ -366,9 +436,18 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
       .maybeSingle()
     if (existing) return c.json({ ok: true, variant_id: existing.variant_id, from_cache: true })
 
-    // Load experiment variants
-    const { data: exp } = await db().from('experiments').select('*, experiment_variants(*)').eq('id', experiment_id).single()
-    if (!exp || exp.status !== 'running') return c.json({ ok: false, error: { code: 'ERROR', message: 'Experiment not running' } }, 404)
+    // A client-supplied end user must belong to this project's organization.
+    let end_user_id: string | null = null
+    if (parsed.data.end_user_id) {
+      const { data: project } = await db().from('projects').select('organization_id').eq('id', projectId).maybeSingle()
+      const { data: endUser } = await db()
+        .from('end_users')
+        .select('id')
+        .eq('id', parsed.data.end_user_id)
+        .eq('organization_id', (project?.organization_id as string | undefined) ?? '')
+        .maybeSingle()
+      end_user_id = (endUser?.id as string | undefined) ?? null
+    }
 
     const variants = (exp.experiment_variants as Array<{ id: string; traffic_weight: number; bandit_alpha: number; bandit_beta: number }>) ?? []
     if (!variants.length) return c.json({ ok: false, error: { code: 'ERROR', message: 'No variants' } }, 404)
@@ -397,7 +476,7 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
     }
 
     await db().from('experiment_assignments').upsert(
-      { experiment_id, variant_id: chosenVariant.id, reporter_token, end_user_id: end_user_id ?? null },
+      { experiment_id, variant_id: chosenVariant.id, reporter_token, end_user_id },
       { onConflict: 'experiment_id, reporter_token', ignoreDuplicates: true },
     )
 
@@ -406,9 +485,17 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
 
   // Record a conversion
   sdk.post('/convert', async (c) => {
-    const body = await c.req.json()
-    const { experiment_id, reporter_token, conversion_value } = body
-    if (!experiment_id || !reporter_token) return c.json({ ok: false, error: { code: 'ERROR', message: 'experiment_id and reporter_token required' } }, 400)
+    const parsed = sdkConvertSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) return c.json({ ok: false, error: { code: 'ERROR', message: 'experiment_id and reporter_token required' } }, 400)
+    const { experiment_id, conversion_value } = parsed.data
+    const { data: exp } = await db()
+      .from('experiments')
+      .select('id')
+      .eq('id', experiment_id)
+      .eq('project_id', c.get('projectId') as string)
+      .maybeSingle()
+    if (!exp) return c.json({ ok: false, error: { code: 'ERROR', message: 'Experiment not found' } }, 404)
+    const reporter_token = await reporterKey(parsed.data.reporter_token)
     await db().from('experiment_assignments').update({
       converted: true,
       converted_at: new Date().toISOString(),

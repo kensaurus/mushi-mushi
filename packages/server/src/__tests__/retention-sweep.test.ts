@@ -24,6 +24,7 @@ vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
 vi.mock('../../supabase/functions/_shared/plans.ts', () => ({
   listPlans: async () => [],
   resolvePlanFromSubscription: async () => ({ id: 'hobby', retention_days: 7 }),
+  getPlan: async () => ({ id: 'hobby', retention_days: 7 }),
 }))
 
 import { deleteOldReportsBatch } from '../../supabase/functions/retention-sweep/index.ts'

@@ -2,14 +2,7 @@
   "mcpServers": {
     "mushi": {
       "type": "http",
-      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
-      "headers": {
-        "Authorization": "Bearer ${MUSHI_API_KEY}",
-        "X-Mushi-Api-Key": "${MUSHI_API_KEY}",
-        "X-Mushi-Project-Id": "${MUSHI_PROJECT_ID}"
-      },
-      "notes": "Hosted Streamable HTTP MCP. Append ?read_only=1 to hide write tools. Self-hosters replace this URL with their own /functions/v1/mcp endpoint.",
-      "_envSetup": "Export MUSHI_API_KEY=<your-mcp-read-key> and MUSHI_PROJECT_ID=<uuid> in your shell profile, or add them to Cursor → Settings → Environment Variables."
+      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp"
     },
     "mushi-stdio": {
       "type": "stdio",
@@ -19,8 +12,7 @@
         "MUSHI_API_KEY": "${MUSHI_API_KEY}",
         "MUSHI_PROJECT_ID": "${MUSHI_PROJECT_ID}",
         "MUSHI_API_ENDPOINT": "${MUSHI_API_ENDPOINT}"
-      },
-      "notes": "stdio fallback — runs npx @mushi-mushi/mcp locally. Use this if the hosted HTTP endpoint is not configured."
+      }
     }
   }
 }

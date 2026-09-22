@@ -36,8 +36,7 @@ Deno.serve(
     if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
 
     const authErr = requireServiceRoleAuth(req)
-    const isAdmin = req.headers.get('x-mushi-admin') === '1'
-    if (authErr && !isAdmin) return authErr
+    if (authErr) return authErr
 
     const raw = await req.json().catch(() => null)
     const parsed = bodySchema.safeParse(raw)

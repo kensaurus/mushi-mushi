@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/security/prompt-injection
 
 ---
 title: Prompt-injection defence
+description: How Mushi defends its LLM pipeline against prompt injection hidden in user bug reports, and the OWASP LLM01 regression suite that runs on every CI push.
 ---
 
 # Prompt-injection defence
@@ -28,11 +29,11 @@ Every text field (report title, description, console lines, OCR output) passes t
 All user content is always enclosed in named XML tags before reaching the model:
 
 ```
-
-  …
-  …
-  …
-
+<user_report>
+  <title>…</title>
+  <description>…</description>
+  <console_logs>…</console_logs>
+</user_report>
 ```
 
 The system prompt instructs the model to treat anything inside `` as untrusted data. Instructions in that region are recognised as data, not commands.

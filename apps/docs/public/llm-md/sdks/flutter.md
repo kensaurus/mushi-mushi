@@ -4,71 +4,69 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/flutter
 
 ---
 title: 'mushi_mushi (Flutter)'
+description: API reference for mushi_mushi, Mushi's Flutter SDK — configure, report, captureError, showWidget, screenshots and the offline queue. Preview, not on pub.dev.
 ---
 
 # `mushi_mushi` (Flutter)
 
-Pure-Dart SDK on [pub.dev](https://pub.dev/packages/mushi_mushi). `RepaintBoundary`-driven screenshot capture, shake detection via `sensors_plus`, same offline-queue contract as the JS core SDK.
+Pure-Dart SDK for iOS and Android: `RepaintBoundary` screenshot capture, shake
+detection via `sensors_plus`, a Material bottom sheet, and a byte-capped
+offline queue.
+
+  **Preview — not on pub.dev yet.** Install it as a `git:` dependency from the
+  repository until the first release is published.
 
 ```yaml
 # pubspec.yaml
 dependencies:
-  mushi_mushi: ^0.3.0
+  mushi_mushi:
+    git:
+      url: https://github.com/kensaurus/mushi-mushi.git
+      path: packages/flutter
+      ref: master
 ```
 
 See [Quickstart → Flutter](/quickstart/flutter) for the full setup walkthrough.
 
 ## API surface
 
-| Method | Purpose |
+| Member | Purpose |
 | --- | --- |
-| `Mushi.instance.configure(...)` | Boot the SDK — call once in `main()` before `runApp()` |
-| `Mushi.instance.identify(userId, traits)` | Link reports to a user |
-| `Mushi.instance.submitReport(description, severity)` | Programmatic report submission |
-| `Mushi.instance.submitActivity(events)` | Rewards-program activity events |
-| `MushiReportButton()` | Drop-in widget — shake-to-report + tap-to-report |
+| `Mushi.instance.configure(MushiConfig)` | Boot the SDK — call once in `main()` before `runApp()` |
+| `Mushi.instance.report(description:, category:, metadata:)` | Submit a report from code |
+| `Mushi.instance.captureError(error, [stackTrace])` | Report a caught error with its type and stack trace |
+| `Mushi.instance.showWidget(context)` | Present the bottom sheet from any screen |
+| `Mushi.instance.screenshotBoundaryKey` | `GlobalKey` of the `RepaintBoundary` screenshots are taken from |
+| `Mushi.instance.rootContext` / `setRootContext(context)` | Context used by shake-to-report to present the sheet |
+| `Mushi.instance.onReportSubmitted` | Callback after each successful submission (use it to mirror reports into Sentry) |
 
-## Setup
+## Configuration
 
-```dart
-// main.dart
-import 'package:mushi_mushi/mushi_mushi.dart';
-import 'package:flutter/material.dart';
-
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Mushi.instance.configure(
-    projectId: 'YOUR_PROJECT_ID',
-    apiKey: 'YOUR_PUBLIC_API_KEY',
-    enableShakeToReport: true,
-  );
-  runApp(const MyApp());
-}
-```
-
-## Identifying users
-
-```dart
-// After sign-in
-await Mushi.instance.identify(
-  user.id,
-  traits: {'email': user.email, 'name': user.displayName},
-);
-```
+`MushiConfig` requires `projectId`, `apiKey` and `endpoint` (the hosted API is
+`https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`). Optional fields:
+`triggerMode` (`shake`, `button`, `both`, `none`; default `shake`),
+`captureScreenshot`, `minDescriptionLength` (default 20),
+`offlineQueueMaxBytes` (default 2 MB), `theme` and `triggerInsets`.
 
 ## Submitting a report
 
 ```dart
-await Mushi.instance.submitReport(
+await Mushi.instance.report(
   description: 'The checkout button does nothing.',
-  severity: MushiSeverity.p2,
+  category: 'bug',
+  metadata: {'screen': 'checkout'},
 );
 ```
 
 ## Screenshot capture
 
-The SDK uses `RepaintBoundary` to capture the current widget tree into a PNG before submission. Wrap sensitive screens in `ExcludeFromSemantics` and set `excludeFromCapture: true` on your `MushiReportButton` if needed.
+The SDK captures the widget tree under `screenshotBoundaryKey` into a PNG
+before submission. No boundary key, no screenshot; set
+`captureScreenshot: false` to turn it off entirely.
 
 ## Offline queue
 
-Reports created without network access are persisted to `flutter_secure_storage` and flushed automatically when connectivity resumes. The queue cap is 50 reports (configurable via `maxOfflineQueueSize`).
+Reports that fail to send are written to a file in the app's support
+directory and retried every 30 seconds and whenever connectivity returns. The
+queue is capped by `offlineQueueMaxBytes`; the oldest entries are trimmed
+first.

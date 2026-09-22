@@ -2,7 +2,7 @@
   "name": "@mushi-mushi/react-native",
   "version": "0.21.0",
   "license": "MIT",
-  "description": "React Native SDK for Mushi Mushi — shake-to-report, bottom sheet widget, full context capture",
+  "description": "Shake-to-report widget for React Native and Expo. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -66,7 +66,7 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   },
-  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "repository": {
     "type": "git",
     "url": "https://github.com/kensaurus/mushi-mushi.git",
@@ -83,15 +83,12 @@
   "files": [
     "dist",
     "README.md",
-    "CHANGELOG.md",
-    "LICENSE",
-    "CONTRIBUTING.md",
-    "CODE_OF_CONDUCT.md",
-    "SECURITY.md"
+    "LICENSE"
   ],
   "sideEffects": false,
   "keywords": [
     "mushi-mushi",
+    "bug-report-widget",
     "bug-reporting",
     "user-feedback",
     "user-report",
@@ -104,7 +101,6 @@
     "session-replay",
     "offline-queue",
     "sentry-companion",
-    "sentry-alternative",
     "error-tracking",
     "ai-triage",
     "auto-fix",
@@ -126,10 +122,6 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=20"
-  },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/kensaurus"
+    "node": ">=20.19.0"
   }
 }

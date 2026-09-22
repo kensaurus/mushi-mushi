@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/spa-to-ssr
 
 ---
 title: 'SPA → SSR (Next.js / Nuxt / SvelteKit)'
+description: Move a Vite SPA to Next.js, Nuxt or SvelteKit — env var prefix changes, where to mount Mushi so it survives navigation, and hydration gotchas.
 ---
 
 # SPA → SSR (Next.js / Nuxt / SvelteKit)
@@ -50,7 +51,6 @@ npm create svelte@latest          # SvelteKit`} },
 'use client'
 
   return {children}
-}
 
 // Nuxt — plugins/mushi.client.ts
 
@@ -59,9 +59,17 @@ export default defineNuxtPlugin((nuxtApp) => {
   const credentials = { projectId: cfg.public.mushiProjectId, apiKey: cfg.public.mushiApiKey }
   nuxtApp.vueApp.use(MushiPlugin, credentials)
   Mushi.init(credentials)
-})
 
 // SvelteKit — src/routes/+layout.svelte
+
+  import { onMount } from 'svelte'
+  import { Mushi } from '@mushi-mushi/web'
+  import { initMushi } from '@mushi-mushi/svelte'
+  import { PUBLIC_MUSHI_PROJECT_ID, PUBLIC_MUSHI_API_KEY } from '$env/static/public'
+  onMount(() => {
+    const credentials = { projectId: PUBLIC_MUSHI_PROJECT_ID, apiKey: PUBLIC_MUSHI_API_KEY }
+    initMushi(credentials)
+    Mushi.init(credentials)
 
 `} },
     { id: 'hydration', label: 'Verify no hydration warnings', content: <>Mushi renders its widget into a Shadow DOM mounted on document.body on the client side only. It does NOT cause hydration mismatches because the widget is never present in server-rendered HTML. If you see hydration warnings, they're from your code, not Mushi.</> },
@@ -69,7 +77,7 @@ export default defineNuxtPlugin((nuxtApp) => {
     { id: 'sitemap', label: 'Confirm SSR routes are crawlable', content: <>Run a Lighthouse SEO audit on a few key pages. If TTFB is slower than the old SPA, you've probably introduced an unnecessary serverside fetch — profile and remove it.</> },
     { id: 'redirect', label: 'Redirect old SPA routes to the new ones (when all migrated)', content: <>Either at the CDN layer (Cloudflare / S3 redirects) or via the new framework's redirects config.</> },
     { id: 'verify', label: 'Smoke-test Mushi from a server-rendered page', content: <>Open a page that's rendered by the SSR pipeline. Click the floating bug widget, submit a report, confirm metadata.url on the report shows the SSR-rendered route. Tagged appropriately for the new framework.</> },
-  ]}
+
 />
 
 ## Where the Mushi widget lives across SSR vs CSR

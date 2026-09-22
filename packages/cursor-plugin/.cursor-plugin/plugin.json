@@ -1,13 +1,13 @@
 {
   "name": "mushi-mushi",
   "displayName": "Mushi Mushi",
-  "version": "0.17.0",
+  "version": "0.21.1",
   "description": "Triage user-felt bugs, pull evidence (screenshots, console logs, network requests), check blast radius, and dispatch fix PRs — all from your AI coding agent. Mushi sees what users feel; Sentry sees what code throws.",
   "author": {
     "name": "Mushi Mushi",
     "url": "https://kensaur.us/mushi-mushi"
   },
-  "icon": "./logo.png",
+  "logo": "logo.svg",
   "homepage": "https://kensaur.us/mushi-mushi",
   "repository": "https://github.com/kensaurus/mushi-mushi",
   "license": "MIT",
@@ -22,12 +22,29 @@
     "auto-fix",
     "developer-tools"
   ],
-  "categories": ["monitoring", "debugging", "productivity"],
-  "mcp": {
-    "configFile": "mcp.json"
+  "mcpServers": "mcp.json",
+  "variables": {
+    "type": "object",
+    "properties": {
+      "MUSHI_API_KEY": {
+        "type": "string",
+        "title": "Mushi API key",
+        "description": "Only for the mushi-stdio fallback. A project key with the mcp:read scope (mcp:write to dispatch fixes), minted in the Mushi console under Settings → API Keys. The hosted mushi server signs in with OAuth and needs no key."
+      },
+      "MUSHI_PROJECT_ID": {
+        "type": "string",
+        "title": "Mushi project ID",
+        "description": "Only for the mushi-stdio fallback. The project UUID the key belongs to; optional for single-project keys."
+      },
+      "MUSHI_API_ENDPOINT": {
+        "type": "string",
+        "title": "Mushi API endpoint",
+        "description": "Only for self-hosted deployments using the mushi-stdio fallback: your …/functions/v1/api URL. Leave empty for Mushi Cloud."
+      }
+    }
   },
   "skills": [
-    "skills/mushi-triage/SKILL.md"
+    "skills/mushi-triage"
   ],
   "rules": [
     "rules/mushi-mcp.mdc"
@@ -36,6 +53,5 @@
     "commands/triage-mushi-report.md",
     "commands/test-mushi-mcp.md",
     "commands/fix-with-mushi.md"
-  ],
-  "minCursorVersion": "0.43.0"
+  ]
 }

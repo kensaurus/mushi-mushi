@@ -9,213 +9,231 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 
 ## Start here (MCP-first)
 
-- [Incident loop](https://kensaur.us/mushi-mushi/docs/quickstart/incident-loop)
-- [MCP server](https://kensaur.us/mushi-mushi/docs/quickstart/mcp)
-- [Choose your stack](https://kensaur.us/mushi-mushi/docs/quickstart)
+- [Incident loop](https://kensaur.us/mushi-mushi/docs/quickstart/incident-loop): Run npx mushi-mushi, ship, and turn your first user-reported bug into a plain-English diagnosis and a paste-ready fix for Cursor or Claude Code.
+- [MCP server](https://kensaur.us/mushi-mushi/docs/quickstart/mcp): Set up the Mushi MCP server with npx mushi-mushi setup — read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code, or Codex.
+- [Connect your AI client](https://kensaur.us/mushi-mushi/docs/connect): One-click MCP setup for Cursor, VS Code, Windsurf, Cline, Claude and Zed, with a keyless demo.
+- [Choose your stack](https://kensaur.us/mushi-mushi/docs/quickstart): Install Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.
+- [Pricing](https://kensaur.us/mushi-mushi/docs/pricing): Mushi Mushi pricing — 50 AI bug diagnoses a month free, no card. Open-source Sentry alternative you can self-host for free, or upgrade for teams.
+- [Compare Mushi with Sentry, Jam and PostHog](https://kensaur.us/mushi-mushi/docs/compare): Honest, dated comparisons of Mushi Mushi with Sentry, Jam and PostHog, plus Sentry alternatives for solo founders. Every number links to its source.
 
 ## SDK quickstarts
 
-- [React](https://kensaur.us/mushi-mushi/docs/quickstart/react)
-- [Web / vanilla JS](https://kensaur.us/mushi-mushi/docs/quickstart/web)
-- [React Native](https://kensaur.us/mushi-mushi/docs/quickstart/react-native)
+- [React](https://kensaur.us/mushi-mushi/docs/quickstart/react): Add the Mushi React SDK in one command — npx mushi-mushi installs the bug-reporting widget, writes env vars, and files your first test report.
+- [Web / vanilla JS](https://kensaur.us/mushi-mushi/docs/quickstart/web): Add Mushi's browser SDK to any site without a framework — install @mushi-mushi/web, call Mushi.init, and file bug reports from your buttons or the widget.
+- [React Native](https://kensaur.us/mushi-mushi/docs/quickstart/react-native): Add shake-to-report bug capture to a React Native or Expo app with @mushi-mushi/react-native — install, mount the provider, and verify the first report.
 
 ## SDK reference
 
-- [SDK index](https://kensaur.us/mushi-mushi/docs/sdks)
-- [Project ID & API keys](https://kensaur.us/mushi-mushi/docs/concepts/credentials)
-- [@mushi-mushi/web](https://kensaur.us/mushi-mushi/docs/sdks/web)
-- [@mushi-mushi/cli](https://kensaur.us/mushi-mushi/docs/sdks/cli)
-- [@mushi-mushi/mcp](https://kensaur.us/mushi-mushi/docs/sdks/mcp)
+- [SDK index](https://kensaur.us/mushi-mushi/docs/sdks): Bug-reporting SDKs for React, Vue, Svelte, Angular, React Native, Capacitor and Node, installed by npx mushi-mushi, plus preview iOS, Android and Flutter SDKs.
+- [Project ID & API keys](https://kensaur.us/mushi-mushi/docs/concepts/credentials): Where to find your Mushi project ID and API key, what the report:write and mcp scopes allow, the one mushi_ key format, and env var names per framework.
+- [@mushi-mushi/web](https://kensaur.us/mushi-mushi/docs/sdks/web): Reference for @mushi-mushi/web, the browser SDK — screenshots, console and network capture, the Shadow DOM widget, sampling, beforeSend and privacy.
+- [@mushi-mushi/react](https://kensaur.us/mushi-mushi/docs/sdks/react): Reference for @mushi-mushi/react — MushiProvider, the useMushi, useMushiSdk and useMushiReport hooks, identifying users, and the rewards hooks and badge.
+- [@mushi-mushi/node](https://kensaur.us/mushi-mushi/docs/sdks/node): Report server errors from Node with @mushi-mushi/node — Express, Fastify and Hono error handlers that tag each report with route, request ID and user.
+- [@mushi-mushi/cli](https://kensaur.us/mushi-mushi/docs/sdks/cli): Reference for @mushi-mushi/cli — log in, connect a project, run doctor, list reports, dispatch agent fixes and merge their pull requests from the terminal.
+- [@mushi-mushi/mcp](https://kensaur.us/mushi-mushi/docs/sdks/mcp): Reference for @mushi-mushi/mcp, the Mushi MCP server for Cursor, Claude Code, VS Code and Windsurf — stdio and hosted HTTP transports, scopes and setup.
+- [MCP tools reference](https://kensaur.us/mushi-mushi/docs/sdks/mcp-tools): Every tool, resource and prompt the Mushi MCP server exposes to Cursor, Claude Code and other editors, with its read or write scope, from the catalog.
 
 ## All pages
 
-- [Mushi Mushi — know why your AI-built app broke, with the fix ready](https://kensaur.us/mushi-mushi/docs)
-- [Admin console](https://kensaur.us/mushi-mushi/docs/admin)
-- [Activity](https://kensaur.us/mushi-mushi/docs/admin/activity)
-- [Anomaly detection](https://kensaur.us/mushi-mushi/docs/admin/anomalies)
-- [Anti-gaming](https://kensaur.us/mushi-mushi/docs/admin/anti-gaming)
-- [Audit log](https://kensaur.us/mushi-mushi/docs/admin/audit)
-- [Billing](https://kensaur.us/mushi-mushi/docs/admin/billing)
-- [CLI device auth](https://kensaur.us/mushi-mushi/docs/admin/cli-auth)
-- [Code health](https://kensaur.us/mushi-mushi/docs/admin/code-health)
-- [Compliance](https://kensaur.us/mushi-mushi/docs/admin/compliance)
-- [Connect & Update](https://kensaur.us/mushi-mushi/docs/admin/connect)
-- [Content quality](https://kensaur.us/mushi-mushi/docs/admin/content)
-- [Cost & usage](https://kensaur.us/mushi-mushi/docs/admin/cost)
-- [Dashboard](https://kensaur.us/mushi-mushi/docs/admin/dashboard)
-- [Docs bridge](https://kensaur.us/mushi-mushi/docs/admin/docs-bridge)
-- [Drift scanner](https://kensaur.us/mushi-mushi/docs/admin/drift)
-- [Experiments](https://kensaur.us/mushi-mushi/docs/admin/experiments)
-- [Codebase Atlas](https://kensaur.us/mushi-mushi/docs/admin/explore)
-- [Feature board](https://kensaur.us/mushi-mushi/docs/admin/feature-board)
-- [Feedback hub](https://kensaur.us/mushi-mushi/docs/admin/feedback)
-- [Fine-tuning](https://kensaur.us/mushi-mushi/docs/admin/fine-tuning)
-- [Fix drafts & PRs](https://kensaur.us/mushi-mushi/docs/admin/fixes)
-- [Full-stack audit](https://kensaur.us/mushi-mushi/docs/admin/fullstack-audit)
-- [Knowledge graph](https://kensaur.us/mushi-mushi/docs/admin/graph)
-- [Integration health](https://kensaur.us/mushi-mushi/docs/admin/health)
-- [Action inbox](https://kensaur.us/mushi-mushi/docs/admin/inbox)
-- [Integrations](https://kensaur.us/mushi-mushi/docs/admin/integrations)
-- [Intelligence reports](https://kensaur.us/mushi-mushi/docs/admin/intelligence)
-- [User stories · Inventory](https://kensaur.us/mushi-mushi/docs/admin/inventory)
-- [Iterate](https://kensaur.us/mushi-mushi/docs/admin/iterate)
-- [Judge dashboard](https://kensaur.us/mushi-mushi/docs/admin/judge)
-- [Lessons](https://kensaur.us/mushi-mushi/docs/admin/lessons)
-- [Plugin marketplace](https://kensaur.us/mushi-mushi/docs/admin/marketplace)
-- [MCP](https://kensaur.us/mushi-mushi/docs/admin/mcp)
-- [MCP OAuth consent](https://kensaur.us/mushi-mushi/docs/admin/mcp-auth)
-- [Notifications](https://kensaur.us/mushi-mushi/docs/admin/notifications)
-- [Onboarding](https://kensaur.us/mushi-mushi/docs/admin/onboarding)
-- [Overview (portfolio)](https://kensaur.us/mushi-mushi/docs/admin/overview)
-- [Projects](https://kensaur.us/mushi-mushi/docs/admin/projects)
-- [Prompt lab](https://kensaur.us/mushi-mushi/docs/admin/prompt-lab)
-- [QA Coverage](https://kensaur.us/mushi-mushi/docs/admin/qa-coverage)
-- [Natural-language query](https://kensaur.us/mushi-mushi/docs/admin/query)
-- [Processing queue](https://kensaur.us/mushi-mushi/docs/admin/queue)
-- [Real-time collaboration](https://kensaur.us/mushi-mushi/docs/admin/realtime)
-- [Releases](https://kensaur.us/mushi-mushi/docs/admin/releases)
-- [Repo graph](https://kensaur.us/mushi-mushi/docs/admin/repo)
-- [Reports & triage](https://kensaur.us/mushi-mushi/docs/admin/reports)
-- [Research](https://kensaur.us/mushi-mushi/docs/admin/research)
-- [Rewards program](https://kensaur.us/mushi-mushi/docs/admin/rewards)
-- [SDK health](https://kensaur.us/mushi-mushi/docs/admin/sdk-health)
-- [Settings](https://kensaur.us/mushi-mushi/docs/admin/settings)
-- [Setup Copilot](https://kensaur.us/mushi-mushi/docs/admin/setup-copilot)
-- [Skill Pipelines](https://kensaur.us/mushi-mushi/docs/admin/skill-pipelines)
-- [SSO](https://kensaur.us/mushi-mushi/docs/admin/sso)
-- [Storage](https://kensaur.us/mushi-mushi/docs/admin/storage)
-- [Teams and Members](https://kensaur.us/mushi-mushi/docs/admin/teams)
-- [Users](https://kensaur.us/mushi-mushi/docs/admin/users)
-- [Voice intake](https://kensaur.us/mushi-mushi/docs/admin/voice)
-- [Blog](https://kensaur.us/mushi-mushi/docs/blog)
-- [Mushi goes AGPLv3 — the honest open source story](https://kensaur.us/mushi-mushi/docs/blog/agplv3-relicense)
-- [Launch Week 1 — five features, five days](https://kensaur.us/mushi-mushi/docs/blog/launch-week-1)
-- [Changelog](https://kensaur.us/mushi-mushi/docs/changelog)
-- [Mushi Cloud](https://kensaur.us/mushi-mushi/docs/cloud)
-- [Concepts](https://kensaur.us/mushi-mushi/docs/concepts)
-- [Agent contract](https://kensaur.us/mushi-mushi/docs/concepts/agent-contract)
-- [Anti-gaming & reputation](https://kensaur.us/mushi-mushi/docs/concepts/anti-gaming)
-- [Architecture](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
-- [Mushi Bounties — crowd-testing marketplace](https://kensaur.us/mushi-mushi/docs/concepts/bounty-marketplace)
-- [How Mushi reads a bug report](https://kensaur.us/mushi-mushi/docs/concepts/classification)
-- [Closed-loop evolution — the thesis](https://kensaur.us/mushi-mushi/docs/concepts/closed-loop)
-- [Project ID & API keys](https://kensaur.us/mushi-mushi/docs/concepts/credentials)
-- [API error catalog](https://kensaur.us/mushi-mushi/docs/concepts/error-catalog)
-- [The evolution loop — how Mushi closes the cycle](https://kensaur.us/mushi-mushi/docs/concepts/evolution-loop)
-- [Fix drafts & PRs](https://kensaur.us/mushi-mushi/docs/concepts/fix-orchestrator)
-- [Inventory and gates (v2)](https://kensaur.us/mushi-mushi/docs/concepts/inventory-and-gates)
-- [Judge & self-improvement](https://kensaur.us/mushi-mushi/docs/concepts/judge-loop)
-- [Knowledge graph](https://kensaur.us/mushi-mushi/docs/concepts/knowledge-graph)
-- [Multi-repo coordinated fixes](https://kensaur.us/mushi-mushi/docs/concepts/multi-repo-fixes)
-- [Open source & licensing](https://kensaur.us/mushi-mushi/docs/concepts/open-source)
-- [Connecting your orchestrator (MCP / A2A / REST / AG-UI)](https://kensaur.us/mushi-mushi/docs/concepts/orchestrator-interop)
-- [Rewards & contributor identity](https://kensaur.us/mushi-mushi/docs/concepts/rewards)
-- [Runtime config](https://kensaur.us/mushi-mushi/docs/concepts/runtime-config)
-- [Where the report button lives](https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes)
-- [Cursor integration](https://kensaur.us/mushi-mushi/docs/integrations/cursor)
-- [Voice intake](https://kensaur.us/mushi-mushi/docs/integrations/voice-intake)
-- [Launch Week](https://kensaur.us/mushi-mushi/docs/launch-week)
-- [Migration guides](https://kensaur.us/mushi-mushi/docs/migrations)
-- [BugHerd → Mushi](https://kensaur.us/mushi-mushi/docs/migrations/bugherd-to-mushi)
-- [Migration: Capacitor → React Native](https://kensaur.us/mushi-mushi/docs/migrations/capacitor-to-react-native)
-- [Cordova → Capacitor](https://kensaur.us/mushi-mushi/docs/migrations/cordova-to-capacitor)
-- [Cordova → React Native](https://kensaur.us/mushi-mushi/docs/migrations/cordova-to-react-native)
-- [Create React App → Vite](https://kensaur.us/mushi-mushi/docs/migrations/cra-to-vite)
-- [Instabug (Luciq) → Mushi](https://kensaur.us/mushi-mushi/docs/migrations/instabug-to-mushi)
-- [LogRocket Feedback → Mushi](https://kensaur.us/mushi-mushi/docs/migrations/logrocket-feedback-to-mushi)
-- [@mushi-mushi/* upgrades](https://kensaur.us/mushi-mushi/docs/migrations/mushi-sdk-upgrade)
-- [Native iOS / Android → Hybrid](https://kensaur.us/mushi-mushi/docs/migrations/native-to-hybrid)
-- [Next.js Pages → App Router](https://kensaur.us/mushi-mushi/docs/migrations/nextjs-pages-to-app-router)
-- [Pendo Feedback → Mushi](https://kensaur.us/mushi-mushi/docs/migrations/pendo-feedback-to-mushi)
-- [React Native CLI ↔ Expo](https://kensaur.us/mushi-mushi/docs/migrations/react-native-cli-to-expo)
-- [Sentry + Mushi (enrich or standalone)](https://kensaur.us/mushi-mushi/docs/migrations/sentry-to-mushi)
-- [Shake → Mushi](https://kensaur.us/mushi-mushi/docs/migrations/shake-to-mushi)
-- [SPA → SSR (Next.js / Nuxt / SvelteKit)](https://kensaur.us/mushi-mushi/docs/migrations/spa-to-ssr)
-- [Vue 2 → Vue 3](https://kensaur.us/mushi-mushi/docs/migrations/vue-2-to-vue-3)
-- [Operating (maintainers)](https://kensaur.us/mushi-mushi/docs/operating)
-- [Deployment & releases](https://kensaur.us/mushi-mushi/docs/operating/deployment)
-- [Status & Uptime](https://kensaur.us/mushi-mushi/docs/operating/status)
-- [Plugin marketplace](https://kensaur.us/mushi-mushi/docs/plugins)
-- [Bugsnag](https://kensaur.us/mushi-mushi/docs/plugins/bugsnag)
-- [Building a plugin](https://kensaur.us/mushi-mushi/docs/plugins/building)
-- [Crashlytics](https://kensaur.us/mushi-mushi/docs/plugins/crashlytics)
-- [Cursor Cloud Agent](https://kensaur.us/mushi-mushi/docs/plugins/cursor-cloud)
-- [Discord](https://kensaur.us/mushi-mushi/docs/plugins/discord)
-- [Webhook events](https://kensaur.us/mushi-mushi/docs/plugins/events)
-- [GitHub Issues](https://kensaur.us/mushi-mushi/docs/plugins/github-issues)
-- [Jira Cloud](https://kensaur.us/mushi-mushi/docs/plugins/jira)
-- [Linear](https://kensaur.us/mushi-mushi/docs/plugins/linear)
-- [Microsoft Teams](https://kensaur.us/mushi-mushi/docs/plugins/msteams)
-- [PagerDuty](https://kensaur.us/mushi-mushi/docs/plugins/pagerduty)
-- [Rollbar](https://kensaur.us/mushi-mushi/docs/plugins/rollbar)
-- [Sentry](https://kensaur.us/mushi-mushi/docs/plugins/sentry)
-- [Slack app](https://kensaur.us/mushi-mushi/docs/plugins/slack)
-- [Zapier](https://kensaur.us/mushi-mushi/docs/plugins/zapier)
-- [Pricing — free tier, Pro, and self-host](https://kensaur.us/mushi-mushi/docs/pricing)
-- [Quickstart — fix your first bug in 60 seconds](https://kensaur.us/mushi-mushi/docs/quickstart)
-- [Android (Kotlin) quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/android)
-- [Angular quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/angular)
-- [Capacitor quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/capacitor)
-- [CLI ↔ console setup loop](https://kensaur.us/mushi-mushi/docs/quickstart/cli-console-loop)
-- [Flutter quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/flutter)
-- [Incident loop — bug to fix prompt](https://kensaur.us/mushi-mushi/docs/quickstart/incident-loop)
-- [iOS (Swift) quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/ios)
-- [MCP server for bug fixing in Cursor & Claude Code](https://kensaur.us/mushi-mushi/docs/quickstart/mcp)
-- [Mobile (overview)](https://kensaur.us/mushi-mushi/docs/quickstart/mobile)
-- [React quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/react)
-- [React Native quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/react-native)
-- [Svelte quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/svelte)
-- [Vue 3 quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/vue)
-- [Vanilla JS quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/web)
-- [Roadmap](https://kensaur.us/mushi-mushi/docs/roadmap)
-- [SDK reference](https://kensaur.us/mushi-mushi/docs/sdks)
-- [@mushi-mushi/adapters](https://kensaur.us/mushi-mushi/docs/sdks/adapters)
-- [dev.mushimushi:mushi-android (Android)](https://kensaur.us/mushi-mushi/docs/sdks/android)
-- [@mushi-mushi/angular](https://kensaur.us/mushi-mushi/docs/sdks/angular)
-- [In-SDK Ask assistant](https://kensaur.us/mushi-mushi/docs/sdks/assistant)
-- [@mushi-mushi/capacitor](https://kensaur.us/mushi-mushi/docs/sdks/capacitor)
-- [Capacitor bottom dock](https://kensaur.us/mushi-mushi/docs/sdks/capacitor-bottom-dock)
-- [@mushi-mushi/cli](https://kensaur.us/mushi-mushi/docs/sdks/cli)
-- [@mushi-mushi/core](https://kensaur.us/mushi-mushi/docs/sdks/core)
-- [eslint-plugin-mushi-mushi](https://kensaur.us/mushi-mushi/docs/sdks/eslint-plugin)
-- [mushi_mushi (Flutter)](https://kensaur.us/mushi-mushi/docs/sdks/flutter)
-- [Framework wrappers (Vue / Svelte / Angular)](https://kensaur.us/mushi-mushi/docs/sdks/framework-wrappers)
-- [@mushi-mushi/inventory-auth-runner](https://kensaur.us/mushi-mushi/docs/sdks/inventory-auth-runner)
-- [@mushi-mushi/inventory-schema](https://kensaur.us/mushi-mushi/docs/sdks/inventory-schema)
-- [MushiMushi (iOS)](https://kensaur.us/mushi-mushi/docs/sdks/ios)
-- [mushi-mushi (launcher)](https://kensaur.us/mushi-mushi/docs/sdks/launcher)
-- [@mushi-mushi/mcp](https://kensaur.us/mushi-mushi/docs/sdks/mcp)
-- [@mushi-mushi/mcp-ci](https://kensaur.us/mushi-mushi/docs/sdks/mcp-ci)
-- [MCP tools (generated)](https://kensaur.us/mushi-mushi/docs/sdks/mcp-tools.generated)
-- [Next.js App Router + CSP](https://kensaur.us/mushi-mushi/docs/sdks/nextjs-app-router-csp)
-- [Next.js static export](https://kensaur.us/mushi-mushi/docs/sdks/nextjs-static-export)
-- [@mushi-mushi/node](https://kensaur.us/mushi-mushi/docs/sdks/node)
-- [@mushi-mushi/plugin-sdk](https://kensaur.us/mushi-mushi/docs/sdks/plugin-sdk)
-- [SDK presets](https://kensaur.us/mushi-mushi/docs/sdks/presets)
-- [@mushi-mushi/react](https://kensaur.us/mushi-mushi/docs/sdks/react)
-- [@mushi-mushi/react-native](https://kensaur.us/mushi-mushi/docs/sdks/react-native)
-- [Sentry Replay coexistence](https://kensaur.us/mushi-mushi/docs/sdks/sentry-replay-coexistence)
-- [Agent skills](https://kensaur.us/mushi-mushi/docs/sdks/skills)
-- [@mushi-mushi/svelte](https://kensaur.us/mushi-mushi/docs/sdks/svelte)
-- [@mushi-mushi/vue](https://kensaur.us/mushi-mushi/docs/sdks/vue)
-- [@mushi-mushi/wasm-classifier](https://kensaur.us/mushi-mushi/docs/sdks/wasm-classifier)
-- [@mushi-mushi/web](https://kensaur.us/mushi-mushi/docs/sdks/web)
-- [Security overview](https://kensaur.us/mushi-mushi/docs/security)
-- [BYO storage](https://kensaur.us/mushi-mushi/docs/security/byo-storage)
-- [Bring-your-own-key](https://kensaur.us/mushi-mushi/docs/security/byok)
-- [Data residency](https://kensaur.us/mushi-mushi/docs/security/data-residency)
-- [No client data leakage — what we promise and how we enforce it](https://kensaur.us/mushi-mushi/docs/security/no-leakage-claim)
-- [Prompt-injection defence](https://kensaur.us/mushi-mushi/docs/security/prompt-injection)
-- [SOC 2 readiness](https://kensaur.us/mushi-mushi/docs/security/soc2)
-- [Self-hosting](https://kensaur.us/mushi-mushi/docs/self-hosting)
-- [Admin SPA deploy](https://kensaur.us/mushi-mushi/docs/self-hosting/admin-spa)
-- [Self-host in minutes (Docker Compose)](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose)
-- [Edge Functions deploy](https://kensaur.us/mushi-mushi/docs/self-hosting/edge-functions)
-- [Langfuse + Sentry](https://kensaur.us/mushi-mushi/docs/self-hosting/observability)
-- [Supabase setup](https://kensaur.us/mushi-mushi/docs/self-hosting/supabase)
-- [Use cases & comparisons](https://kensaur.us/mushi-mushi/docs/use-cases)
-- [AI code bug fixing — report to merged fix](https://kensaur.us/mushi-mushi/docs/use-cases/ai-code-bug-fixing)
-- [Debug apps built with Claude Code](https://kensaur.us/mushi-mushi/docs/use-cases/debug-claude-code-apps)
-- [Debug apps built with Cursor](https://kensaur.us/mushi-mushi/docs/use-cases/debug-cursor-apps)
-- [MCP server for bug fixing](https://kensaur.us/mushi-mushi/docs/use-cases/mcp-bug-fixing-server)
-- [Sentry alternative for AI-built apps](https://kensaur.us/mushi-mushi/docs/use-cases/sentry-alternative)
+- [Mushi Mushi — know why your AI-built app broke, with the fix ready](https://kensaur.us/mushi-mushi/docs): Your AI shipped it. Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.
+- [Admin console](https://kensaur.us/mushi-mushi/docs/admin): Guide to the Mushi admin console — the reports inbox, fix drafts and PRs, plain-English queries, and a link to every deeper page of the console.
+- [Activity](https://kensaur.us/mushi-mushi/docs/admin/activity): The Activity page in the Mushi console shows end-user sessions, top routes, and identified versus anonymous users for a project over the last 30 days.
+- [Anomaly detection](https://kensaur.us/mushi-mushi/docs/admin/anomalies): The Anomaly detection page runs statistical detectors over the metrics you send and can file a report in your queue when one behaves unexpectedly.
+- [Anti-gaming](https://kensaur.us/mushi-mushi/docs/admin/anti-gaming): The Anti-gaming page flags reporters whose patterns look abusive — near-duplicate spam, reward farming or synthetic sessions — for you to review.
+- [Audit log](https://kensaur.us/mushi-mushi/docs/admin/audit): The Audit log records every admin action and agent run in Mushi — who minted API keys, who dispatched a fix, and what triggered a pull request.
+- [Billing](https://kensaur.us/mushi-mushi/docs/admin/billing): The Billing page shows your diagnosis quota, usage alerts at 50% and 80%, your projected bill, and spend caps for your Mushi plan.
+- [CLI device auth](https://kensaur.us/mushi-mushi/docs/admin/cli-auth): The page that mushi login opens so you can approve a CLI device code while signed in to the console, and how the device authorization flow works.
+- [Code health](https://kensaur.us/mushi-mushi/docs/admin/code-health): The Code health page charts bundle size and oversized files from your CI over time, so you notice an app getting heavier before your users do.
+- [Compliance](https://kensaur.us/mushi-mushi/docs/admin/compliance): The Compliance page shows SOC 2 control status, retention policies and DSAR requests, and exports an evidence PDF for procurement reviews.
+- [Connect & Update](https://kensaur.us/mushi-mushi/docs/admin/connect): Connect & Update wires GitHub, the SDK, MCP, the CLI and your editor to a Mushi project, and shows when your installed SDK is out of date.
+- [Content quality](https://kensaur.us/mushi-mushi/docs/admin/content): The Content quality page queues AI-generated copy, release notes and knowledge snippets that scored poorly or were flagged, so you can fix them.
+- [Cost & usage](https://kensaur.us/mushi-mushi/docs/admin/cost): The Cost page shows LLM token use and estimated spend per model and pipeline for a Mushi project, so you can see what each diagnosis costs.
+- [Dashboard](https://kensaur.us/mushi-mushi/docs/admin/dashboard): The Mushi dashboard answers whether anything broke since your last release — new reports, overnight fix runs and pipeline health on one screen.
+- [Docs bridge](https://kensaur.us/mushi-mushi/docs/admin/docs-bridge): The docs bridge is the console's silent sign-in relay that lets the Mushi docs site fill live snippets with your project details when you are signed in.
+- [Drift scanner](https://kensaur.us/mushi-mushi/docs/admin/drift): The Drift scanner compares your live routes and components against the last snapshot to find the pages that a refactor silently broke.
+- [Experiments](https://kensaur.us/mushi-mushi/docs/admin/experiments): The Experiments page defines and runs A/B tests in Mushi and analyses them with CUPED variance reduction and sequential testing.
+- [Codebase Atlas](https://kensaur.us/mushi-mushi/docs/admin/explore): Visual, searchable map of every indexed source file — explore architectural layers, import dependencies, and find code by meaning.
+- [Feature board](https://kensaur.us/mushi-mushi/docs/admin/feature-board): The Feature board collects feature requests from support tickets so members can upvote them and you can mark them as shipped.
+- [Feedback hub](https://kensaur.us/mushi-mushi/docs/admin/feedback): The Feedback hub lists the support tickets filed from the console — active, shipped and all — with unread replies in one place.
+- [Fine-tuning](https://kensaur.us/mushi-mushi/docs/admin/fine-tuning): The Fine-tuning page exports your best-scored classifications, trains a fine-tuned model, benchmarks it offline and promotes it to production.
+- [Fix drafts & PRs](https://kensaur.us/mushi-mushi/docs/admin/fixes): The Fixes page tracks every draft pull request Mushi opened from a bug report, from the moment a fix run starts until the PR is ready or the run fails.
+- [Full-stack audit](https://kensaur.us/mushi-mushi/docs/admin/fullstack-audit): The Full-stack audit runs one health check across RLS gaps, recent backend errors and API contract drift, and returns a readable scorecard.
+- [Knowledge graph](https://kensaur.us/mushi-mushi/docs/admin/graph): The Knowledge graph page draws your project's bugs, components and fixes as an interactive graph, so you can see which areas cluster problems.
+- [Integration health](https://kensaur.us/mushi-mushi/docs/admin/health): The Integration health page monitors Mushi's LLM pipelines, cron jobs and provider connections so you catch a degraded integration early.
+- [Action inbox](https://kensaur.us/mushi-mushi/docs/admin/inbox): The Action inbox gathers everything in Mushi that needs a human decision — reports, queue failures, health and drift alerts — in one list.
+- [Integrations](https://kensaur.us/mushi-mushi/docs/admin/integrations): Set up Mushi integrations from one page — send new bugs to Linear, bring in Sentry feedback, and open fix pull requests on your GitHub repo.
+- [Intelligence reports](https://kensaur.us/mushi-mushi/docs/admin/intelligence): Intelligence reports are Mushi's weekly plain-English bug digest for each project — what broke, what got fixed and what to watch, sent to your inbox.
+- [User stories · Inventory](https://kensaur.us/mushi-mushi/docs/admin/inventory): The User stories page manages your inventory.yaml — every page, action and story your app should have — and shows which of them the gates cover.
+- [Iterate](https://kensaur.us/mushi-mushi/docs/admin/iterate): The Iterate page queues improvement runs on a user flow — an agent tests the screens, finds friction and proposes changes for you to review.
+- [Judge dashboard](https://kensaur.us/mushi-mushi/docs/admin/judge): The Judge page scores how well Mushi's plain-English reads match reality over time, so you see quality slipping or a better prompt ready to promote.
+- [Lessons](https://kensaur.us/mushi-mushi/docs/admin/lessons): The Lessons page turns repeat fixes into rules — when the same root cause keeps returning, Mushi records it so your editor sees it on the next PR.
+- [Plugin marketplace](https://kensaur.us/mushi-mushi/docs/admin/marketplace): The Plugin marketplace installs outbound plugins such as PagerDuty, Linear and Zapier that receive Mushi webhook events for your project.
+- [MCP](https://kensaur.us/mushi-mushi/docs/admin/mcp): The MCP page connects Cursor, Claude Code, Windsurf and other MCP clients to Mushi and lists the tools your agent can call from the editor.
+- [MCP OAuth consent](https://kensaur.us/mushi-mushi/docs/admin/mcp-auth): The consent page the hosted Mushi MCP server opens when your editor signs in over OAuth — what you approve and how the authorization flow works.
+- [Notifications](https://kensaur.us/mushi-mushi/docs/admin/notifications): The Notifications page lists every alert Mushi sent to reporters and team members for a project, so you can debug delivery or audit messages.
+- [Onboarding](https://kensaur.us/mushi-mushi/docs/admin/onboarding): Get your first real bug report into Mushi in about 10 minutes with the console onboarding checklist, from new project to classified report.
+- [Overview (portfolio)](https://kensaur.us/mushi-mushi/docs/admin/overview): The Overview page is the organization-wide portfolio view — seven-day activity and open tickets for every connected project at a glance.
+- [Projects](https://kensaur.us/mushi-mushi/docs/admin/projects): Create a Mushi project, mint an API key, copy the install snippet for your framework and send a test report, all from the Projects page.
+- [Prompt lab](https://kensaur.us/mushi-mushi/docs/admin/prompt-lab): The Prompt lab lets you edit, test and A/B compare the classification prompts behind Mushi's diagnoses before you promote a new version.
+- [QA Coverage](https://kensaur.us/mushi-mushi/docs/admin/qa-coverage): QA Coverage turns user flows written in plain English into scheduled browser tests, so you find out when login or checkout breaks.
+- [Natural-language query](https://kensaur.us/mushi-mushi/docs/admin/query): Ask questions about your Mushi project's bug data in plain English — the Query page writes the SQL and draws the chart for you.
+- [Processing queue](https://kensaur.us/mushi-mushi/docs/admin/queue): The Processing queue shows reports waiting for classification, retries and dead-letter items, and lets you requeue the ones that failed.
+- [Real-time collaboration](https://kensaur.us/mushi-mushi/docs/admin/realtime): How Mushi report pages support real-time collaboration — see who else is viewing a report and watch new comments arrive without a refresh.
+- [Releases](https://kensaur.us/mushi-mushi/docs/admin/releases): The Releases page drafts a changelog for each version from the fixes that shipped, crediting the users whose reports led to each fix.
+- [Repo graph](https://kensaur.us/mushi-mushi/docs/admin/repo): The Repo page shows every fix branch in your connected GitHub repository — open PRs, CI status, and what the fix worker did on each branch.
+- [Reports & triage](https://kensaur.us/mushi-mushi/docs/admin/reports): The Reports list is Mushi's bug inbox — filter by status, severity, category and component, and start with the recommended action at the top.
+- [Research](https://kensaur.us/mushi-mushi/docs/admin/research): The Research page runs a Firecrawl web search scoped to your tech stack and returns summarised answers with links to their sources.
+- [Rewards program](https://kensaur.us/mushi-mushi/docs/admin/rewards): Set up the Mushi rewards program from the console — points for reporter activity, the tier ladder, and the perks your app grants at each tier.
+- [SDK health](https://kensaur.us/mushi-mushi/docs/admin/sdk-health): The SDK health card shows the live heartbeat of every Mushi SDK that reported in the last 24 hours, so an SDK that never shipped is obvious.
+- [Settings](https://kensaur.us/mushi-mushi/docs/admin/settings): The Settings page holds every project option — notifications, your own LLM keys, widget copy, Slack alerts and developer settings.
+- [Setup Copilot](https://kensaur.us/mushi-mushi/docs/admin/setup-copilot): Setup Copilot is a guided checklist that verifies SDK ingest and fix dispatch for a project, with copy-paste CLI commands for each step.
+- [Skill Pipelines](https://kensaur.us/mushi-mushi/docs/admin/skill-pipelines): Skill Pipelines recommend agent skills from the cursor-kenji and skills.sh ecosystem for each classified bug and run them during review in Mushi.
+- [SSO](https://kensaur.us/mushi-mushi/docs/admin/sso): Set up SAML 2.0 or OIDC single sign-on for your Mushi organization so teammates log in with your company's identity provider.
+- [Storage](https://kensaur.us/mushi-mushi/docs/admin/storage): The Storage page chooses where Mushi keeps report attachments and recordings — managed storage, or your own bucket for residency or cost.
+- [Teams and Members](https://kensaur.us/mushi-mushi/docs/admin/teams): How teams work in Mushi — organizations own projects, billing, invitations and the member roster, and project access comes from membership.
+- [Users](https://kensaur.us/mushi-mushi/docs/admin/users): The Users page is an operator-only directory of every Mushi account with plan, MRR and churn; other visitors see a not-found page instead.
+- [Voice intake](https://kensaur.us/mushi-mushi/docs/admin/voice): Report a bug by voice from the Mushi console — say what is wrong, confirm the transcript, and a draft pull request is started for you.
+- [Blog](https://kensaur.us/mushi-mushi/docs/blog): Notes from building Mushi Mushi — the real numbers behind the funnel, open-source licensing, launches, and how AI-built apps get debugged in practice.
+- [Mushi goes AGPLv3 — the honest open source story](https://kensaur.us/mushi-mushi/docs/blog/agplv3-relicense): Why Mushi Mushi relicensed its server to AGPLv3 while keeping every SDK MIT — the open-core reasoning, what changes for self-hosters, and what stays free.
+- [60 seconds from "this is broken" to a draft PR — building Mushi Mushi](https://kensaur.us/mushi-mushi/docs/blog/auto-fix-loop): How Mushi Mushi turns a one-sentence user complaint into a classified, deduped, AI-judged draft PR, and why the human stays in the loop the whole way.
+- [Launch Week 1 — five features, five days](https://kensaur.us/mushi-mushi/docs/blog/launch-week-1): Everything Mushi Mushi shipped in Launch Week 1 — one feature a day, from bug-report capture to editor-ready fixes, with demos and setup commands.
+- [I shipped a bug tool for 5 months and got 9 signups. Here's what the data said.](https://kensaur.us/mushi-mushi/docs/blog/nine-signups-what-the-data-said): Five months after launch, Mushi Mushi had 30 npm packages, an MCP server in every registry and nine signups. What the data said, and what changed.
+- [Changelog](https://kensaur.us/mushi-mushi/docs/changelog): What shipped in Mushi Mushi — new SDK releases, console features, MCP tools, and fixes, in plain English with dates.
+- [Mushi Cloud](https://kensaur.us/mushi-mushi/docs/cloud): Hosted Mushi Mushi — bug reports, plain-English diagnoses, and fix dispatch without running servers. Free tier includes 50 diagnoses a month.
+- [Compare](https://kensaur.us/mushi-mushi/docs/compare): Honest, dated comparisons of Mushi Mushi with Sentry, Jam and PostHog, plus Sentry alternatives for solo founders. Every number links to its source.
+- [Jam vs Mushi Mushi](https://kensaur.us/mushi-mushi/docs/compare/jam-vs-mushi): Jam.dev vs Mushi Mushi in 2026 — a teammate recording a bug in the Jam extension versus a user reporting from your app, MCP handoff and free tiers.
+- [PostHog session replay vs Mushi Mushi](https://kensaur.us/mushi-mushi/docs/compare/posthog-session-replay-vs-mushi): PostHog session replay vs Mushi Mushi in 2026 — every session recorded versus the one a user flagged as broken, free tiers, and why teams run both.
+- [Sentry alternatives for solo founders](https://kensaur.us/mushi-mushi/docs/compare/sentry-alternatives-for-solo-founders): Sentry alternatives for solo founders in 2026 — Bugsnag, Rollbar, highlight.io, PostHog and Mushi compared on free tiers, self-hosting and AI fixes.
+- [Sentry vs Mushi Mushi](https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi): Sentry vs Mushi Mushi in 2026 — what each captures, Sentry's free tier and Seer pricing next to Mushi's 50 free diagnoses a month, and running both.
+- [Concepts](https://kensaur.us/mushi-mushi/docs/concepts): Mushi's core ideas in one place — capture, plain-English diagnosis, dedupe into one row, optional agent fixes, verification, and lessons it remembers.
+- [Agent contract](https://kensaur.us/mushi-mushi/docs/concepts/agent-contract): What Mushi expects an agent to read before opening a PR, and what it promises in return.
+- [Anti-gaming & reputation](https://kensaur.us/mushi-mushi/docs/concepts/anti-gaming): How Mushi keeps bug reports honest — reporter reputation against spam and point farming, and prompt-fatigue limits so real users are not nagged.
+- [Architecture](https://kensaur.us/mushi-mushi/docs/concepts/architecture): How Mushi is built — a Hono gateway in front of Supabase, the edge functions behind it, and the relational, vector and graph stores that hold each report.
+- [Mushi Bounties — crowd-testing marketplace](https://kensaur.us/mushi-mushi/docs/concepts/bounty-marketplace): Mushi Bounties is a crowd-testing marketplace — publish your app, and real testers file bug reports and earn points they can redeem for rewards.
+- [How Mushi reads a bug report](https://kensaur.us/mushi-mushi/docs/concepts/classification): How Mushi turns a raw bug report and screenshot into a plain-English diagnosis — the fast filter, the text and vision stages, and what gets stored.
+- [Closed-loop evolution — the thesis](https://kensaur.us/mushi-mushi/docs/concepts/closed-loop): The thesis behind Mushi — why AI-built apps need a closed loop from what users feel to a verified fix, and how capture, diagnosis and fixes connect.
+- [Project ID & API keys](https://kensaur.us/mushi-mushi/docs/concepts/credentials): Where to find your Mushi project ID and API key, what the report:write and mcp scopes allow, the one mushi_ key format, and env var names per framework.
+- [API error catalog](https://kensaur.us/mushi-mushi/docs/concepts/error-catalog): Stable error codes returned by the Mushi API envelope, how to read them in the console, and how they correlate with Sentry and Langfuse.
+- [The evolution loop — how Mushi closes the cycle](https://kensaur.us/mushi-mushi/docs/concepts/evolution-loop): The five stages that turn a user-felt bug into a merged fix and a lesson rule — the loop that improves your app without Jira, QA teams or PM bottlenecks.
+- [Fix drafts & PRs](https://kensaur.us/mushi-mushi/docs/concepts/fix-orchestrator): What happens when you dispatch a fix — Mushi runs a coding agent in a sandbox and opens a draft pull request with a rationale and CI status to review.
+- [Inventory and gates (v2)](https://kensaur.us/mushi-mushi/docs/concepts/inventory-and-gates): Mushi v2's inventory.yaml lists every page, story and action in your app, and five composite gates fail the build when a change breaks that contract.
+- [Judge & self-improvement](https://kensaur.us/mushi-mushi/docs/concepts/judge-loop): How Mushi's classifier improves itself — a nightly judge scores yesterday's reads, prompts are A/B tested, and drift is caught before it reaches you.
+- [Knowledge graph](https://kensaur.us/mushi-mushi/docs/concepts/knowledge-graph): How Mushi links reports, components, fixes and developers in a per-project knowledge graph, with pgvector for similarity and Apache AGE for traversal.
+- [Multi-repo coordinated fixes](https://kensaur.us/mushi-mushi/docs/concepts/multi-repo-fixes): When one bug spans a frontend and a backend repo, Mushi plans the fix across both and opens one cross-linked pull request per repository.
+- [Open source & licensing](https://kensaur.us/mushi-mushi/docs/concepts/open-source): What is open source in Mushi — MIT SDKs you can embed anywhere, an AGPLv3 server you can self-host, and the small commercial enterprise edition.
+- [Connecting your orchestrator (MCP / A2A / REST / AG-UI)](https://kensaur.us/mushi-mushi/docs/concepts/orchestrator-interop): Connect any agent orchestrator to Mushi — MCP, A2A, REST and AG-UI surfaces for Cursor, Claude, OpenAI Agents, LangGraph, CrewAI and your own agents.
+- [Rewards & contributor identity](https://kensaur.us/mushi-mushi/docs/concepts/rewards): How Mushi's rewards program works — reporters earn points for reports and triage, climb project-defined tiers, and get perks from your app via webhooks.
+- [Runtime config](https://kensaur.us/mushi-mushi/docs/concepts/runtime-config): How the Mushi SDK fetches widget and capture settings from the console at startup, how they merge with your init options, and when to turn it off.
+- [Where the report button lives](https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes): Choose where Mushi's bug-report button lives — corner stamp, edge tab, banner, your own button via attach, or fully manual — on web and mobile.
+- [Cursor integration](https://kensaur.us/mushi-mushi/docs/integrations/cursor): Wire Mushi's evolution loop into Cursor with one command — get fix context, lessons, and dispatch right from the editor.
+- [Voice intake](https://kensaur.us/mushi-mushi/docs/integrations/voice-intake): Say the bug on your phone, get a draft PR back. iOS Shortcut, Telegram, Slack, or the installed console — one pipeline, one confirmation gate, no audio kept.
+- [Launch Week](https://kensaur.us/mushi-mushi/docs/launch-week): How Mushi Mushi launches now — one public post per release (Show HN, then Product Hunt), the gate each release must pass, and what we publish after.
+- [Legal](https://kensaur.us/mushi-mushi/docs/legal): Privacy policy and terms of service for Mushi Mushi Cloud, the SDKs, and the tester program.
+- [Privacy Policy](https://kensaur.us/mushi-mushi/docs/legal/privacy): What Mushi Mushi collects, why, who processes it, how long it is kept, and how to exercise your rights under GDPR and Japan's APPI.
+- [Terms of Service](https://kensaur.us/mushi-mushi/docs/legal/terms): The terms for Mushi Cloud, the admin console, the SDKs and the Bounties tester marketplace — plans, limits, AI-output disclaimer, licenses and liability.
+- [Migration guides](https://kensaur.us/mushi-mushi/docs/migrations): Step-by-step guides for moving an app onto Mushi from Sentry, Instabug, Shake, LogRocket, BugHerd or Pendo, or between React, Vue and mobile runtimes.
+- [BugHerd → Mushi](https://kensaur.us/mushi-mushi/docs/migrations/bugherd-to-mushi): Move from BugHerd to Mushi — map pin-to-element feedback onto Mushi's element selector, screenshot and metadata capture, with an interactive checklist.
+- [Migration: Capacitor → React Native](https://kensaur.us/mushi-mushi/docs/migrations/capacitor-to-react-native): Port an Ionic or Capacitor app to React Native — a full plan with a Mushi API map and CI/CD recipes for Expo EAS or React Native CLI with Fastlane.
+- [Cordova → Capacitor](https://kensaur.us/mushi-mushi/docs/migrations/cordova-to-capacitor): Migrate a Cordova app to Capacitor in place — same web code, a new native shell — and re-mount Mushi bug reporting with @mushi-mushi/capacitor.
+- [Cordova → React Native](https://kensaur.us/mushi-mushi/docs/migrations/cordova-to-react-native): Move a Cordova app to React Native in two hops — stabilise on Capacitor first, then port screen by screen — without losing Mushi bug reporting.
+- [Create React App → Vite](https://kensaur.us/mushi-mushi/docs/migrations/cra-to-vite): Migrate a Create React App project to Vite — run the codemod, rename REACT_APP_ env vars to VITE_, and keep your Mushi React setup working.
+- [Instabug (Luciq) → Mushi](https://kensaur.us/mushi-mushi/docs/migrations/instabug-to-mushi): Replace Instabug (Luciq) with Mushi for in-app bug reporting — config mapping, shake-to-report parity, a beta validation pass, and a checklist.
+- [LogRocket Feedback → Mushi](https://kensaur.us/mushi-mushi/docs/migrations/logrocket-feedback-to-mushi): Move LogRocket's feedback widget to Mushi while keeping LogRocket for session replay — both SDKs run side by side, with a step-by-step checklist.
+- [@mushi-mushi/* upgrades](https://kensaur.us/mushi-mushi/docs/migrations/mushi-sdk-upgrade): Upgrade @mushi-mushi packages to the current 1.x releases — breaking changes by package, the codemod, and how to check which versions you run.
+- [Native iOS / Android → Hybrid](https://kensaur.us/mushi-mushi/docs/migrations/native-to-hybrid): Should you wrap a native iOS or Android app in Capacitor or React Native? When it pays off, how to do it, and where Mushi's SDKs fit either way.
+- [Next.js Pages → App Router](https://kensaur.us/mushi-mushi/docs/migrations/nextjs-pages-to-app-router): Move a Next.js app from the Pages Router to the App Router step by step — where to mount Mushi, CSP for static export, and client component boundaries.
+- [Pendo Feedback → Mushi](https://kensaur.us/mushi-mushi/docs/migrations/pendo-feedback-to-mushi): Swap Pendo's feedback module for Mushi while keeping Pendo for analytics, guides and NPS — both share user identity through one identify call.
+- [React Native CLI ↔ Expo](https://kensaur.us/mushi-mushi/docs/migrations/react-native-cli-to-expo): Move between React Native CLI and Expo in either direction — EAS Build and OTA updates, or expo prebuild for full native control — with Mushi intact.
+- [Sentry + Mushi (enrich or standalone)](https://kensaur.us/mushi-mushi/docs/migrations/sentry-to-mushi): Add Mushi alongside Sentry or run it on its own — three setups, the Sentry webhook for errors, and user bug reports with plain-English diagnoses.
+- [Shake → Mushi](https://kensaur.us/mushi-mushi/docs/migrations/shake-to-mushi): Replace the Shake bug-reporting SDK with Mushi and keep the same shake-to-report experience — config mapping, identity, and a cut-over checklist.
+- [SPA → SSR (Next.js / Nuxt / SvelteKit)](https://kensaur.us/mushi-mushi/docs/migrations/spa-to-ssr): Move a Vite SPA to Next.js, Nuxt or SvelteKit — env var prefix changes, where to mount Mushi so it survives navigation, and hydration gotchas.
+- [Vue 2 → Vue 3](https://kensaur.us/mushi-mushi/docs/migrations/vue-2-to-vue-3): Upgrade a Vue 2 app to Vue 3 and move from the vanilla Mushi web SDK to the @mushi-mushi/vue plugin, with an interactive migration checklist.
+- [Operating (maintainers)](https://kensaur.us/mushi-mushi/docs/operating): Runbooks for maintainers running Mushi Cloud or publishing the open-source packages — deployment, releases and status. Not needed to use the SDK.
+- [Deployment & releases](https://kensaur.us/mushi-mushi/docs/operating/deployment): How Mushi's maintainers ship the SDKs, edge functions and docs — a public summary of the release process. App developers never need to run any of it.
+- [Status & Uptime](https://kensaur.us/mushi-mushi/docs/operating/status): Mushi Cloud status and uptime — the live status page for the API, hosted MCP, console and docs, what is monitored, and the uptime commitment per plan.
+- [Plugin marketplace](https://kensaur.us/mushi-mushi/docs/plugins): Send Mushi events to the tools you already use through HMAC-signed Standard Webhooks — 12 first-party plugins and an SDK to build your own.
+- [Bugsnag](https://kensaur.us/mushi-mushi/docs/plugins/bugsnag): Mirror Mushi bug reports into Bugsnag and close the Bugsnag error when the fix PR merges — install from the marketplace and map release stages.
+- [Building a plugin](https://kensaur.us/mushi-mushi/docs/plugins/building): Build your own Mushi plugin — an HTTP endpoint that receives HMAC-signed webhook events, verified with @mushi-mushi/plugin-sdk in a few lines.
+- [Crashlytics](https://kensaur.us/mushi-mushi/docs/plugins/crashlytics): Push Mushi mobile bug reports into Firebase Crashlytics issues and close them when fixes merge — service account setup and app ID mapping.
+- [Cursor Cloud Agent](https://kensaur.us/mushi-mushi/docs/plugins/cursor-cloud): Dispatch a Cursor Cloud Agent automatically when a Mushi report qualifies — it investigates, drafts a fix and opens a PR that links back to Mushi.
+- [Discord](https://kensaur.us/mushi-mushi/docs/plugins/discord): Post Mushi report and fix events to a Discord channel through a webhook — create the webhook, install the plugin, and choose which events to send.
+- [Webhook events](https://kensaur.us/mushi-mushi/docs/plugins/events): Reference for every webhook event Mushi plugins receive — the shared envelope, each event's payload, and how to subscribe to only the events you need.
+- [GitHub Issues](https://kensaur.us/mushi-mushi/docs/plugins/github-issues): Open a labelled GitHub issue for every classified Mushi report, with a link back to the report — target repo, default labels and assignee settings.
+- [Jira Cloud](https://kensaur.us/mushi-mushi/docs/plugins/jira): Two-way sync between Mushi reports and Jira Cloud issues — create issues on classification, sync status, and comment fix summaries when fixes land.
+- [Linear](https://kensaur.us/mushi-mushi/docs/plugins/linear): File a Linear issue automatically when Mushi classifies a bug report — create a Linear API key, install the plugin, and choose the team and filters.
+- [Microsoft Teams](https://kensaur.us/mushi-mushi/docs/plugins/msteams): Send Adaptive Cards to a Microsoft Teams channel when Mushi classifies a report or a fix lands — incoming webhook setup and severity filters.
+- [PagerDuty](https://kensaur.us/mushi-mushi/docs/plugins/pagerduty): Page your on-call rotation through PagerDuty when a P0 or P1 bug report lands in Mushi — Events API v2 integration key setup and filters.
+- [Rollbar](https://kensaur.us/mushi-mushi/docs/plugins/rollbar): Mirror Mushi bug reports into Rollbar items and resolve them when fixes ship — access token, environment name, and dedup key mapping.
+- [Sentry](https://kensaur.us/mushi-mushi/docs/plugins/sentry): Two-way Sentry integration — Sentry errors flow into Mushi's queue, merging a Mushi fix resolves the Sentry issue, and critical reports mirror back.
+- [Slack app](https://kensaur.us/mushi-mushi/docs/plugins/slack): Triage Mushi bug reports from Slack — each classified report posts as a card with its root cause and buttons to dispatch a fix, resolve or dismiss.
+- [Zapier](https://kensaur.us/mushi-mushi/docs/plugins/zapier): Send every Mushi event to Zapier and on to thousands of apps such as Notion, Google Sheets and HubSpot — Catch Hook setup and event filters.
+- [Pricing — free tier, Pro, and self-host](https://kensaur.us/mushi-mushi/docs/pricing): Mushi Mushi pricing — 50 AI bug diagnoses a month free, no card. Open-source Sentry alternative you can self-host for free, or upgrade for teams.
+- [Quickstart — fix your first bug in 60 seconds](https://kensaur.us/mushi-mushi/docs/quickstart): Install Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.
+- [Android (Kotlin) quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/android): Try Mushi's native Kotlin SDK on Android — shake-to-report, a bottom-sheet widget and an offline queue. A preview built from source, not on Maven Central yet.
+- [Angular quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/angular): Add Mushi to an Angular 17+ app — register the Mushi service and error handler as factory providers so uncaught errors and user bug reports reach your queue.
+- [Capacitor quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/capacitor): Add Mushi to an Ionic or Capacitor app — install @mushi-mushi/capacitor, configure shake-to-report and screenshots, and file your first bug report.
+- [CLI ↔ console setup loop](https://kensaur.us/mushi-mushi/docs/quickstart/cli-console-loop): How npx mushi-mushi creates a project, mints an SDK key and installs the SDK through browser sign-in, and how to recover when the setup loop fails.
+- [Flutter quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/flutter): Add Mushi's Flutter SDK as a git dependency — shake-to-report, a Material bottom sheet and an offline queue for iOS and Android. Preview, not on pub.dev yet.
+- [Incident loop — bug to fix prompt](https://kensaur.us/mushi-mushi/docs/quickstart/incident-loop): Run npx mushi-mushi, ship, and turn your first user-reported bug into a plain-English diagnosis and a paste-ready fix for Cursor or Claude Code.
+- [iOS (Swift) quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/ios): Add Mushi's native Swift SDK to an iOS app with Swift Package Manager — shake-to-report, offline queue and device context. Preview build, not on CocoaPods yet.
+- [MCP server for bug fixing in Cursor & Claude Code](https://kensaur.us/mushi-mushi/docs/quickstart/mcp): Set up the Mushi MCP server with npx mushi-mushi setup — read bug reports, get fix context, and dispatch fixes from Cursor, Claude Code, or Codex.
+- [Mobile (overview)](https://kensaur.us/mushi-mushi/docs/quickstart/mobile): Shake-to-report bug capture for mobile apps — React Native and Capacitor from npm with npx mushi-mushi, plus preview native SDKs for iOS, Android and Flutter.
+- [React quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/react): Add the Mushi React SDK in one command — npx mushi-mushi installs the bug-reporting widget, writes env vars, and files your first test report.
+- [React Native quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/react-native): Add shake-to-report bug capture to a React Native or Expo app with @mushi-mushi/react-native — install, mount the provider, and verify the first report.
+- [Svelte quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/svelte): Add Mushi bug reporting to a Svelte or SvelteKit app — install @mushi-mushi/svelte and call initMushi from hooks.client.ts or a root layout's onMount.
+- [Vue 3 quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/vue): Add Mushi bug reporting to a Vue 3 app — install @mushi-mushi/vue and register MushiPlugin with your project ID and public API key in main.ts.
+- [Vanilla JS quickstart](https://kensaur.us/mushi-mushi/docs/quickstart/web): Add Mushi's browser SDK to any site without a framework — install @mushi-mushi/web, call Mushi.init, and file bug reports from your buttons or the widget.
+- [Roadmap](https://kensaur.us/mushi-mushi/docs/roadmap): Where Mushi Mushi is headed — upcoming SDK platforms, diagnosis speed targets, and console features, updated as work lands.
+- [SDK reference](https://kensaur.us/mushi-mushi/docs/sdks): Bug-reporting SDKs for React, Vue, Svelte, Angular, React Native, Capacitor and Node, installed by npx mushi-mushi, plus preview iOS, Android and Flutter SDKs.
+- [@mushi-mushi/adapters](https://kensaur.us/mushi-mushi/docs/sdks/adapters): Turn Sentry, Datadog, Bugsnag and other monitoring webhooks into Mushi reports with @mushi-mushi/adapters, deduped against the same queue as user reports.
+- [Product analytics (track)](https://kensaur.us/mushi-mushi/docs/sdks/analytics): Mushi.track() reference — named events, consent, sampling and batching, useMushiTrack() for React, Users & Funnels, and the /v1/sdk/events wire format.
+- [dev.mushimushi:mushi-android (Android)](https://kensaur.us/mushi-mushi/docs/sdks/android): API reference for Mushi's native Kotlin SDK — init, report, captureError, showWidget, breadcrumbs and the Sentry bridge. A preview built from source.
+- [@mushi-mushi/angular](https://kensaur.us/mushi-mushi/docs/sdks/angular): API reference for @mushi-mushi/angular — MushiService, MushiErrorHandler and the MUSHI_CONFIG token, wired with factory providers in an Angular 17+ app.
+- [In-SDK Ask assistant](https://kensaur.us/mushi-mushi/docs/sdks/assistant): The Mushi widget's Ask tab answers end users' questions from the current page and your knowledge corpus, using your own LLM key, with every turn logged.
+- [@mushi-mushi/capacitor](https://kensaur.us/mushi-mushi/docs/sdks/capacitor): API reference for @mushi-mushi/capacitor — configure, report, listeners, setUser and widget options for Ionic and Capacitor apps on iOS, Android and web.
+- [Capacitor bottom dock](https://kensaur.us/mushi-mushi/docs/sdks/capacitor-bottom-dock): Keep the Mushi bug-report button clear of tab bars and bottom docks in Capacitor apps with triggerInsetPreset, explicit insets, or widget.anchor.
+- [@mushi-mushi/cli](https://kensaur.us/mushi-mushi/docs/sdks/cli): Reference for @mushi-mushi/cli — log in, connect a project, run doctor, list reports, dispatch agent fixes and merge their pull requests from the terminal.
+- [@mushi-mushi/core](https://kensaur.us/mushi-mushi/docs/sdks/core): Reference for @mushi-mushi/core — the MushiConfig shape, widget options, PII scrubbing helpers and region resolution shared by every Mushi JavaScript SDK.
+- [eslint-plugin-mushi-mushi](https://kensaur.us/mushi-mushi/docs/sdks/eslint-plugin): eslint-plugin-mushi-mushi flags empty event handlers and leftover mock data in production code — the no-dead-handler and no-mock-leak rules and preset.
+- [mushi_mushi (Flutter)](https://kensaur.us/mushi-mushi/docs/sdks/flutter): API reference for mushi_mushi, Mushi's Flutter SDK — configure, report, captureError, showWidget, screenshots and the offline queue. Preview, not on pub.dev.
+- [Framework wrappers (Vue / Svelte / Angular)](https://kensaur.us/mushi-mushi/docs/sdks/framework-wrappers): How the Vue, Svelte and Angular Mushi packages wrap @mushi-mushi/web — how each one boots the SDK once, and where to find capture and widget options.
+- [@mushi-mushi/inventory-auth-runner](https://kensaur.us/mushi-mushi/docs/sdks/inventory-auth-runner): @mushi-mushi/inventory-auth-runner logs in with Playwright from your inventory.yaml auth script so Mushi's crawler can reach pages behind a login.
+- [@mushi-mushi/inventory-schema](https://kensaur.us/mushi-mushi/docs/sdks/inventory-schema): The Zod schema, JSON Schema and TypeScript types for inventory.yaml — the contract that Mushi's gates, crawler, ESLint plugin and CLI all read.
+- [MushiMushi (iOS)](https://kensaur.us/mushi-mushi/docs/sdks/ios): API reference for MushiMushi, Mushi's native Swift SDK — configure, report, captureError, breadcrumbs and PII scrubbing. Preview, via SwiftPM from master.
+- [mushi-mushi (launcher)](https://kensaur.us/mushi-mushi/docs/sdks/launcher): npx mushi-mushi detects your framework, installs the matching @mushi-mushi SDK, writes your project ID and API key to .env.local, and prints the snippet.
+- [Bug report MCP server for Cursor & Claude Code](https://kensaur.us/mushi-mushi/docs/sdks/mcp): Reference for @mushi-mushi/mcp, the Mushi MCP server for Cursor, Claude Code, VS Code and Windsurf — stdio and hosted HTTP transports, scopes and setup.
+- [@mushi-mushi/mcp-ci](https://kensaur.us/mushi-mushi/docs/sdks/mcp-ci): @mushi-mushi/mcp-ci is Mushi's GitHub Action — run the five-gate composite check on pull requests, draft inventory entries, and bootstrap crawler auth.
+- [MCP tools reference](https://kensaur.us/mushi-mushi/docs/sdks/mcp-tools): Every tool, resource and prompt the Mushi MCP server exposes to Cursor, Claude Code and other editors, with its read or write scope, from the catalog.
+- [Next.js App Router + CSP](https://kensaur.us/mushi-mushi/docs/sdks/nextjs-app-router-csp): Mount Mushi in a Next.js App Router client component and allow its endpoints in your Content-Security-Policy, with a copy-paste CSP allowlist.
+- [Next.js static export](https://kensaur.us/mushi-mushi/docs/sdks/nextjs-static-export): Use Mushi in a Next.js static export — keep the public env vars in NEXT_PUBLIC_* or set runtimeConfig to false, and initialise on the client only.
+- [Node.js server error reporting SDK](https://kensaur.us/mushi-mushi/docs/sdks/node): Report server errors from Node with @mushi-mushi/node — Express, Fastify and Hono error handlers that tag each report with route, request ID and user.
+- [@mushi-mushi/plugin-sdk](https://kensaur.us/mushi-mushi/docs/sdks/plugin-sdk): Build a Mushi plugin in TypeScript with @mushi-mushi/plugin-sdk — verify webhook signatures, dedupe deliveries and handle lifecycle events in Express.
+- [SDK presets](https://kensaur.us/mushi-mushi/docs/sdks/presets): Mushi SDK presets such as production-calm set sensible widget and capture defaults in one line, and any explicit Mushi.init option still wins.
+- [React & Next.js bug reporting SDK](https://kensaur.us/mushi-mushi/docs/sdks/react): Reference for @mushi-mushi/react — MushiProvider, the useMushi, useMushiSdk and useMushiReport hooks, identifying users, and the rewards hooks and badge.
+- [@mushi-mushi/react-native](https://kensaur.us/mushi-mushi/docs/sdks/react-native): Reference for @mushi-mushi/react-native — MushiProvider, hooks, shake-to-report, screenshots, identity and the offline queue for React Native and Expo.
+- [Sentry Replay coexistence](https://kensaur.us/mushi-mushi/docs/sdks/sentry-replay-coexistence): Run Mushi next to Sentry Session Replay — initialise Sentry first so Mushi attaches the Sentry event and replay IDs to every bug report it sends.
+- [Agent skills](https://kensaur.us/mushi-mushi/docs/sdks/skills): Install Mushi playbooks into Cursor and Claude Code, sync them into the console catalog, and attach skill chains to bug reports.
+- [@mushi-mushi/svelte](https://kensaur.us/mushi-mushi/docs/sdks/svelte): Reference for @mushi-mushi/svelte — initMushi, getMushi and the SvelteKit error hooks that forward client and server errors to your Mushi queue.
+- [@mushi-mushi/vue](https://kensaur.us/mushi-mushi/docs/sdks/vue): Reference for @mushi-mushi/vue — install MushiPlugin, use the useMushi and useMushiReport composables, identify users and submit reports in Vue 3.
+- [@mushi-mushi/wasm-classifier](https://kensaur.us/mushi-mushi/docs/sdks/wasm-classifier): @mushi-mushi/wasm-classifier runs a small on-device model in the browser to drop junk bug reports before they reach your LLM, cutting classification cost.
+- [JavaScript bug reporting SDK for the browser](https://kensaur.us/mushi-mushi/docs/sdks/web): Reference for @mushi-mushi/web, the browser SDK — screenshots, console and network capture, the Shadow DOM widget, sampling, beforeSend and privacy.
+- [Security & compliance](https://kensaur.us/mushi-mushi/docs/security): How Mushi Mushi protects bug-report data — residency, your own keys and storage, retention sweeps, RLS coverage, prompt-injection defence and SOC 2.
+- [BYO storage](https://kensaur.us/mushi-mushi/docs/security/byo-storage): Keep Mushi screenshots and crash dumps in your own storage bucket instead of Mushi's — credentials in Vault, signed URLs, and the same console view.
+- [Bring-your-own-key](https://kensaur.us/mushi-mushi/docs/security/byok): Use your own Anthropic or OpenAI API key for a Mushi project, so every classification, judge and fix run bills to your provider account.
+- [Data residency](https://kensaur.us/mushi-mushi/docs/security/data-residency): Where Mushi Cloud stores data today (Tokyo, ap-northeast-1), how the region picked at project creation works, and what the SDK does about regions.
+- [No client data leakage — what we promise and how we enforce it](https://kensaur.us/mushi-mushi/docs/security/no-leakage-claim): Explicit enumeration of Mushi Mushi's privacy boundaries, the gaps we've closed, and the controls that keep client data isolated.
+- [Prompt-injection defence](https://kensaur.us/mushi-mushi/docs/security/prompt-injection): How Mushi defends its LLM pipeline against prompt injection hidden in user bug reports, and the OWASP LLM01 regression suite that runs on every CI push.
+- [SOC 2 readiness](https://kensaur.us/mushi-mushi/docs/security/soc2): Mushi's SOC 2 Type 1 readiness module — automated evidence for access, retention and encryption controls, DSAR exports, and a quarterly evidence pack.
+- [Self-hosting](https://kensaur.us/mushi-mushi/docs/self-hosting): Run the whole Mushi Mushi stack yourself with one command — Docker Compose, your own keys, AGPLv3 server, MIT SDKs, no usage limits.
+- [Admin SPA deploy](https://kensaur.us/mushi-mushi/docs/self-hosting/admin-spa): Build and deploy the Mushi admin console yourself — a static Vite and React app that talks to your Supabase project, and the env vars it needs.
+- [Self-host in minutes (Docker Compose)](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose): Self-host the whole Mushi stack with one Docker Compose file — Postgres, auth, storage, edge functions, the admin console and a Caddy reverse proxy.
+- [Edge Functions deploy](https://kensaur.us/mushi-mushi/docs/self-hosting/edge-functions): Deploy Mushi's Supabase Edge Functions for a self-hosted install — the minimal ingest and classification set, the full list, and the secrets they need.
+- [Langfuse + Sentry](https://kensaur.us/mushi-mushi/docs/self-hosting/observability): Wire Langfuse LLM tracing and Sentry error tracking into a self-hosted Mushi server — the Edge Function secrets and what each trace records.
+- [Supabase setup](https://kensaur.us/mushi-mushi/docs/self-hosting/supabase): Set up a Supabase project for self-hosted Mushi — link the CLI, push every migration, and enable the Postgres extensions the server needs.
+- [Use cases & comparisons](https://kensaur.us/mushi-mushi/docs/use-cases): Where Mushi Mushi fits — as an open-source Sentry alternative, a debugger for Cursor and Claude Code apps, and an MCP bug-fixing server for your editor.
+- [AI code bug fixing — report to merged fix](https://kensaur.us/mushi-mushi/docs/use-cases/ai-code-bug-fixing): AI code bug fixing end to end — user reports become plain-English diagnoses, fix prompts, and optional draft PRs, with lessons that prevent repeats.
+- [Debug apps built with Claude Code](https://kensaur.us/mushi-mushi/docs/use-cases/debug-claude-code-apps): How to debug an app Claude Code built — bug reports arrive as plain-English diagnoses your Claude Code agent reads and fixes over MCP, fix prompt included.
+- [Debug apps built with Cursor](https://kensaur.us/mushi-mushi/docs/use-cases/debug-cursor-apps): How to debug an app Cursor wrote for you — user bug reports become plain-English diagnoses and fix prompts your Cursor agent applies over MCP.
+- [Your Lovable app broke in production](https://kensaur.us/mushi-mushi/docs/use-cases/lovable-app-broke-in-production): What to do when a Lovable, Bolt, Cursor or Claude Code app breaks for a real user — reproduce it, read the first error, and ask the agent for the smallest fix.
+- [MCP server for bug fixing](https://kensaur.us/mushi-mushi/docs/use-cases/mcp-bug-fixing-server): What an MCP bug-fixing server is and how Mushi's works — Cursor, Claude Code, or Codex read live bug reports, pull fix context, and dispatch fixes.
+- [Sentry alternative for AI-built apps](https://kensaur.us/mushi-mushi/docs/use-cases/sentry-alternative): An open-source Sentry alternative for AI-built apps — plain-English bug diagnoses and ready fixes instead of raw stack traces. Works with or without Sentry.

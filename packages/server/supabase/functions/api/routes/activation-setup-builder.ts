@@ -180,12 +180,16 @@ export async function buildSetupResponse(
         cta_to: '/projects',
         cta_label: 'Generate key',
       },
+      // Recommended, not required: the activation event is the first
+      // diagnosis, which the one-click test report reaches without an SDK
+      // install (docs/plan-gtm.md → Workstream B §2b). Required steps are
+      // exactly project_created, api_key_generated, first_report_received.
       {
         id: 'sdk_installed',
         label: 'Install the SDK in your app',
         description: 'Drop the Mushi widget into your app so users can submit reports.',
         complete: hasSdk,
-        required: true,
+        required: false,
         cta_to: '/onboarding',
         cta_label: 'View setup guide',
         diagnostic: {
@@ -198,11 +202,11 @@ export async function buildSetupResponse(
       {
         id: 'first_report_received',
         label: 'Receive your first bug report',
-        description: 'Send a test report or wait for a real user submission.',
+        description: 'Send a test report now, or install the SDK and wait for a real one.',
         complete: reportInfo.count > 0,
         required: true,
         cta_to: '/onboarding',
-        cta_label: 'Send test report',
+        cta_label: 'See your first diagnosis',
       },
       {
         id: 'github_connected',

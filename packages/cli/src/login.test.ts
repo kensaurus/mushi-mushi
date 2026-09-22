@@ -1,11 +1,45 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  chooseProjectNonInteractive,
+  defaultProjectName,
   getPostLoginBannerMessage,
   pollUntilApproved,
   resolveProjectChoice,
   type PollUntilApprovedDeps,
 } from './login.js'
+
+describe('defaultProjectName', () => {
+  it('uses the package name without its scope', () => {
+    expect(defaultProjectName('@acme/storefront', '/work/x')).toBe('storefront')
+    expect(defaultProjectName('storefront', '/work/x')).toBe('storefront')
+  })
+
+  it('falls back to the folder name (either slash style)', () => {
+    expect(defaultProjectName(undefined, '/work/my-app/')).toBe('my-app')
+    expect(defaultProjectName('', 'C:\\work\\my-app')).toBe('my-app')
+  })
+})
+
+describe('chooseProjectNonInteractive', () => {
+  const PROJECTS = [
+    { id: 'p-1', name: 'Glot It', slug: 'glot-it' },
+    { id: 'p-2', name: 'Storefront', slug: 'storefront' },
+  ]
+
+  it('reuses the project whose name matches the app', () => {
+    expect(chooseProjectNonInteractive(PROJECTS, 'storefront')).toEqual({ kind: 'existing', id: 'p-2', name: 'Storefront' })
+    expect(chooseProjectNonInteractive(PROJECTS, 'glot it')).toEqual({ kind: 'existing', id: 'p-1', name: 'Glot It' })
+  })
+
+  it('creates a new project instead of picking an unrelated one', () => {
+    expect(chooseProjectNonInteractive(PROJECTS, 'blog')).toEqual({ kind: 'new', name: 'blog' })
+  })
+
+  it('creates a new project when the user has none', () => {
+    expect(chooseProjectNonInteractive([], 'blog')).toEqual({ kind: 'new', name: 'blog' })
+  })
+})
 import type { pollDeviceToken } from './device-auth.js'
 
 type PollOutcome = Awaited<ReturnType<typeof pollDeviceToken>>

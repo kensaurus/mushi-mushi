@@ -185,7 +185,7 @@ Deno.serve(
     if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
 
     const authErr = requireServiceRoleAuth(req)
-    if (authErr && req.headers.get('x-mushi-admin') !== '1') return authErr
+    if (authErr) return authErr
 
     const db = getServiceClient()
     const body = await req.json().catch(() => ({})) as Partial<Body>

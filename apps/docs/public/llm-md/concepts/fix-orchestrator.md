@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/fix-orchestrator
 
 ---
 title: Fix drafts & PRs
+description: What happens when you dispatch a fix — Mushi runs a coding agent in a sandbox and opens a draft pull request with a rationale and CI status to review.
 ---
 
 # Fix drafts & PRs

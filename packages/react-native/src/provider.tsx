@@ -37,6 +37,7 @@ import {
   useMemo,
   type ReactNode,
 } from 'react'
+import { AppState, Platform, type NativeEventSubscription } from 'react-native'
 import {
   createApiClient,
   createBreadcrumbBuffer,
@@ -57,6 +58,7 @@ import {
   type MushiHallOfFameEntry,
   type MushiPageContext,
   type MushiAssistantReply,
+  type MushiPropertyValue,
 } from '@mushi-mushi/core'
 import { setupConsoleCapture } from './capture/console-capture'
 import { setupNetworkCapture } from './capture/network-capture'
@@ -67,6 +69,8 @@ import { loadReporterToken, saveReporterToken } from './storage/secure-storage'
 import { MushiBottomSheet } from './components/MushiBottomSheet'
 import { MushiFloatingButton } from './components/MushiFloatingButton'
 import { MushiBanner } from './components/MushiBanner'
+import { createRNEventTracker, type RNAnalyticsConfig, type RNEventTracker } from './analytics/event-tracker'
+import { createRNSessionTracker, type RNSessionTracker } from './analytics/session-tracker'
 import { MUSHI_SDK_PACKAGE, MUSHI_SDK_VERSION } from './version'
 
 export { reporterStatusShort } from './reporter-status'
@@ -140,6 +144,22 @@ export interface MushiRNConfig {
     secureStorage?: boolean
   }
   rewards?: MushiRewardsConfig
+  /**
+   * Product analytics (`useMushi().track()`). Events batch to
+   * POST /v1/sdk/events every 5 s, on app background and at 20 queued events;
+   * unsent batches spill to AsyncStorage (optional peer) and replay on the
+   * next launch. `consent: 'required'` buffers until `setConsent('granted')`.
+   * There is no DNT signal on native — `enabled: false` is the off switch.
+   */
+  analytics?: RNAnalyticsConfig
+  /**
+   * Session lifecycle tracking for the console's Activity and Users views:
+   * session start / end on foreground and background, a heartbeat every
+   * minute, and a page view per `setScreen()` change. Default true. Follows
+   * the `analytics` switch and consent: nothing is sent while analytics is
+   * disabled or consent is not granted.
+   */
+  trackSessions?: boolean
 }
 
 // MushiHallOfFameEntry is now defined in and imported from @mushi-mushi/core
@@ -208,6 +228,17 @@ export interface MushiRNInstance {
   // Rewards program (P1)
   /** Manually record a host-defined activity event. */
   recordActivity(action: string, metadata?: Record<string, unknown>): void
+
+  // Product analytics (Users & Funnels) — parity with `Mushi.track()` on web
+  /**
+   * Record a product-analytics event, e.g. `track('checkout_started', { plan: 'pro' })`.
+   * Names must match `^[a-z][a-z0-9_]{1,63}$`; properties are flat, PII-looking
+   * keys are dropped and string values are scrubbed. Batched to
+   * POST /v1/sdk/events with `$surface: 'mobile'`. Returns true when queued.
+   */
+  track(event: string, properties?: Record<string, MushiPropertyValue>): boolean
+  /** Grant or deny analytics consent (persisted in AsyncStorage when available). */
+  setConsent(state: 'granted' | 'denied'): void
   /** Returns the current user's tier. */
   getTier(): Promise<MushiTierResult | null>
   /** Returns the current user's reputation + point totals. */
@@ -219,6 +250,13 @@ export interface MushiRNInstance {
 }
 
 const MushiContext = createContext<MushiRNInstance | null>(null)
+
+/** Stand-in for navigator.userAgent on session rows, e.g. `@mushi-mushi/react-native/1.2.0 (ios 17.5)`. */
+function nativeUserAgent(): string {
+  const os = Platform?.OS ?? 'native'
+  const version = Platform?.Version
+  return `${MUSHI_SDK_PACKAGE}/${MUSHI_SDK_VERSION} (${version != null ? `${os} ${String(version)}` : os})`
+}
 
 /** Default privacy caption shown beneath the screenshot preview. */
 const DEFAULT_SCREENSHOT_HINT =
@@ -696,6 +734,72 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
     }
   }, [config.rewards?.enabled, config.rewards?.trackActivity, config.rewards?.flushIntervalMs])
 
+  // Product analytics batcher and session tracker. Declared after
+  // userRef/screenRef so the getters below can read them; the effect runs
+  // after the api-client effect above. Sessions follow the event tracker's
+  // consent, so one analytics switch and one setConsent() govern both.
+  const eventTrackerRef = useRef<RNEventTracker | null>(null)
+  const sessionTrackerRef = useRef<RNSessionTracker | null>(null)
+  useEffect(() => {
+    const getRoute = () => screenRef.current?.route ?? screenRef.current?.name ?? null
+    const tracker = createRNEventTracker({
+      projectId: config.projectId,
+      client: () => apiClientRef.current,
+      getAnonId: async () => {
+        await reporterTokenReadyRef.current
+        return reporterTokenRef.current
+      },
+      getUserId: () => userRef.current?.id ?? null,
+      getRoute,
+      sdkVersion: MUSHI_SDK_VERSION,
+      config: config.analytics,
+      scrub: scrubPii,
+    })
+    eventTrackerRef.current = tracker
+    const sessions =
+      config.trackSessions === false
+        ? null
+        : createRNSessionTracker({
+            client: () => apiClientRef.current,
+            getReporterToken: async () => {
+              await reporterTokenReadyRef.current
+              return reporterTokenRef.current
+            },
+            getRoute,
+            consent: tracker,
+            sessionId: sessionIdRef.current,
+            sdkVersion: MUSHI_SDK_VERSION,
+            userAgent: nativeUserAgent(),
+          })
+    sessionTrackerRef.current = sessions
+    // Flush when the app leaves the foreground — the interval may never fire
+    // again if the OS suspends the JS thread.
+    let sub: NativeEventSubscription | undefined
+    try {
+      if (typeof AppState?.addEventListener === 'function') {
+        sub = AppState.addEventListener('change', (state) => {
+          sessions?.onAppStateChange(state)
+          if (state !== 'active') tracker.flush().catch(() => {})
+        })
+      }
+    } catch {
+      /* AppState unavailable (tests, web) */
+    }
+    return () => {
+      sub?.remove()
+      sessions?.destroy()
+      sessionTrackerRef.current = null
+      eventTrackerRef.current = null
+      tracker.destroy().catch(() => {})
+    }
+  }, [
+    config.projectId,
+    config.analytics?.enabled,
+    config.analytics?.consent,
+    config.analytics?.flushIntervalMs,
+    config.trackSessions,
+  ])
+
   const instance: MushiRNInstance = useMemo(
     () => ({
       open,
@@ -714,6 +818,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
           name: traits?.name,
           provider: traits?.provider,
         }
+        eventTrackerRef.current?.setIdentity(userId, traits ?? null)
       },
       setUser(user) {
         userRef.current = {
@@ -722,6 +827,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
           name: user.name,
           provider: user.provider,
         }
+        eventTrackerRef.current?.setIdentity(user.id, { email: user.email, name: user.name, provider: user.provider })
       },
       identifyWithToken(token) {
         userTokenRef.current = token && typeof token === 'string' ? token : null
@@ -733,7 +839,10 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
               ...(claims.email ? { email: claims.email } : {}),
               ...(claims.name ? { name: claims.name } : {}),
             }
+            eventTrackerRef.current?.setIdentity(claims.sub, null)
           }
+        } else {
+          eventTrackerRef.current?.setIdentity(null, null)
         }
       },
       publishPageContext(context) {
@@ -746,6 +855,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         const prev = screenRef.current?.name
         screenRef.current = screen
         if (screen.name && screen.name !== prev) {
+          sessionTrackerRef.current?.pageView(screen.route ?? screen.name)
           breadcrumbsRef.current.add({
             category: 'navigation',
             level: 'info',
@@ -815,6 +925,14 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       recordActivity(action, metadata) {
         if (!config.rewards?.enabled) return
         activityQueueRef.current.push({ action, metadata })
+      },
+
+      // Product analytics (Users & Funnels)
+      track(event, properties) {
+        return eventTrackerRef.current?.track(event, properties) ?? false
+      },
+      setConsent(state) {
+        eventTrackerRef.current?.setConsent(state)
       },
       async getTier() {
         const userId = userRef.current?.id

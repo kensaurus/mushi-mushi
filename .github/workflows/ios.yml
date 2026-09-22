@@ -5,10 +5,16 @@ on:
     branches: [master]
     paths:
       - 'packages/ios/**'
+      - 'packages/capacitor/ios/**'
+      - 'packages/capacitor/MushiMushiCapacitor.podspec'
+      - 'packages/capacitor/package.json'
       - '.github/workflows/ios.yml'
   pull_request:
     paths:
       - 'packages/ios/**'
+      - 'packages/capacitor/ios/**'
+      - 'packages/capacitor/MushiMushiCapacitor.podspec'
+      - 'packages/capacitor/package.json'
       - '.github/workflows/ios.yml'
 
 permissions:
@@ -59,6 +65,41 @@ jobs:
         run: |
           gem install cocoapods --no-document
           pod lib lint MushiMushi.podspec --allow-warnings --skip-tests
+
+  lint-capacitor-podspec:
+    # packages/capacitor ships its own pod (MushiMushiCapacitor.podspec, read
+    # by `npx cap sync ios`) that compiles the Capacitor plugin plus the core
+    # iOS SDK vendored into ios/MushiMushi. Nothing linted it, so a broken
+    # source glob, Swift version or Capacitor dependency reached users first.
+    # Same lint as the MushiMushi pod above. The podspec reads version,
+    # license and author from package.json.
+    name: pod lib lint (MushiMushiCapacitor)
+    runs-on: macos-26
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: packages/capacitor
+    steps:
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Vendor the core iOS SDK exactly as `prepack` does
+        # ios/MushiMushi is a tracked copy of packages/ios/Sources, refreshed by
+        # scripts/sync-native-sources.mjs before every pack; lint what ships.
+        run: node scripts/sync-native-sources.mjs
+
+      - name: Lint podspec
+        # Resolves the `Capacitor` dependency from CocoaPods trunk and builds
+        # the pod for the iOS simulator.
+        run: |
+          gem install cocoapods --no-document
+          pod lib lint MushiMushiCapacitor.podspec --allow-warnings --skip-tests
 
   build-ios-app-shell:
     name: xcodebuild (iPhone simulator)

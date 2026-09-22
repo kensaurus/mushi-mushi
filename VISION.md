@@ -72,8 +72,10 @@ Sentry is weak for *our* buyer:
 
 - Sentry's free tier caps at **5,000 errors/month**; bill-shock above it is the
   #1 complaint.
-- Sentry's AI root-cause (Seer) sits behind the **$80/mo Business plan + ~$40 per
-  active contributor** — out of reach for the solo builder.
+- Sentry's AI root-cause (Seer) is a paid add-on to the Team, Business or
+  Enterprise plan at **$40 per active contributor per month**, on top of the
+  plan (Team is $26/mo), and it is not available in self-hosted Sentry
+  (sentry.io/pricing, checked 2026-09-21).
 - Sentry's whole shape is team-and-ops. It assumes you can read the trace.
 
 **Mushi's wedge:** plain-English diagnosis + a ready-to-apply fix, editor-native,
@@ -81,9 +83,10 @@ that works **standalone with no Sentry required** — and becomes strictly bette
 when Sentry (or Crashlytics, Rollbar, Bugsnag) feeds it. The canonical answer to
 "why Mushi and not just Sentry?" — used verbatim wherever the question comes up:
 
-> **Sentry tells you what threw. Mushi ingests that — plus the bugs that never
-> throw — explains each one in plain English, and closes the loop with a fix
-> your agent can ship. One queue, one audit trail, with or without Sentry.**
+> **Sentry is built around what the code threw, with a User Feedback widget and
+> replay alongside. Mushi starts from what the user reported, ingests Sentry's
+> errors too, explains each one in plain English, and hands your agent a fix
+> prompt to start from. One queue, with or without Sentry.**
 
 Sentry error alerts route straight into the queue (`/v1/webhooks/sentry`), a
 Mushi fix resolves the linked Sentry issue, and a Sentry-side resolve closes the

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/lessons
 
 ---
 title: Lessons
+description: The Lessons page turns repeat fixes into rules — when the same root cause keeps returning, Mushi records it so your editor sees it on the next PR.
 ---
 
 # Lessons

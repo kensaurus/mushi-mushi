@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/crashlytics
 
 ---
 title: Crashlytics
+description: Push Mushi mobile bug reports into Firebase Crashlytics issues and close them when fixes merge — service account setup and app ID mapping.
 ---
 
 # Crashlytics plugin

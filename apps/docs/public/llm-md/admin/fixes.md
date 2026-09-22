@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/fixes
 
 ---
 title: Fix drafts & PRs
+description: The Fixes page tracks every draft pull request Mushi opened from a bug report, from the moment a fix run starts until the PR is ready or the run fails.
 ---
 
 # Fix drafts & PRs
@@ -130,7 +131,7 @@ to the PR branch.
 From the CLI:
 
 ```bash
-mushi fixes refresh-ci 
+mushi fixes refresh-ci <fixId>
 ```
 
 ---
@@ -182,8 +183,8 @@ idempotent — `finalizeFixMerge()` backfills `merged_at` and report status.
 From the CLI (requires `mcp:write` API key):
 
 ```bash
-mushi fixes merge 
-mushi fixes merge  --method squash
+mushi fixes merge <fixId>
+mushi fixes merge <fixId> --method squash
 ```
 
 ### Prerequisites

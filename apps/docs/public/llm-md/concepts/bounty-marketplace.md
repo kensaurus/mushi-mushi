@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/bounty-marketplace
 
 ---
 title: Mushi Bounties — crowd-testing marketplace
+description: Mushi Bounties is a crowd-testing marketplace — publish your app, and real testers file bug reports and earn points they can redeem for rewards.
 ---
 
 # Mushi Bounties

@@ -185,6 +185,6 @@ export const ja: MushiLocale = {
     changelog: {
       whatsNew: '{version} の新機能',
     },
-    poweredBy: 'Mushi v{version}',
+    poweredBy: 'バグ報告は Mushi で',
   },
 };

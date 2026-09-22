@@ -27,7 +27,9 @@ export default defineConfig([
     format: ['iife'],
     globalName: 'MushiLoader',
     dts: false,
-    sourcemap: true,
+    // No map: the CDN serves this file directly (unpkg/jsdelivr fields), and a
+    // 1.2 MB map in every tarball is weight nobody debugs a minified loader with.
+    sourcemap: false,
     clean: false,
     treeshake: true,
     splitting: false,

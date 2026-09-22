@@ -96,10 +96,10 @@ note. This is the **enrichment / upgrade path**, not the front door.
 | ---------------------------- | :-------------------------- | :------------------------ | :---------------------- | :-------------------------------------------- |
 | **Signal origin**            | Code throws                 | Infrastructure metrics    | User event streams      | User-felt friction, captured in the moment    |
 | **What lands in your queue** | Stack trace                 | Alert threshold breach    | Funnel drop-off         | User note + screenshot + device context       |
-| **Repeat signal**            | Same error = separate issue | Spike repeats → new alert | Conversion drops again  | Same broken button collapses to one row       |
+| **Repeat signal**            | Same error groups into one issue | Spike repeats → new alert | Conversion drops again  | Same broken button collapses to one row       |
 | **Closing the loop**         | Assign a ticket             | Write a runbook           | A/B test the conversion | Optional draft PR you merge, edit, or close   |
-| **From your IDE**            | Paste issue ID into Cursor  | —                         | —                       | Cursor reads the report and proposes the diff |
-| **Where it runs**            | Their cloud                 | Their cloud               | Google cloud            | Yours, ours, or both                          |
+| **From your IDE**            | Sentry MCP pulls the issue  | —                         | —                       | Cursor reads the report and proposes the diff |
+| **Where it runs**            | Their cloud or self-hosted  | Their cloud               | Google cloud            | Yours, ours, or both                          |
 
 Mushi is wired to send signals **back** to the tools you run — 13 outbound
 plugins (Sentry, Slack, Jira, Linear, PagerDuty, Discord, Microsoft Teams, GitHub

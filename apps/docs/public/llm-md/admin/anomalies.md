@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/anomalies
 
 ---
 title: Anomaly detection
+description: The Anomaly detection page runs statistical detectors over the metrics you send and can file a report in your queue when one behaves unexpectedly.
 ---
 
 # Anomaly detection
@@ -87,18 +88,18 @@ without requiring manual review.
 
 ```bash
 # List anomalies
-GET /v1/admin/anomalies?project_id=&limit=100
+GET /v1/admin/anomalies?project_id=<pid>&limit=100
 
 # Ingest a metric data point
 POST /v1/admin/metric-series
-{ "project_id": "", "metric_name": "p95_latency", "value": 1240, "ts": "2026-05-19T12:00:00Z" }
+{ "project_id": "<pid>", "metric_name": "p95_latency", "value": 1240, "ts": "2026-05-19T12:00:00Z" }
 
 # Run detection
 POST /v1/admin/anomalies/detect
-{ "project_id": "", "lookback_hours": 24 }
+{ "project_id": "<pid>", "lookback_hours": 24 }
 
 # Confirm / dismiss
-PATCH /v1/admin/anomalies/
+PATCH /v1/admin/anomalies/<id>
 { "status": "confirmed" }
 ```
 

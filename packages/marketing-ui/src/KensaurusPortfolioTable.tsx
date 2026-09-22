@@ -77,27 +77,19 @@ function withUtm(url: string, utmSource: string): string {
   return `${url}${joiner}utm_source=${utmSource}&utm_medium=cross_promo&utm_campaign=more-by-kensaurus`
 }
 
+/**
+ * Visual cross-promo table only. It used to emit an ItemList JSON-LD of these
+ * apps, which told search engines and answer engines that every Mushi page
+ * (docs footer, landing, admin's public integrations page) was *about* a Thai
+ * course, a household ledger and a camp in Gunma. Structured data on a Mushi
+ * page describes Mushi (apps/docs/lib/structured-data.ts); plain links are
+ * enough for the portfolio to be discovered.
+ */
 export function KensaurusPortfolioTable({ utmSource }: { utmSource: string }) {
   const apps = PORTFOLIO
-  const itemList = {
-    '@context': 'https://schema.org',
-    '@type': 'ItemList',
-    name: 'More from KENSAURUS',
-    itemListElement: apps.map((app, index) => ({
-      '@type': 'ListItem',
-      position: index + 1,
-      name: app.name,
-      url: withUtm(app.href, utmSource),
-      description: app.blurb,
-    })),
-  }
 
   return (
     <section aria-label="More from KENSAURUS" className="mt-6">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemList) }}
-      />
       <h2 className="mb-3 font-serif text-base font-semibold text-[var(--mushi-ink)]">
         More from KENSAURUS
       </h2>

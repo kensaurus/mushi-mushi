@@ -45,7 +45,11 @@ import {
 } from '../helpers.ts';
 import { safeParse, ApiReportBodySchema } from '../../_shared/validate.ts';
 import { registerReporterFeatureBoardRoutes } from './reporter-feature-board.ts';
+import { resolveReporterAuth } from './reporter-auth.ts';
+import { reporterKey } from '../../_shared/reporter-token.ts';
 import { claimIpRateLimit, extractClientIp } from './cli-auth.ts';
+import { unsubscribeSecret, verifyUnsubscribeToken } from '../../_shared/lifecycle-unsubscribe.ts';
+import { brandFooterDefaultForProject } from '../../_shared/brand-footer.ts';
 
 // Upper bound for reporter-supplied notes that feed `mushi_apply_reporter_feedback`
 // (these can seed a reopened child report's description). Keeps a hostile or
@@ -147,6 +151,65 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   // other route file (identity-secret.ts, sdk-assistant.ts,
   // settings-research.ts, etc.) does.
 
+  // ============================================================
+  // Lifecycle email unsubscribe — GET|POST /v1/public/email/unsubscribe?t=
+  //
+  // `t` = `<user_id>.<hmac>` signed by the lifecycle-emails cron with
+  // LIFECYCLE_UNSUB_SECRET (_shared/lifecycle-unsubscribe.ts). GET serves
+  // the link in the email footer and only CONFIRMS: it renders a one-button
+  // form and writes nothing, because mail scanners and link previewers fetch
+  // header and body URLs automatically (RFC 8058 §1), and a write on GET
+  // would unsubscribe people who never clicked. POST — the button, or the
+  // RFC 8058 one-click request mail clients send to the List-Unsubscribe URL —
+  // writes lifecycle_email_optout. Fails closed (400) when the secret is
+  // unset or the token does not verify — never a redirect, never a JSON blob
+  // a mail client would render.
+  // ============================================================
+  const unsubscribePage = (title: string, body: string, formHtml = '') =>
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title></head><body style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:480px;margin:64px auto;padding:0 16px;color:#18181b;line-height:1.5"><h1 style="font-size:20px">${title}</h1><p>${body}</p>${formHtml}</body></html>`;
+  const invalidUnsubscribeLink = (c: Context) =>
+    c.html(
+      unsubscribePage(
+        'This unsubscribe link is not valid',
+        'It may have been cut off by your mail client. You can also turn setup emails off in the Mushi console under Settings.',
+      ),
+      400,
+    );
+  app.get('/v1/public/email/unsubscribe', async (c) => {
+    const secret = unsubscribeSecret();
+    const token = c.req.query('t');
+    const userId = secret ? await verifyUnsubscribeToken(token, secret) : null;
+    if (!userId || !token) return invalidUnsubscribeLink(c);
+    const action = `?t=${encodeURIComponent(token)}`;
+    return c.html(
+      unsubscribePage(
+        'Unsubscribe from setup emails?',
+        'Mushi will stop sending setup tips. Account notices you asked for (usage alerts, team invites) still arrive.',
+        `<form method="post" action="${action}"><button type="submit" style="font:inherit;padding:8px 16px;border-radius:6px;border:1px solid #18181b;background:#18181b;color:#fff;cursor:pointer">Unsubscribe</button></form>`,
+      ),
+    );
+  });
+  const unsubscribeHandler = async (c: Context) => {
+    const secret = unsubscribeSecret();
+    const userId = secret ? await verifyUnsubscribeToken(c.req.query('t'), secret) : null;
+    if (!userId) return invalidUnsubscribeLink(c);
+    const db = getServiceClient();
+    const { error } = await db
+      .from('lifecycle_email_optout')
+      .upsert({ user_id: userId }, { onConflict: 'user_id', ignoreDuplicates: true });
+    if (error) {
+      log.warn('lifecycle unsubscribe write failed', { err: error.message });
+      return c.html(unsubscribePage('Something went wrong', 'Please try the link again in a minute.'), 500);
+    }
+    return c.html(
+      unsubscribePage(
+        "You're unsubscribed",
+        'No more setup emails from Mushi. Account notices you asked for (usage alerts, team invites) still arrive.',
+      ),
+    );
+  };
+  app.post('/v1/public/email/unsubscribe', unsubscribeHandler);
+
   app.get('/v1/sdk/latest-version', async (c) => {
     const packageName = c.req.query('package')?.trim();
     if (!packageName) {
@@ -190,16 +253,24 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
           'sdk_screenshot_sensitive_hint, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, ' +
-          'reporter_notifications_enabled, ' +
+          'reporter_notifications_enabled, widget_brand_footer, ' +
           'assistant_enabled, assistant_label, assistant_greeting, assistant_suggestions',
       )
       .eq('project_id', projectId)
       .maybeSingle();
 
     if (error) return dbError(c, error);
+    // "Powered by Mushi" footer (growth loop, docs/plan-gtm.md → Workstream
+    // C §6): project_settings.widget_brand_footer wins when set; otherwise
+    // the plan decides (on for Free Cloud, off for paid / self-host). The
+    // host's MIT `brandFooter` config remains a hard override on the client.
+    const brandFooterDefault = await brandFooterDefaultForProject(db, projectId);
     c.header('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
     c.header('Vary', 'Origin, X-Mushi-Project, X-Mushi-Api-Key');
-    return c.json({ ok: true, data: normalizeSdkConfig(data as SdkConfigRow | null) });
+    return c.json({
+      ok: true,
+      data: normalizeSdkConfig(data as SdkConfigRow | null, { brandFooterDefault }),
+    });
   });
 
   // ============================================================
@@ -1025,132 +1096,17 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         400,
       );
 
-    const encoder = new TextEncoder();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(reporterToken));
-    const tokenHash = Array.from(new Uint8Array(hashBuffer))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-
     const db = getServiceClient();
-    const rep = await getReputation(db, projectId, tokenHash);
+    const rep = await getReputation(db, projectId, await reporterKey(reporterToken));
     return c.json({ ok: true, data: rep });
   });
 
   // Reporter notifications
   //
-  // Auth model: two flows are accepted, in priority order:
-  //
-  //   (A) HMAC-signed (preferred). The SDK proves possession of the reporter
-  //       token without sending it on the wire:
-  //
-  //         X-Reporter-Token-Hash: <sha256(token) hex>
-  //         X-Reporter-Ts:         <unix ms>
-  //         X-Reporter-Hmac:       hex(HMAC-SHA256(
-  //                                  secret = projectApiKey,
-  //                                  msg    = `${projectId}.${ts}.${tokenHash}`))
-  //
-  //       Server enforces `|now - ts| < 5 min` to defeat replay, then recomputes
-  //       the HMAC against the API key already validated by apiKeyAuth.
-  //
-  //   (B) Legacy raw-token. Accepted for backwards compatibility but logged as a
-  //       deprecation warning by the SDK. Token can be passed as
-  //       `X-Reporter-Token` header (preferred over query so it doesn't leak
-  //       into proxy logs) or `?reporterToken=...`.
-  //
-  // Both flows resolve to a stable `reporter_token_hash` for table lookup.
-  async function resolveReporterTokenHash(
-    c: Context,
-    projectId: string,
-  ): Promise<
-    { ok: true; tokenHash: string } | { ok: false; status: number; code: string; message: string }
-  > {
-    const headerHash = c.req.header('X-Reporter-Token-Hash');
-    const ts = c.req.header('X-Reporter-Ts');
-    const sig = c.req.header('X-Reporter-Hmac');
-    const apiKey = c.req.header('X-Mushi-Api-Key') || c.req.header('X-Mushi-Project');
-
-    if (headerHash && ts && sig && apiKey) {
-      // Belt-and-suspenders: even though the HMAC is computed over the lowercase
-      // hash and a tampered value would fail signature verification, we also
-      // refuse anything that doesn't look like a SHA-256 hex digest before it
-      // ever flows into PostgREST `or()` filter strings downstream.
-      if (!/^[0-9a-f]{64}$/i.test(headerHash)) {
-        return {
-          ok: false,
-          status: 400,
-          code: 'BAD_TOKEN_HASH',
-          message: 'X-Reporter-Token-Hash must be a 64-char hex SHA-256 digest',
-        };
-      }
-      const parsedTs = Number(ts);
-      if (!Number.isFinite(parsedTs)) {
-        return {
-          ok: false,
-          status: 400,
-          code: 'BAD_TIMESTAMP',
-          message: 'X-Reporter-Ts must be a unix-ms integer',
-        };
-      }
-      const skewMs = Math.abs(Date.now() - parsedTs);
-      if (skewMs > 5 * 60 * 1000) {
-        return {
-          ok: false,
-          status: 401,
-          code: 'STALE_REQUEST',
-          message: 'X-Reporter-Ts outside 5-minute window',
-        };
-      }
-      const enc = new TextEncoder();
-      const key = await crypto.subtle.importKey(
-        'raw',
-        enc.encode(apiKey),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign'],
-      );
-      const expected = await crypto.subtle.sign(
-        'HMAC',
-        key,
-        enc.encode(`${projectId}.${parsedTs}.${headerHash.toLowerCase()}`),
-      );
-      const expectedHex = Array.from(new Uint8Array(expected))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-      if (!constantTimeEqualHex(expectedHex, sig)) {
-        return {
-          ok: false,
-          status: 401,
-          code: 'INVALID_HMAC',
-          message: 'X-Reporter-Hmac signature mismatch',
-        };
-      }
-      return { ok: true, tokenHash: headerHash.toLowerCase() };
-    }
-
-    const rawToken = c.req.header('X-Reporter-Token') ?? c.req.query('reporterToken') ?? null;
-    if (!rawToken) {
-      return {
-        ok: false,
-        status: 400,
-        code: 'MISSING_TOKEN',
-        message:
-          'Pass X-Reporter-Token-Hash + X-Reporter-Hmac (preferred) or X-Reporter-Token / ?reporterToken=',
-      };
-    }
-    const enc = new TextEncoder();
-    const buf = await crypto.subtle.digest('SHA-256', enc.encode(rawToken));
-    const tokenHash = Array.from(new Uint8Array(buf))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    return { ok: true, tokenHash };
-  }
-
-  function constantTimeEqualHex(a: string, b: string): boolean {
-    if (a.length !== b.length) return false;
-    let diff = 0;
-    for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-    return diff === 0;
-  }
+  // Auth: signed digest (X-Reporter-Token-Hash + X-Reporter-Ts + X-Reporter-Hmac)
+  // or the raw token for older SDKs; see reporter-auth.ts. Both resolve to the
+  // one-way key the reporter tables store.
+  const resolveReporterTokenHash = resolveReporterAuth;
 
   app.get('/v1/reporter/reports', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;

@@ -5,10 +5,17 @@ packages:
   - 'examples/*'
   - 'examples/realworld/*'
 
-# pnpm 10.33+ no longer reads these root policies from `package.json#pnpm`.
-# Keep dependency resolution, audit policy, patches, and build-script trust in
-# this canonical workspace config so local installs and frozen CI installs use
-# the same controls.
+# Workspace behaviour. Moved here from .npmrc, where npm read the same keys
+# and printed "Unknown project config" for each one on every install.
+linkWorkspacePackages: true
+autoInstallPeers: true
+strictPeerDependencies: false
+shamefullyHoist: false
+
+# Keep audit policy, patches, build-script trust and install settings in this
+# workspace config so local installs and frozen CI installs use the same
+# controls. Dependency overrides are the exception: see the note on
+# `overrides:` below.
 allowBuilds:
   '@sentry/cli': true
   esbuild: true
@@ -18,6 +25,17 @@ allowBuilds:
   sqlite3: true
   supabase: true
 
+# NOT APPLIED — read before editing. While package.json#pnpm.overrides exists,
+# pnpm 10.33 resolves with that block and ignores this one: pnpm-lock.yaml's
+# `overrides:` section lists only package.json's entries, and versions these
+# entries forbid are installed (uuid@7.0.3, esbuild@0.27.7,
+# brace-expansion@1.1.18 as of 2026-09-22). A `pkg@<x` selector also only
+# matches dependencies whose declared range is a subset of `<x`, so many of
+# these would miss even if active. Put security overrides in
+# package.json#pnpm.overrides, bounded (scripts/check-dependency-overrides.mjs).
+# Do not delete that block to "activate" this one: several entries here are
+# unbounded or force a new major on every consumer (brace-expansion 5,
+# uuid 14 for CommonJS callers).
 overrides:
   'undici@<6.24.0': '>=6.24.0'
   'undici@>=7.0.0 <7.29.0': '>=7.29.0 <8'

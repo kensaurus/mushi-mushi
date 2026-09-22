@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/users
 
 ---
 title: Users
+description: The Users page is an operator-only directory of every Mushi account with plan, MRR and churn; other visitors see a not-found page instead.
 ---
 
 # Users
@@ -74,7 +75,7 @@ Click any user row to open the drawer:
 
 ```bash
 GET /v1/super-admin/metrics
-GET /v1/super-admin/users?limit=100&search=&plan=
+GET /v1/super-admin/users?limit=100&search=<email>&plan=<plan>
 GET /v1/super-admin/users/:userId
 ```
 

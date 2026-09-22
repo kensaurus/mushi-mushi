@@ -45,6 +45,56 @@ interface ApiKeyRow {
   scopes: string[] | null
   owner_user_id: string | null
   projects: { name: string } | null
+  last_seen_origin?: string | null
+  browser_seen_at?: string | null
+}
+
+/**
+ * Why an agent-scope (mcp:*) use of this key must be refused, or null.
+ *
+ * A key that a web page sends is public: anyone can read it from the bundle.
+ * The SDK only needs report:write, so an mcp:* scope on such a key lets a
+ * stranger list and change the project's reports. Two signals, either enough:
+ *   - this request comes from a browser (Origin, Referer or Sec-Fetch-Site —
+ *     headers a page cannot strip from a cross-origin request);
+ *   - the key has ever been seen from a browser. browser_seen_at is sticky;
+ *     last_seen_origin is the older column, which a later origin-less call
+ *     overwrites with null, so it only counts while it is still set.
+ * Agents (CLI, MCP, hosted MCP, VS Code) call from a server process and send
+ * none of these headers.
+ */
+export function mcpKeyBrowserExposure(
+  headers: { origin?: string | null; referer?: string | null; secFetchSite?: string | null },
+  key: { last_seen_origin?: string | null; browser_seen_at?: string | null },
+): 'browser_request' | 'key_seen_in_browser' | null {
+  if (headers.origin || headers.referer || headers.secFetchSite) return 'browser_request'
+  if (key.browser_seen_at || key.last_seen_origin) return 'key_seen_in_browser'
+  return null
+}
+
+const BROWSER_EXPOSURE_MESSAGE: Record<'browser_request' | 'key_seen_in_browser', string> = {
+  browser_request:
+    'Keys with MCP scopes cannot be used from a web page, because anything a page sends is public. ' +
+    'Use this key from the CLI or an MCP client, and give web apps an SDK key (report:write only).',
+  key_seen_in_browser:
+    'This key has been used from a web page, so treat it as public: its MCP scopes are refused. ' +
+    'Mint an agent key with `mushi login` (or in the console) and keep it out of browser bundles.',
+}
+
+function refuseBrowserExposedMcpKey(
+  c: Context,
+  key: { last_seen_origin?: string | null; browser_seen_at?: string | null },
+): Response | null {
+  const reason = mcpKeyBrowserExposure(
+    {
+      origin: c.req.header('Origin'),
+      referer: c.req.header('Referer'),
+      secFetchSite: c.req.header('Sec-Fetch-Site'),
+    },
+    key,
+  )
+  if (!reason) return null
+  return authError(c, 'KEY_EXPOSED_IN_BROWSER', BROWSER_EXPOSURE_MESSAGE[reason], 403)
 }
 
 function applyLogContext(c: Context, patch: LogContext): void {
@@ -261,6 +311,18 @@ function recordSdkHeartbeat(opts: {
     }, () => {
       // Swallow — never fail the auth path on a heartbeat write.
     })
+
+  // Sticky: once a page has sent this key it is public, and a later
+  // origin-less call must not clear that (last_seen_origin above would).
+  // Read by mcpKeyBrowserExposure.
+  if (origin) {
+    void db
+      .from('project_api_keys')
+      .update({ browser_seen_at: new Date().toISOString() })
+      .eq('key_hash', keyHash)
+      .is('browser_seen_at', null)
+      .then(() => {}, () => {})
+  }
 }
 
 /**
@@ -347,13 +409,17 @@ async function lookupActiveApiKey(apiKey: string): Promise<ApiKeyRow | null> {
   // keys (project_id = NULL) are not excluded by the inner-join filter.
   const { data, error } = await db
     .from('project_api_keys')
-    .select('id, key_prefix, project_id, is_org_scoped, is_active, scopes, owner_user_id, projects(name)')
+    .select(
+      'id, key_prefix, project_id, is_org_scoped, is_active, scopes, owner_user_id, last_seen_origin, browser_seen_at, projects(name)',
+    )
     .eq('key_hash', keyHash)
     .eq('is_active', true)
     .single()
   if (error || !data) return null
   return data as unknown as ApiKeyRow
 }
+
+const isAgentScope = (scope: McpScope): boolean => scope === 'mcp:read' || scope === 'mcp:write'
 
 /** True iff the key's scopes satisfy ANY of the accepted scopes (mcp:write implies mcp:read). */
 function keyGrantsAnyScope(scopes: string[], accepted: readonly McpScope[]): boolean {
@@ -380,6 +446,11 @@ async function authenticateApiKey(
       `API key is missing required scope ${wanted}. Mint a new key with the correct scope or upgrade this one in the admin console.`,
       403,
     )
+  }
+
+  if (accepted.some(isAgentScope)) {
+    const exposed = refuseBrowserExposedMcpKey(c, keyRow)
+    if (exposed) return exposed
   }
 
   const ownerId = keyRow.owner_user_id
@@ -434,14 +505,22 @@ export async function apiKeyAuth(c: Context, next: Next) {
 
   const { data, error } = await db
     .from('project_api_keys')
-    .select('id, key_prefix, project_id, is_org_scoped, is_active, scopes, projects(name)')
+    .select('id, key_prefix, project_id, is_org_scoped, is_active, scopes, last_seen_origin, browser_seen_at, projects(name)')
     .eq('key_hash', keyHash)
     .eq('is_active', true)
     .single()
 
   const keyRow = data as Pick<
     ApiKeyRow,
-    'id' | 'key_prefix' | 'project_id' | 'is_org_scoped' | 'is_active' | 'scopes' | 'projects'
+    | 'id'
+    | 'key_prefix'
+    | 'project_id'
+    | 'is_org_scoped'
+    | 'is_active'
+    | 'scopes'
+    | 'projects'
+    | 'last_seen_origin'
+    | 'browser_seen_at'
   > | null
   if (error || !keyRow) {
     return authError(c, 'INVALID_API_KEY', 'Invalid or revoked API key')
@@ -481,6 +560,11 @@ export async function apiKeyAuth(c: Context, next: Next) {
   c.set('projectId', keyRow.project_id ?? undefined)
   c.set('projectName', keyRow.projects?.name ?? 'Unknown')
   c.set('apiKeyScopes', keyRow.scopes ?? [])
+  // Read by requireApiKeyScope for agent scopes (see mcpKeyBrowserExposure).
+  c.set('apiKeyBrowserSignals', {
+    last_seen_origin: keyRow.last_seen_origin ?? null,
+    browser_seen_at: keyRow.browser_seen_at ?? null,
+  })
   if (keyRow.id) c.set('apiKeyId', keyRow.id)
   if (keyRow.key_prefix) c.set('apiKeyPrefix', keyRow.key_prefix)
   applyLogContext(c, {
@@ -490,6 +574,40 @@ export async function apiKeyAuth(c: Context, next: Next) {
     apiKeyPrefix: keyRow.key_prefix ?? undefined,
   })
   await next()
+}
+
+/**
+ * Middleware factory: after {@link apiKeyAuth}, require the key to carry a
+ * scope. apiKeyAuth itself accepts ANY active project key, because the public
+ * SDK key (report:write only, shipped in every customer's browser bundle) must
+ * reach the ingest routes. Routes that read or change a project's reports on
+ * the owner's behalf — the CLI/MCP `/v1/sync/*` family — must also sit behind
+ * this, or any key lifted from a public bundle can list every report, change
+ * statuses and reply to end users as the team (live until 2026-09-21).
+ *
+ * `mcp:write` implies `mcp:read`, as everywhere else.
+ */
+export function requireApiKeyScope(scope: McpScope) {
+  return async (c: Context, next: Next) => {
+    const scopes = (c.get('apiKeyScopes') as string[] | undefined) ?? []
+    if (!keyGrantsAnyScope(scopes, [scope])) {
+      return authError(
+        c,
+        'INSUFFICIENT_SCOPE',
+        `API key is missing required scope "${scope}". Public SDK keys (report:write) cannot use this route; ` +
+          'use a key minted for the CLI or MCP, or upgrade this one with `mushi login --upgrade-scope`.',
+        403,
+      )
+    }
+    if (isAgentScope(scope)) {
+      const signals = (c.get('apiKeyBrowserSignals') as
+        | { last_seen_origin: string | null; browser_seen_at: string | null }
+        | undefined) ?? { last_seen_origin: null, browser_seen_at: null }
+      const exposed = refuseBrowserExposedMcpKey(c, signals)
+      if (exposed) return exposed
+    }
+    await next()
+  }
 }
 
 /**

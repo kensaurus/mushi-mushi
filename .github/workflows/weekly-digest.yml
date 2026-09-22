@@ -16,16 +16,20 @@ on:
         required: false
         default: 'false'
 
+# Read-only by default; the job below asks for the one write scope it needs.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   weekly-digest:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # gh release create
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Compute this-week's package releases
         id: digest
@@ -100,17 +104,24 @@ jobs:
             --prerelease \
             --target master
 
+      # The body goes through env, never through ${{ }} inside `run:`: pasted
+      # into a double-quoted echo, its ``` fences were command substitutions.
       - name: Dry-run output
         if: steps.digest.outputs.no_releases == 'false' && github.event.inputs.dry_run == 'true'
+        env:
+          WEEK_TAG: ${{ steps.digest.outputs.week_tag }}
+          BODY: ${{ steps.digest.outputs.body }}
         run: |
-          echo "=== DRY RUN: would create release ${{ steps.digest.outputs.week_tag }} ==="
-          echo "${{ steps.digest.outputs.body }}"
+          echo "=== DRY RUN: would create release ${WEEK_TAG} ==="
+          printf '%s\n' "$BODY"
 
       - name: Summary
         if: steps.digest.outputs.no_releases == 'false'
+        env:
+          BODY: ${{ steps.digest.outputs.body }}
         run: |
           {
             echo "## Weekly shipping digest"
             echo ""
-            echo "${{ steps.digest.outputs.body }}"
+            printf '%s\n' "$BODY"
           } >> "$GITHUB_STEP_SUMMARY"

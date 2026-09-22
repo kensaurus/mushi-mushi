@@ -42,9 +42,26 @@ export function ClosingCta() {
         </LandingStaggerItem>
         <LandingStaggerItem>
           <p className="landing-closing-cta">
-            <Link className="landing-closing-link" href={LANDING_OPERATOR.soloHref}>
-              {LANDING_OPERATOR.soloCta}
-            </Link>
+            {/* Console signup is another app — plain <a>, same tab, tracked. */}
+            {LANDING_OPERATOR.soloHref.startsWith('http') ? (
+              <a
+                className="landing-closing-link"
+                href={LANDING_OPERATOR.soloHref}
+                data-mushi-cta={LANDING_OPERATOR.soloCtaId}
+                data-mushi-location="closing"
+              >
+                {LANDING_OPERATOR.soloCta}
+              </a>
+            ) : (
+              <Link
+                className="landing-closing-link"
+                href={LANDING_OPERATOR.soloHref}
+                data-mushi-cta={LANDING_OPERATOR.soloCtaId}
+                data-mushi-location="closing"
+              >
+                {LANDING_OPERATOR.soloCta}
+              </Link>
+            )}
           </p>
         </LandingStaggerItem>
         <LandingStaggerItem>

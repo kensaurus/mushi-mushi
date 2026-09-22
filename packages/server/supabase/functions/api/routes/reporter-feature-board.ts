@@ -8,8 +8,7 @@ import type { Variables } from '../types.ts';
 import { apiKeyAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { dbError, jsonError, jsonOk } from '../shared.ts';
-
-type ReporterAuth = { ok: true; tokenHash: string } | { ok: false; status: number; code: string; message: string };
+import type { ReporterAuth } from './reporter-auth.ts';
 
 export function registerReporterFeatureBoardRoutes(
   app: Hono<{ Variables: Variables }>,

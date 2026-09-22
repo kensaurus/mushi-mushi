@@ -22,6 +22,22 @@ import { SettingEffectCallout } from '../FeatureExplainPanel'
 import { countChangedFields } from './settingsDiff'
 import { ContainedBlock } from '../report-detail/ReportSurface'
 import { ConsoleHelpPanel } from '../ConsoleHelpPanel'
+import { LifecycleEmailsToggle } from './LifecycleEmailsToggle'
+
+/** Tri-state select values for `widget_brand_footer` (null = plan default). */
+type BrandFooterChoice = 'default' | 'on' | 'off'
+
+function brandFooterToChoice(value: boolean | null | undefined): BrandFooterChoice {
+  if (value === true) return 'on'
+  if (value === false) return 'off'
+  return 'default'
+}
+
+function choiceToBrandFooter(choice: BrandFooterChoice): boolean | null {
+  if (choice === 'on') return true
+  if (choice === 'off') return false
+  return null
+}
 
 interface ProjectSettings {
   slack_webhook_url?: string
@@ -39,6 +55,10 @@ interface ProjectSettings {
   tdd_max_gens_per_day?: number
   /** Branch name template for fix-worker PRs. Tokens: {date}, {category}, {shortId}. */
   fix_branch_template?: string
+  /** "Bug reports by Mushi" mark on the feedback widget. `null`/absent =
+   *  plan default (on for Free Cloud, off for paid and self-host). The
+   *  server column ships with the GTM loop (docs/plan-gtm.md, C §5). */
+  widget_brand_footer?: boolean | null
 }
 
 export function GeneralPanel() {
@@ -437,7 +457,35 @@ export function GeneralPanel() {
           </label>
         </div>
       </Section>
+
+      <div id="widget" className="scroll-mt-6">
+        <Section title="Feedback widget" className="space-y-3">
+          <SettingEffectCallout>
+            A small "Bug reports by Mushi" line at the foot of the in-app feedback widget. It links to
+            Mushi and is how other builders find us. Default is on for Free Cloud projects and off for
+            paid and self-hosted projects; override it here either way.
+          </SettingEffectCallout>
+          <SelectField
+            label="Show “Bug reports by Mushi” on the feedback widget"
+            id="widget-brand-footer"
+            value={brandFooterToChoice(settings.widget_brand_footer)}
+            onChange={(e) => update({ widget_brand_footer: choiceToBrandFooter(e.target.value as BrandFooterChoice) })}
+          >
+            <option value="default">Plan default (on for Free Cloud, off for paid and self-host)</option>
+            <option value="on">Always show</option>
+            <option value="off">Never show</option>
+          </SelectField>
+          <SettingsChangeHint
+            current={brandFooterToChoice(settings.widget_brand_footer)}
+            saved={brandFooterToChoice(saved.widget_brand_footer)}
+            kind="text"
+          />
+        </Section>
+      </div>
     </SettingsPanelLayout>
+
+    {/* Account-scoped; saves on toggle, independent of the project form above. */}
+    <LifecycleEmailsToggle />
     <ConsoleHelpPanel />
     </>
   )

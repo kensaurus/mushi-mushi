@@ -26,7 +26,18 @@ import { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { BILLING_CTA_LINK_CLASS_MD } from '../../lib/tokens'
 import { useToast } from '../../lib/toast'
+import { trackSelf } from '../../lib/track'
 import type { FeatureFlag, UpgradeTarget } from '../../lib/useEntitlements'
+
+/** Funnel: `upgrade_clicked { plan }` — `plan` is the target plan id, or
+ *  `view_plans` when no specific target was resolved. */
+export function trackUpgradeClicked(
+  upgradeTo: UpgradeTarget | null | undefined,
+  flag: FeatureFlag | string,
+  surface: string,
+): void {
+  trackSelf('upgrade_clicked', { plan: upgradeTo?.id ?? 'view_plans', flag, surface })
+}
 
 const FEATURE_COPY: Record<FeatureFlag, { title: string; tagline: string; bullets: string[] }> = {
   sso: {
@@ -166,6 +177,7 @@ export function UpgradePrompt({ flag, currentPlan, upgradeTo }: InlineProps) {
         <Link
           to="/billing"
           className={BILLING_CTA_LINK_CLASS_MD}
+          onClick={() => trackUpgradeClicked(upgradeTo, flag, 'upgrade_prompt')}
         >
           {upgradeTo
             ? `Upgrade to ${upgradeTo.display_name} — $${upgradeTo.monthly_price_usd}/mo`
@@ -218,7 +230,13 @@ export function UpgradePromptHost() {
           ? `${detail.upgradeTo.display_name} ($${detail.upgradeTo.monthly_price_usd}/mo) unlocks this.`
           : 'Pick a plan that includes this feature.',
         duration: 12_000,
-        action: { label: 'View plans', onClick: () => navigate('/billing') },
+        action: {
+          label: 'View plans',
+          onClick: () => {
+            trackUpgradeClicked(detail.upgradeTo, detail.flag, 'entitlement_blocked_toast')
+            navigate('/billing')
+          },
+        },
       })
     }
     window.addEventListener('mushi:entitlement-blocked', handler)

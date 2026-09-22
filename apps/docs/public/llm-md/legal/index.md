@@ -1,0 +1,15 @@
+# Legal
+
+Source: https://kensaur.us/mushi-mushi/docs/legal
+
+---
+title: Legal
+description: Privacy policy and terms of service for Mushi Mushi Cloud, the SDKs, and the tester program.
+---
+
+# Legal
+
+- [Privacy policy](/legal/privacy) — what Mushi collects, why, who processes it, how long it is kept, and how to exercise your rights (GDPR and Japan APPI).
+- [Terms of service](/legal/terms) — the agreement for Mushi Mushi Cloud, the MIT SDKs, the AGPLv3 server, and the Mushi Bounties tester program.
+
+Questions: kensaurus@gmail.com. Security posture and vulnerability reporting: [Security](/security).

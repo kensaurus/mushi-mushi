@@ -20,6 +20,11 @@ const SOURCE = readFileSync(
   'utf8',
 )
 
+/** The generated catalog copy the hosted server takes tool metadata from. */
+const DISCOVERY = JSON.parse(
+  readFileSync(resolve(__dirname, '../../supabase/functions/_shared/mcp-discovery-tools.json'), 'utf8'),
+) as { tools: Record<string, { inputSchema: Record<string, unknown>; outputSchema?: Record<string, unknown> }> }
+
 describe('mcp http edge function — scope filter parity (B3)', () => {
   it('handleToolsList accepts a CallContext so it can filter by scope', () => {
     expect(SOURCE).toMatch(/function handleToolsList\(ctx: CallContext\)/)
@@ -53,16 +58,30 @@ describe('mcp http edge function — outputSchema parity (B3)', () => {
     expect(SOURCE).toMatch(/outputSchema\?: Record<string, unknown>/)
   })
 
-  it('get_recent_reports declares an outputSchema with reports array + total', () => {
-    expect(SOURCE).toMatch(/get_recent_reports:\s*\{[\s\S]*?outputSchema:\s*\{[\s\S]*?reports:[\s\S]*?total:/m)
+  // Hosted schemas are no longer hand-declared next to each handler: every
+  // tool takes its input and output schema from the generated catalog copy,
+  // so the two transports cannot disagree (check-catalog-sync.mjs check 7).
+  it('takes every hand-written tool\'s input and output schema from the catalog', () => {
+    const overlay = SOURCE.split('function withCatalogMetadata')[1]?.split('\n}\n')[0] ?? ''
+    expect(overlay).toMatch(/inputSchema: canonical\.inputSchema/)
+    expect(overlay).toMatch(/outputSchema: canonical\.outputSchema/)
+    expect(SOURCE).toMatch(/Object\.entries\(BASE_TOOLS\)\.map\(\(\[name, impl\]\) => \[name, withCatalogMetadata\(name, impl\)\]\)/)
   })
 
-  it('search_reports declares an outputSchema with results array', () => {
-    expect(SOURCE).toMatch(/search_reports:\s*\{[\s\S]*?outputSchema:\s*\{[\s\S]*?results:/m)
+  it('get_recent_reports advertises the catalog outputSchema with reports array + total', () => {
+    const out = DISCOVERY.tools.get_recent_reports?.outputSchema as { properties: Record<string, unknown>; required: string[] }
+    expect(Object.keys(out.properties)).toEqual(expect.arrayContaining(['reports', 'total']))
+    expect(out.required).toEqual(expect.arrayContaining(['reports', 'total']))
   })
 
-  it('dispatch_fix declares an outputSchema with fixId + cursor agent fields', () => {
-    expect(SOURCE).toMatch(/dispatch_fix:\s*\{[\s\S]*?outputSchema:\s*\{[\s\S]*?fixId:[\s\S]*?agentId:[\s\S]*?prUrl:/m)
+  it('search_reports advertises the catalog outputSchema with a results array', () => {
+    const out = DISCOVERY.tools.search_reports?.outputSchema as { properties: Record<string, { type?: string }> }
+    expect(out.properties.results?.type).toBe('array')
+  })
+
+  it('dispatch_fix advertises { fixId, status } — the dispatch route returns nothing else', () => {
+    const out = DISCOVERY.tools.dispatch_fix?.outputSchema as { properties: Record<string, unknown> }
+    expect(Object.keys(out.properties).sort()).toEqual(['fixId', 'status'])
   })
 
   it('handleToolsCall emits structuredContent when an outputSchema is defined', () => {
@@ -81,12 +100,47 @@ describe('mcp http edge function — outputSchema parity (B3)', () => {
   })
 })
 
+describe('mcp http edge function — one parameter spelling', () => {
+  // Parameters are camelCase on both transports; the snake_case spelling is
+  // an accepted alias (functions/mcp/arg-aliases.ts, identical to stdio's).
+  it('renames aliases from the tool\'s declared schema before anything reads the arguments', () => {
+    const call = SOURCE.split('async function handleToolsCall')[1]?.split('\nasync function ')[0] ?? ''
+    const normalize = call.indexOf('const args = normalizeArgAliases(')
+    expect(normalize).toBeGreaterThan(-1)
+    expect(call.slice(normalize)).toMatch(/Object\.keys\(\(def\.inputSchema\.properties/)
+    // The voice gate and the handler both see the normalized args.
+    expect(call.indexOf('applyVoiceGate(args')).toBeGreaterThan(normalize)
+    expect(call.indexOf('invokeToolAsResult(name, args')).toBeGreaterThan(normalize)
+  })
+
+  it('has no hosted handler reading a snake_case argument', () => {
+    const base = SOURCE.split('const BASE_TOOLS')[1]?.split('/** Full catalog')[0] ?? ''
+    expect(base.match(/\bargs\.[a-z]+_[a-z_]+/g) ?? []).toEqual([])
+    const manifestTools = readFileSync(resolve(__dirname, '../../supabase/functions/mcp/manifest-tools.ts'), 'utf8')
+    expect(manifestTools.match(/\bargs\.[a-z]+_[a-z_]+/g) ?? []).toEqual([])
+    const manifest = readFileSync(resolve(__dirname, '../../supabase/functions/_shared/mcp-hosted-tool-manifest.json'), 'utf8')
+    // Templates name catalog parameters ({projectId}); wire keys stay snake_case.
+    expect(manifest.match(/\{[a-z]+_[a-z_]+(\|[^}]*)?\}/g) ?? []).toEqual([])
+  })
+
+  it('advertises no snake_case parameter in any catalog tool', () => {
+    const snake = Object.entries(DISCOVERY.tools).flatMap(([name, t]) =>
+      Object.keys((t.inputSchema.properties ?? {}) as Record<string, unknown>)
+        .filter((p) => p.includes('_'))
+        .map((p) => `${name}.${p}`),
+    )
+    expect(snake).toEqual([])
+  })
+})
+
 describe('mcp http edge function — setup tools parity', () => {
   // setup_check + ingest_setup_check were consolidated into the single
   // diagnose_setup entry point (mode=full|ingest|dispatch). Assert the
   // consolidated tool covers both readiness surfaces.
-  it('declares diagnose_setup with full|ingest|dispatch modes', () => {
-    expect(SOURCE).toMatch(/diagnose_setup:\s*\{[\s\S]*?enum:\s*\['full',\s*'ingest',\s*'dispatch'\]/m)
+  it('advertises diagnose_setup with full|ingest|dispatch modes', () => {
+    const mode = (DISCOVERY.tools.diagnose_setup?.inputSchema as { properties: Record<string, { enum?: string[] }> })
+      .properties.mode
+    expect(mode?.enum).toEqual(['full', 'ingest', 'dispatch'])
   })
 
   it('diagnose_setup ingest mode is wired to /v1/sync/ingest-setup', () => {

@@ -23,8 +23,9 @@ const rawLimit = pkg["size-limit"]?.find((e) => !e.gzip)?.limit
 const findings = []
 
 if (gzLimit) {
-  const m = readme.match(/(\d+)\s*KB\s*gzipped/i)
-  if (!m || m[1] !== String(parseInt(gzLimit, 10))) {
+  // Budgets may be fractional ("89.5 KB"); an integer-only match read that as "5".
+  const m = readme.match(/(\d+(?:\.\d+)?)\s*KB\s*gzipped/i)
+  if (!m || m[1] !== String(parseFloat(gzLimit))) {
     findings.push(
       `README gzipped budget (${m?.[1] ?? "missing"}) != package.json (${gzLimit})`
     )
@@ -32,8 +33,8 @@ if (gzLimit) {
 }
 
 if (rawLimit) {
-  const m = readme.match(/(\d+)\s*KB\s*uncompressed/i)
-  if (!m || m[1] !== String(parseInt(rawLimit, 10))) {
+  const m = readme.match(/(\d+(?:\.\d+)?)\s*KB\s*uncompressed/i)
+  if (!m || m[1] !== String(parseFloat(rawLimit))) {
     findings.push(
       `README uncompressed budget (${m?.[1] ?? "missing"}) != package.json (${rawLimit})`
     )
