@@ -61,6 +61,7 @@ for (const line of eventsBlock.split('\n')) {
   events.push({ name: m[1], surface, required: quotedList(m[3]) })
 }
 if (events.length === 0) throw new Error('gen-analytics-taxonomy: parsed zero events')
+const reservedPrefix = grab(/const RESERVED_PROPERTY_PREFIX = '([^']+)';/, 'RESERVED_PROPERTY_PREFIX')
 const activation = grab(/export const ACTIVATION_EVENT: MushiEventName = '(\w+)';/, 'ACTIVATION_EVENT')
 const habit = quotedList(grab(/export const HABIT_EVENTS: readonly MushiEventName\[\] = \[([^\]]*)\];/, 'HABIT_EVENTS'))
 for (const h of habit) {
@@ -76,7 +77,7 @@ const body = `/**
 
 export const EVENT_NAME_RE = ${nameRe}
 export const PII_PROPERTY_KEY_RE = ${piiRe}
-export const RESERVED_PROPERTY_PREFIX = '$'
+export const RESERVED_PROPERTY_PREFIX = '${reservedPrefix}'
 
 export const EVENT_PROPERTY_LIMITS = ${JSON.stringify(limits, null, 2)} as const
 
