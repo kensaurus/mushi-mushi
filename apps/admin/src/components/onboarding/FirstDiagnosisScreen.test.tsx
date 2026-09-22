@@ -27,14 +27,25 @@ vi.mock('../ClientConnectButton', () => ({ ClientConnectButton: () => null }))
 vi.mock('../FirstRunTour', () => ({ startFirstRunTour: vi.fn() }))
 vi.mock('@mushi-mushi/mcp/clients', () => ({ getMcpClient: () => ({ id: 'cursor' }) }))
 
-const PROJECT = '11111111-1111-4111-8111-111111111111'
+import { FirstDiagnosisScreen } from './FirstDiagnosisScreen'
+
 const REPORT = '22222222-2222-4222-8222-222222222222'
-const VIEWED_PATH = `/v1/admin/projects/${PROJECT}/setup-funnel/diagnosis-viewed`
+
+/**
+ * The per-page-load dedupe lives in module state, so each test uses its own
+ * project id instead of re-importing the (heavy) component per test.
+ */
+let projectSeq = 0
+let PROJECT = ''
+
+function viewedPath(): string {
+  return `/v1/admin/projects/${PROJECT}/setup-funnel/diagnosis-viewed`
+}
 
 type Call = [string, { method?: string; body?: string } | undefined]
 
 function viewedCalls(): Call[] {
-  return (api.apiFetch.mock.calls as Call[]).filter(([path]) => path === VIEWED_PATH)
+  return (api.apiFetch.mock.calls as Call[]).filter(([path]) => path === viewedPath())
 }
 
 /** Test report accepted, then the first poll returns a classified row. */
@@ -47,7 +58,7 @@ function serveDiagnosis(viewed: { ok: boolean } = { ok: true }) {
         data: { id: REPORT, title: 'Login fails on iPad Safari', summary: 'Session 401', severity: 'high' },
       }
     }
-    if (path === VIEWED_PATH) return viewed.ok ? { ok: true, data: { ok: true } } : { ok: false, error: { code: 'X' } }
+    if (path === viewedPath()) return viewed.ok ? { ok: true, data: { ok: true } } : { ok: false, error: { code: 'X' } }
     return { ok: false, error: { code: 'UNEXPECTED' } }
   })
 }
@@ -61,7 +72,8 @@ describe('FirstDiagnosisScreen — diagnosis_viewed', () => {
   let root: Root
 
   beforeEach(() => {
-    vi.resetModules()
+    projectSeq += 1
+    PROJECT = `11111111-1111-4111-8111-${String(projectSeq).padStart(12, '0')}`
     vi.useFakeTimers()
     api.apiFetch.mockReset()
     tracking.trackSelf.mockReset()
@@ -77,9 +89,7 @@ describe('FirstDiagnosisScreen — diagnosis_viewed', () => {
     vi.useRealTimers()
   })
 
-  async function renderScreen(): Promise<void> {
-    // Fresh module per test so the per-page-load dedupe starts empty.
-    const { FirstDiagnosisScreen } = await import('./FirstDiagnosisScreen')
+  function renderScreen(): void {
     act(() => {
       root.render(
         createElement(
@@ -106,7 +116,7 @@ describe('FirstDiagnosisScreen — diagnosis_viewed', () => {
 
   it('posts diagnosis_viewed once the diagnosis renders, with the report id', async () => {
     serveDiagnosis()
-    await renderScreen()
+    renderScreen()
     expect(viewedCalls()).toHaveLength(0)
 
     await sendAndDiagnose()
@@ -121,7 +131,7 @@ describe('FirstDiagnosisScreen — diagnosis_viewed', () => {
 
   it('does not post before a diagnosis exists', async () => {
     serveDiagnosis()
-    await renderScreen()
+    renderScreen()
     const send = container.querySelector<HTMLButtonElement>('[data-testid="first-diagnosis-send"]')
     await act(async () => {
       send!.click()
@@ -133,18 +143,18 @@ describe('FirstDiagnosisScreen — diagnosis_viewed', () => {
 
   it('sends once per project per page load, even when the screen remounts', async () => {
     serveDiagnosis()
-    await renderScreen()
+    renderScreen()
     await sendAndDiagnose()
     act(() => root.unmount())
     root = createRoot(container)
-    await renderScreen()
+    renderScreen()
     await sendAndDiagnose()
     expect(viewedCalls()).toHaveLength(1)
   })
 
   it('retries on the next diagnosis when the post failed', async () => {
     serveDiagnosis({ ok: false })
-    await renderScreen()
+    renderScreen()
     await sendAndDiagnose()
     await act(async () => {
       await flush()
@@ -152,23 +162,14 @@ describe('FirstDiagnosisScreen — diagnosis_viewed', () => {
     serveDiagnosis({ ok: true })
     act(() => root.unmount())
     root = createRoot(container)
-    const { FirstDiagnosisScreen } = await import('./FirstDiagnosisScreen')
-    act(() => {
-      root.render(
-        createElement(
-          MemoryRouter,
-          null,
-          createElement(FirstDiagnosisScreen, { projectId: PROJECT, projectName: 'Demo' }),
-        ),
-      )
-    })
+    renderScreen()
     await sendAndDiagnose()
     expect(viewedCalls()).toHaveLength(2)
   })
 
   it('records the install-first branch as an ad-hoc event, not a funnel step', async () => {
     serveDiagnosis()
-    await renderScreen()
+    renderScreen()
     const installFirst = Array.from(container.querySelectorAll('button')).find((b) =>
       b.textContent?.includes('Install the SDK first instead'),
     )
