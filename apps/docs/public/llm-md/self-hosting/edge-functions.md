@@ -30,6 +30,22 @@ npx supabase functions deploy healthz --no-verify-jwt
 
   Run every deploy command from `packages/server/` — the Supabase CLI looks for `supabase/functions/` relative to the current directory. Running from the repo root will fail with "entrypoint path does not exist".
 
+## Checking what is deployed
+
+`api` answers `GET /health` and `GET /v1/health` without a key, with the
+commit it was built from:
+
+```bash
+curl -s "$SUPABASE_URL/functions/v1/api/v1/health"
+# {"status":"ok","version":"<commit sha>","deployed_at":"...","region":"us","hosting_region":"ap-northeast-1"}
+```
+
+`version` is the sha stamped at deploy time, so it answers "did my deploy
+land?" without reading logs — compare it with `git rev-parse HEAD`.
+`hosting_region` is where the function actually runs, which matters when the
+database lives elsewhere. The standalone `healthz` function reports the same
+sha for uptime monitors that should not depend on the API router.
+
 ## Common optional functions
 
 ```bash

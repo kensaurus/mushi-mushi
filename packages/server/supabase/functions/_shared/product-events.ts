@@ -105,6 +105,36 @@ export async function resolveSelfEndUser(db: SupabaseClient, userId: string): Pr
   return (data?.id as string | undefined) ?? null
 }
 
+let _demoProjectId: string | null | undefined
+
+/**
+ * True when this event is about the public /connect demo project
+ * (mushi_runtime_config key 'demo_project_id'). Demo traffic is real people
+ * trying the product, but it is one shared key and no account, so it must
+ * not land on anyone's person row or count toward habit.
+ */
+async function isDemoProject(db: SupabaseClient, projectId: unknown): Promise<boolean> {
+  if (typeof projectId !== 'string' || !projectId) return false
+  if (_demoProjectId === undefined) {
+    try {
+      const { data } = await db
+        .from('mushi_runtime_config')
+        .select('value')
+        .eq('key', 'demo_project_id')
+        .maybeSingle()
+      _demoProjectId = (data?.value as string | undefined) || null
+    } catch (err) {
+      // Never let a config read decide whether an event is recorded: the
+      // worst case here is one demo row attributed, not a lost funnel.
+      log.warn('product-events: demo project lookup failed', {
+        error: err instanceof Error ? err.message : String(err),
+      })
+      return false
+    }
+  }
+  return _demoProjectId !== null && projectId === _demoProjectId
+}
+
 /** True when the mushi-self project is configured (company funnel enabled). */
 export function isSelfFunnelConfigured(): boolean {
   return Boolean(SELF_PROJECT_ID)
@@ -132,8 +162,12 @@ async function writeProductEvent(db: SupabaseClient, payload: ProductEventPayloa
       log.warn('product-events: properties too large', { event: payload.eventName })
       return false
     }
+    // The /connect demo runs on one shared read-only key, so a stranger's
+    // tool call would otherwise land on the demo project owner's person row
+    // and count as their habit. Tag it and attribute it to nobody.
+    const onDemoProject = await isDemoProject(db, properties.project_id)
     let endUserId: string | null = null
-    if (payload.userId && projectId === SELF_PROJECT_ID) {
+    if (payload.userId && !onDemoProject && projectId === SELF_PROJECT_ID) {
       endUserId = await resolveSelfEndUser(db, payload.userId)
     }
     const { error } = await db.from('product_events').insert({
@@ -141,12 +175,12 @@ async function writeProductEvent(db: SupabaseClient, payload: ProductEventPayloa
       event_name: payload.eventName,
       ts: payload.ts ?? new Date().toISOString(),
       session_id: payload.sessionId ?? null,
-      anon_id: payload.anonId ?? null,
+      anon_id: onDemoProject ? null : (payload.anonId ?? null),
       end_user_id: endUserId,
       surface: payload.surface,
       sdk_version: null,
       dedup_key: payload.dedupKey ?? null,
-      properties: { ...properties, $surface: payload.surface },
+      properties: { ...properties, $surface: payload.surface, ...(onDemoProject ? { demo: true } : {}) },
       written_by: 'server',
     })
     if (error) {

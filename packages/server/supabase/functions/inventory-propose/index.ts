@@ -33,6 +33,20 @@
 // ────
 // Honours `project_settings.byok_anthropic_key_ref` via the existing
 // `resolveLlmKey` helper. Falls back to the host's `ANTHROPIC_API_KEY`.
+//
+// Run budget
+// ──────────
+// Every model call carries a deadline. Until 2026-09-22 it carried none:
+// the hourly `drift_watch` cron made up to three Sonnet calls per project
+// with no abort, so the run outlived the edge runtime's wall clock and was
+// killed before it could persist anything. The watchdog recorded 5 degraded
+// runs a day and the last proposal to reach the database was 2026-05-04 —
+// an LLM call an hour, every hour, for nothing.
+//
+// Now: the run stops work at MUSHI_INVENTORY_RUN_BUDGET_MS (default 110 s,
+// under the 150 s the cron waits), each attempt aborts at its share of what
+// is left, and drift_watch fires at most MUSHI_INVENTORY_DRIFT_MAX_PER_RUN
+// proposals (default 1) and reports the rest as `deferred` for the next run.
 // ============================================================
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
@@ -53,6 +67,7 @@ import {
   validateInventoryObject,
   type Inventory,
 } from '../_shared/inventory.ts'
+import { RUN_BUDGET_MS, nextAttemptTimeoutMs } from './run-budget.ts'
 
 /**
  * We use `generateText` rather than `generateObject` here because the
@@ -246,6 +261,7 @@ async function runProposer(args: {
   prompt: string
   previousIssues?: string
   systemPrompt?: string
+  timeoutMs: number
 }): Promise<{ inventory: Inventory; rationale: Record<string, string>; tokens: { in: number; out: number } }> {
   const anthropic = createAnthropic({ apiKey: args.apiKey })
   const messages: Array<{ role: 'system' | 'user'; content: string }> = [
@@ -265,6 +281,8 @@ async function runProposer(args: {
     model: anthropic(args.modelId),
     messages,
     maxTokens: 8192,
+    // Without this the call can outlive the edge runtime itself.
+    abortSignal: AbortSignal.timeout(args.timeoutMs),
   })
 
   let out: ModelOutput
@@ -317,6 +335,7 @@ async function proposeAndPersist(
   projectId: string,
   triggeredBy: string | null,
   modelOverride?: string,
+  deadlineAt: number = Date.now() + RUN_BUDGET_MS,
 ): Promise<{
   proposalId: string
   routeCount: number
@@ -349,6 +368,11 @@ async function proposeAndPersist(
   let last: Awaited<ReturnType<typeof runProposer>> | null = null
   let lastError: { message: string; summary?: string } | null = null
   while (attempt < 3) {
+    const timeoutMs = nextAttemptTimeoutMs(deadlineAt - Date.now())
+    if (timeoutMs === null) {
+      rlog.warn('propose out of time — persisting what we have', { projectId, attempt })
+      break
+    }
     try {
       last = await withLlmFailover(
         db,
@@ -361,6 +385,7 @@ async function proposeAndPersist(
             prompt,
             previousIssues,
             systemPrompt: managedSystemPrompt ?? undefined,
+            timeoutMs,
           })
         },
         // This path writes no llm_invocations row, so the hosted-key debit is
@@ -510,6 +535,12 @@ async function handler(req: Request): Promise<Response> {
 async function handleDriftWatch(db: SupabaseClient, body: ProposeBody): Promise<Response> {
   const driftRouteThreshold = Number(Deno.env.get('MUSHI_INVENTORY_DRIFT_ROUTES') ?? '5')
   const driftCooldownDays = Number(Deno.env.get('MUSHI_INVENTORY_DRIFT_COOLDOWN_DAYS') ?? '7')
+  // One proposal per run by default: each is a Sonnet call, and the cron
+  // comes back every hour. The rest are reported as deferred, not dropped.
+  const maxPerRun = Number(Deno.env.get('MUSHI_INVENTORY_DRIFT_MAX_PER_RUN') ?? '1')
+  const deadlineAt = Date.now() + RUN_BUDGET_MS
+  let fired = 0
+  let deferred = 0
 
   // Find every project that HAS a current inventory.yaml. Projects
   // without one already get a different proposal flow (the bootstrap
@@ -574,13 +605,27 @@ async function handleDriftWatch(db: SupabaseClient, body: ProposeBody): Promise<
       continue
     }
 
+    // Out of budget, or this run has already fired its share.
+    if (fired >= maxPerRun || nextAttemptTimeoutMs(deadlineAt - Date.now()) === null) {
+      deferred += 1
+      results.push({ projectId, drifted: drifted.length, skipped: 'deferred_to_next_run' })
+      continue
+    }
+
     rlog.info('drift detected — re-firing proposer', {
       projectId,
       driftedCount: drifted.length,
       driftedSample: drifted.slice(0, 5),
     })
     try {
-      const result = await proposeAndPersist(db, projectId, body.triggered_by ?? 'cron:drift-watch', body.model)
+      const result = await proposeAndPersist(
+        db,
+        projectId,
+        body.triggered_by ?? 'cron:drift-watch',
+        body.model,
+        deadlineAt,
+      )
+      fired += 1
       results.push({ projectId, drifted: drifted.length, proposalId: result.proposalId })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -589,9 +634,9 @@ async function handleDriftWatch(db: SupabaseClient, body: ProposeBody): Promise<
     }
   }
 
-  const fired = results.filter((r) => r.proposalId).length
   const skipped = results.filter((r) => r.skipped).length
   rlog.info('drift-watch sweep complete', {
+    deferred,
     candidates: candidates?.length ?? 0,
     fired,
     skipped,
@@ -605,6 +650,7 @@ async function handleDriftWatch(db: SupabaseClient, body: ProposeBody): Promise<
         candidatesChecked: candidates?.length ?? 0,
         fired,
         skipped,
+        deferred,
         results,
       },
     }),
