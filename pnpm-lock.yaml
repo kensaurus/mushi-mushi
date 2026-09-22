@@ -870,9 +870,6 @@ importers:
       '@mushi-mushi/core':
         specifier: workspace:^
         version: link:../core
-      '@sentry/node':
-        specifier: ^10.57.0
-        version: 10.58.0
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -883,6 +880,9 @@ importers:
       '@mushi-mushi/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint-config
+      '@sentry/node':
+        specifier: ^10.57.0
+        version: 10.58.0
       '@types/node':
         specifier: ^22.20.0
         version: 22.20.0

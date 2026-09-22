@@ -289,6 +289,9 @@ Named templates the MCP client surfaces in its slash-menu. Each one bakes in the
 | `MUSHI_API_KEY` | yes | — | Project API key with `mcp:read` or `mcp:write` scope. Mint one in the admin console → **Projects** (the one-time reveal card has a **Copy as `.env.local`** tab). |
 | `MUSHI_PROJECT_ID` | yes | — | UUID from the admin console URL (`/projects/<uuid>/...`) or the reveal card. |
 | `MUSHI_API_ENDPOINT` | no | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` | Override only if you self-host. Localhost: `http://localhost:54321/functions/v1/api`. |
+| `MUSHI_MCP_SENTRY_DSN` | no | — | Reports this server's own errors to your Sentry project. Needs `@sentry/node` installed next to the server (an optional peer, not installed by default): `npx -p @sentry/node -p @mushi-mushi/mcp mushi-mcp`. |
+
+If a client passes a variable reference through unexpanded (the server receives the literal text `${MUSHI_API_KEY}`), the server treats it as unset: it falls back to the `mushi login` config, or serves setup mode and prints which client syntax to use. Claude Desktop expands no variables; Cursor and VS Code expand `${env:MUSHI_API_KEY}`; Claude Code expands `${MUSHI_API_KEY}`.
 
 ### Storing the key in `.env.local`
 
