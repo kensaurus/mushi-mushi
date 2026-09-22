@@ -2,8 +2,12 @@
  * Smoke: cinematic landing still ships north-star copy from the SSOT.
  * Guards against accidental hero/CTA/nav drift when motion components wrap prose.
  */
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  LANDING_WHAT_THIS_IS,
   LANDING_HERO,
   LANDING_HERO_CTAS,
   LANDING_SIXTY_SECOND,
@@ -17,9 +21,22 @@ import {
 } from './landing-copy'
 import { ADMIN_DEMO_BASE } from '../data/admin-screenshots'
 
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
 describe('landing cinematic copy SSOT', () => {
   it('keeps category eyebrow on the v2 ladder', () => {
     expect(LANDING_HERO.eyebrow).toBe(MUSHI_TAGLINE_V2.category)
+  })
+
+  it('says what Mushi Mushi is in one sentence built from the brand ladder', () => {
+    const { definition } = LANDING_WHAT_THIS_IS
+    expect(definition.startsWith('Mushi Mushi is ')).toBe(true)
+    expect(definition.toLowerCase()).toContain(MUSHI_TAGLINE_V2.category.toLowerCase())
+    expect(definition.toLowerCase()).toContain(MUSHI_TAGLINE_V2.promise.toLowerCase())
+    expect(definition.split(/[.!?](?:\s|$)/).filter(Boolean)).toHaveLength(1)
+    // index.mdx carries it as plain text so the Markdown mirrors keep it.
+    const landing = readFileSync(join(__dirname, '..', 'content', 'index.mdx'), 'utf8')
+    expect(landing).toContain(`\n${definition}\n`)
   })
 
   it('keeps 60-second proof pricing claim', () => {

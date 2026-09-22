@@ -10,6 +10,7 @@ import { SiteFooter } from '../components/SiteFooter'
  * (Tailwind base layer before Nextra theme styles). */
 import './globals.css'
 import changelog from '../data/changelog.json'
+import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { JsonLd } from '../components/JsonLd'
 import {
   DOCS_SITE,
@@ -27,8 +28,9 @@ export const metadata: Metadata = {
     default: 'Mushi Mushi — know why your AI-built app broke, with the fix ready',
     template: '%s · Mushi Mushi',
   },
-  description:
-    'Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor. Open source. Sentry optional.',
+  // Fallback for pages without their own `description:` (the admin-console
+  // manual). The brand pitch, not a hand-typed second one.
+  description: MUSHI_TAGLINE_V2.pitch,
   openGraph: {
     siteName: 'Mushi Mushi',
     type: 'website',
