@@ -71,16 +71,37 @@ export interface RouteViewEvent {
   props: Record<string, string>
 }
 
+/** The routes each view series last fired for. The component keeps one per mount. */
+export interface RouteViewDedupe {
+  /** Route of the last `docs_page_view`. */
+  page: string | null
+  /**
+   * Route of the last page-specific view. Only the three tracked routes move
+   * it — the rule these events always had — so `/` → `/sdks/web` → `/` is
+   * still one `landing_view`, and their series stays continuous.
+   */
+  specific: string | null
+}
+
 /**
- * What one route view emits, in order: `docs_page_view` for every route,
- * then the page-specific event where there is one.
+ * What a route change emits, in order: `docs_page_view` for every route,
+ * then the page-specific event where there is one. A repeat of the same
+ * route (StrictMode, same-route re-render) emits nothing.
  */
-export function viewEventsForRoute(pathname: string): RouteViewEvent[] {
+export function planRouteViews(
+  pathname: string,
+  last: RouteViewDedupe,
+): { events: RouteViewEvent[]; last: RouteViewDedupe } {
   const route = normalizePathname(pathname)
+  if (last.page === route) return { events: [], last }
   const events: RouteViewEvent[] = [{ name: DOCS_PAGE_VIEW_EVENT, props: { route } }]
+  const next: RouteViewDedupe = { page: route, specific: last.specific }
   const specific = viewEventForRoute(route)
-  if (specific) events.push({ name: specific, props: {} })
-  return events
+  if (specific && last.specific !== route) {
+    events.push({ name: specific, props: {} })
+    next.specific = route
+  }
+  return { events, last: next }
 }
 
 // ─── UTM / referrer → reserved props ─────────────────────────────────────────

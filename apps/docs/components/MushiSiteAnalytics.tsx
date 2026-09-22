@@ -52,16 +52,16 @@ import {
   decorateSignupHref,
   dntActive,
   firstTouchReservedProps,
-  normalizePathname,
+  planRouteViews,
   readFirstTouch,
   readSiteAnalyticsConfig,
   readStoredConsent,
   reservedViewProps,
   sanitizeRefSlug,
-  viewEventsForRoute,
   writeStoredConsent,
   type FirstTouch,
   type ReservedProps,
+  type RouteViewDedupe,
   type SiteAnalyticsConfig,
   type StoredConsent,
 } from '@/lib/site-analytics'
@@ -139,7 +139,7 @@ export function MushiSiteAnalytics() {
   const consentRef = useRef<StoredConsent | 'pending' | 'blocked'>('pending')
   const trackerRef = useRef<Tracker | null>(null)
   const queueRef = useRef<QueuedEvent[]>([])
-  const lastViewRef = useRef<string | null>(null)
+  const lastViewsRef = useRef<RouteViewDedupe>({ page: null, specific: null })
   /** The stored first touch, set once consent committed it. Decorates signup links. */
   const firstTouchStoredRef = useRef<FirstTouch | null>(null)
   const firstTouchPendingRef = useRef(false)
@@ -237,13 +237,13 @@ export function MushiSiteAnalytics() {
   }, [activate, persistFirstTouch])
 
   // Route views — `usePathname` changes on every client navigation
-  // (Nextra catch-all included); dedupe so StrictMode / same-route
-  // re-renders never double-fire.
+  // (Nextra catch-all included); planRouteViews dedupes so StrictMode /
+  // same-route re-renders never double-fire.
   useEffect(() => {
     if (!CONFIG) return
-    const key = normalizePathname(pathname)
-    if (lastViewRef.current === key) return
-    lastViewRef.current = key
+    const plan = planRouteViews(pathname, lastViewsRef.current)
+    lastViewsRef.current = plan.last
+    if (plan.events.length === 0) return
     const firstTouch = firstTouchPendingRef.current
     firstTouchPendingRef.current = false
     const reserved = reservedViewProps({
@@ -252,7 +252,7 @@ export function MushiSiteAnalytics() {
       pathname,
       firstTouch,
     })
-    for (const ev of viewEventsForRoute(pathname)) emit(ev.name, ev.props, reserved)
+    for (const ev of plan.events) emit(ev.name, ev.props, reserved)
   }, [pathname, emit])
 
   // Delegated CTA clicks. Capture phase so the href is decorated before the

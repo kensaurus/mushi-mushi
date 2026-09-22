@@ -21,7 +21,7 @@ import {
   reservedViewProps,
   sanitizeReferrer,
   sanitizeRefSlug,
-  viewEventsForRoute,
+  planRouteViews,
   writeStoredConsent,
   type KeyValueStore,
 } from './site-analytics'
@@ -49,9 +49,26 @@ describe('readSiteAnalyticsConfig', () => {
   })
 })
 
+const FRESH = { page: null, specific: null }
+
+/** What a first view of `pathname` emits. */
+function viewEventsForRoute(pathname: string) {
+  return planRouteViews(pathname, FRESH).events
+}
+
 /** The page-specific event for a route, after the always-present docs_page_view. */
 function specificViewEvent(pathname: string): string | null {
   return viewEventsForRoute(pathname)[1]?.name ?? null
+}
+
+/** Event names emitted across a client-side navigation sequence. */
+function navigate(paths: string[]): string[][] {
+  let last: { page: string | null; specific: string | null } = FRESH
+  return paths.map((p) => {
+    const plan = planRouteViews(p, last)
+    last = plan.last
+    return plan.events.map((e) => e.name)
+  })
 }
 
 describe('viewEventsForRoute — page-specific events', () => {
@@ -98,6 +115,32 @@ describe('viewEventsForRoute', () => {
       }
     }
     expect(MUSHI_EVENTS.docs_page_view.surface).toBe('docs')
+  })
+})
+
+describe('planRouteViews — dedupe', () => {
+  it('emits nothing for a repeat of the same route (StrictMode, re-render)', () => {
+    expect(navigate(['/sdks/web', '/sdks/web/', '/'])).toEqual([
+      ['docs_page_view'],
+      [],
+      ['docs_page_view', 'landing_view'],
+    ])
+  })
+
+  it('counts the page-specific views exactly as before docs_page_view existed', () => {
+    // Before 2026-09-22 an untracked route did not move the dedupe key, so
+    // coming back to `/` through it was one landing_view. docs_page_view
+    // counts every page; the legacy series keeps its old rule.
+    expect(navigate(['/', '/sdks/web', '/'])).toEqual([
+      ['docs_page_view', 'landing_view'],
+      ['docs_page_view'],
+      ['docs_page_view'],
+    ])
+    expect(navigate(['/', '/pricing', '/'])).toEqual([
+      ['docs_page_view', 'landing_view'],
+      ['docs_page_view', 'pricing_view'],
+      ['docs_page_view', 'landing_view'],
+    ])
   })
 })
 
