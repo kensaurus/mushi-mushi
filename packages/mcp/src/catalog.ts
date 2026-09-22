@@ -931,9 +931,9 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
   // Sentry ships `use_sentry` (a single meta-tool an agent calls to get a
   // recommended subset of tools for a given intent) as the primary context-
   // cost reduction lever.  We do the same: `use_mushi` returns a curated
-  // list of the 6–12 tools most relevant to the caller's stated intent, plus
+  // short list of the tools most relevant to the caller's stated intent, plus
   // a short orientation block.  Agents that call use_mushi first avoid
-  // loading 68 tool descriptions up-front, cutting context cost by ~60% for
+  // loading every tool description up-front, which cuts context cost for
   // narrow tasks (fix a bug, check status, start a pipeline).
   {
     name: 'use_mushi',

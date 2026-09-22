@@ -328,7 +328,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   async function apiCall<T = unknown>(path: string, options?: RequestInit): Promise<T> {
     const requestId = crypto.randomUUID().slice(0, 12);
     const started = Date.now();
-    // Every one of the ~90 tool bodies funnels through here, so this is the
+    // Every tool body funnels through here, so this is the
     // only place a timeout has to exist. `AbortSignal.timeout` fires a
     // `TimeoutError` DOMException that fetch surfaces as the rejection reason.
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
@@ -3907,7 +3907,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   // ── use_mushi meta-tool ────────────────────────────────────────────────────
   // Single entry point for orientation and context-cost reduction.
   // Returns a curated tool list for the agent's stated intent so it can skip
-  // loading all 68 tool descriptions up-front (mirrors Sentry's `use_sentry`).
+  // loading every tool description up-front (mirrors Sentry's `use_sentry`).
   server.registerTool(
     'use_mushi',
     {

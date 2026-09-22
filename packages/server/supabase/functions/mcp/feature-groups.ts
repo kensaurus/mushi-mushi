@@ -29,7 +29,7 @@ export const FEATURE_GROUPS = [
 
 export type FeatureGroup = (typeof FEATURE_GROUPS)[number]
 
-/** Lean default for new Cursor installs (~45 tools vs 70 full). */
+/** Lean default for new installs — a focused subset of the full catalog. */
 export const DEFAULT_FEATURE_GROUPS: readonly FeatureGroup[] = [
   'triage',
   'fixes',
