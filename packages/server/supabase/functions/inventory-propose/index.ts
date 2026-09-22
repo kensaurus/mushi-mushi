@@ -67,7 +67,9 @@ import {
   validateInventoryObject,
   type Inventory,
 } from '../_shared/inventory.ts'
-import { RUN_BUDGET_MS, nextAttemptTimeoutMs } from './run-budget.ts'
+import { nextAttemptTimeoutMs, runBudgetMs } from './run-budget.ts'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
  * We use `generateText` rather than `generateObject` here because the
@@ -335,7 +337,7 @@ async function proposeAndPersist(
   projectId: string,
   triggeredBy: string | null,
   modelOverride?: string,
-  deadlineAt: number = Date.now() + RUN_BUDGET_MS,
+  deadlineAt: number = Date.now() + runBudgetMs(),
 ): Promise<{
   proposalId: string
   routeCount: number
@@ -466,7 +468,11 @@ ${raw ? yamlStringify(raw) : '# (no model output captured)\n'}`
       rationale_by_story: rationale as unknown as Record<string, unknown>,
       llm_model: modelId,
       observation_count: observations.length,
-      created_by: triggeredBy,
+      // created_by is a uuid: a cron passes a label ('cron:drift-watch'),
+      // which Postgres refused — so every cron proposal was computed, paid
+      // for, and thrown away at the insert. Labels belong in `source`.
+      created_by: UUID_RE.test(triggeredBy ?? '') ? triggeredBy : null,
+      source: triggeredBy ?? 'api',
     })
     .select('id')
     .single()
@@ -538,7 +544,7 @@ async function handleDriftWatch(db: SupabaseClient, body: ProposeBody): Promise<
   // One proposal per run by default: each is a Sonnet call, and the cron
   // comes back every hour. The rest are reported as deferred, not dropped.
   const maxPerRun = Number(Deno.env.get('MUSHI_INVENTORY_DRIFT_MAX_PER_RUN') ?? '1')
-  const deadlineAt = Date.now() + RUN_BUDGET_MS
+  const deadlineAt = Date.now() + runBudgetMs()
   let fired = 0
   let deferred = 0
 

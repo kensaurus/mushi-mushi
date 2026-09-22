@@ -5,7 +5,10 @@ package = JSON.parse(File.read(File.join(__dir__, 'package.json')))
 Pod::Spec.new do |s|
   s.name             = 'MushiMushiCapacitor'
   s.version          = package['version']
-  s.summary          = package['description']
+  # CocoaPods wants a summary of at most 140 characters and treats the long
+  # npm description as the `description`.
+  s.summary          = 'Bug reports with a plain-English diagnosis for Capacitor apps.'
+  s.description      = package['description']
   s.license          = package['license']
   s.homepage         = package['repository']['url']
   s.author           = package['author']

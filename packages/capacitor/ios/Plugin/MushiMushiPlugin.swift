@@ -55,8 +55,12 @@ public class MushiMushiPlugin: CAPPlugin {
         let presetBottom: Double = triggerInsetPreset == "tabBarSafe" ? 72 : 96
         let triggerInset = MushiConfig.TriggerInset(
             bottom: CGFloat(triggerInsetObj?["bottom"] as? Double ?? presetBottom),
-            leading: (triggerInsetObj?["leading"] as? Double).map(CGFloat.init),
-            trailing: (triggerInsetObj?["trailing"] as? Double).map(CGFloat.init) ?? 20
+            // Spell the conversion out: `.map(CGFloat.init)` with a `??`
+            // default leaves the initialiser ambiguous between CoreFoundation's
+            // CGFloat.init and Swift.BinaryFloatingPoint.init, which fails
+            // `pod lib lint` even though SPM builds it.
+            leading: (triggerInsetObj?["leading"] as? Double).map { CGFloat($0) },
+            trailing: CGFloat((triggerInsetObj?["trailing"] as? Double) ?? 20)
         )
 
         let config = MushiConfig(
