@@ -4,7 +4,7 @@ import { DEPLOY_INFO } from './deploy-info.ts'
 import { mcpPackageVersion } from './mcp-server-card.ts'
 
 export const MUSHI_WEBSITE_URL = 'https://kensaur.us/mushi-mushi'
-export const MUSHI_ICON_PNG_URL = `${MUSHI_WEBSITE_URL}/integrations/mushi-mark-512.png`
+export const MUSHI_ICON_PNG_URL = `${MUSHI_WEBSITE_URL}/docs/integrations/mushi-mark-512.png`
 export const MUSHI_ICON_SVG_URL = `${MUSHI_WEBSITE_URL}/favicon.svg`
 
 /** Inline stamp mark — served at ?icon=1 when CDN is unreachable. */

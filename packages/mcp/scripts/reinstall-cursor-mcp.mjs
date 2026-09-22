@@ -12,7 +12,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const MCP_JSON = join(homedir(), '.cursor', 'mcp.json')
 const DIST = resolve(__dirname, '..', 'dist', 'index.js')
 const API_ENDPOINT = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
-const ICON = 'https://kensaur.us/mushi-mushi/integrations/mushi-mark-512.png'
+const ICON = 'https://kensaur.us/mushi-mushi/docs/integrations/mushi-mark-512.png'
 const FEATURES = 'triage,fixes,inventory,setup,docs'
 
 const raw = readFileSync(MCP_JSON, 'utf8')
