@@ -201,6 +201,36 @@ describe('OpenID Connect discovery document', () => {
   })
 })
 
+describe('RFC 9207 authorization response issuer', () => {
+  it('is advertised on both URLs, and CIMD is not (URL client_ids are never fetched)', () => {
+    productionEnv()
+    for (const headers of [DIRECT, VIA_CLOUDFRONT]) {
+      const as = parse(meta.mcpOAuthDiscoveryDocument(runtimeUrl('/.well-known/oauth-authorization-server'), headers))
+      expect(as.authorization_response_iss_parameter_supported).toBe(true)
+      expect(as).not.toHaveProperty('client_id_metadata_document_supported')
+    }
+  })
+
+  it('names the issuer of the URL the client discovered, from the resource it sent', () => {
+    productionEnv()
+    const origin = RUNTIME_ORIGIN
+    // Each issuer must equal the `issuer` of the metadata that URL serves.
+    const proxiedIssuer = parse(meta.mcpOAuthDiscoveryDocument(runtimeUrl('/.well-known/oauth-authorization-server'), VIA_CLOUDFRONT)).issuer
+    const directIssuer = parse(meta.mcpOAuthDiscoveryDocument(runtimeUrl('/.well-known/oauth-authorization-server'), DIRECT)).issuer
+    expect(meta.mcpOAuthIssuerForResource(PUBLIC_BASE, origin)).toBe(proxiedIssuer)
+    expect(meta.mcpOAuthIssuerForResource(`${PUBLIC_BASE}/`, origin)).toBe(proxiedIssuer)
+    expect(meta.mcpOAuthIssuerForResource(FN_BASE, origin)).toBe(directIssuer)
+    expect(meta.mcpOAuthIssuerForResource(`${FN_BASE}?features=all`, origin)).toBe(directIssuer)
+  })
+
+  it('falls back to the Supabase issuer for a missing, foreign or malformed resource', () => {
+    productionEnv()
+    for (const resource of [null, undefined, '', 'https://evil.example/mushi-mushi/hosted-mcp', 'not a url', 'https://kensaur.us/other']) {
+      expect(meta.mcpOAuthIssuerForResource(resource, RUNTIME_ORIGIN)).toBe(FN_BASE)
+    }
+  })
+})
+
 describe('response headers', () => {
   it('declare the request headers the document varies on', () => {
     expect(meta.MCP_OAUTH_METADATA_HEADERS.Vary).toContain('X-Forwarded-Host')
