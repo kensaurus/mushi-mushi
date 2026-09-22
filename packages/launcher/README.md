@@ -253,7 +253,7 @@ Mushi is a CLI launcher — it spawns one `npm install` and writes one `.env.loc
 | **npm provenance** | ✅ Signed by `kensaurus/mushi-mushi @ master` | Cryptographic Sigstore attestation — `npm audit signatures` will verify this build came from this exact commit on this exact CI workflow.                                                                                        |
 | **Socket.dev**     | Score + a few low-signal alerts               | Alerts are expected and benign: `child_process.spawn` (used to invoke `npm install`), `process.env` (read `DEBUG`, `npm_config_*`), URL strings (printed in help text). All visible in `src/index.ts` — ~150 LOC, easy to audit. |
 | **Bundlephobia**   | ❌ EntryPointError                            | **Expected.** This is a CLI (`bin` only — no `main`/`module`/`exports`), so there is no importable bundle to measure. Bundlephobia only works for libraries you `import`.                                                        |
-| **Snyk Advisor**   | Health score (lower right after publish)      | Snyk's crawler often lags by 1–2 weeks for new public packages — score corrects itself once it picks up the actual `package.json` (`CONTRIBUTING.md`, `funding`, downloads, repo activity).                                      |
+| **Snyk Advisor**   | Health score (lower right after publish)      | Snyk's crawler often lags by 1–2 weeks for new public packages — score corrects itself once it picks up the actual `package.json` (repository links, downloads, repo activity).                                                  |
 
 If something looks off to you, [open an issue](https://github.com/kensaurus/mushi-mushi/issues) — the source is 100% public and the CI build is reproducible.
 

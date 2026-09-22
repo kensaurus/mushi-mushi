@@ -1,7 +1,20 @@
+# Mushi Mushi — stdio MCP server (@mushi-mushi/mcp).
+#
+# Display description (Smithery dashboard → Settings, and
+# docs/marketing/smithery-external-publish.json#displayDescription):
+#   MCP server for Cursor, Claude Code and Copilot. The bug mediator for
+#   AI-built apps: plain-English diagnosis + a ready fix, in your editor.
+# It is @mushi-mushi/mcp's npm description, composed from MUSHI_TAGLINE_V2 in
+# packages/brand/src/index.js by scripts/normalize-package-metadata.mjs.
+# smithery.yaml has no description key (runtime, build, startCommand, env
+# only), so the listing text is set on the dashboard, not read from here.
 startCommand:
   type: stdio
   configSchema:
     type: object
+    description: >-
+      MCP server for Cursor, Claude Code and Copilot. The bug mediator for
+      AI-built apps: plain-English diagnosis + a ready fix, in your editor.
     required:
       - mushiApiKey
     properties:

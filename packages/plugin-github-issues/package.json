@@ -58,10 +58,7 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE",
-    "CONTRIBUTING.md",
-    "CODE_OF_CONDUCT.md",
-    "SECURITY.md"
+    "LICENSE"
   ],
   "publishConfig": {
     "access": "public",
@@ -70,10 +67,6 @@
   "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
-  },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/kensaurus"
   },
   "homepage": "https://kensaur.us/mushi-mushi"
 }

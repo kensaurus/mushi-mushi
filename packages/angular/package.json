@@ -53,10 +53,7 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE",
-    "CONTRIBUTING.md",
-    "CODE_OF_CONDUCT.md",
-    "SECURITY.md"
+    "LICENSE"
   ],
   "sideEffects": false,
   "keywords": [
@@ -94,9 +91,5 @@
   "type": "module",
   "engines": {
     "node": ">=20.19.0"
-  },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/kensaurus"
   }
 }

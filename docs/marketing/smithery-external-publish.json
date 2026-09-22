@@ -29,5 +29,5 @@
     "required": ["mushiApiKey"]
   },
   "displayName": "Mushi Mushi",
-  "displayDescription": "Your AI shipped it. Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key."
+  "displayDescription": "MCP server for Cursor, Claude Code and Copilot. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor."
 }

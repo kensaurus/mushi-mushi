@@ -80,10 +80,7 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE",
-    "CONTRIBUTING.md",
-    "CODE_OF_CONDUCT.md",
-    "SECURITY.md"
+    "LICENSE"
   ],
   "repository": {
     "type": "git",
@@ -161,8 +158,13 @@
   "dependencies": {
     "@mushi-mushi/core": "workspace:^"
   },
-  "optionalDependencies": {
+  "peerDependencies": {
     "rrweb": "^2.0.1"
+  },
+  "peerDependenciesMeta": {
+    "rrweb": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
@@ -171,6 +173,7 @@
     "@size-limit/file": "^12.1.0",
     "eslint": "^10.6.0",
     "jsdom": "^29.1.1",
+    "rrweb": "^2.0.1",
     "size-limit": "^12.1.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
@@ -179,9 +182,5 @@
   "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "engines": {
     "node": ">=20.19.0"
-  },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/kensaurus"
   }
 }

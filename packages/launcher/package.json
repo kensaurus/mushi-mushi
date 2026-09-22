@@ -33,10 +33,6 @@
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/kensaurus"
-  },
   "publishConfig": {
     "access": "public",
     "provenance": true
@@ -44,10 +40,7 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE",
-    "CONTRIBUTING.md",
-    "CODE_OF_CONDUCT.md",
-    "SECURITY.md"
+    "LICENSE"
   ],
   "sideEffects": false,
   "keywords": [

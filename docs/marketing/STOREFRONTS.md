@@ -64,16 +64,18 @@ Keywords have been populated. Now confirm each package README opens strong:
 - [x] **About description, homepage, 20 topics, awesome-list good-first-issue** —
   applied via [`scripts/marketing/setup-github.mjs`](../../scripts/marketing/setup-github.mjs).
   Idempotent; safe to re-run any time the wording changes here.
-- [x] **Social preview image** — generated to
-  [`docs/social-preview/og-card.png`](../social-preview/og-card.png) (1280×640,
-  matches the dark admin aesthetic).
+- [x] **Social preview image** — rendered from the brand SSOT by
+  [`scripts/gen-og-card.mjs`](../../scripts/gen-og-card.mjs) to
+  [`docs/social-preview/og-card.png`](../social-preview/og-card.png) (1200×630,
+  the editorial paper/ink/vermillion palette of the landing page).
   > One manual step left: GitHub doesn't expose a stable API for social preview
   > upload. Drop the image into Settings → Social preview by hand once.
-- [ ] **Sponsor link** — wired in every `package.json` → `funding`, but
-  GitHub Sponsors is **not enabled** (checked 2026-09-21:
-  `github.com/sponsors/kensaurus` redirects to the profile). Either enable
-  Sponsors or drop `funding` from the manifests
-  (`scripts/normalize-package-metadata.mjs`).
+- [x] **Sponsor link** — `funding` dropped from every `package.json`
+  (2026-09-22): GitHub Sponsors is **not enabled** (checked 2026-09-21:
+  `github.com/sponsors/kensaurus` redirects to the profile), so the field was
+  a dead link on npm. Once Sponsors is live, restore it in
+  [`scripts/update-manifest-fields.mjs`](../../scripts/update-manifest-fields.mjs)
+  and re-run it.
 
 ## 4. Live demo ([kensaur.us/mushi-mushi/](https://kensaur.us/mushi-mushi/))
 

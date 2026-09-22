@@ -18,10 +18,7 @@
     "dist",
     "README.md",
     "LICENSE",
-    "plugin.json",
-    "CONTRIBUTING.md",
-    "CODE_OF_CONDUCT.md",
-    "SECURITY.md"
+    "plugin.json"
   ],
   "scripts": {
     "build": "tsup",
@@ -70,9 +67,5 @@
   ],
   "engines": {
     "node": ">=20.19.0"
-  },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/kensaurus"
   }
 }
