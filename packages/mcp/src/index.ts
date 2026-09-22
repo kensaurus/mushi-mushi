@@ -39,7 +39,7 @@ import { installStdoutGuard } from './stdout-guard.js'
 installStdoutGuard()
 import { ALL_SCOPES, type McpScope } from './catalog.js'
 import { DEFAULT_FEATURE_GROUPS, parseFeaturesCsv } from './feature-groups.js'
-import { createMushiServer } from './server.js'
+import { createMushiServer, createSetupModeServer } from './server.js'
 import * as Sentry from '@sentry/node'
 
 const require = createRequire(import.meta.url)
@@ -184,7 +184,8 @@ function missingApiKeyReport(): string {
       : 'file exists but has no "apiKey" field'
   return [
     '',
-    '[mushi-mcp] FATAL: no API key — the MCP server cannot serve a single tool call.',
+    '[mushi-mcp] No API key — serving setup mode: only search_mushi_docs, get_mushi_doc and',
+    '            diagnose_setup are available until a key is configured.',
     '',
     '  Sources checked, in precedence order:',
     `    1. env MUSHI_API_KEY        → ${envState}`,
@@ -220,13 +221,20 @@ async function main() {
     // Written straight to stderr: the structured logger would collapse this
     // into a single escaped-newline JSON line, which is unreadable in the
     // exact place people read it (the client's MCP log pane).
-    process.stderr.write(missingApiKeyReport())
-    log.fatal('No API key found — set MUSHI_API_KEY, or run `mushi login`.', {
+    const report = missingApiKeyReport()
+    process.stderr.write(report)
+    log.warn('No API key found — serving setup mode. Set MUSHI_API_KEY, or run `mushi login`.', {
       cliConfigPath: CLI_CONFIG.path,
       cliConfigFound: CLI_CONFIG.found,
       endpoint: API_ENDPOINT,
     })
-    process.exit(1)
+    // Exiting 1 here made registry and directory installers see a dead
+    // server, and agents see no tools at all. Setup mode lists the docs tools
+    // and a diagnose_setup that says how to connect.
+    serveUntilClosed(serveStdio(() => createSetupModeServer({ version: VERSION, missingKeyReport: report }), {
+      onerror: (err) => log.error('stdio transport error', { err: String(err) }),
+    }))
+    return
   }
   if (!process.env.MUSHI_API_KEY && CLI_CONFIG.apiKey) {
     log.info('[mushi-mcp] Using API key from the CLI config (~/.config/mushi/config.json)')
@@ -292,39 +300,7 @@ async function main() {
     },
   )
 
-  // Graceful shutdown: real MCP clients (Cursor, Claude Desktop, …) manage
-  // the child process lifecycle by killing it directly, so this path was
-  // never exercised by hand-testing. External test harnesses that pipe
-  // requests over stdio then close the pipe and wait for a natural exit
-  // (Docker introspection checks, e.g. Glama's build test) do rely on it —
-  // without an explicit stdin-EOF/signal handler the process leaks forever
-  // once `pollTimer` below is scheduled, since a bare `setInterval` keeps
-  // the event loop alive indefinitely.
-  let shuttingDown = false
-  let pollTimer: ReturnType<typeof setInterval> | undefined
-  const shutdown = (exitCode: number) => {
-    if (shuttingDown) return
-    shuttingDown = true
-    if (pollTimer) clearInterval(pollTimer)
-    void handle.close().finally(() => process.exit(exitCode))
-  }
-  // Let the crash guards close the transport instead of a bare process.exit.
-  setActiveShutdown(shutdown)
-  process.stdin.on('end', () => shutdown(0))
-  process.stdin.on('close', () => shutdown(0))
-  process.on('SIGINT', () => shutdown(0))
-  process.on('SIGTERM', () => shutdown(0))
-  process.stdout.on('error', (err: NodeJS.ErrnoException) => {
-    // The client closed the read end mid-write (crash / kill). The JSON-RPC
-    // channel is gone; exit quietly instead of dying with an unhandled EPIPE
-    // stack trace on stderr.
-    if (err.code === 'EPIPE') {
-      shutdown(0)
-      return
-    }
-    log.fatal('stdout write error', { err: String(err) })
-    shutdown(1)
-  })
+  const lifecycle = serveUntilClosed(handle)
 
   // Inventory change notifications (P1.7):
   // Poll the inventory endpoint every 60 seconds and send
@@ -339,7 +315,7 @@ async function main() {
     const POLL_INTERVAL_MS = 60_000
 
     const pollInventory = async () => {
-      if (shuttingDown) return
+      if (lifecycle.isShuttingDown()) return
       try {
         const res = await fetch(`${API_ENDPOINT}/v1/admin/inventory/${PROJECT_ID}`, {
           headers: {
@@ -371,9 +347,53 @@ async function main() {
     // session keeps stdin open for hours, so unref has no effect on normal
     // operation, it only matters once nothing else is keeping the loop alive.
     void pollInventory()
-    pollTimer = setInterval(() => { void pollInventory() }, POLL_INTERVAL_MS)
+    const pollTimer = setInterval(() => { void pollInventory() }, POLL_INTERVAL_MS)
     pollTimer.unref()
+    lifecycle.addCleanup(() => clearInterval(pollTimer))
   }
+}
+
+/**
+ * Graceful shutdown: real MCP clients (Cursor, Claude Desktop, …) manage
+ * the child process lifecycle by killing it directly, so this path was
+ * never exercised by hand-testing. External test harnesses that pipe
+ * requests over stdio then close the pipe and wait for a natural exit
+ * (Docker introspection checks, e.g. Glama's build test) do rely on it —
+ * without an explicit stdin-EOF/signal handler the process leaks forever
+ * once the inventory poll is scheduled, since a bare `setInterval` keeps
+ * the event loop alive indefinitely. Shared by the normal and setup-mode
+ * servers.
+ */
+function serveUntilClosed(handle: ReturnType<typeof serveStdio>): {
+  isShuttingDown: () => boolean
+  addCleanup: (fn: () => void) => void
+} {
+  let shuttingDown = false
+  const cleanups: Array<() => void> = []
+  const shutdown = (exitCode: number) => {
+    if (shuttingDown) return
+    shuttingDown = true
+    for (const fn of cleanups) fn()
+    void handle.close().finally(() => process.exit(exitCode))
+  }
+  // Let the crash guards close the transport instead of a bare process.exit.
+  setActiveShutdown(shutdown)
+  process.stdin.on('end', () => shutdown(0))
+  process.stdin.on('close', () => shutdown(0))
+  process.on('SIGINT', () => shutdown(0))
+  process.on('SIGTERM', () => shutdown(0))
+  process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+    // The client closed the read end mid-write (crash / kill). The JSON-RPC
+    // channel is gone; exit quietly instead of dying with an unhandled EPIPE
+    // stack trace on stderr.
+    if (err.code === 'EPIPE') {
+      shutdown(0)
+      return
+    }
+    log.fatal('stdout write error', { err: String(err) })
+    shutdown(1)
+  })
+  return { isShuttingDown: () => shuttingDown, addCleanup: (fn) => cleanups.push(fn) }
 }
 
 /**

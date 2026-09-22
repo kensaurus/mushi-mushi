@@ -34,6 +34,58 @@ describe('mcp server card', () => {
     }
   })
 
+  it('advertises real input schemas, catalog titles and annotations (not empty objects and name.replace)', async () => {
+    const { buildMcpServerCard } = await import('../../supabase/functions/_shared/mcp-server-card.ts')
+    const card = buildMcpServerCard() as {
+      tools: Array<{
+        name: string
+        title: string
+        inputSchema: { properties?: Record<string, unknown>; required?: string[] }
+        annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean }
+      }>
+    }
+    const merge = card.tools.find((t) => t.name === 'merge_fix')!
+    expect(merge.title).toBe('Merge fix PR')
+    expect(merge.inputSchema.required).toContain('fixId')
+    expect(merge.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true })
+    const refresh = card.tools.find((t) => t.name === 'refresh_ci')!
+    expect(refresh.annotations?.destructiveHint).toBe(false)
+    for (const tool of card.tools) {
+      expect(tool.title, tool.name).not.toBe(tool.name.replace(/_/g, ' '))
+      expect(tool.annotations, `${tool.name} annotations`).toBeDefined()
+    }
+  })
+
+  it('offers OAuth alongside API keys, lists resources, and reports the npm package version', async () => {
+    const { buildMcpServerCard } = await import('../../supabase/functions/_shared/mcp-server-card.ts')
+    const oauth = {
+      authorizationServer: 'https://example.supabase.co/functions/v1/mcp',
+      resourceMetadata: 'https://example.supabase.co/functions/v1/mcp/.well-known/oauth-protected-resource',
+    }
+    const card = buildMcpServerCard(oauth) as {
+      serverInfo: { version: string }
+      authentication: { schemes: string[]; oauth2: Record<string, unknown> }
+      configSchema: { required?: string[] }
+      resources: Array<{ uri: string }>
+    }
+    expect(card.authentication.schemes).toEqual(['oauth2', 'apiKey'])
+    expect(card.authentication.oauth2).toMatchObject(oauth)
+    // An OAuth client needs no key, so the Smithery config must not require one.
+    expect(card.configSchema.required ?? []).not.toContain('mushiApiKey')
+    expect(card.resources.map((r) => r.uri)).toContain('project://dashboard')
+    const mcpPackage = JSON.parse(readFileSync(resolve(REPO_ROOT, 'packages/mcp/package.json'), 'utf8')) as {
+      version: string
+    }
+    expect(card.serverInfo.version).toBe(mcpPackage.version)
+  })
+
+  it('does not advertise an oauth2 block with no issuer when the caller cannot name one', async () => {
+    const { buildMcpServerCard } = await import('../../supabase/functions/_shared/mcp-server-card.ts')
+    const card = buildMcpServerCard() as { authentication: { schemes: string[]; oauth2?: unknown } }
+    expect(card.authentication.schemes).toEqual(['apiKey'])
+    expect(card.authentication).not.toHaveProperty('oauth2')
+  })
+
   it('mcp-discovery-tools.json is in sync with the canonical catalog', () => {
     const catalogDist = resolve(REPO_ROOT, 'packages/mcp/dist/catalog.js')
     if (!existsSync(catalogDist)) {

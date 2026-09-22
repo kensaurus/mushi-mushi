@@ -108,13 +108,6 @@
     "bodyPassthrough": true,
     "hints": { "destructive": true, "idempotent": true }
   },
-  "setup_repo_for_mushi": {
-    "scope": "mcp:write",
-    "description": "Bootstrap Mushi repo files.",
-    "method": "POST",
-    "path": "/v1/admin/projects/{projectId}/repo/bootstrap",
-    "body": {}
-  },
   "get_account_overview": {
     "scope": "mcp:read",
     "description": "Account overview for all accessible projects.",

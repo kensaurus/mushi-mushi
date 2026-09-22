@@ -124,10 +124,6 @@
       "description": "Override a contributor's tier by tier slug (e.g. \"champion\"). This is an admin escape hatch for manual promotions — normal tier transitions happen automatically via point thresholds. The override is logged in end_user_activity with action=tier_override_manual. Requires mcp:write scope."
     },
     {
-      "name": "setup_repo_for_mushi",
-      "description": "Writes the three Mushi bootstrap files into the current repo root: `.cursorrules` (Cursor evolution-loop coding rules), `.mushi/lessons.json` (initial empty lesson cache), and `MUSHI.md` (one-page project contract for agents). Idempotent — safe to re-run after lessons sync. Requires mcp:write scope. Call this once after connecting the repo; subsequently use `mushi sync-lessons` from CI to keep lessons current."
-    },
-    {
       "name": "list_projects",
       "description": "List all Mushi projects accessible to this API key. For project-scoped keys returns a single-item list; for org-scoped keys (account mode) returns every project owned by this account. Call this first when MUSHI_PROJECT_ID is not configured — use the returned id with subsequent tool calls. If multiple projects are returned, pass the target projectId explicitly to project-scoped tools. Multi-project tip: run `mushi setup --all-projects` in your terminal to create one named MCP server entry per project in .cursor/mcp.json."
     },

@@ -1,8 +1,13 @@
 /**
  * Feature groups for MCP tool filtering — mirrors Supabase MCP `?features=` pattern.
  *
- * When `features` is omitted → all tools (backward compatible).
- * New installs default to DEFAULT_FEATURE_GROUPS via deeplink / docs.
+ * Both transports expose DEFAULT_FEATURE_GROUPS when the caller names none:
+ * stdio when MUSHI_FEATURES is unset, the hosted server when `?features=` is
+ * absent. `features=all` opts into every group.
+ *
+ * This file is kept byte-identical with
+ * packages/server/supabase/functions/mcp/feature-groups.ts (checked by
+ * packages/mcp/scripts/check-catalog-sync.mjs).
  */
 
 export const FEATURE_GROUPS = [
@@ -37,9 +42,14 @@ export const ALL_FEATURE_GROUPS: readonly FeatureGroup[] = FEATURE_GROUPS.filter
   (g) => g !== 'legacy',
 )
 
-/** Map every tool/resource name → feature group. */
+/**
+ * Map every tool/resource name → feature group. A tool with no entry is
+ * listed under no filter but `all`, so every registered tool needs one
+ * (enforced by the catalog-parity test and check-catalog-sync.mjs).
+ */
 export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   // triage
+  triage_next_steps: 'triage',
   get_recent_reports: 'triage',
   get_report_detail: 'triage',
   get_report_timeline: 'triage',
@@ -69,7 +79,6 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   check_sdk_version: 'setup',
   activation_status: 'setup',
   project_integration_health: 'setup',
-  setup_repo_for_mushi: 'setup',
   get_two_way_comms_health: 'setup',
 
   // fixes
@@ -99,8 +108,11 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   privacy_status: 'admin',
   evolution_history: 'admin',
 
-  // usage / billing
+  // usage / billing / product analytics (Mushi.track() funnels)
   get_usage: 'usage',
+  query_funnel: 'usage',
+  get_product_events_summary: 'usage',
+  get_user_paths: 'usage',
 
   // qa / tdd
   map_user_stories: 'qa',
@@ -138,8 +150,10 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   analyze_codebase_impact: 'codebase',
   analyze_wiki_knowledge: 'codebase',
 
-  // docs
+  // docs / orientation
   search_mushi_docs: 'docs',
+  get_mushi_doc: 'docs',
+  use_mushi: 'docs',
 }
 
 /**
@@ -196,12 +210,15 @@ export function parseFeaturesCsv(raw: string | undefined): FeatureFilter {
 
 export function toolMatchesFeatures(toolName: string, filter: FeatureFilter): boolean {
   if (filter === 'all') return true
-  const group = TOOL_FEATURE_MAP[toolName]
-  if (!group) return true // unknown tools stay visible (codegen drift guard)
-  if (group === 'legacy') {
+  // Deprecated aliases belong to the `legacy` group.
+  if (Object.prototype.hasOwnProperty.call(DEPRECATED_TOOL_ALIASES, toolName)) {
     return filter.includes('legacy')
   }
-  return filter.includes(group)
+  // An unmapped name matches no group. It used to match every filter, which
+  // put all the deprecated aliases (and any tool nobody mapped) on the lean
+  // default surface.
+  const group = TOOL_FEATURE_MAP[toolName]
+  return group !== undefined && filter.includes(group)
 }
 
 export function featuresQueryString(groups: readonly FeatureGroup[]): string {

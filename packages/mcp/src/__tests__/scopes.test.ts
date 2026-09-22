@@ -204,12 +204,11 @@ describe('structured tool output (MCP 2025-06-18)', () => {
       reports: [{ id: 'r1', status: 'classified' }],
       total: 42,
     })
-    // Text content is still present for older clients.
+    // Text content is still present for older clients — wrapped as untrusted
+    // data, because report rows carry reporter-authored text.
     const content = res.content as Array<{ type: string; text: string }>
-    expect(JSON.parse(content[0].text)).toEqual({
-      reports: [{ id: 'r1', status: 'classified' }],
-      total: 42,
-    })
+    expect(content[0].text).toMatch(/^<mushi-data role="get_recent_reports">/)
+    expect(content[0].text).toContain('"total": 42')
   })
 
   it('search_reports exposes results array as structuredContent', async () => {

@@ -215,9 +215,10 @@ describe('tool → REST contract', () => {
     expect(call.headers['x-mushi-project-id']).toBe(PROJECT_ID)
 
     expect(res.isError).toBeFalsy()
+    expect(res.structuredContent).toEqual({ reports: [{ id: 'r1' }], total: 1 })
+    // Report rows carry reporter-authored text, so the text block is wrapped.
     const content = res.content as Array<{ type: string; text: string }>
-    const parsed = JSON.parse(content[0].text)
-    expect(parsed).toEqual({ reports: [{ id: 'r1' }], total: 1 })
+    expect(content[0].text).toMatch(/^<mushi-data role="get_recent_reports">/)
   })
 
   it('clamps limit at 100 even if caller asks for more', async () => {
