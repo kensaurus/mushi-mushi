@@ -139,8 +139,8 @@ export function buildManifestTools(deps: {
     // below enforces spec.required, so a model had to learn the parameters by
     // failing; and a write tool with no explicit destructiveHint defaults to
     // destructive in clients, so refresh_ci looked as dangerous as merge_fix.
-    // The seven resource-shaped tools (project_dashboard, …) have no stdio
-    // counterpart and keep the manifest's own metadata.
+    // Every manifest tool is a catalog tool (check-catalog-sync.mjs); the
+    // manifest's own description and hints are only a fallback.
     const canonical = MCP_DISCOVERY.tools[name];
     const annotations: Record<string, unknown> = canonical?.annotations
       ? { ...canonical.annotations }

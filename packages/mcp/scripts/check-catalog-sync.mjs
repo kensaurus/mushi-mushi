@@ -101,6 +101,17 @@ const manifestContent = read('packages/server/supabase/functions/_shared/mcp-hos
 const canonicalEntries = extractEntries(canonicalContent)
 const canonicalMap = new Map(canonicalEntries.map((t) => [t.name, t.scope]))
 
+/** RESOURCE_CATALOG names — MCP resources on both transports, never hosted tools. */
+const resourceNames = new Set(
+  [...(canonicalContent.split('export const RESOURCE_CATALOG')[1]?.split('\n];')[0] ?? '').matchAll(/name:\s*'([^']+)'/g)].map((m) => m[1]),
+)
+/** Tool names across TOOL_CATALOG, TDD_TOOL_CATALOG and CODEBASE_TOOL_CATALOG. */
+const canonicalToolNames = new Set(
+  ['TOOL_CATALOG', 'TDD_TOOL_CATALOG', 'CODEBASE_TOOL_CATALOG'].flatMap((anchor) =>
+    [...(canonicalContent.split(`export const ${anchor}: ToolSpec[] = [`)[1]?.split('\n];')[0] ?? '').matchAll(/^ {4}name:\s*'([^']+)'/gm)].map((m) => m[1]),
+  ),
+)
+
 const adminReexportsCanonical =
   /from\s+['"]@mushi-mushi\/mcp\/catalog['"]/.test(adminContent)
 const adminEntries = adminReexportsCanonical ? canonicalEntries : extractEntries(adminContent)
@@ -147,6 +158,10 @@ for (const hosted of hostedTools) {
   const canonicalScope = canonicalMap.get(hosted.name)
   if (canonicalScope === undefined) {
     fail(`Hosted tool "${hosted.name}" not in canonical catalog — add it to TOOL_CATALOG or TDD_TOOL_CATALOG in packages/mcp/src/catalog.ts`)
+  } else if (!canonicalToolNames.has(hosted.name)) {
+    // project_dashboard & co. were hosted tools until 2026-09-22 while stdio
+    // served them as resources; hosted serves them as resources too now.
+    fail(`Hosted tool "${hosted.name}" is a RESOURCE_CATALOG resource, not a tool — serve it from mcp/hosted-resources.ts, not the tool manifest`)
   } else if (canonicalScope !== hosted.scope) {
     fail(`Hosted "${hosted.name}": scope mismatch — hosted="${hosted.scope}", canonical="${canonicalScope}"`)
   } else {
@@ -155,8 +170,11 @@ for (const hosted of hostedTools) {
 }
 if (hostedOk > 0) info(`${hostedOk} hosted tools match canonical catalog`)
 
-// Informational: canonical entries not in hosted (expected unless --strict-full-parity)
-const canonicalNotInHosted = canonicalEntries.filter((t) => !hostedTools.find((h) => h.name === t.name))
+// Informational: canonical tools not in hosted (expected unless --strict-full-parity).
+// Resource-only names are excluded: they are resources on both transports.
+const canonicalNotInHosted = canonicalEntries.filter(
+  (t) => canonicalToolNames.has(t.name) && !hostedTools.find((h) => h.name === t.name),
+)
 if (canonicalNotInHosted.length > 0) {
   if (strictFullParity) {
     for (const t of canonicalNotInHosted) {
@@ -323,14 +341,17 @@ console.log(`\n── Check 5: Feature-group map ──────────�
   }
   const mapSource = stdioGroups.split('export const TOOL_FEATURE_MAP')[1]?.split('\n}')[0] ?? ''
   const mapped = new Set([...mapSource.matchAll(/^ {2}([a-z_]+):\s*'[a-z]+',/gm)].map((m) => m[1]))
-  const resourceNames = new Set(
-    [...(canonicalContent.split('export const RESOURCE_CATALOG')[1]?.split('\n];')[0] ?? '').matchAll(/name:\s*'([^']+)'/g)].map((m) => m[1]),
-  )
   let unmapped = 0
-  for (const { name } of canonicalEntries) {
-    if (resourceNames.has(name) || mapped.has(name)) continue
+  for (const name of canonicalToolNames) {
+    if (mapped.has(name)) continue
     fail(`"${name}" has no TOOL_FEATURE_MAP entry — it would be hidden from every feature-filtered install`)
     unmapped++
+  }
+  for (const name of mapped) {
+    if (!canonicalToolNames.has(name)) {
+      fail(`TOOL_FEATURE_MAP maps "${name}", which is not a catalog tool${resourceNames.has(name) ? ' (it is a resource)' : ''}`)
+      unmapped++
+    }
   }
   if (unmapped === 0 && stdioGroups === hostedGroups) info(`every tool mapped; stdio and hosted feature maps identical`)
 }

@@ -114,48 +114,6 @@
     "method": "GET",
     "path": "/v1/admin/mcp/projects"
   },
-  "project_dashboard": {
-    "scope": "mcp:read",
-    "description": "PDCA dashboard snapshot.",
-    "method": "GET",
-    "path": "/v1/admin/dashboard"
-  },
-  "project_stats": {
-    "scope": "mcp:read",
-    "description": "Report counts and breakdown.",
-    "method": "GET",
-    "path": "/v1/admin/stats"
-  },
-  "project_settings": {
-    "scope": "mcp:read",
-    "description": "Project configuration.",
-    "method": "GET",
-    "path": "/v1/admin/settings"
-  },
-  "privacy_status": {
-    "scope": "mcp:read",
-    "description": "Privacy posture for the project.",
-    "method": "GET",
-    "path": "/v1/admin/privacy-status"
-  },
-  "evolution_history": {
-    "scope": "mcp:read",
-    "description": "Evolution loop history.",
-    "method": "GET",
-    "path": "/v1/admin/projects/{projectId}/evolution-history"
-  },
-  "project_integration_health": {
-    "scope": "mcp:read",
-    "description": "Integration channel health.",
-    "method": "GET",
-    "path": "/v1/admin/integrations/health"
-  },
-  "inventory_current": {
-    "scope": "mcp:read",
-    "description": "Current inventory snapshot.",
-    "method": "GET",
-    "path": "/v1/admin/inventory/{projectId}"
-  },
   "map_user_stories": {
     "scope": "mcp:write",
     "description": "Map user stories from live app URL.",

@@ -22,6 +22,7 @@ import {
   TOOL_FEATURE_MAP,
   toolMatchesFeatures,
 } from '../../supabase/functions/mcp/feature-groups.ts'
+import { HOSTED_RESOURCE_URIS, hostedResourceTarget } from '../../supabase/functions/mcp/hosted-resources.ts'
 
 const FUNCTIONS = resolve(__dirname, '../../supabase/functions')
 const SOURCE = readFileSync(resolve(FUNCTIONS, 'mcp/index.ts'), 'utf8')
@@ -80,5 +81,49 @@ describe('hosted MCP tool surface', () => {
 
   it('no longer carries the unreachable linear_* tools', () => {
     expect(SOURCE).not.toMatch(/LINEAR_TOOLS|linear_search_issues/)
+  })
+})
+
+/**
+ * project_dashboard, project_stats, project_settings, privacy_status,
+ * evolution_history, project_integration_health and inventory_current were
+ * hosted *tools* (listed under ?features=all) while stdio served them as
+ * resources, and hosted resources/list carried only four URIs. They are
+ * resources on both transports now.
+ */
+describe('hosted MCP resources', () => {
+  const DISCOVERY = JSON.parse(
+    readFileSync(resolve(FUNCTIONS, '_shared/mcp-discovery-tools.json'), 'utf8'),
+  ) as { tools: Record<string, unknown>; resources: Array<{ name: string; uri: string }> }
+  const resourceOnly = DISCOVERY.resources.filter((r) => !(r.name in DISCOVERY.tools))
+
+  it('lists no resource-shaped tool in the hosted tool manifest', () => {
+    expect(resourceOnly.map((r) => r.name)).toEqual(
+      expect.arrayContaining(['project_dashboard', 'privacy_status', 'inventory_current']),
+    )
+    expect(resourceOnly.filter((r) => r.name in MANIFEST).map((r) => r.name)).toEqual([])
+    expect(hostedToolNames().filter((n) => resourceOnly.some((r) => r.name === n))).toEqual([])
+  })
+
+  it('resolves every catalog resource URI to an api route', () => {
+    expect([...HOSTED_RESOURCE_URIS].sort()).toEqual(DISCOVERY.resources.map((r) => r.uri).sort())
+    for (const { uri } of DISCOVERY.resources) {
+      const target = hostedResourceTarget(uri, '11111111-1111-4111-8111-111111111111')
+      expect(target && 'path' in target ? target.path : null, uri).toMatch(/^\/v1\/admin\//)
+    }
+  })
+
+  it('names the missing project instead of reading project-scoped resources without one', () => {
+    expect(hostedResourceTarget('inventory://current')).toEqual({ error: expect.stringMatching(/X-Mushi-Project-Id/) })
+    expect(hostedResourceTarget('evolution://history')).toEqual({ error: expect.stringMatching(/project/) })
+    expect(hostedResourceTarget('project://stats')).toEqual({ path: '/v1/admin/stats' })
+    expect(hostedResourceTarget('nope://x')).toBeNull()
+  })
+
+  it('builds resources/list from the generated catalog and resources/read from the route table', () => {
+    const list = SOURCE.split('function handleResourcesList')[1]?.split('\nasync function ')[0] ?? ''
+    expect(list).toMatch(/MCP_DISCOVERY\.resources/)
+    const read = SOURCE.split('async function handleResourcesRead')[1]?.split('\nfunction ')[0] ?? ''
+    expect(read).toMatch(/hostedResourceTarget\(uri, ctx\.projectIdHint\)/)
   })
 })

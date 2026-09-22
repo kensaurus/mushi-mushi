@@ -109,6 +109,7 @@ import { propagateRequestId } from '../_shared/internal-headers.ts'
 import { recordMcpToolInvocation } from '../_shared/mcp-tool-audit.ts'
 import { claimMcpToolCallRateLimit, buildRateLimitHeaders } from '../_shared/mcp-rate-limit.ts'
 import { buildManifestTools } from './manifest-tools.ts'
+import { HOSTED_RESOURCE_URIS, hostedResourceTarget } from './hosted-resources.ts'
 import { SERVER_INFO_EXTENDED, MUSHI_ICON_SVG_INLINE } from '../_shared/mcp-branding.ts'
 import {
   parseFeaturesParam,
@@ -2358,41 +2359,26 @@ async function invokeToolAsResult(
   }
 }
 
+/**
+ * The catalog's resources (RESOURCE_CATALOG in packages/mcp, via the generated
+ * mcp-discovery-tools.json) — the same eight URIs stdio registers and the
+ * server card advertises. Hosted listed four of them until 2026-09-22.
+ */
 function handleResourcesList(): Record<string, unknown> {
   return {
-    resources: [
-      { uri: 'project://dashboard', name: 'project_dashboard', description: 'PDCA snapshot', mimeType: 'application/json' },
-      { uri: 'project://stats', name: 'project_stats', description: 'Report stats', mimeType: 'application/json' },
-      { uri: 'project://settings', name: 'project_settings', description: 'Project settings', mimeType: 'application/json' },
-      {
-        uri: 'inventory://current',
-        name: 'inventory_current',
-        description:
-          'Current inventory.yaml snapshot — all pages, user stories, actions, and their ' +
-          'expected_outcome contracts. Subscribable: the MCP server pushes ' +
-          '`notifications/resources/updated` when a new inventory is ingested so orchestrators ' +
-          'never hold a stale contract.',
-        mimeType: 'application/json',
-      },
-    ],
+    resources: MCP_DISCOVERY.resources
+      .filter(({ uri }) => (HOSTED_RESOURCE_URIS as readonly string[]).includes(uri))
+      .map(({ uri, name, title, description }) => ({ uri, name, title, description, mimeType: 'application/json' })),
   }
 }
 
 async function handleResourcesRead(params: Record<string, unknown>, ctx: CallContext): Promise<Record<string, unknown>> {
   const uri = params.uri
   if (typeof uri !== 'string') throw new McpError(ERR_INVALID_PARAMS, 'resources/read requires a string `uri`')
-  const path =
-    uri === 'project://dashboard' ? '/v1/admin/dashboard'
-    : uri === 'project://stats' ? '/v1/admin/stats'
-    : uri === 'project://settings' ? '/v1/admin/settings'
-    : uri === 'inventory://current'
-      ? (ctx.projectIdHint ? `/v1/admin/inventory/${encodeURIComponent(ctx.projectIdHint)}` : null)
-      : null
-  if (uri === 'inventory://current' && !ctx.projectIdHint) {
-    throw new McpError(ERR_INVALID_PARAMS, 'inventory://current requires a project context; set X-Mushi-Project-Id header or pass projectId')
-  }
-  if (!path) throw new McpError(ERR_INVALID_PARAMS, `unknown resource uri: ${uri}`)
-  const data = await apiCall(path, { headers: ctx.authHeaders })
+  const target = hostedResourceTarget(uri, ctx.projectIdHint)
+  if (!target) throw new McpError(ERR_INVALID_PARAMS, `unknown resource uri: ${uri}`)
+  if ('error' in target) throw new McpError(ERR_INVALID_PARAMS, target.error)
+  const data = await apiCall(target.path, { headers: ctx.authHeaders })
   return {
     contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(data, null, 2) }],
   }

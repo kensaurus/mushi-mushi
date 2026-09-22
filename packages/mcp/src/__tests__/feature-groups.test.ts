@@ -34,6 +34,11 @@ describe('TOOL_FEATURE_MAP', () => {
     }
   })
 
+  it('maps tools only — resources are not feature-filtered and have no entry', () => {
+    const names = new Set(ALL_TOOLS.map((t) => t.name))
+    expect(Object.keys(TOOL_FEATURE_MAP).filter((n) => !names.has(n))).toEqual([])
+  })
+
   it('points every deprecated alias at a real tool', () => {
     const names = new Set(ALL_TOOLS.map((t) => t.name))
     for (const [alias, target] of Object.entries(DEPRECATED_TOOL_ALIASES)) {
