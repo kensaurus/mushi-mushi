@@ -132,6 +132,7 @@
     "check:docs-drift": "node scripts/check-docs-versions.mjs && node scripts/check-docs-links.mjs",
     "check:bundle-docs": "node scripts/check-bundle-docs.mjs",
     "gen:llms-txt": "node scripts/gen-llms-txt.mjs",
+    "gen:og-card": "node scripts/gen-og-card.mjs",
     "sync:public-schemas": "node scripts/sync-public-schemas.mjs",
     "check:public-schemas": "node scripts/sync-public-schemas.mjs --check",
     "gen:mcp-tools-doc": "node scripts/gen-mcp-tools-doc.mjs",

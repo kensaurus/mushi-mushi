@@ -19,14 +19,14 @@ export const DOCS_SITE = MUSHI_CANONICAL_URLS.docs
 const OG_CARD_URL = `${DOCS_SITE}/social-preview/og-card.png`
 
 /**
- * The card's real pixel size. og:image:width/height must describe the file,
- * not the 1200×630 the platforms recommend — docs-meta.test.ts reads the PNG
- * header and fails if the file and these numbers drift apart.
+ * The card's real pixel size. og:image:width/height must describe the file —
+ * docs-meta.test.ts reads the PNG header and fails if the file and these
+ * numbers drift apart. scripts/gen-og-card.mjs renders it at 1200×630.
   * @internal Exported for tests only.
   */
-export const OG_CARD_WIDTH = 1376
+export const OG_CARD_WIDTH = 1200
 /** @internal Exported for tests only. */
-export const OG_CARD_HEIGHT = 768
+export const OG_CARD_HEIGHT = 630
 
 /**
  * Landing `<title>` and meta description. Search results cut titles near 60
