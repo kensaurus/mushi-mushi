@@ -95,7 +95,9 @@ test.describe('Audit enhanced shell', () => {
   test('breakdown tab shows actor mix', async ({ page }) => {
     await page.goto(`${ADMIN_URL}/audit?tab=breakdown`, { waitUntil: 'networkidle' })
     await expect(page.getByLabel('Audit sections').getByRole('radio', { name: 'Breakdown' })).toBeChecked()
-    await expect(page.getByText('7-DAY ACTION MIX')).toBeVisible()
+    // Heading corrected to match the data it labels: the three cards below
+    // it are 24h counts, not 7-day. Uppercased by CSS, matched as rendered.
+    await expect(page.getByText('24H ACTOR MIX')).toBeVisible()
   })
 
   test('failure preset deep link opens log tab', async ({ page }) => {

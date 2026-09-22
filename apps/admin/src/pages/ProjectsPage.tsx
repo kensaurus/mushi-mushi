@@ -161,13 +161,24 @@ export function ProjectsPage() {
   // gets one last "wait, no" toast they can cancel from. The Set drives
   // optimistic row hiding; the Map keeps each scheduled timer addressable
   // by id so concurrent deletes don't race.
+  //
+  // Each entry carries the timer AND the work it would have done, so the
+  // unmount cleanup can *commit* a confirmed mutation rather than silently
+  // drop it. Holding only the timeout handle (as this used to) meant
+  // navigating away inside the 8 s window abandoned the request while the
+  // toast had already reported success in the past tense — a revoked key
+  // stayed live and a deleted project came back.
+  type PendingMutation = { timer: ReturnType<typeof setTimeout>; flush: () => Promise<void> }
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set())
-  const deleteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const deleteTimers = useRef<Map<string, PendingMutation>>(new Map())
   // Same shape for key-revoke. Indexed by `${projectId}:${keyId}` so a user
   // can revoke a key in one project while another project's revoke is
   // still in its undo window without the two interfering.
   const [pendingRevokeIds, setPendingRevokeIds] = useState<Set<string>>(new Set())
-  const revokeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const revokeTimers = useRef<Map<string, PendingMutation>>(new Map())
+  // False after unmount: the flushed request must still complete, but its
+  // setState/reload follow-ups must not run against a dead tree.
+  const mountedRef = useRef(true)
 
   // Key-revoke confirm (themed replacement for the old window.confirm()).
   // `pendingRevoke` holds {projectId, keyId, prefix} of the key being
@@ -338,18 +349,28 @@ export function ProjectsPage() {
     }
   }
 
-  // Cancel any in-flight delete / revoke timers when the page unmounts.
-  // Without this, navigating away after clicking Delete and *before* the
-  // 8 s timer fires would still drop the project on the next tick — with
-  // no toast left to undo from. Capturing the ref values lets the cleanup
-  // function run with the same map identity React saw at effect setup.
+  // COMMIT, don't cancel, when the page unmounts.
+  //
+  // This used to clearTimeout() every pending timer, which silently threw
+  // away a mutation the user had already confirmed (and that the toast had
+  // already reported as done). Navigating away is not a retraction — Undo
+  // in the toast is the only retraction — so each pending entry is flushed
+  // instead. `mountedRef` stops the flushed request's UI follow-ups from
+  // touching an unmounted tree; the network call itself still completes.
+  //
+  // Not covered here: a hard refresh or tab close, where the JS context
+  // dies before fetch can finish. The durable fix for that is a server-side
+  // grace period (soft-delete + restore) rather than a client timer.
   useEffect(() => {
     const dTimers = deleteTimers.current
     const rTimers = revokeTimers.current
     return () => {
-      dTimers.forEach((t) => clearTimeout(t))
+      mountedRef.current = false
+      for (const entry of [...dTimers.values(), ...rTimers.values()]) {
+        clearTimeout(entry.timer)
+        void entry.flush()
+      }
       dTimers.clear()
-      rTimers.forEach((t) => clearTimeout(t))
       rTimers.clear()
     }
   }, [])
@@ -362,8 +383,8 @@ export function ProjectsPage() {
 
   function cancelScheduledRevoke(projectId: string, keyId: string) {
     const composite = `${projectId}:${keyId}`
-    const timer = revokeTimers.current.get(composite)
-    if (timer) clearTimeout(timer)
+    const entry = revokeTimers.current.get(composite)
+    if (entry) clearTimeout(entry.timer)
     revokeTimers.current.delete(composite)
     setPendingRevokeIds((prev) => {
       if (!prev.has(composite)) return prev
@@ -383,11 +404,17 @@ export function ProjectsPage() {
     setPendingRevokeIds((prev) => new Set(prev).add(composite))
     setPendingRevoke(null)
 
-    const timer = setTimeout(async () => {
+    // The whole deferred body, hoisted so both the timer and the unmount
+    // cleanup can run it. Guarded so it can only ever fire once.
+    let settled = false
+    const flush = async () => {
+      if (settled) return
+      settled = true
       revokeTimers.current.delete(composite)
       const res = await apiFetch(`/v1/admin/projects/${projectId}/keys/${keyId}`, {
         method: 'DELETE',
       })
+      if (!mountedRef.current) return
       if (!res.ok) {
         // Restore the row so the user can retry. Surface the server's
         // verbatim error since revoke failures are usually permission-
@@ -406,13 +433,17 @@ export function ProjectsPage() {
         return next
       })
       reload()
-    }, UNDO_WINDOW_MS)
-    revokeTimers.current.set(composite, timer)
+    }
+
+    const timer = setTimeout(() => void flush(), UNDO_WINDOW_MS)
+    revokeTimers.current.set(composite, { timer, flush })
 
     toast.push({
       tone: 'success',
-      title: 'API key revoked',
-      description: `${keyPrefix}… will stop working in a few seconds.`,
+      // Present tense: at this point the DELETE has not been sent yet.
+      // Past tense here is what made the silent-drop bug invisible.
+      title: 'Revoking API key',
+      description: `${keyPrefix}… will stop working in a few seconds. Undo to keep it.`,
       duration: UNDO_WINDOW_MS,
       action: {
         label: 'Undo',
@@ -422,8 +453,8 @@ export function ProjectsPage() {
   }
 
   function cancelScheduledDelete(projectId: string) {
-    const timer = deleteTimers.current.get(projectId)
-    if (timer) clearTimeout(timer)
+    const entry = deleteTimers.current.get(projectId)
+    if (entry) clearTimeout(entry.timer)
     deleteTimers.current.delete(projectId)
     setPendingDeleteIds((prev) => {
       if (!prev.has(projectId)) return prev
@@ -468,7 +499,11 @@ export function ProjectsPage() {
       setSearchParams(nextParams, { replace: true })
     }
 
-    const timer = setTimeout(async () => {
+    // Hoisted so the unmount cleanup can commit this instead of dropping it.
+    let settled = false
+    const flush = async () => {
+      if (settled) return
+      settled = true
       deleteTimers.current.delete(project.id)
       const res = await apiFetch<{ id: string; slug: string; name: string }>(
         `/v1/admin/projects/${project.id}`,
@@ -477,6 +512,7 @@ export function ProjectsPage() {
           body: JSON.stringify({ confirm_slug: project.slug }),
         },
       )
+      if (!mountedRef.current) return
       if (!res.ok) {
         // Restore the row so the user can retry. The active-project
         // localStorage clear is intentionally NOT undone — the user's
@@ -499,13 +535,17 @@ export function ProjectsPage() {
         return next
       })
       reload()
-    }, UNDO_WINDOW_MS)
-    deleteTimers.current.set(project.id, timer)
+    }
+
+    const timer = setTimeout(() => void flush(), UNDO_WINDOW_MS)
+    deleteTimers.current.set(project.id, { timer, flush })
 
     toast.push({
       tone: 'success',
-      title: `Deleted ${project.name}`,
-      description: 'Reports, fixes, keys, and integrations will be removed in a few seconds.',
+      // Present tense — the DELETE has not been sent yet.
+      title: `Deleting ${project.name}`,
+      description:
+        'Reports, fixes, keys, and integrations will be removed in a few seconds. Undo to keep it.',
       duration: UNDO_WINDOW_MS,
       action: {
         label: 'Undo',

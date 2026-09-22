@@ -249,15 +249,26 @@ export function OrganizationSettingsPage() {
   // already succeeded — matches Gmail's "Message sent / Undo" pattern.
   // Two stores so concurrent removes don't race: the Set drives render
   // filtering, the Map keeps each scheduled timeout addressable by id.
+  //
+  // Each entry carries the timer AND the deferred work, so unmount can
+  // commit a confirmed removal rather than silently drop it. Holding only
+  // the handle meant leaving the page inside the 8 s window abandoned the
+  // DELETE while the toast had already said the member was removed — the
+  // teammate kept full access. This is the access-revocation path, so a
+  // silent no-op here is a security problem, not a cosmetic one.
+  type PendingMutation = { timer: ReturnType<typeof setTimeout>; flush: () => Promise<void> }
   const [pendingRemovalIds, setPendingRemovalIds] = useState<Set<string>>(new Set())
-  const removeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const removeTimers = useRef<Map<string, PendingMutation>>(new Map())
   // Same soft-delete pattern as members: cancelling an invite optimistically
   // hides the row, the DELETE call is deferred for `UNDO_WINDOW_MS`, and the
   // toast is the user's only affordance for backing out. Distinct from the
   // member structures so a "cancel invite" toast can't undo a "remove
   // teammate" action and vice versa.
   const [pendingCancelIds, setPendingCancelIds] = useState<Set<string>>(new Set())
-  const cancelTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const cancelTimers = useRef<Map<string, PendingMutation>>(new Map())
+  // False after unmount: a flushed request must still complete, but its
+  // setState/reload follow-ups must not run against a dead tree.
+  const mountedRef = useRef(true)
   const path = activeOrgId ? `/v1/org/${activeOrgId}/members` : null
   const statsPath = activeOrgId ? `/v1/org/${activeOrgId}/members/stats` : null
   const { data, loading, error, reload, lastFetchedAt, isValidating } = usePageData<MembersResponse>(path)
@@ -501,19 +512,27 @@ export function OrganizationSettingsPage() {
     if (ok) setRoleChangeTarget(null)
   }
 
-  // Cancel any in-flight remove timers when the page unmounts so the DELETE
-  // never lands after the user has navigated away (otherwise a user who
-  // hits Remove and then immediately leaves would still evict a teammate
-  // they meant to keep, with no toast left to undo from). Same logic applies
-  // to in-flight invite cancellations — we don't want a stranded timer to
-  // revoke an invitation seconds after the admin closes the tab.
+  // COMMIT, don't cancel, when the page unmounts.
+  //
+  // This used to clearTimeout() each pending timer on the theory that
+  // navigating away meant "wait, no". It does not: the admin already passed
+  // a confirm dialog and the toast already reported the removal in the past
+  // tense. Dropping the DELETE left a removed teammate with full access and
+  // a cancelled invitation still redeemable, with nothing on screen to say
+  // so. Undo in the toast is the only retraction; leaving the page commits.
+  //
+  // Not covered: hard refresh / tab close, where the JS context dies before
+  // fetch completes. The durable fix is a server-side grace period.
   useEffect(() => {
     const memberTimers = removeTimers.current
     const inviteTimers = cancelTimers.current
     return () => {
-      memberTimers.forEach((t) => clearTimeout(t))
+      mountedRef.current = false
+      for (const entry of [...memberTimers.values(), ...inviteTimers.values()]) {
+        clearTimeout(entry.timer)
+        void entry.flush()
+      }
       memberTimers.clear()
-      inviteTimers.forEach((t) => clearTimeout(t))
       inviteTimers.clear()
     }
   }, [])
@@ -524,8 +543,8 @@ export function OrganizationSettingsPage() {
   )
 
   function cancelScheduledRemove(userId: string) {
-    const timer = removeTimers.current.get(userId)
-    if (timer) clearTimeout(timer)
+    const entry = removeTimers.current.get(userId)
+    if (entry) clearTimeout(entry.timer)
     removeTimers.current.delete(userId)
     setPendingRemovalIds((prev) => {
       if (!prev.has(userId)) return prev
@@ -547,9 +566,14 @@ export function OrganizationSettingsPage() {
     setPendingRemovalIds((prev) => new Set(prev).add(id))
     setPendingRemove(null)
 
-    const timer = setTimeout(async () => {
+    // Hoisted so the unmount cleanup can commit this instead of dropping it.
+    let settled = false
+    const flush = async () => {
+      if (settled) return
+      settled = true
       removeTimers.current.delete(id)
       const res = await apiFetch(`/v1/org/${orgId}/members/${id}`, { method: 'DELETE' })
+      if (!mountedRef.current) return
       if (!res.ok) {
         // Restore the row so the user can retry. Surface the server's
         // message verbatim — most failures here are auth-shaped ("only
@@ -571,14 +595,16 @@ export function OrganizationSettingsPage() {
         return next
       })
       reloadAll()
-    }, UNDO_WINDOW_MS)
+    }
 
-    removeTimers.current.set(id, timer)
+    const timer = setTimeout(() => void flush(), UNDO_WINDOW_MS)
+    removeTimers.current.set(id, { timer, flush })
 
     toast.push({
       tone: 'success',
-      title: 'Member removed',
-      description: `${label} will lose access in a few seconds.`,
+      // Present tense — the DELETE has not been sent yet.
+      title: 'Removing member',
+      description: `${label} will lose access in a few seconds. Undo to keep them.`,
       duration: UNDO_WINDOW_MS,
       action: {
         label: 'Undo',
@@ -588,8 +614,8 @@ export function OrganizationSettingsPage() {
   }
 
   function cancelScheduledInviteCancel(invitationId: string) {
-    const timer = cancelTimers.current.get(invitationId)
-    if (timer) clearTimeout(timer)
+    const entry = cancelTimers.current.get(invitationId)
+    if (entry) clearTimeout(entry.timer)
     cancelTimers.current.delete(invitationId)
     setPendingCancelIds((prev) => {
       if (!prev.has(invitationId)) return prev
@@ -610,9 +636,14 @@ export function OrganizationSettingsPage() {
     // the timer fires and we issue the DELETE for real.
     setPendingCancelIds((prev) => new Set(prev).add(id))
 
-    const timer = setTimeout(async () => {
+    // Hoisted so the unmount cleanup can commit this instead of dropping it.
+    let settled = false
+    const flush = async () => {
+      if (settled) return
+      settled = true
       cancelTimers.current.delete(id)
       const res = await apiFetch(`/v1/org/${orgId}/invitations/${id}`, { method: 'DELETE' })
+      if (!mountedRef.current) return
       if (!res.ok) {
         // Restore the row so the admin can see the invite still exists
         // and retry. The 'ALREADY_ACCEPTED' branch is benign — surface a
@@ -636,14 +667,16 @@ export function OrganizationSettingsPage() {
         return next
       })
       reloadAll()
-    }, UNDO_WINDOW_MS)
+    }
 
-    cancelTimers.current.set(id, timer)
+    const timer = setTimeout(() => void flush(), UNDO_WINDOW_MS)
+    cancelTimers.current.set(id, { timer, flush })
 
     toast.push({
       tone: 'success',
-      title: 'Invitation cancelled',
-      description: `${label} won't be able to join.`,
+      // Present tense — the DELETE has not been sent yet.
+      title: 'Cancelling invitation',
+      description: `${label} won't be able to join. Undo to keep the invite.`,
       duration: UNDO_WINDOW_MS,
       action: {
         label: 'Undo',

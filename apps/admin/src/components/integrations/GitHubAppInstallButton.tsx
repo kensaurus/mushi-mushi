@@ -20,8 +20,24 @@ interface Props {
   className?: string
 }
 
-/** GitHub App slug — set VITE_GITHUB_APP_SLUG in .env or Vercel env vars. */
-const APP_SLUG = import.meta.env.VITE_GITHUB_APP_SLUG as string | undefined
+/**
+ * GitHub App slug — set VITE_GITHUB_APP_SLUG in .env or the deploy workflow.
+ *
+ * Deliberately NOT defaulted. RepoPage used to hard-code `mushi-mushi` here,
+ * but `github.com/apps/mushi-mushi` 404s, so baking that in would replace an
+ * honest "not configured" note with a button that lands on a GitHub error
+ * page. Both entry points now read this one constant, so when the real slug
+ * is set they light up together and cannot drift apart.
+ */
+export const GITHUB_APP_SLUG = import.meta.env.VITE_GITHUB_APP_SLUG as string | undefined
+
+/** The App's install URL for a project, or undefined when the slug is unset. */
+export function githubAppInstallUrl(projectId: string): string | undefined {
+  if (!GITHUB_APP_SLUG) return undefined
+  return `https://github.com/apps/${GITHUB_APP_SLUG}/installations/new?state=${encodeURIComponent(projectId)}`
+}
+
+const APP_SLUG = GITHUB_APP_SLUG
 
 export function GitHubAppInstallButton({ projectId, hasInstallation = false, className = '' }: Props) {
   if (!APP_SLUG) {

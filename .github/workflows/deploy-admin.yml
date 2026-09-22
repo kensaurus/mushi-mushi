@@ -153,6 +153,13 @@ jobs:
           # Vite plugin upload sourcemaps. VITE_RELEASE tags the release so
           # Sentry can group events by version and resolve them automatically.
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          # GitHub App slug for the one-click "Install GitHub App" CTA on
+          # /integrations. Unset in this workflow until now, which is why the
+          # primary connect button never rendered in the deployed console and
+          # users were pushed onto hand-typing an installation id. Set the
+          # VITE_GITHUB_APP_SLUG repo variable to the App's real slug (the
+          # `github.com/apps/<slug>` segment) to light the button up.
+          VITE_GITHUB_APP_SLUG: ${{ vars.VITE_GITHUB_APP_SLUG }}
           VITE_RELEASE: ${{ steps.version.outputs.app_version }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: sakuramoto

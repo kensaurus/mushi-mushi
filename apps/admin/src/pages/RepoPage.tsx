@@ -17,6 +17,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { githubAppInstallUrl } from '../components/integrations/GitHubAppInstallButton'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -521,9 +522,12 @@ export function RepoPage() {
             )}
           </div>
           <ActionPillRow className="shrink-0">
-            {hasRepo && !repo.github_app_installation_id && (
+            {/* Only render when the App slug is configured. The slug used to
+                be hard-coded as `mushi-mushi`, which 404s on GitHub — the
+                pill looked live but led to an error page. */}
+            {hasRepo && !repo.github_app_installation_id && githubAppInstallUrl(activeProjectId ?? '') && (
               <ActionPill
-                href={`https://github.com/apps/mushi-mushi/installations/new?state=${activeProjectId ?? ''}`}
+                href={githubAppInstallUrl(activeProjectId ?? '')!}
                 tone="brand"
               >
                 Install Mushi on GitHub ↗
