@@ -14,7 +14,9 @@
  *
  * Output: docs/social-preview/og-card.png at 1200×630 (the size Open Graph,
  * X and LinkedIn crop to), copied to apps/docs/public/social-preview/ where the
- * docs site serves it. apps/docs/lib/structured-data.ts declares the same size
+ * docs site serves it (scripts/sync-docs-og-card.mjs makes the same copy in the
+ * docs prebuild, so a build never ships a stale card; keep both). The file
+ * apps/docs/lib/structured-data.ts declares the same size
  * and docs-meta.test.ts reads the PNG header, so change all three together.
  *
  * Text is rendered with the host's fonts (editorialTokens.fontDisplay /
