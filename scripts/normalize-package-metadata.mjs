@@ -63,10 +63,12 @@ export const PRIMARY_DESCRIPTION_MAX = 140
 // Mushi is a Sentry companion (VISION.md) — this keyword says the opposite.
 export const BANNED_KEYWORDS = ['sentry-alternative']
 
-const lowerFirst = (s) => s.charAt(0).toLowerCase() + s.slice(1)
-
-/** "The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor." */
-export const NPM_PITCH = `${MUSHI_TAGLINE_V2.category}: ${lowerFirst(MUSHI_TAGLINE_V2.promise)}.`
+/**
+ * "The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor."
+ * Composed once in the brand package (category + promise) so the docs site's
+ * JSON-LD and meta description quote the same sentence as the npm cards.
+ */
+export const NPM_PITCH = MUSHI_TAGLINE_V2.pitch
 
 /**
  * Role phrase for each primary entry point. The npm description is

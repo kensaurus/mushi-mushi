@@ -104,7 +104,12 @@ const PAGES: readonly SnippetPage[] = [
   {
     page: 'quickstart/react.mdx',
     pkgDir: 'react',
-    fixtures: { 'src/App.tsx': 'export function App() {\n  return null\n}\n' },
+    fixtures: {
+      'src/App.tsx': 'export function App() {\n  return null\n}\n',
+      // Stand-in for the @types/node every Next.js app has: the App Router
+      // sample reads `process.env.NEXT_PUBLIC_*`.
+      'next-env.d.ts': 'declare const process: { env: Record<string, string | undefined> }\n',
+    },
   },
   { page: 'quickstart/angular.mdx', pkgDir: 'angular' },
   {
@@ -227,4 +232,16 @@ describe('quickstart code samples compile against the SDK sources', () => {
       expect(results.get(spec.page)).toEqual([])
     })
   }
+
+  // The react page's `process` stand-in is global to the shared program, so
+  // it would also type-check `process.env` on the Vite, Angular and Svelte
+  // pages, where it is undefined in the browser. Keep that failing here.
+  it('only the Next.js samples read process.env', () => {
+    const offenders = PAGES.filter((spec) => spec.page !== 'quickstart/react.mdx').flatMap((spec) =>
+      virtualFilesFor(spec)
+        .filter((f) => f.isSnippet && /\bprocess\.env\b/.test(f.text))
+        .map((f) => f.origin),
+    )
+    expect(offenders).toEqual([])
+  })
 })

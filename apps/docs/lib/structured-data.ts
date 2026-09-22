@@ -87,13 +87,17 @@ export function faqPageJsonLd(items: readonly FaqEntry[]): Record<string, unknow
   }
 }
 
-/** schema.org WebSite — rendered site-wide from app/layout.tsx. */
+/**
+ * schema.org WebSite — rendered site-wide from app/layout.tsx. The
+ * description is the brand pitch the npm cards end with
+ * (MUSHI_TAGLINE_V2.pitch), so every surface quotes one sentence.
+ */
 export const WEBSITE_JSONLD = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
   name: 'Mushi Mushi',
   url: PRODUCT_ROOT,
-  description: MUSHI_TAGLINE_V2.oneLiner,
+  description: MUSHI_TAGLINE_V2.pitch,
   publisher: { '@id': ORGANIZATION_ID },
 } as const
 
@@ -132,7 +136,7 @@ export const SOFTWARE_APPLICATION_JSONLD = {
   '@type': 'SoftwareApplication',
   name: 'Mushi Mushi',
   url: PRODUCT_ROOT,
-  description: MUSHI_TAGLINE_V2.oneLiner,
+  description: MUSHI_TAGLINE_V2.pitch,
   applicationCategory: 'DeveloperApplication',
   operatingSystem: 'Web, iOS, Android',
   offers: {

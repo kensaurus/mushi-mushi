@@ -7,6 +7,15 @@ import { Callout } from 'nextra/components'
 
 # Product analytics: `Mushi.track()`
 
+<Callout type="warning">
+  **Requires `@mushi-mushi/web` ≥ 1.29** (and `@mushi-mushi/core` ≥ 1.29).
+  `track()`, `setConsent()`, `getAnonymousId()` and the `analytics` config
+  ship in that minor release; on 1.28 and earlier they do not exist. The
+  other SDKs get them in the same release: `@mushi-mushi/react` ≥ 1.29 for
+  `useMushiTrack()`, `@mushi-mushi/react-native` ≥ 0.22 and
+  `@mushi-mushi/node` ≥ 1.3.
+</Callout>
+
 Every Mushi SDK can record named product events alongside bug reports and
 sessions, so a solo builder can see a signup funnel, a user's path, and
 retention in the same console that holds the bug reports, without a second

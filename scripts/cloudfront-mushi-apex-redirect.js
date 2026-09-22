@@ -29,11 +29,13 @@
  *      Must be a redirect, not a URI rewrite: Default origin is the
  *      kensaur homepage bucket; only a new request rematches the
  *      /mushi-mushi* cache behavior.)
- *   3. /sdks/mcp-tools.generated → 301 /mushi-mushi/docs/sdks/mcp-tools
- *   4. Static assets (has extension) → pass through
- *   5. Docs routes → /mushi-mushi/docs{uri} (slash-stripped)
- *   6. Admin SPA routes → /mushi-mushi/admin{uri}
- *   7. Unknown → pass through
+ *   3. /mushi-mushi (no slash) → 301 /mushi-mushi/ (the S3 website endpoint
+ *      used to answer it with a 302)
+ *   4. /sdks/mcp-tools.generated → 301 /mushi-mushi/docs/sdks/mcp-tools
+ *   5. Static assets (has extension) → pass through
+ *   6. Docs routes → /mushi-mushi/docs{uri} (slash-stripped)
+ *   7. Admin SPA routes → /mushi-mushi/admin{uri}
+ *   8. Unknown → pass through
  *
  * CONFLICT: /integrations alone is the admin console route; /integrations/*
  * is docs-only (e.g. /integrations/cursor). Nested docs prefixes use a
@@ -226,6 +228,14 @@ function handler(event) {
   // homepage bucket; rematch /mushi-mushi* behavior on the follow-up.
   if (uri === '/brand' || uri.indexOf('/brand/') === 0) {
     return redirect301('/mushi-mushi/docs' + uri, qs);
+  }
+
+  // Slashless product root. `/mushi-mushi` does not match the
+  // `/mushi-mushi/*` behavior, so it lands here; passed through, the S3
+  // website endpoint answered with a 302 to `/mushi-mushi/`. The slash form is
+  // the canonical landing URL, so say so permanently.
+  if (uri === '/mushi-mushi') {
+    return redirect301('/mushi-mushi/', qs);
   }
 
   // A moved docs page whose old slug contains a dot, so the extension rule

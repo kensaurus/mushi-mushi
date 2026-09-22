@@ -121,7 +121,15 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
 export const LANDING_MEDIA_INTRO =
   'Admin console, the SDK on a real app (glot.it), and light/dark screenshots — click a frame to open the live surface.'
 
+const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
+
 export const LANDING_WHAT_THIS_IS = {
+  /**
+   * One plain "Mushi Mushi is …" sentence, the shape answer engines lift as a
+   * definition. Category and promise come from the brand SSOT so it cannot
+   * drift from the eyebrow, the npm cards or the JSON-LD.
+   */
+  definition: `Mushi Mushi is ${lowerFirst(MUSHI_TAGLINE_V2.category)}, an open-source bug-reporting SDK and queue: ${lowerFirst(MUSHI_TAGLINE_V2.promise)}.`,
   who: 'Built for solo founders who ship with AI and lose afternoons debugging code they did not fully write.',
   boundary:
     'Works inside your editor — not another dashboard. Sentry, Linear, and Slack plug into the same queue; none of them are required to start.',

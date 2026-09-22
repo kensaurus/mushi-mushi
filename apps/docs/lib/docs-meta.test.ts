@@ -20,7 +20,14 @@ import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { parseFrontmatter } from '../../../scripts/lib/frontmatter.mjs'
-import { LANDING_META, OG_CARD_HEIGHT, OG_CARD_WIDTH } from './structured-data'
+import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
+import {
+  LANDING_META,
+  OG_CARD_HEIGHT,
+  OG_CARD_WIDTH,
+  SOFTWARE_APPLICATION_JSONLD,
+  WEBSITE_JSONLD,
+} from './structured-data'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DOCS_ROOT = join(__dirname, '..')
@@ -92,6 +99,53 @@ describe('install and credential claims', () => {
       for (const [label, re] of unpublished) if (re.test(p.source)) hits.push(`${p.rel}: ${label}`)
     }
     expect(hits).toEqual([])
+  })
+})
+
+describe('script-tag install (quickstart/web)', () => {
+  const REPO = join(DOCS_ROOT, '..', '..')
+  const LOADER_URL_RE = /https:\/\/cdn\.jsdelivr\.net\/npm\/@mushi-mushi\/web@\d+\/dist\/mushi\.loader\.global\.js/g
+  const quickstart = readFileSync(join(CONTENT, 'quickstart', 'web.mdx'), 'utf8')
+  const loaderSource = readFileSync(join(REPO, 'packages', 'web', 'src', 'loader.ts'), 'utf8')
+
+  it('uses the same loader URL as the loader header and the console snippet', () => {
+    const snippets = readFileSync(join(REPO, 'apps', 'admin', 'src', 'lib', 'sdkSnippets.ts'), 'utf8')
+    const urls = new Set([
+      ...(quickstart.match(LOADER_URL_RE) ?? []),
+      ...(loaderSource.match(LOADER_URL_RE) ?? []),
+      ...(snippets.match(LOADER_URL_RE) ?? []),
+    ])
+    expect(quickstart.match(LOADER_URL_RE)?.length ?? 0).toBeGreaterThan(0)
+    expect([...urls]).toHaveLength(1)
+  })
+
+  it('documents only data-* attributes the loader reads', () => {
+    const documented = [...new Set(quickstart.match(/`data-[a-z-]+`/g) ?? [])].map((a) => a.slice(1, -1))
+    expect(documented.length).toBeGreaterThan(5)
+    const unread = documented.filter((attr) => {
+      const key = attr.slice('data-'.length).replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())
+      return !loaderSource.includes(`ds.${key}`)
+    })
+    expect(unread).toEqual([])
+  })
+})
+
+describe('structured data describes Mushi only', () => {
+  it('the site-wide and landing JSON-LD use the brand pitch the npm cards end with', () => {
+    expect(WEBSITE_JSONLD.description).toBe(MUSHI_TAGLINE_V2.pitch)
+    expect(SOFTWARE_APPLICATION_JSONLD.description).toBe(MUSHI_TAGLINE_V2.pitch)
+    expect(MUSHI_TAGLINE_V2.pitch).toBe(
+      'The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.',
+    )
+  })
+
+  it('the portfolio footer table emits no JSON-LD of unrelated apps', () => {
+    // It rendered an ItemList of the other kensaurus apps on every Mushi page.
+    const code = readFileSync(
+      join(DOCS_ROOT, '..', '..', 'packages', 'marketing-ui', 'src', 'KensaurusPortfolioTable.tsx'),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
+    expect(code).not.toMatch(/ld\+json|'@type'|ItemList/)
   })
 })
 

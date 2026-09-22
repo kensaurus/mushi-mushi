@@ -38,6 +38,8 @@ export declare const MUSHI_TAGLINE_V2: {
   readonly hero: string
   readonly subHero: string
   readonly category: string
+  /** `category: promise.` — npm descriptions, docs JSON-LD, default meta description. */
+  readonly pitch: string
   readonly micro: string
   readonly mark: string
 }

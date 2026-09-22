@@ -69,18 +69,32 @@ When an agent follows this contract, Mushi promises:
 
 ## Self-bootstrap (Claude Code and similar)
 
-Agents that run in a repo without Mushi configured can self-bootstrap
-using the `setup_repo_for_mushi` tool (requires `mcp:write` scope):
+Repo setup is a CLI command, not an MCP tool. An agent working in a repo
+without Mushi configured runs it in the terminal:
 
-```
-// In the agent's context: "Set up this repo for Mushi"
-// The agent calls: setup_repo_for_mushi({ repo_root: ".", project_name: "my-app" })
+```bash
+npx mushi-mushi setup --ide claude --with-rules   # Claude Code
+npx mushi-mushi setup --ide cursor --with-rules   # Cursor
+npx mushi-mushi sync-lessons                      # current project lessons
 ```
 
 This writes:
-- `.mushi/lessons.json` — pre-filled with current project lessons
-- `.cursorrules` — evolution-loop coding rules for Cursor
-- `MUSHI.md` — this contract as a human-readable doc in the repo
+- `.mcp.json` (Claude Code) or `.cursor/mcp.json` (Cursor) — the Mushi MCP
+  server entry. For these two clients it is the hosted server URL: the IDE
+  opens a browser sign-in on first use and stores the key itself, so no key
+  lands in the repo. `--stdio` (or its alias `--ci`) writes a local stdio
+  entry instead, which reads the key from the saved CLI config.
+- `.claude/rules/mushi.md` (Claude Code) or `.cursorrules` (Cursor), from
+  `--with-rules` — the evolution-loop coding rules.
+- `.mushi/lessons.json`, from `sync-lessons` — the project's promoted lessons.
+
+If the CLI has no saved credentials, `setup` runs browser sign-in first,
+which needs a person at the keyboard; `--dry-run` prints what it would write
+without signing in or writing anything. `sync-lessons` needs a signed-in CLI
+(or `MUSHI_API_KEY` and `MUSHI_PROJECT_ID` in the environment). Older MCP
+server versions list a `setup_repo_for_mushi` tool: it never worked, since
+the route it called did not exist, and it has been removed. Use
+`mushi setup`.
 
 ## Privacy contract
 
@@ -103,7 +117,7 @@ against your own account.
 | Scope | What it grants |
 |-------|---------------|
 | `mcp:read` | All read tools and resources including `privacy://status`, `evolution://history` |
-| `mcp:write` | Everything in `mcp:read` plus `submit_fix_result`, `dispatch_fix`, `setup_repo_for_mushi` |
+| `mcp:write` | Everything in `mcp:read` plus `submit_fix_result`, `dispatch_fix` |
 
 Mint keys in Admin console → Settings → API Keys. Pick the smallest scope
 that works — `mcp:read` is enough for agents that only read context.

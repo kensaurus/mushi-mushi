@@ -50,5 +50,42 @@ The widget launcher mounts automatically on `Mushi.init`. Set
 `widget: { trigger: 'hidden' }` to keep it out of sight and open it only
 from your own buttons.
 
+## No bundler: script tag
+
+On a site with no build step (plain HTML, Rails or Django templates,
+WordPress, Webflow), paste one tag into `` instead of installing the
+package:
+
+```html filename="index.html"
+<script async
+  src="https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js"
+  data-project="YOUR_PROJECT_ID"
+  data-key="YOUR_API_KEY"
+></script>
+```
+
+The file is the loader that `@mushi-mushi/web` publishes to npm, served by
+jsDelivr and pinned to major version 1, so minor and patch releases reach
+you without editing the tag. It reads its settings from its own `data-*`
+attributes and calls `Mushi.init` once; including the tag twice does not
+start a second copy. With no `data-project` and `data-key` it does nothing.
+
+| Attribute | Maps to |
+| --- | --- |
+| `data-project` | `projectId` (required) |
+| `data-key` | `apiKey` (required; an SDK key with the `report:write` scope) |
+| `data-trigger` | `widget.trigger` |
+| `data-theme` | `widget.theme` |
+| `data-position` | `widget.position` |
+| `data-trigger-text` | `widget.triggerText` |
+| `data-banner-variant` | `widget.bannerConfig.variant` (`neon`, `brand` or `subtle`) |
+| `data-banner-position` | `widget.bannerConfig.position` (`top` or `bottom`) |
+| `data-endpoint` | `apiEndpoint`, for a self-hosted server |
+| `data-debug` | `debug` when set to `"true"` |
+
+Anything else (capture options, `beforeSend`, `captureEvent` from your own
+code) needs the npm package above. The console's **Script tag** install tab
+prints this tag with your project ID and key filled in.
+
   See [SDK reference → @mushi-mushi/web](/sdks/web) for the full config
   surface (PII scrubbing, rate limits, custom triggers, on-device pre-filter).

@@ -1,9 +1,9 @@
-# @mushi-mushi/web
+# JavaScript bug reporting SDK for the browser
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/web
 
 ---
-title: '@mushi-mushi/web'
+title: JavaScript bug reporting SDK for the browser
 description: Reference for @mushi-mushi/web, the browser SDK — screenshots, console and network capture, the Shadow DOM widget, sampling, beforeSend and privacy.
 ---
 

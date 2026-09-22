@@ -17,6 +17,8 @@ Your AI wrote it. Mushi tells you why it broke.</>}
 
 ## What this is (and is not)
 
+Mushi Mushi is the bug mediator for AI-built apps, an open-source bug-reporting SDK and queue: plain-English diagnosis + a ready fix, in your editor.
+
 ## Get started with the SDK
 
 ## Install in your framework

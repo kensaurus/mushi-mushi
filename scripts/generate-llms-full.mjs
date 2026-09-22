@@ -45,6 +45,7 @@ import { fileURLToPath } from 'node:url';
 import { buildRssFeed } from './lib/blog-feed.mjs';
 import { parseFrontmatter } from './lib/frontmatter.mjs';
 import { mdxToPlainMarkdown } from './lib/mdx-prose.mjs';
+import { MUSHI_TAGLINE_V2 } from '../packages/brand/src/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -61,6 +62,9 @@ const BLOG_AUTHOR = 'Kenji Sakuramoto';
 
 const BASE_URL = 'https://kensaur.us/mushi-mushi/docs';
 const DRY_RUN = process.argv.includes('--dry-run');
+
+/** Summary line under each file's title: the brand pitch, same as the npm cards and JSON-LD. */
+const PITCH = MUSHI_TAGLINE_V2.pitch;
 
 /** Hard ceiling for llms-ctx.txt, in bytes. */
 const CTX_BUDGET_BYTES = 50 * 1024;
@@ -203,7 +207,7 @@ pages.sort(comparePages);
 
 const header = `# Mushi Mushi — full documentation dump
 
-> Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor.
+> ${PITCH}
 
 Canonical docs: ${BASE_URL}
 Generated: ${new Date().toISOString().slice(0, 10)}
@@ -226,7 +230,7 @@ const fullContent = header + pages.map((p) => p.section).join('\n\n---\n\n');
 
 const ctxHeader = `# Mushi Mushi — getting-started context
 
-> Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor.
+> ${PITCH}
 
 Canonical docs: ${BASE_URL}
 
