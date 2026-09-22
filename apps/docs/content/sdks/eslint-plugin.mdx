@@ -54,11 +54,11 @@ arrow (`() => {}`). The CI gate fails on any non-test file that matches.
 ```jsx
 // ✗ caught
 <button onClick={() => {}}>Submit</button>
-<button onSubmit={noop}>Submit</button>
+<form onSubmit={noop}><button type="submit">Submit</button></form>
 
 // ✓ allowed
 <button onClick={() => mutate()}>Submit</button>
-<button onSubmit={handleSubmit}>Submit</button>
+<form onSubmit={handleSubmit}><button type="submit">Submit</button></form>
 
 // ✓ allowed in tests + stories
 <button onClick={() => {}} />        // foo.test.tsx, *.stories.tsx

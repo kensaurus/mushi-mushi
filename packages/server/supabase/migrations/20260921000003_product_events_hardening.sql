@@ -26,3 +26,6 @@ create policy "org member read product_events"
 
 create index if not exists product_events_end_user_id
   on public.product_events (end_user_id) where end_user_id is not null;
+
+notify pgrst, 'reload schema';
+notify pgrst, 'reload config';

@@ -928,7 +928,9 @@ exports[`getWidgetStyles > matches stable CSS snapshot markers 1`] = `
     }
     .mushi-brand-link:hover { color: #5C5852; text-decoration: underline; }
     .mushi-brand-link:focus-visible {
-      outline: none;
+      outline: 2px solid #E03C2C;
+      outline-offset: 2px;
+      border-radius: 2px;
       color: #E03C2C;
       text-decoration: underline;
     }

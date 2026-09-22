@@ -32,6 +32,11 @@ const EXPRESSION_ONLY_LINE = /^[ \t]*\{[A-Za-z_$][\w$.]*\}(?:[ \t]+\{[A-Za-z_$][
  * bare blockquote `>` are deliberately outside the class).
  */
 const PUNCTUATION_ONLY_LINE = /^[ \t]*[{}()[\],;]+[ \t]*$/gm
+/**
+ * A `{ident.map(...)}` (or similar) that starts a line and runs to EOF.
+ * Changelog-style MDX leaves this after JSX tags are stripped.
+ */
+const MAP_EXPRESSION_TAIL = /\n[ \t]*\{[A-Za-z_$][\w$.]*\.map\([\s\S]*$/
 
 /**
  * Plain-Markdown body of an MDX page. Keeps front matter (agents read `title`
@@ -49,7 +54,8 @@ export function mdxToPlainMarkdown(src) {
         .replace(BARE_IMPORT, '')
         .replace(EXPORT_LINE, '')
         .replace(EXPRESSION_ONLY_LINE, ''),
-    ).replace(PUNCTUATION_ONLY_LINE, ''),
+    ).replace(PUNCTUATION_ONLY_LINE, '')
+      .replace(MAP_EXPRESSION_TAIL, ''),
   )
     .replace(/\n{3,}/g, '\n\n')
     .trim()

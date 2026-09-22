@@ -119,6 +119,8 @@ var SPA_PREFIXES = [
   '/anti-gaming',
   '/notifications',
   '/billing',
+  '/analytics',
+  '/growth',
   '/organization',
   '/org/',
   '/queue',

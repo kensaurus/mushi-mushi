@@ -65,7 +65,7 @@ days, then let it go. Track the state here; the Monday ritual in
 | 3 | [StackShare](https://stackshare.io/) — tool page under Monitoring / Bug tracking | Same entry; logo from `docs/mascot/mushi-happy.png` | none | issue-first: not submitted |
 | 4 | [awesome-selfhosted](https://github.com/awesome-selfhosted/awesome-selfhosted) — Analytics / Error tracking (main list; AGPLv3 qualifies) | `- [Mushi Mushi](https://kensaur.us/mushi-mushi/) - In-app bug reports that arrive with a plain-English diagnosis and a paste-ready fix for Cursor / Claude Code. ([Demo](https://kensaur.us/mushi-mushi/docs/connect), [Source Code](https://github.com/kensaurus/mushi-mushi)) \`AGPL-3.0\` \`Docker\`` | **Demo gate passed** (the list requires a working demo or screenshots) | issue-first: not submitted |
 | 5 | [awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code) — Integrations / Plugins | List `.claude-plugin/marketplace.json` and `plugins/mushi-debugger/` (the subagent that pulls a user's report + fix context into Claude Code) | `scripts/check-cursor-plugin.mjs` green; plugin README current | issue-first: not submitted |
-| 6 | [awesome-remote-mcp-servers #431](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/431) | Already open (see §2) | none | nudge once, then stop |
+| 6 | [awesome-remote-mcp-servers #431](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/431) | Already open (see §2) | none | nudged 2026-09-22, then stop |
 
 Submit-form paths and category names were not verified on 2026-09-21; check
 each site's current submission flow before opening anything.
