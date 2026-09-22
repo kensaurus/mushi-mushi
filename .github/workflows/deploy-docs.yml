@@ -180,13 +180,32 @@ jobs:
             --include "*.css"
 
       - name: Sync immutable assets to S3 (other static)
+        # .txt / .xml / .md are excluded: their names carry no content hash
+        # and they change on every deploy (RSC payloads, llms*.txt,
+        # sitemap.xml, blog/feed.xml, llm-md twins). Marked immutable for a
+        # year, a stale llms.txt or sitemap outlived every docs deploy.
         run: |
           aws s3 sync apps/docs/out/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
             --cache-control "public, max-age=31536000, immutable" \
             --exclude "*.html" \
             --exclude "*.js" \
             --exclude "*.css" \
+            --exclude "*.txt" \
+            --exclude "*.xml" \
+            --exclude "*.md" \
             --exclude "version.json"
+
+      - name: Sync text, feeds and Markdown to S3 (short cache)
+        # Same 5-minute policy as the HTML they mirror. Content-Type is left
+        # to the CLI's extension guess (text/plain, application/xml,
+        # text/markdown), which is what these objects were served with before.
+        run: |
+          aws s3 sync apps/docs/out/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
+            --cache-control "public, max-age=300, must-revalidate" \
+            --exclude "*" \
+            --include "*.txt" \
+            --include "*.xml" \
+            --include "*.md"
 
       - name: Sync HTML to S3 (short cache)
         # Per-page HTML for clean URL routing. We use 5 minutes so an
