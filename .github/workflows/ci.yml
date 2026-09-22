@@ -186,6 +186,14 @@ jobs:
       - name: Check design system gates
         run: pnpm check:design
 
+      # The "More from KENSAURUS" footer reads the vendored KENSAURUS spine
+      # (packages/marketing-ui/src/kensaurus/spine, ADR 0014). This fails if
+      # anyone hand-edits that copy instead of changing the manifest in
+      # kensaurus/yen-yen and re-running the sync — which is how the footer
+      # drifted into a stale hand-copied app list in the first place.
+      - name: Check vendored KENSAURUS spine is unmodified
+        run: pnpm check:spine
+
       - run: pnpm test
 
       # Wave D D2: enforce that the public changelog is in sync with the

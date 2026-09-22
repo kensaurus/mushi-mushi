@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "manifest": {
+    "version": 2,
+    "updated": "2026-09-19"
+  },
+  "files": {
+    "apps.generated.ts": "5b213bf02bb16ce8df8f76236157b90ac5789b309776d8463b9f0c48aa234426",
+    "account.ts": "a00cb4f34fa6b43849644042e751a446f94de5e6d7fb7bacb933e9b4dbc66f17",
+    "events.ts": "f945fa4ccd374a0f8a1638881073977ee0c73b0d9832a35b8d0424ae8ba0fb41",
+    "links.ts": "308e76e34df633bf0ae10d420463826b3422da5978474b314d594acdb5b508a5",
+    "check-spine.mjs": "e753ba0f57ae09571c69f617ae1f5240b63a26c235156104c16220654541807f"
+  }
+}

@@ -34,8 +34,13 @@ function handler(event) {
     value: 'max-age=63072000; includeSubDomains; preload',
   };
   response.headers['content-security-policy'] = {
+    // `*.kensaur.us` + github.com cover the KENSAURUS sibling-app icons in the
+    // "More from KENSAURUS" footer, which PublicIntegrationsPage renders via
+    // <MarketingFooter />. Without them those icons are blocked and render as
+    // broken images. github.com/<org>.png redirects to the avatars host, so
+    // both origins must be listed.
     value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://www.google.com https://*.googleusercontent.com https://avatars.githubusercontent.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://kensaur.us https://*.sentry.io https://*.cloud.langfuse.com; frame-src 'none'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'",
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://www.google.com https://*.googleusercontent.com https://avatars.githubusercontent.com https://*.kensaur.us https://github.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://kensaur.us https://*.sentry.io https://*.cloud.langfuse.com; frame-src 'none'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'",
   };
 
   if (status !== 403 && status !== 404) {
