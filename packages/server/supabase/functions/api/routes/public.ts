@@ -45,6 +45,8 @@ import {
 } from '../helpers.ts';
 import { safeParse, ApiReportBodySchema } from '../../_shared/validate.ts';
 import { registerReporterFeatureBoardRoutes } from './reporter-feature-board.ts';
+import { resolveReporterAuth } from './reporter-auth.ts';
+import { reporterKey } from '../../_shared/reporter-token.ts';
 import { claimIpRateLimit, extractClientIp } from './cli-auth.ts';
 import { unsubscribeSecret, verifyUnsubscribeToken } from '../../_shared/lifecycle-unsubscribe.ts';
 import { brandFooterDefaultForProject } from '../../_shared/brand-footer.ts';
@@ -1094,132 +1096,17 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         400,
       );
 
-    const encoder = new TextEncoder();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(reporterToken));
-    const tokenHash = Array.from(new Uint8Array(hashBuffer))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-
     const db = getServiceClient();
-    const rep = await getReputation(db, projectId, tokenHash);
+    const rep = await getReputation(db, projectId, await reporterKey(reporterToken));
     return c.json({ ok: true, data: rep });
   });
 
   // Reporter notifications
   //
-  // Auth model: two flows are accepted, in priority order:
-  //
-  //   (A) HMAC-signed (preferred). The SDK proves possession of the reporter
-  //       token without sending it on the wire:
-  //
-  //         X-Reporter-Token-Hash: <sha256(token) hex>
-  //         X-Reporter-Ts:         <unix ms>
-  //         X-Reporter-Hmac:       hex(HMAC-SHA256(
-  //                                  secret = projectApiKey,
-  //                                  msg    = `${projectId}.${ts}.${tokenHash}`))
-  //
-  //       Server enforces `|now - ts| < 5 min` to defeat replay, then recomputes
-  //       the HMAC against the API key already validated by apiKeyAuth.
-  //
-  //   (B) Legacy raw-token. Accepted for backwards compatibility but logged as a
-  //       deprecation warning by the SDK. Token can be passed as
-  //       `X-Reporter-Token` header (preferred over query so it doesn't leak
-  //       into proxy logs) or `?reporterToken=...`.
-  //
-  // Both flows resolve to a stable `reporter_token_hash` for table lookup.
-  async function resolveReporterTokenHash(
-    c: Context,
-    projectId: string,
-  ): Promise<
-    { ok: true; tokenHash: string } | { ok: false; status: number; code: string; message: string }
-  > {
-    const headerHash = c.req.header('X-Reporter-Token-Hash');
-    const ts = c.req.header('X-Reporter-Ts');
-    const sig = c.req.header('X-Reporter-Hmac');
-    const apiKey = c.req.header('X-Mushi-Api-Key') || c.req.header('X-Mushi-Project');
-
-    if (headerHash && ts && sig && apiKey) {
-      // Belt-and-suspenders: even though the HMAC is computed over the lowercase
-      // hash and a tampered value would fail signature verification, we also
-      // refuse anything that doesn't look like a SHA-256 hex digest before it
-      // ever flows into PostgREST `or()` filter strings downstream.
-      if (!/^[0-9a-f]{64}$/i.test(headerHash)) {
-        return {
-          ok: false,
-          status: 400,
-          code: 'BAD_TOKEN_HASH',
-          message: 'X-Reporter-Token-Hash must be a 64-char hex SHA-256 digest',
-        };
-      }
-      const parsedTs = Number(ts);
-      if (!Number.isFinite(parsedTs)) {
-        return {
-          ok: false,
-          status: 400,
-          code: 'BAD_TIMESTAMP',
-          message: 'X-Reporter-Ts must be a unix-ms integer',
-        };
-      }
-      const skewMs = Math.abs(Date.now() - parsedTs);
-      if (skewMs > 5 * 60 * 1000) {
-        return {
-          ok: false,
-          status: 401,
-          code: 'STALE_REQUEST',
-          message: 'X-Reporter-Ts outside 5-minute window',
-        };
-      }
-      const enc = new TextEncoder();
-      const key = await crypto.subtle.importKey(
-        'raw',
-        enc.encode(apiKey),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign'],
-      );
-      const expected = await crypto.subtle.sign(
-        'HMAC',
-        key,
-        enc.encode(`${projectId}.${parsedTs}.${headerHash.toLowerCase()}`),
-      );
-      const expectedHex = Array.from(new Uint8Array(expected))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-      if (!constantTimeEqualHex(expectedHex, sig)) {
-        return {
-          ok: false,
-          status: 401,
-          code: 'INVALID_HMAC',
-          message: 'X-Reporter-Hmac signature mismatch',
-        };
-      }
-      return { ok: true, tokenHash: headerHash.toLowerCase() };
-    }
-
-    const rawToken = c.req.header('X-Reporter-Token') ?? c.req.query('reporterToken') ?? null;
-    if (!rawToken) {
-      return {
-        ok: false,
-        status: 400,
-        code: 'MISSING_TOKEN',
-        message:
-          'Pass X-Reporter-Token-Hash + X-Reporter-Hmac (preferred) or X-Reporter-Token / ?reporterToken=',
-      };
-    }
-    const enc = new TextEncoder();
-    const buf = await crypto.subtle.digest('SHA-256', enc.encode(rawToken));
-    const tokenHash = Array.from(new Uint8Array(buf))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    return { ok: true, tokenHash };
-  }
-
-  function constantTimeEqualHex(a: string, b: string): boolean {
-    if (a.length !== b.length) return false;
-    let diff = 0;
-    for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-    return diff === 0;
-  }
+  // Auth: signed digest (X-Reporter-Token-Hash + X-Reporter-Ts + X-Reporter-Hmac)
+  // or the raw token for older SDKs; see reporter-auth.ts. Both resolve to the
+  // one-way key the reporter tables store.
+  const resolveReporterTokenHash = resolveReporterAuth;
 
   app.get('/v1/reporter/reports', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;

@@ -37,7 +37,7 @@ import { awardPointsForEndUser, invalidateRuleCache } from '../../_shared/reputa
 import { dispatchRewardWebhook } from '../../_shared/reward-webhooks.ts'
 import { verifyHostJwt } from '../../_shared/verify-host-jwt.ts'
 import { MUSHI_USER_TOKEN_HEADER, verifyEndUserToken } from '../../_shared/end-user-identity.ts'
-import { hashReporterTokenOrNull } from '../../_shared/reporter-token.ts'
+import { reporterKeyOrNull } from '../../_shared/reporter-token.ts'
 import {
   stripeFromEnv,
   createConnectAccount,
@@ -315,13 +315,15 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     }
 
     // Resolve / upsert end_user. The SDK sends the raw reporter token under
-    // this name; reporter_devices stores digests, so hash it (idempotent on a
-    // digest) or the anti-fraud join never matches.
+    // this name. Every table stores the one-way reporter key, so derive it
+    // once here: the anti-fraud join and the reputation row both need it, and
+    // the raw value must never reach storage.
+    const reporterKey = await reporterKeyOrNull(reporter_token_hash)
     const endUser = await resolveEndUser(db, {
       organizationId,
       externalUserId: user_id,
       traits: user_traits,
-      reporterTokenHash: await hashReporterTokenOrNull(reporter_token_hash),
+      reporterTokenHash: reporterKey,
       optedInToRewards: opted_in,
     })
 
@@ -359,7 +361,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
           endUserId: endUser.id,
           action: event.action,
           metadata: event.metadata as Record<string, unknown>,
-          reporterTokenHash: reporter_token_hash,
+          reporterTokenHash: reporterKey,
         })
         accepted++
       } catch (err) {

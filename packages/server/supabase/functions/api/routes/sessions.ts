@@ -6,10 +6,10 @@
  * Auth:   Public SDK API key (same as /v1/sdk/discovery). Sets `projectId`.
  * Safety: Strict Zod validation, per-(project, session_id) upsert/update writes.
  *         The SDK sends its raw reporter token (a bearer credential for the
- *         end user's report threads) in `reporter_token_hash`; only
- *         sha256(token) is stored — the same digest the report path stores —
- *         via _shared/reporter-token.ts. Until 2026-09-21 the raw token was
- *         stored verbatim. Rate-limit: per project and per client IP
+ *         end user's report threads) in `reporter_token_hash`; only the
+ *         one-way reporter key is stored — the same key the report path
+ *         stores — via _shared/reporter-token.ts. Until 2026-09-21 the raw
+ *         token was stored verbatim. Rate-limit: per project and per client IP
  *         (ingest-budget.ts); one upsert per event.
  *
  * Automation: a session whose User-Agent names a headless browser, test
@@ -25,7 +25,7 @@ import type { Variables } from '../types.ts';
 import { apiKeyAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
-import { hashReporterTokenOrNull } from '../../_shared/reporter-token.ts';
+import { reporterKeyOrNull } from '../../_shared/reporter-token.ts';
 import { isAutomatedUserAgent } from '../../_shared/automated-agent.ts';
 import { claimIngestBudget, clientIp } from './ingest-budget.ts';
 
@@ -115,7 +115,7 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
         {
           project_id: projectId,
           session_id: event.session_id,
-          reporter_token_hash: await hashReporterTokenOrNull(event.reporter_token_hash),
+          reporter_token_hash: await reporterKeyOrNull(event.reporter_token_hash),
           user_agent: event.user_agent ?? null,
           entry_route: sanitisedRoute,
           page_view_count: event.page_view_count ?? 1,

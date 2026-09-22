@@ -47,6 +47,7 @@ import {
 } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { CHIP_TONE } from '../lib/chipTone'
+import { shortReporterKey } from '../lib/reporterKey'
 
 interface ReporterDevice {
   id: string
@@ -670,7 +671,7 @@ export function AntiGamingPage() {
                     <span className="text-fg-secondary truncate flex-1">{g.reason ?? '—'}</span>
                     <span title={tokTip}>
                       <SignalChip tone="neutral" className="shrink-0 max-w-32 truncate font-mono">
-                        tok:{g.reporter_token_hash.slice(0, 8)}…
+                        tok:{shortReporterKey(g.reporter_token_hash)}…
                       </SignalChip>
                     </span>
                     {g.ip_address && (
@@ -708,7 +709,7 @@ export function AntiGamingPage() {
                 <Badge className={EVENT_BADGE[e.event_type]}>{e.event_type}</Badge>
                 <span className="text-fg-secondary truncate flex-1">{e.reason ?? '—'}</span>
                 <SignalChip tone="neutral" className="shrink-0 max-w-32 truncate font-mono">
-                  tok:{e.reporter_token_hash.slice(0, 8)}…
+                  tok:{shortReporterKey(e.reporter_token_hash)}…
                 </SignalChip>
                 {e.ip_address && (
                   <SignalChip tone="neutral" className="shrink-0 font-mono">

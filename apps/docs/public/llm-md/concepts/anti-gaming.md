@@ -20,6 +20,9 @@ Mushi defends against both.
 ## Reporter reputation
 
 Each anonymous reporter is identified by a stable `reporter_token_hash`.
+It is a one-way key derived from the random token the SDK keeps on the
+device, so the value you see in the console cannot be used to read or reply
+to that reporter's threads.
 Outcomes accrue to the token:
 
 | Outcome     | Points |

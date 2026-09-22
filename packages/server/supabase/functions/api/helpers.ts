@@ -27,6 +27,7 @@ import { sendBotMessage, sendSlackText } from '../_shared/slack.ts';
 import { upsertProjectSdkObservationAsync } from '../_shared/sdk-observation.ts';
 import { emitProductEvent } from '../_shared/product-events.ts';
 import { runInBackground } from '../_shared/background.ts';
+import { reporterKey } from '../_shared/reporter-token.ts';
 import {
   isFirstRealReport,
   NON_REAL_REPORT_SOURCES,
@@ -235,11 +236,9 @@ export async function ingestReport(
   const report = parsed.data;
 
   const encoder = new TextEncoder();
-  const tokenData = encoder.encode(report.reporterToken);
-  const tokenHashBuffer = await crypto.subtle.digest('SHA-256', tokenData);
-  const tokenHash = Array.from(new Uint8Array(tokenHashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+  // The one-way key every reporter table stores; the reporter-thread routes
+  // derive the same key from what the SDK presents (_shared/reporter-token.ts).
+  const tokenHash = await reporterKey(report.reporterToken);
 
   // Build a weak device fingerprint from IP + User-Agent. This is intentionally
   // coarse: it is meant to surface the obvious case of the same browser on the

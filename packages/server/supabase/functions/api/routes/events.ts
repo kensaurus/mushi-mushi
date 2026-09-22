@@ -15,9 +15,10 @@
  *         names and the 'server' surface are rejected here (only
  *         emitProductEvent writes those); RLS read-only for org members.
  *
- * The SDK's anon_id is its reporter token — a bearer credential for the
- * end user's report threads — so it is stored only as sha256(value), the same
- * digest the report path stores (_shared/reporter-token.ts).
+ * Older SDKs send their reporter token as anon_id — a bearer credential for
+ * the end user's report threads — so anon_id is stored only as the one-way
+ * reporter key, the same key the report path stores
+ * (_shared/reporter-token.ts).
  *
  * Identity stitching: an `identify` pseudo-event (never stored) plus
  * `user_id` (+ traits) resolves an end_users row (org-scoped) and backfills
@@ -37,7 +38,7 @@ import { apiKeyAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { resolveEndUser } from '../../_shared/end-user-resolver.ts';
-import { hashReporterTokenOrNull } from '../../_shared/reporter-token.ts';
+import { reporterKeyOrNull } from '../../_shared/reporter-token.ts';
 import { isAutomatedUserAgent } from '../../_shared/automated-agent.ts';
 import {
   EVENT_NAME_RE,
@@ -365,7 +366,7 @@ export function registerEventRoutes(app: Hono<{ Variables: Variables }>): void {
       return c.json({ ok: true, data: { accepted: 0, dropped: batch.events.length, reason: 'automated_agent' } });
     }
     const meta = await loadProjectMeta(db, projectId);
-    const anonKey = await hashReporterTokenOrNull(batch.anon_id);
+    const anonKey = await reporterKeyOrNull(batch.anon_id);
     if (!meta.enabled) {
       // Accepted-but-dropped keeps well-behaved clients from retrying.
       return c.json({ ok: true, data: { accepted: 0, dropped: batch.events.length, reason: 'disabled' } });

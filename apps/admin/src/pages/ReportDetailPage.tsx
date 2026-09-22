@@ -84,6 +84,7 @@ import { SdkUpgradeCTA } from '../components/SdkUpgradeCTA'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import type { SdkStatus } from '../components/SdkVersionBadge'
 import { CHIP_TONE } from '../lib/chipTone'
+import { shortReporterKey } from '../lib/reporterKey'
 
 export function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -418,7 +419,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
     dispatchState.status !== 'completed'
 
   const isDispatchBusy = dispatchState.status === 'queueing' || dispatchState.status === 'queued' || dispatchState.status === 'running'
-  const reporterShort = report.reporter_token_hash?.slice(0, 8) ?? 'unknown'
+  const reporterShort = report.reporter_token_hash ? shortReporterKey(report.reporter_token_hash) : 'unknown'
   const mergeTarget = latestFix && canMergeFix(latestFix) ? latestFix : null
 
   const handleMerged = useCallback(
