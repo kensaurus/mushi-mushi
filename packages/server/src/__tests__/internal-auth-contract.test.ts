@@ -107,6 +107,16 @@ function readIndex(fn: string): string {
   return readFileSync(join(functionsRoot, fn, 'index.ts'), 'utf-8')
 }
 
+/** `[functions.<name>] verify_jwt = …` from supabase/config.toml. */
+function verifyJwtByFunction(): Map<string, boolean> {
+  const toml = readFileSync(resolve(functionsRoot, '../config.toml'), 'utf-8')
+  const out = new Map<string, boolean>()
+  for (const [, name, value] of toml.matchAll(/^\[functions\.([a-z0-9-]+)\]\s*\n\s*verify_jwt\s*=\s*(true|false)/gm)) {
+    out.set(name, value === 'true')
+  }
+  return out
+}
+
 describe('internal-auth contract', () => {
   const fns = listFunctionDirs()
 
@@ -175,6 +185,19 @@ describe('internal-auth contract', () => {
         source,
         `${fn}/index.ts reads an x-mushi-* request header; internal functions must authenticate with requireServiceRoleAuth alone`,
       ).not.toMatch(/headers\.get\(\s*['"`]x-mushi-/i)
+    })
+
+    // pg_cron and the api call internal functions with the internal caller
+    // token, which is not a JWT. With the platform default verify_jwt = true
+    // the gateway 401s before requireServiceRoleAuth runs, and pg_cron still
+    // records 'succeeded' because net.http_post only enqueues. Until
+    // 2026-09-22 thirteen functions were deployed that way, including three
+    // cron jobs that never once reached their handler.
+    it(`${fn} is pinned to verify_jwt = false in config.toml`, () => {
+      expect(
+        verifyJwtByFunction().get(fn),
+        `add [functions.${fn}] verify_jwt = false to packages/server/supabase/config.toml (auth is requireServiceRoleAuth inside the handler)`,
+      ).toBe(false)
     })
   }
 })
