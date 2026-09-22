@@ -178,12 +178,16 @@ async function verifyOne(name, version) {
  */
 export async function verifyPackages(packages, { verify = verifyOne, retry = {}, log = console } = {}) {
   const results = await Promise.all(
-    packages.map(async ({ name, version }) => {
+    packages.map(async (pkg) => {
+      // The list comes from the PUBLISHED env var, so every logged field is
+      // flattened to one line before any log call can see it.
+      const name = String(pkg.name).replace(/[\r\n]+/g, ' ')
+      const version = String(pkg.version).replace(/[\r\n]+/g, ' ')
       try {
         const leaks = await withRetry(() => verify(name, version), {
           ...retry,
           onRetry: (err, attempt, delay) =>
-            log.log(`WAIT ${name}@${version} — ${err.message}; retry ${attempt} in ${Math.round(delay / 1000)}s`),
+            log.log(`WAIT ${name}@${version} — ${String(err.message).replace(/[\r\n]+/g, ' ')}; retry ${attempt} in ${Math.round(delay / 1000)}s`),
         })
         if (leaks.length === 0) {
           log.log(`OK   ${name}@${version}`)

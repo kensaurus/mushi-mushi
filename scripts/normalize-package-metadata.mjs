@@ -33,7 +33,7 @@
  *          fix (a description over the cap, a legacy tagline).
  */
 
-import { closeSync, existsSync, ftruncateSync, openSync, readdirSync, readFileSync, realpathSync, statSync, writeSync } from 'node:fs'
+import { closeSync, ftruncateSync, openSync, readdirSync, readFileSync, realpathSync, statSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { MUSHI_TAGLINE_LEGACY, MUSHI_TAGLINE_V2 } from '../packages/brand/src/index.js'
@@ -213,11 +213,17 @@ function main() {
     const pkgDir = join(PKGS, dir)
     if (!statSync(pkgDir).isDirectory()) continue
     const pkgPath = join(pkgDir, 'package.json')
-    if (!existsSync(pkgPath)) continue
 
     // Read and (with --write) rewrite through one descriptor, so the file that
-    // was normalized is the file that gets written.
-    const fd = openSync(pkgPath, write ? 'r+' : 'r')
+    // was normalized is the file that gets written. No existence check first:
+    // a missing manifest surfaces as ENOENT from the open itself.
+    let fd
+    try {
+      fd = openSync(pkgPath, write ? 'r+' : 'r')
+    } catch (err) {
+      if (err.code === 'ENOENT') continue
+      throw err
+    }
     try {
       const manifest = JSON.parse(readFileSync(fd, 'utf8'))
       if (manifest.private) continue // skip non-published workspace packages
