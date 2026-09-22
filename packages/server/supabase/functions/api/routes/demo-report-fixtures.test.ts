@@ -5,6 +5,7 @@ import {
   DEMO_REPORT_FIXTURES,
   getDemoReportFixture,
   materializeDemoReport,
+  precomputedClassification,
 } from '../../_shared/demo-report-fixtures.ts'
 import { reportSubmissionSchema } from '../../_shared/schemas.ts'
 import { ApiReportBodySchema } from '../../_shared/validate.ts'
@@ -17,6 +18,27 @@ Deno.test('the default test-report fixture is the iPad-Safari login bug', () => 
   assertEquals(fixture.category, 'bug')
   assert(fixture.environment.userAgent.includes('iPad'))
   assertEquals(getDemoReportFixture('does-not-exist').id, DEMO_REPORT_FIXTURES[0]?.id)
+})
+
+Deno.test('the test report ships a precomputed diagnosis in the columns classify-report writes', () => {
+  const row = precomputedClassification(getDemoReportFixture())
+  assert(row, 'the default fixture must carry a diagnosis')
+  assertEquals(row.status, 'classified')
+  assertEquals(row.stage2_model, 'precomputed')
+  assertEquals(row.severity, 'high')
+  for (const col of ['title', 'summary', 'component', 'area_tag', 'reproduction_steps', 'confidence']) {
+    assert(row[col] !== undefined && row[col] !== null, `${col} must be set`)
+  }
+  const analysis = row.stage2_analysis as Record<string, unknown>
+  assert(typeof analysis.rootCause === 'string' && analysis.rootCause.length > 40)
+  assert(typeof analysis.suggestedFix === 'string' && analysis.suggestedFix.length > 40)
+  assertEquals(analysis.precomputed, true)
+})
+
+Deno.test('fixtures without a diagnosis are left to the real classifier', () => {
+  const plain = DEMO_REPORT_FIXTURES.find((f) => !f.diagnosis)
+  assert(plain, 'the marketing seed needs fixtures that exercise the classifier')
+  assertEquals(precomputedClassification(plain), null)
 })
 
 Deno.test('every fixture materializes into a body the ingest schema accepts', () => {

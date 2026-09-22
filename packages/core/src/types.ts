@@ -1863,7 +1863,8 @@ export interface MushiProductEventPayload {
 export interface MushiApiResponse<T> {
   ok: boolean;
   data?: T;
-  error?: { code: string; message: string };
+  /** `status` is the HTTP status when the server answered; absent for network errors. */
+  error?: { code: string; message: string; status?: number };
 }
 
 export interface MushiRuntimeSdkConfig {

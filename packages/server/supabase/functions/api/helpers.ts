@@ -196,6 +196,11 @@ export async function ingestReport(
   options?: {
     ipAddress?: string
     userAgent?: string
+    /**
+     * Do not start the LLM pipeline: the caller stores a classification itself
+     * (the console test report's precomputed diagnosis, demo-report-fixtures.ts).
+     */
+    skipClassification?: boolean
     /** Mushi Bounties: link the ingested report back to the tester and submission row. */
     testerId?: string
     testerSubmissionId?: string
@@ -797,6 +802,11 @@ export async function ingestReport(
     );
   } catch (err) {
     log.warn('Plugin dispatch failed (sync)', { event: 'report.created', err: String(err) });
+  }
+
+  // The caller classifies this report itself (precomputed test diagnosis).
+  if (options?.skipClassification) {
+    return { ok: true, reportId };
   }
 
   // Check circuit breaker before invoking classification

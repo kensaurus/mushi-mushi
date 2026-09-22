@@ -9,7 +9,8 @@
  *         end user's report threads) in `reporter_token_hash`; only
  *         sha256(token) is stored — the same digest the report path stores —
  *         via _shared/reporter-token.ts. Until 2026-09-21 the raw token was
- *         stored verbatim. Rate-limit: one upsert per event — cheap O(1) writes.
+ *         stored verbatim. Rate-limit: per project and per client IP
+ *         (ingest-budget.ts); one upsert per event.
  *
  * Automation: a session whose User-Agent names a headless browser, test
  * driver or crawler (_shared/automated-agent.ts) is stored with is_bot = true
@@ -26,6 +27,15 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { hashReporterTokenOrNull } from '../../_shared/reporter-token.ts';
 import { isAutomatedUserAgent } from '../../_shared/automated-agent.ts';
+import { claimIngestBudget, clientIp } from './ingest-budget.ts';
+
+/**
+ * One request per session event: a tab sends session_start, a heartbeat a
+ * minute and one page_view per navigation. The per-IP budget stops one host
+ * spending the project's (the key is public).
+ */
+const SESSION_EVENTS_PER_MINUTE = 3000;
+const SESSION_EVENTS_PER_IP_PER_MINUTE = 600;
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
@@ -54,6 +64,18 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
   // CORS is handled by the /v1/sdk/* middleware registered in index.ts.
   app.post('/v1/sdk/session', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;
+
+    const budget = await claimIngestBudget(
+      getServiceClient(),
+      projectId,
+      clientIp((name) => c.req.header(name)),
+      { scope: 'sdk_sessions', perProjectPerMinute: SESSION_EVENTS_PER_MINUTE, perIpPerMinute: SESSION_EVENTS_PER_IP_PER_MINUTE },
+      (scope, err) => log.error('sessions: rate-limit claim failed — failing closed', { err, scope }),
+    );
+    if (budget === 'limited') {
+      c.header('Retry-After', '60');
+      return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: 'Session ingest rate limit exceeded. Retry in 60 seconds.' } }, 429);
+    }
 
     let raw: unknown;
     try {

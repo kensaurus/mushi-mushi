@@ -130,6 +130,7 @@ async function writeProductEvent(db: SupabaseClient, payload: ProductEventPayloa
       sdk_version: null,
       dedup_key: payload.dedupKey ?? null,
       properties: { ...properties, $surface: payload.surface },
+      written_by: 'server',
     })
     if (error) {
       // 23505 = unique violation on (project_id, dedup_key): idempotent replay, not a failure.

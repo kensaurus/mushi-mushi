@@ -47,7 +47,7 @@ import {
   PII_PROPERTY_KEY_RE,
   RESERVED_PROPERTY_PREFIX,
 } from '../../_shared/analytics-taxonomy.generated.ts';
-import { classifyIngestRateLimitError } from './ingest-rate-limit.ts';
+import { claimIngestBudget, clientIp } from './ingest-budget.ts';
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
@@ -56,6 +56,16 @@ const MAX_BODY_BYTES = 64 * 1024;
 /** One claim per batch; the SDK sends at most one batch per 5 s per tab. */
 const EVENT_BATCHES_PER_MINUTE = 600;
 
+/**
+ * Per client IP, across projects: one public key must not let a single host
+ * spend a whole project's budget. 300 batches a minute is ~25 busy tabs
+ * behind one NAT at the SDK's 5 s flush.
+ */
+const EVENT_BATCHES_PER_IP_PER_MINUTE = 300;
+
+/** How long a project's distinct event-name set is trusted before re-reading. */
+const EVENT_NAMES_TTL_MS = 5 * 60_000;
+
 /** The SDK spill replays at most 24 h, so anything older or in the future is clock skew or forgery. */
 export const CLIENT_TS_MAX_PAST_MS = 25 * 60 * 60 * 1000;
 export const CLIENT_TS_MAX_FUTURE_MS = 5 * 60 * 1000;
@@ -63,12 +73,62 @@ export const CLIENT_TS_MAX_FUTURE_MS = 5 * 60 * 1000;
 /** Events only emitProductEvent may write (taxonomy surface 'server'). */
 export const SERVER_OWNED_EVENTS: ReadonlySet<string> = new Set(
   Object.entries(MUSHI_EVENTS)
-    .filter(([, spec]) => (spec as { surface?: string }).surface === 'server')
+    .filter(([, spec]) => [(spec as { surface: string | readonly string[] }).surface].flat().every((s) => s === 'server'))
     .map(([name]) => name),
 );
 
-/** Surfaces a public SDK key may claim. 'server' is written only by emitProductEvent. */
-export const PUBLIC_SURFACES: ReadonlySet<string> = new Set(MUSHI_SURFACES.filter((s) => s !== 'server'));
+/**
+ * Surfaces a public SDK key may claim. 'server' and 'mcp' are written only by
+ * emitProductEvent (MCP usage is recorded by the api and the hosted MCP
+ * server, never reported by a browser).
+ */
+export const PUBLIC_SURFACES: ReadonlySet<string> = new Set(
+  MUSHI_SURFACES.filter((s) => s !== 'server' && s !== 'mcp'),
+);
+
+/** Distinct event names already stored per project (bounded by the cap + 1). */
+const projectEventNames = new Map<string, { names: Set<string>; at: number }>();
+
+async function loadProjectEventNames(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+): Promise<Set<string>> {
+  const cached = projectEventNames.get(projectId);
+  if (cached && Date.now() - cached.at < EVENT_NAMES_TTL_MS) return cached.names;
+  const { data, error } = await db.rpc('product_event_names', {
+    p_project_id: projectId,
+    p_limit: EVENT_PROPERTY_LIMITS.maxEventNamesPerProject + 1,
+  });
+  // Fail open on a read error: the cap guards cardinality, not security, and
+  // a stale cache must not turn into dropped events.
+  const names = new Set<string>(error ? [] : ((data as string[] | null) ?? []));
+  if (error) log.warn('events: event-name lookup failed', { err: error.message, projectId });
+  projectEventNames.set(projectId, { names, at: Date.now() });
+  return names;
+}
+
+/**
+ * Split events into those the per-project name cap admits and those it drops.
+ * Known names always pass; a new name passes while the project is under the
+ * cap. Mutates `known` with admitted new names. Exported for tests.
+ */
+export function admitEventNames<T extends { name: string }>(
+  events: readonly T[],
+  known: Set<string>,
+  cap: number,
+): { admitted: T[]; overCap: number } {
+  const admitted: T[] = [];
+  let overCap = 0;
+  for (const ev of events) {
+    if (known.has(ev.name) || known.size < cap) {
+      known.add(ev.name);
+      admitted.push(ev);
+    } else {
+      overCap += 1;
+    }
+  }
+  return { admitted, overCap };
+}
 
 /**
  * Read at most `limit` bytes of a request body. Returns null when the body is
@@ -122,7 +182,14 @@ const propertyValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 const eventSchema = z.object({
   name: z.string().regex(EVENT_NAME_RE, 'event name must match ^[a-z][a-z0-9_]{1,63}$'),
   ts: z.string().datetime({ offset: true }).optional(),
-  properties: z.record(propertyValue).optional(),
+  // The SDK never sends more than maxKeys; a larger record is a hand-rolled
+  // client, refused before any per-key work.
+  properties: z
+    .record(propertyValue)
+    .refine((o) => Object.keys(o).length <= EVENT_PROPERTY_LIMITS.maxKeys, {
+      message: `at most ${EVENT_PROPERTY_LIMITS.maxKeys} properties per event`,
+    })
+    .optional(),
   dedup_key: z.string().min(1).max(128).optional(),
 });
 
@@ -240,21 +307,30 @@ export function registerEventRoutes(app: Hono<{ Variables: Variables }>): void {
   app.post('/v1/sdk/events', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;
 
+    // SDK keys carry report:write; an agent-only key has no business writing
+    // a project's analytics.
+    const scopes = (c.get('apiKeyScopes') as string[] | undefined) ?? [];
+    if (!scopes.includes('report:write')) {
+      return c.json(
+        { ok: false, error: { code: 'INSUFFICIENT_SCOPE', message: 'Event ingest needs an SDK key (report:write).' } },
+        403,
+      );
+    }
+
     const tooLarge = () =>
       c.json({ ok: false, error: { code: 'PAYLOAD_TOO_LARGE', message: 'Event batch exceeds 64 KB' } }, 413);
     const contentLength = Number(c.req.header('content-length') ?? '0');
     if (contentLength > MAX_BODY_BYTES) return tooLarge();
 
     const db = getServiceClient();
-    const { error: rateErr } = await db.rpc('scoped_rate_limit_claim', {
-      p_user_id: projectId,
-      p_scope: 'product_events',
-      p_max_per_window: EVENT_BATCHES_PER_MINUTE,
-      p_window: '1 minute',
-    });
-    const rateOutcome = classifyIngestRateLimitError(rateErr);
-    if (rateOutcome === 'breach' || rateOutcome === 'fail-closed') {
-      if (rateOutcome === 'fail-closed') log.error('events: rate-limit claim failed — failing closed', { err: rateErr?.message });
+    const budget = await claimIngestBudget(
+      db,
+      projectId,
+      clientIp((name) => c.req.header(name)),
+      { scope: 'product_events', perProjectPerMinute: EVENT_BATCHES_PER_MINUTE, perIpPerMinute: EVENT_BATCHES_PER_IP_PER_MINUTE },
+      (scope, err) => log.error('events: rate-limit claim failed — failing closed', { err, scope }),
+    );
+    if (budget === 'limited') {
       c.header('Retry-After', '60');
       return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: 'Event ingest rate limit exceeded. Retry in 60 seconds.' } }, 429);
     }
@@ -331,11 +407,18 @@ export function registerEventRoutes(app: Hono<{ Variables: Variables }>): void {
     let dropped = 0;
     let identifyRequested = false;
 
-    for (const ev of batch.events) {
-      if (ev.name === 'identify') {
-        identifyRequested = true;
-        continue; // pseudo-event: stitching only, never stored
-      }
+    // Cardinality cap: past maxEventNamesPerProject distinct names, new names
+    // are dropped (known names keep flowing), so a runaway `track(\`${id}\`)`
+    // cannot explode the funnel builder's name list.
+    const known = await loadProjectEventNames(db, projectId);
+    const storable = batch.events.filter((ev) => ev.name !== 'identify');
+    const { admitted, overCap } = admitEventNames(storable, known, EVENT_PROPERTY_LIMITS.maxEventNamesPerProject);
+    dropped += overCap;
+    if (overCap > 0) log.warn('events: event-name cap reached', { projectId, overCap });
+    identifyRequested = storable.length !== batch.events.length;
+
+    for (const ev of admitted) {
+      // ('identify' is a pseudo-event: stitching only, never stored — filtered above.)
       // Server milestones (first_report_received, project_created, …) are
       // written only by emitProductEvent; a public key must not forge them.
       if (SERVER_OWNED_EVENTS.has(ev.name)) { dropped += 1; continue; }

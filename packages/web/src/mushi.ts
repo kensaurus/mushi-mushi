@@ -198,7 +198,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     initSessionTracker({
       client: apiClient,
       sdkVersion: MUSHI_SDK_VERSION,
-      reporterTokenHash: getReporterToken(bootstrapConfig.projectId) ?? null,
+      reporterToken: getReporterToken(bootstrapConfig.projectId) ?? null,
       projectId: bootstrapConfig.projectId,
       analytics: bootstrapConfig.analytics,
     });
@@ -209,14 +209,14 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   const rateLimiter = createRateLimiter({ maxBurst: 10, refillRate: 1, refillIntervalMs: 5_000 });
   const piiScrubber = createPiiScrubber();
 
-  // Product analytics (Mushi.track()) — same opaque per-project reporter
-  // token as sessions; DNT/GPC and consent handled inside the tracker.
+  // Product analytics (Mushi.track()) — keyed on the tracker's own random
+  // per-project id, not the reporter token (a credential for the end user's
+  // report threads). DNT/GPC and consent are handled inside the tracker.
   // Opt-out via analytics.enabled:false. Reserved UTM/referrer props are
   // attached by the tracker's caller (landing/docs) via trackEvent opts.
   initEventTracker({
     client: apiClient,
     projectId: bootstrapConfig.projectId,
-    anonId: getReporterToken(bootstrapConfig.projectId) ?? null,
     sdkVersion: MUSHI_SDK_VERSION,
     config: bootstrapConfig.analytics,
     scrub: (s) => piiScrubber.scrub(s),

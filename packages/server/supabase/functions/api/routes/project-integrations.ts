@@ -4,10 +4,10 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { resolveLlmKey } from '../../_shared/byok.ts';
 import { dbError, userCanAccessProject } from '../shared.ts';
-import { ingestReport } from '../helpers.ts';
+import { ingestReport, triggerClassification } from '../helpers.ts';
 import { emitFunnelEvent } from '../../_shared/setup-funnel.ts';
 import { emitProductEvent } from '../../_shared/product-events.ts';
-import { getDemoReportFixture, materializeDemoReport } from '../../_shared/demo-report-fixtures.ts';
+import { getDemoReportFixture, materializeDemoReport, precomputedClassification } from '../../_shared/demo-report-fixtures.ts';
 import { checkIngestQuota } from '../../_shared/quota.ts';
 import { log } from '../../_shared/logger.ts';
 import { classifyIngestRateLimitError } from './ingest-rate-limit.ts';
@@ -301,15 +301,34 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
     // projectId in the body is schema-required; ingestReport actually uses the
     // auth-context projectId. The reporter token is per-admin so repeated test
     // reports from the same person group under one reporter.
-    const syntheticBody = materializeDemoReport(getDemoReportFixture(), {
+    const fixture = getDemoReportFixture();
+    const syntheticBody = materializeDemoReport(fixture, {
       projectId,
       reporterToken: `admin-test-${userId}`,
       metadata: { source: 'admin_test_report', userId },
     });
 
-    const result = await ingestReport(db, projectId, syntheticBody, { ipAddress, userAgent });
+    // The report is synthetic, so its diagnosis is written with the fixture
+    // rather than bought from the LLM pipeline: no Stage-1 call on the
+    // project's budget, and the first diagnosis appears on the next poll.
+    const precomputed = precomputedClassification(fixture);
+    const result = await ingestReport(db, projectId, syntheticBody, {
+      ipAddress,
+      userAgent,
+      skipClassification: precomputed !== null,
+    });
     if (!result.ok) {
       return c.json({ ok: false, error: { code: 'INGEST_ERROR', message: result.error } }, 400);
+    }
+    if (precomputed && result.reportId) {
+      const { error: classifyErr } = await db.from('reports').update(precomputed).eq('id', result.reportId);
+      if (classifyErr) {
+        log.warn('test-report: precomputed diagnosis write failed — running the pipeline', {
+          reportId: result.reportId,
+          err: classifyErr.message,
+        });
+        triggerClassification(result.reportId, projectId);
+      }
     }
 
     // Activation funnel (setup_funnel_events) + product_events, both

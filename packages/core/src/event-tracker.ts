@@ -44,7 +44,12 @@ import {
 export interface EventTrackerOptions {
   client: MushiApiClient;
   projectId: string;
-  anonId: string | null;
+  /**
+   * Anonymous id to key events on. Omit it: the tracker then uses its own
+   * random per-project id, stored only after consent. Do not pass the reporter
+   * token — it is a credential for the end user's report threads.
+   */
+  anonId?: string | null;
   sdkVersion?: string;
   userId?: string | null;
   config?: MushiAnalyticsConfig;
@@ -109,6 +114,43 @@ function now(): string {
 
 function spillKey(): string {
   return 'mushi_events_spill_' + _projectId;
+}
+
+/** No answer (network), rate-limited, or a server fault: worth sending again later. */
+function isRetryableStatus(status: number | undefined): boolean {
+  return status === undefined || status === 429 || status >= 500;
+}
+
+function analyticsIdKey(): string {
+  return 'mushi_analytics_id_' + _projectId;
+}
+
+/**
+ * The tracker's own random id for this browser and project. It is not the
+ * reporter token: that is a bearer credential for the end user's report
+ * threads and has no business travelling with every analytics batch. Created
+ * in memory at init; written to storage only once consent is granted (see
+ * persistAnalyticsId), so a pending or denied visitor stores no identifier.
+ */
+function loadOrMintAnalyticsId(): string {
+  try {
+    const stored = localStorage.getItem(analyticsIdKey());
+    if (stored) return stored;
+  } catch {
+    /* storage unavailable */
+  }
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : 'a-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function persistAnalyticsId(): void {
+  if (!_anonId) return;
+  try {
+    if (localStorage.getItem(analyticsIdKey()) !== _anonId) localStorage.setItem(analyticsIdKey(), _anonId);
+  } catch {
+    /* storage unavailable or full */
+  }
 }
 
 /** Stable [0,1) from a string (FNV-1a 32-bit). */
@@ -177,6 +219,7 @@ async function flushNow(): Promise<void> {
   if (!_client || _flushing || _consent !== 'granted') return;
   if (_buffer.length === 0 && !_pendingIdentify) return;
   _flushing = true;
+  persistAnalyticsId();
   const batch = _buffer.splice(0, EVENT_PROPERTY_LIMITS.maxServerBatch);
   if (_pendingIdentify) {
     batch.unshift({ name: 'identify', ts: now(), properties: {} });
@@ -184,11 +227,13 @@ async function flushNow(): Promise<void> {
   }
   try {
     const res = await _client.postProductEvents(buildPayload(batch));
-    if (!res.ok) {
-      writeSpill([...readSpill(), ...batch.filter((e) => e.name !== 'identify')]);
-    } else {
+    if (res.ok) {
       writeSpill([]);
+    } else if (isRetryableStatus(res.error?.status)) {
+      writeSpill([...readSpill(), ...batch.filter((e) => e.name !== 'identify')]);
     }
+    // Any other 4xx is the server refusing this batch (bad shape, wrong key,
+    // too large); replaying it on every page load would only repeat that.
   } catch {
     writeSpill([...readSpill(), ...batch.filter((e) => e.name !== 'identify')]);
   } finally {
@@ -269,7 +314,7 @@ export function initEventTracker(opts: EventTrackerOptions): void {
 
   _initialized = true;
   _client = opts.client;
-  _anonId = opts.anonId;
+  _anonId = opts.anonId ?? loadOrMintAnalyticsId();
   _userId = opts.userId ?? null;
   _sdkVersion = opts.sdkVersion;
   _scrub = opts.scrub;
@@ -387,8 +432,8 @@ function patchHistory(): void {
   const original = history.pushState;
   history.pushState = function (this: History, ...args: Parameters<History['pushState']>) {
     const result = original.apply(this, args);
-    trackEvent('pageview');
+    trackEvent('page_view');
     return result;
   };
-  window.addEventListener('popstate', () => { trackEvent('pageview'); }, { passive: true });
+  window.addEventListener('popstate', () => { trackEvent('page_view'); }, { passive: true });
 }

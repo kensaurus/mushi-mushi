@@ -270,6 +270,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
               (errorBody as { message?: string; error?: { message?: string } }).error?.message ||
               (errorBody as { message?: string }).message ||
               `HTTP ${response.status} error`,
+            status: response.status,
           },
         };
       }

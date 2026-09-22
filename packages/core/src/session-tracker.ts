@@ -34,7 +34,7 @@ const HEARTBEAT_INTERVAL_MS = 60_000; // 1 minute
 let _client: MushiApiClient | null = null;
 let _sdkVersion: string | undefined;
 let _userIdHash: string | null = null;
-let _reporterTokenHash: string | null = null;
+let _reporterToken: string | null = null;
 let _pageViewCount = 0;
 let _heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let _initialized = false;
@@ -77,7 +77,8 @@ function buildPayload(
     session_id: getSessionId(),
     ts: now(),
     page_view_count: _pageViewCount,
-    reporter_token_hash: _reporterTokenHash,
+    // Wire name kept for older servers; the value is the raw token (hashed server-side).
+    reporter_token_hash: _reporterToken,
     user_id_hash: _userIdHash,
     user_agent: userAgent(),
     sdk_version: _sdkVersion,
@@ -125,6 +126,9 @@ function deactivate(): void {
 export interface SessionTrackerOptions {
   client: MushiApiClient;
   sdkVersion?: string;
+  /** The raw per-project reporter token; the server stores only its sha256. */
+  reporterToken?: string | null;
+  /** @deprecated Renamed to `reporterToken` (it always carried the raw token, never a hash). */
   reporterTokenHash?: string | null;
   userIdHash?: string | null;
   /** Project the stored analytics consent is keyed on (the SDK passes its projectId). */
@@ -150,7 +154,7 @@ export function initSessionTracker(opts: SessionTrackerOptions): void {
 
   _client = opts.client;
   _sdkVersion = opts.sdkVersion;
-  _reporterTokenHash = opts.reporterTokenHash ?? null;
+  _reporterToken = opts.reporterToken ?? opts.reporterTokenHash ?? null;
   _userIdHash = opts.userIdHash ?? null;
 
   // session_end on visibility-change to hidden / pagehide

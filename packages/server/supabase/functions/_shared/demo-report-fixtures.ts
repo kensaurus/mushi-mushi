@@ -48,6 +48,27 @@ export interface DemoReportFixture {
     timezone: string
   }
   customMetadata?: Record<string, unknown>
+  /**
+   * A diagnosis written for this fixture. The console's test report stores it
+   * directly instead of running the LLM pipeline (audit #52): the report is
+   * synthetic, so spending the project's Stage-1 call and minutes of the
+   * visitor's first session on it bought nothing. The marketing seed ignores
+   * it and runs the real classifier.
+   */
+  diagnosis?: DemoReportDiagnosis
+}
+
+export interface DemoReportDiagnosis {
+  title: string
+  summary: string
+  severity: 'critical' | 'high' | 'medium' | 'low'
+  component: string
+  area: string
+  rootCause: string
+  suggestedFix: string
+  reproductionSteps: string[]
+  confidence: number
+  bugOntologyTags?: string[]
 }
 
 export const DEMO_REPORT_FIXTURES: readonly DemoReportFixture[] = fixturesRaw as DemoReportFixture[]
@@ -75,6 +96,47 @@ export function getDemoReportFixture(id: string = DEFAULT_TEST_REPORT_FIXTURE_ID
   const first = DEMO_REPORT_FIXTURES[0]
   if (!first) throw new Error('demo-report-fixtures.json is empty')
   return first
+}
+
+/**
+ * The reports-row update that marks a test report classified with the
+ * fixture's written diagnosis — the same columns classify-report writes on a
+ * Stage-2 success, with stage2_model 'precomputed' so it is never mistaken for
+ * a model output. Null when the fixture carries no diagnosis.
+ */
+export function precomputedClassification(fixture: DemoReportFixture): Record<string, unknown> | null {
+  const d = fixture.diagnosis
+  if (!d) return null
+  return {
+    stage2_analysis: {
+      category: fixture.category,
+      severity: d.severity,
+      title: d.title,
+      summary: d.summary,
+      component: d.component,
+      area: d.area,
+      rootCause: d.rootCause,
+      suggestedFix: d.suggestedFix,
+      reproductionSteps: d.reproductionSteps,
+      confidence: d.confidence,
+      bugOntologyTags: d.bugOntologyTags ?? [],
+      precomputed: true,
+    },
+    stage2_model: 'precomputed',
+    stage2_prompt_version: `fixture:${fixture.id}`,
+    stage2_latency_ms: 0,
+    stage2_partial: null,
+    processing_error: null,
+    category: fixture.category,
+    severity: d.severity,
+    summary: d.summary,
+    title: d.title,
+    area_tag: d.area,
+    component: d.component,
+    reproduction_steps: d.reproductionSteps,
+    confidence: d.confidence,
+    status: 'classified',
+  }
 }
 
 /**

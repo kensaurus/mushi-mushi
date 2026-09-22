@@ -31,7 +31,24 @@
       "viewport": { "width": 820, "height": 1180 },
       "timezone": "America/Los_Angeles"
     },
-    "customMetadata": {}
+    "customMetadata": {},
+    "diagnosis": {
+      "title": "Sign in does nothing on iPad Safari",
+      "summary": "On iPad Safari the Sign in button registers the tap but the login request never starts, so the user is stuck on /login with no feedback. Chrome on the same iPad works.",
+      "severity": "high",
+      "component": "LoginForm",
+      "area": "Auth",
+      "rootCause": "Three taps on the submit button are recorded but no request follows and nothing is logged, so the submit handler never runs in Safari. The likely cause is login code that relies on something WebKit handles differently: a handler on the button's click or touch events instead of the form's submit event, or a touch listener that calls preventDefault and swallows the tap.",
+      "suggestedFix": "Move the login logic to the form's onSubmit handler (with event.preventDefault() there), drop any touchstart/touchend handlers on the button, and confirm in Safari's Web Inspector that the POST fires. Add a WebKit run to your end-to-end tests so this cannot come back.",
+      "reproductionSteps": [
+        "Open /login on an iPad in Safari (iOS 17.6)",
+        "Fill in email and password",
+        "Tap Sign in: nothing happens and no request is sent",
+        "Repeat in Chrome on the same iPad: sign-in works"
+      ],
+      "confidence": 0.72,
+      "bugOntologyTags": ["browser-compat", "form-submit", "auth"]
+    }
   },
   {
     "id": "checkout-pause-after-card",

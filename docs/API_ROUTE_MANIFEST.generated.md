@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-09-21 · **555** routes.
+> Generated: 2026-09-22 · **556** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -12,7 +12,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | `apiKeyAuth` | 47 |
 | `jwtAuth` | 338 |
 | `jwtOrApiKey` | 3 |
-| `unknown` | 66 |
+| `unknown` | 67 |
 
 ## Routes by path
 
@@ -450,6 +450,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/cli/projects/:id/keys/:keyPrefix/revoke` | `unknown` | `packages/server/supabase/functions/api/routes/cli-auth.ts` |
 | POST | `/v1/content-quality` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/content-quality.ts` |
 | POST | `/v1/content-quality/callback` | `unknown` | `packages/server/supabase/functions/api/routes/content-quality.ts` |
+| GET | `/v1/health` | `unknown` | `packages/server/supabase/functions/api/routes/discovery.ts` |
 | POST | `/v1/ingest/metrics` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/ingest/spans` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/intake/voice` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/intake-voice.ts` |

@@ -461,3 +461,91 @@ describe('isAutomatedBrowser', () => {
     }
   });
 });
+
+// ─── Retry rules, own analytics id, page_view (audit #15, #30, #38) ──────────
+
+describe('event-tracker delivery and identity', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    setDnt(undefined);
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function clientAnswering(status: number | undefined) {
+    return {
+      postProductEvents: vi.fn(async () => ({
+        ok: false,
+        error: { code: status ? `HTTP_${status}` : 'NETWORK_ERROR', message: 'x', ...(status ? { status } : {}) },
+      })),
+    } as unknown as MushiApiClient;
+  }
+
+  it.each([422, 403, 413, 400])('drops a batch the server refused with %i instead of replaying it forever', async (status) => {
+    const mod = await freshTracker();
+    mod.initEventTracker({ client: clientAnswering(status), projectId: 'p1', anonId: 'anon-1' });
+    mod.trackEvent('cta_click');
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(spilledNames()).toEqual([]);
+    mod.destroyEventTracker();
+  });
+
+  it.each([429, 500, 503, undefined])('keeps a batch for later on %s', async (status) => {
+    const mod = await freshTracker();
+    mod.initEventTracker({ client: clientAnswering(status), projectId: 'p1', anonId: 'anon-1' });
+    mod.trackEvent('cta_click');
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(spilledNames()).toEqual(['cta_click']);
+    mod.destroyEventTracker();
+  });
+
+  it('keys events on its own random id, never the reporter token', async () => {
+    localStorage.setItem('mushi_reporter_p1', 'reporter-secret-token');
+    const mod = await freshTracker();
+    const client = makeMockClient(true);
+    mod.initEventTracker({ client, projectId: 'p1' });
+    mod.trackEvent('landing_view');
+    await vi.advanceTimersByTimeAsync(5_000);
+    const anon = client.payloads[0].anon_id;
+    expect(anon).toBeTruthy();
+    expect(anon).not.toBe('reporter-secret-token');
+    expect(localStorage.getItem('mushi_analytics_id_p1')).toBe(anon);
+    mod.destroyEventTracker();
+
+    // The next page load reuses it.
+    const mod2 = await freshTracker();
+    const client2 = makeMockClient(true);
+    mod2.initEventTracker({ client: client2, projectId: 'p1' });
+    mod2.trackEvent('landing_view');
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(client2.payloads[0].anon_id).toBe(anon);
+    mod2.destroyEventTracker();
+  });
+
+  it('stores no analytics id while consent is pending', async () => {
+    const mod = await freshTracker();
+    const client = makeMockClient(true);
+    mod.initEventTracker({ client, projectId: 'p1', config: { consent: 'required' } });
+    mod.trackEvent('landing_view');
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(client.postProductEvents).not.toHaveBeenCalled();
+    expect(localStorage.getItem('mushi_analytics_id_p1')).toBeNull();
+    mod.destroyEventTracker();
+  });
+
+  it('auto page views use the taxonomy name page_view', async () => {
+    const mod = await freshTracker();
+    const client = makeMockClient(true);
+    mod.initEventTracker({ client, projectId: 'p1', anonId: 'anon-1', config: { autoPageviews: true } });
+    history.pushState({}, '', '/next-page');
+    await vi.advanceTimersByTimeAsync(5_000);
+    const names = client.payloads.flatMap((p) => p.events.map((e) => e.name));
+    expect(names).toContain('page_view');
+    expect(names).not.toContain('pageview');
+    mod.destroyEventTracker();
+  });
+});

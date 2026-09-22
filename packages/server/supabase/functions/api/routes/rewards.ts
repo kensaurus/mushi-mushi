@@ -36,6 +36,8 @@ import { resolveEndUser } from '../../_shared/end-user-resolver.ts'
 import { awardPointsForEndUser, invalidateRuleCache } from '../../_shared/reputation.ts'
 import { dispatchRewardWebhook } from '../../_shared/reward-webhooks.ts'
 import { verifyHostJwt } from '../../_shared/verify-host-jwt.ts'
+import { MUSHI_USER_TOKEN_HEADER, verifyEndUserToken } from '../../_shared/end-user-identity.ts'
+import { hashReporterTokenOrNull } from '../../_shared/reporter-token.ts'
 import {
   stripeFromEnv,
   createConnectAccount,
@@ -160,7 +162,8 @@ type EndUserAccess =
   | { ok: true; endUserId: string | null }
   | { ok: false; status: 401 | 403 | 429; code: string; message: string }
 
-async function authorizeEndUserPrivacyAccess(
+/** @internal Exported for tests (rewards-privacy-proof.test.ts). */
+export async function authorizeEndUserPrivacyAccess(
   c: Context,
   db: ReturnType<typeof getServiceClient>,
   projectId: string,
@@ -210,6 +213,26 @@ async function authorizeEndUserPrivacyAccess(
       return { ok: false, status: 403, code: 'HOST_JWT_INVALID', message: 'Host JWT failed verification.' }
     }
     return { ok: true, endUserId: eu.id }
+  }
+
+  // No host provider: the request must carry the host backend's signature for
+  // this user (X-Mushi-User-Token, HS256 with the project's identity secret).
+  // A public SDK key alone is not proof — it is in every visitor's browser, so
+  // until 2026-09-22 anyone could export or erase any end user who had used
+  // the project, given only their external id (audit #31).
+  const verified = await verifyEndUserToken(db, projectId, c.req.header(MUSHI_USER_TOKEN_HEADER))
+  if (!verified) {
+    return {
+      ok: false,
+      status: 401,
+      code: 'IDENTITY_PROOF_REQUIRED',
+      message:
+        'Export and erasure need proof that the request is for this user: send X-Mushi-User-Token signed with the ' +
+        "project's identity secret, or configure a host auth provider and send X-Mushi-Host-Jwt.",
+    }
+  }
+  if (verified.externalUserId !== externalUserId) {
+    return { ok: false, status: 403, code: 'IDENTITY_SUBJECT_MISMATCH', message: 'X-Mushi-User-Token subject does not match userId.' }
   }
 
   for (const table of END_USER_FOOTPRINT_TABLES) {
@@ -291,12 +314,14 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
       return c.json({ ok: false, error: { code: 'PROJECT_NO_ORG', message: 'Project has no organization' } }, 422)
     }
 
-    // Resolve / upsert end_user
+    // Resolve / upsert end_user. The SDK sends the raw reporter token under
+    // this name; reporter_devices stores digests, so hash it (idempotent on a
+    // digest) or the anti-fraud join never matches.
     const endUser = await resolveEndUser(db, {
       organizationId,
       externalUserId: user_id,
       traits: user_traits,
-      reporterTokenHash: reporter_token_hash,
+      reporterTokenHash: await hashReporterTokenOrNull(reporter_token_hash),
       optedInToRewards: opted_in,
     })
 
@@ -541,10 +566,13 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     // Unknown (or out of this project's reach): nothing to erase. Idempotent.
     if (!access.endUserId) return c.json({ ok: true, data: { deleted: false } })
 
-    const { error } = await db.from('end_users').delete().eq('id', access.endUserId)
+    // One transaction: the person's sessions, page views and analytics events
+    // (by end_user_id and by their devices' reporter-token digests) go with
+    // them; payout and dispute records stay for audit, unlinked.
+    const { data: erased, error } = await db.rpc('erase_end_user', { p_end_user_id: access.endUserId })
 
     if (error) return c.json({ ok: false, error: { code: 'DELETE_FAILED', message: error.message } }, 500)
-    return c.json({ ok: true, data: { deleted: true } })
+    return c.json({ ok: true, data: { deleted: true, erased } })
   })
 
   // ===========================================================
