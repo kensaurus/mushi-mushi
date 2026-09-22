@@ -118,9 +118,5 @@
   },
   "engines": {
     "node": ">=20.19.0"
-  },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/kensaurus"
   }
 }

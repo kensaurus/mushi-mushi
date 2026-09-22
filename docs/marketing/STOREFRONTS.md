@@ -69,11 +69,12 @@ Keywords have been populated. Now confirm each package README opens strong:
   matches the dark admin aesthetic).
   > One manual step left: GitHub doesn't expose a stable API for social preview
   > upload. Drop the image into Settings → Social preview by hand once.
-- [ ] **Sponsor link** — wired in every `package.json` → `funding`, but
-  GitHub Sponsors is **not enabled** (checked 2026-09-21:
-  `github.com/sponsors/kensaurus` redirects to the profile). Either enable
-  Sponsors or drop `funding` from the manifests
-  (`scripts/normalize-package-metadata.mjs`).
+- [x] **Sponsor link** — `funding` dropped from every `package.json`
+  (2026-09-22): GitHub Sponsors is **not enabled** (checked 2026-09-21:
+  `github.com/sponsors/kensaurus` redirects to the profile), so the field was
+  a dead link on npm. Once Sponsors is live, restore it in
+  [`scripts/update-manifest-fields.mjs`](../../scripts/update-manifest-fields.mjs)
+  and re-run it.
 
 ## 4. Live demo ([kensaur.us/mushi-mushi/](https://kensaur.us/mushi-mushi/))
 
