@@ -28,15 +28,16 @@ thing and point to the same install flow.
 | **Install badges** | Root `README.md`, `packages/mcp/README.md` | ✅ Point to `https://kensaur.us/mushi-mushi/docs/connect` |
 | **cursor.directory** | Root [`.mcp.json`](../../.mcp.json) | ✅ Auto-detect manifest committed — submit repo URL |
 | **VS Code extension** | `packages/vscode-extension/` | ⏸️ **Deferred (2026-09-21)** — never published, and not mentioned on Show HN. See [VS Code extension](#vs-code-extension) for why and what unblocks it |
-| **Cursor Marketplace plugin** | `packages/cursor-plugin/` | 📋 Checklist ready; submission pending |
+| **Cursor Marketplace plugin** | `packages/cursor-plugin/` | 📬 Publisher application submitted 2026-09-22 as `mushi-mushi` for `https://github.com/kensaurus/mushi-mushi`. Cursor reviews manually. This branch's `packages/cursor-plugin/mcp.json` uses the hosted Supabase URL. `master` still has `your-project.supabase.co` until this lands. |
 | **npm keywords** | All primary `@mushi-mushi/*` packages | ✅ Aligned to MCP / vibe-coder discovery terms |
 
 | **PulseMCP** | Auto-index from official registry | ⏳ Ingest weekly — no form; verify after ~7 days |
 | **awesome-mcp-servers** | PR [#8625](https://github.com/punkpeye/awesome-mcp-servers/pull/8625) | ✅ Merged 2026-07-22 |
-| **awesome-remote-mcp-servers** | PR [#431](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/431) (supersedes closed #428) | 📬 Open since 2026-06-25 — stale, worth a nudge |
+| **awesome-remote-mcp-servers** | PR [#431](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/431) (supersedes closed #428) | 📬 Still open. Nudged once on 2026-09-22 ([comment](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/431#issuecomment-5775955307)). Do not bump again. |
 | **cursor.directory** | Repo already registered | ✅ Duplicate on re-submit confirms live listing |
 | **mcp.so** | Web submit at `/submit` | ✅ Live — [mcp.so/server/mushi-mushi](https://mcp.so/server/mushi-mushi). Description + Overview + Server Config on canonical URLs — see [`mcp-so-listing.md`](./mcp-so-listing.md) |
 | **smithery.ai** | `kensaurus/mushi-mushi` | ✅ Republished Jun 2026 — upstream `kensaur.us/mushi-mushi/hosted-mcp/` — see [`smithery-external-publish.json`](./smithery-external-publish.json) |
+| **Wellknown** | Crawled record [`mushi-mushi-mcp`](https://wellknown.network/agents/mushi-mushi-mcp) | ✅ Claimed 2026-09-22 as GitHub `kensaurus`. Probes are unauthenticated `initialize` against the registry remote in `packages/mcp/server.json`; HTTP 401 counts as answered and the tool surface is not measured. The MCP server is `@mushi-mushi/mcp`. `@mushi-mushi/mcp-ci` is the GitHub Action, not the server. Do not mint a `MUSHI_API_KEY` for the prober. |
 
 Paste fields for remaining manual surfaces: [`STOREFRONTS.md` §7](./STOREFRONTS.md#7-mcp-registry--directory-listings-diagnoses-era).
 Canonical hosts: [`canonical-urls.md`](./canonical-urls.md) — **do not** use `api.mushimushi.dev` or `docs.mushimushi.dev` in listings until DNS is verified (503 as of Jun 2026).

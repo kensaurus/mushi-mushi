@@ -22,6 +22,7 @@ import {
 } from '../../_shared/activation-status.ts';
 import { buildSetupResponse } from './activation-setup-builder.ts';
 import { buildOnboardingStatsPayload } from './activation-onboarding-builder.ts';
+import { isNonRealReport } from '../../_shared/first-report.ts';
 
 export function registerActivationRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/activation', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
@@ -160,9 +161,10 @@ async function buildOnboardingStatsForProject(
     // of test reports before a real one lands.
     db
       .from('reports')
-      .select('created_at, custom_metadata')
+      .select('id, created_at, custom_metadata')
       .eq('project_id', projectId)
       .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
       .limit(50),
   ]);
 
@@ -203,14 +205,12 @@ async function buildOnboardingStatsForProject(
   const fixCount = fixes.length;
   const mergedFixCount = fixes.filter((f) => f.merged_at).length;
 
-  const NON_REAL_SOURCES = new Set(['admin_test_report', 'mushi-marketing-seed']);
   let firstReportAt: string | null = null;
   for (const r of (firstReportsRes.data ?? []) as Array<{
     created_at: string;
     custom_metadata: Record<string, unknown> | null;
   }>) {
-    const source = r.custom_metadata?.source;
-    if (typeof source === 'string' && NON_REAL_SOURCES.has(source)) continue;
+    if (isNonRealReport(r.custom_metadata)) continue;
     firstReportAt = r.created_at;
     break;
   }

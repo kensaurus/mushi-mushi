@@ -21,3 +21,4 @@ comment on column public.project_settings.widget_brand_footer is
   'Powered-by-Mushi footer on the feedback widget. NULL = plan default (on for free_cloud/hobby, off for paid). Emitted as widget.brandFooter by GET /v1/sdk/config; the host''s MIT brandFooter config remains a hard override.';
 
 notify pgrst, 'reload schema';
+notify pgrst, 'reload config';

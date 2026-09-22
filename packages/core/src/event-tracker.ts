@@ -242,14 +242,16 @@ async function flushNow(): Promise<void> {
   if (_buffer.length >= EVENT_PROPERTY_LIMITS.maxClientBatch) void flushNow();
 }
 
-function enqueue(ev: BufferedEvent): void {
-  if (_consent === 'denied') return;
+function enqueue(ev: BufferedEvent): boolean {
+  if (_consent === 'denied') return false;
   if (_consent === 'pending') {
-    if (_consentBuffer.length < CONSENT_BUFFER_MAX) _consentBuffer.push(ev);
-    return;
+    if (_consentBuffer.length >= CONSENT_BUFFER_MAX) return false;
+    _consentBuffer.push(ev);
+    return true;
   }
   _buffer.push(ev);
   if (_buffer.length >= EVENT_PROPERTY_LIMITS.maxClientBatch) void flushNow();
+  return true;
 }
 
 /** React to a consent decision made anywhere in the SDK (see analytics-gate.ts). */
@@ -366,13 +368,12 @@ export function trackEvent(
   merged.$surface = _config.surface;
   if (typeof location !== 'undefined' && merged.$route === undefined) merged.$route = location.pathname;
   if (!propertiesWithinByteLimit(merged)) return false;
-  enqueue({
+  return enqueue({
     name,
     ts: opts?.ts ?? now(),
     properties: merged,
     ...(opts?.dedupKey ? { dedup_key: opts.dedupKey } : {}),
   });
-  return true;
 }
 
 /**

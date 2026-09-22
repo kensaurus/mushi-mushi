@@ -128,7 +128,6 @@ describe('MCP protocol handshake', () => {
       'transition_status',
       'award_bonus_points',
       'set_tier',
-      'setup_repo_for_mushi',
       // Phase 4: TDD write tools
       'map_user_stories',
       'generate_tdd_from_story',

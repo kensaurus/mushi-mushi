@@ -1042,7 +1042,9 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     }
     .mushi-brand-link:hover { color: ${inkMuted}; text-decoration: underline; }
     .mushi-brand-link:focus-visible {
-      outline: none;
+      outline: 2px solid ${widgetAccent};
+      outline-offset: 2px;
+      border-radius: 2px;
       color: ${widgetAccent};
       text-decoration: underline;
     }
