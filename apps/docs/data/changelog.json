@@ -1146,6 +1146,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.21.1",
       "0.21.0"
     ],
     "highlights": [
@@ -1169,7 +1170,7 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.21.0"
+        "version": "0.21.1"
       },
       {
         "name": "@mushi-mushi/react-native",

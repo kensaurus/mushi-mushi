@@ -486,7 +486,7 @@ Latest tag: `v0.22.1`
 
 ## v0.21.x
 
-Latest tag: `v0.21.0`
+Latest tag: `v0.21.1`
 
 ### Highlights
 
@@ -497,7 +497,7 @@ Latest tag: `v0.21.0`
 ### Packages bumped
 
 - `@mushi-mushi/cli` → 0.21.0
-- `@mushi-mushi/mcp` → 0.21.0
+- `@mushi-mushi/mcp` → 0.21.1
 - `@mushi-mushi/react-native` → 0.21.0
 
 ## v0.20.x
