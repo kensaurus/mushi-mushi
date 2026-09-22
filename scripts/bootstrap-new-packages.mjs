@@ -18,29 +18,37 @@
  * already at their current version and skip them (the "already published"
  * warning). The release overall still succeeds.
  *
- * USAGE (called by release.yml before the changesets step):
- *   node scripts/bootstrap-new-packages.mjs
+ * WHERE IT RUNS: .github/workflows/npm-bootstrap.yml (manual, behind the
+ * `npm-bootstrap` environment) — NOT the Release workflow. release.yml holds
+ * `id-token: write` and is the workflow npm's Trusted Publisher rules trust,
+ * so it must not also hold a long-lived publish token. release.yml runs this
+ * script with --check instead, which needs no token and fails the release
+ * before `changeset publish` if a package still has to be bootstrapped.
  *
- * REQUIREMENTS:
+ * USAGE:
+ *   node scripts/bootstrap-new-packages.mjs           # publish new packages
+ *   node scripts/bootstrap-new-packages.mjs --check   # list them, exit 1 if any
+ *
+ * REQUIREMENTS (publish mode):
  *   - NODE_AUTH_TOKEN env var must be set (NPM_TOKEN with write access)
  *   - pnpm turbo run build must have already run
  *   - cwd = repo root
  *
  * EXIT CODE:
  *   0 — success (no new packages, or all new packages published)
- *   1 — one or more new packages failed to publish
+ *   1 — one or more new packages failed to publish (or, with --check, exist)
  */
 
-import { execSync, execFileSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 const ROOT = process.cwd()
 const PUBLISH_ROOTS = ['packages']
-const NPM_BIN = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
+const checkOnly = process.argv.includes('--check')
 const token = process.env.NODE_AUTH_TOKEN
-if (!token) {
+if (!checkOnly && !token) {
   console.log('bootstrap-new-packages: NODE_AUTH_TOKEN not set — skipping (provenance mode)')
   process.exit(0)
 }
@@ -55,30 +63,35 @@ function* walk(dir) {
   }
 }
 
-/** Check whether the package name already exists on npm. */
-function packageExistsOnNpm(name) {
-  try {
-    execFileSync(NPM_BIN, ['view', name, 'name'], {
-      stdio: 'pipe',
-      env: { ...process.env },
-    })
-    return true
-  } catch (err) {
-    const output = `${err.stdout?.toString?.() ?? ''}\n${err.stderr?.toString?.() ?? ''}`
-    if (/E404|404 Not Found|is not in this registry/i.test(output)) {
-      return false
+/**
+ * Check whether the package name already exists on npm. Reads the public
+ * registry directly (no npm CLI, no auth), so --check works in a job whose
+ * .npmrc only carries setup-node's placeholder token.
+ */
+async function packageExistsOnNpm(name) {
+  const url = `https://registry.npmjs.org/${name.replaceAll('/', '%2f')}`
+  let last = ''
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(url, { headers: { accept: 'application/vnd.npm.install-v1+json' } })
+      await res.body?.cancel()
+      if (res.status === 200) return true
+      if (res.status === 404) return false
+      last = `HTTP ${res.status}`
+    } catch (err) {
+      last = err instanceof Error ? err.message : String(err)
     }
-    throw new Error(`npm view ${name} failed while checking package existence:\n${output.trim()}`)
+    await new Promise((resolve) => setTimeout(resolve, attempt * 2000))
   }
+  // Only a definite 404 means "new". A registry hiccup must not block a
+  // release over 33 lookups; a package that really is new still fails loudly
+  // at the OIDC publish.
+  console.log(`::warning::could not confirm ${name} on npm (${last}); assuming it exists`)
+  return true
 }
 
-function shouldBootstrapPackage(pkg) {
-  try {
-    return !packageExistsOnNpm(pkg.name)
-  } catch (err) {
-    console.error(err instanceof Error ? err.message : String(err))
-    process.exit(1)
-  }
+async function shouldBootstrapPackage(pkg) {
+  return !(await packageExistsOnNpm(pkg.name))
 }
 
 // Collect publishable package names that are NOT on npm yet.
@@ -92,7 +105,7 @@ for (const root of PUBLISH_ROOTS) {
     if (pkg.private === true) continue
     if (!pkg.version) continue
     if (!pkg.name?.match(/^(@[a-z0-9-]+\/)?[a-z0-9-]+/)) continue
-    if (!shouldBootstrapPackage(pkg)) continue
+    if (!(await shouldBootstrapPackage(pkg))) continue
     newPackages.push({ pkgPath, pkg, dir: join(pkgPath, '..') })
   }
 }
@@ -100,6 +113,17 @@ for (const root of PUBLISH_ROOTS) {
 if (newPackages.length === 0) {
   console.log('bootstrap-new-packages: all publishable packages already exist on npm.')
   process.exit(0)
+}
+
+if (checkOnly) {
+  for (const { pkg } of newPackages) {
+    console.log(`::error::${pkg.name} is not on npm yet, so the OIDC publish in release.yml cannot create it.`)
+  }
+  console.log(
+    'Run the "npm Bootstrap" workflow (npm-bootstrap.yml), add a Trusted Publisher rule for each ' +
+      'package on npmjs.com pointing at release.yml, then re-run the release.',
+  )
+  process.exit(1)
 }
 
 console.log(`bootstrap-new-packages: ${newPackages.length} new package(s) to bootstrap without provenance:`)

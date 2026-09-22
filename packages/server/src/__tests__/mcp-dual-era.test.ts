@@ -126,10 +126,17 @@ describe('mcp http edge function — tasks extension + MRTR voice gate', () => {
 })
 
 describe('mcp http edge function — dispatch_fix agent input', () => {
-  it('declares the agent enum and forwards it to the dispatch route body', () => {
-    expect(SOURCE).toMatch(
-      /agent: \{\s*\n\s*type: 'string',\s*\n\s*enum: \['claude_code', 'codex', 'auto', 'rest_fix_worker', 'llm', 'mcp', 'cursor_cloud', 'github_cloud_agent'\]/,
-    )
+  it('advertises every agent the dispatch route accepts and forwards it in the body', () => {
+    // The schema comes from the catalog (mcp-discovery-tools.json); the value
+    // set must be the route's allow-list, _shared/agent-adapters.ts.
+    const discovery = JSON.parse(
+      readFileSync(resolve(__dirname, '../../supabase/functions/_shared/mcp-discovery-tools.json'), 'utf8'),
+    ) as { tools: Record<string, { inputSchema: { properties: Record<string, { enum?: string[] }> } }> }
+    const adapters = readFileSync(resolve(__dirname, '../../supabase/functions/_shared/agent-adapters.ts'), 'utf8')
+    const allowList = adapters.split('export const ALLOWED_AGENT_OVERRIDES = [')[1]?.split(']')[0] ?? ''
+    const allowed = [...allowList.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort()
+    expect(allowed.length).toBeGreaterThan(5)
+    expect([...(discovery.tools.dispatch_fix?.inputSchema.properties.agent?.enum ?? [])].sort()).toEqual(allowed)
     expect(SOURCE).toMatch(/\.\.\.\(typeof args\.agent === 'string' && args\.agent \? \{ agent: args\.agent \} : \{\}\)/)
   })
 })

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/intelligence
 
 ---
 title: Intelligence reports
+description: Intelligence reports are Mushi's weekly plain-English bug digest for each project — what broke, what got fixed and what to watch, sent to your inbox.
 ---
 
 # Intelligence reports

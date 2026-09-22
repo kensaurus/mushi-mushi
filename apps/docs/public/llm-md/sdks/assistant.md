@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/assistant
 
 ---
 title: In-SDK Ask assistant
+description: The Mushi widget's Ask tab answers end users' questions from the current page and your knowledge corpus, using your own LLM key, with every turn logged.
 ---
 
 # In-SDK Ask assistant

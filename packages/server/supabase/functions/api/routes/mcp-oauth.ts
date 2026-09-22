@@ -31,6 +31,9 @@
  *   - Approval requires a signed-in console user with owner/admin on the
  *     selected project; the minted key never exceeds the approver's access.
  *   - All public endpoints are per-IP rate-limited via scoped_rate_limit_claim.
+ *   - Every authorization response (code or error redirect) carries `iss`
+ *     (RFC 9207), the issuer of the URL the client discovered — see
+ *     mcpOAuthIssuerForResource. The AS metadata advertises it.
  */
 
 import type { Hono } from 'npm:hono@4'
@@ -50,6 +53,7 @@ import {
   readOAuthParams,
   verifyPkceS256,
 } from '../../_shared/mcp-oauth-helpers.ts'
+import { mcpOAuthIssuerForResource } from '../../_shared/mcp-oauth-metadata.ts'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -191,8 +195,9 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
 
     // From here on the redirect_uri is trusted — report errors to the client.
     const state = q('state') || null
+    const iss = mcpOAuthIssuerForResource(q('resource') || null, new URL(c.req.url).origin)
     const fail = (error: string, description: string) =>
-      c.redirect(appendRedirectParams(redirectUri, { error, error_description: description, state }), 302)
+      c.redirect(appendRedirectParams(redirectUri, { error, error_description: description, state, iss }), 302)
 
     if (q('response_type') !== 'code') {
       return fail('unsupported_response_type', 'Only response_type=code is supported')
@@ -294,7 +299,7 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
     const db = getServiceClient()
     const { data: row } = await db
       .from('mcp_oauth_requests')
-      .select('id, status, scope, redirect_uri, state, expires_at, user_id')
+      .select('id, status, scope, redirect_uri, state, resource, expires_at, user_id')
       .eq('id', txn)
       .eq('status', 'pending')
       .gt('expires_at', new Date().toISOString())
@@ -387,7 +392,13 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
 
     return c.json({
       ok: true,
-      data: { redirect_to: appendRedirectParams(row.redirect_uri, { code, state: row.state }) },
+      data: {
+        redirect_to: appendRedirectParams(row.redirect_uri, {
+          code,
+          state: row.state,
+          iss: mcpOAuthIssuerForResource(row.resource, new URL(c.req.url).origin),
+        }),
+      },
     })
   })
 
@@ -411,7 +422,7 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
       .eq('id', txn)
       .eq('status', 'pending')
       .eq('user_id', userId)
-      .select('redirect_uri, state')
+      .select('redirect_uri, state, resource')
       .maybeSingle()
     if (!row) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No pending request for that transaction' } }, 404)
@@ -423,6 +434,7 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
           error: 'access_denied',
           error_description: 'The user denied the request',
           state: row.state,
+          iss: mcpOAuthIssuerForResource(row.resource, new URL(c.req.url).origin),
         }),
       },
     })

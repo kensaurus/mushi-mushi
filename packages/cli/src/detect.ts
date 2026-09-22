@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
 /**
  * FILE: packages/cli/src/detect.ts
  * PURPOSE: Pure detection helpers for framework, package manager, and project state.

@@ -1,9 +1,10 @@
-# @mushi-mushi/web
+# JavaScript bug reporting SDK for the browser
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/web
 
 ---
-title: '@mushi-mushi/web'
+title: JavaScript bug reporting SDK for the browser
+description: Reference for @mushi-mushi/web, the browser SDK — screenshots, console and network capture, the Shadow DOM widget, sampling, beforeSend and privacy.
 ---
 
 # `@mushi-mushi/web`
@@ -178,6 +179,7 @@ for the previous session first.
 Add a `rewards` block to your `init()` config:
 
 ```typescript
+import { Mushi } from '@mushi-mushi/web'
 
 const mushi = Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
@@ -259,6 +261,7 @@ The same methods are exposed on the `useMushi()` hook, memoised so they're
 stable across renders:
 
 ```tsx
+import { useMushi } from '@mushi-mushi/react'
 
 function MyReports() {
   const { listMyReports, replyToReport } = useMushi()

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/credentials
 
 ---
 title: Project ID & API keys
+description: Where to find your Mushi project ID and API key, what the report:write and mcp scopes allow, the one mushi_ key format, and env var names per framework.
 ---
 
 # Project ID & API keys
@@ -35,16 +36,21 @@ Use the UUID from the success panel for `mushi init --project-id` and SDK env va
 
 ## API key
 
-Secret used to authenticate ingest and admin API calls. Prefix depends on surface:
+Secret used to authenticate ingest and admin API calls. Every key has the same
+format, whichever surface uses it: `mushi_` followed by 32 hex characters
+(for example `mushi_3f9a…`). The console, the CLI and the MCP sign-in all mint
+this one format; if an older guide shows a different prefix, read it as
+`mushi_…`.
 
-| Prefix | Used by | Example |
+| Format | Used by | What tells keys apart |
 | --- | --- | --- |
-| `mushi_…` | Web, React, Node, CLI, MCP | `mushi_live_abc123…` |
-| `mush_pk_…` | Capacitor / native hybrid plugin | `mush_pk_abc123…` |
+| `mushi_…` | Web, React, React Native, Capacitor, native SDKs, Node, CLI, MCP | The **scopes** chosen at mint time (table above), not the prefix |
 
-Capacitor uses a **public ingest key** (`mush_pk_…`) embedded in the hybrid app bundle — see [`@mushi-mushi/capacitor`](/sdks/capacitor).
+The SDK key and the MCP key look identical, so label them when you store them.
+An app bundle (web, React Native, Capacitor, native) should carry a
+`report:write`-only key; keep `mcp:*` keys in your editor and CI.
 
-Never commit API keys. The CLI writes SDK keys to `.env.local`, CLI config to **`~/.config/mushi/config.json`** (legacy `~/.mushirc` is auto-migrated on first load), and adds `.cursor/mcp.json` to `.gitignore` when wiring Cursor.
+Never commit API keys. The CLI writes SDK keys to `.env.local`, CLI config to **`~/.config/mushi/config.json`** on macOS and Linux or **`%APPDATA%\mushi\config.json`** on Windows (`$XDG_CONFIG_HOME/mushi/config.json` on any platform when that variable is set; legacy `~/.mushirc` is auto-migrated on first load), and adds `.cursor/mcp.json` to `.gitignore` when wiring Cursor.
 
 See [`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example) for a copy-paste template.
 

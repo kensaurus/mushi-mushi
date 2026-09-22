@@ -12,16 +12,25 @@
  *  6. catalog drift guard passes (re-runs check-mcp-catalog-sync.mjs)
  *  7. Cursor plugin manifest is valid (re-runs check-cursor-plugin.mjs)
  *  8. Marketplace doc exists (docs/marketplace/cursor-mushi-plugin.md)
+ *  9. server.json icons are absolute URLs whose mimeType matches the file
+ *     extension (step 7 already requires repo-served icons to be git-tracked).
+ *     With --online, also HEAD each icon URL and require a 200.
+ *
+ *   node scripts/check-mcp-publish-readiness.mjs            # offline checks
+ *   node scripts/check-mcp-publish-readiness.mjs --online   # + live icon HEAD
  */
 
 import { readFileSync, existsSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
+import { resolve, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
+
+import { repoPathFromRawUrl } from './lib/mcp-configs.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '..')
 const mcpPkg = resolve(root, 'packages', 'mcp')
+const online = process.argv.includes('--online')
 
 let failures = 0
 let warnings = 0
@@ -146,6 +155,47 @@ for (const doc of marketplaceDocs) {
     warn(`${doc} not found — create before marketplace submission`)
   } else {
     ok(`${doc} exists`)
+  }
+}
+
+// 9. Registry icons. The registry stores the icon URL, not the image, and the
+// URL is path-based on master — so the file has to be committed, not just
+// present on the publisher's disk (`*.png` is git-ignored repo-wide). Step 7
+// already fails on an untracked icon (check-cursor-plugin.mjs runs in CI);
+// this adds the declared mime type and, with --online, the live URL.
+console.log('\n── Registry icons ──────────────────────────────────────────────────────────')
+const ICON_EXT_MIME = { '.png': 'image/png', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }
+let serverJson
+try {
+  serverJson = JSON.parse(readFileSync(resolve(mcpPkg, 'server.json'), 'utf8'))
+} catch (e) {
+  fail(`packages/mcp/server.json invalid: ${e.message}`)
+}
+const icons = Array.isArray(serverJson?.icons) ? serverJson.icons : []
+if (serverJson && icons.length === 0) warn('server.json has no icons — registry clients will show a default icon')
+for (const icon of icons) {
+  const src = icon?.src
+  if (typeof src !== 'string' || !URL.canParse(src)) {
+    fail(`server.json icon "src" must be an absolute URL, got ${JSON.stringify(src)}`)
+    continue
+  }
+  if (!repoPathFromRawUrl(src) && !online) {
+    warn(`icon ${src} is not served from this repo — re-run with --online to check it`)
+  }
+  const expectedMime = ICON_EXT_MIME[extname(new URL(src).pathname).toLowerCase()]
+  if (expectedMime && icon.mimeType && icon.mimeType !== expectedMime) {
+    fail(`icon ${src} declares mimeType ${icon.mimeType}, expected ${expectedMime}`)
+  } else {
+    ok(`icon ${src}${icon.mimeType ? ` (${icon.mimeType})` : ''}`)
+  }
+  if (online) {
+    try {
+      const res = await fetch(src, { method: 'HEAD', signal: AbortSignal.timeout(10_000) })
+      if (res.status === 200) ok(`HEAD ${src} → 200`)
+      else fail(`HEAD ${src} → ${res.status}`)
+    } catch (e) {
+      fail(`HEAD ${src} failed: ${e.message}`)
+    }
   }
 }
 

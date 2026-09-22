@@ -7,10 +7,14 @@
  * (not accidentally silence them).
  *
  * Key invariants:
- *  1. maskAllInputs: true  — all input values masked
- *  2. maskAllText: true    — rendered DOM text masked
- *  3. password selectors always in the mask set, regardless of userOptions
- *  4. user-supplied redactSelectors EXTEND the default mask set (not replace)
+ *  1. maskAllInputs: true      — all input values masked
+ *  2. maskTextSelector: '*'    — every rendered text node masked. rrweb 2.x has
+ *     no `maskAllText` option; the earlier `maskAllText: true` was silently
+ *     ignored, so this invariant used to pass while text went out in clear.
+ *     replay.rrweb.test.ts proves it against the real rrweb.
+ *  3. password inputs and [data-mushi-redact] always blocked, regardless of
+ *     userOptions
+ *  4. user-supplied redactSelectors EXTEND the default block set (not replace)
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createReplayCapture } from './replay';
@@ -20,8 +24,8 @@ import { createReplayCapture } from './replay';
 type RecordOptions = {
   emit: (event: unknown) => void;
   maskAllInputs?: boolean;
-  maskAllText?: boolean;
   maskTextSelector?: string;
+  blockSelector?: string;
   checkoutEveryNms?: number;
   sampling?: Record<string, unknown>;
 };
@@ -64,30 +68,34 @@ describe('createReplayCapture — privacy defaults', () => {
     replay.destroy();
   });
 
-  it('sets maskAllText: true (rendered DOM text masked)', async () => {
+  it("masks every text node with maskTextSelector '*' (rrweb has no maskAllText)", async () => {
     const replay = await createReplayCapture({ enabled: true });
     replay.start();
-    expect(getRecordOptions().maskAllText).toBe(true);
+    const opts = getRecordOptions();
+    expect(opts.maskTextSelector).toBe('*');
+    expect(opts).not.toHaveProperty('maskAllText');
     replay.destroy();
   });
 
-  it('always masks password inputs regardless of redactSelectors', async () => {
+  it('always blocks password inputs and [data-mushi-redact] regardless of redactSelectors', async () => {
     const replay = await createReplayCapture({ enabled: true, redactSelectors: [] });
     replay.start();
     const opts = getRecordOptions();
-    const selector = opts.maskTextSelector ?? '';
+    const selector = opts.blockSelector ?? '';
     expect(selector).toContain('input[type="password"]');
+    expect(selector).toContain('[data-mushi-redact]');
+    expect(opts.maskAllInputs).toBe(true);
     replay.destroy();
   });
 
-  it('user redactSelectors are APPENDED to the default mask set, not replacing it', async () => {
+  it('user redactSelectors are APPENDED to the default block set, not replacing it', async () => {
     const userSelectors = ['.my-secret', '[data-redact]'];
     const replay = await createReplayCapture({ enabled: true, redactSelectors: userSelectors });
     replay.start();
     const opts = getRecordOptions();
-    const selector = opts.maskTextSelector ?? '';
+    const selector = opts.blockSelector ?? '';
 
-    // Default password mask must still be present
+    // Default password block must still be present
     expect(selector).toContain('input[type="password"]');
     // User selectors must also be present
     for (const s of userSelectors) {
@@ -106,6 +114,13 @@ describe('createReplayCapture — privacy defaults', () => {
   it('does not call rrweb.record before start()', async () => {
     await createReplayCapture({ enabled: true });
     expect(mockRrweb.record).not.toHaveBeenCalled();
+  });
+
+  it("never loads rrweb in 'lite' mode", async () => {
+    const replay = await createReplayCapture({ enabled: true, mode: 'lite' });
+    replay.start();
+    expect(mockRrweb.record).not.toHaveBeenCalled();
+    replay.destroy();
   });
 
   it('calls the rrweb stop function when stop() is called', async () => {

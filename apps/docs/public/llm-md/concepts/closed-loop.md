@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/closed-loop
 
 ---
 title: Closed-loop evolution — the thesis
+description: The thesis behind Mushi — why AI-built apps need a closed loop from what users feel to a verified fix, and how capture, diagnosis and fixes connect.
 ---
 
 # Closed-loop evolution — the thesis

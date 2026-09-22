@@ -54,6 +54,7 @@ import {
   type ReporterNotification,
 } from '../components/notifications/types'
 import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { shortReporterKey } from '../lib/reporterKey'
 
 const TABS: Array<{ id: NotificationTabId; label: string; description: string }> = [
   {
@@ -516,7 +517,7 @@ export function NotificationsPage() {
                                 ? `read ${new Date(n.read_at).toLocaleString()}`
                                 : 'unread'}
                             </SignalChip>
-                            <SignalChip tone="neutral">tok:{n.reporter_token_hash.slice(0, 8)}…</SignalChip>
+                            <SignalChip tone="neutral">tok:{shortReporterKey(n.reporter_token_hash)}…</SignalChip>
                             {n.report_id ? (
                               <ActionPill to={`/reports/${n.report_id}`} tone="brand">
                                 report:{n.report_id.slice(0, 8)}…

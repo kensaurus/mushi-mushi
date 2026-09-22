@@ -24,6 +24,7 @@ import { SUPPORT_EMAIL, SUPPORT_URL } from '../../_shared/support.ts';
 import { dbError, ownedProjectIds, resolveOwnedProject } from '../shared.ts';
 import { requireSuperAdmin } from '../../_shared/super-admin.ts';
 import { resolveActiveEntitlement } from '../../_shared/entitlements.ts';
+import { resolveProjectRetention } from '../../_shared/retention-policy.ts';
 
 const SUPPORT_CATEGORIES = ['billing', 'bug', 'feature', 'other'] as const;
 type SupportCategory = (typeof SUPPORT_CATEGORIES)[number];
@@ -746,78 +747,21 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       return c.json({ ok: true, data: { projects: [], next_sweep_at: null, last_run: null } });
     }
 
-    const [{ data: policies }, { data: subs }, { data: plansList }, { data: lastRun }] =
-      await Promise.all([
-        db
-          .from('project_retention_policies')
-          .select('project_id, reports_retention_days, legal_hold, legal_hold_reason')
-          .in('project_id', projectIds),
-        db
-          .from('billing_subscriptions')
-          .select('project_id, status, plan_id, current_period_end')
-          .in('project_id', projectIds)
-          .in('status', ['active', 'trialing', 'past_due']),
-        db.from('pricing_plans').select('id, display_name, retention_days'),
-        db
-          .from('cron_runs')
-          .select('id, started_at, finished_at, status, rows_affected, metadata')
-          .eq('job_name', 'retention-sweep')
-          .order('started_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ]);
-
-    const planById = new Map<
-      string,
-      { id: string; display_name: string; retention_days: number }
-    >();
-    for (const p of plansList ?? []) {
-      planById.set(p.id, p as { id: string; display_name: string; retention_days: number });
-    }
-    const policyByProject = new Map<
-      string,
-      { reports_retention_days: number; legal_hold: boolean }
-    >();
-    for (const r of policies ?? []) {
-      policyByProject.set(r.project_id, {
-        reports_retention_days: r.reports_retention_days,
-        legal_hold: r.legal_hold,
-      });
-    }
-    const subByProject = new Map<string, { plan_id: string | null }>();
-    for (const s of subs ?? []) {
-      if (!subByProject.has(s.project_id)) {
-        subByProject.set(s.project_id, { plan_id: s.plan_id });
-      }
-    }
-
-    const HOBBY_FALLBACK_DAYS = planById.get('hobby')?.retention_days ?? 7;
+    const { data: lastRun } = await db
+      .from('cron_runs')
+      .select('id, started_at, finished_at, status, rows_affected, metadata')
+      .eq('job_name', 'retention-sweep')
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     const now = Date.now();
     const result = await Promise.all(
       projectIds.map(async (pid) => {
-        const policy = policyByProject.get(pid);
-        const sub = subByProject.get(pid);
-        const plan = planById.get(sub?.plan_id ?? 'hobby');
-
-        let retention_days = HOBBY_FALLBACK_DAYS;
-        let plan_id: string = 'hobby';
-        let source: 'override' | 'plan' | 'fallback' = 'fallback';
-        const legal_hold = policy?.legal_hold === true;
-
-        if (legal_hold) {
-          retention_days = policy!.reports_retention_days ?? HOBBY_FALLBACK_DAYS;
-          plan_id = 'legal_hold';
-          source = 'override';
-        } else if (policy && policy.reports_retention_days) {
-          retention_days = policy.reports_retention_days;
-          plan_id = 'override';
-          source = 'override';
-        } else if (sub && plan) {
-          retention_days = plan.retention_days ?? HOBBY_FALLBACK_DAYS;
-          plan_id = plan.id;
-          source = 'plan';
-        }
+        // The same resolver the sweep uses, so this page can never show a
+        // window the sweep does not honour (it showed 7 days for the pro org
+        // while the sweep deleted on that 7-day window — both were wrong).
+        const { retention_days, plan_id, source, legal_hold } = await resolveProjectRetention(db, pid);
 
         const cutoffIso = new Date(now - retention_days * 24 * 60 * 60 * 1000).toISOString();
 

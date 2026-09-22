@@ -4,12 +4,12 @@
     "kensaurus"
   ],
   "name": "mushi-mushi",
-  "description": "Bug-report triage and fix-dispatch MCP for vibe coders. Ask your AI coding agent for a plain-English diagnosis of any user-reported bug — with evidence, blast radius, and a paste-ready fix prompt — then dispatch an automated GitHub fix PR without a second LLM key. 73 tools, Supabase-backed, MIT SDK. npx @mushi-mushi/mcp.\n\nAlso from KENSAURUS:\n| | App |\n|---|---|\n| ![The Wanting Mind](https://kensaur.us/the-wanting-mind/pwa-512x512.png) | [The Wanting Mind](https://kensaur.us/the-wanting-mind/) — 268 concepts |\n| ![Cooler Heads](https://talk.kensaur.us/pwa-192.png) | [Cooler Heads](https://talk.kensaur.us) |\n| ![Glot It](https://kensaur.us/glot-it/icon-512.png) | [Glot It](https://kensaur.us/glot-it/) |\n| ![yen-yen](https://kensaur.us/yen-yen/icon.svg) | [yen-yen](https://kensaur.us/yen-yen/) |\n| ![Help Her Take Photo](https://kensaur.us/help-her-take-photo/assets/apple-touch-icon.png) | [Help Her Take Photo](https://kensaur.us/help-her-take-photo/) |\n| ![Tsumagoi](https://tsumagoi.kensaur.us/apple-touch-icon.png) | [Tsumagoi Work&Camp](https://tsumagoi.kensaur.us/) — [Instagram](https://www.instagram.com/tsumagoicamp/) · [Facebook](https://www.facebook.com/profile.php?id=61592113053042) · [Maps](https://maps.app.goo.gl/JCNnTfsdQVHCS1FA7) |\n| ![cursor-kenji](https://github.com/kensaurus.png) | [cursor-kenji](https://github.com/kensaurus/cursor-kenji) |",
+  "description": "MCP server for Cursor, Claude Code and Copilot. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor. 76 tools to triage user-reported bugs, pull a fix packet with evidence and blast radius, and dispatch a fix PR. Run it with npx @mushi-mushi/mcp. SDKs MIT · server AGPLv3 · enterprise edition commercial.",
   "license": "MIT",
   "tools": [
     {
       "name": "get_recent_reports",
-      "description": "List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, created_at }], total }. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports."
+      "description": "List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, component, created_at, processing_error }], total }; include_raw=true returns every list column instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed|…), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports."
     },
     {
       "name": "get_report_detail",
@@ -41,7 +41,7 @@
     },
     {
       "name": "get_knowledge_graph",
-      "description": "Traverse the knowledge graph from a seed component or page. Returns { nodes: [{ id, label, type }], edges } within a depth budget (default 2, max 4 hops). Read-only. Use to see how a component connects to the rest of the app; use get_blast_radius for a bug's impact area, or get_graph_neighborhood for a tighter BFS around one node."
+      "description": "Traverse the knowledge graph from a seed component or page. Returns { nodes: [{ id, label, node_type }], edges: [{ source_node_id, target_node_id, edge_type }] } within a depth budget (default 2, max 4 hops). Read-only. Use to see how a component connects to the rest of the app; use get_blast_radius for a bug's impact area, or get_graph_neighborhood for a tighter BFS around one node."
     },
     {
       "name": "run_nl_query",
@@ -57,15 +57,15 @@
     },
     {
       "name": "list_gate_findings",
-      "description": "List the most recent inventory gate findings for a project, newest run first. Returns rows of { gate, severity, status, message, node_ref }; \"latest\" = the most recent run per gate by created_at. Filter by gate (dead-handler | mock-leak | crawl | status-claim) or minimum severity (low|medium|high|critical). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot."
+      "description": "List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead-handler | mock-leak | crawl | status-claim) or minimum severity (low|medium|high|critical). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot."
     },
     {
       "name": "get_graph_neighborhood",
-      "description": "Return the BFS neighborhood around one graph node by id or label: { nodes: [{ id, label, type }], edges } within a depth budget (default 2, max 4). Read-only. Tuned for \"what touches this action?\"; use get_knowledge_graph to traverse from a component seed, or get_graph_node for a single node's row."
+      "description": "Return the BFS neighborhood around one graph node by id or label: { nodes: [{ id, label, node_type }], edges: [{ source_node_id, target_node_id, edge_type }] } within a depth budget (default 2, max 4). Read-only. Tuned for \"what touches this action?\"; use get_knowledge_graph to traverse from a component seed, or get_graph_node for a single node's row."
     },
     {
       "name": "get_graph_node",
-      "description": "Fetch one knowledge-graph node row by id: { id, label, type, metadata } including the v2 derived status on Action nodes (ok | stale | broken). Read-only. Use to inspect a single node's status; use get_graph_neighborhood to see what connects to it."
+      "description": "Fetch one knowledge-graph node row by id. Returns { node: { id, node_type, label, metadata } } including the v2 derived status on Action nodes (ok | stale | broken). Read-only. Use to inspect a single node's status; use get_graph_neighborhood to see what connects to it."
     },
     {
       "name": "suggest_fix",
@@ -76,8 +76,16 @@
       "description": "Diagnose Mushi setup health and return the single best next action. mode=full (default) runs both SDK-ingest and fix-dispatch preflight checks; mode=ingest runs ingest checks only (project exists, active API key, SDK heartbeat, at least one report); mode=dispatch runs dispatch readiness only (GitHub connected, codebase indexed, LLM key present, autofix enabled). Returns { ready, steps: [{ label, complete, required, hint }], nextAction }. Read-only. The one setup-diagnosis entry point — use this instead of separate connection/ingest checks."
     },
     {
+      "name": "check_sdk_version",
+      "description": "Compare a published @mushi-mushi/* package version against the catalog (GET /v1/sdk/latest-version). Returns { package, current, latest, outdated } and, when outdated, suggestedActions (Sentry-style, max 1) pointing at search_mushi_docs plus the mushi-sdk-upgrade skill. Read-only. Use when Dependabot or mushi upgrade --check reports a drift, or before dispatching a fix that assumes a current SDK. Does not bump the pin — that stays a human/Dependabot change."
+    },
+    {
       "name": "search_mushi_docs",
-      "description": "Search the official Mushi documentation (guides, MCP setup, inventory, QA, skills) by keyword. Returns ranked { results: [{ title, url, excerpt }] }. Read-only. Use before guessing API shapes, tool names, or RPC names; use run_nl_query for questions about your own project data, not the docs."
+      "description": "Search the official Mushi documentation (guides, MCP setup, inventory, QA, skills) by keyword — titles, section headings and summaries are indexed. Returns ranked { results: [{ title, url, excerpt, score }] }. Read-only; works without an API key. Use before guessing API shapes, tool names, or RPC names, then get_mushi_doc to read a page; use run_nl_query for questions about your own project data, not the docs."
+    },
+    {
+      "name": "get_mushi_doc",
+      "description": "Fetch one official Mushi docs page as Markdown, by a url from search_mushi_docs or a route such as \"/quickstart/mcp\". Returns { title, url, markdown, truncated }; markdown is capped at 8,000 characters and says where to read the rest. Only indexed docs pages resolve. Read-only; works without an API key. Use after search_mushi_docs when an excerpt is not enough."
     },
     {
       "name": "submit_fix_result",
@@ -85,11 +93,11 @@
     },
     {
       "name": "dispatch_fix",
-      "description": "Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent=\"cursor_cloud\" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns { fixAttemptId }; poll get_fix_timeline for progress and merge_fix when CI is green. Write; NOT idempotent — each call starts a new attempt. Report must be classified — run triage_issue if not."
+      "description": "Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent=\"cursor_cloud\" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns { fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not."
     },
     {
       "name": "trigger_judge",
-      "description": "Queue the Sonnet-as-Judge to grade the quality of recent fixes across a batch of classified reports. Returns { batchId }; graded scores land asynchronously in the judge_results table (read them back with run_nl_query). Write; consumes LLM budget. Idempotent within a short window — re-running for the same batch re-grades rather than duplicating. Use before shipping to vet fix quality; use get_fix_timeline to inspect a single attempt instead."
+      "description": "Queue the Sonnet-as-Judge to grade recent fix quality across accessible projects. Returns { dispatched: number } — one judge-batch job per project; scores land asynchronously in judge_results (read back with run_nl_query). Write; consumes LLM budget. Idempotent within a short window. Use before shipping to vet fix quality; use get_fix_timeline to inspect a single attempt instead."
     },
     {
       "name": "test_gen_from_report",
@@ -101,11 +109,11 @@
     },
     {
       "name": "merge_fix",
-      "description": "Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns { merged, reportStatus }. Write; destructive (mutates the target repo's default branch); idempotent — re-running an already-merged attempt is a safe no-op. Prerequisite: CI green (check with refresh_ci). Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging."
+      "description": "Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns { merged, reportStatus }. Write; destructive and irreversible from Mushi's side — once GitHub merges into the target repo's default branch there is no unmerge endpoint, only a manual revert PR outside this tool. Idempotent — re-running an already-merged attempt is a safe no-op. Prerequisite: CI green (check with refresh_ci); confirm the diff and CI status with the user before calling on a PR you have not reviewed. Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging."
     },
     {
       "name": "refresh_ci",
-      "description": "Re-poll GitHub for the latest check-run status of a fix attempt's PR and persist it. Returns { ciStatus: pending|success|failure|neutral, checks: [{ name, conclusion }] }. Read-only (mutates nothing on GitHub). Use right before merge_fix to confirm CI is green; use get_fix_timeline for the full attempt lifecycle."
+      "description": "Re-poll GitHub for the latest check-run status of a fix attempt's PR and persist it on the fix_attempt row (does not merge or mutate GitHub). Returns { check_run_status, check_run_conclusion, check_run_updated_at }. Write; idempotent. Use right before merge_fix to confirm CI is green; use get_fix_timeline for the full attempt lifecycle."
     },
     {
       "name": "reopen_report",
@@ -117,15 +125,11 @@
     },
     {
       "name": "award_bonus_points",
-      "description": "Award ad-hoc bonus points to a contributor by their external user id (as passed to Mushi.identify()). Points are applied server-side, audit-logged, and trigger tier re-evaluation. Requires mcp:write scope. Use this to thank a contributor who found a critical bug or to run a one-off promotional campaign."
+      "description": "Award ad-hoc bonus points (1-50000, positive only — there is no way to subtract via this tool) to a contributor by their external user id (as passed to Mushi.identify()). Points post immediately to their total and are audit-logged as bonus_manual. Destructive and effectively irreversible: there is no reversal endpoint, so confirm the amount and recipient with the user before calling. Tier re-evaluation (and any host-side reward_webhooks grant tied to crossing a threshold) is NOT immediate — it only runs on the contributor's next tracked activity, not on this call. Requires mcp:write scope. Use this to thank a contributor who found a critical bug or to run a one-off promotional campaign."
     },
     {
       "name": "set_tier",
-      "description": "Override a contributor's tier by tier slug (e.g. \"champion\"). This is an admin escape hatch for manual promotions — normal tier transitions happen automatically via point thresholds. The override is logged in end_user_activity with action=tier_override_manual. Requires mcp:write scope."
-    },
-    {
-      "name": "setup_repo_for_mushi",
-      "description": "Writes the three Mushi bootstrap files into the current repo root: `.cursorrules` (Cursor evolution-loop coding rules), `.mushi/lessons.json` (initial empty lesson cache), and `MUSHI.md` (one-page project contract for agents). Idempotent — safe to re-run after lessons sync. Requires mcp:write scope. Call this once after connecting the repo; subsequently use `mushi sync-lessons` from CI to keep lessons current."
+      "description": "Override a contributor's tier by tier slug (e.g. \"champion\"), bypassing the normal points-threshold logic entirely. This is an admin escape hatch for manual promotions — normal tier transitions happen automatically via point thresholds instead. Destructive: it is a label-only override that does NOT replay the automatic tier-evaluation path, so any host_credit_payload grant (Stripe perk, badge, etc.) normally tied to reaching that tier via points will NOT fire — confirm with the user whether they also need the perk granted another way. The override persists until another set_tier call changes it; the prior override stays in the end_user_activity audit trail either way, logged as tier_override_manual. Requires mcp:write scope."
     },
     {
       "name": "list_projects",
@@ -145,11 +149,15 @@
     },
     {
       "name": "get_report_evidence",
-      "description": "Return the full evidence package for a single bug report: screenshot URL, console logs, network excerpts, browser environment (user agent, URL, viewport, SDK version), user replay link if available, breadcrumb trail, and the reporter's own comments thread. This is the same data an engineer would collect for a root-cause investigation. Faster than calling get_report_detail + report timeline separately."
+      "description": "Return the full evidence package for a single bug report covering all three observability pillars: (1) LOGS — console_logs (error/warn/info/debug entries with timestamps), breadcrumbs (SDK ring buffer: navigation, clicks, network, lifecycle events with category/level), repro_timeline (merged SDK event stream: route/click/request/log/screen), and the reporter's own comments thread; (2) TRACES — network_requests (SDK-captured fetch/XHR with method/status/duration/traceId), backend_spans (server-side spans joined by W3C trace_id: name/duration_ms/parentSpanId/status), and Sentry trace correlation IDs (sentry_trace_id, sentry_event_id) for deeplinks; (3) METRICS — performance_metrics (Web Vitals snapshot: LCP/CLS/INP/TTFB/FCP + INP attribution + page timing + connection info), anomalies (statistical provenance when auto-filed by CI metric regression: baseline_mean/std, score in σ, threshold); plus screenshot_url, browser environment (user agent, URL, viewport, SDK version), and tags. This is the same data an engineer would collect for a root-cause investigation. Faster than calling get_report_detail + report timeline separately."
     },
     {
       "name": "triage_issue",
-      "description": "Read-only combined tool: merges report detail, evidence, similar bugs, fix context, blast radius, and recent pipeline logs for a report into a single structured review packet. Returns a prioritised list of recommended next actions (investigate, dispatch_fix, group_with, dismiss). Equivalent to a Sentry \"Analyze with Seer\" flow grounded in user-felt reports. Pass report_id to kick off review. Call this before dispatch_fix."
+      "description": "Read-only combined tool: merges report detail, the reporter thread, similar bugs (matched on the report summary), the fix context (paste-ready fix prompt, repro steps, root cause), the blast radius of the inventory action the report is filed against, and recent pipeline warnings into a single structured review packet. Returns the packet plus prioritised recommended_actions, partial_errors for any source that failed, and notes for any source that does not apply (e.g. no blast radius when the report is not anchored to an inventory action). Equivalent to a Sentry \"Analyze with Seer\" flow grounded in user-felt reports. Pass report_id to kick off review. Call this before dispatch_fix."
+    },
+    {
+      "name": "triage_next_steps",
+      "description": "Prioritised \"do this next\" list for the project: blocked auto-fixes first (with the unblock action), then in-flight fixes to shepherd to merge, then user-felt classified reports by severity, with robot/cron chores (dependency bumps) last. Returns { steps: [{ priority, action, reason, tool, args }], summary }. Read-only. Call this first when the user asks \"what needs my attention / what should I triage or fix\"."
     },
     {
       "name": "query_lessons",
@@ -157,11 +165,23 @@
     },
     {
       "name": "list_lessons",
-      "description": "List the promoted learning rules (\"lessons\") for the current project, newest first. Each lesson is a named pattern of mistakes encoded from past bug reports. Returns { lessons: [{ id, title, rule, severity, source_report_ids }] }. Read-only. Use to see the full catalog of encoded heuristics; use query_lessons to retrieve only the lessons relevant to a specific diff or PR within a token budget."
+      "description": "List promoted learning rules (\"lessons\") for the current project, highest-frequency first. Returns { lessons: [{ id, rule_text, severity, frequency, anti_pattern, … }] }. Read-only. Use to browse the full catalog of encoded heuristics; use query_lessons to retrieve only lessons relevant to a specific diff or PR within a token budget."
     },
     {
       "name": "activation_status",
       "description": "Return the unified activation posture — SDK heartbeat, ingested reports, GitHub, MCP readiness, QA stories, and the next best action. Read this before guessing which onboarding step is blocking the user. Also available as the mushi://activation resource for resource-reader clients. Returns { sdkActive, reportsIngested, githubConnected, mcpConnected, qaStoriesCreated, nextBestAction }."
+    },
+    {
+      "name": "query_funnel",
+      "description": "Where do users drop off? Ordered funnel over Mushi.track() events for this project. Pass 2–8 step event names in order (e.g. [\"landing_view\", \"signup_completed\", \"first_report_received\"]); each step counts distinct users who did the previous step then this one within stepWindow (default 7d), over the trailing windowDays (default 30). Optional breakdown property (e.g. \"utm_source\", \"$surface\") splits every step. Returns { steps: [{ name, entered, converted, pct, median_secs }], breakdown: [{ value, entered, steps }] } (pct is conversion from step 1; breakdown is empty unless requested). Read-only. Use to find the biggest drop-off before changing onboarding; use get_product_events_summary to discover event names, or get_user_paths to see what users did after a step."
+    },
+    {
+      "name": "get_product_events_summary",
+      "description": "Summarise the Mushi.track() product events this project received in the trailing windowDays (default 30): event names with counts and distinct users, daily volume, and top properties. Returns { window_days, events_total, persons, identified, anonymous, events_per_day: [{ day, count }], top_events: [{ name, count, persons }] }. Read-only. Use first to learn which event names exist before calling query_funnel or get_user_paths; use run_nl_query for ad-hoc SQL over the same rows."
+    },
+    {
+      "name": "get_user_paths",
+      "description": "What did users do next? Rank the events users fired immediately after fromEvent within the trailing windowDays (default 30), most common first, up to limit rows (default 20, max 50). Returns { from_event, total, next: [{ name, count, pct }] }. Read-only. Use to see where users go after a step instead of guessing the funnel order; use query_funnel once you know the ordered steps, or get_product_events_summary for event names."
     },
     {
       "name": "map_user_stories",
@@ -185,11 +205,19 @@
     },
     {
       "name": "list_byok_keys",
-      "description": "List the project's BYOK API keys grouped by provider (anthropic | openai | firecrawl | browserbase | cursor). Returns { keys: [{ id, provider, label, priority, status, cooldownUntil }] } — metadata only, never the raw secret. Read-only. Use to see which keys are active vs rate-limited/exhausted; use add_byok_key to add one."
+      "description": "List the project's BYOK API keys grouped by provider (anthropic | openai | firecrawl | browserbase | cursor). Returns pooled { keys: [{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at }] } plus read-only { legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, or rate-limited; use add_byok_key to add one."
     },
     {
       "name": "add_byok_key",
-      "description": "Add a BYOK API key to the project pool for a provider (anthropic | openai | firecrawl | browserbase | cursor), with a label and priority for failover ordering. The raw key is stored encrypted in Supabase Vault and never returned. Returns { id, provider, label }. Write; NOT idempotent — adds a new row each call. Use to register a backup/rotated key; use list_byok_keys to review the pool."
+      "description": "Add and immediately validate a BYOK API key for anthropic | openai | firecrawl | browserbase | cursor. The raw key is stored encrypted in Supabase Vault and never returned; failed probes remain quarantined. Optional baseUrl is accepted only for allow-listed OpenAI-compatible HTTPS providers. Write; NOT idempotent."
+    },
+    {
+      "name": "test_byok_key",
+      "description": "Re-test one pooled BYOK credential by key id. A successful provider probe activates the key; auth, quota, and network failures keep it out of the runtime pool. Returns the sanitized validation result and updated key metadata. Write; idempotent."
+    },
+    {
+      "name": "remove_byok_key",
+      "description": "Permanently remove one pooled BYOK credential by key id from the authenticated project, including its Vault secret. Write; destructive; idempotent."
     },
     {
       "name": "list_pending_review_stories",
@@ -252,6 +280,10 @@
       "description": "Return the current backend health state for a linked Supabase project: table list (with RLS enabled status), recent API and Postgres error logs, and DB advisor findings. Uses the read-only Supabase MCP client via the stored PAT. Returns { tables, logs, advisors, projectRef } when the backend is linked, or { reason: \"no_supabase_pat\" | \"no_project_ref\" } when it is not configured. This is the read-only fast path — use run_fullstack_audit for the full scorecard including gate results."
     },
     {
+      "name": "use_mushi",
+      "description": "CALL THIS FIRST if you are new to this Mushi project or unsure which tool to use. Pass your intent as a short natural-language phrase (\"fix the top bug\", \"check what I should work on\", \"run QA tests\", \"set up Mushi\", …). Returns: (1) a curated list of the 5–12 tool names most relevant to that intent, (2) a one-paragraph orientation to the Mushi project and dashboard state, and (3) the single recommended first tool to call. Only tools this connection exposes are recommended; relevant tools hidden by the active feature groups are named with how to enable them. Avoids loading the full tool catalog into context when only a small subset is needed. Read-only; does not call any downstream tools itself."
+    },
+    {
       "name": "ask_codebase",
       "description": "Answer a plain-English question about the connected repo, grounded on pgvector retrieval over project_codebase_files. Returns { answer, citations: [{ path, line }] }. Set include_wiki=true to merge docs/wiki knowledge. Requires codebase indexing + your Anthropic or OpenAI key; consumes LLM budget (write scope). Use for \"how does X work?\"; use search_codebase for raw file matches without synthesis, or get_file_summary for one file."
     },
@@ -265,7 +297,7 @@
     },
     {
       "name": "search_codebase",
-      "description": "Search the indexed repo by plain-English meaning via embeddings. Returns top-k { results: [{ path, startLine, endLine, snippet, similarity }] } ordered by similarity. Requires codebase indexing enabled. Read-only. Use to locate where something lives (\"where do we verify webhooks?\"); use ask_codebase for a synthesized answer with citations, or analyze_codebase_impact to find dependents of a file."
+      "description": "Search the indexed repo by plain-English meaning via embeddings. Returns { results: [{ file_path, line_start, line_end, content_preview, similarity, … }], query, mode } ordered by similarity. Requires codebase indexing enabled. Read-only. Use to locate where something lives (\"where do we verify webhooks?\"); use ask_codebase for a synthesized answer with citations, or analyze_codebase_impact to find dependents of a file."
     },
     {
       "name": "get_codebase_domains",
@@ -273,7 +305,7 @@
     },
     {
       "name": "analyze_codebase_impact",
-      "description": "Find the files that depend on a set of changed paths by walking the reverse import graph. Source the paths from: manual list, the last push, a GitHub compare range, or a fix PR's files. Returns { impacted: [{ path, importedBy }], depth }. Requires codebase indexing. Read-only. Use to gauge a diff's blast radius before merging; use get_blast_radius for a bug's component impact, or search_codebase to locate files."
+      "description": "Find files that depend on a set of changed paths by walking the reverse import graph. Source paths from: manual list, last push, a GitHub compare range, or a fix PR's files. Returns { changed_paths, source, affected_file_paths, affected_node_ids, meta }. Requires codebase indexing. Read-only. Use to gauge a diff's blast radius before merging; use get_blast_radius for a bug's component impact, or search_codebase to locate files."
     },
     {
       "name": "analyze_wiki_knowledge",

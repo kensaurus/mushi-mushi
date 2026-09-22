@@ -1,5 +1,6 @@
 ---
 title: React Native quickstart
+description: Add shake-to-report bug capture to a React Native or Expo app with @mushi-mushi/react-native — install, mount the provider, and verify the first report.
 ---
 
 import { Callout } from 'nextra/components'
@@ -76,8 +77,8 @@ within a couple of seconds, tagged `sdk:react-native@<version>`.
 
 If nothing arrives:
 
-- Confirm `apiKey` is the **public** ingest key (`mushi_pk_...`) — not the
-  Supabase service-role key.
+- Confirm `apiKey` is a Mushi project key (it starts with `mushi_`, like every
+  Mushi key) with the `report:write` scope — not the Supabase service-role key.
 - Confirm `<MushiProvider>` is at the **root** of the component tree, above
   any `NavigationContainer`.
 - iOS release builds must use HTTPS for the Mushi endpoint (the default).

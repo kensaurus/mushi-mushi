@@ -6,9 +6,14 @@ import {
   MUSHI_SDK_PACKAGE_HEADER,
   MUSHI_SDK_VERSION_HEADER,
   getBackoffDelay,
+  isValidEventName,
   parseRetryAfter,
+  propertiesWithinByteLimit,
+  sanitizeEventProperties,
   scrubPii,
   scrubUrl,
+  type MushiEventProperties,
+  type MushiPropertyValue,
 } from '@mushi-mushi/core'
 import { MUSHI_SDK_PACKAGE, MUSHI_SDK_VERSION } from './version'
 
@@ -73,6 +78,20 @@ export interface CaptureReportOptions {
   signal?: AbortSignal
 }
 
+/** Options for {@link MushiNodeClient.track}. */
+export interface NodeTrackOptions {
+  /** The person this event belongs to (your user id). Sent as `user_id`. */
+  distinctId: string
+  /** Flat properties; PII-looking keys are dropped, strings are scrubbed. */
+  properties?: Record<string, MushiPropertyValue>
+  /** Event time; defaults to now. */
+  timestamp?: Date | string
+  /** Server-side idempotency key (unique per project). */
+  dedupKey?: string
+  /** Per-call AbortSignal, composed with the process-wide one and the timeout. */
+  signal?: AbortSignal
+}
+
 const DEFAULT_CIRCUIT_THRESHOLD = 4
 const DEFAULT_CIRCUIT_COOLDOWN_MS = 30_000
 const MAX_INLINE_RETRY_WAIT_MS = 10_000
@@ -107,6 +126,101 @@ export class MushiNodeClient {
     const threshold = Math.max(1, this.opts.circuitBreaker?.threshold ?? DEFAULT_CIRCUIT_THRESHOLD)
     const cooldown = Math.max(1_000, this.opts.circuitBreaker?.cooldownMs ?? DEFAULT_CIRCUIT_COOLDOWN_MS)
     if (this.cbFailures >= threshold) this.cbOpenUntil = Date.now() + cooldown
+  }
+
+  /** Headers every SDK ingest request carries (key, project, SDK identity). */
+  private ingestHeaders(extra: Record<string, string> = {}): Record<string, string> {
+    return {
+      'Content-Type': 'application/json',
+      'X-Mushi-Api-Key': this.opts.apiKey,
+      'X-Mushi-Project': this.opts.projectId,
+      [MUSHI_SDK_PACKAGE_HEADER]: MUSHI_SDK_PACKAGE,
+      [MUSHI_SDK_VERSION_HEADER]: MUSHI_SDK_VERSION,
+      'User-Agent': `${MUSHI_SDK_PACKAGE}/${MUSHI_SDK_VERSION}`,
+      ...extra,
+    }
+  }
+
+  /**
+   * Record a product-analytics event for a known person from the server —
+   * `track('upgrade_completed', { distinctId: user.id, properties: { plan: 'pro' } })`.
+   *
+   * Parity with `Mushi.track()` on web: names must match `^[a-z][a-z0-9_]{1,63}$`,
+   * properties are flat, PII-looking keys are dropped and string values are
+   * scrubbed. Each call is one `POST /v1/sdk/events` with `surface: 'server'`
+   * (no client-side batching — servers can retry on their own terms).
+   * Never throws; the circuit breaker shared with `captureReport` applies.
+   */
+  async track(
+    event: string,
+    options: NodeTrackOptions,
+  ): Promise<{ ok: boolean; accepted?: number }> {
+    if (!isValidEventName(event)) {
+      warnOnce(`[mushi-mushi/node] track skipped: invalid event name "${String(event)}"`)
+      return { ok: false }
+    }
+    if (!options || typeof options.distinctId !== 'string' || options.distinctId.length === 0) {
+      warnOnce('[mushi-mushi/node] track skipped: distinctId is required')
+      return { ok: false }
+    }
+    if (this.cbIsOpen()) {
+      warnOnce('[mushi-mushi/node] track skipped: circuit open')
+      return { ok: false }
+    }
+
+    const { properties } = sanitizeEventProperties(options.properties, { scrub: scrubPii })
+    const merged: MushiEventProperties = { ...properties, $surface: 'server' }
+    if (!propertiesWithinByteLimit(merged)) {
+      warnOnce('[mushi-mushi/node] track skipped: properties exceed the size limit')
+      return { ok: false }
+    }
+    const ts =
+      options.timestamp instanceof Date
+        ? options.timestamp.toISOString()
+        : typeof options.timestamp === 'string'
+          ? options.timestamp
+          : new Date().toISOString()
+
+    const body = JSON.stringify({
+      user_id: options.distinctId,
+      surface: 'server',
+      sdk_version: MUSHI_SDK_VERSION,
+      events: [
+        {
+          name: event,
+          ts,
+          properties: merged,
+          ...(options.dedupKey ? { dedup_key: options.dedupKey } : {}),
+        },
+      ],
+    })
+
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), this.opts.timeout ?? 10_000)
+    const signal = composeSignals([controller.signal, options.signal, this.opts.signal])
+    try {
+      const res = await fetch(`${this.endpoint}/v1/sdk/events`, {
+        method: 'POST',
+        signal,
+        headers: this.ingestHeaders(),
+        body,
+      })
+      if (res.ok) {
+        this.cbRecordReachable()
+        const parsed = (await res.json().catch(() => ({}))) as { data?: { accepted?: number } }
+        return { ok: true, accepted: parsed.data?.accepted }
+      }
+      if (res.status >= 500 || res.status === 429) this.cbRecordUnreachable()
+      else this.cbRecordReachable()
+      warnOnce(`[mushi-mushi/node] track failed: HTTP ${res.status}`)
+      return { ok: false }
+    } catch (err) {
+      this.cbRecordUnreachable()
+      warnOnce(`[mushi-mushi/node] track threw: ${(err as Error).message}`)
+      return { ok: false }
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   /**
@@ -212,15 +326,7 @@ export class MushiNodeClient {
         const res = await fetch(`${this.endpoint}/v1/reports`, {
           method: 'POST',
           signal,
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Mushi-Api-Key': this.opts.apiKey,
-            'X-Mushi-Project': this.opts.projectId,
-            [MUSHI_SDK_PACKAGE_HEADER]: MUSHI_SDK_PACKAGE,
-            [MUSHI_SDK_VERSION_HEADER]: MUSHI_SDK_VERSION,
-            'User-Agent': `${MUSHI_SDK_PACKAGE}/${MUSHI_SDK_VERSION}`,
-            ...extraHeaders,
-          },
+          headers: this.ingestHeaders(extraHeaders),
           body,
         })
         if (res.ok) {

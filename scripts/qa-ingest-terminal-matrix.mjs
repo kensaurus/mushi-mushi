@@ -139,7 +139,10 @@ try {
     const mcp = readFileSync(mcpPath, 'utf8')
     record('CLI connect mcp package name', /@mushi-mushi\/mcp@\d+\.\d+\.\d+/.test(mcp))
     record('CLI connect mcp pin (no @latest)', !mcp.includes('@mushi-mushi/mcp@latest'))
-    record('CLI connect gitignore mcp.json', gi.includes('.cursor/mcp.json'))
+    // connect writes a ${env:MUSHI_API_KEY} placeholder, never the key, so the
+    // file is safe to commit and connect no longer gitignores it.
+    record('CLI connect mcp.json holds no key', !mcp.includes(apiKey) && mcp.includes('${env:MUSHI_API_KEY}'))
+    record('CLI connect leaves .gitignore alone', gi === 'node_modules/\n')
   } else {
     record('CLI connect writes mcp.json', false)
   }

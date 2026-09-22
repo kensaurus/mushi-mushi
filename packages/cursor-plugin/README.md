@@ -100,7 +100,7 @@ export MUSHI_PROJECT_ID=<your-project-uuid>
 |-------|----------------|
 | `report:write` | SDK ingest only (`/v1/reports`). **No admin access.** Use this for your app's runtime Mushi SDK key — never give this to an MCP client. |
 | `mcp:read` | All triage, evidence, context, and log tools (read-only) |
-| `mcp:write` | `dispatch_fix`, `close_report`, `set_report_status`, `reply_to_reporter`, and other mutating tools |
+| `mcp:write` | `dispatch_fix`, `transition_status`, `merge_fix`, `reply_to_reporter`, and other mutating tools |
 
 **Key separation rule:** Your app's SDK key (`NEXT_PUBLIC_MUSHI_API_KEY` or equivalent) ships in client-side code and should carry **only** `report:write`. This scope is rejected by every admin route, so it cannot be abused for triage or fix dispatch even if someone extracts it from your bundle. Your MCP key (`mcp:read` or `mcp:write`) must be kept out of client-side bundles — store it in your global `~/.cursor/mcp.json` or shell profile.
 

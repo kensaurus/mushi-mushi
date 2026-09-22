@@ -145,6 +145,14 @@ jobs:
           # SEC S1: wire the cloud anon key explicitly so the hardcoded
           # 2091-expiry fallback in apps/admin/src/lib/env.ts is never reached.
           VITE_CLOUD_SUPABASE_ANON_KEY: ${{ secrets.VITE_CLOUD_SUPABASE_ANON_KEY }}
+          # Dogfooding: the console runs the Mushi web SDK against the
+          # mushi-self project (bug reports + Users & Funnels events for the
+          # company growth funnel). Public SDK ingest key by design (ships in
+          # the bundle, report:write scope only). Unset → the SDK is a no-op
+          # and the /growth funnel stays empty. See apps/admin/src/lib/mushi-self.ts.
+          VITE_MUSHI_SELF_PROJECT_ID: ${{ secrets.MUSHI_SELF_PROJECT_ID }}
+          VITE_MUSHI_SELF_API_KEY: ${{ secrets.MUSHI_SELF_API_KEY }}
+          VITE_MUSHI_SELF_API_ENDPOINT: ${{ secrets.MUSHI_SELF_API_ENDPOINT }}
           # CloudFront serves this build under /mushi-mushi/admin/, so all asset URLs
           # and the React Router basename must be prefixed accordingly. Local
           # dev and other deployments leave this unset and serve from /.
@@ -363,6 +371,7 @@ jobs:
               "/mushi-mushi/*" \
               "/mushi-mushi/hosted-mcp*" \
               "/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp*" \
+              "/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp*" \
               "/quickstart/*" \
               "/concepts/*" \
               "/sdks/*" \

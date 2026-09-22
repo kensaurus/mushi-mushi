@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
 /**
  * FILE: packages/web/src/loader.ts
  * PURPOSE: Self-initializing entry point for the universal `<script async>`
@@ -8,10 +10,13 @@
  *          The hosting page drops:
  *
  *            <script async
- *              src="https://cdn.mushi.dev/sdk/v1/mushi.js"
+ *              src="https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js"
  *              data-project="proj_xxx"
  *              data-key="mushi_xxx"
  *              data-trigger="banner"></script>
+ *
+ *          The URL is the published npm file served by jsDelivr, pinned to
+ *          the major version. There is no Mushi-hosted CDN host.
  *
  *          and this module — bundled as an IIFE — reads the credentials and
  *          appearance hints off its own <script> tag's data-* attributes and

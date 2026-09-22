@@ -66,6 +66,97 @@ jobs:
         with:
           fail-on-severity: high
           comment-summary-in-pr: on-failure
+          # LICENSE POLICY for third-party dependencies. The SDKs, CLI and MCP
+          # server are MIT so integrators can vendor them; a strong-copyleft
+          # (GPL/AGPL) or source-available (SSPL) dependency in their tree
+          # would put that on every app that installs them. The AGPL server
+          # (packages/server, agents, verify) is our own code under our own
+          # license — this list governs what we pull in, and one lockfile
+          # serves every workspace, so the rule applies repo-wide: an
+          # AGPL/GPL dependency the server genuinely needs gets an explicit
+          # allow-dependencies-licenses entry here, reviewed on its own.
+          # Weak/file-level copyleft (LGPL, MPL-2.0: dompurify, axe-core,
+          # lightningcss, sharp's libvips) is allowed.
+          # Both SPDX spellings are listed: the deprecated GPL-2.0 / GPL-3.0 /
+          # AGPL-3.0 ids still appear in package metadata.
+          # `deny-licenses` is deprecated upstream (actions/dependency-review-action#938)
+          # but supported by this pinned v4.9.0; switching to `allow-licenses`
+          # needs an allowlist built from the full current tree.
+          deny-licenses: >-
+            GPL-2.0-only, GPL-2.0-or-later, GPL-2.0, GPL-2.0+,
+            GPL-3.0-only, GPL-3.0-or-later, GPL-3.0, GPL-3.0+,
+            AGPL-1.0-only, AGPL-1.0-or-later, AGPL-3.0-only, AGPL-3.0-or-later, AGPL-3.0,
+            SSPL-1.0
+          # node-forge is "(BSD-3-Clause OR GPL-2.0)": we take it under BSD, but
+          # the action flags any expression a denied id can satisfy.
+          allow-dependencies-licenses: pkg:npm/node-forge
+
+  # RELEASE GATE: every publishable package whose shipped source (src/, not
+  # tests) changed in this PR must be named in a pending changeset, or the
+  # change merges and never reaches npm while the docs describing it deploy.
+  # The script diffs against the merge-base with origin/master, so it needs
+  # full history; it imports only node builtins, so no install.
+  # pull_request only: pushes to changeset-release/master consume changesets.
+  changeset-coverage:
+    name: Changeset coverage
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          # Fetches every branch, so refs/remotes/origin/master exists.
+          fetch-depth: 0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: 24
+      - name: Check changed packages have a changeset
+        run: node scripts/check-changeset-coverage.mjs --base origin/master
+
+  # COMPATIBILITY GATE: every published package promises `engines.node:
+  # ">=20.19.0"`, but the build job runs Node 24 only. Pack the CLI and MCP
+  # server once on 24, then install the tarballs and start both on the
+  # oldest supported Node and on 22 (scripts/smoke-node-compat.mjs). The
+  # workspace itself needs Node 22+ to install, so the old Node only ever
+  # sees the tarballs — exactly what an `npx` user gets.
+  node-compat:
+    name: CLI + MCP on Node 20.19 / 22
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271  # v4.1.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build and pack core, cli and mcp
+        run: |
+          pnpm --filter "@mushi-mushi/mcp..." --filter "@mushi-mushi/cli..." build
+          mkdir -p "$RUNNER_TEMP/tarballs"
+          for p in core cli mcp; do
+            (cd "packages/$p" && pnpm pack --pack-destination "$RUNNER_TEMP/tarballs")
+          done
+      - name: Smoke on Node 24
+        run: node scripts/smoke-node-compat.mjs "$RUNNER_TEMP/tarballs"
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          # The floor every package's engines.node declares.
+          node-version: 20.19.0
+      - name: Smoke on Node 20.19.0
+        run: node scripts/smoke-node-compat.mjs "$RUNNER_TEMP/tarballs"
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: 22
+      - name: Smoke on Node 22
+        run: node scripts/smoke-node-compat.mjs "$RUNNER_TEMP/tarballs"
 
   # ONBOARDING GATE: prove the public example builds OUTSIDE the monorepo
   # against the packages users actually get from npm. `workspace:*` deps
@@ -135,6 +226,20 @@ jobs:
         # failed exactly this way and gave nothing to read.
         run: pnpm check:workflow-expressions
 
+      - name: Check the script-tag loader URL agrees everywhere
+        # tsup's IIFE entry, packages/web jsdelivr/unpkg, the loader.ts
+        # example and the console's LOADER_CDN_URL must name the same file and
+        # major. release.yml fetches the published URL after each release.
+        run: pnpm check:loader-cdn-url
+
+      - name: Check kensaur.us URLs in skills and READMEs resolve
+        # Routes every https://kensaur.us/mushi-mushi/... URL in skills/**,
+        # README.md and packages/*/README.md through the CloudFront router and
+        # fails when the S3 key it reaches is not a docs page, a docs public
+        # file or a schema the deploy publishes. check:docs-links only covers
+        # apps/docs/content.
+        run: pnpm check:site-urls
+
       - name: Check the release version step
         # Runs `changeset version` and restores the tree. That command lives
         # only in release.yml, so before this step a PR could pass every gate,
@@ -162,6 +267,12 @@ jobs:
         # High/Critical finding still fails the job — until pnpm ships
         # the bulk-advisory endpoint. dependency-review + CodeQL keep
         # supply-chain coverage in the meantime.
+        #
+        # The tolerance is dated (AUDIT_OUTAGE_TOLERATED_UNTIL): pnpm 10.33
+        # audits fine again, so if the endpoint breaks after that date the
+        # gate fails and someone decides, instead of skipping forever.
+        env:
+          AUDIT_OUTAGE_TOLERATED_UNTIL: '2026-12-31'
         run: |
           set +e
           output="$(pnpm audit --audit-level=high 2>&1)"
@@ -171,7 +282,11 @@ jobs:
             exit 0
           fi
           if echo "$output" | grep -qE 'ERR_PNPM_AUDIT_BAD_RESPONSE|This endpoint is being retired'; then
-            echo "::warning::pnpm audit endpoint retired by npm (HTTP 410); skipping supply-chain gate. dependency-review + CodeQL still enforce."
+            if [ "$(date -u +%F)" \> "$AUDIT_OUTAGE_TOLERATED_UNTIL" ]; then
+              echo "::error::pnpm audit cannot reach npm's advisory endpoint and the outage tolerance expired on ${AUDIT_OUTAGE_TOLERATED_UNTIL}. Fix the audit client or extend the date deliberately."
+              exit 1
+            fi
+            echo "::warning::pnpm audit endpoint retired by npm (HTTP 410); skipping supply-chain gate until ${AUDIT_OUTAGE_TOLERATED_UNTIL}. dependency-review + CodeQL still enforce."
             exit 0
           fi
           echo "::error::pnpm audit reported High/Critical advisories."
@@ -187,6 +302,14 @@ jobs:
         run: pnpm check:design
 
       - run: pnpm test
+
+      # `pnpm test` is turbo, which only reaches workspaces. The root-level
+      # scripts/*.test.mjs suites (CloudFront routing functions, hosted-MCP
+      # verifier helpers, the LLM-surface markup stripper) had no CI step at
+      # all until PR #394, so they could rot unnoticed. They are offline and
+      # take ~1s.
+      - name: Test root scripts
+        run: pnpm test:scripts
 
       # Wave D D2: enforce that the public changelog is in sync with the
       # per-package CHANGELOGs and pending changesets. If a PR touches
@@ -223,10 +346,10 @@ jobs:
       # docs/execplans/knip-baseline/. Lower them as findings are paid down;
       # never raise them to get a red run green.
       - name: Check dead code (knip, production)
-        run: pnpm exec knip --production --max-issues 748
+        run: pnpm exec knip --production --max-issues 724
 
       - name: Check dead code (knip, default + config hints)
-        run: pnpm exec knip --max-issues 587 --treat-config-hints-as-errors
+        run: pnpm exec knip --max-issues 579 --treat-config-hints-as-errors
 
       - name: Check debug residue and suppression ratchet
         # console.(log|debug|warn), @ts-ignore/@ts-expect-error, eslint-disable
@@ -378,6 +501,25 @@ jobs:
         # (production-readiness audit item #14) so a regression on any
         # publishable package is caught in CI, not just core/web/react.
         run: pnpm --filter @mushi-mushi/core --filter @mushi-mushi/web --filter @mushi-mushi/react --filter @mushi-mushi/react-native --filter @mushi-mushi/node --filter @mushi-mushi/capacitor --filter @mushi-mushi/angular --filter @mushi-mushi/svelte --filter @mushi-mushi/vue exec size-limit
+
+      - name: Check install size (mcp, cli)
+        # `npx @mushi-mushi/mcp` / `npx mushi-mushi` download the tarball on
+        # every cold start. Packs both with `pnpm pack` and fails above the
+        # packed / unpacked budgets in scripts/check-install-size.mjs.
+        run: pnpm check:install-size
+
+      - name: Check published types (Are The Types Wrong)
+        # Packs core, web, react, node, mcp and cli and resolves every entry
+        # point under node10 / node16-CJS / node16-ESM / bundler — the
+        # consumer's view, which `pnpm typecheck` (src against src) never has.
+        run: pnpm check:package-types
+
+      - name: Check documented snippets type-check
+        # ts/tsx fences in the quickstarts and the web/react/angular/vue
+        # READMEs, compiled strict against the BUILT packages (so after
+        # `pnpm build`). Partial snippets are marked `snippet-skip`; see the
+        # header of scripts/check-doc-snippets.mjs.
+        run: pnpm check:doc-snippets
 
       # ── MCP package gates ──────────────────────────────────────────────────
       # Regression guard: keep the MCP package buildable, type-safe, and in

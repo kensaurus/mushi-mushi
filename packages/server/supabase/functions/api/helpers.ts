@@ -6,6 +6,7 @@ import { log } from '../_shared/logger.ts';
 import { checkIngestQuota } from '../_shared/quota.ts';
 import { getStorageAdapter } from '../_shared/storage.ts';
 import { reportSubmissionSchema } from '../_shared/schemas.ts';
+import { normalizeReportCategory } from '../_shared/report-category.ts';
 import { checkAntiGaming } from '../_shared/anti-gaming.ts';
 import { logAntiGamingEvent } from '../_shared/telemetry.ts';
 import { awardPoints, awardPointsForEndUser } from '../_shared/reputation.ts';
@@ -24,6 +25,20 @@ import { childTraceparent } from '../_shared/trace.ts';
 import { scrubPii } from '../_shared/pii-scrubber.ts';
 import { sendBotMessage, sendSlackText } from '../_shared/slack.ts';
 import { upsertProjectSdkObservationAsync } from '../_shared/sdk-observation.ts';
+import { emitProductEvent } from '../_shared/product-events.ts';
+import { runInBackground } from '../_shared/background.ts';
+import { reporterKey } from '../_shared/reporter-token.ts';
+import {
+  isFirstRealReport,
+  NON_REAL_REPORT_SOURCES,
+  type OldestReportRow,
+} from '../_shared/first-report.ts';
+
+// Company funnel: projects whose first_report_received check already ran in
+// this isolate. Bounds the lookups to once per project per isolate; the
+// (project_id, dedup_key) unique constraint on product_events is the real
+// once-per-project guarantee across isolates and retries.
+const firstReportEmitted = new Set<string>();
 
 // Fixed namespace for deriving deterministic report ids from non-UUID client
 // ids (RFC 4122 §4.3 name-based v5). Arbitrary but stable — it only has to be
@@ -182,6 +197,11 @@ export async function ingestReport(
   options?: {
     ipAddress?: string
     userAgent?: string
+    /**
+     * Do not start the LLM pipeline: the caller stores a classification itself
+     * (the console test report's precomputed diagnosis, demo-report-fixtures.ts).
+     */
+    skipClassification?: boolean
     /** Mushi Bounties: link the ingested report back to the tester and submission row. */
     testerId?: string
     testerSubmissionId?: string
@@ -195,7 +215,10 @@ export async function ingestReport(
     userToken?: string
   },
 ): Promise<{ ok: boolean; reportId?: string; error?: string; deduplicated?: boolean }> {
-  const normalizedBody = { ...body };
+  // User-only categories ('feedback' | 'question' | 'feature') are kept in
+  // userCategory and mapped onto the classifier vocabulary so the schema
+  // below (classifier enum) agrees with the route-level union.
+  const normalizedBody: Record<string, any> = normalizeReportCategory({ ...body });
   if (typeof normalizedBody.description === 'string') {
     const trimmed = normalizedBody.description.trim();
     if (trimmed.length > 0 && trimmed.length < 20) {
@@ -213,11 +236,9 @@ export async function ingestReport(
   const report = parsed.data;
 
   const encoder = new TextEncoder();
-  const tokenData = encoder.encode(report.reporterToken);
-  const tokenHashBuffer = await crypto.subtle.digest('SHA-256', tokenData);
-  const tokenHash = Array.from(new Uint8Array(tokenHashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+  // The one-way key every reporter table stores; the reporter-thread routes
+  // derive the same key from what the SDK presents (_shared/reporter-token.ts).
+  const tokenHash = await reporterKey(report.reporterToken);
 
   // Build a weak device fingerprint from IP + User-Agent. This is intentionally
   // coarse: it is meant to surface the obvious case of the same browser on the
@@ -565,6 +586,52 @@ export async function ingestReport(
     return { ok: false, error: 'Failed to store report' };
   }
 
+  // Company funnel (mushi-self): the project's first real report = "activated".
+  // Console test reports (admin_test_report) and the marketing demo seed never
+  // count. Background work kept alive past the response (runInBackground);
+  // repeat emits are no-ops on the dedup constraint.
+  {
+    const reportSource = typeof enrichedMetadata.source === 'string' ? enrichedMetadata.source : null;
+    if (!firstReportEmitted.has(projectId) && !(reportSource && NON_REAL_REPORT_SOURCES.has(reportSource))) {
+      firstReportEmitted.add(projectId);
+      runInBackground((async () => {
+        // Only the project's genuinely first real report counts. The dedup key
+        // alone would stamp a "first report" on the first report after deploy
+        // for projects that already had reports. (created_at, id) ordering
+        // makes concurrent first reports agree on one winner. 50 is plenty: a
+        // project has at most a handful of test reports before a real one.
+        const { data: oldest, error: oldestErr } = await db
+          .from('reports')
+          .select('id, custom_metadata')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .limit(50);
+        if (oldestErr) throw oldestErr;
+        if (!isFirstRealReport((oldest ?? []) as OldestReportRow[], reportId)) return;
+
+        const { data: proj } = await db
+          .from('projects')
+          .select('owner_id')
+          .eq('id', projectId)
+          .maybeSingle();
+        await emitProductEvent(db, {
+          userId: ((proj as { owner_id?: string | null } | null)?.owner_id) ?? null,
+          eventName: 'first_report_received',
+          surface: 'server',
+          properties: {
+            project_id: projectId,
+            source: reportSource,
+            sdk_package: report.sdkPackage ?? null,
+          },
+          dedupKey: `first_report_received:${projectId}`,
+        });
+      })().catch((err: unknown) =>
+        log.warn('first_report_received emit failed (non-fatal)', { projectId, err: String(err) }),
+      ), 'first_report_received');
+    }
+  }
+
   if (report.sdkPackage && report.sdkVersion) {
     upsertProjectSdkObservationAsync(db, {
       projectId,
@@ -587,8 +654,9 @@ export async function ingestReport(
   //    payload is resolved via resolveEndUser as before. jwt_verified_at stays
   //    null. Used when no token is present or verification fails.
   //
-  // Both paths are fire-and-forget — linkage must never block ingest.
-  void (async () => {
+  // Both paths run in the background — linkage must never block ingest, and
+  // runInBackground keeps the isolate alive until the link is written.
+  runInBackground((async () => {
     try {
       // Attempt verified path first.
       if (options?.userToken) {
@@ -666,7 +734,7 @@ export async function ingestReport(
     } catch (err) {
       log.warn('end_user linkage failed', { reportId, err: String(err) });
     }
-  })();
+  })(), 'end_user linkage');
 
   // Insert into processing queue. Uses upsert with ignoreDuplicates so
   // a retry (after a crash between the reports insert and this line) doesn't
@@ -694,20 +762,25 @@ export async function ingestReport(
     }
   }
 
-  // D5: meter the ingest. Fire-and-forget — billing must never
-  // block ingest. The hourly `usage-aggregator` cron rolls these up and
-  // pushes a Stripe Meter Event per (project, day_utc).
-  void db
-    .from('usage_events')
-    .insert({
-      project_id: projectId,
-      event_name: 'reports_ingested',
-      quantity: 1,
-      metadata: { report_id: reportId },
-    })
-    .then(({ error }) => {
+  // D5: meter the ingest. In the background — billing must never
+  // block ingest, but a dropped row is an unbilled report, so the insert is
+  // kept alive past the response. The hourly `usage-aggregator` cron rolls
+  // these up and pushes a Stripe Meter Event per (project, day_utc).
+  runInBackground(
+    Promise.resolve(
+      db
+        .from('usage_events')
+        .insert({
+          project_id: projectId,
+          event_name: 'reports_ingested',
+          quantity: 1,
+          metadata: { report_id: reportId },
+        }),
+    ).then(({ error }) => {
       if (error) log.warn('Usage event insert failed', { reportId, error: error.message });
-    });
+    }),
+    'usage_events insert',
+  );
 
   // D1: fire `report.created` to all webhook plugins. Fully async —
   // plugin failures must not impact ingest latency or block the pipeline.
@@ -730,6 +803,11 @@ export async function ingestReport(
     log.warn('Plugin dispatch failed (sync)', { event: 'report.created', err: String(err) });
   }
 
+  // The caller classifies this report itself (precomputed test diagnosis).
+  if (options?.skipClassification) {
+    return { ok: true, reportId };
+  }
+
   // Check circuit breaker before invoking classification
   const shouldProcess = await checkCircuitBreaker(db);
 
@@ -739,8 +817,8 @@ export async function ingestReport(
     await db.from('reports').update({ status: 'queued' }).eq('id', reportId);
     log.warn('Circuit breaker open — report queued', { reportId });
     // Notify Slack so a queued-but-unclassified report is never silent.
-    // Fire-and-forget; channel/webhook fetched from project_settings.
-    void (async () => {
+    // In the background; channel/webhook fetched from project_settings.
+    runInBackground((async () => {
       try {
         const { data: ps } = await db
           .from('project_settings')
@@ -756,7 +834,7 @@ export async function ingestReport(
       } catch (err) {
         log.warn('Circuit-breaker Slack notify failed', { reportId, err: String(err) });
       }
-    })();
+    })(), 'circuit-breaker slack notify');
   }
 
   return { ok: true, reportId };

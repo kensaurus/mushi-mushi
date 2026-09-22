@@ -20,6 +20,11 @@ export function WhereToStartGrid({ paths = LANDING_WHERE_TO_START }: WhereToStar
             {p.cmd ? <code className="docs-quickstart-card__cmd">{p.cmd}</code> : null}
           </>
         )
+        // Cards with a `ctaId` are tracked by <MushiSiteAnalytics />;
+        // React drops the attributes entirely when the values are undefined.
+        const tracking = p.ctaId
+          ? ({ 'data-mushi-cta': p.ctaId, 'data-mushi-location': 'where-to-start' } as const)
+          : {}
         return (
           <li key={p.title} className="list-none">
             {external ? (
@@ -28,11 +33,12 @@ export function WhereToStartGrid({ paths = LANDING_WHERE_TO_START }: WhereToStar
                 className="docs-quickstart-card"
                 target="_blank"
                 rel="noopener noreferrer"
+                {...tracking}
               >
                 {inner}
               </a>
             ) : (
-              <Link href={p.href} className="docs-quickstart-card">
+              <Link href={p.href} className="docs-quickstart-card" {...tracking}>
                 {inner}
               </Link>
             )}

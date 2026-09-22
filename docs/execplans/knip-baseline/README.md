@@ -7,8 +7,32 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 | Mode | Command | Error-level issues | CI threshold |
 |---|---|---:|---|
-| production | `pnpm exec knip --production --reporter json` | **748** | `--max-issues 748` |
-| default | `pnpm exec knip --reporter json` | **587** | `--max-issues 587 --treat-config-hints-as-errors` |
+| production | `pnpm exec knip --production --reporter json` | **724** | `--max-issues 724` |
+| default | `pnpm exec knip --reporter json` | **579** | `--max-issues 579 --treat-config-hints-as-errors` |
+
+> **Re-measured 2026-09-21 (third pass), knip 6.34.0: 724 production / 579 default**
+> (723 and 578 fail, 724 and 579 pass). The root workspace now marks its tooling scripts as
+> production entries (`scripts/*.mjs!`, `scripts/marketing/*.mjs!`, …). Production mode only
+> follows `!` entries, so before this it never walked the root scripts at all and reported the
+> helpers they import (`scripts/lib/docs-stats.mjs`, `scripts/lib/sdk-version-matrix.mjs`) as
+> unused files — false positives, since both have importers. Walking them surfaced 5 genuinely
+> dead exports in those helpers (`buildReadmeClaimChecks`, `VERSION_MATRIX_GROUPS`,
+> `collectPackageVersions`, `VERSION_MATRIX_START`, `VERSION_MATRIX_END`), each used only inside
+> its own module; they are now module-local. One artifact remains and is counted, not hidden:
+> `scripts/check-release-version.mjs` invokes the `changeset` binary, which comes from a
+> devDependency that production mode cannot see. Putting it in `ignoreBinaries` would trade one
+> counted issue for a config hint, and the default run fails on hints.
+
+> **Re-measured 2026-09-21 on `feat/gtm-phase1-measure` (PR #394), knip 6.34.0: 725 production / 584 default**
+> (724 and 583 fail, 725 and 584 pass; measured after merging master's hosted-billing commit
+> `181ca882`, which removed one default-mode finding). The GTM branch first pushed the counts to 784 / 602. Nothing was
+> suppressed to get back under: new module-local constants were un-exported, test-only helpers were tagged
+> `@internal` (knip's documented production-mode treatment for exports used only by tests), and the docs
+> entries became `content/**/_meta.ts!` and `content/**/*.mdx!`. Production mode only follows entries
+> marked `!`, so before this it could not see the components the MDX pages import and reported them as unused.
+> The only pre-existing file that left the list that way (`PricingTiersTable.tsx`) really is imported, by
+> `pricing.mdx` and `cloud.mdx`; the others were this branch's new compare-page components. The untracked `.claude/worktrees/` checkout, which inflated the default
+> count locally, is now gitignored.
 
 > **Re-measured 2026-09-12, after all workstreams landed and after `pnpm install`.**
 > The first capture read 733 / 579, taken while the SDK v2 migration and the
@@ -47,29 +71,29 @@ Never raise them.
 
 ## Counts per workspace: production
 
-| workspace | files | dependencies | unlisted | exports | types | duplicates | total |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| . | 3 |  |  |  |  |  | 3 |
-| apps/admin | 64 |  |  | 295 | 160 | 5 | 524 |
-| apps/docs | 1 | 2 |  | 34 | 9 | 1 | 47 |
-| examples/e2e-dogfood | 1 |  |  |  |  |  | 1 |
-| packages/adapters | 1 |  |  |  |  |  | 1 |
-| packages/agents | 8 |  | 1 | 3 | 2 |  | 14 |
-| packages/brand | 1 |  |  |  |  |  | 1 |
-| packages/capacitor | 1 |  |  |  |  |  | 1 |
-| packages/cli |  |  |  | 46 | 16 |  | 62 |
-| packages/core |  |  |  | 4 | 4 |  | 8 |
-| packages/marketing-ui |  | 1 |  | 1 |  |  | 2 |
-| packages/mcp | 9 | 1 |  | 5 |  |  | 15 |
-| packages/mcp-ci |  |  |  | 3 |  |  | 3 |
-| packages/node |  |  |  | 1 | 2 |  | 3 |
-| packages/plugin-jira | 1 |  |  |  |  |  | 1 |
-| packages/react-native | 1 |  |  | 3 | 2 |  | 6 |
-| packages/server | 2 | 1 |  |  |  |  | 3 |
-| packages/verify | 1 |  |  |  |  |  | 1 |
-| packages/wasm-classifier |  |  |  |  | 1 |  | 1 |
-| packages/web |  |  |  | 39 | 12 |  | 51 |
-| **total** | **94** | **5** | **1** | **434** | **208** | **6** | **748** |
+| workspace | files | dependencies | binaries | unlisted | exports | types | duplicates | total |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| . | 1 |  | 1 |  |  |  |  | 2 |
+| apps/admin | 64 |  |  |  | 293 | 160 | 5 | 522 |
+| apps/docs |  | 2 |  |  | 16 | 7 | 1 | 26 |
+| examples/e2e-dogfood | 1 |  |  |  |  |  |  | 1 |
+| packages/adapters | 1 |  |  |  |  |  |  | 1 |
+| packages/agents | 8 |  |  | 1 | 3 | 2 |  | 14 |
+| packages/brand | 1 |  |  |  |  |  |  | 1 |
+| packages/capacitor | 1 |  |  |  |  |  |  | 1 |
+| packages/cli |  |  |  |  | 46 | 16 |  | 62 |
+| packages/core |  |  |  |  | 4 | 4 |  | 8 |
+| packages/marketing-ui |  | 1 |  |  | 1 |  |  | 2 |
+| packages/mcp | 9 | 1 |  |  | 5 |  |  | 15 |
+| packages/mcp-ci |  |  |  |  | 3 |  |  | 3 |
+| packages/node |  |  |  |  | 1 | 2 |  | 3 |
+| packages/plugin-jira | 1 |  |  |  |  |  |  | 1 |
+| packages/react-native | 1 |  |  |  | 3 | 2 |  | 6 |
+| packages/server | 2 | 1 |  |  |  |  |  | 3 |
+| packages/verify | 1 |  |  |  |  |  |  | 1 |
+| packages/wasm-classifier |  |  |  |  |  | 1 |  | 1 |
+| packages/web |  |  |  |  | 39 | 12 |  | 51 |
+| **total** | **91** | **5** | **1** | **1** | **414** | **206** | **6** | **724** |
 
 Warn-level (not counted): optionalPeerDependencies 8 (agents 1, plugin-sdk 2,
 react-native 4, wasm-classifier 1).
@@ -78,8 +102,7 @@ react-native 4, wasm-classifier 1).
 
 | workspace | files | dependencies | devDependencies | unlisted | unresolved | exports | types | duplicates | total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| . |  |  |  |  |  | 5 |  |  | 5 |
-| apps/admin | 51 |  |  |  |  | 218 | 160 | 5 | 434 |
+| apps/admin | 51 |  |  |  |  | 216 | 160 | 5 | 432 |
 | apps/docs |  | 2 | 1 |  |  | 14 | 7 | 1 | 25 |
 | examples/e2e-dogfood |  |  | 3 |  |  | 2 |  |  | 5 |
 | examples/realworld |  |  | 1 |  |  |  |  |  | 1 |
@@ -95,11 +118,11 @@ react-native 4, wasm-classifier 1).
 | packages/plugin-jira | 1 |  |  |  |  |  |  |  | 1 |
 | packages/react |  |  | 1 |  |  |  |  |  | 1 |
 | packages/react-native | 1 |  |  |  |  | 2 | 2 |  | 5 |
-| packages/server |  |  | 2 |  | 1 |  |  |  | 3 |
+| packages/server |  |  | 1 |  | 1 |  |  |  | 2 |
 | packages/svelte |  |  | 1 |  |  |  |  |  | 1 |
 | packages/wasm-classifier |  |  |  |  |  |  | 1 |  | 1 |
 | packages/web |  |  |  |  |  | 32 | 11 |  | 43 |
-| **total** | **64** | **4** | **19** | **1** | **1** | **298** | **194** | **6** | **587** |
+| **total** | **64** | **4** | **18** | **1** | **1** | **291** | **194** | **6** | **579** |
 
 Warn-level (not counted): optionalPeerDependencies 8.
 
@@ -124,7 +147,7 @@ Warn-level (not counted): optionalPeerDependencies 8.
    (`@supabase/supabase-js`, `yaml`, `zod` in `packages/server` are read
    through `npm:` specifiers knip cannot see; `@mushi-mushi/tsconfig` in
    inventory-auth-runner is now used since its tsconfig extends it).
-5. **exports / types** — 480 (default) / 626 (production) symbols exported but
+5. **exports / types** — 490 (default) / 620 (production) symbols exported but
    never imported. The two barrels tagged `@public`
    (`packages/core/src/index.ts`, `apps/admin/src/components/ui.tsx`) are entry
    files and never counted; the rest are candidates for the A3 exports pass.
@@ -133,8 +156,9 @@ Warn-level (not counted): optionalPeerDependencies 8.
 
 - `compilers.mdx: true` enables the built-in MDX import extractor (knip only
   auto-enables it when `@mdx-js/*` is a direct dependency; here Nextra brings
-  it transitively). `apps/docs` lists `content/**/*.mdx` and the Nextra
-  `content/**/_meta.ts` files as entries and excludes `playground/**`, which
+  it transitively). `apps/docs` lists `content/**/*.mdx!` and the Nextra
+  `content/**/_meta.ts!` files as entries (the `!` makes them production
+  entries too) and excludes `playground/**`, which
   has its own package.json files but is not a pnpm workspace.
 - `packages/server` excludes `supabase/**` from `project` (Deno). Its
   vitest tests still import `_shared/*.ts`, so those files enter the graph;

@@ -1,16 +1,20 @@
 // mushi-ui: intentional overlay — not Modal/Drawer (reason: coach-mark tour with spotlight cutout and anchor-positioned tooltip)
 /**
  * FILE: apps/admin/src/components/FirstRunTour.tsx
- * PURPOSE: First-run interactive coach-marks tour. Auto-launches once when:
- *            • localStorage:'mushi:tour-v1-completed' !== 'true'
- *            • the active project exists (post-onboarding)
- *            • the user is on the dashboard (so anchors are mounted)
+ * PURPOSE: Click-triggered coach-marks tour ("Take the 2-minute tour").
+ *          Launched via `startFirstRunTour()` from the first-run dashboard
+ *          and from the onboarding "See your first diagnosis" screen once
+ *          the inline diagnosis has rendered. It never auto-launches: the
+ *          GTM first-run pass (docs/plan-gtm.md, Workstream B §2d) found
+ *          an unprompted overlay competed with the one thing a new user
+ *          should do — send a test report.
  *
- *          Six stops with `data-tour-id` selectors so we never reach into
+ *          Four stops with `data-tour-id` selectors so we never reach into
  *          component internals — anchors are explicit on the consuming
- *          components. Stops 2–4 silently skip when the user has zero
- *          reports; the tour resumes from where it stopped after the first
- *          report lands.
+ *          components. Stops that need a report silently skip when the
+ *          project has none; the `report-diagnosis` stop also needs a
+ *          report id (passed by the caller) to know which detail page to
+ *          open.
  *
  *          Homemade (no react-joyride dependency) so it inherits the dark
  *          theme tokens, requires no extra bundle, and lives ~250 lines.
@@ -22,73 +26,75 @@ import { useAuth } from '../lib/auth'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from './ProjectSwitcher'
 
-type StopId = 'plan' | 'reports' | 'dispatch' | 'fixes' | 'mode' | 'askMushi'
+type StopId = 'reports' | 'dispatch' | 'askMushi' | 'report-diagnosis'
 
 interface Stop {
   id: StopId
-  /** Routes the tour will navigate to before showing this stop (first one
-   *  that matches `pathname.startsWith` is used). */
-  routes: string[]
+  /** Route the tour navigates to before showing this stop. `exact` matches
+   *  the pathname verbatim; `prefix` uses `pathname.startsWith`. The
+   *  `report-diagnosis` stop substitutes the report id at runtime. */
+  route: string
+  match: 'exact' | 'prefix'
   /** CSS selector for the highlighted anchor. */
   anchor: string
   title: string
   body: string
   /** When true, skip this stop if the active project has zero reports. */
   requiresReports?: boolean
+  /** When true, skip this stop unless the launcher passed a report id. */
+  requiresReportId?: boolean
 }
 
 const STOPS: Stop[] = [
   {
-    id: 'plan',
-    routes: ['/'],
-    // Match either the live React Flow canvas (sm+) or the stacked-card
-    // fallback (narrow viewports). Both carry a `pdca-*` anchor so the
-    // tour highlight lands on whichever layout is active.
-    anchor: '[data-tour-id="pdca-flow"], [data-tour-id="pdca-plan"]',
-    title: 'Plan — bugs your users felt',
-    body: 'This is the Plan, Do, Check, Act loop. Plan is where real user complaints land, get classified, and get scored. Follow the animated edge to see where the current bottleneck sits.',
-  },
-  {
     id: 'reports',
-    routes: ['/reports'],
+    route: '/reports',
+    match: 'exact',
     anchor: '[data-tour-id="reports-row"]',
     title: 'Reports — proof for every bug',
-    body: 'Each row has a screenshot, console log, and reproduction steps. The auto-fix agent uses all three to draft a pull request.',
+    body: 'Each row carries a screenshot, console log, and reproduction steps. The diagnosis reads all three so you do not have to.',
     requiresReports: true,
   },
   {
     id: 'dispatch',
-    routes: ['/reports'],
+    route: '/reports',
+    match: 'exact',
     anchor: '[data-tour-id="dispatch-fix-button"]',
-    title: 'Dispatch a fix',
-    body: 'Click here to send the bug to the auto-fix agent. It opens a draft pull request you can review before merging.',
+    title: 'Open in your editor',
+    body: 'Pull the fix context into Cursor, or dispatch an agent to draft a pull request you review before merging.',
     requiresReports: true,
-  },
-  {
-    id: 'fixes',
-    routes: ['/fixes'],
-    anchor: '[data-tour-id="fix-card"]',
-    title: 'Fixes — review and merge',
-    body: 'Auto-drafted PRs land here with judge scores and screenshot proof. Open the diff before you click "Open PR" in GitHub.',
-    requiresReports: true,
-  },
-  {
-    id: 'mode',
-    routes: ['/'],
-    anchor: '[data-tour-id="mode-toggle"]',
-    title: 'Switch modes anytime',
-    body: 'Quick = 3 pages. Beginner = 9 pages with guidance. Advanced = the full 23-page console for power users.',
   },
   {
     id: 'askMushi',
-    routes: ['/'],
+    route: '/dashboard',
+    match: 'prefix',
     anchor: '[data-tour-id="ask-mushi-launcher"]',
     title: 'Ask Mushi — your AI guide',
     body: 'The glowing chat icon opens Ask Mushi. Ask how any page works, run /explain on the current route, or press Cmd/Ctrl+J from anywhere in the console.',
   },
+  {
+    id: 'report-diagnosis',
+    route: '/reports/:id',
+    match: 'exact',
+    anchor: '[data-tour-id="report-diagnosis"]',
+    title: 'The diagnosis',
+    body: 'What broke and why, in plain English, with severity and the likely root cause. Every report your users file gets this read automatically.',
+    requiresReports: true,
+    requiresReportId: true,
+  },
 ]
 
+function resolveRoute(stop: Stop, reportId: string | null): string {
+  return stop.route.replace(':id', reportId ?? '')
+}
+
 const STORAGE_KEY = 'mushi:tour-v1-completed'
+const START_EVENT = 'mushi:tour-start'
+
+export interface StartTourOptions {
+  /** Report to open for the "diagnosis" stop. Omit to skip that stop. */
+  reportId?: string | null
+}
 
 function readCompleted(): boolean {
   if (typeof window === 'undefined') return true
@@ -110,9 +116,24 @@ function writeCompleted(value: boolean) {
   }
 }
 
-/** Public helper for /onboarding footer to restart the tour. */
-export function restartFirstRunTour() {
+/**
+ * Launch the tour from anywhere ("Take the 2-minute tour"). Dispatches a
+ * window event so callers never need a ref to the mounted <FirstRunTour/>
+ * in Layout. Passing `reportId` enables the "diagnosis" stop.
+ */
+export function startFirstRunTour(opts: StartTourOptions = {}) {
+  if (typeof window === 'undefined') return
+  try {
+    window.dispatchEvent(new CustomEvent<StartTourOptions>(START_EVENT, { detail: opts }))
+  } catch {
+    /* CustomEvent unavailable — tour is a nicety, never load-bearing */
+  }
+}
+
+/** /onboarding footer: clear the "don't show again" flag and start over. */
+export function restartFirstRunTour(opts: StartTourOptions = {}) {
   writeCompleted(false)
+  startFirstRunTour(opts)
 }
 
 export function FirstRunTour() {
@@ -122,12 +143,14 @@ export function FirstRunTour() {
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
 
-  const [completed, setCompleted] = useState<boolean>(() => readCompleted())
+  const [, setCompleted] = useState<boolean>(() => readCompleted())
   const [stopIdx, setStopIdx] = useState<number>(0)
   const [running, setRunning] = useState<boolean>(false)
+  const [reportId, setReportId] = useState<string | null>(null)
   const [rect, setRect] = useState<DOMRect | null>(null)
 
-  // Listen for cross-tab + restart events.
+  // Listen for cross-tab completion + explicit start requests. The tour is
+  // click-triggered only — there is no auto-launch effect on purpose.
   useEffect(() => {
     function onState(e: Event) {
       const detail = (e as CustomEvent<boolean>).detail
@@ -137,40 +160,39 @@ export function FirstRunTour() {
         setRunning(false)
       }
     }
+    function onStart(e: Event) {
+      if (!user) return
+      const detail = (e as CustomEvent<StartTourOptions | undefined>).detail
+      setReportId(detail?.reportId ?? null)
+      setStopIdx(0)
+      setRunning(true)
+    }
     window.addEventListener('mushi:tour-state', onState)
-    return () => window.removeEventListener('mushi:tour-state', onState)
-  }, [])
+    window.addEventListener(START_EVENT, onStart)
+    return () => {
+      window.removeEventListener('mushi:tour-state', onState)
+      window.removeEventListener(START_EVENT, onStart)
+    }
+  }, [user])
 
-  // Auto-launch trigger: signed-in, has project, not completed, on dashboard.
-  // We deliberately delay 600ms so the dashboard finishes its first paint
-  // before we measure anchor positions.
-  useEffect(() => {
-    if (completed) return
-    if (running) return
-    if (!user) return
-    if (setup.loading) return
-    if (!setup.activeProject) return
-    if (pathname !== '/') return
-    const t = setTimeout(() => setRunning(true), 600)
-    return () => clearTimeout(t)
-  }, [completed, running, user, setup.loading, setup.activeProject, pathname])
-
-  // Filter out stops that require reports if the project has none. The
-  // user will see the remaining stops; once a report lands and the tour is
-  // restarted (via onboarding footer), the full sequence runs.
-  const visibleStops = STOPS.filter(
-    (s) => !s.requiresReports || (setup.activeProject?.report_count ?? 0) > 0,
-  )
+  // Stops that need a report skip when the project has none — unless the
+  // launcher handed us a fresh report id (the S2 screen does, right after
+  // the diagnosis renders and before the setup status has refetched).
+  const hasReports = (setup.activeProject?.report_count ?? 0) > 0 || Boolean(reportId)
+  const visibleStops = STOPS.filter((s) => {
+    if (s.requiresReportId && !reportId) return false
+    if (s.requiresReports && !hasReports) return false
+    return true
+  })
   const stop = running ? visibleStops[stopIdx] : null
 
   // Auto-navigate to the route that hosts the current stop's anchor.
   useEffect(() => {
     if (!stop) return
-    const onRoute = stop.routes.some((r) =>
-      r === '/' ? pathname === '/' : pathname.startsWith(r),
-    )
-    if (!onRoute) navigate(stop.routes[0])
-  }, [stop, pathname, navigate])
+    const target = resolveRoute(stop, reportId)
+    const onRoute = stop.match === 'exact' ? pathname === target : pathname.startsWith(target)
+    if (!onRoute) navigate(target)
+  }, [stop, pathname, navigate, reportId])
 
   // Measure anchor position; retry briefly because anchors may mount after
   // a route change. Updates on resize + scroll for a stable spotlight.

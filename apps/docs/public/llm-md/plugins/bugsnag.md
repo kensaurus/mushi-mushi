@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/bugsnag
 
 ---
 title: Bugsnag
+description: Mirror Mushi bug reports into Bugsnag and close the Bugsnag error when the fix PR merges — install from the marketplace and map release stages.
 ---
 
 # Bugsnag plugin

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/skill-pipelines
 
 ---
 title: Skill Pipelines
+description: Skill Pipelines recommend agent skills from the cursor-kenji and skills.sh ecosystem for each classified bug and run them during review in Mushi.
 ---
 
 # Skill Pipelines
@@ -80,15 +81,15 @@ mushi skills show workflow-fix-and-ship
 mushi skills sync
 
 # Start a pipeline for a report
-mushi pipeline start  --skill workflow-fix-and-ship
-mushi pipeline start  --skill workflow-fix-and-ship --mode cloud
+mushi pipeline start <reportId> --skill workflow-fix-and-ship
+mushi pipeline start <reportId> --skill workflow-fix-and-ship --mode cloud
 
 # Watch a pipeline run and print the context packet
-mushi pipeline watch 
+mushi pipeline watch <runId>
 
 # Check in a step (report your progress back to Mushi)
-mushi pipeline checkin  --step 0 --status passed
-mushi pipeline checkin  --step 1 --status failed --notes "Build failed: missing dep"
+mushi pipeline checkin <runId> --step 0 --status passed
+mushi pipeline checkin <runId> --step 1 --status failed --notes "Build failed: missing dep"
 ```
 
 ---

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/cli-console-loop
 
 ---
 title: CLI ↔ console setup loop
+description: How npx mushi-mushi creates a project, mints an SDK key and installs the SDK through browser sign-in, and how to recover when the setup loop fails.
 ---
 
 # CLI ↔ console setup loop
@@ -18,7 +19,7 @@ something goes wrong.
 | Command | When to use | What it does |
 | --- | --- | --- |
 | **`npx mushi-mushi`** / **`mushi init`** | First SDK install in an app repo | Detects framework, opens browser auth, installs SDK, writes `.env.local` |
-| **`mushi login`** | Authenticate the CLI without installing | Browser sign-in only; persists to `~/.config/mushi/config.json` |
+| **`mushi login`** | Authenticate the CLI without installing | Browser sign-in only; persists to the [CLI config file](/sdks/cli#config-file) (`~/.config/mushi/config.json`, or `%APPDATA%\mushi\config.json` on Windows) |
 | **`mushi connect`** | You already have credentials; want env + MCP + proof | Merges env vars, wires `.cursor/mcp.json`, optional `--wait` heartbeat |
 | **`mushi setup`** | MCP-only wiring after login | Writes Cursor/Claude MCP config — **does not** install the SDK |
 
@@ -95,7 +96,8 @@ project picker.
 
 ## How sign-in reliability works
 
-Each machine gets a stable `client_id` (stored in `~/.config/mushi/config.json`).
+Each machine gets a stable `client_id`, stored in the [CLI config file](/sdks/cli#config-file)
+(`~/.config/mushi/config.json`, or `%APPDATA%\mushi\config.json` on Windows).
 The CLI sends it when starting device auth so concurrent logins on the same
 machine behave predictably.
 
@@ -167,8 +169,9 @@ the connection is live.
 | **Local monorepo dev** | [http://localhost:6464](http://localhost:6464) | Run `pnpm dev` from the mushi-mushi repo |
 | **Override** | Set `MUSHI_CONSOLE_URL` | CLI hints + browser opens use this base when set |
 
-The CLI resolves the console in this order: `MUSHI_CONSOLE_URL` → saved
-`~/.config/mushi/config.json` `consoleUrl` → localhost `:6464` probe → hosted default.
+The CLI resolves the console in this order: `MUSHI_CONSOLE_URL` → `consoleUrl`
+saved in the [CLI config file](/sdks/cli#config-file) (`~/.config/mushi/config.json`,
+or `%APPDATA%\mushi\config.json` on Windows) → localhost `:6464` probe → hosted default.
 
 ## Manual paste (fallback / self-hosted)
 
@@ -176,7 +179,7 @@ If the browser auth path isn't available, select "Paste a Project ID + API key"
 in the wizard, or pass flags directly:
 
 ```bash
-mushi init --project-id  --api-key mushi_xxx
+mushi init --project-id <uuid> --api-key mushi_xxx
 ```
 
 To get the values manually:
@@ -194,14 +197,14 @@ To get the values manually:
 Pass all three flags so the wizard skips all interactive prompts:
 
 ```bash
-npx mushi-mushi --yes --project-id  --api-key mushi_xxx
+npx mushi-mushi --yes --project-id <uuid> --api-key mushi_xxx
 ```
 
 Or use the non-interactive connect command after minting a key in the console:
 
 ```bash
 MUSHI_API_KEY=mushi_xxx mushi connect \
-  --project-id  \
+  --project-id <uuid> \
   --endpoint https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api \
   --write-env --wire-ide
 ```

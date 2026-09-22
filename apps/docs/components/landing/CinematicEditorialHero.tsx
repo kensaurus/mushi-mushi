@@ -105,21 +105,26 @@ export function CinematicEditorialHero({
         <div className="landing-hero-ctas" role="group" aria-label="Get started">
           {LANDING_HERO_CTAS.map((cta) => {
             const className = `landing-hero-cta landing-hero-cta--${cta.kind}`
+            // `data-mushi-cta` is what <MushiSiteAnalytics /> listens for.
+            const tracking = { 'data-mushi-cta': cta.id, 'data-mushi-location': 'hero' } as const
             if (cta.external) {
+              // Our own console (signup) keeps the tab; third-party links
+              // open a new one so the visitor never loses the landing page.
+              const newTab = cta.sameTab !== true
               return (
                 <a
-                  key={cta.href}
+                  key={cta.id}
                   className={className}
                   href={cta.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  {...(newTab ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                  {...tracking}
                 >
                   {cta.label}
                 </a>
               )
             }
             return (
-              <Link key={cta.href} className={className} href={cta.href}>
+              <Link key={cta.id} className={className} href={cta.href} {...tracking}>
                 {cta.label}
               </Link>
             )

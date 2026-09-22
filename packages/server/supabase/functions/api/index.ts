@@ -4,6 +4,7 @@ import type { Variables } from './types.ts';
 
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requestLoggingMiddleware } from '../_shared/request-logging.ts';
+import { stdioMcpUsage } from '../_shared/mcp-stdio-usage.ts';
 import { registerAskMushiRoutes } from './routes/ask-mushi.ts';
 import { registerSdkAssistantRoutes } from './routes/sdk-assistant.ts';
 import { registerConsoleKnowledgeRoutes } from './routes/console-knowledge.ts';
@@ -62,6 +63,10 @@ import { registerSdkUpgradeRoutes } from './routes/sdk-upgrade.ts';
 import { registerBootstrapRoutes } from './routes/bootstrap.ts';
 import { registerIdentitySecretRoutes } from './routes/identity-secret.ts';
 import { registerSessionRoutes } from './routes/sessions.ts';
+import { registerEventRoutes } from './routes/events.ts';
+import { registerGrowthRoutes } from './routes/growth.ts';
+import { registerEventsAdminRoutes } from './routes/events-admin.ts';
+import { registerLifecycleEmailRoutes } from './routes/lifecycle-emails.ts';
 import { registerSlackEventsRoutes } from './routes/slack-events.ts';
 import { registerTelegramAdminRoutes } from './routes/telegram-admin.ts';
 import { registerIntakeVoiceRoutes } from './routes/intake-voice.ts';
@@ -76,6 +81,9 @@ const app = new Hono<{ Variables: Variables }>().basePath('/api');
 app.onError(sentryHonoErrorHandler);
 
 app.use('*', requestLoggingMiddleware());
+// Records tool calls from the stdio MCP server (npx @mushi-mushi/mcp) after the
+// route's own auth has run; a no-op for every other caller.
+app.use('/v1/*', stdioMcpUsage());
 
 // SEC (Wave S1 / D-18 + S-5): split CORS policy.
 //
@@ -136,6 +144,9 @@ const SDK_OBSERVATION_HEADERS = [
   'X-Mushi-SDK-Version',
   'X-Mushi-SDK-Package',
   'X-Mushi-User-Token',
+  // Host JWT proving the end user's identity on the privacy routes
+  // (GET /v1/sdk/me/export, DELETE /v1/sdk/me) when the project verifies users.
+  'X-Mushi-Host-Jwt',
 ] as const;
 
 // The SDK does far more than GET here: the browser widget POSTs rewards
@@ -594,6 +605,10 @@ registerSdkUpgradeRoutes(app);
 registerBootstrapRoutes(app);
 registerIdentitySecretRoutes(app);
 registerSessionRoutes(app);
+registerEventRoutes(app);
+registerGrowthRoutes(app);
+registerEventsAdminRoutes(app);
+registerLifecycleEmailRoutes(app);
 registerSlackEventsRoutes(app);
 registerTelegramAdminRoutes(app);
 registerIntakeVoiceRoutes(app);

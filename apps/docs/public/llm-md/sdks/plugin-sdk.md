@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/plugin-sdk
 
 ---
 title: '@mushi-mushi/plugin-sdk'
+description: Build a Mushi plugin in TypeScript with @mushi-mushi/plugin-sdk — verify webhook signatures, dedupe deliveries and handle lifecycle events in Express.
 ---
 
 # `@mushi-mushi/plugin-sdk`
@@ -21,6 +22,9 @@ pnpm add @mushi-mushi/plugin-sdk
 ## Express adapter
 
 ```ts
+import express from 'express'
+import { expressMiddleware } from '@mushi-mushi/plugin-sdk/express'
+import { createMushiClient } from '@mushi-mushi/plugin-sdk'
 
 const app = express()
 const mushi = createMushiClient({ apiKey: process.env.MUSHI_API_KEY! })
@@ -46,6 +50,8 @@ app.listen(8080)
 ## Hono adapter
 
 ```ts
+import { Hono } from 'hono'
+import { honoHandler } from '@mushi-mushi/plugin-sdk/hono'
 
 const app = new Hono()
 app.post('/mushi/webhook', honoHandler({
@@ -62,6 +68,7 @@ If you'd rather use your own framework, just call `verifySignature` with
 the raw body and the `Mushi-Signature` header:
 
 ```ts
+import { verifySignature } from '@mushi-mushi/plugin-sdk'
 
 const result = await verifySignature({
   payload: rawBodyString,

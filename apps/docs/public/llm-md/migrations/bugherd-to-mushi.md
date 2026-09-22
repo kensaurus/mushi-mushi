@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/bugherd-to-mushi
 
 ---
 title: 'BugHerd → Mushi'
+description: Move from BugHerd to Mushi — map pin-to-element feedback onto Mushi's element selector, screenshot and metadata capture, with an interactive checklist.
 ---
 
 # BugHerd → Mushi
@@ -34,12 +35,37 @@ screenshot) plus structured user metadata.
 
 | BugHerd | Mushi |
 |---------|-------|
-| `
+| `` | `` mounting `Mushi.init({ projectId, apiKey })` |
+| Sidebar widget (always visible) | Floating button widget (`widget.trigger: 'button'`) — discreet, opens on click |
+| Element click → annotation | User triggers widget → screenshot + element selector capture |
+| `bugherd.identify(user)` | `Mushi.setUser({ id, email, name })` |
+| Project-board view | Mushi admin console — Reports tab |
+| `data-bugherd-private` (skip element from screenshots) | `data-mushi-redact` (same idea) |
+
+## Before / After
+
+```html
+<!-- BEFORE — BugHerd -->
+<script type="text/javascript">
+  (function(d,t) {
+    var bh = d.createElement(t); bh.async = true;
+    bh.type = 'text/javascript';
+    bh.src = 'https://www.bugherd.com/sidebarv2.js?apikey=YOUR_API_KEY';
+    var s = d.getElementsByTagName(t)[0]; s.parentNode.insertBefore(bh, s);
+  })(document, 'script');
+</script>
 ```
 
 ```html
 <!-- AFTER — Mushi (web) -->
-
+<script type="module">
+  import { Mushi } from 'https://esm.sh/@mushi-mushi/web'
+  Mushi.init({
+    projectId: 'YOUR_PROJECT_ID',
+    apiKey:    'YOUR_PUBLIC_KEY',
+    widget:    { trigger: 'button' },  // BugHerd-equivalent UX
+  })
+</script>
 ```
 
 For React / Vue / Svelte / Next, use the framework-specific SDK instead.
@@ -48,6 +74,9 @@ For React / Vue / Svelte / Next, use the framework-specific SDK instead.
 
 Sign in to the Mushi admin console; copy projectId + apiKey.</> },
     { id: 'install', label: 'Install or script-tag Mushi', content: {`# CDN — for the same script-tag UX BugHerd had:
+
+  import { Mushi } from 'https://esm.sh/@mushi-mushi/web'
+  Mushi.init({ projectId: '...', apiKey: '...' })
 
 # Or via npm:
 npm install @mushi-mushi/web`} },
@@ -60,7 +89,7 @@ npm install @mushi-mushi/web`} },
     { id: 'client-comms', label: 'Tell clients about the new widget', content: <>The biggest difference: BugHerd's sidebar is always visible. Mushi's widget is a discreet floating button that expands on click. Send a 1-line email so clients know what to look for.</> },
     { id: 'verify', label: 'Submit a test report from a real page', content: <>Click the floating bug, write a description, confirm the screenshot + element selector are attached, confirm it lands in the Mushi admin console.</> },
     { id: 'remove-bugherd', label: 'Remove the BugHerd script + revoke the API key', content: <>Once clients are on Mushi for ≥ a week, pull the script tag and revoke BugHerd's API key in their dashboard.</> },
-  ]}
+
 />
 
 ## Feature parity

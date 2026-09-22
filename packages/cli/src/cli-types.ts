@@ -19,6 +19,17 @@ export interface StatsData {
   lessons_count: number
 }
 
+/** GET /v1/admin/activation — only the fields `mushi status` prints. */
+export interface ActivationData {
+  phase?: 'ingest' | 'dispatch' | 'loop'
+  stats?: {
+    reportCount?: number
+    /** ISO timestamp of the earliest report; added with the GTM activation work. */
+    first_report_at?: string | null
+    firstReportAt?: string | null
+  }
+}
+
 export interface ReportListData {
   reports: ReportRow[]
   total: number

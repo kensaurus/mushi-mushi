@@ -2,22 +2,23 @@
 // FILE: sync-community-files.mjs
 // PURPOSE: Copy the canonical community files (CONTRIBUTING / CODE_OF_CONDUCT
 //          / SECURITY) from the repo root into every publishable package
-//          directory so they ship inside each npm tarball.
+//          directory, so someone browsing packages/<name>/ on GitHub finds
+//          them next to the package's README.
 //
-// Why: package registries (npm, Snyk, Socket) score a package as having a
-// "community" (or "documentation" / "healthy-repo") signal only when these
-// files are present inside the published tarball. Our monorepo keeps them at
-// the root by convention — which means 0 publishable packages carry them by
-// default, and Snyk/Socket report "Contributing.md: No, Code of Conduct: No"
-// even though the repo itself has them. This script closes that gap without
-// forcing humans to maintain N duplicates.
+// They are NOT shipped to npm. They used to be listed in every package's
+// `files` so Snyk/Socket would score a "community" signal, which put 32 KB of
+// repository governance docs into every tarball — more than the whole of some
+// packages. npm links each package to this repository, where the root copies
+// live. `--check` fails if a publishable package lists one of them in
+// `files` again.
 //
 // Modes:
 //   node scripts/sync-community-files.mjs            → write synced copies
 //   node scripts/sync-community-files.mjs --check    → fail if any package
 //                                                      has stale or missing
-//                                                      synced copies (CI /
-//                                                      pre-commit guard)
+//                                                      synced copies, or
+//                                                      ships one in `files`
+//                                                      (CI / pre-commit guard)
 //
 // Idempotent. Safe to run repeatedly. Skips private packages
 // (`"private": true`). Every synced file is prefixed with an AUTO-SYNCED
@@ -60,7 +61,7 @@ async function findPackageDirs() {
         const raw = await readFile(pkgJsonPath, 'utf8')
         const pkg = JSON.parse(raw)
         if (pkg.private === true) continue
-        dirs.push(join(base, entry))
+        dirs.push({ dir: join(base, entry), files: Array.isArray(pkg.files) ? pkg.files : [] })
       } catch {
         // no package.json, unreadable, or malformed — skip
       }
@@ -71,11 +72,15 @@ async function findPackageDirs() {
 
 async function sync({ check }) {
   const canonical = await readCanonical()
-  const dirs = await findPackageDirs()
+  const packages = await findPackageDirs()
   const drift = []
+  const shipped = []
   let written = 0
 
-  for (const dir of dirs) {
+  for (const { dir, files } of packages) {
+    for (const name of files.filter((f) => FILES.includes(f))) {
+      shipped.push(`${relative(ROOT, join(dir, 'package.json')).replaceAll('\\', '/')} → files: "${name}"`)
+    }
     for (const name of FILES) {
       const dest = join(dir, name)
       const want = canonical[name]
@@ -95,6 +100,13 @@ async function sync({ check }) {
     }
   }
 
+  if (shipped.length > 0) {
+    console.error('\nsync-community-files FAILED — these packages ship repository governance docs to npm:\n')
+    for (const s of shipped) console.error(`  ${s}`)
+    console.error('\nRemove them from `files`. The copies stay in the package folder for GitHub; npm links to the repo.\n')
+    process.exit(1)
+  }
+
   if (check) {
     if (drift.length > 0) {
       console.error('\nsync-community-files --check FAILED — these files are missing or stale:\n')
@@ -102,11 +114,11 @@ async function sync({ check }) {
       console.error('\nRun `node scripts/sync-community-files.mjs` to regenerate, then commit.\n')
       process.exit(1)
     }
-    console.log(`sync-community-files --check OK — scanned ${dirs.length} publishable package(s).`)
+    console.log(`sync-community-files --check OK — scanned ${packages.length} publishable package(s).`)
     return
   }
 
-  console.log(`sync-community-files wrote ${written} file(s) across ${dirs.length} publishable package(s).`)
+  console.log(`sync-community-files wrote ${written} file(s) across ${packages.length} publishable package(s).`)
 }
 
 const check = process.argv.includes('--check')

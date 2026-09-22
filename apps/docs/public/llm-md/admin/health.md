@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/health
 
 ---
 title: Integration health
+description: The Integration health page monitors Mushi's LLM pipelines, cron jobs and provider connections so you catch a degraded integration early.
 ---
 
 # Integration health

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
 /**
  * Wave G3 — `mushi-plugin` dev CLI.
  *

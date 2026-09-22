@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/inventory
 
 ---
 title: 'User stories · Inventory'
+description: The User stories page manages your inventory.yaml — every page, action and story your app should have — and shows which of them the gates cover.
 ---
 
 # User stories · Inventory
@@ -47,9 +48,15 @@ Most teams will never hand-author `inventory.yaml`. Turn on
 `capture.discoverInventory` in the SDK config:
 
 ```ts
+import { MushiProvider } from '@mushi-mushi/react'
 
-  
-
+<MushiProvider config={{
+  projectId: '…',
+  apiKey: '…',
+  capture: { discoverInventory: true },
+}}>
+  <App />
+</MushiProvider>
 ```
 
 The SDK quietly observes routes, `data-testid`s, and outbound API paths

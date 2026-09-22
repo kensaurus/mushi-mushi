@@ -2,13 +2,13 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-iOS native bridge for Capacitor and React Native hosts.
-
-
 Native iOS SDK for [Mushi Mushi](https://kensaur.us/mushi-mushi) — the open-source,
 LLM-driven bug intake, classification, and autofix platform.
 
-> **Status**: V0.4.0 Feature parity with the web SDK.
+> **Status: preview (0.4.0).** Feature parity with the web SDK, but **not
+> released to CocoaPods trunk and not tagged for SwiftPM yet** — `pod 'MushiMushi', '~> 0.4'`
+> and `.package(..., from: "0.4.0")` will not resolve. Install it from this
+> repository as shown below until the first tagged release.
 
 ## Features
 
@@ -26,16 +26,25 @@ LLM-driven bug intake, classification, and autofix platform.
 
 ### Swift Package Manager (recommended)
 
+The repository root carries a `Package.swift` that exposes the `MushiMushi`
+product, so SwiftPM can build it straight from GitHub. There is no version tag
+yet, so track a branch (or pin `revision:` to a commit SHA):
+
 ```swift
-.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.4.0")
+.package(url: "https://github.com/kensaurus/mushi-mushi.git", branch: "master")
 ```
 
-then add `MushiMushi` to your target.
+then add `MushiMushi` to your target. In Xcode: **File → Add Package
+Dependencies…**, paste the URL, and set the dependency rule to **Branch:
+master**.
 
 ### CocoaPods
 
+The pod is not on CocoaPods trunk. Clone the repository next to your app and
+point your `Podfile` at the podspec in `packages/ios`:
+
 ```ruby
-pod 'MushiMushi', '~> 0.4'
+pod 'MushiMushi', :path => '../mushi-mushi/packages/ios'
 ```
 
 ## Quickstart
@@ -49,7 +58,7 @@ struct MyApp: App {
     init() {
         Mushi.shared.configure(with: MushiConfig(
             projectId: "proj_...",
-            apiKey: "mush_pk_...",
+            apiKey: "mushi_...",
             triggerMode: .both,           // .shake | .button | .both | .none
             captureScreenshot: true,
             minDescriptionLength: 20
@@ -113,7 +122,7 @@ target, which keeps the native SDK dependency-free by default.
 | Field                   | Default                              | Notes |
 |-------------------------|--------------------------------------|-------|
 | `projectId`             | _required_                           | Project UUID from Mushi admin |
-| `apiKey`                | _required_                           | Public ingest key (`mush_pk_...`) |
+| `apiKey`                | _required_                           | Project API key (`mushi_...`) |
 | `endpoint`              | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`         | Override for self-hosting |
 | `triggerMode`           | `.shake`                             | `shake` / `button` / `both` / `none` |
 | `captureScreenshot`     | `true`                               | Disable for HIPAA-sensitive flows |

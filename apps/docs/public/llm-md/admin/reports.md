@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/reports
 
 ---
 title: Reports & triage
+description: The Reports list is Mushi's bug inbox — filter by status, severity, category and component, and start with the recommended action at the top.
 ---
 
 # Reports
@@ -78,8 +79,8 @@ resolution notification, and `fix.applied` webhooks fire.
 Equivalent CLI:
 
 ```bash
-mushi fixes refresh-ci 
-mushi fixes merge 
+mushi fixes refresh-ci <fixId>
+mushi fixes merge <fixId>
 ```
 
 See [Fix orchestrator → Merging from the console](/admin/fixes#merging-from-the-console)

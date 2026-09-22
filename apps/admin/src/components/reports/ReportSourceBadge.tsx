@@ -18,6 +18,7 @@ import { Tooltip } from '../ui'
 import { ReportCodeText } from './ReportCodeText'
 import type { ReportRow } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { shortReporterKey } from '../../lib/reporterKey'
 
 interface Props {
   row: ReportRow
@@ -104,7 +105,7 @@ function reporterMonogram(row: ReportRow): { label: string; tooltip: string } {
     }
   }
   if (row.reporter_token_hash) {
-    const hex = row.reporter_token_hash.slice(0, 6)
+    const hex = shortReporterKey(row.reporter_token_hash, 6)
     return {
       label: `anon\u00B7${hex}`,
       tooltip: `Anonymous reporter — stable device fingerprint hash starts with ${hex}. Two reports with the same monogram are the same device.`,

@@ -4,13 +4,12 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/capacitor
 
 ---
 title: Capacitor quickstart
+description: Add Mushi to an Ionic or Capacitor app — install @mushi-mushi/capacitor, configure shake-to-report and screenshots, and file your first bug report.
 ---
 
 # Capacitor quickstart
 
 Ship the same bug-report widget on iOS, Android, and web from one Capacitor shell.
-
-  {QUICKSTART_ONE_KEY_CALLOUT}
 
 The Capacitor plugin delegates to the native iOS / Android SDKs at runtime
 and falls back to `@mushi-mushi/core` on the web.
@@ -25,6 +24,7 @@ npx cap sync
 ## 2. Configure
 
 ```ts filename="src/mushi.ts"
+import { Mushi } from '@mushi-mushi/capacitor'
 
 await Mushi.configure({
   projectId: 'YOUR_PROJECT_ID',

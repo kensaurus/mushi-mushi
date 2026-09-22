@@ -3,7 +3,8 @@
  * check-license-consistency.mjs
  *
  * Anti-drift guard for the license split. Ensures primary surfaces agree with
- * packages/server/LICENSE (AGPLv3) and that we never silently regress to
+ * packages/server/LICENSE (AGPLv3), that the root LICENSE names the split
+ * instead of reading as MIT-everything, and that we never silently regress to
  * "Apache-2.0 server" copy left over from a rejected relicense attempt.
  *
  * Run: node scripts/check-license-consistency.mjs
@@ -58,6 +59,33 @@ if (readme) {
   }
   if (serverIsAgpl && !readme.includes('COMMERCIAL-LICENSE.md')) {
     failures.push('README.md license section should link to COMMERCIAL-LICENSE.md for dual licensing')
+  }
+}
+
+// The root LICENSE is what GitHub reports as the repo's license, and what
+// answer engines quote. Bare MIT there made the AGPL server and the commercial
+// ee/ read as MIT, so it must name the split before the MIT text.
+const rootLicense = read('LICENSE')
+if (rootLicense && serverIsAgpl) {
+  const mitAt = rootLicense.indexOf('MIT License')
+  if (mitAt === -1) {
+    failures.push('LICENSE (root) must still carry the MIT License text after the license split')
+  }
+  const carveOut = [
+    'packages/server/ee/LICENSE',
+    'packages/server/',
+    'packages/agents/',
+    'packages/verify/',
+    'AGPL-3.0-only',
+    'COMMERCIAL-LICENSE.md',
+  ]
+  for (const needle of carveOut) {
+    const at = rootLicense.indexOf(needle)
+    if (at === -1) {
+      failures.push(`LICENSE (root) must describe the license split before the MIT text — missing "${needle}"`)
+    } else if (mitAt !== -1 && at > mitAt) {
+      failures.push(`LICENSE (root) must name "${needle}" before the MIT text, not after it`)
+    }
   }
 }
 

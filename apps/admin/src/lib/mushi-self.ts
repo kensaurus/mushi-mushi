@@ -14,43 +14,24 @@
  * The SDK is initialised lazily (dynamic import) so the admin's initial
  * bundle stays lean. If the env vars are absent it's a no-op.
  *
+ * The dynamic import MUST stay a plain `import('@mushi-mushi/web')` with no
+ * `@vite-ignore`: that comment makes Rollup leave the bare specifier in the
+ * production chunk, the browser rejects it (there is no importmap), and the
+ * catch below turns the failure into a console warning — the deployed
+ * console then dogfoods nothing while `vite dev` (which does resolve bare
+ * names) looks fine. `mushi-self.test.ts` pins this.
+ *
  * Launcher policy: the lime BetaBanner is the sole visible entry point.
  * The SDK widget uses `trigger: 'hidden'` + `runtimeConfig: false` so a
  * remote dashboard default cannot resurrect the FAB or a second banner.
  */
 
+import type { MushiConfig, MushiSDKInstance } from '@mushi-mushi/core'
 import { RESOLVED_API_URL } from './env'
 import { Sentry } from './sentry'
 
-type MushiInitOptions = {
-  projectId: string
-  apiKey: string
-  apiEndpoint: string
-  runtimeConfig?: boolean
-  widget?: Record<string, unknown>
-  capture?: Record<string, unknown>
-  privacy?: Record<string, unknown>
-  proactive?: Record<string, unknown>
-  debug?: boolean
-  enabled?: boolean
-}
-
-type MushiInstance = {
-  identify: (userId: string, traits: Record<string, unknown>) => void
-  setMetadata: (key: string, value: string) => void
-  report: (opts?: { category?: string }) => void
-  setTrigger?: (trigger: 'auto' | 'banner' | 'edge-tab' | 'attach' | 'manual' | 'hidden') => void
-  hide?: () => void
-}
-
-type MushiModule = {
-  Mushi: {
-    init: (options: MushiInitOptions) => MushiInstance
-  }
-}
-
-let _sdk: MushiInstance | null = null;
-let _initPromise: Promise<MushiInstance | null> | null = null;
+let _sdk: MushiSDKInstance | null = null;
+let _initPromise: Promise<MushiSDKInstance | null> | null = null;
 const INIT_KEY = '__mushi_admin_self_init__';
 
 function isEnabled(): boolean {
@@ -68,7 +49,7 @@ export function isMushiSelfEnabled(): boolean {
 export async function initMushiSelf(options?: {
   userId?: string;
   activeProjectId?: string;
-}): Promise<MushiInstance | null> {
+}): Promise<MushiSDKInstance | null> {
   if (typeof window === 'undefined') return null;
   const win = window as unknown as Record<string, unknown>;
   // Init now runs pre-login; a later call with the freshly logged-in user
@@ -90,20 +71,27 @@ export async function initMushiSelf(options?: {
 
   _initPromise = (async () => {
     try {
-      // @ts-ignore — @vite-ignore: dynamic import resolved at runtime via workspace symlink; types resolve after build
-      const { Mushi } = await import(/* @vite-ignore */ '@mushi-mushi/web') as MushiModule;
+      // Plain dynamic import on purpose — Vite code-splits it into a relative
+      // chunk. See the header for why `@vite-ignore` must never come back.
+      const { Mushi } = await import('@mushi-mushi/web');
 
       const endpoint =
         import.meta.env.VITE_MUSHI_SELF_API_ENDPOINT ||
         RESOLVED_API_URL;
 
-      _sdk = Mushi.init({
+      const config: MushiConfig = {
         projectId: import.meta.env.VITE_MUSHI_SELF_PROJECT_ID!,
         apiKey: import.meta.env.VITE_MUSHI_SELF_API_KEY!,
         apiEndpoint: endpoint,
         // Pin launcher locally — remote runtime config can overwrite trigger to
         // `auto` and resurrect the FAB (glot.it hit this in Capacitor WebView).
         runtimeConfig: false,
+
+        // Console events carry `$surface: 'console'` (the SDK default is
+        // 'web'), matching the surface packages/core/src/analytics-taxonomy.ts
+        // declares for every console-owned event, so a per-surface split never
+        // files console usage under the customer-widget 'web' surface.
+        analytics: { surface: 'console' },
 
         widget: {
           position: 'bottom-right',
@@ -120,7 +108,7 @@ export async function initMushiSelf(options?: {
             contactEmail: 'kensaurus@gmail.com',
           },
           minDescriptionLength: 12,
-        } as MushiInitOptions['widget'],
+        },
 
         proactive: {
           rageClick: false,
@@ -147,10 +135,11 @@ export async function initMushiSelf(options?: {
 
         debug: import.meta.env.DEV,
         enabled: true,
-      });
+      };
+      _sdk = Mushi.init(config);
 
-      _sdk.setTrigger?.('hidden');
-      _sdk.hide?.();
+      _sdk.setTrigger('hidden');
+      _sdk.hide();
 
       // Attach the logged-in user so reports are attributable.
       if (options?.userId) {
@@ -180,7 +169,7 @@ export async function initMushiSelf(options?: {
   return _initPromise;
 }
 
-export function getMushiSelf(): MushiInstance | null {
+export function getMushiSelf(): MushiSDKInstance | null {
   return _sdk;
 }
 

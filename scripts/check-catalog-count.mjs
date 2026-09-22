@@ -126,7 +126,7 @@ try {
 
 for (const rel of [
   'AGENTS.md',
-  'apps/docs/content/sdks/mcp-tools.generated.mdx',
+  'apps/docs/content/sdks/mcp-tools.mdx',
 ]) {
   try {
     const src = readFileSync(join(ROOT, rel), 'utf8')

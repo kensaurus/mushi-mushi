@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/security/soc2
 
 ---
 title: SOC 2 readiness
+description: Mushi's SOC 2 Type 1 readiness module — automated evidence for access, retention and encryption controls, DSAR exports, and a quarterly evidence pack.
 ---
 
 # SOC 2 readiness

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/security/byok
 
 ---
 title: Bring-your-own-key
+description: Use your own Anthropic or OpenAI API key for a Mushi project, so every classification, judge and fix run bills to your provider account.
 ---
 
 # Bring-your-own-key (BYOK)

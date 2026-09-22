@@ -98,6 +98,28 @@ host non-auto trigger.
 Non-trigger widget keys from runtime apply only when defined and non-null.
 `betaMode` from host is never dropped.
 
+### `widget.brandFooter` (the "Bug reports by Mushi" mark)
+
+Host wins, then runtime, then the default `false`:
+
+| Host `widget.brandFooter` | Runtime sends | Effective |
+| --- | --- | --- |
+| `true` / `false` (explicit) | anything | host value (MIT config always wins) |
+| unset | `true` | `true` — Free Cloud projects by default |
+| unset | `false` | `false` — paid plans and self-host |
+| unset | omitted | `false` |
+
+`mergeRuntimeConfig(active, runtime, host)` takes the *bootstrap* config as
+its third argument so a cached runtime payload can never masquerade as a host
+decision on the second merge. The server derives the runtime value from
+`project_settings.widget_brand_footer` (tri-state, console → Settings →
+General → "Feedback widget") falling back to the plan: `true` for Free Cloud,
+`false` otherwise. The rendered mark links to
+`https://kensaur.us/mushi-mushi/?utm_source=widget&utm_medium=powered-by&ref=<sha256(projectId)[0:12]>`
+and emits `loop_impression` (once per widget session) and `loop_click`
+through `Mushi.track()`; both are silent under DNT/GPC, denied consent or
+`analytics.enabled: false`.
+
 ### Banner copy
 
 When runtime sends any banner field (`bannerMessage`, `bannerVariant`, etc.),

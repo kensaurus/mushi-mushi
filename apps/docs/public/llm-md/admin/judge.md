@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/judge
 
 ---
 title: Judge dashboard
+description: The Judge page scores how well Mushi's plain-English reads match reality over time, so you see quality slipping or a better prompt ready to promote.
 ---
 
 # Fix quality scores

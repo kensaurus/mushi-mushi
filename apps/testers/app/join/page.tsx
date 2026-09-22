@@ -75,11 +75,11 @@ function JoinPageInner() {
 
           <p className="testers-faint mt-6 text-center text-xs leading-relaxed">
             By creating an account you agree to the{' '}
-            <a href="/mushi-mushi/docs/legal/tester-terms" className="underline underline-offset-2 hover:text-[var(--mushi-ink-muted)]">
-              Tester Terms of Service
+            <a href="https://kensaur.us/mushi-mushi/docs/legal/terms#15-mushi-bounties-tester-program" className="underline underline-offset-2 hover:text-[var(--mushi-ink-muted)]">
+              Terms of Service
             </a>{' '}
-            and{' '}
-            <a href="/mushi-mushi/docs/legal/privacy" className="underline underline-offset-2 hover:text-[var(--mushi-ink-muted)]">
+            (including the tester program section) and{' '}
+            <a href="https://kensaur.us/mushi-mushi/docs/legal/privacy" className="underline underline-offset-2 hover:text-[var(--mushi-ink-muted)]">
               Privacy Policy
             </a>
             . Gift card payouts are subject to OFAC compliance and a $599/yr KYC threshold.

@@ -58,6 +58,9 @@ const LANDING_PATHS = [
 const PUBLIC_PATHS = [
   'apps/docs/lib/public-copy.ts',
   'apps/docs/components/TroubleshootingAccordion.tsx',
+  'apps/docs/components/PricingTiersTable.tsx',
+  'apps/docs/components/PricingCta.tsx',
+  'apps/docs/components/MushiSiteAnalytics.tsx',
   'apps/docs/content/pricing.mdx',
   'apps/docs/content/cloud.mdx',
   'apps/docs/content/concepts/index.mdx',
@@ -71,6 +74,27 @@ const PUBLIC_PATHS = [
   'apps/docs/content/use-cases/debug-claude-code-apps.mdx',
   'apps/docs/content/use-cases/ai-code-bug-fixing.mdx',
   'apps/docs/content/use-cases/mcp-bug-fixing-server.mdx',
+  // GTM Phase 3 (2026-09-21): compare pages, how-to, journey posts, analytics
+  // reference, launch page. Legal/security pages are registered separately.
+  'apps/docs/components/CompareFacts.tsx',
+  'apps/docs/content/compare/_facts.ts',
+  'apps/docs/content/compare/index.mdx',
+  'apps/docs/content/compare/sentry-vs-mushi.mdx',
+  'apps/docs/content/compare/jam-vs-mushi.mdx',
+  'apps/docs/content/compare/posthog-session-replay-vs-mushi.mdx',
+  'apps/docs/content/compare/sentry-alternatives-for-solo-founders.mdx',
+  'apps/docs/content/use-cases/lovable-app-broke-in-production.mdx',
+  'apps/docs/content/sdks/analytics.mdx',
+  'apps/docs/content/launch-week.mdx',
+  'apps/docs/content/blog/index.mdx',
+  'apps/docs/content/blog/nine-signups-what-the-data-said.mdx',
+  'apps/docs/content/blog/auto-fix-loop.mdx',
+  // GTM Phase 2 (2026-09-21): trust pages + site footer.
+  'apps/docs/content/legal/index.mdx',
+  'apps/docs/content/legal/privacy.mdx',
+  'apps/docs/content/legal/terms.mdx',
+  'apps/docs/content/security/index.mdx',
+  'apps/docs/components/SiteFooter.tsx',
   'apps/docs/content/admin/index.mdx',
   'apps/docs/content/admin/onboarding.mdx',
   'apps/docs/content/admin/connect.mdx',
@@ -274,13 +298,13 @@ if (mcpCatalog !== null) {
 }
 
 /** Generated MCP doc must match built catalog (no stale jargon) */
-const mcpGen = read('apps/docs/content/sdks/mcp-tools.generated.mdx')
+const mcpGen = read('apps/docs/content/sdks/mcp-tools.mdx')
 if (mcpGen !== null) {
   const lower = mcpGen.toLowerCase()
   for (const phrase of MCP_CATALOG_BANNED) {
     if (lower.includes(phrase)) {
       failures.push(
-        `apps/docs/content/sdks/mcp-tools.generated.mdx\n      stale phrase "${phrase}" — run pnpm --filter @mushi-mushi/mcp build && pnpm gen:mcp-tools-doc`,
+        `apps/docs/content/sdks/mcp-tools.mdx\n      stale phrase "${phrase}" — run pnpm --filter @mushi-mushi/mcp build && pnpm gen:mcp-tools-doc`,
       )
     }
   }

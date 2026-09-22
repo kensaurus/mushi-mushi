@@ -1,0 +1,247 @@
+---
+title: Terms of Service
+description: The terms for Mushi Cloud, the admin console, the SDKs and the Bounties tester marketplace — plans, limits, AI-output disclaimer, licenses and liability.
+---
+
+import { Callout } from 'nextra/components'
+
+# Terms of Service
+
+<Callout type="warning">
+  **Draft, not yet reviewed by a lawyer.** This is a complete plain-English
+  draft. The governing-law and venue clause (section 14) has not been confirmed
+  yet. Questions: kensaurus@gmail.com.
+</Callout>
+
+**Effective date:** 2026-09-21 · **Version:** 1
+
+These terms are between you and **kensaurus** (an individual developer in
+Japan, "Mushi", "we") and cover **Mushi Cloud** at `kensaur.us/mushi-mushi`,
+the **admin console**, the **hosted MCP server**, the **docs site**, and the
+**Mushi Bounties** tester marketplace (together, the "Service"). The
+open-source software is licensed separately (section 3).
+
+## 1. Acceptance
+
+You accept these terms by creating an account, sending a report through the
+SDK to Mushi Cloud, connecting an editor to the hosted MCP server, or joining
+Bounties. If you accept on behalf of a company, you confirm you can bind it.
+If you do not agree, do not use the Service — the [self-hosted
+server](/self-hosting) is available under its open-source license instead.
+
+## 2. The Service
+
+Mushi collects bug reports from the apps you build, turns each into a
+plain-English **diagnosis** (one finished root cause), and can hand your editor
+or a coding agent a fix. A diagnosis is the unit we meter and bill; filtered
+noise and duplicates collapsed into one row do not count. We may change,
+add, or retire features. We give notice on the [changelog](/changelog) and, for
+removals that affect paid plans, by email at least 30 days ahead.
+
+## 3. Software licenses
+
+The Service runs on open-source code. Three licenses apply, and the split is
+deliberate:
+
+| Component | License | What it means for you |
+| --- | --- | --- |
+| **SDKs** (`@mushi-mushi/web`, `react`, `react-native`, `node`, `cli`, `mcp`, and the rest) | [MIT](https://github.com/kensaurus/mushi-mushi/blob/master/LICENSE) | Embed in proprietary apps with no copyleft obligation |
+| **Server** (`@mushi-mushi/server`, `agents`, `verify`) | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) | Self-host free. If you offer a *modified* server as a network service, publish your changes |
+| **Enterprise edition** and hosting Mushi for third parties | [Commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md) | A separate agreement that replaces AGPL terms for that use |
+
+Using Mushi Cloud does not grant you a license to the Service's hosted
+configuration, brand, or content beyond what these terms allow.
+
+## 4. Accounts
+
+- You need a working email address or a Google / GitHub login. Keep your
+  credentials and API keys secret; you are responsible for what happens under
+  them. Rotate a key from **Settings → API keys** the moment you suspect a leak.
+- One person per seat. Team seats on Pro and Enterprise are for named people
+  in your organisation.
+- You must be **16 or older**.
+- We may suspend an account that breaks section 5, does not pay, or is used
+  in a way that endangers the Service or other users. We tell you why unless
+  the law or an active investigation prevents it.
+
+## 5. Acceptable use
+
+You agree **not** to:
+
+- send reports from apps you do not own or are not authorised to instrument;
+- use the Service to build a competing hosted bug-diagnosis product by
+  bulk-extracting diagnoses, prompts, or fix output;
+- probe, scan, or load-test the Service outside the rules in
+  [SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md#safe-harbor);
+- upload malware, credentials that are not yours, or content that is illegal
+  where you or we are;
+- game usage limits, bounties, or the anti-abuse controls;
+- resell or sublicense access to Mushi Cloud.
+
+**Duty to inform your users.** The SDK can capture screenshots, console and
+network log excerpts, the page URL, and, if you enable it, a voice recording
+that is transcribed. **You** are the controller of that data and you must
+tell your users, in your own privacy notice, that a bug report may include
+these things, and obtain any consent your law requires before enabling voice
+intake or passing end-user identifiers. Mushi acts as your processor under the
+terms in the [Privacy Policy](/legal/privacy#4-data-where-mushi-is-the-processor).
+
+## 6. Your data and the license you give us
+
+Everything you and your users send stays **yours**. You give us a
+non-exclusive, worldwide license to store, copy, sanitise, transmit to the
+sub-processors listed in the Privacy Policy, and process that data **only** to
+provide the Service to you, to keep it secure, and to meet legal duties. We do
+not train models on your reports or code. When you delete data, or your
+retention window passes, the license ends for that data and we delete it on the
+schedule in the Privacy Policy.
+
+Aggregate, de-identified usage figures (for example "reports processed this
+month") may appear in our own public proof lines. They never identify you, your
+users, or your app.
+
+## 7. Free tier
+
+The **Free Cloud** plan includes **50 diagnoses per month**, one seat, and
+7-day report retention. At 50, the pipeline **stops** for the rest of the
+calendar month: reports are still accepted and stored, but no new diagnoses
+run until the counter resets or you upgrade. We do not silently bill overage
+on Free. We may change Free limits with 30 days' notice on the pricing page.
+
+## 8. Paid plans and billing
+
+- Plans, prices, and limits are on the [pricing page](/pricing). Billing runs
+  through **Stripe**; we never see your full card number.
+- Plans bill **monthly** or **annually** in advance, in US dollars, plus any
+  tax we must collect.
+- **Overage** on Indie and Pro is metered per diagnosis at the rate shown on
+  the pricing page and capped by a **spend cap** ($50 on Indie, $200 on Pro).
+  When the cap is reached the pipeline stops, like Free, until the next period
+  or until you raise the cap in **Billing**. You get email alerts at 50 %,
+  80 %, and 100 % of your included diagnoses.
+- **Upgrades** take effect immediately and are prorated. **Downgrades** and
+  cancellations take effect at the end of the current period; you keep the
+  higher plan until then.
+- **No refunds** for partial months or years except where the law requires
+  one. If we terminate your paid plan under section 12 for a reason that is
+  not your breach, we refund the unused portion.
+- If a payment fails we retry for 14 days and email you. After that the
+  project drops to Free limits until payment succeeds; your data is kept for
+  the Free retention window.
+- Enterprise terms, SLAs, and invoicing are set in a separate order form that
+  wins over this section where they conflict.
+
+## 9. AI output — read before you merge
+
+Diagnoses, fix briefs, generated tests, and draft pull requests are produced
+by large language models. **They can be wrong, incomplete, or unsafe.** You
+agree that:
+
+- you review every diagnosis and every fix before acting on it, and you are
+  responsible for anything you merge or deploy;
+- AI output is provided "as is" and is not advice of any kind;
+- prompt-injection defences reduce but do not remove the risk that a
+  malicious report steers a model; keep the fix agent on draft PRs and human
+  review, which is the default.
+
+## 10. Intellectual property
+
+- **Your code is yours.** Connecting a repository or letting the fix agent
+  open a draft PR grants us no rights beyond section 6.
+- **Fix output is yours** to the extent we can grant it, with no attribution
+  required. The same output may be produced for other users because models are
+  not exclusive.
+- **Mushi's marks** — the names "Mushi", "Mushi Mushi", "Mushi Bounties", the
+  logo, and the 虫々 mark — are ours. Open-source use of the code does not
+  include the marks; the "Bug reports by Mushi" widget mark may be shown only
+  as the SDK renders it.
+- Feedback you send us may be used without obligation to you.
+
+## 11. Third-party services
+
+The Service depends on the providers listed in the
+[Privacy Policy](/legal/privacy#5-sub-processors) and on integrations you
+connect (GitHub, Slack, Linear, Jira, Sentry, and your model provider under
+BYOK). Their terms govern your relationship with them. If you bring your own
+model key, **you** pay that provider and are bound by its usage policies; we
+are not responsible for their availability, pricing, or output.
+
+## 12. Termination
+
+- **You** can close your account any time from **Settings** or by email.
+  Data is deleted on the schedule in the Privacy Policy; export it first.
+- **We** can suspend or terminate for breach of section 5, non-payment after
+  the retry window, a legal requirement, or if we shut the Service down. For a
+  shutdown we give **90 days' notice** and an export path; the open-source
+  server remains available so you can self-host.
+- Sections 6 (for data still held), 9, 10, 13, 14, and 15 survive termination.
+
+## 13. Warranties and liability
+
+To the fullest extent the law allows:
+
+- the Service is provided **"as is"** and **"as available"**, without
+  warranties of merchantability, fitness for a particular purpose, or
+  non-infringement. Uptime commitments exist only on the
+  [status page](/operating/status) and in Enterprise contracts;
+- we are **not liable** for indirect, incidental, special, consequential, or
+  punitive damages, lost profits, lost data, or the cost of substitute
+  services, even if we were told they were possible;
+- our **total liability** for any claim arising from the Service is limited to
+  the amount you paid us in the **12 months** before the claim, or **US$100**
+  if you paid nothing;
+- nothing here limits liability for fraud, gross negligence, wilful
+  misconduct, death or personal injury, or anything that cannot be limited
+  under the law that applies to you. Consumers in the EU, UK, and Japan keep
+  their statutory rights.
+
+You will indemnify us against third-party claims caused by your breach of
+section 5, including claims from your own users about data the SDK captured
+without proper notice.
+
+## 14. Governing law and disputes
+
+**Not yet confirmed.** The governing law and the court that hears disputes
+will be stated here before these terms take effect. Until then, disputes go
+to good-faith discussion by email (kensaurus@gmail.com). Consumers keep any
+right the law gives them to bring claims in their home courts.
+
+## 15. Mushi Bounties tester program
+
+If you join Bounties as a tester, this section also applies:
+
+- **Points.** Accepted bug reports earn mushi-points at the rate the app's
+  developer set. Points have no cash value until redeemed, cannot be
+  transferred, and can be revoked for duplicate, fabricated, or automated
+  reports. Developer decisions on acceptance are final; use the feedback to
+  improve your next report.
+- **Redemption.** 1,000 points redeem for US$10 in gift cards (delivered by
+  Tremendous) or US$13 in Mushi Pro credit. Redemption thresholds and
+  catalogue are shown in your wallet.
+- **KYC.** Gift-card redemptions above **US$599 in a calendar year** are held
+  until you complete a tax-identification form (W-9 or W-8BEN). Pro credit is
+  not subject to this gate.
+- **Sanctions.** Bounties is not available in jurisdictions under US OFAC
+  sanctions. We may cancel redemptions we cannot lawfully pay.
+- **Testing rules.** Test only apps listed on the marketplace, stay within
+  the app's stated scope, never access other users' data, and report
+  security findings privately through the app's channel or
+  [SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md).
+
+Full mechanics are on [How it works](https://kensaur.us/mushi-mushi/testers/how-it-works/).
+
+## 16. Changes to these terms
+
+We will post changes here and bump the version. For changes that materially
+reduce your rights, raise prices, or change limits on a plan you pay for, we
+email account holders at least **30 days** before they take effect. Continued
+use after the effective date means the new terms apply. If you disagree, close
+your account before that date and we refund any prepaid, unused annual period.
+
+## 17. Contact
+
+**kensaurus** · Japan · [kensaurus@gmail.com](mailto:kensaurus@gmail.com) ·
+subject `[mushi-legal]`
+
+Related: [Privacy Policy](/legal/privacy) · [Pricing](/pricing) ·
+[Security summary](/security) · [Commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md)

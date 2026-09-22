@@ -22,6 +22,7 @@ import {
 } from '../../_shared/activation-status.ts';
 import { buildSetupResponse } from './activation-setup-builder.ts';
 import { buildOnboardingStatsPayload } from './activation-onboarding-builder.ts';
+import { isNonRealReport } from '../../_shared/first-report.ts';
 
 export function registerActivationRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/activation', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
@@ -129,7 +130,7 @@ async function buildOnboardingStatsForProject(
     .eq('id', projectId)
     .maybeSingle();
 
-  const [keysRes, settingsRes, reportsRes, fixesRes, reposRes, qaRes] = await Promise.all([
+  const [keysRes, settingsRes, reportsRes, fixesRes, reposRes, qaRes, firstReportsRes] = await Promise.all([
     db
       .from('project_api_keys')
       .select('project_id, is_active, last_seen_at, last_seen_endpoint_host')
@@ -154,6 +155,17 @@ async function buildOnboardingStatsForProject(
       .eq('project_id', projectId)
       .eq('last_run_status', 'passed')
       .limit(1),
+    // Oldest reports, filtered in TS below to the first REAL one (console test
+    // reports and the marketing seed never count — same predicate as
+    // first_report_received). 50 is plenty: a project has at most a handful
+    // of test reports before a real one lands.
+    db
+      .from('reports')
+      .select('id, created_at, custom_metadata')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(50),
   ]);
 
   const hasKey = (keysRes.data ?? []).length > 0;
@@ -193,6 +205,16 @@ async function buildOnboardingStatsForProject(
   const fixCount = fixes.length;
   const mergedFixCount = fixes.filter((f) => f.merged_at).length;
 
+  let firstReportAt: string | null = null;
+  for (const r of (firstReportsRes.data ?? []) as Array<{
+    created_at: string;
+    custom_metadata: Record<string, unknown> | null;
+  }>) {
+    if (isNonRealReport(r.custom_metadata)) continue;
+    firstReportAt = r.created_at;
+    break;
+  }
+
   return buildOnboardingStatsPayload({
     hasAnyProject: true,
     adminHost,
@@ -209,6 +231,7 @@ async function buildOnboardingStatsForProject(
       reportCount,
       fixCount,
       mergedFixCount,
+      firstReportAt,
     },
   });
 }

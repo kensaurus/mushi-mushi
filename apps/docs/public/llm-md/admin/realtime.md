@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/realtime
 
 ---
 title: Real-time collaboration
+description: How Mushi report pages support real-time collaboration — see who else is viewing a report and watch new comments arrive without a refresh.
 ---
 
 # Real-time collaboration

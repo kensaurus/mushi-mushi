@@ -72,10 +72,7 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE",
-    "CONTRIBUTING.md",
-    "CODE_OF_CONDUCT.md",
-    "SECURITY.md"
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsup",
@@ -101,7 +98,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/adapters"
   },
-  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "homepage": "https://kensaur.us/mushi-mushi",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
@@ -128,10 +125,6 @@
     "glue"
   ],
   "engines": {
-    "node": ">=20"
-  },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/kensaurus"
+    "node": ">=20.19.0"
   }
 }

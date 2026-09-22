@@ -2,13 +2,13 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Android native bridge for Capacitor and React Native hosts.
-
-
 Native Android (Kotlin) SDK for [Mushi Mushi](https://kensaur.us/mushi-mushi) — the
 open-source, LLM-driven bug intake, classification, and autofix platform.
 
-> **Status**: V0.4.0 Feature parity with the web SDK.
+> **Status: preview (0.4.0).** Feature parity with the web SDK, but **not
+> published to Maven Central yet** — `implementation("dev.mushimushi:mushi-android:0.4.0")`
+> will not resolve from any repository on its own. Build it from source as
+> shown below until the first release lands.
 
 ## Features
 
@@ -26,7 +26,20 @@ open-source, LLM-driven bug intake, classification, and autofix platform.
 
 ## Install
 
-Add to your app's `build.gradle.kts`:
+Until the SDK is on Maven Central, build it from source with a Gradle
+composite build. Clone this repository next to your app, then include the
+SDK's build in your app's `settings.gradle.kts`:
+
+```kotlin
+includeBuild("../mushi-mushi/packages/android") {
+    dependencySubstitution {
+        substitute(module("dev.mushimushi:mushi-android")).using(project(":"))
+    }
+}
+```
+
+and depend on it from your app module's `build.gradle.kts` as usual — Gradle
+substitutes the local build for the coordinate:
 
 ```kotlin
 dependencies {
@@ -36,8 +49,9 @@ dependencies {
 }
 ```
 
-Snapshots are published to OSSRH; releases sync to Maven Central within a few
-hours of `gradle publish`.
+The included build pins Android Gradle Plugin 8.5.2 and Kotlin 1.9.24 in
+[`settings.gradle.kts`](./settings.gradle.kts); if your app is on different
+versions, align them there.
 
 ## Quickstart
 
@@ -47,7 +61,7 @@ class App : Application() {
         super.onCreate()
         Mushi.init(this, MushiConfig(
             projectId = "proj_...",
-            apiKey = "mush_pk_...",
+            apiKey = "mushi_...",
             triggerMode = TriggerMode.BOTH,
             captureScreenshot = true,
             minDescriptionLength = 20
@@ -119,7 +133,7 @@ window, and shake detection uses sensors that don't require user consent.
 | Field                  | Default                              | Notes |
 |------------------------|--------------------------------------|-------|
 | `projectId`            | _required_                           | Project UUID from Mushi admin |
-| `apiKey`               | _required_                           | Public ingest key (`mush_pk_...`) |
+| `apiKey`               | _required_                           | Project API key (`mushi_...`) |
 | `endpoint`             | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`         | Override for self-hosting |
 | `triggerMode`          | `SHAKE`                              | `SHAKE` / `BUTTON` / `BOTH` / `NONE` |
 | `captureScreenshot`    | `true`                               | Disable for HIPAA-sensitive flows |

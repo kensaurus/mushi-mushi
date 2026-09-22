@@ -2,6 +2,10 @@
 
 Source: https://kensaur.us/mushi-mushi/docs/operating/status
 
+---
+description: Mushi Cloud status and uptime — the live status page for the API, hosted MCP, console and docs, what is monitored, and the uptime commitment per plan.
+---
+
 # Status & Uptime
 
   **Status page:** [updown.io/p/b6lod](https://updown.io/p/b6lod) — live
@@ -31,13 +35,14 @@ contact `kensaurus@gmail.com` for details.
 ## Incident communication
 
 1. Status page updated within **15 minutes** of detection.
-2. Active incidents posted to the `#status` channel in the
-   [Mushi Discord](https://discord.gg/mushimushi).
+2. Active incidents posted in
+   [GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions).
 3. Post-mortems published within **5 business days** for P0/P1 incidents.
 
 ## Reporting availability issues
 
 If you observe degradation not reflected on the status page, email
-`kensaurus@gmail.com` with subject `[availability]` or open a thread in Discord.
+`kensaurus@gmail.com` with subject `[availability]` or open a thread in
+[GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions).
 For security incidents, use `kensaurus@gmail.com` instead (see
 [Security Policy](/security)).

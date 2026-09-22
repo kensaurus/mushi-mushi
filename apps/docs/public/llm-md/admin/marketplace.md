@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/marketplace
 
 ---
 title: Plugin marketplace
+description: The Plugin marketplace installs outbound plugins such as PagerDuty, Linear and Zapier that receive Mushi webhook events for your project.
 ---
 
 # Plugin marketplace
@@ -74,6 +75,7 @@ request body using your signing secret). Always verify this in your handler befo
 processing events:
 
 ```ts
+import crypto from 'crypto'
 
 function verify(body: string, signature: string, secret: string) {
   const expected = crypto.createHmac('sha256', secret).update(body).digest('hex')

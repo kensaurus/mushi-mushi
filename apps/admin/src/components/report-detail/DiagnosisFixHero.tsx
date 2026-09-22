@@ -61,7 +61,9 @@ export function DiagnosisFixHero({
 
   return (
     <>
-      {/* Part 1 — Diagnosis: "here's why it broke", in plain English. */}
+      {/* Part 1 — Diagnosis: "here's why it broke", in plain English.
+          `data-tour-id` anchors the FirstRunTour "diagnosis" stop. */}
+      <div data-tour-id="report-diagnosis">
       <Card  className="mb-2 p-3">
         <div className="mb-1.5 flex items-start justify-between gap-2">
           <div className="flex items-center gap-1.5 text-sm font-semibold text-fg">
@@ -119,6 +121,7 @@ export function DiagnosisFixHero({
           </p>
         )}
       </Card>
+      </div>
 
       {/* Part 2 — Fix: the paste-ready prompt (already its own card). */}
       <CursorAgentLaunch report={report} cursorWorkspace={cursorWorkspace} />

@@ -75,7 +75,7 @@ Two Shortcuts: one to speak, one to confirm.
 The raw request, for reference:
 
 ```bash
-curl -X POST "https://.supabase.co/functions/v1/api/v1/intake/voice" \
+curl -X POST "https://<ref>.supabase.co/functions/v1/api/v1/intake/voice" \
   -H "X-Mushi-Api-Key: mushi_xxx" \
   -H "Idempotency-Key: 4d2a…" \
   -H "Content-Type: application/json" \

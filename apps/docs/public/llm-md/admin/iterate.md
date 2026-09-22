@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/iterate
 
 ---
 title: Iterate
+description: The Iterate page queues improvement runs on a user flow — an agent tests the screens, finds friction and proposes changes for you to review.
 ---
 
 # Iterate
@@ -123,13 +124,13 @@ run is active. The drawer doesn't auto-poll to avoid hammering the API during a 
 ## API
 
 ```bash
-GET    /v1/admin/pdca?project_id=&limit=50
-GET    /v1/admin/pdca/
+GET    /v1/admin/pdca?project_id=<pid>&limit=50
+GET    /v1/admin/pdca/<id>
 POST   /v1/admin/pdca   { "target_url": "...", "goal": "...", "iterations_target": 5,
                           "target_score": 0.85, "primary_model": "claude-4-sonnet",
-                          "judge_model": "claude-3-haiku", "project_id": "" }
-DELETE /v1/admin/pdca/         (abort)
-POST   /v1/admin/pdca//trigger (manually trigger queued run)
+                          "judge_model": "claude-3-haiku", "project_id": "<pid>" }
+DELETE /v1/admin/pdca/<id>         (abort)
+POST   /v1/admin/pdca/<id>/trigger (manually trigger queued run)
 ```
 
 ---
