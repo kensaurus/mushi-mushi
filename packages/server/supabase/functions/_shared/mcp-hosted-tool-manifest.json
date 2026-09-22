@@ -45,8 +45,8 @@
     "description": "Record a fix outcome from an external agent.",
     "method": "POST",
     "path": "/v1/admin/fixes",
-    "required": ["reportId"],
-    "bodyPassthrough": true
+    "required": ["reportId", "branch", "filesChanged", "linesChanged", "summary"],
+    "transform": "submit_fix_result"
   },
   "trigger_judge": {
     "scope": "mcp:write",
@@ -68,6 +68,7 @@
     "method": "POST",
     "path": "/v1/admin/fixes/{fixId}/merge",
     "required": ["fixId"],
+    "body": { "mergeMethod": "{mergeMethod|squash}" },
     "hints": { "destructive": true, "idempotent": true }
   },
   "refresh_ci": {
@@ -83,7 +84,8 @@
     "method": "PATCH",
     "path": "/v1/sync/reports/{reportId}",
     "required": ["reportId"],
-    "body": { "status": "reopened", "note": "{note}" }
+    "body": { "status": "reopened", "note": "{note}" },
+    "wrap": "report"
   },
   "list_top_contributors": {
     "scope": "mcp:read",
@@ -96,8 +98,8 @@
     "description": "Award bonus points (positive only — no reversal endpoint) to a contributor by external user id. Destructive: points post immediately and permanently; confirm the amount and recipient before calling. Tier re-evaluation is not immediate — it runs on the contributor's next tracked activity.",
     "method": "POST",
     "path": "/v1/admin/rewards/bonus-points",
-    "required": ["external_user_id", "points", "reason"],
-    "bodyPassthrough": true,
+    "required": ["externalUserId", "points", "reason"],
+    "body": { "external_user_id": "{externalUserId}", "points": "{points}", "reason": "{reason}" },
     "hints": { "destructive": true, "idempotent": false }
   },
   "set_tier": {
@@ -105,14 +107,16 @@
     "description": "Override a contributor's tier by slug, bypassing point thresholds. Destructive: this is a label-only override that does not replay reward_webhooks, so any host perk normally tied to reaching that tier via points will not auto-grant.",
     "method": "POST",
     "path": "/v1/admin/rewards/set-tier",
-    "bodyPassthrough": true,
+    "required": ["externalUserId", "tierSlug"],
+    "body": { "external_user_id": "{externalUserId}", "tier_slug": "{tierSlug}", "reason": "{reason}" },
     "hints": { "destructive": true, "idempotent": true }
   },
   "get_account_overview": {
     "scope": "mcp:read",
     "description": "Account overview for all accessible projects.",
     "method": "GET",
-    "path": "/v1/admin/mcp/projects"
+    "path": "/v1/admin/mcp/account-overview",
+    "transform": "account_overview"
   },
   "map_user_stories": {
     "scope": "mcp:write",
@@ -140,7 +144,7 @@
     "method": "POST",
     "path": "/v1/admin/inventory/{projectId}/stories/{storyNodeId}/generate-test",
     "required": ["projectId", "storyNodeId"],
-    "bodyPassthrough": true
+    "body": { "automation_mode": "{automationMode}", "base_url": "{baseUrl}", "open_pr": "{openPr}" }
   },
   "improve_qa_story": {
     "scope": "mcp:write",
@@ -183,7 +187,7 @@
     "scope": "mcp:read",
     "description": "Two-way reporter communication health.",
     "method": "GET",
-    "path": "/v1/admin/two-way-health?project_id={project_id}"
+    "path": "/v1/admin/two-way-health?project_id={projectId}"
   },
   "list_qa_story_runs": {
     "scope": "mcp:read",
@@ -211,7 +215,8 @@
     "scope": "mcp:read",
     "description": "List agent skills catalog.",
     "method": "GET",
-    "path": "/v1/admin/skills?category={category}&q={search}&limit={limit|200}"
+    "path": "/v1/admin/skills?category={category}&q={search}&page={page}&limit={limit|200}",
+    "transform": "skills_list"
   },
   "get_skill": {
     "scope": "mcp:read",
@@ -225,23 +230,23 @@
     "description": "Start skill pipeline run.",
     "method": "POST",
     "path": "/v1/admin/skills/pipelines",
-    "required": ["root_skill_slug"],
-    "bodyPassthrough": true
+    "required": ["rootSkillSlug"],
+    "body": { "root_skill_slug": "{rootSkillSlug}", "report_id": "{reportId}", "mode": "{mode}", "project_id": "{projectId}" }
   },
   "get_pipeline_run": {
     "scope": "mcp:read",
     "description": "Get pipeline run detail.",
     "method": "GET",
-    "path": "/v1/admin/skills/pipelines/{run_id}",
-    "required": ["run_id"]
+    "path": "/v1/admin/skills/pipelines/{runId}",
+    "required": ["runId"]
   },
   "checkin_pipeline_step": {
     "scope": "mcp:write",
     "description": "Check in pipeline step status.",
     "method": "POST",
-    "path": "/v1/admin/skills/pipelines/{run_id}/steps/{step_index}/checkin",
-    "required": ["run_id", "step_index", "status"],
-    "bodyPassthrough": true
+    "path": "/v1/admin/skills/pipelines/{runId}/steps/{stepIndex}/checkin",
+    "required": ["runId", "stepIndex", "status"],
+    "body": { "status": "{status}", "notes": "{notes}", "pr_url": "{prUrl}", "agent_ref": "{agentRef}" }
   },
   "list_byok_keys": {
     "scope": "mcp:read",
@@ -286,58 +291,61 @@
     "scope": "mcp:write",
     "description": "Run full-stack health audit.",
     "method": "POST",
-    "path": "/v1/admin/projects/{project_id}/audit",
+    "path": "/v1/admin/projects/{projectId}/audit",
     "body": {}
   },
   "get_backend_health": {
     "scope": "mcp:read",
     "description": "Backend health for linked Supabase project.",
     "method": "GET",
-    "path": "/v1/admin/projects/{project_id}/backend/schema",
+    "path": "/v1/admin/projects/{projectId}/backend/schema",
     "transform": "backend_health"
   },
   "ask_codebase": {
     "scope": "mcp:write",
     "description": "Ask a plain-English question about the indexed codebase.",
     "method": "POST",
-    "path": "/v1/admin/projects/{project_id}/codebase/chat",
-    "bodyPassthrough": true
+    "path": "/v1/admin/projects/{projectId}/codebase/chat",
+    "required": ["question"],
+    "transform": "codebase_chat"
   },
   "get_file_summary": {
     "scope": "mcp:read",
     "description": "Plain-English summary for an indexed file.",
     "method": "GET",
-    "path": "/v1/admin/projects/{project_id}/codebase/summary"
+    "path": "/v1/admin/projects/{projectId}/codebase/summary?file_path={filePath}&symbol_name={symbolName}&force={force}",
+    "required": ["filePath"]
   },
   "get_codebase_tour": {
     "scope": "mcp:read",
     "description": "Guided dependency-ordered codebase tour.",
     "method": "GET",
-    "path": "/v1/admin/projects/{project_id}/codebase/tour"
+    "path": "/v1/admin/projects/{projectId}/codebase/tour?force={force}"
   },
   "search_codebase": {
     "scope": "mcp:read",
     "description": "Semantic codebase search via embeddings.",
     "method": "POST",
-    "path": "/v1/admin/projects/{project_id}/codebase/search",
-    "bodyPassthrough": true
+    "path": "/v1/admin/projects/{projectId}/codebase/search",
+    "required": ["query"],
+    "body": { "query": "{query}", "k": "{k|8}", "scope_prefix": "{scopePrefix}", "mode": "{mode}" }
   },
   "get_codebase_domains": {
     "scope": "mcp:read",
     "description": "Business domain map for the indexed codebase.",
     "method": "GET",
-    "path": "/v1/admin/projects/{project_id}/codebase/domains"
+    "path": "/v1/admin/projects/{projectId}/codebase/domains?force={force}&scope_prefix={scopePrefix}"
   },
   "analyze_codebase_impact": {
     "scope": "mcp:read",
     "description": "Diff impact — files that depend on changed paths.",
     "method": "GET",
-    "path": "/v1/admin/projects/{project_id}/codebase/impact"
+    "path": "/v1/admin/projects/{projectId}/codebase/impact?paths={paths}&source={source}&compare={compare}&fix_id={fixId}"
   },
   "analyze_wiki_knowledge": {
     "scope": "mcp:read",
     "description": "Fetch wiki/knowledge graph for indexed docs sources.",
     "method": "GET",
-    "path": "/v1/admin/projects/{project_id}/codebase/knowledge/graph"
+    "path": "/v1/admin/projects/{projectId}/codebase/knowledge/graph"
   }
 }

@@ -170,7 +170,9 @@ For custom MCP hosts or tests:
 
 1. **One global MCP config**; keep `mushi` in `~/.cursor/mcp.json` only. Do **not** duplicate `mushi` / `mushi-stdio` in per-project `.cursor/mcp.json` (prevents connection storms). Project repos may ship `{}` or a comment pointing to the global file.
 2. **Windows paths**; use forward slashes in JSON (`C:/Users/...`) or escaped backslashes (`C:\\Users\\...`). Raw `\f`, `\n`, `\t` in paths corrupt JSON.
-3. **Multi-project**; either one HTTP server per project (distinct server name + `X-Mushi-Project-Id`) or one stdio server and pass `project_id` on each tool call.
+3. **Multi-project**; either one HTTP server per project (distinct server name + `X-Mushi-Project-Id`) or one stdio server and pass `projectId` on each tool call.
+
+Tool parameters are camelCase (`projectId`, `reportId`, `includeRaw`). The snake_case spelling of any of them (`project_id`) is accepted too, on both transports, so older prompts and configs keep working.
 4. **After editing global config**; fully restart Cursor (MCP panel must reload).
 
 | Header | Role |
