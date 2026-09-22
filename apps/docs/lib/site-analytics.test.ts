@@ -4,7 +4,6 @@
 import { describe, expect, it } from 'vitest'
 import { MUSHI_EVENTS } from '@mushi-mushi/core'
 import {
-  DOCS_PAGE_VIEW_EVENT,
   buildFirstTouch,
   commitFirstTouch,
   consentKey,
@@ -22,7 +21,6 @@ import {
   reservedViewProps,
   sanitizeReferrer,
   sanitizeRefSlug,
-  viewEventForRoute,
   viewEventsForRoute,
   writeStoredConsent,
   type KeyValueStore,
@@ -51,20 +49,25 @@ describe('readSiteAnalyticsConfig', () => {
   })
 })
 
-describe('viewEventForRoute', () => {
+/** The page-specific event for a route, after the always-present docs_page_view. */
+function specificViewEvent(pathname: string): string | null {
+  return viewEventsForRoute(pathname)[1]?.name ?? null
+}
+
+describe('viewEventsForRoute — page-specific events', () => {
   it('maps landing, quickstart subtree and pricing', () => {
-    expect(viewEventForRoute('/')).toBe('landing_view')
-    expect(viewEventForRoute('')).toBe('landing_view')
-    expect(viewEventForRoute('/quickstart')).toBe('quickstart_view')
-    expect(viewEventForRoute('/quickstart/incident-loop/')).toBe('quickstart_view')
-    expect(viewEventForRoute('/pricing')).toBe('pricing_view')
+    expect(specificViewEvent('/')).toBe('landing_view')
+    expect(specificViewEvent('')).toBe('landing_view')
+    expect(specificViewEvent('/quickstart')).toBe('quickstart_view')
+    expect(specificViewEvent('/quickstart/incident-loop/')).toBe('quickstart_view')
+    expect(specificViewEvent('/pricing')).toBe('pricing_view')
   })
 
-  it('returns null for every other docs route', () => {
-    expect(viewEventForRoute('/connect')).toBeNull()
-    expect(viewEventForRoute('/quickstarts')).toBeNull()
-    expect(viewEventForRoute('/pricing/faq')).toBeNull()
-    expect(viewEventForRoute('/sdks/web')).toBeNull()
+  it('has none for every other docs route', () => {
+    expect(specificViewEvent('/connect')).toBeNull()
+    expect(specificViewEvent('/quickstarts')).toBeNull()
+    expect(specificViewEvent('/pricing/faq')).toBeNull()
+    expect(specificViewEvent('/sdks/web')).toBeNull()
   })
 })
 
@@ -94,7 +97,7 @@ describe('viewEventsForRoute', () => {
         for (const key of spec.required as readonly string[]) expect(ev.props[key], `${ev.name}.${key}`).toBeTruthy()
       }
     }
-    expect(MUSHI_EVENTS[DOCS_PAGE_VIEW_EVENT].surface).toBe('docs')
+    expect(MUSHI_EVENTS.docs_page_view.surface).toBe('docs')
   })
 })
 

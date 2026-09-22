@@ -40,13 +40,13 @@ export function readSiteAnalyticsConfig(env: {
 
 // ─── Routes → view events ────────────────────────────────────────────────────
 
-export type DocsViewEvent = 'landing_view' | 'quickstart_view' | 'pricing_view'
+type DocsViewEvent = 'landing_view' | 'quickstart_view' | 'pricing_view'
 
 /**
  * Fired on every docs route (landing included), so visits are not limited to
  * the three pages below. Its taxonomy entry requires a host `route` prop.
  */
-export const DOCS_PAGE_VIEW_EVENT = 'docs_page_view' as const
+const DOCS_PAGE_VIEW_EVENT = 'docs_page_view'
 
 /** `usePathname()` already strips `basePath`; this just drops trailing slashes. */
 export function normalizePathname(pathname: string): string {
@@ -58,7 +58,7 @@ export function normalizePathname(pathname: string): string {
  * The page-specific view event, kept alongside `docs_page_view` so the funnel
  * series that started with them stay continuous. Null for other routes.
  */
-export function viewEventForRoute(pathname: string): DocsViewEvent | null {
+function viewEventForRoute(pathname: string): DocsViewEvent | null {
   const p = normalizePathname(pathname)
   if (p === '/') return 'landing_view'
   if (p === '/quickstart' || p.startsWith('/quickstart/')) return 'quickstart_view'
@@ -115,7 +115,7 @@ export function sanitizeReferrer(referrer: string): string {
   }
 }
 
-/** `?ref=` values ride into the console URL — keep them slug-shaped. @internal */
+/** `?ref=` values ride into the console URL — keep them slug-shaped. */
 export function sanitizeRefSlug(value: string | null | undefined): string | null {
   if (!value) return null
   const slug = value.trim().replace(/[^A-Za-z0-9._-]/g, '').slice(0, 64)

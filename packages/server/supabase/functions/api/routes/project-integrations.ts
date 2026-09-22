@@ -341,4 +341,49 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
     );
   });
 
+  // Activation funnel step `diagnosis_viewed`: the console's first-diagnosis
+  // screen calls this once the classified test report renders. The
+  // setup_funnel_events CHECK (20260921000002) and FunnelEventName allowed the
+  // step from the start, but nothing wrote it — the console has no API key
+  // for POST /v1/cli/funnel. JWT + project access like the test-report route
+  // above; one row per project (dedup_key = project id), so a refresh or a
+  // second diagnosis never adds another.
+  app.post('/v1/admin/projects/:id/setup-funnel/diagnosis-viewed', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+
+    if (!UUID_RE.test(projectId)) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
+        400,
+      );
+    }
+
+    const db = getServiceClient();
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+
+    // Optional `{ reportId }`, kept as metadata when it is a UUID.
+    let reportId: string | null = null;
+    try {
+      const body: unknown = await c.req.json();
+      const raw = body && typeof body === 'object' ? (body as { reportId?: unknown }).reportId : undefined;
+      if (typeof raw === 'string' && UUID_RE.test(raw)) reportId = raw;
+    } catch {
+      /* no body */
+    }
+
+    void emitFunnelEvent(db, {
+      userId,
+      projectId,
+      eventName: 'diagnosis_viewed',
+      dedupKey: projectId,
+      source: 'console',
+      metadata: reportId ? { report_id: reportId } : {},
+    });
+
+    return c.json({ ok: true }, 202);
+  });
 }

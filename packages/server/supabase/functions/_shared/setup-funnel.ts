@@ -49,6 +49,8 @@ export type FunnelEventName =
   | 'console_project_created'
   | 'console_key_minted'
   | 'test_report_sent'
+  // Written by POST /v1/admin/projects/:id/setup-funnel/diagnosis-viewed when
+  // the console's first diagnosis renders; one row per project.
   | 'diagnosis_viewed'
   | 'mcp_setup_done'
   | 'mcp_first_tool_call'
