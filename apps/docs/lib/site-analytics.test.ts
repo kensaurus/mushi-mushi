@@ -12,7 +12,6 @@ import {
   dntActive,
   firstTouchKey,
   firstTouchReservedProps,
-  normalizePathname,
   parseUtm,
   readFirstTouch,
   readSiteAnalyticsConfig,
@@ -90,9 +89,17 @@ describe('viewEventsForRoute — page-specific events', () => {
 
 describe('viewEventsForRoute', () => {
   it('emits docs_page_view with its route on every docs route', () => {
-    for (const path of ['/', '/connect', '/sdks/web/', '/pricing/faq', '/quickstart']) {
+    const routes: Array<[string, string]> = [
+      ['/', '/'],
+      ['', '/'],
+      ['/connect', '/connect'],
+      ['/sdks/web/', '/sdks/web'],
+      ['/pricing/faq', '/pricing/faq'],
+      ['/quickstart', '/quickstart'],
+    ]
+    for (const [path, route] of routes) {
       const [first] = viewEventsForRoute(path)
-      expect(first).toEqual({ name: 'docs_page_view', props: { route: normalizePathname(path) } })
+      expect(first).toEqual({ name: 'docs_page_view', props: { route } })
     }
   })
 

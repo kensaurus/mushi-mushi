@@ -49,7 +49,7 @@ type DocsViewEvent = 'landing_view' | 'quickstart_view' | 'pricing_view'
 const DOCS_PAGE_VIEW_EVENT = 'docs_page_view'
 
 /** `usePathname()` already strips `basePath`; this just drops trailing slashes. */
-export function normalizePathname(pathname: string): string {
+function normalizePathname(pathname: string): string {
   const p = pathname.replace(/\/+$/, '')
   return p === '' ? '/' : p
 }
