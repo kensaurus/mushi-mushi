@@ -2,13 +2,13 @@
   "mcpServers": {
     "mushi": {
       "type": "http",
-      "url": "https://your-project.supabase.co/functions/v1/mcp",
+      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
       "headers": {
         "Authorization": "Bearer ${MUSHI_API_KEY}",
         "X-Mushi-Api-Key": "${MUSHI_API_KEY}",
         "X-Mushi-Project-Id": "${MUSHI_PROJECT_ID}"
       },
-      "notes": "Hosted Streamable HTTP MCP — recommended for Cursor plugin usage. Replace the URL with your Supabase project's edge function URL. Set MUSHI_API_KEY and MUSHI_PROJECT_ID in your shell environment or Cursor settings. Append ?read_only=1 to the URL to hide write tools.",
+      "notes": "Hosted Streamable HTTP MCP. Append ?read_only=1 to hide write tools. Self-hosters replace this URL with their own /functions/v1/mcp endpoint.",
       "_envSetup": "Export MUSHI_API_KEY=<your-mcp-read-key> and MUSHI_PROJECT_ID=<uuid> in your shell profile, or add them to Cursor → Settings → Environment Variables."
     },
     "mushi-stdio": {
