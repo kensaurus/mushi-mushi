@@ -128,7 +128,7 @@ The Mushi backend now exposes the same tool catalog over the **Streamable HTTP**
 }
 ```
 
-> **Cursor icon:** HTTP MCP URLs on `*.supabase.co` often show the **Supabase favicon** in Cursor settings; not a Mushi bug. Use **stdio** (`command` + `npx @mushi-mushi/mcp`) for the red 虫 stamp, or set `"icon": "https://kensaur.us/mushi-mushi/integrations/mushi-mark-512.png"` in your server block. The hosted endpoint also emits MCP `serverInfo.icons` and serves inline SVG at `?icon=1`.
+> **Cursor icon:** HTTP MCP URLs on `*.supabase.co` often show the **Supabase favicon** in Cursor settings; not a Mushi bug. Use **stdio** (`command` + `npx @mushi-mushi/mcp`) for the red 虫 stamp, or set `"icon": "https://kensaur.us/mushi-mushi/docs/integrations/mushi-mark-512.png"` in your server block. The hosted endpoint also emits MCP `serverInfo.icons` and serves inline SVG at `?icon=1`.
 
 ### Feature groups (`?features=` / `MUSHI_FEATURES`)
 
