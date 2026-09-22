@@ -210,7 +210,9 @@ describe('structured tool output (MCP 2025-06-18)', () => {
     // the rows themselves went missing from this channel.
     const content = res.content as Array<{ type: string; text: string }>
     expect(content[0].text).toMatch(/^<mushi-data role="get_recent_reports">/)
-    const payload = content[0].text.match(/<content>\n([\s\S]*)\n<\/content>/)?.[1] ?? ''
+    // Non-greedy: report bodies are reporter-authored and can contain a
+    // literal </content>, which a greedy match would swallow past.
+    const payload = content[0].text.match(/<content>\n([\s\S]*?)\n<\/content>/)?.[1] ?? ''
     expect(JSON.parse(payload)).toEqual({
       reports: [{ id: 'r1', status: 'classified' }],
       total: 42,
