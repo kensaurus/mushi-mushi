@@ -333,9 +333,12 @@ const ABSOLUTE_RE = /^[a-z][a-z0-9+.-]*:/i
 export interface SignupDecoration {
   /** `data-mushi-cta` of the clicked element → `src=`. */
   ctaId: string
-  /** Decoration is analytics: nothing is appended unless this is `granted`. */
+  /** First-touch fields are appended only when this is `granted`. */
   consent: StoredConsent | 'pending' | 'blocked' | null
-  /** The stored first touch → `ft_src=` plus `utm_source/medium/campaign`. */
+  /**
+   * The stored first touch → `ft_src=` plus `utm_source/medium/campaign`.
+   * It comes from device storage, so it rides only with consent.
+   */
   firstTouch?: FirstTouch | null
   /**
    * The `?ref=` this page load arrived with, forwarded unchanged. The widget's
@@ -353,12 +356,15 @@ export interface SignupDecoration {
  * `ref=<utm_source>` here turned every UTM visitor who signed up into a loop
  * signup while a real widget ref was overwritten.
  *
- * Only on `consent === 'granted'`; otherwise the href comes back unchanged.
+ * `src=` and the landing `ref=` come from the page itself (the clicked
+ * button and this page load's URL), are not personal, and read nothing from
+ * the device, so they ride without consent; without them a widget visitor who
+ * never answers the consent bar would drop out of loop attribution. The first
+ * touch is read from storage and rides only on `consent === 'granted'`.
  * Existing params are never overwritten; unparseable hrefs are returned
  * untouched.
  */
 export function decorateSignupHref(href: string, input: SignupDecoration): string {
-  if (input.consent !== 'granted') return href
   const relative = !ABSOLUTE_RE.test(href)
   let url: URL
   try {
@@ -371,7 +377,7 @@ export function decorateSignupHref(href: string, input: SignupDecoration): strin
     if (slug && !url.searchParams.has(key)) url.searchParams.set(key, slug)
   }
   setIfAbsent('src', input.ctaId)
-  const touch = input.firstTouch
+  const touch = input.consent === 'granted' ? input.firstTouch : null
   setIfAbsent('ft_src', touch?.utm_source)
   setIfAbsent('utm_source', touch?.utm_source)
   setIfAbsent('utm_medium', touch?.utm_medium)

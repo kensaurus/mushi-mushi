@@ -162,13 +162,13 @@ const mushi = Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' });
 
 mushi.identify('usr_42', { email: 'aya@example.com', segment: 'beta' });
 mushi.setTags({ plan: 'pro', region: 'apac' });
-mushi.addBreadcrumb({ category: 'business', message: 'cart.checkout_started', data: { itemCount: 3 } });
+mushi.addBreadcrumb({ category: 'custom', message: 'cart.checkout_started', data: { itemCount: 3 } });
 
 try {
   await runCheckout();
 } catch (err) {
   // Normalises any throw, attaches breadcrumbs + sticky tags + Sentry context.
-  mushi.captureException(err, { level: 'error', tags: { surface: 'checkout' } });
+  mushi.captureException(err, { severity: 'high', tags: { surface: 'checkout' } });
 }
 ```
 

@@ -340,12 +340,14 @@ describe('CTA links', () => {
     )
   })
 
-  it('decorates nothing unless consent is granted', () => {
+  it('without consent, keeps the page-level src and loop ref but no first touch', () => {
     const href = 'https://x.test/admin/signup'
     for (const consent of [null, 'pending', 'denied', 'blocked'] as const) {
+      // src and ref come from this page, not device storage: a widget visitor
+      // who never answers the consent bar still counts as a loop signup.
       expect(
         decorateSignupHref(href, { ctaId: 'landing-hero', consent, firstTouch: hnTouch, landingRef: 'a1b2c3d4e5f6' }),
-      ).toBe(href)
+      ).toBe('https://x.test/admin/signup?src=landing-hero&ref=a1b2c3d4e5f6')
     }
   })
 

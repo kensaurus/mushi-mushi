@@ -217,7 +217,8 @@ export function MushiSiteAnalytics() {
     firstTouchCandidateRef.current =
       existing ?? buildFirstTouch({ search: window.location.search, referrer: document.referrer, pathname })
     firstTouchPendingRef.current = existing === null
-    // In memory only; used just to decorate a signup link after consent.
+    // In memory only, from this page's URL: forwarded on signup links with or
+    // without consent (decorateSignupHref) so widget-mark signups stay counted.
     landingRefRef.current = sanitizeRefSlug(new URLSearchParams(window.location.search).get('ref'))
 
     const stored = readStoredConsent(storage, CONFIG.projectId)

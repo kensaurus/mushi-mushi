@@ -84,14 +84,7 @@ export const KNOWN_FAILING = new Map([
     { reason: "several top-level JSX fragments; Button is the reader's own component", errors: ['TS2657', 'TS2304'] },
   ],
   ['packages/vue/README.md#1', { reason: 'App is used without an import', errors: ['TS2304'] }],
-  [
-    'packages/web/README.md#7',
-    {
-      reason:
-        "real doc bugs: addBreadcrumb({ category: 'business' }) is not a category the SDK accepts and captureException has no `level` option; runCheckout is the reader's own function",
-      errors: ['TS2322', 'TS2353', 'TS2304'],
-    },
-  ],
+  ['packages/web/README.md#7', { reason: "runCheckout is the reader's own function", errors: ['TS2304'] }],
   ['packages/web/README.md#10', { reason: 'Mushi.init({ /* ... */ }) is a placeholder config', errors: ['TS2345'] }],
 ])
 
