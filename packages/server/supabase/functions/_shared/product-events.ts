@@ -56,7 +56,24 @@ async function selfOrganizationId(db: SupabaseClient): Promise<string | null> {
     .eq('id', SELF_PROJECT_ID)
     .maybeSingle()
   _selfOrgId = (data?.organization_id as string | undefined) ?? null
+  if (_selfOrgId) void warnIfSelfOrgShared(db, _selfOrgId)
   return _selfOrgId
+}
+
+/**
+ * end_users are organization-scoped: console users resolved here share a
+ * namespace with every other project in the self organization. The self
+ * project was moved into its own org on 2026-09-22 (migration
+ * 20260922000018); a second project landing there silently re-mixes them.
+ */
+async function warnIfSelfOrgShared(db: SupabaseClient, orgId: string): Promise<void> {
+  const { count, error } = await db
+    .from('projects')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', orgId)
+  if (!error && (count ?? 0) > 1) {
+    log.error('product-events: self organization holds more than one project', { orgId, projects: count })
+  }
 }
 
 /**
