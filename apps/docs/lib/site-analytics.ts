@@ -42,18 +42,45 @@ export function readSiteAnalyticsConfig(env: {
 
 export type DocsViewEvent = 'landing_view' | 'quickstart_view' | 'pricing_view'
 
+/**
+ * Fired on every docs route (landing included), so visits are not limited to
+ * the three pages below. Its taxonomy entry requires a host `route` prop.
+ */
+export const DOCS_PAGE_VIEW_EVENT = 'docs_page_view' as const
+
 /** `usePathname()` already strips `basePath`; this just drops trailing slashes. */
 export function normalizePathname(pathname: string): string {
   const p = pathname.replace(/\/+$/, '')
   return p === '' ? '/' : p
 }
 
+/**
+ * The page-specific view event, kept alongside `docs_page_view` so the funnel
+ * series that started with them stay continuous. Null for other routes.
+ */
 export function viewEventForRoute(pathname: string): DocsViewEvent | null {
   const p = normalizePathname(pathname)
   if (p === '/') return 'landing_view'
   if (p === '/quickstart' || p.startsWith('/quickstart/')) return 'quickstart_view'
   if (p === '/pricing') return 'pricing_view'
   return null
+}
+
+export interface RouteViewEvent {
+  name: typeof DOCS_PAGE_VIEW_EVENT | DocsViewEvent
+  props: Record<string, string>
+}
+
+/**
+ * What one route view emits, in order: `docs_page_view` for every route,
+ * then the page-specific event where there is one.
+ */
+export function viewEventsForRoute(pathname: string): RouteViewEvent[] {
+  const route = normalizePathname(pathname)
+  const events: RouteViewEvent[] = [{ name: DOCS_PAGE_VIEW_EVENT, props: { route } }]
+  const specific = viewEventForRoute(route)
+  if (specific) events.push({ name: specific, props: {} })
+  return events
 }
 
 // ─── UTM / referrer → reserved props ─────────────────────────────────────────
@@ -253,6 +280,22 @@ export function commitFirstTouch(
   return recordFirstTouchOnce(store, projectId, candidate)
 }
 
+/**
+ * Reserved `$ft_*` props carrying the stored first touch. The component adds
+ * them to the first event it tracks on each page load, so every visitor's
+ * anon id can be tied to where they first came from, not just the one visit
+ * that created the record.
+ */
+export function firstTouchReservedProps(touch: FirstTouch | null | undefined): ReservedProps {
+  if (!touch) return {}
+  const out: ReservedProps = { $ft_landing_path: touch.landing_path }
+  if (touch.utm_source) out.$ft_utm_source = touch.utm_source
+  if (touch.utm_medium) out.$ft_utm_medium = touch.utm_medium
+  if (touch.utm_campaign) out.$ft_utm_campaign = touch.utm_campaign
+  if (touch.referrer) out.$ft_referrer = touch.referrer
+  return out
+}
+
 // ─── CTA links ───────────────────────────────────────────────────────────────
 
 export type CtaHrefKind = 'signup' | 'connect' | null
@@ -266,12 +309,35 @@ export function ctaHrefKind(href: string | null | undefined): CtaHrefKind {
 
 const ABSOLUTE_RE = /^[a-z][a-z0-9+.-]*:/i
 
+export interface SignupDecoration {
+  /** `data-mushi-cta` of the clicked element → `src=`. */
+  ctaId: string
+  /** Decoration is analytics: nothing is appended unless this is `granted`. */
+  consent: StoredConsent | 'pending' | 'blocked' | null
+  /** The stored first touch → `ft_src=` plus `utm_source/medium/campaign`. */
+  firstTouch?: FirstTouch | null
+  /**
+   * The `?ref=` this page load arrived with, forwarded unchanged. The widget's
+   * "Bug reports by Mushi" mark puts the host project's hash there; the
+   * console decides whether it is a loop ref (signupAttribution.isLoopRef).
+   */
+  landingRef?: string | null
+}
+
 /**
- * Append `src=<ctaId>` (when absent) and `ref=<first-touch utm_source>` (when
- * known and absent) at click time, so MDX / copy links stay static. Existing
- * params are never overwritten; unparseable hrefs are returned untouched.
+ * Append attribution to a signup link at click time, so MDX / copy links stay
+ * static: `src=<ctaId>`, `ft_src=<first-touch utm_source>`, the first touch's
+ * `utm_*`, and the landing's own `ref=`. First touch never rides in `ref=`:
+ * the console reads `ref=` as a growth-loop referral, and until 2026-09-22 a
+ * `ref=<utm_source>` here turned every UTM visitor who signed up into a loop
+ * signup while a real widget ref was overwritten.
+ *
+ * Only on `consent === 'granted'`; otherwise the href comes back unchanged.
+ * Existing params are never overwritten; unparseable hrefs are returned
+ * untouched.
  */
-export function decorateSignupHref(href: string, ctaId: string, ref?: string | null): string {
+export function decorateSignupHref(href: string, input: SignupDecoration): string {
+  if (input.consent !== 'granted') return href
   const relative = !ABSOLUTE_RE.test(href)
   let url: URL
   try {
@@ -279,9 +345,17 @@ export function decorateSignupHref(href: string, ctaId: string, ref?: string | n
   } catch {
     return href
   }
-  if (ctaId && !url.searchParams.has('src')) url.searchParams.set('src', ctaId)
-  const refSlug = sanitizeRefSlug(ref)
-  if (refSlug && !url.searchParams.has('ref')) url.searchParams.set('ref', refSlug)
+  const setIfAbsent = (key: string, value: string | null | undefined) => {
+    const slug = sanitizeRefSlug(value)
+    if (slug && !url.searchParams.has(key)) url.searchParams.set(key, slug)
+  }
+  setIfAbsent('src', input.ctaId)
+  const touch = input.firstTouch
+  setIfAbsent('ft_src', touch?.utm_source)
+  setIfAbsent('utm_source', touch?.utm_source)
+  setIfAbsent('utm_medium', touch?.utm_medium)
+  setIfAbsent('utm_campaign', touch?.utm_campaign)
+  setIfAbsent('ref', input.landingRef)
   return relative ? `${url.pathname}${url.search}${url.hash}` : url.toString()
 }
 

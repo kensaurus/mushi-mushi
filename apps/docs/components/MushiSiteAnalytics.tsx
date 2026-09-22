@@ -16,23 +16,28 @@
  * initialised with `analytics.consent: 'required'` so a stale or spoofed
  * stored value cannot widen anything — it just reads the same key.
  * The first-touch record (`mushi_first_touch_<projectId>`) is held in memory
- * and written only on consent too, and until then signup links get no
- * `ref=` — the consent answer is the only thing stored before an OK
+ * and written only on consent too, and until then signup links are not
+ * decorated at all — the consent answer is the only thing stored before an OK
  * (apps/docs/content/legal/privacy.mdx §11 lists every key).
  *
  * Events (packages/core/src/analytics-taxonomy.ts)
  * -------------------------------------------------
+ *   docs_page_view   every route (the funnel's visits count this + landing_view)
  *   landing_view     `/`
  *   quickstart_view  `/quickstart`, `/quickstart/*`
  *   pricing_view     `/pricing`
  *   cta_click        any click inside `[data-mushi-cta]`
  *   signup_click     …when that element links to `/signup`
  *   connect_demo_click …when it links to `/connect`
- * `*_view` events carry reserved `$utm_*`, `$referrer`, `$route`, `$ref`
- * and `$first_touch` (true on the first tracked view after the first-touch
- * record was created — i.e. this visitor's very first session). Signup links
- * get `src=<cta_id>` / `ref=<first-touch utm_source>` appended at click time
- * so MDX links stay static.
+ * View events carry reserved `$utm_*`, `$referrer`, `$route`, `$ref` and
+ * `$first_touch` (true on the first tracked view after the first-touch
+ * record was created — i.e. this visitor's very first session). The first
+ * event tracked on each page load also carries the stored first touch as
+ * `$ft_*`. Signup links get `src=<cta_id>`, `ft_src=<first-touch
+ * utm_source>`, the first touch's `utm_*` and the landing's own `ref=`
+ * (the widget mark's project hash) appended at click time, so MDX links stay
+ * static. `ref=` is the console's growth-loop referral and never carries a
+ * UTM source.
  *
  * Config: NEXT_PUBLIC_MUSHI_SELF_{PROJECT_ID,API_KEY,API_ENDPOINT}
  * (apps/docs/.env.example). Unset → renders nothing, does nothing.
@@ -46,12 +51,14 @@ import {
   ctaHrefKind,
   decorateSignupHref,
   dntActive,
+  firstTouchReservedProps,
   normalizePathname,
   readFirstTouch,
   readSiteAnalyticsConfig,
   readStoredConsent,
   reservedViewProps,
-  viewEventForRoute,
+  sanitizeRefSlug,
+  viewEventsForRoute,
   writeStoredConsent,
   type FirstTouch,
   type ReservedProps,
@@ -133,22 +140,33 @@ export function MushiSiteAnalytics() {
   const trackerRef = useRef<Tracker | null>(null)
   const queueRef = useRef<QueuedEvent[]>([])
   const lastViewRef = useRef<string | null>(null)
-  const firstTouchSourceRef = useRef<string | null>(null)
+  /** The stored first touch, set once consent committed it. Decorates signup links. */
+  const firstTouchStoredRef = useRef<FirstTouch | null>(null)
   const firstTouchPendingRef = useRef(false)
   /** First-touch candidate held in memory until consent allows the write. */
   const firstTouchCandidateRef = useRef<FirstTouch | null>(null)
+  /** `$ft_*` already attached to an event on this page load. */
+  const firstTouchAttachedRef = useRef(false)
+  /** The `?ref=` this page load arrived with (widget mark hash), forwarded to signup. */
+  const landingRefRef = useRef<string | null>(null)
 
   /** Write the first-touch record — a no-op unless consent is `granted`. */
   const persistFirstTouch = useCallback((consent: StoredConsent) => {
     const candidate = firstTouchCandidateRef.current
     if (!CONFIG || !candidate) return
     const committed = commitFirstTouch(window.localStorage, CONFIG.projectId, candidate, consent)
-    if (committed) firstTouchSourceRef.current = committed.touch.utm_source ?? null
+    if (committed) firstTouchStoredRef.current = committed.touch
   }, [])
 
   const emit = useCallback((name: string, props: EventProps, reserved?: ReservedProps) => {
     const consent = consentRef.current
     if (consent === 'denied' || consent === 'blocked') return
+    // Queued events only leave on `granted`, which also commits the
+    // candidate, so the candidate here is the first touch that gets stored.
+    if (!firstTouchAttachedRef.current && firstTouchCandidateRef.current) {
+      firstTouchAttachedRef.current = true
+      reserved = { ...firstTouchReservedProps(firstTouchCandidateRef.current), ...reserved }
+    }
     const tracker = trackerRef.current
     if (tracker) {
       tracker.track(name, props, reserved)
@@ -199,6 +217,8 @@ export function MushiSiteAnalytics() {
     firstTouchCandidateRef.current =
       existing ?? buildFirstTouch({ search: window.location.search, referrer: document.referrer, pathname })
     firstTouchPendingRef.current = existing === null
+    // In memory only; used just to decorate a signup link after consent.
+    landingRefRef.current = sanitizeRefSlug(new URLSearchParams(window.location.search).get('ref'))
 
     const stored = readStoredConsent(storage, CONFIG.projectId)
     if (stored === 'granted') {
@@ -221,23 +241,18 @@ export function MushiSiteAnalytics() {
   // re-renders never double-fire.
   useEffect(() => {
     if (!CONFIG) return
-    const name = viewEventForRoute(pathname)
-    if (!name) return
     const key = normalizePathname(pathname)
     if (lastViewRef.current === key) return
     lastViewRef.current = key
     const firstTouch = firstTouchPendingRef.current
     firstTouchPendingRef.current = false
-    emit(
-      name,
-      {},
-      reservedViewProps({
-        search: window.location.search,
-        referrer: document.referrer,
-        pathname,
-        firstTouch,
-      }),
-    )
+    const reserved = reservedViewProps({
+      search: window.location.search,
+      referrer: document.referrer,
+      pathname,
+      firstTouch,
+    })
+    for (const ev of viewEventsForRoute(pathname)) emit(ev.name, ev.props, reserved)
   }, [pathname, emit])
 
   // Delegated CTA clicks. Capture phase so the href is decorated before the
@@ -255,7 +270,12 @@ export function MushiSiteAnalytics() {
       if (!(el instanceof HTMLAnchorElement)) return
       const kind = ctaHrefKind(el.getAttribute('href'))
       if (kind === 'signup') {
-        const next = decorateSignupHref(el.href, ctaId, firstTouchSourceRef.current)
+        const next = decorateSignupHref(el.href, {
+          ctaId,
+          consent: consentRef.current,
+          firstTouch: firstTouchStoredRef.current,
+          landingRef: landingRefRef.current,
+        })
         if (next !== el.href) el.href = next
         emit('signup_click', { href: next })
       } else if (kind === 'connect') {
