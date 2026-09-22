@@ -108,6 +108,11 @@
     "check:publish-readiness": "node scripts/check-publish-readiness.mjs",
     "check:license-headers": "node scripts/check-license-headers.mjs",
     "check:spdx-headers": "node scripts/check-spdx-headers.mjs",
+    "check:loader-cdn-url": "node scripts/check-loader-cdn-url.mjs",
+    "check:site-urls": "node scripts/check-site-urls.mjs",
+    "check:doc-snippets": "node scripts/check-doc-snippets.mjs",
+    "check:package-types": "node scripts/check-package-types.mjs",
+    "check:install-size": "node scripts/check-install-size.mjs",
     "bootstrap:new-package": "node scripts/bootstrap-new-package.mjs",
     "sync:helm-migrations": "node scripts/sync-helm-migrations.mjs",
     "check:helm-migrations": "node scripts/sync-helm-migrations.mjs --check",
@@ -148,7 +153,7 @@
     "test:cloudfront": "node --test scripts/cloudfront-functions.test.mjs",
     "test:verify-hosted-mcp": "node --test scripts/verify-hosted-mcp-helpers.test.mjs",
     "test:strip-markup": "node --test scripts/strip-markup.test.mjs",
-    "test:scripts": "node --test scripts/cloudfront-functions.test.mjs scripts/verify-hosted-mcp-helpers.test.mjs scripts/strip-markup.test.mjs scripts/mcp-configs.test.mjs scripts/marketing/queue-policy.test.mjs scripts/normalize-package-metadata.test.mjs scripts/check-changeset-coverage.test.mjs scripts/aws-configure-docs-errors.test.mjs scripts/verify-published-tarballs.test.mjs scripts/release-workflow.test.mjs",
+    "test:scripts": "node --test scripts/cloudfront-functions.test.mjs scripts/verify-hosted-mcp-helpers.test.mjs scripts/strip-markup.test.mjs scripts/mcp-configs.test.mjs scripts/marketing/queue-policy.test.mjs scripts/normalize-package-metadata.test.mjs scripts/check-changeset-coverage.test.mjs scripts/aws-configure-docs-errors.test.mjs scripts/verify-published-tarballs.test.mjs scripts/release-workflow.test.mjs scripts/check-loader-cdn-url.test.mjs scripts/check-site-urls.test.mjs scripts/check-doc-snippets.test.mjs scripts/check-spdx-headers.test.mjs scripts/check-install-size.test.mjs",
     "verify:pipeline": "pnpm --filter @mushi-mushi/server test && cd packages/server/supabase && deno check functions/_shared/rag.ts functions/_shared/observability.ts functions/_shared/env-int.ts functions/api/routes/doctor.ts functions/api/routes/project-codebase.ts functions/webhooks-github-indexer/index.ts",
     "check:drift": "pnpm check:catalog-sync && pnpm check:mcp-tools-doc && pnpm check:internal-doc-links && pnpm check:onboarding-drift && pnpm check:env-docs && pnpm check:docs-drift && pnpm check:docs-stats && pnpm check:route-manifest && pnpm check:edge-fn-deploy-docs && pnpm check:admin-docs-coverage && pnpm check:humanize-parity && pnpm check:error-codes",
     "check:mcp-tools-doc": "node scripts/gen-mcp-tools-doc.mjs --check",
@@ -157,6 +162,7 @@
     "e2e:realworld": "pnpm --filter mushi-realworld e2e:gate"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@changesets/cli": "^2.31.0",
     "jiti": "^2.7.0",
     "knip": "^6.34.0",

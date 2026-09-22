@@ -26,8 +26,10 @@ npx mushi-mushi
 [![Try the demo — no signup](https://img.shields.io/badge/Try%20the%20demo-no%20signup-E34234)](https://kensaur.us/mushi-mushi/docs/connect)
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=%40mushi-mushi%2Freact&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
 [![Server](https://img.shields.io/badge/server-AGPL--3.0-brightgreen.svg)](./packages/server/LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/kensaurus/mushi-mushi/badge)](https://scorecard.dev/viewer/?uri=github.com/kensaurus/mushi-mushi)
+[![npm provenance](https://img.shields.io/badge/npm-provenance-2ea44f?logo=npm)](./SECURITY.md#verifying-a-mushi-mushi-tarball-before-installing)
 
-<sub>Node ≥22 · [CI](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml) · SDK MIT · [enterprise](./packages/server/ee/README.md) · [Smithery](https://smithery.ai/servers/kensaurus/mushi-mushi)</sub>
+<sub>Node ≥20.19 · [CI](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml) · SDK MIT · [enterprise](./packages/server/ee/README.md) · [Smithery](https://smithery.ai/servers/kensaurus/mushi-mushi)</sub>
 
 [Vision](./VISION.md) · [Quick start](#60-second-proof) · [Connect your editor](https://kensaur.us/mushi-mushi/docs/connect) · [Self-host](#self-host-in-under-5-minutes) · [Why not just Sentry?](#why-not-just-sentry) · [Packages](#framework-coverage) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Try the read-only demo](https://kensaur.us/mushi-mushi/docs/connect) · [Console (sign in)](https://kensaur.us/mushi-mushi/admin/) · [Operators / platform](./docs/operators/) · [Roadmap](https://kensaur.us/mushi-mushi/docs/roadmap)
 

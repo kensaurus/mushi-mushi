@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
 import { scrubUrl } from '@mushi-mushi/core'
 import type { MushiNodeClient } from './client'
 import { parseTraceContext } from './trace'
