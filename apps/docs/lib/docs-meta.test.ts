@@ -102,6 +102,34 @@ describe('install and credential claims', () => {
   })
 })
 
+describe('script-tag install (quickstart/web)', () => {
+  const REPO = join(DOCS_ROOT, '..', '..')
+  const LOADER_URL_RE = /https:\/\/cdn\.jsdelivr\.net\/npm\/@mushi-mushi\/web@\d+\/dist\/mushi\.loader\.global\.js/g
+  const quickstart = readFileSync(join(CONTENT, 'quickstart', 'web.mdx'), 'utf8')
+  const loaderSource = readFileSync(join(REPO, 'packages', 'web', 'src', 'loader.ts'), 'utf8')
+
+  it('uses the same loader URL as the loader header and the console snippet', () => {
+    const snippets = readFileSync(join(REPO, 'apps', 'admin', 'src', 'lib', 'sdkSnippets.ts'), 'utf8')
+    const urls = new Set([
+      ...(quickstart.match(LOADER_URL_RE) ?? []),
+      ...(loaderSource.match(LOADER_URL_RE) ?? []),
+      ...(snippets.match(LOADER_URL_RE) ?? []),
+    ])
+    expect(quickstart.match(LOADER_URL_RE)?.length ?? 0).toBeGreaterThan(0)
+    expect([...urls]).toHaveLength(1)
+  })
+
+  it('documents only data-* attributes the loader reads', () => {
+    const documented = [...new Set(quickstart.match(/`data-[a-z-]+`/g) ?? [])].map((a) => a.slice(1, -1))
+    expect(documented.length).toBeGreaterThan(5)
+    const unread = documented.filter((attr) => {
+      const key = attr.slice('data-'.length).replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())
+      return !loaderSource.includes(`ds.${key}`)
+    })
+    expect(unread).toEqual([])
+  })
+})
+
 describe('structured data describes Mushi only', () => {
   it('the site-wide and landing JSON-LD use the brand pitch the npm cards end with', () => {
     expect(WEBSITE_JSONLD.description).toBe(MUSHI_TAGLINE_V2.pitch)
