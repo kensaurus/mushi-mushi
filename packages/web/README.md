@@ -137,9 +137,12 @@ Mushi.init({
     // 'sentry'— reuse an installed @sentry/replay session
     // 'off'   — default
     replay: 'rrweb',
+    rrweb: () => import('rrweb'), // your bundler code-splits it
   },
 });
 ```
+
+`replay: 'rrweb'` needs `rrweb` in your app (`npm install rrweb`). It is an optional peer dependency, so apps that don't record replay don't download it. Without it, replay records clicks only and warns once in the console.
 
 Records continuously from init (so you capture the moments *before* the report), trimmed to a rolling window. Already on Sentry Replay? See [coexistence](https://kensaur.us/mushi-mushi/docs/sdks/sentry-replay-coexistence).
 </details>
