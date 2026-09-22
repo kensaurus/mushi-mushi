@@ -127,19 +127,27 @@ The details step renders the attached screenshot as a visible preview (not just 
 <details>
 <summary><b>Session replay</b> — opt-in rolling buffer attached on submit</summary>
 
+```bash
+npm install rrweb   # only for replay: 'rrweb' — your app installs it
+```
+
 ```typescript
 Mushi.init({
   projectId: 'proj_xxx',
   apiKey: 'mushi_xxx',
   capture: {
-    // 'rrweb' — full DOM replay (lazy-loaded; text + inputs masked by default)
-    // 'lite'  — dependency-free coarse fallback
+    // 'rrweb' — full DOM replay (every text node and input masked)
+    // 'lite'  — dependency-free, records clicks only
     // 'sentry'— reuse an installed @sentry/replay session
     // 'off'   — default
     replay: 'rrweb',
+    // Hand the SDK your own import of rrweb.
+    rrweb: () => import('rrweb'),
   },
 });
 ```
+
+`rrweb: () => import('rrweb')` is what makes `'rrweb'` mode work in a bundled app. The SDK cannot import rrweb itself: a published package's `import('rrweb')` is invisible to your bundler, so rrweb never reaches your build. An import written in your code is one your bundler sees, and it code-splits rrweb into its own chunk that loads only for sessions sampled into replay. Without the loader the SDK tries a global `rrweb` (the UMD build from a `<script>` tag), then a bare `import('rrweb')` (which resolves only under an import map); if neither works, it records clicks only (`'lite'`) and warns once in the console. The `rrweb` option ships in `@mushi-mushi/web` 1.29.
 
 Records continuously from init (so you capture the moments *before* the report), trimmed to a rolling window. Already on Sentry Replay? See [coexistence](https://kensaur.us/mushi-mushi/docs/sdks/sentry-replay-coexistence).
 </details>

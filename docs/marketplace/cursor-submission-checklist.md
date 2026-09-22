@@ -15,7 +15,7 @@ Use this checklist before submitting the Mushi Mushi plugin to the Cursor Market
 - [x] `.cursor-plugin/plugin.json` — only fields from Cursor's [manifest reference](https://cursor.com/docs/reference/plugins) (`logo`, `mcpServers`, `variables`; no `icon`, `categories`, `minCursorVersion` or `mcp`)
 - [x] `mcp.json` — hosted `mushi` entry uses the live edge function URL with `"type": "http"` and no static headers (OAuth sign-in); the check fails on placeholder hosts such as `your-project`
 - [x] Every `${VAR}` in `mcp.json` is declared under `variables` in `plugin.json`
-- [ ] `mcp.json` — hosted URL switched to the canonical OAuth resource URL once hosted-MCP OAuth discovery is fixed
+- [x] `mcp.json` — hosted URL is the canonical OAuth resource URL, `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp` (switched 2026-09-21 in 4cc40d93; checked 2026-09-22: an unauthenticated `initialize` gets `401` with `resource_metadata`, and that protected-resource document names this URL as its `resource`)
 - [ ] `skills/mushi-triage/SKILL.md` — workflow steps are accurate and up to date
 - [ ] `rules/mushi-mcp.mdc` — write-tool list matches current catalog `mcp:write` tools
 - [ ] All three command files exist and reference current tool names
