@@ -154,6 +154,21 @@ describe('cloudfront-mushi-apex-redirect', () => {
     assert.equal(out.statusCode, 301);
     assert.equal(out.headers.location.value, '/mushi-mushi/docs/brand/logo-mark.svg');
   });
+
+  // Slashless /mushi-mushi misses the `/mushi-mushi/*` behavior and lands on
+  // Default, where S3's website endpoint answered with a 302. The product root
+  // is canonical with the slash (structured-data.ts PRODUCT_ROOT).
+  it('301 slashless /mushi-mushi to the canonical product root', () => {
+    const out = apex(req('/mushi-mushi'));
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, '/mushi-mushi/');
+  });
+
+  it('keeps the query string on the /mushi-mushi redirect', () => {
+    const out = apex(reqWithQs('/mushi-mushi', { utm_source: 'bsky' }));
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, '/mushi-mushi/?utm_source=bsky');
+  });
 });
 
 describe('cloudfront-kensaur-default-viewer', () => {
@@ -169,6 +184,12 @@ describe('cloudfront-kensaur-default-viewer', () => {
     const out = combined(req('/.well-known/assetlinks.json'));
     assert.equal(out.statusCode, 200);
     assert.match(out.body, /com\.glotit\.app/);
+  });
+
+  it('301s slashless /mushi-mushi before the glot SPA handler sees it', () => {
+    const out = combined(req('/mushi-mushi'));
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, '/mushi-mushi/');
   });
 });
 
@@ -252,6 +273,32 @@ describe('cloudfront-mushi-spa-router', () => {
   it('does not rewrite the /apps/ listing page itself to the shell', () => {
     const out = spa(req('/mushi-mushi/testers/apps/'));
     assert.equal(out.uri, '/mushi-mushi/testers/apps/index.html');
+  });
+
+  // llmstxt.org puts the file at the site root: /mushi-mushi/llms.txt 404'd
+  // (NoSuchKey) because the files live under the docs export.
+  for (const name of ['llms.txt', 'llms-full.txt', 'llms-ctx.txt']) {
+    it(`serves /mushi-mushi/${name} from the docs export in place`, () => {
+      const out = spa(req(`/mushi-mushi/${name}`));
+      assert.equal(out.statusCode, undefined);
+      assert.equal(out.uri, `/mushi-mushi/docs/${name}`);
+    });
+  }
+
+  it('leaves the docs copy of llms.txt and other root .txt files alone', () => {
+    assert.equal(spa(req('/mushi-mushi/docs/llms.txt')).uri, '/mushi-mushi/docs/llms.txt');
+    assert.equal(spa(req('/mushi-mushi/robots.txt')).uri, '/mushi-mushi/robots.txt');
+  });
+
+  it('rewrites the product root with its slash to the landing export', () => {
+    const out = spa(req('/mushi-mushi/'));
+    assert.equal(out.uri, '/mushi-mushi/docs/index.html');
+  });
+
+  it('301s a slashless product root to the canonical slash form', () => {
+    const out = spa(reqWithQs('/mushi-mushi', { ref: 'npm' }));
+    assert.equal(out.statusCode, 301);
+    assert.equal(out.headers.location.value, '/mushi-mushi/?ref=npm');
   });
 });
 
@@ -545,6 +592,60 @@ describe('cloudfront-mushi-docs-response', () => {
       response: { statusCode: 200, headers: {} },
     });
     assert.equal(out.headers['x-robots-tag'].value, 'noindex, nofollow');
+  });
+
+  function respondTo(uri) {
+    return respond({ request: { uri }, response: { statusCode: 200, headers: {} } });
+  }
+
+  // The llm-md twins duplicate every page as Markdown; a canonical Link
+  // header tells a crawler which URL the content belongs to.
+  it('points an llm-md twin at its HTML page with a canonical Link header', () => {
+    const out = respondTo('/mushi-mushi/docs/llm-md/sdks/web.md');
+    assert.equal(
+      out.headers.link.value,
+      '<https://kensaur.us/mushi-mushi/docs/sdks/web>; rel="canonical"',
+    );
+  });
+
+  it('maps a folder index twin to the slashless folder page', () => {
+    const out = respondTo('/mushi-mushi/docs/llm-md/sdks/index.md');
+    assert.equal(
+      out.headers.link.value,
+      '<https://kensaur.us/mushi-mushi/docs/sdks>; rel="canonical"',
+    );
+  });
+
+  it('maps the landing twin to the product root, the landing canonical', () => {
+    const out = respondTo('/mushi-mushi/docs/llm-md/index.md');
+    assert.equal(out.headers.link.value, '<https://kensaur.us/mushi-mushi/>; rel="canonical"');
+  });
+
+  it('adds no Link header to pages, RSC payloads or other .md files', () => {
+    for (const uri of [
+      '/mushi-mushi/docs/sdks/web.html',
+      '/mushi-mushi/docs/sdks/web.txt',
+      '/mushi-mushi/docs/llms.txt',
+    ]) {
+      assert.equal(respondTo(uri).headers.link, undefined, uri);
+    }
+  });
+
+  it('every generated twin gets the canonical its own Source line names', () => {
+    // generate-llms-full.mjs writes `Source: <page URL>` into each twin. The
+    // landing's Source is the docs root, but its HTML canonical is the product
+    // root (app/[[...mdxPath]]/page.tsx), so it is checked separately above.
+    const twinsDir = join(__dirname, '..', 'apps', 'docs', 'public', 'llm-md');
+    const twins = readdirSync(twinsDir, { recursive: true })
+      .map((f) => String(f).replace(/\\/g, '/'))
+      .filter((f) => f.endsWith('.md') && f !== 'index.md');
+    assert.ok(twins.length > 100, `expected the twin tree, found ${twins.length}`);
+    for (const rel of twins) {
+      const source = readFileSync(join(twinsDir, rel), 'utf8').match(/^Source: (\S+)$/m)?.[1];
+      assert.ok(source, `${rel} has no Source line`);
+      const link = respondTo(`/mushi-mushi/docs/llm-md/${rel}`).headers.link?.value;
+      assert.equal(link, `<${source}>; rel="canonical"`, rel);
+    }
   });
 
   it('no longer carries a 404 body it could never serve', () => {

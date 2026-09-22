@@ -1,8 +1,9 @@
 /**
  * FILE: cloudfront-mushi-docs-response.js
  * PURPOSE: CloudFront Function (viewer-response) for the docs site at
- *          /mushi-mushi/docs/*. Adds security headers and tags the `.txt`
- *          RSC payloads noindex.
+ *          /mushi-mushi/docs/*. Adds security headers, tags the `.txt`
+ *          RSC payloads noindex, and gives each llm-md Markdown twin a
+ *          canonical Link header pointing at its HTML page.
  *
  * WHAT THIS FUNCTION CANNOT DO: CloudFront never invokes viewer-response
  * functions when the origin answers 400 or higher
@@ -70,6 +71,22 @@ function handler(event) {
   // https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#xrobotstag
   if (/\.txt$/.test(request.uri)) {
     response.headers['x-robots-tag'] = { value: 'noindex, nofollow' };
+  }
+
+  // The llm-md twins (/mushi-mushi/docs/llm-md/<path>.md, written by
+  // scripts/generate-llms-full.mjs) repeat every page as Markdown. A
+  // `Link: <…>; rel="canonical"` header names the HTML page the content
+  // belongs to, so search engines fold the twin into it instead of treating
+  // it as a duplicate. The URL matches each page's own canonical
+  // (app/[[...mdxPath]]/page.tsx): `<path>/index.md` is the slashless folder
+  // page, and the landing's twin points at the product root.
+  var twin = /^\/mushi-mushi\/docs\/llm-md\/(.+)\.md$/.exec(request.uri);
+  if (twin) {
+    var path = twin[1].replace(/(^|\/)index$/, '');
+    var page = path
+      ? 'https://kensaur.us/mushi-mushi/docs/' + path
+      : 'https://kensaur.us/mushi-mushi/';
+    response.headers['link'] = { value: '<' + page + '>; rel="canonical"' };
   }
 
   return response;
