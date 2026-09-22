@@ -3,8 +3,10 @@
  * PURPOSE: `trackSelf` must never throw and must be a no-op when the
  *          dogfooded SDK is disabled or not loaded. It accepts only taxonomy
  *          events with their required properties (the `@ts-expect-error`
- *          lines are checked by `tsc`), and reports through the admin debug
- *          channel when a cast slips a required property past the types.
+ *          lines are checked by `tsc`), reports through the admin debug
+ *          channel when a cast slips a required property past the types, and
+ *          drops a cast off-taxonomy name. `trackAdHoc` is the path for
+ *          non-taxonomy events: valid names only, never a taxonomy name.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -20,7 +22,7 @@ const debug = vi.hoisted(() => ({ debugWarn: vi.fn() }))
 vi.mock('./mushi-self', () => mocks)
 vi.mock('./debug', () => debug)
 
-import { trackSelf } from './track'
+import { trackAdHoc, trackSelf } from './track'
 
 describe('trackSelf', () => {
   beforeEach(() => {
@@ -123,7 +125,8 @@ describe('trackSelf — taxonomy contract', () => {
   })
 
   it('rejects off-taxonomy names and missing required properties at compile time', () => {
-    mocks.getMushiSelf.mockReturnValue({ track: vi.fn() })
+    const track = vi.fn()
+    mocks.getMushiSelf.mockReturnValue({ track })
     // @ts-expect-error — not a MUSHI_EVENTS name (a bag is passed so the
     // error is the name, not the argument count)
     trackSelf('pageview', {})
@@ -133,8 +136,102 @@ describe('trackSelf — taxonomy contract', () => {
     trackSelf('upgrade_clicked', { plan: null })
     // @ts-expect-error — events with required properties need a bag
     trackSelf('loop_signup')
-    // At runtime the three required-property gaps still reach the debug
-    // warning; the unknown name has no taxonomy entry to check against.
-    expect(warn).toHaveBeenCalledTimes(3)
+    // At runtime all four reach the debug warning. The three required-
+    // property gaps are still sent; the unknown name is dropped.
+    expect(warn).toHaveBeenCalledTimes(4)
+    expect(track).toHaveBeenCalledTimes(3)
+    expect(track).not.toHaveBeenCalledWith('pageview', expect.anything())
+  })
+
+  it('drops an off-taxonomy name that reaches it through a cast', () => {
+    const track = vi.fn()
+    mocks.getMushiSelf.mockReturnValue({ track })
+    trackSelf('checkout_started' as unknown as 'invite_sent')
+    expect(track).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalledWith(
+      'track',
+      'checkout_started is not a Mushi taxonomy event; use trackAdHoc for non-funnel events',
+      { event: 'checkout_started' },
+    )
+  })
+})
+
+describe('trackAdHoc', () => {
+  const warn = debug.debugWarn
+
+  beforeEach(() => {
+    mocks.getMushiSelf.mockReset()
+    mocks.initMushiSelf.mockReset()
+    mocks.isMushiSelfEnabled.mockReset()
+    warn.mockReset()
+  })
+
+  it('sends a valid non-taxonomy event with its properties', () => {
+    const track = vi.fn()
+    mocks.getMushiSelf.mockReturnValue({ track })
+    trackAdHoc('graph_layout_toggled', { layout: 'force' })
+    expect(track).toHaveBeenCalledWith('graph_layout_toggled', { layout: 'force' })
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it('sends an empty bag when no properties are given', () => {
+    const track = vi.fn()
+    mocks.getMushiSelf.mockReturnValue({ track })
+    trackAdHoc('palette_opened')
+    expect(track).toHaveBeenCalledWith('palette_opened', {})
+  })
+
+  it('drops names that fail EVENT_NAME_RE', () => {
+    const track = vi.fn()
+    mocks.getMushiSelf.mockReturnValue({ track })
+    for (const bad of ['Checkout', '1st_open', 'a', 'has-dash', 'x'.repeat(65), '$pageview']) {
+      trackAdHoc(bad)
+    }
+    expect(track).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalledTimes(6)
+    expect(warn).toHaveBeenCalledWith(
+      'track',
+      'Checkout is not a valid event name (lowercase snake_case, 2-64 chars)',
+      { event: 'Checkout' },
+    )
+  })
+
+  it('refuses taxonomy names, which must go through trackSelf', () => {
+    const track = vi.fn()
+    mocks.getMushiSelf.mockReturnValue({ track })
+    // @ts-expect-error — a literal taxonomy name is rejected at compile time
+    trackAdHoc('report_opened', { report_id: 'r1' })
+    const widened: string = 'fix_dispatched'
+    trackAdHoc(widened)
+    expect(track).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalledWith(
+      'track',
+      'fix_dispatched is a Mushi taxonomy event; use trackSelf so its required properties are checked',
+      { event: 'fix_dispatched' },
+    )
+  })
+
+  it('defers to the init promise when enabled but not yet loaded', async () => {
+    const track = vi.fn()
+    mocks.getMushiSelf.mockReturnValue(null)
+    mocks.isMushiSelfEnabled.mockReturnValue(true)
+    mocks.initMushiSelf.mockResolvedValue({ track })
+    trackAdHoc('palette_opened', { via: 'kbd' })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(track).toHaveBeenCalledWith('palette_opened', { via: 'kbd' })
+  })
+
+  it('is a no-op when disabled and never throws', () => {
+    mocks.getMushiSelf.mockReturnValue(null)
+    mocks.isMushiSelfEnabled.mockReturnValue(false)
+    expect(() => trackAdHoc('palette_opened')).not.toThrow()
+    expect(mocks.initMushiSelf).not.toHaveBeenCalled()
+    mocks.getMushiSelf.mockReturnValue({
+      track: () => {
+        throw new Error('boom')
+      },
+    })
+    expect(() => trackAdHoc('palette_opened')).not.toThrow()
   })
 })

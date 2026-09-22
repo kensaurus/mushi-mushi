@@ -20,7 +20,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getMcpClient } from '@mushi-mushi/mcp/clients'
 import { apiFetch, invalidateApiCache } from '../../lib/supabase'
-import { trackSelf } from '../../lib/track'
+import { trackAdHoc, trackSelf } from '../../lib/track'
 import { useOnlineStatus } from '../../lib/onlineStatus'
 import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../../lib/env'
 import { SEVERITY_TRAFFIC_BADGE, severityTrafficLabel } from '../../lib/severityTraffic'
@@ -43,6 +43,7 @@ import { ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
 import { SdkInstallCard } from '../SdkInstallCard'
 import { ClientConnectButton } from '../ClientConnectButton'
 import { startFirstRunTour } from '../FirstRunTour'
+import { reportDiagnosisViewed } from './diagnosisViewed'
 
 const CURSOR_SETUP_COMMAND = 'npx mushi-mushi setup --ide cursor'
 
@@ -119,12 +120,15 @@ function useFirstDiagnosis({ projectId, onDiagnosed }: UseFirstDiagnosisOptions)
   }, [state])
 
   // The inline diagnosis IS the report being opened — count it as the
-  // Habit event and let the page refetch (setup steps, report lists).
+  // Habit event, record the activation step `diagnosis_viewed` (once per
+  // project, server-deduped) and let the page refetch (setup steps, report
+  // lists).
   useEffect(() => {
     if (state.phase !== 'diagnosed') return
     if (trackedRef.current === state.reportId) return
     trackedRef.current = state.reportId
     trackSelf('report_opened', { report_id: state.reportId, project_id: projectId, via: 'first_diagnosis' })
+    reportDiagnosisViewed(projectId, state.reportId)
     invalidateApiCache('/v1/admin/reports')
     invalidateApiCache('/v1/admin/setup')
     onDiagnosedRef.current?.(state.reportId)
@@ -336,7 +340,11 @@ export function FirstDiagnosisScreen({
               <Btn
                 size="sm"
                 variant="ghost"
-                onClick={() => setShowInstall(true)}
+                onClick={() => {
+                  // Which S2 path a builder takes; not a funnel step.
+                  trackAdHoc('onboarding_install_first_clicked', { project_id: projectId })
+                  setShowInstall(true)
+                }}
                 className="border-0 bg-transparent shadow-none px-0 py-0 text-2xs text-fg-faint hover:text-fg-muted"
               >
                 Install the SDK first instead

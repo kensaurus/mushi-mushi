@@ -48,7 +48,13 @@ export type MushiSurface = (typeof MUSHI_SURFACES)[number];
  * `surface: ['console', 'mcp']`.
  */
 export const MUSHI_EVENTS = {
+  // ── Any surface (SDK `analytics.autoPageviews`) ──────────────────────────
+  page_view: { surface: ['web', 'docs', 'console'], required: [] },
   // ── Landing + docs (apps/docs) ───────────────────────────────────────────
+  // Every docs route; `route` repeats the reserved `$route` as a host prop so
+  // the requirement is checkable. company_funnel_weekly counts visits from
+  // this and landing_view.
+  docs_page_view: { surface: 'docs', required: ['route'] },
   landing_view: { surface: 'docs', required: [] },
   cta_click: { surface: 'docs', required: ['cta_id', 'location'] },
   quickstart_view: { surface: 'docs', required: [] },

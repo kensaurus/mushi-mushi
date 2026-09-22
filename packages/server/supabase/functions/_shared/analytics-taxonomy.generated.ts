@@ -23,6 +23,20 @@ export const MUSHI_SURFACES = ["web","console","docs","cli","mcp","server","mobi
 export type MushiSurface = (typeof MUSHI_SURFACES)[number]
 
 export const MUSHI_EVENTS = {
+  "page_view": {
+    "surface": [
+      "web",
+      "docs",
+      "console"
+    ],
+    "required": []
+  },
+  "docs_page_view": {
+    "surface": "docs",
+    "required": [
+      "route"
+    ]
+  },
   "landing_view": {
     "surface": "docs",
     "required": []
