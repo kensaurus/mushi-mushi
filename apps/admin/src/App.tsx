@@ -9,7 +9,7 @@ import { SetupGatePage } from './pages/SetupGatePage'
 import { checkEnv } from './lib/env'
 import type { ReactNode } from 'react'
 import { Loading } from './components/ui'
-import { ErrorBoundary } from './components/ErrorBoundary'
+import { ErrorBoundary, RouteErrorBoundary } from './components/ErrorBoundary'
 import { EditorialErrorState } from './components/EditorialErrorState'
 import { ToastProvider } from './lib/toast'
 import { UpgradePromptHost } from './components/billing/UpgradePrompt'
@@ -350,7 +350,10 @@ export function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <ErrorBoundary source="protected-route">
+                {/* Route-keyed: a crash on one page must not brick every
+                    later route. Before this, IteratePage throwing left
+                    /dashboard and /reports on the fallback until a reload. */}
+                <RouteErrorBoundary source="protected-route">
                 <Suspense fallback={<Loading text="Loading…" />}>
                 <SentryRoutes>
                   <Route path="/overview" element={<OverviewPage />} />
@@ -435,7 +438,7 @@ export function App() {
                   <Route path="*" element={<NotFoundPage />} />
                 </SentryRoutes>
                 </Suspense>
-                </ErrorBoundary>
+                </RouteErrorBoundary>
               </Layout>
             </ProtectedRoute>
           }

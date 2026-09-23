@@ -18,6 +18,15 @@
  *   - Routes are sent as the pathname only and the referrer as its origin, so
  *     query strings (reset tokens, emails in links) never leave the page.
  *   - Respects the SDK-level `trackSessions: false` opt-out option.
+ *
+ * SPA page views:
+ *   The history patch below decides push-vs-replace at wrap time (comparing
+ *   against `history.pushState` inside the wrapper never matches, because by
+ *   then that property is the wrapper). Hosts that already own a history
+ *   patch (`@mushi-mushi/web`'s shared one) pass `patchHistory: false` and
+ *   call `trackPageView()` themselves — a second wrapper assigned to
+ *   `history.pushState` silently discards this one, which is how the web SDK
+ *   recorded zero SPA page views across >1,000 sessions per project.
  */
 
 import { getSessionId } from './session';
@@ -131,6 +140,14 @@ export interface SessionTrackerOptions {
   /** @deprecated Renamed to `reporterToken` (it always carried the raw token, never a hash). */
   reporterTokenHash?: string | null;
   userIdHash?: string | null;
+  /**
+   * Install the built-in `history.pushState` / `popstate` patch that emits
+   * `page_view` events. Default `true`. Pass `false` when the host already
+   * owns a history patch and will call `trackPageView()` itself — stacking a
+   * second wrapper on `history.pushState` is exactly how this tracker's page
+   * views got overwritten and silently dropped in `@mushi-mushi/web`.
+   */
+  patchHistory?: boolean;
   /** Project the stored analytics consent is keyed on (the SDK passes its projectId). */
   projectId?: string;
   /** The SDK's `analytics` block: sessions pass the same gate as product events. */
@@ -170,8 +187,11 @@ export function initSessionTracker(opts: SessionTrackerOptions): void {
     send(buildPayload('session_end', { route: currentRoute() }));
   }, { passive: true });
 
-  // page_view on History API navigation (SPA route changes)
-  patchHistoryForPageViews();
+  // page_view on History API navigation (SPA route changes) — unless the
+  // host owns the history patch and reports page views via trackPageView().
+  if (opts.patchHistory !== false) {
+    patchHistoryForPageViews();
+  }
 
   _unsubscribeConsent = onAnalyticsConsentChange((state) => {
     if (state === 'granted') activate();
@@ -182,7 +202,8 @@ export function initSessionTracker(opts: SessionTrackerOptions): void {
 
 /**
  * Record a page view manually — call from framework router hooks where the
- * history patch may fire too early (e.g. React Router v7 loader transitions).
+ * history patch may fire too early (e.g. React Router v7 loader transitions),
+ * or from a host that initialised with `patchHistory: false`.
  */
 export function trackPageView(route?: string): void {
   if (!_initialized || !_client) return;

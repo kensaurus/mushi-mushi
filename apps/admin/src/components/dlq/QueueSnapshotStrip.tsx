@@ -7,12 +7,16 @@ import { Section, StatCard, SnapshotSectionHint } from '../ui'
 import { MetricStrip } from '../MetricStrip'
 import type { QueueStats } from './QueueStatsTypes'
 
+// The processing-queue page is routed at /queue (App.tsx → DLQPage); there is
+// no /dlq route, so these cards used to land on the in-app 404. DLQPage
+// filters by local state, not the URL, so a plain route is the deepest link
+// available.
 const queueLinks = {
-  pending: '/dlq',
-  running: '/dlq',
-  completed: '/dlq',
-  failed: '/dlq',
-  deadLetter: '/dlq',
+  pending: '/queue',
+  running: '/queue',
+  completed: '/queue',
+  failed: '/queue',
+  deadLetter: '/queue',
 } as const
 
 interface Props {

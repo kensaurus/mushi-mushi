@@ -308,6 +308,20 @@ export function humanizeFixError(
     };
   }
 
+  // Context assembly failed: the embedding / retrieval call itself errored.
+  // Must precede the "no relevant code" branch. The worker files a revoked
+  // embedding key here, and the generic copy below sent users off to
+  // re-index a repo whose index was fine (glot.it, 2026-09-23).
+  if (category === 'context_assembly_failed' || m.includes('embedding call failed')) {
+    return {
+      title: 'The code lookup failed before the agent could start.',
+      hint: 'If the error mentions a 401 from the embedding provider, the BYOK OpenAI key is invalid or revoked \u2014 rotate it under Settings \u2192 BYOK and retry.',
+      severity: 'hard',
+      action: { label: 'Check BYOK keys', target: { kind: 'route', to: '/settings?tab=byok' } },
+      raw,
+    };
+  }
+
   // No relevant code
   if (m.includes('no grounding context') || m.includes('skipped_no_context') || category === 'no_relevant_code') {
     return {
