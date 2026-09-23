@@ -85,10 +85,13 @@ export async function resolveExternalIssue(
   projectId: string,
   db: SupabaseClient,
 ): Promise<void> {
+  // Scoped to projectId: the provider configs below come from that project,
+  // so a report from another project must never be resolved with them.
   const { data: openIssues, error } = await db
     .from('report_external_issues')
     .select('id, system, external_id')
     .eq('report_id', reportId)
+    .eq('project_id', projectId)
     .is('resolved_at', null)
 
   if (error) {

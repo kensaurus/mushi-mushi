@@ -285,10 +285,15 @@ async function handleEvent(db: any, projectId: string, eventType: string, payloa
       return
     }
 
-    // Find the linked Mushi report
+    // Find the linked Mushi report — in the project whose webhook secret
+    // verified this delivery, and only Linear links. Issue keys like "ENG-5"
+    // repeat across workspaces (and match Jira keys), so an unscoped lookup
+    // resolved other tenants' reports.
     const { data: extIssues } = await db
       .from('report_external_issues')
       .select('report_id')
+      .eq('project_id', projectId)
+      .eq('system', 'linear')
       .eq('external_id', identifier)
       .is('resolved_at', null)
       .limit(10)

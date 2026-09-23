@@ -19,6 +19,17 @@ import type { Variables } from '../types.ts'
 
 function db() { return getServiceClient() }
 
+// requireProjectAccess only sees a project_id in the query string or header.
+// Routes that take it from the body, or act on a row by id, check the row's
+// project here — they used to reach any tenant's scans, snapshots and findings.
+async function callerCanAccess(userId: string, projectId: unknown): Promise<boolean> {
+  if (typeof projectId !== 'string' || !projectId) return false
+  const ids = await ownedProjectIds(db(), userId)
+  return ids.includes(projectId)
+}
+
+const notFound = { ok: false, error: { code: 'ERROR', message: 'Not found' } } as const
+
 export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
   // GET /v1/admin/drift/stats — posture banner + DRIFT SNAPSHOT (before nested /:id routes).
   parent.get('/v1/admin/drift/stats', requireAuth, async (c) => {
@@ -214,6 +225,9 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
     const body = await c.req.json()
     const { project_id, max_paths } = body
     if (!project_id) return c.json({ ok: false, error: { code: 'ERROR', message: 'project_id required' } }, 400)
+    if (!(await callerCanAccess(c.get('userId') as string, project_id))) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Access to this project is not allowed' } }, 403)
+    }
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const res = await fetch(`${supabaseUrl}/functions/v1/drift-walker`, {
@@ -247,7 +261,9 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
       .select('*')
       .eq('id', c.req.param('id')!)
       .single()
-    if (error) return c.json({ ok: false, error: { code: 'ERROR', message: 'Not found' } }, 404)
+    if (error || !(await callerCanAccess(c.get('userId') as string, data?.project_id))) {
+      return c.json(notFound, 404)
+    }
     return c.json({ ok: true, data })
   })
 
@@ -256,6 +272,12 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
     const body = await c.req.json()
     const { status } = body
     if (!['open', 'dismissed'].includes(status)) return c.json({ ok: false, error: { code: 'ERROR', message: 'invalid status' } }, 400)
+    const { data: row } = await db()
+      .from('drift_findings')
+      .select('project_id')
+      .eq('id', c.req.param('id')!)
+      .maybeSingle()
+    if (!(await callerCanAccess(c.get('userId') as string, row?.project_id))) return c.json(notFound, 404)
     const update: Record<string, unknown> = { status }
     if (status === 'dismissed') update.dismissed_at = new Date().toISOString()
     const { error } = await db()
@@ -273,7 +295,9 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
       .select('*')
       .eq('id', c.req.param('id')!)
       .single()
-    if (!finding) return c.json({ ok: false, error: { code: 'ERROR', message: 'Not found' } }, 404)
+    if (!finding || !(await callerCanAccess(c.get('userId') as string, finding.project_id))) {
+      return c.json(notFound, 404)
+    }
     const { data: lesson, error } = await db()
       .from('mistake_clusters')
       .insert({

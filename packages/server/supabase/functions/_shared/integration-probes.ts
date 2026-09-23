@@ -14,6 +14,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
 import { HEALTH_PROBE_ANTHROPIC_MODEL, HEALTH_PROBE_OPENAI_MODEL } from './models.ts'
 import { isOperatorProject } from './operator-gate.ts'
+import { safeFetch } from './inventory-guards.ts'
 
 // Deno global — declared only where consumed (edge functions).
 declare const Deno: { env: { get(name: string): string | undefined } }
@@ -153,23 +154,35 @@ export async function probeIntegration(
       }
 
     } else if (kind === 'langfuse') {
-      const host = settings.langfuse_host || Deno.env.get('LANGFUSE_BASE_URL') || 'https://cloud.langfuse.com'
-      const pub =
-        (await dereferenceMaybeVault(db, settings.langfuse_public_key_ref ?? null)) ||
-        Deno.env.get('LANGFUSE_PUBLIC_KEY') ||
-        ''
-      const sec =
-        (await dereferenceMaybeVault(db, settings.langfuse_secret_key_ref ?? null)) ||
-        Deno.env.get('LANGFUSE_SECRET_KEY') ||
-        ''
+      // The platform's env keys only ever go to the platform's own host. A
+      // tenant-set langfuse_host gets the tenant's own keys or nothing, and is
+      // called through safeFetch (public https, redirects re-checked).
+      const platformHost = Deno.env.get('LANGFUSE_BASE_URL') || 'https://cloud.langfuse.com'
+      const tenantHost = settings.langfuse_host?.trim() || null
+      const tenantPub = await dereferenceMaybeVault(db, settings.langfuse_public_key_ref ?? null)
+      const tenantSec = await dereferenceMaybeVault(db, settings.langfuse_secret_key_ref ?? null)
+      let host = platformHost
+      let pub = ''
+      let sec = ''
+      if (tenantPub && tenantSec) {
+        host = tenantHost ?? platformHost
+        pub = tenantPub
+        sec = tenantSec
+      } else if (!tenantHost) {
+        pub = Deno.env.get('LANGFUSE_PUBLIC_KEY') ?? ''
+        sec = Deno.env.get('LANGFUSE_SECRET_KEY') ?? ''
+      }
       if (!pub || !sec) {
-        detail = 'Add Langfuse public + secret keys (or set env vars on the host).'
+        detail = tenantHost
+          ? 'Add Langfuse public + secret keys for your Langfuse host.'
+          : 'Add Langfuse public + secret keys (or set env vars on the host).'
       } else {
         const auth = btoa(`${pub}:${sec}`)
-        const res = await fetch(`${host.replace(/\/$/, '')}/api/public/health`, {
-          headers: { Authorization: `Basic ${auth}` },
-          signal: AbortSignal.timeout(8_000),
-        })
+        const url = `${host.replace(/\/$/, '')}/api/public/health`
+        const init = { headers: { Authorization: `Basic ${auth}` } }
+        const res = host === platformHost
+          ? await fetch(url, { ...init, signal: AbortSignal.timeout(8_000) })
+          : await safeFetch(url, init, { timeoutMs: 8_000, maxRedirects: 2, url: {} })
         httpStatus = res.status
         status = res.ok ? 'ok' : res.status === 401 ? 'down' : 'degraded'
         if (!res.ok) detail = `HTTP ${res.status}`

@@ -393,6 +393,8 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
           status: 'resolved',
         })
         .in('id', ticketIds)
+        // fulfilled_ticket_ids is caller-supplied: only this project's tickets.
+        .eq('project_id', release.project_id)
         .is('shipped_in_release_id', null)
       if (ticketsError) {
         return c.json(

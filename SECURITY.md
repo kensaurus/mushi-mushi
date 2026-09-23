@@ -97,7 +97,10 @@ What we treat as in-scope attacker capabilities, and what we don't.
 | Capability | In scope | Notes |
 |-----------|----------|-------|
 | Unauthenticated network attacker hitting public endpoints | ✅ | Rate-limit + HMAC + replay protection on every webhook endpoint (`packages/server/supabase/functions/_shared/webhook-middleware.ts`). |
-| Authenticated user trying to read another tenant's data | ✅ | Postgres RLS on every `public.*` table; advisor lints reviewed monthly. |
+| Authenticated user trying to read another tenant's data | ✅ | Edge Functions use the service role, so every route scopes by the caller's project or org (`api/shared.ts`: `resolveOwnedProject`, `callerProjectIds`, `assertTargetProjectAccess`); credential writes also need an owner/admin role. Postgres RLS on every `public.*` table is the second layer for direct PostgREST access, and the credential / outbound-URL settings tables are not reachable through PostgREST at all. |
+| Authenticated user writing SQL ("Ask your data", raw query) | ✅ | The query runs as `mushi_nl_reader`: SELECT on the analytics tables only, RLS pinned to the caller's project, no access to `vault` / `auth` / other tables; PostgREST request settings are cleared before it runs. Keyword checks in `_shared/nl-query.ts` are defence in depth. |
+| Tenant-supplied secret references or outbound URLs | ✅ | The server mints every Vault reference under the caller's own project; a `vault://` value in a request body is refused. Tenant-set hosts and webhook URLs must be public `https`, and tenant-influenced fetches re-check every redirect (`_shared/inventory-guards.ts`). |
+| Forged GitHub App installation id | ✅ | Installation ids from the install callback or a request body are not bound to a project; indexing uses a project PAT. Single-tenant self-hosts can opt back in with `MUSHI_GITHUB_APP_TRUST_UNVERIFIED_INSTALLS=1`. |
 | Authenticated user trying to escalate to super-admin | ✅ | Role lives in `auth.users.raw_app_meta_data.role`; cannot be self-edited via PostgREST. |
 | Compromised dependency (npm supply-chain attack) | ✅ | 7-day cooldown + provenance + Harden-Runner + pinned SHAs (see "Supply-chain hardening" below). |
 | Stolen API key | ✅ | Per-key scopes (`api_key_has_scope`), revocation via admin console, audit log of every use. |
@@ -227,6 +230,10 @@ When you provision a new self-hosted Mushi instance:
 - [ ] Set CSP `frame-ancestors` on the host page if you embed the Mushi
       widget (the widget is iframe-friendly but does not enforce
       framing constraints itself).
+- [ ] Bring-your-own storage: name the Vault secrets
+      `mushi/storage/<projectId>/<name>` (other names are refused). Set
+      `MUSHI_ALLOW_PRIVATE_STORAGE_ENDPOINT=1` only for an internal MinIO
+      on a single-tenant install.
 
 ## Supply-chain hardening (how this package is protected)
 
