@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/web",
-  "version": "1.28.0",
+  "version": "1.29.0",
   "description": "Bug report and user feedback widget for the web. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
   "license": "MIT",
   "type": "module",

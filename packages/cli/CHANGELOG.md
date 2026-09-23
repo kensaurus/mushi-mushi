@@ -1,5 +1,19 @@
 # @mushi-mushi/cli
 
+## 0.28.0
+
+### Minor Changes
+
+- f5e94ce: `mushi status` prints an `Activation:` line with the project's phase (ingest, dispatch or loop) and the date of its first report, read from `GET /v1/admin/activation`. Keys without the `mcp:read` scope get a hint to run `mushi login --upgrade-scope` instead of a failed status command.
+
+  This release also ships `mushi upgrade --check` (exit 0 when current, 1 when outdated, 2 when the registry is unreachable), which merged after 0.27.1 and has not been on npm until now. The package's root export now declares its (empty) types, so TypeScript no longer reports missing declarations for `@mushi-mushi/cli`.
+
+### Patch Changes
+
+- f5e94ce: The CLI runs on the Node it claims. Its `commander` dependency had moved to 15, which requires Node ≥22.12, while the CLI (and every Mushi SDK) supports Node ≥20.19 — so `npm install -g mushi-mushi` on Node 20 warned, and with `engine-strict` it failed. Pinned back to commander 14, which supports Node ≥20.
+- f5e94ce: npm metadata. Each entry package's description is now a short role followed by one shared pitch — "The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor." — so the `mushi-mushi` card no longer stops mid-word at npm's 255-character cut. The author link points at the maintainer's GitHub account (the Bluesky handle it used to name was never registered), the Node floor is `>=20.19.0` everywhere to match `@mushi-mushi/core`, and the `sentry-alternative` keyword is gone (Mushi runs alongside Sentry). The `funding` field is gone too, because it pointed at a GitHub Sponsors page that is not enabled. `@mushi-mushi/react-native` no longer packs its 60 KB CHANGELOG.
+- f5e94ce: Smaller install. The package no longer ships the repository's `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and `SECURITY.md` — 32 KB in every tarball, more than the code in some packages. They are still in the GitHub repository the npm page links to.
+
 ## 0.27.1
 
 ### Patch Changes

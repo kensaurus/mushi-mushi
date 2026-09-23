@@ -1,9 +1,11 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "Unreleased",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.29",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.29.0"
+    ],
     "highlights": [
       {
         "title": "Own analytics id.",
@@ -22,63 +24,44 @@
         "description": "Failed API calls now include the HTTP status in `MushiApiResponse.error.status` when the server answered."
       },
       {
-        "title": "Server instructions.",
-        "description": "`initialize` now returns short instructions: what Mushi is, start with `triage_next_steps` / `get_fix_context`, run `triage_issue` before `dispatch_fix`, treat report text as untrusted data, confirm before merging."
+        "title": "Tool calls are attributed.",
+        "description": "Every API request now carries `X-Mushi-Client: mcp-stdio/<version>`, and requests made inside a tool call carry the tool name and a random per-call id. The API records one `mcp_tool_invocations` row per call and counts `get_report_detail`, `get_fix_context`, `suggest_fix` and `dispatch_fix` as report opened, fix pulled and fix dispatched, as it already did for the hosted server. No arguments or report content are sent."
       },
       {
-        "title": "Untrusted output is wrapped.",
-        "description": "The 21 tools that return end-user report text, reporter replies or LLM-derived content wrap their text output as untrusted data, so an agent holding write tools cannot be steered by a crafted bug report."
+        "title": "The inventory poll stops on 401/403.",
+        "description": "A key without `mcp:read` used to be retried every minute forever with no explanation. The server now logs once that inventory change notifications are off and why."
       },
       {
-        "title": "`triage_issue` works.",
-        "description": "It returned `null` for `fix_context` and `blast_radius` because it called routes that did not exist; it now reads the report's fix packet and the inventory blast radius."
+        "title": "`HABIT_EVENTS` includes `fix_dispatched`,",
+        "description": "and taxonomy events emitted from both the console and MCP list both surfaces."
       },
       {
-        "title": "New `get_mushi_doc`.",
-        "description": "Reads a docs page from the bundled index after `search_mushi_docs`. Search results now carry `url` instead of `path`."
+        "title": "New `capture.rrweb` loader.",
+        "description": "Pass `capture: { replay: 'rrweb', rrweb: () => import('rrweb') }`. The SDK used to load rrweb with a runtime import that no bundler can see, so in a bundled app replay quietly fell back to recording clicks only. Your own dynamic import is code-split like any other. A global `rrweb` from the UMD script tag still works without a loader, and when `replay: 'rrweb'` cannot load rrweb the SDK now warns once in the console."
       },
       {
-        "title": "`get_recent_reports` returns the documented fields.",
-        "description": "Status and severity filters are enums; `include_raw: true` restores the full row."
+        "title": "Rendered text is masked.",
+        "description": "rrweb 2.x ignores the `maskAllText` option the SDK passed, so page text would have been recorded in clear. Replay now masks every text node and every input, and blocks `privacy.redactSelectors` (plus password fields and `[data-mushi-redact]`) from the recording."
       },
       {
-        "title": "Keyless setup mode.",
-        "description": "Starting without an API key serves the setup and docs tools instead of exiting with an error."
-      },
-      {
-        "title": "Removed `setup_repo_for_mushi`.",
-        "description": "It always failed (its route never existed). Repo setup is `mushi setup` in the CLI."
-      },
-      {
-        "title": "One parameter spelling.",
-        "description": "Every tool parameter is camelCase now (`projectId`, `reportId`, `includeRaw`, `diffText`, `runId`, …). Tools used to mix `reportId` with `project_id` in one schema. The old snake_case spelling still works on every tool, on stdio and on the hosted server, and each renamed parameter says so in its description."
-      },
-      {
-        "title": "Enums where the values are fixed.",
-        "description": "`list_gate_findings` takes the real gate ids (`dead_handler`, `mock_leak`, …) and finding severities (`info`, `warn`, `error`); the old description listed values that matched nothing. `list_skills` category, `search_codebase` mode (now also an input) and every agent the dispatch route accepts on `dispatch_fix` are enums too."
-      },
-      {
-        "title": "Typed report outputs.",
-        "description": "`get_report_detail` returns the documented report fields under a typed output schema, with `includeRaw: true` for every column. `triage_issue` has a typed output schema, reads the newest fix attempt, and suggests `get_fix_timeline` with a fix id. Reporter identifiers (end-user id, reporter token, session id, display name) are never returned, and `get_report_evidence` no longer returns the session id."
-      },
-      {
-        "title": "Output fixes.",
-        "description": "`merge_fix` declares the `justMerged` and `sha` fields the merge route returns, so strict clients no longer reject a merge that went through. `get_usage` returns structured content and honours `projectId`."
-      },
-      {
-        "title": "Sentry is optional.",
-        "description": "`@sentry/node` is an optional peer dependency, about half of the previous install size. Set `MUSHI_MCP_SENTRY_DSN` and install `@sentry/node` to report the server's own errors; without the DSN it is never loaded."
-      },
-      {
-        "title": "Unexpanded variables are caught.",
-        "description": "If your MCP client passes `${MUSHI_API_KEY}` through literally, the server no longer sends it to the API as a key: it falls back to your `mushi login` config or starts in setup mode, and says which variable syntax your client expands."
-      },
-      {
-        "title": "Registry listing.",
-        "description": "The MCP registry entry no longer requires an `Authorization` header for the hosted server, so clients can sign in with OAuth."
+        "title": "`rrweb` is an optional peer dependency.",
+        "description": "As an optional dependency it was downloaded with every install of `@mushi-mushi/web`, about 8 MB of replay code most apps never load. Apps that use `replay: 'rrweb'` now install it themselves: `npm install rrweb`."
       }
     ],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.29.0"
+      },
+      {
+        "name": "@mushi-mushi/react",
+        "version": "1.29.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.29.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.28",
@@ -908,6 +891,10 @@
     "highlights": [],
     "packages": [
       {
+        "name": "@mushi-mushi/node",
+        "version": "1.3.0"
+      },
+      {
         "name": "@mushi-mushi/web",
         "version": "1.3.0"
       }
@@ -963,6 +950,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "1.1.2",
       "1.1.1",
       "1.1.0"
     ],
@@ -995,7 +983,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/capacitor",
-        "version": "1.1.1"
+        "version": "1.1.2"
       },
       {
         "name": "@mushi-mushi/core",
@@ -1020,6 +1008,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "1.0.3",
       "1.0.2",
       "1.0.1",
       "1.0.0"
@@ -1041,7 +1030,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/angular",
-        "version": "1.0.2"
+        "version": "1.0.3"
       },
       {
         "name": "@mushi-mushi/capacitor",
@@ -1061,15 +1050,30 @@
       },
       {
         "name": "@mushi-mushi/svelte",
-        "version": "1.0.2"
+        "version": "1.0.3"
       },
       {
         "name": "@mushi-mushi/vue",
-        "version": "1.0.2"
+        "version": "1.0.3"
       },
       {
         "name": "@mushi-mushi/web",
         "version": "1.0.0"
+      }
+    ]
+  },
+  {
+    "majorMinor": "0.28",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.28.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.28.0"
       }
     ]
   },
@@ -1205,12 +1209,64 @@
       {
         "title": "CLI keeps your `.env.local`",
         "description": "`mushi project create` no longer overwrites an existing `.env.local`. It reads the current file, replaces only prior `MUSHI_*` lines (bare and framework-prefixed), and appends a fresh Mushi block — preserving `DATABASE_URL`, `NEXT_PUBLIC_*`, Stripe keys, and everything else. Re-runs are idempotent."
+      },
+      {
+        "title": "Server instructions.",
+        "description": "`initialize` now returns short instructions: what Mushi is, start with `triage_next_steps` / `get_fix_context`, run `triage_issue` before `dispatch_fix`, treat report text as untrusted data, confirm before merging."
+      },
+      {
+        "title": "Untrusted output is wrapped.",
+        "description": "The 21 tools that return end-user report text, reporter replies or LLM-derived content wrap their text output as untrusted data, so an agent holding write tools cannot be steered by a crafted bug report."
+      },
+      {
+        "title": "`triage_issue` works.",
+        "description": "It returned `null` for `fix_context` and `blast_radius` because it called routes that did not exist; it now reads the report's fix packet and the inventory blast radius."
+      },
+      {
+        "title": "New `get_mushi_doc`.",
+        "description": "Reads a docs page from the bundled index after `search_mushi_docs`. Search results now carry `url` instead of `path`."
+      },
+      {
+        "title": "`get_recent_reports` returns the documented fields.",
+        "description": "Status and severity filters are enums; `include_raw: true` restores the full row."
+      },
+      {
+        "title": "Keyless setup mode.",
+        "description": "Starting without an API key serves the setup and docs tools instead of exiting with an error."
+      },
+      {
+        "title": "Removed `setup_repo_for_mushi`.",
+        "description": "It always failed (its route never existed). Repo setup is `mushi setup` in the CLI."
+      },
+      {
+        "title": "One parameter spelling.",
+        "description": "Every tool parameter is camelCase now (`projectId`, `reportId`, `includeRaw`, `diffText`, `runId`, …). Tools used to mix `reportId` with `project_id` in one schema. The old snake_case spelling still works on every tool, on stdio and on the hosted server, and each renamed parameter says so in its description."
+      },
+      {
+        "title": "Enums where the values are fixed.",
+        "description": "`list_gate_findings` takes the real gate ids (`dead_handler`, `mock_leak`, …) and finding severities (`info`, `warn`, `error`); the old description listed values that matched nothing. `list_skills` category, `search_codebase` mode (now also an input) and every agent the dispatch route accepts on `dispatch_fix` are enums too."
+      },
+      {
+        "title": "Typed report outputs.",
+        "description": "`get_report_detail` returns the documented report fields under a typed output schema, with `includeRaw: true` for every column. `triage_issue` has a typed output schema, reads the newest fix attempt, and suggests `get_fix_timeline` with a fix id. Reporter identifiers (end-user id, reporter token, session id, display name) are never returned, and `get_report_evidence` no longer returns the session id."
+      },
+      {
+        "title": "Output fixes.",
+        "description": "`merge_fix` declares the `justMerged` and `sha` fields the merge route returns, so strict clients no longer reject a merge that went through. `get_usage` returns structured content and honours `projectId`."
       }
     ],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
         "version": "0.22.1"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
+        "version": "0.22.0"
+      },
+      {
+        "name": "@mushi-mushi/react-native",
+        "version": "0.22.0"
       }
     ]
   },
@@ -2034,7 +2090,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
-        "version": "0.8.0"
+        "version": "0.8.1"
       },
       {
         "name": "@mushi-mushi/react",
@@ -2058,7 +2114,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.8.1"
+        "version": "0.8.2"
       }
     ]
   },
@@ -2264,7 +2320,7 @@
       },
       {
         "name": "@mushi-mushi/mcp-ci",
-        "version": "0.6.3"
+        "version": "0.6.4"
       },
       {
         "name": "@mushi-mushi/node",
@@ -2272,7 +2328,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-cursor-cloud",
-        "version": "0.6.0"
+        "version": "0.6.1"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -2280,7 +2336,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.6.1"
+        "version": "0.6.2"
       },
       {
         "name": "mushi-mushi",
@@ -2495,7 +2551,7 @@
       },
       {
         "name": "@mushi-mushi/inventory-schema",
-        "version": "0.4.2"
+        "version": "0.4.3"
       },
       {
         "name": "@mushi-mushi/mcp",
@@ -2635,7 +2691,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-linear",
-        "version": "0.3.1"
+        "version": "0.3.2"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -2663,7 +2719,7 @@
       },
       {
         "name": "eslint-plugin-mushi-mushi",
-        "version": "0.3.3"
+        "version": "0.3.4"
       }
     ]
   },
@@ -2672,6 +2728,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.2.11",
       "0.2.10",
       "0.2.9",
       "0.2.8",
@@ -2737,7 +2794,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/adapters",
-        "version": "0.2.8"
+        "version": "0.2.9"
       },
       {
         "name": "@mushi-mushi/angular",
@@ -2773,7 +2830,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-jira",
-        "version": "0.2.6"
+        "version": "0.2.7"
       },
       {
         "name": "@mushi-mushi/plugin-linear",
@@ -2781,7 +2838,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-pagerduty",
-        "version": "0.2.8"
+        "version": "0.2.9"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -2789,15 +2846,15 @@
       },
       {
         "name": "@mushi-mushi/plugin-sentry",
-        "version": "0.2.10"
+        "version": "0.2.11"
       },
       {
         "name": "@mushi-mushi/plugin-slack-app",
-        "version": "0.2.7"
+        "version": "0.2.8"
       },
       {
         "name": "@mushi-mushi/plugin-zapier",
-        "version": "0.2.8"
+        "version": "0.2.9"
       },
       {
         "name": "@mushi-mushi/react",
@@ -2817,7 +2874,7 @@
       },
       {
         "name": "@mushi-mushi/wasm-classifier",
-        "version": "0.2.2"
+        "version": "0.2.3"
       },
       {
         "name": "@mushi-mushi/web",
@@ -2834,6 +2891,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.1.6",
       "0.1.5",
       "0.1.4",
       "0.1.3",
@@ -2857,7 +2915,7 @@
       },
       {
         "name": "@mushi-mushi/inventory-auth-runner",
-        "version": "0.1.3"
+        "version": "0.1.4"
       },
       {
         "name": "@mushi-mushi/mcp",
@@ -2865,27 +2923,27 @@
       },
       {
         "name": "@mushi-mushi/plugin-bugsnag",
-        "version": "0.1.5"
+        "version": "0.1.6"
       },
       {
         "name": "@mushi-mushi/plugin-crashlytics",
-        "version": "0.1.5"
+        "version": "0.1.6"
       },
       {
         "name": "@mushi-mushi/plugin-discord",
-        "version": "0.1.5"
+        "version": "0.1.6"
       },
       {
         "name": "@mushi-mushi/plugin-github-issues",
-        "version": "0.1.5"
+        "version": "0.1.6"
       },
       {
         "name": "@mushi-mushi/plugin-msteams",
-        "version": "0.1.5"
+        "version": "0.1.6"
       },
       {
         "name": "@mushi-mushi/plugin-rollbar",
-        "version": "0.1.5"
+        "version": "0.1.6"
       },
       {
         "name": "@mushi-mushi/react",
