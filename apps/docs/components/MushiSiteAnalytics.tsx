@@ -43,7 +43,8 @@
  * (apps/docs/.env.example). Unset → renders nothing, does nothing.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useSitePathname } from '../lib/site-pathname'
+import { usePathname } from 'next/navigation'
+import { toSitePathname } from '../lib/site-pathname'
 import {
   SITE_ANALYTICS_ENV,
   buildFirstTouch,
@@ -136,7 +137,7 @@ export function MushiSiteAnalytics() {
   // Site-relative: a visit to the /mushi-mushi/ landing alias is a visit to
   // "/". Raw usePathname() recorded it as docs_page_view on "/mushi-mushi",
   // so landing_view never fired (lib/site-pathname.ts).
-  const pathname = useSitePathname()
+  const pathname = toSitePathname(usePathname())
   const [showBar, setShowBar] = useState(false)
 
   const consentRef = useRef<StoredConsent | 'pending' | 'blocked'>('pending')

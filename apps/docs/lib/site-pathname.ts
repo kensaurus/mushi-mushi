@@ -13,18 +13,13 @@
  * NEXT_PUBLIC_MUSHI_ROOT_ALIAS is set by next.config.mjs (the basePath's
  * parent) and is empty outside the production build. Nextra's own route
  * hook gets the same mapping via patches/nextra@4.6.1.patch.
+ *
+ * Callers use `toSitePathname(usePathname())`.
  */
-import { usePathname } from 'next/navigation'
-
 const ROOT_ALIAS = process.env.NEXT_PUBLIC_MUSHI_ROOT_ALIAS ?? ''
 
 export function toSitePathname<P extends string | null>(pathname: P, rootAlias: string = ROOT_ALIAS): P | '/' {
   if (!pathname || !rootAlias) return pathname
   if (pathname === rootAlias || pathname === `${rootAlias}/`) return '/'
   return pathname
-}
-
-/** `usePathname()` with the landing alias mapped to "/". */
-export function useSitePathname() {
-  return toSitePathname(usePathname())
 }
