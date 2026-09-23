@@ -60,7 +60,7 @@
     "eslint": "^10.6.0",
     "eslint-plugin-mushi-mushi": "workspace:*",
     "react": "^19.2.7",
-    "react-native": "^0.86.0",
+    "react-native": "^0.87.1",
     "size-limit": "^12.1.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
