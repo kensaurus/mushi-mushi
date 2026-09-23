@@ -563,7 +563,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       data: {
         hasAnyProject: true,
         projectId: pid,
-        projectName: activeProject.project_name,
+        projectName: activeProject.name ?? null,
         projectCount: projectIds.length,
         hasGithub,
         codebaseIndexEnabled: indexedFiles > 0,
@@ -1396,7 +1396,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       data: {
         hasAnyProject: true,
         projectId: pid,
-        projectName: activeProject.project_name,
+        projectName: activeProject.name ?? null,
         projectCount: projectIds.length,
         hasRepo,
         repoUrl,

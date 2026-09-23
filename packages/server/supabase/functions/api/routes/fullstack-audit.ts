@@ -87,7 +87,7 @@ export function registerFullstackAuditRoutes(parent: Hono<{ Variables: Variables
     if ('response' in resolved) return resolved.response
     const { project } = resolved
     const projectId = project.id as string
-    const projectName = (project.project_name as string | null) ?? null
+    const projectName = (project.name as string | null) ?? null
 
     const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
     const { data: recentRuns } = await db
