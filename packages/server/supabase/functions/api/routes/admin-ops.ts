@@ -21,7 +21,9 @@ import { getPlan } from '../../_shared/plans.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { notifyOperator } from '../../_shared/operator-notify.ts';
 import { SUPPORT_EMAIL, SUPPORT_URL } from '../../_shared/support.ts';
-import { dbError, ownedProjectIds, resolveOwnedProject } from '../shared.ts';
+import { dbError, ownedProjectIds, requireProjectAdmin, resolveOwnedProject } from '../shared.ts';
+import { isProjectStorageSecretRef, storageSecretPrefix } from '../../_shared/vault-ref.ts';
+import { assertSafeOutboundUrl } from '../../_shared/inventory-guards.ts';
 import { requireSuperAdmin } from '../../_shared/super-admin.ts';
 import { resolveActiveEntitlement } from '../../_shared/entitlements.ts';
 import { resolveProjectRetention } from '../../_shared/retention-policy.ts';
@@ -1268,10 +1270,39 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const userId = c.get('userId') as string;
     const projectId = c.req.param('projectId')!;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
-    if (!projectIds.includes(projectId))
-      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
-    const body = await c.req.json().catch(() => ({}));
+    const resolved = await resolveOwnedProject(c, db, userId, { overrideProjectId: projectId });
+    if ('response' in resolved) return resolved.response;
+    const forbidden = requireProjectAdmin(c, resolved.project);
+    if (forbidden) return forbidden;
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+
+    // Secret references are read by name with the service role, so they must
+    // name this project's own secrets. The endpoint receives SigV4-signed
+    // requests carrying those keys, so it must be public https unless the
+    // operator of a self-hosted install opts in.
+    for (const k of ['access_key_vault_ref', 'secret_key_vault_ref', 'service_account_vault_ref']) {
+      const v = body[k];
+      if (v == null || v === '') continue;
+      if (typeof v !== 'string' || !isProjectStorageSecretRef(v, projectId)) {
+        return c.json({
+          ok: false,
+          error: {
+            code: 'VAULT_REF_NOT_ALLOWED',
+            message: `${k} must name a Vault secret under ${storageSecretPrefix(projectId)}`,
+          },
+        }, 400);
+      }
+    }
+    if (typeof body.endpoint === 'string' && body.endpoint.trim() !== '') {
+      const allowPrivate = Deno.env.get('MUSHI_ALLOW_PRIVATE_STORAGE_ENDPOINT') === '1';
+      const safe = assertSafeOutboundUrl(body.endpoint.trim(), { allowHttp: allowPrivate, allowPrivateHosts: allowPrivate });
+      if (!safe.ok) {
+        return c.json({
+          ok: false,
+          error: { code: 'UNSAFE_URL', message: `endpoint must be a public https URL (${safe.reason}).` },
+        }, 400);
+      }
+    }
 
     const allowed = [
       'provider',

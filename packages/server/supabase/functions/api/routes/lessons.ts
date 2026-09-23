@@ -428,10 +428,21 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
     const authMethod = c.get('authMethod') as string | undefined
     const callerProjectId = c.get('projectId') as string | undefined
     const { diff_text, max_tokens, top_k } = body.data
-    const project_id = authMethod === 'apiKey'
+    const project_id = authMethod === 'apiKey' && callerProjectId
       ? callerProjectId
       : body.data.project_id
     const db = getServiceClient()
+
+    // match_lessons treats a null project as "every project", and the body's
+    // project_id is caller-chosen, so both must resolve to a project the
+    // caller can reach.
+    if (!project_id) {
+      return c.json({ ok: false, error: { code: 'PROJECT_REQUIRED', message: 'project_id is required' } }, 400)
+    }
+    const allowed = await callerProjectIds(c, db, c.get('userId') as string)
+    if (!allowed.includes(project_id)) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'No access to this project' } }, 403)
+    }
 
     // Embed the diff text
     const openaiKey = Deno.env.get('OPENAI_API_KEY')

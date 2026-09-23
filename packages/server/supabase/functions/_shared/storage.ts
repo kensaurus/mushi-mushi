@@ -17,6 +17,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { getServiceClient } from './db.ts'
 import { log } from './logger.ts'
+import { isProjectStorageSecretRef } from './vault-ref.ts'
 
 const storageLog = log.child('storage')
 
@@ -173,7 +174,7 @@ export async function getStorageAdapterForHealthCheck(
   // Vault-ref resolution for external providers
   if (['s3', 'r2', 'minio'].includes(settings.provider)) {
     const tv1 = Date.now()
-    const hasAccess = !!(await resolveVaultSecret(settings.access_key_vault_ref))
+    const hasAccess = !!(await resolveVaultSecret(settings.access_key_vault_ref, settings.project_id))
     prefixDebug.push({
       step: 'vault_access_key',
       ok: hasAccess,
@@ -184,7 +185,7 @@ export async function getStorageAdapterForHealthCheck(
     })
 
     const tv2 = Date.now()
-    const hasSecret = !!(await resolveVaultSecret(settings.secret_key_vault_ref))
+    const hasSecret = !!(await resolveVaultSecret(settings.secret_key_vault_ref, settings.project_id))
     prefixDebug.push({
       step: 'vault_secret_key',
       ok: hasSecret,
@@ -212,7 +213,7 @@ export async function getStorageAdapterForHealthCheck(
 
   if (settings.provider === 'gcs') {
     const tv = Date.now()
-    const hasSa = !!(await resolveVaultSecret(settings.service_account_vault_ref))
+    const hasSa = !!(await resolveVaultSecret(settings.service_account_vault_ref, settings.project_id))
     prefixDebug.push({
       step: 'vault_service_account',
       ok: hasSa,
@@ -261,8 +262,8 @@ async function buildExternalAdapter(settings: StorageSettings): Promise<StorageA
     case 's3':
     case 'r2':
     case 'minio': {
-      const accessKey = await resolveVaultSecret(settings.access_key_vault_ref)
-      const secretKey = await resolveVaultSecret(settings.secret_key_vault_ref)
+      const accessKey = await resolveVaultSecret(settings.access_key_vault_ref, settings.project_id)
+      const secretKey = await resolveVaultSecret(settings.secret_key_vault_ref, settings.project_id)
       if (!accessKey || !secretKey) {
         throw new Error(`Missing access/secret key vault refs for ${settings.provider}`)
       }
@@ -278,7 +279,7 @@ async function buildExternalAdapter(settings: StorageSettings): Promise<StorageA
       })
     }
     case 'gcs': {
-      const sa = await resolveVaultSecret(settings.service_account_vault_ref)
+      const sa = await resolveVaultSecret(settings.service_account_vault_ref, settings.project_id)
       if (!sa) throw new Error('Missing GCS service-account vault ref')
       return new GcsAdapter({
         bucket: settings.bucket,
@@ -299,8 +300,14 @@ function defaultEndpoint(provider: StorageProvider, region: string | null): stri
   return `https://s3.${region ?? 'us-east-1'}.amazonaws.com`
 }
 
-async function resolveVaultSecret(ref: string | null): Promise<string | null> {
+async function resolveVaultSecret(ref: string | null, projectId: string): Promise<string | null> {
   if (!ref) return null
+  // vault_lookup reads any secret by name, so only this project's own
+  // mushi/storage/<projectId>/… names are honoured (security pass 2026-09-23).
+  if (!isProjectStorageSecretRef(ref, projectId)) {
+    storageLog.error('storage secret ref outside project scope', { projectId })
+    return null
+  }
   // Supabase Vault is exposed via the `vault.decrypted_secrets` view. We use
   // a tiny SECURITY DEFINER RPC `vault_lookup(name)` (added separately) to
   // keep the contract uniform across self-hosted deployments.
