@@ -5,7 +5,9 @@
  * Does not animate the same transforms GSAP pin chapters own.
  */
 import { type ReactNode } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { motion } from 'motion/react'
+
+import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
 
 interface ScrollRevealProps {
   children: ReactNode
@@ -13,7 +15,12 @@ interface ScrollRevealProps {
 }
 
 export function ScrollReveal({ children, className }: ScrollRevealProps) {
-  const reduced = useReducedMotion()
+  // Motion's own `useReducedMotion` reads matchMedia synchronously during
+  // render, so it returns false on the server and true in the client's
+  // hydration render for a reduce-motion user — and this component branches
+  // its tree on it, which is React hydration error #418 on the landing page.
+  // The local hook is `true` until mounted, so both sides agree.
+  const reduced = usePrefersReducedMotion()
 
   if (reduced) {
     return <div className={className}>{children}</div>

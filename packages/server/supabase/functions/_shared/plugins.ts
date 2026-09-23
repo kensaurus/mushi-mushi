@@ -559,7 +559,7 @@ async function deliverSkillPipelineStep(
     `Pipeline run: ${d.runId}`,
     ``,
     `You are executing step ${d.stepIndex + 1} of a Mushi skill pipeline.`,
-    `When done, call the Mushi MCP tool \`checkin_pipeline_step\` with run_id, step_index, and status.`,
+    `When done, call the Mushi MCP tool \`checkin_pipeline_step\` with runId, stepIndex, and status.`,
     ``,
     `─── Context Packet ────────────────────────────────────────────────────`,
     ``,

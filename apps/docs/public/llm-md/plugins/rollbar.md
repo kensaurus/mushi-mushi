@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/rollbar
 
 ---
 title: Rollbar
+description: Mirror Mushi bug reports into Rollbar items and resolve them when fixes ship — access token, environment name, and dedup key mapping.
 ---
 
 # Rollbar plugin

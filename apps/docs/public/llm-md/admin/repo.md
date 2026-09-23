@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/repo
 
 ---
 title: Repo graph
+description: The Repo page shows every fix branch in your connected GitHub repository — open PRs, CI status, and what the fix worker did on each branch.
 ---
 
 # Repo graph
@@ -82,8 +83,8 @@ update the GitHub token, repository URL, and default branch.
 ## API
 
 ```bash
-GET /v1/admin/repo/overview?project_id=
-GET /v1/admin/repo/activity?project_id=&limit=100
+GET /v1/admin/repo/overview?project_id=<pid>
+GET /v1/admin/repo/activity?project_id=<pid>&limit=100
 ```
 
 ---

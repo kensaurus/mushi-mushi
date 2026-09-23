@@ -1,0 +1,78 @@
+---
+title: Jam vs Mushi Mushi
+description: Jam.dev vs Mushi Mushi in 2026 — a teammate recording a bug in the Jam extension versus a user reporting from your app, MCP handoff and free tiers.
+---
+
+import { ComparisonTable } from '../../components/ComparisonTable'
+import { FactsChecked, FactsTable, FaqList, StartFree } from '../../components/CompareFacts'
+import { JAM, MUSHI, JAM_ROWS, JAM_FAQ, FACTS_REVIEWED_AT, NEXT_REVIEW_DUE, signupUrl } from './_facts'
+
+# Jam vs Mushi Mushi
+
+Jam and Mushi both put console and network logs next to a bug so nobody has
+to ask "can you reproduce that?". The difference is who presses the button.
+With Jam, a person on or near your team records the bug in Chrome. With
+Mushi, the user who hit the bug reports it from inside your production app,
+and the report arrives with a diagnosis already written.
+
+<FactsChecked reviewedAt={FACTS_REVIEWED_AT} nextReviewDue={NEXT_REVIEW_DUE} />
+
+## What each one is
+
+<FactsTable vendor={JAM} />
+
+<FactsTable vendor={MUSHI} />
+
+## Side by side
+
+<ComparisonTable foil="Jam" rows={JAM_ROWS} />
+
+## Where they overlap
+
+Both attach the technical context a developer needs: console output, network
+requests, device details and the sequence of user actions. Both expose that
+context to a coding agent over MCP, and Jam's "Debug Jams via MCP" is on the
+free tier, which is a fair point in its favour for a team that already uses
+Jam for QA.
+
+## Where they do not
+
+Jam is a recording tool. The unit is a Jam: a video a human made, sent to a
+tracker such as Jira or Linear. Reading the video is still your job, and
+Recording Links are the way to get one from someone outside the workspace.
+
+Mushi is a reporting SDK plus a diagnosis. The unit is a report: the user's
+sentence, a screenshot, the console/network tail, the route and a timeline of
+what they did before. Mushi reads that against your repo and writes what
+broke and why. Repeat reports collapse into one row, and each fix becomes a
+lesson your editor sees next time.
+
+## Using both
+
+Sensible, and common: Jam for internal QA passes and support-desk recordings,
+Mushi for reports from real users in production and for the fix loop in
+Cursor or Claude Code. There is no direct integration between the two today;
+if you want a Jam link on a Mushi report, put it in the report's metadata.
+
+## Pick Jam if
+
+- Your bugs are found by teammates, testers or support agents who can run a
+  Chrome extension.
+- A video is the artefact your tracker workflow expects.
+
+## Pick Mushi if
+
+- Your bugs are found by end users on devices you do not control, including
+  mobile (React Native, Capacitor, Flutter, iOS, Android).
+- You want the first thing you read to be the diagnosis, not the recording.
+- You want the report and fix context inside Cursor or Claude Code.
+
+<StartFree href={signupUrl('jam-vs-mushi')} />
+
+## Frequently asked questions
+
+<FaqList items={JAM_FAQ} />
+
+**Related:** [Sentry vs Mushi](/compare/sentry-vs-mushi) ·
+[Debug apps built with Cursor](/use-cases/debug-cursor-apps) ·
+[MCP quickstart](/quickstart/mcp)

@@ -9,25 +9,36 @@ weeks, don't track it**.
 
 ---
 
-## The 90-day target bar
+## The north-star (decided 2026-09-20 — supersedes the star bar)
 
-Research baselines (AFFiNE, Supabase, PostHog 0→1 retros) say a well-executed
-launch + 90 days of cadence nets:
+**Activated external projects per week**: a project owned by someone outside
+the founder's org receives its first SDK-originated report and the owner sees
+the diagnosis. Stars and npm downloads are lagging, vanity-prone signals
+(3 stars and ~1k monthly downloads coexisted with 0 activated external
+projects for five months). The weekly numbers live in
+[`scorecard.md`](./scorecard.md); the funnel definition, activation event and
+phase plan live in [`../plan-gtm.md`](../plan-gtm.md).
 
-- **Good**: 500 stars, 750 weekly npm downloads
-- **Great**: 1,500 stars, 2,000 weekly npm downloads
-- **Astonishing**: 5,000+ stars (requires HN #1 + a post that goes viral)
+Funnel cells, in order: Visit → Signup → Project → Key → SDK installed →
+**Activated** → Fix pulled → Habit → Paid. Source: `GET /v1/admin/growth/funnel`
+(`company_funnel_weekly`), split by `signup_source` from the signup form.
 
-Set **1,500 stars + 2,000 weekly downloads** as the 90-day *"great"* bar and
-**500 stars + 750 weekly downloads** as the *"good"* floor. Anything above
-500 stars is a legitimate base to build on; anything below, re-evaluate the
-positioning before doubling down.
+Old bar for reference only: the June 2026 plan targeted 500 stars / 750 weekly
+downloads at day 90. Do not chase it.
 
 ---
 
 ## The five numbers to check weekly
 
-Every Friday afternoon, 10 minutes:
+Every Monday, 10 minutes — the first line is the north-star, the rest are
+diagnostics. Append the row to [`scorecard.md`](./scorecard.md).
+
+| # | Number | Source |
+| --- | --- | --- |
+| 0 | **Activated external projects this week** | `/growth` in the console (operator) or the SQL in `plan-gtm.md` → Workstream C §8 |
+| 0b | Signups → project → SDK installed → activated, by `signup_source` | same endpoint, `by_source` |
+
+Then the original five (still useful as diagnostics):
 
 | # | Number | Source | How to check |
 | --- | --- | --- | --- |

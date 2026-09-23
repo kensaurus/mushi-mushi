@@ -4,6 +4,7 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
+import { emitProductEvent } from '../../_shared/product-events.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { dbError, userCanAccessProject } from '../shared.ts';
 
@@ -237,6 +238,15 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
     });
 
     if (error) return dbError(c, error);
+    // Company funnel (mushi-self): fire-and-forget. The prefix is the 12-char
+    // head of a fresh UUID-derived key, unique enough for an idempotency key.
+    void emitProductEvent(db, {
+      userId,
+      eventName: 'key_minted',
+      surface: 'server',
+      properties: { project_id: projectId, label, scopes: scopes.join(',') },
+      dedupKey: `key_minted:${prefix}`,
+    });
     return c.json({ ok: true, data: { key: rawKey, prefix, scopes, label } }, 201);
   });
 
@@ -326,6 +336,16 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
       .select('id')
       .single();
     if (insertError) return dbError(c, insertError);
+
+    // Company funnel (mushi-self): fire-and-forget. Rotation keeps the
+    // column default scopes ('report:write').
+    void emitProductEvent(db, {
+      userId,
+      eventName: 'key_minted',
+      surface: 'server',
+      properties: { project_id: projectId, label: 'rotated', scopes: 'report:write' },
+      dedupKey: `key_minted:${newRow?.id ?? prefix}`,
+    });
 
     const userEmail = c.get('userEmail') as string | undefined;
     await logAudit(

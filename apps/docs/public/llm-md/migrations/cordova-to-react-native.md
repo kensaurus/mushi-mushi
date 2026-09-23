@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/cordova-to-react-native
 
 ---
 title: 'Cordova → React Native'
+description: Move a Cordova app to React Native in two hops — stabilise on Capacitor first, then port screen by screen — without losing Mushi bug reporting.
 ---
 
 # Cordova → React Native
@@ -96,11 +97,11 @@ Walk the plugin list once at the start. Anything without a Capacitor or RN equiv
     
       
     
-  )
+
 }`} },
     { id: 'dual-ship', label: 'Dual-ship Capacitor + RN for ≥ 2 weeks', content: <>Both builds report to the same Mushi project. Use the SDK tag filter on the dashboard to compare incident rates between the two builds before sunsetting Capacitor.</> },
     { id: 'sunset', label: 'Sunset the Cordova/Capacitor build', content: <>Once the RN build has been live for 2 weeks with no P0 reports, push the legacy build to deprecation in App Store Connect / Play Console.</> },
-  ]}
+
 />
 
 ## Migration checklist (Path B — direct)
@@ -112,7 +113,7 @@ If even one plugin has no RN equivalent and you can't budget time for a TurboMod
     { id: 'mushi-rn', label: 'Mount @mushi-mushi/react-native (same projectId / apiKey)', content: <>Same code as Path A.</> },
     { id: 'beta', label: 'Closed beta on TestFlight / Play Internal', content: <>Run for ≥ 1 week. Watch the Mushi inbox daily.</> },
     { id: 'cutover', label: 'Cutover and sunset Cordova', content: <>Push to production once the beta is clean. Archive the Cordova repo.</> },
-  ]}
+
 />
 
 ## Verification

@@ -30,7 +30,7 @@ Deno.serve(
     }
 
     const authErr = requireServiceRoleAuth(req)
-    if (authErr && req.headers.get('x-mushi-trigger') !== 'manual') return authErr
+    if (authErr) return authErr
 
     const db = getServiceClient()
     const body = await req.json().catch(() => ({}))

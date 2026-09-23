@@ -44,6 +44,7 @@ import { usePageCopy } from '../lib/copy'
 import { useFixesUx, resolveQuickFixesTab } from '../lib/fixesModeUx'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
+import { trackSelf } from '../lib/track'
 interface InventoryActionNode {
   actionNodeId?: string
   id?: string
@@ -385,6 +386,10 @@ export function FixesPage() {
         body: JSON.stringify({ reportId, projectId: activeProjectId }),
       })
       if (res.ok) {
+        trackSelf('fix_dispatched', {
+          report_id: reportId,
+          agent: failedFixes.find((f) => f.report_id === reportId)?.agent ?? 'default',
+        })
         toast.push({ tone: 'success', message: 'Fix re-dispatched' })
         settleOptimistic(optimisticId, 'ok')
         void loadFixes()
@@ -393,7 +398,7 @@ export function FixesPage() {
         settleOptimistic(optimisticId, 'error', res.error?.message)
       }
     },
-    [activeProjectId, loadFixes, pushOptimistic, settleOptimistic, toast],
+    [activeProjectId, failedFixes, loadFixes, pushOptimistic, settleOptimistic, toast],
   )
 
   const retryAllFailed = useCallback(async () => {
@@ -410,9 +415,10 @@ export function FixesPage() {
     )
     setRetryingAll(false)
     results.forEach((r, idx) => {
-      const { id } = optimisticIds[idx]
+      const { id, reportId } = optimisticIds[idx]
       const ok = r.status === 'fulfilled' && (r.value as { ok: boolean }).ok
       const msg = r.status === 'fulfilled' ? (r.value as { error?: { message?: string } }).error?.message : 'Request failed'
+      if (ok) trackSelf('fix_dispatched', { report_id: reportId, agent: failedFixes[idx]?.agent ?? 'default' })
       settleOptimistic(id, ok ? 'ok' : 'error', msg)
     })
     const ok = results.filter((r) => r.status === 'fulfilled' && (r.value as { ok: boolean }).ok).length
@@ -542,9 +548,10 @@ export function FixesPage() {
       ),
     )
     results.forEach((r, idx) => {
-      const { id } = optimisticIds[idx]
+      const { id, reportId } = optimisticIds[idx]
       const okRes = r.status === 'fulfilled' && (r.value as { ok: boolean }).ok
       const msg = r.status === 'fulfilled' ? (r.value as { error?: { message?: string } }).error?.message : 'Request failed'
+      if (okRes) trackSelf('fix_dispatched', { report_id: reportId, agent: selectedFailed[idx]?.agent ?? 'default' })
       settleOptimistic(id, okRes ? 'ok' : 'error', msg)
     })
     const ok = results.filter((r) => r.status === 'fulfilled' && (r.value as { ok: boolean }).ok).length

@@ -1,6 +1,7 @@
 ##
 # FILE: deploy-hosted-mcp.yml
-# PURPOSE: Wire kensaur.us/mushi-mushi/hosted-mcp → Supabase MCP (Smithery PRM).
+# PURPOSE: Wire kensaur.us/mushi-mushi/hosted-mcp → Supabase MCP, plus the
+#          origin OAuth discovery documents (RFC 9728 PRM, RFC 8414 AS).
 # Trigger manually after merging script changes — no admin/docs build required.
 ##
 
@@ -46,6 +47,7 @@ jobs:
             --paths \
               "/mushi-mushi/hosted-mcp*" \
               "/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp*" \
+              "/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp*" \
             --region us-east-1
 
       - name: Wait and smoke test

@@ -179,6 +179,7 @@ export interface MushiLocale {
       /** `{version}` placeholder. */
       whatsNew: string;
     };
+    /** Link text of the "Bug reports by Mushi" mark (widget.brandFooter). No placeholders. */
     poweredBy: string;
   };
 }

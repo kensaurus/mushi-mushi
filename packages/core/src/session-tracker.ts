@@ -8,26 +8,30 @@
  * no offline queue, fire-and-forget after visibility-change.
  *
  * Privacy:
+ *   - Passes the same gate as product events (analytics-gate.ts): nothing is
+ *     sent when `analytics.enabled` is false, under DNT / GPC, in automation
+ *     or crawler browsers, or before consent is granted. A later
+ *     setConsent('granted') starts the session; 'denied' stops it mid-page.
  *   - No PII by default. `reporter_token_hash` is the same opaque device
  *     fingerprint already used in reports. `user_id_hash` is only set when
- *     the host app calls Mushi.identify().
+ *     the host app identifies the user.
+ *   - Routes are sent as the pathname only and the referrer as its origin, so
+ *     query strings (reset tokens, emails in links) never leave the page.
  *   - Respects the SDK-level `trackSessions: false` opt-out option.
- *   - Respects a DNT / Global Privacy Control header at the SDK init layer;
- *     callers should check `shouldRespectDnt()` before calling `initSession`.
  *
  * SPA page views:
- *   The history patch below used to decide push-vs-replace with
- *   `original === history.pushState` *inside* the wrapper — but by the time
- *   the wrapper runs, `history.pushState` IS the wrapper, so the comparison
- *   was always false and no SPA page view was ever emitted. Two of five live
- *   projects had zero `session_page_views` rows across >1,000 sessions each.
- *   The kind is now decided at wrap time. Hosts that already own a history
+ *   The history patch below decides push-vs-replace at wrap time (comparing
+ *   against `history.pushState` inside the wrapper never matches, because by
+ *   then that property is the wrapper). Hosts that already own a history
  *   patch (`@mushi-mushi/web`'s shared one) pass `patchHistory: false` and
- *   call `trackPageView()` themselves, so wrappers never stack.
+ *   call `trackPageView()` themselves — a second wrapper assigned to
+ *   `history.pushState` silently discards this one, which is how the web SDK
+ *   recorded zero SPA page views across >1,000 sessions per project.
  */
 
 import { getSessionId } from './session';
-import type { MushiApiClient, MushiSessionEventPayload } from './types';
+import { analyticsBlockReason, onAnalyticsConsentChange, resolveAnalyticsConsent } from './analytics-gate';
+import type { MushiAnalyticsConfig, MushiApiClient, MushiSessionEventPayload } from './types';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -39,10 +43,14 @@ const HEARTBEAT_INTERVAL_MS = 60_000; // 1 minute
 let _client: MushiApiClient | null = null;
 let _sdkVersion: string | undefined;
 let _userIdHash: string | null = null;
-let _reporterTokenHash: string | null = null;
+let _reporterToken: string | null = null;
 let _pageViewCount = 0;
 let _heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let _initialized = false;
+/** True while the gate allows sending; flips with consent. */
+let _active = false;
+let _started = false;
+let _unsubscribeConsent: (() => void) | null = null;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -52,7 +60,16 @@ function now(): string {
 
 function currentRoute(): string {
   if (typeof window === 'undefined') return '';
-  return window.location.pathname + window.location.search;
+  return window.location.pathname;
+}
+
+function referrerOrigin(): string | null {
+  if (typeof document === 'undefined' || !document.referrer) return null;
+  try {
+    return new URL(document.referrer).origin;
+  } catch {
+    return null;
+  }
 }
 
 function userAgent(): string | null {
@@ -69,7 +86,8 @@ function buildPayload(
     session_id: getSessionId(),
     ts: now(),
     page_view_count: _pageViewCount,
-    reporter_token_hash: _reporterTokenHash,
+    // Wire name kept for older servers; the value is the raw token (hashed server-side).
+    reporter_token_hash: _reporterToken,
     user_id_hash: _userIdHash,
     user_agent: userAgent(),
     sdk_version: _sdkVersion,
@@ -78,9 +96,38 @@ function buildPayload(
 }
 
 function send(payload: MushiSessionEventPayload): void {
-  if (!_client) return;
+  if (!_client || !_active) return;
   // Fire-and-forget — best-effort; errors don't propagate to the host app.
   _client.postSessionEvent(payload).catch(() => { /* intentionally silent */ });
+}
+
+function recordPageView(route: string): void {
+  if (!_active) return;
+  _pageViewCount += 1;
+  send(buildPayload('page_view', { route }));
+}
+
+/** Begin (or resume after a re-grant) sending: session_start plus heartbeats. */
+function activate(): void {
+  if (_active || !_initialized) return;
+  _active = true;
+  if (!_started) {
+    _started = true;
+    _pageViewCount = 1;
+    send(buildPayload('session_start', { route: currentRoute(), referrer: referrerOrigin() }));
+  }
+  _heartbeatTimer = setInterval(() => {
+    send(buildPayload('session_heartbeat', { route: currentRoute() }));
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
+/** Stop sending immediately (consent denied). Listeners stay but go quiet. */
+function deactivate(): void {
+  _active = false;
+  if (_heartbeatTimer != null) {
+    clearInterval(_heartbeatTimer);
+    _heartbeatTimer = null;
+  }
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -88,6 +135,9 @@ function send(payload: MushiSessionEventPayload): void {
 export interface SessionTrackerOptions {
   client: MushiApiClient;
   sdkVersion?: string;
+  /** The raw per-project reporter token; the server stores only its sha256. */
+  reporterToken?: string | null;
+  /** @deprecated Renamed to `reporterToken` (it always carried the raw token, never a hash). */
   reporterTokenHash?: string | null;
   userIdHash?: string | null;
   /**
@@ -98,39 +148,33 @@ export interface SessionTrackerOptions {
    * views got overwritten and silently dropped in `@mushi-mushi/web`.
    */
   patchHistory?: boolean;
+  /** Project the stored analytics consent is keyed on (the SDK passes its projectId). */
+  projectId?: string;
+  /** The SDK's `analytics` block: sessions pass the same gate as product events. */
+  analytics?: MushiAnalyticsConfig;
 }
 
 /**
  * Initialise the session tracker. Call once at SDK init for web environments.
  * Subsequent calls on the same page are no-ops (idempotent).
  *
- * Emits: session_start immediately, heartbeats every minute, session_end on
- * visibilitychange/pagehide, and page_view on history API navigation.
+ * Emits, once the analytics gate allows it: session_start, heartbeats every
+ * minute, session_end on visibilitychange/pagehide, and page_view on history
+ * API navigation. Under `consent: 'required'` nothing is sent until
+ * setConsent('granted').
  */
 export function initSessionTracker(opts: SessionTrackerOptions): void {
   if (_initialized || typeof window === 'undefined') return;
+  // Disabled, DNT / GPC or automation: stay fully inert for this page.
+  if (analyticsBlockReason(opts.analytics) !== null) return;
   _initialized = true;
 
   _client = opts.client;
   _sdkVersion = opts.sdkVersion;
-  _reporterTokenHash = opts.reporterTokenHash ?? null;
+  _reporterToken = opts.reporterToken ?? opts.reporterTokenHash ?? null;
   _userIdHash = opts.userIdHash ?? null;
 
-  const entryRoute = currentRoute();
-  _pageViewCount = 1;
-
-  // 1. session_start
-  send(buildPayload('session_start', {
-    route: entryRoute,
-    referrer: typeof document !== 'undefined' ? (document.referrer ?? null) : null,
-  }));
-
-  // 2. Heartbeat — keeps last_seen_at fresh and pushes page_view_count updates
-  _heartbeatTimer = setInterval(() => {
-    send(buildPayload('session_heartbeat', { route: currentRoute() }));
-  }, HEARTBEAT_INTERVAL_MS);
-
-  // 3. session_end on visibility-change to hidden / pagehide
+  // session_end on visibility-change to hidden / pagehide
   const onHide = () => {
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
       send(buildPayload('session_end', { route: currentRoute() }));
@@ -139,17 +183,21 @@ export function initSessionTracker(opts: SessionTrackerOptions): void {
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', onHide, { passive: true });
   }
-  if (typeof window !== 'undefined') {
-    window.addEventListener('pagehide', () => {
-      send(buildPayload('session_end', { route: currentRoute() }));
-    }, { passive: true });
-  }
+  window.addEventListener('pagehide', () => {
+    send(buildPayload('session_end', { route: currentRoute() }));
+  }, { passive: true });
 
-  // 4. page_view on History API navigation (SPA route changes) — unless the
-  //    host owns the history patch and reports page views via trackPageView().
+  // page_view on History API navigation (SPA route changes) — unless the
+  // host owns the history patch and reports page views via trackPageView().
   if (opts.patchHistory !== false) {
     patchHistoryForPageViews();
   }
+
+  _unsubscribeConsent = onAnalyticsConsentChange((state) => {
+    if (state === 'granted') activate();
+    else deactivate();
+  });
+  if (resolveAnalyticsConsent(opts.projectId ?? '', opts.analytics) === 'granted') activate();
 }
 
 /**
@@ -159,8 +207,7 @@ export function initSessionTracker(opts: SessionTrackerOptions): void {
  */
 export function trackPageView(route?: string): void {
   if (!_initialized || !_client) return;
-  _pageViewCount += 1;
-  send(buildPayload('page_view', { route: route ?? currentRoute() }));
+  recordPageView(route ?? currentRoute());
 }
 
 /** Update the user identity after a Mushi.identify() call. */
@@ -170,11 +217,11 @@ export function updateSessionIdentity(userIdHash: string | null): void {
 
 /** Tear down timers (e.g. in tests or SSR environments). */
 export function destroySessionTracker(): void {
-  if (_heartbeatTimer != null) {
-    clearInterval(_heartbeatTimer);
-    _heartbeatTimer = null;
-  }
+  deactivate();
+  _unsubscribeConsent?.();
+  _unsubscribeConsent = null;
   _initialized = false;
+  _started = false;
   _client = null;
 }
 
@@ -186,30 +233,21 @@ function patchHistoryForPageViews(): void {
   if (_historyPatched || typeof history === 'undefined') return;
   _historyPatched = true;
 
-  // `isPush` is decided HERE, at wrap time. The previous implementation
-  // compared `original === history.pushState` inside the wrapper, which is
-  // always false once the wrapper itself has been assigned to
-  // `history.pushState` — so page views never fired.
-  const wrap = <T extends History['pushState'] | History['replaceState']>(
-    original: T,
-    isPush: boolean,
-  ): T =>
-    function (this: History, ...args: Parameters<T>) {
-      const result = (original as (...a: Parameters<T>) => void).apply(this, args);
-      // pushState navigation = new page view; replaceState = same page, skip
-      if (isPush) {
-        _pageViewCount += 1;
-        send(buildPayload('page_view', { route: currentRoute() }));
-      }
+  // pushState navigation = new page view; replaceState = same page, skip.
+  // Decided at wrap time: comparing against `history.pushState` inside the
+  // wrapper never matches, because by then that property is the wrapper.
+  const wrap = (original: History['pushState'] | History['replaceState'], countsAsPageView: boolean) =>
+    function (this: History, ...args: Parameters<typeof original>) {
+      const result = original.apply(this, args);
+      if (countsAsPageView) recordPageView(currentRoute());
       return result;
-    } as unknown as T;
+    };
 
   history.pushState = wrap(history.pushState, true);
   history.replaceState = wrap(history.replaceState, false);
 
   // popstate (back/forward)
   window.addEventListener('popstate', () => {
-    _pageViewCount += 1;
-    send(buildPayload('page_view', { route: currentRoute() }));
+    recordPageView(currentRoute());
   }, { passive: true });
 }

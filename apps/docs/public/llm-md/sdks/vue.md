@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/vue
 
 ---
 title: '@mushi-mushi/vue'
+description: Reference for @mushi-mushi/vue — install MushiPlugin, use the useMushi and useMushiReport composables, identify users and submit reports in Vue 3.
 ---
 
 # `@mushi-mushi/vue`
@@ -22,24 +23,27 @@ See [Quickstart → Vue](/quickstart/vue) for the full setup walkthrough.
 ## API surface
 
 ```ts
-
+import { MushiPlugin, useMushi, useMushiReport } from '@mushi-mushi/vue'
 ```
 
 | Export | Purpose |
 | --- | --- |
 | `MushiPlugin` | `app.use(MushiPlugin, config)` — installs the plugin and boots the SDK |
-| `useMushi()` | Returns the SDK singleton (composable) |
-| `useMushiReport()` | Returns `{ submit, isSubmitting, lastError }` |
+| `useMushi()` | Returns the SDK instance, or `undefined` outside the plugin |
+| `useMushiReport()` | Returns `{ submitReport({ description, category }) }` |
 
 ## Setup (Vite / Vue 3)
 
 ```ts
 // main.ts
+import { createApp } from 'vue'
+import { MushiPlugin } from '@mushi-mushi/vue'
+import App from './App.vue'
 
 createApp(App)
   .use(MushiPlugin, {
     projectId: 'YOUR_PROJECT_ID',
-    apiKey: 'YOUR_PUBLIC_API_KEY',
+    apiKey: 'mushi_...',
   })
   .mount('#app')
 ```
@@ -47,15 +51,32 @@ createApp(App)
 ## Identifying users
 
 ```vue
+<script setup lang="ts">
+import { watch } from 'vue'
+import { useMushi } from '@mushi-mushi/vue'
+import { useAuth } from './auth'
 
+const mushi = useMushi()
+const { user } = useAuth()
+
+watch(user, (u) => {
+  if (u) mushi?.identify(u.id, { email: u.email, name: u.name })
+})
+</script>
 ```
 
 ## Submitting a report
 
 ```vue
+<script setup lang="ts">
+import { useMushiReport } from '@mushi-mushi/vue'
 
-  
+const { submitReport } = useMushiReport()
+</script>
+
+<template>
+  <button @click="submitReport({ description: 'Something feels off', category: 'bug' })">
     Report issue
-  
-
+  </button>
+</template>
 ```

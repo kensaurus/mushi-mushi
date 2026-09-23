@@ -204,9 +204,16 @@ describe('structured tool output (MCP 2025-06-18)', () => {
       reports: [{ id: 'r1', status: 'classified' }],
       total: 42,
     })
-    // Text content is still present for older clients.
+    // Text content is still present for older clients — wrapped as untrusted
+    // data, because report rows carry reporter-authored text. Strip the
+    // envelope and parse it: a `toContain('"total": 42')` would pass even if
+    // the rows themselves went missing from this channel.
     const content = res.content as Array<{ type: string; text: string }>
-    expect(JSON.parse(content[0].text)).toEqual({
+    expect(content[0].text).toMatch(/^<mushi-data role="get_recent_reports">/)
+    // Non-greedy: report bodies are reporter-authored and can contain a
+    // literal </content>, which a greedy match would swallow past.
+    const payload = content[0].text.match(/<content>\n([\s\S]*?)\n<\/content>/)?.[1] ?? ''
+    expect(JSON.parse(payload)).toEqual({
       reports: [{ id: 'r1', status: 'classified' }],
       total: 42,
     })

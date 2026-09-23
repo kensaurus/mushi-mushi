@@ -38,26 +38,43 @@ function App() {
 }
 ```
 
-**Next.js App Router** — put the provider in `app/layout.tsx`:
+**Next.js App Router** — the provider uses React context, so it lives in a client component. Put it in `app/providers.tsx`:
 
 ```tsx
+// app/providers.tsx
+'use client';
 import { MushiProvider } from '@mushi-mushi/react';
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <MushiProvider config={{
+      projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
+      apiKey: process.env.NEXT_PUBLIC_MUSHI_API_KEY!,
+    }}>
+      {children}
+    </MushiProvider>
+  );
+}
+```
+
+Then wrap the tree in `app/layout.tsx`, which stays a Server Component:
+
+```tsx
+// app/layout.tsx
+import { Providers } from './providers';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html>
       <body>
-        <MushiProvider config={{
-          projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
-          apiKey: process.env.NEXT_PUBLIC_MUSHI_API_KEY!,
-        }}>
-          {children}
-        </MushiProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
 }
 ```
+
+Keep callbacks such as `beforeSend` in `providers.tsx`: functions cannot be passed from a Server Component to a client one.
 
 ## Headless integration
 
@@ -111,4 +128,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 58 edge functions · 348 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 59 edge functions · 368 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

@@ -14,6 +14,10 @@
  * rejects — a release-time failure with no local signal, because nothing
  * checked the manifest shape. See docs/marketing/GTM-DISTRIBUTION.md.
  *
+ * The description is synced too, from the brand pitch the npm descriptions
+ * share (NPM_PITCH), and a remote may not require an Authorization header:
+ * that makes clients send a static key and skip the OAuth flow.
+ *
  *   node scripts/sync-server-json-version.mjs           # write
  *   node scripts/sync-server-json-version.mjs --check    # verify only (exit 1 on drift)
  */
@@ -21,6 +25,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { NPM_PITCH } from './normalize-package-metadata.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -63,6 +68,20 @@ function validateRegistryConstraints(manifest) {
     problems.push('at least one of `packages` or `remotes` must be present')
   }
 
+  // A remote that requires an Authorization header makes registry clients
+  // prompt for a static key and send it on every request, which switches off
+  // the MCP OAuth flow the hosted server implements (401 → PRM discovery →
+  // browser consent). Header-key setups stay documented in the README.
+  for (const remote of manifest.remotes ?? []) {
+    for (const header of remote.headers ?? []) {
+      if (String(header.name).toLowerCase() === 'authorization' && header.isRequired) {
+        problems.push(
+          `remote ${remote.url} declares a required Authorization header — that disables client OAuth; remove it`,
+        )
+      }
+    }
+  }
+
   for (const url of [manifest.websiteUrl, manifest.repository?.url]) {
     if (url === undefined) continue
     try {
@@ -86,6 +105,14 @@ if (problems.length > 0) {
 const version = pkg.version
 let drift = false
 
+// The registry description is the brand pitch the npm descriptions share
+// (NPM_PITCH, composed from @mushi-mushi/brand), so a tagline change reaches
+// the registry listing on the next sync instead of going stale there.
+if (server.description !== NPM_PITCH) {
+  drift = true
+  server.description = NPM_PITCH
+}
+
 if (server.version !== version) {
   drift = true
   server.version = version
@@ -100,7 +127,7 @@ for (const entry of server.packages ?? []) {
 if (checkOnly) {
   if (drift) {
     console.error(
-      `server.json is out of sync with package.json (${version}). Run: node scripts/sync-server-json-version.mjs`,
+      `server.json is out of sync with package.json (${version}) or the brand pitch. Run: node scripts/sync-server-json-version.mjs`,
     )
     process.exit(1)
   }

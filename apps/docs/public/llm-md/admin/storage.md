@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/storage
 
 ---
 title: Storage
+description: The Storage page chooses where Mushi keeps report attachments and recordings — managed storage, or your own bucket for residency or cost.
 ---
 
 # Storage

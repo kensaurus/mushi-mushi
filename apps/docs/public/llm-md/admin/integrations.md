@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/integrations
 
 ---
 title: Integrations
+description: Set up Mushi integrations from one page — send new bugs to Linear, bring in Sentry feedback, and open fix pull requests on your GitHub repo.
 ---
 
 # Integrations

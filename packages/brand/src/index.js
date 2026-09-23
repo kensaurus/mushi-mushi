@@ -63,6 +63,16 @@ export const MUSHI_TAGLINE_LEGACY = {
 }
 
 /**
+ * The promise the product makes about every bug — shared by `oneLiner` below
+ * and by the npm descriptions that scripts/normalize-package-metadata.mjs
+ * composes (which lower-case its first letter), so the two cannot drift.
+ */
+const PROMISE = 'Plain-English diagnosis + a ready fix, in your editor'
+
+/** The category we own (VISION.md §1.5) — shared by `category` and `pitch`. */
+const CATEGORY = 'The bug mediator for AI-built apps'
+
+/**
  * Primary tagline ladder (v2) — the comprehension layer for AI-built apps.
  * Import and use these on README headers, landing H1, docs landing, npm.
  * The canonical identity lives in /VISION.md (the constitution); this ladder
@@ -81,15 +91,27 @@ export const MUSHI_TAGLINE_V2 = {
    * description, npm `description`, og:description fallback. Keep these byte-for-
    * byte identical across surfaces (the consistency check enforces it).
    */
-  oneLiner:
-    'Every bug in one queue — user reports, Sentry errors, Slack, coding agents. Plain-English diagnosis + a ready fix, in your editor. Open source.',
+  oneLiner: `Every bug in one queue — user reports, Sentry errors, Slack, coding agents. ${PROMISE}. Open source.`,
+  /**
+   * The per-bug promise, no trailing period. Package npm descriptions append
+   * it to a role phrase and `category` (scripts/normalize-package-metadata.mjs).
+   */
+  promise: PROMISE,
   /** Hero — README headers, landing H1, docs landing. */
   hero: 'Your AI wrote it. Mushi tells you why it broke.',
   /** Lead paragraph directly under hero. */
   subHero:
     'One queue between your users, your monitoring, and your coding agents — every bug lands with a plain-English diagnosis and a ready-to-apply fix, right inside Cursor and Claude Code.',
   /** Eyebrow, npm category line, llms.txt. The category we own (VISION.md §1.5). */
-  category: 'The bug mediator for AI-built apps',
+  category: CATEGORY,
+  /**
+   * The one-sentence pitch: category + promise. It closes every primary npm
+   * description (NPM_PITCH in scripts/normalize-package-metadata.mjs) and is
+   * the docs site's JSON-LD description, default meta description and
+   * llms-full/llms-ctx summary, so a search card, an answer engine and a
+   * package page quote the same sentence.
+   */
+  pitch: `${CATEGORY}: ${PROMISE.charAt(0).toLowerCase()}${PROMISE.slice(1)}.`,
   /** og:description, slide headers. */
   micro: 'Know why. Fix fast.',
   mark: '虫虫',

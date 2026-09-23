@@ -106,11 +106,8 @@ Deno.serve(
       return new Response('Method Not Allowed', { status: 405 })
     }
 
-    const isManual = req.headers.get('x-mushi-trigger') === 'manual'
-    if (!isManual) {
-      const authErr = requireServiceRoleAuth(req)
-      if (authErr) return authErr
-    }
+    const authErr = requireServiceRoleAuth(req)
+    if (authErr) return authErr
 
     const db = getServiceClient()
 

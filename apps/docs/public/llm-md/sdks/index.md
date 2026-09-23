@@ -4,28 +4,26 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks
 
 ---
 title: SDK reference
-description: Bug-reporting SDKs for React, Vue, Svelte, Angular, React Native, Capacitor, Flutter, iOS, Android, and Node — one npx mushi-mushi wizard installs any.
+description: Bug-reporting SDKs for React, Vue, Svelte, Angular, React Native, Capacitor and Node, installed by npx mushi-mushi, plus preview iOS, Android and Flutter SDKs.
 ---
 
 # SDK reference
 
 Published npm packages ship on independent semver tracks (see [npm](https://www.npmjs.com/org/mushi-mushi) for live versions). Current workspace snapshots:
 
-{/* sdk-version-matrix:start */}
 | Package | Version |
 | --- | --- |
-| @mushi-mushi/core, @mushi-mushi/web | 1.27.x |
+| @mushi-mushi/core, @mushi-mushi/web | 1.28.x |
 | @mushi-mushi/react | 1.21.x |
 | @mushi-mushi/react-native | 0.21.x |
 | @mushi-mushi/cli | 0.27.x |
-| @mushi-mushi/mcp | 0.20.x |
+| @mushi-mushi/mcp | 0.21.x |
 | @mushi-mushi/capacitor | 1.1.x |
 | @mushi-mushi/node | 1.2.x |
 | @mushi-mushi/angular, @mushi-mushi/vue, @mushi-mushi/svelte | 1.0.x |
 | mushi-mushi (launcher) | 0.8.x |
-{/* sdk-version-matrix:end */}
 
-See [Project ID & API keys](/concepts/credentials) for credential formats (`proj_*` slug vs UUID, `mushi_*` vs `mush_pk_*` keys).
+See [Project ID & API keys](/concepts/credentials) for credential formats (project UUID, and the one `mushi_…` key format every SDK and the MCP server share).
 
 ## Maturity, honestly
 
@@ -38,7 +36,7 @@ is directly — what each tier means and where each package sits:
 | **Battle-tested** | Runs in production apps daily (including Mushi's own console — we dogfood); full capture surface; deep test suites | `@mushi-mushi/core`, `@mushi-mushi/web`, `@mushi-mushi/react`, `@mushi-mushi/react-native`, `@mushi-mushi/cli`, `@mushi-mushi/mcp` |
 | **Solid** | Complete for the documented surface, used in real apps, smaller scope | `@mushi-mushi/capacitor`, `@mushi-mushi/node`, `@mushi-mushi/adapters` |
 | **Functional wrapper** | Thin framework binding over `@mushi-mushi/web` (~300 lines each); everything documented works, but expect fewer framework-specific niceties | `@mushi-mushi/vue`, `@mushi-mushi/svelte`, `@mushi-mushi/angular` |
-| **Native, earlier-stage** | Full native implementations with smaller install bases than the JS SDKs | iOS (Swift), Android (Kotlin), Flutter |
+| **Native preview** | Full native implementations, not yet published to CocoaPods, Maven Central or pub.dev — install from the GitHub repo | iOS (Swift), Android (Kotlin), Flutter |
 
 If a "functional wrapper" is missing something you need, the underlying
 [`@mushi-mushi/web`](/sdks/web) API is always available alongside it — and
@@ -70,9 +68,9 @@ The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@
 | Package | Registry | Description |
 | --- | --- | --- |
 | [`@mushi-mushi/react-native`](/sdks/react-native) | npm | React Native SDK — shake, offline queue, Sentry bridge |
-| [`MushiMushi`](/sdks/ios) | SwiftPM + CocoaPods | iOS / macOS / tvOS native Swift SDK |
-| [`dev.mushimushi:mushi-android`](/sdks/android) | Maven Central | Android Kotlin SDK, Compose UI, WorkManager queue |
-| [`mushi_mushi`](/sdks/flutter) | pub.dev | Flutter pure-Dart SDK, `sensors_plus` shake detection |
+| [`MushiMushi`](/sdks/ios) | Preview — SwiftPM from `master` (no CocoaPods yet) | iOS / macOS / tvOS native Swift SDK |
+| [`dev.mushimushi:mushi-android`](/sdks/android) | Preview — build from source (not on Maven Central yet) | Android Kotlin SDK, bottom-sheet widget, file-backed queue |
+| [`mushi_mushi`](/sdks/flutter) | Preview — `git:` dependency (not on pub.dev yet) | Flutter pure-Dart SDK, `sensors_plus` shake detection |
 | [`@mushi-mushi/capacitor`](/sdks/capacitor) | npm | Capacitor plugin — wraps native SDKs for hybrid apps |
 
 ## Tooling & automation

@@ -88,12 +88,15 @@ could live next to those three sentences, rewrite it.
 **Say these** — specific, honest, occasionally playful.
 
 - "Mushi-chan caught…", "Mushi-chan noticed…", "Mushi-chan got confused by…"
-- "user-felt bug", "user-friction", "the kind Sentry can't see"
+- "user-felt bug", "user-friction", "the kind that never throws an error"
 - The one canonical Sentry answer (never improvise a different one, never say
-  "not a replacement" or "companion"): *"Sentry tells you what threw. Mushi
-  ingests that — plus the bugs that never throw — explains each one in plain
-  English, and closes the loop with a fix your agent can ship. One queue, with
-  or without Sentry."*
+  "not a replacement" or "companion"): *"Sentry is built around what the code
+  threw, with a User Feedback widget and replay alongside. Mushi starts from
+  what the user reported, ingests Sentry's errors too, explains each one in
+  plain English, and hands your agent a fix prompt to start from. One queue,
+  with or without Sentry."* (Revised 2026-09-21 after a fact check: Sentry has
+  a User Feedback widget, Session Replay and an MCP server, so never say or
+  imply it only sees thrown errors.)
 - "shake to report", "quiet little widget", "tucked into the corner"
 - "classified", "deduped", "judged", "dispatched a fix"
 - "a small 🐛", "a cheeky one", "a sleepy one"

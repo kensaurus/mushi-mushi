@@ -26,6 +26,7 @@ import { useDispatchFix } from '../lib/dispatchFix'
 import { usePublishPageContext } from '../lib/pageContext'
 import { FixProgressStream } from '../components/FixProgressStream'
 import { useReportComments } from '../lib/reportComments'
+import { trackSelf } from '../lib/track'
 import {
   IconUser,
   IconIntelligence,
@@ -83,6 +84,7 @@ import { SdkUpgradeCTA } from '../components/SdkUpgradeCTA'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import type { SdkStatus } from '../components/SdkVersionBadge'
 import { CHIP_TONE } from '../lib/chipTone'
+import { shortReporterKey } from '../lib/reporterKey'
 
 export function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -118,6 +120,21 @@ export function ReportDetailPage() {
   useEffect(() => {
     if (serverReport) setReport(serverReport)
   }, [serverReport])
+
+  // Funnel: `report_opened` is one of the HABIT_EVENTS (diagnosis consumed).
+  // Keyed on the report id so refetches / triage saves don't re-fire.
+  // `project_id` + `via` match FirstDiagnosisScreen's emit so every
+  // report_opened row can be joined to its project and told apart by entry
+  // point.
+  useEffect(() => {
+    if (!serverReport?.id) return
+    trackSelf('report_opened', {
+      report_id: serverReport.id,
+      project_id: serverReport.project_id,
+      via: 'report_detail',
+      ...(serverReport.severity ? { severity: serverReport.severity } : {}),
+    })
+  }, [serverReport?.id])
 
   useEffect(() => {
     if (!serverReport) return
@@ -402,7 +419,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
     dispatchState.status !== 'completed'
 
   const isDispatchBusy = dispatchState.status === 'queueing' || dispatchState.status === 'queued' || dispatchState.status === 'running'
-  const reporterShort = report.reporter_token_hash?.slice(0, 8) ?? 'unknown'
+  const reporterShort = report.reporter_token_hash ? shortReporterKey(report.reporter_token_hash) : 'unknown'
   const mergeTarget = latestFix && canMergeFix(latestFix) ? latestFix : null
 
   const handleMerged = useCallback(

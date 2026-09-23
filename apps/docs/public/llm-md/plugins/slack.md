@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/slack
 
 ---
 title: Slack app
+description: Triage Mushi bug reports from Slack — each classified report posts as a card with its root cause and buttons to dispatch a fix, resolve or dismiss.
 ---
 
 # Slack app plugin

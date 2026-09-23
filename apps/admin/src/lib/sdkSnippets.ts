@@ -127,8 +127,18 @@ export type Framework = (typeof FRAMEWORKS)[number]
  * so it works on plain HTML, Rails/ERB, Django templates, WordPress, Webflow,
  * or any server-rendered page. This is the "fastest path" default tab and the
  * answer to "it doesn't show up on HTTP / non-bundler stacks".
+ *
+ * The URL is the IIFE build that `@mushi-mushi/web` already publishes to npm
+ * (tsup entry `mushi.loader` → `dist/mushi.loader.global.js`), served by
+ * jsDelivr and pinned to the major version so minor and patch releases flow
+ * through (sdkSnippets.test.ts fails when packages/web moves to a new major).
+ * There is no Mushi-hosted CDN host; a bare `unpkg.com/@mushi-mushi/web` would
+ * resolve to the CommonJS `main` and throw inside a `<script>` tag, which is
+ * why the full file path is spelled out. Keep this byte-identical to the
+ * header comment in packages/web/src/loader.ts.
  */
-export const LOADER_CDN_URL = 'https://cdn.mushi.dev/sdk/v1/mushi.js'
+export const LOADER_CDN_URL =
+  'https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js'
 
 /**
  * Frameworks that ship a native runtime (mobile / hybrid). Used by the

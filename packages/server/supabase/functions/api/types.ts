@@ -22,4 +22,8 @@ export interface Variables {
   apiKeyId?: string
   apiKeyPrefix?: string
   isOrgScopedKey?: boolean
+  /** Scopes of the authenticating API key (set by apiKeyAuth / adminOrApiKey). */
+  apiKeyScopes?: string[]
+  /** Browser-exposure signals of the key, read by requireApiKeyScope for mcp:* scopes. */
+  apiKeyBrowserSignals?: { last_seen_origin: string | null; browser_seen_at: string | null }
 }

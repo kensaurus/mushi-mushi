@@ -7,7 +7,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { motion, useReducedMotion } from 'motion/react'
+import { motion } from 'motion/react'
 import { LANDING_HERO, LANDING_HERO_CTAS } from '@/lib/landing-copy'
 import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
 import { landingStampVariants } from './landing-stagger'
@@ -45,9 +45,11 @@ export function CinematicEditorialHero({
   lead,
 }: CinematicEditorialHeroProps) {
   const reducedMotion = usePrefersReducedMotion()
-  const motionReduced = useReducedMotion()
   const showCanvas = useShowDesktopCanvas(reducedMotion)
-  const skipEnter = reducedMotion || motionReduced
+  // Was `reducedMotion || useReducedMotion()`. Motion's hook reads matchMedia
+  // during render, so it disagrees with the server on the hydration pass; the
+  // OR masked that here but left the hazard one edit away from mattering.
+  const skipEnter = reducedMotion
 
   return (
     <header className="docs-editorial-hero landing-cinematic-hero not-prose">
@@ -105,21 +107,26 @@ export function CinematicEditorialHero({
         <div className="landing-hero-ctas" role="group" aria-label="Get started">
           {LANDING_HERO_CTAS.map((cta) => {
             const className = `landing-hero-cta landing-hero-cta--${cta.kind}`
+            // `data-mushi-cta` is what <MushiSiteAnalytics /> listens for.
+            const tracking = { 'data-mushi-cta': cta.id, 'data-mushi-location': 'hero' } as const
             if (cta.external) {
+              // Our own console (signup) keeps the tab; third-party links
+              // open a new one so the visitor never loses the landing page.
+              const newTab = cta.sameTab !== true
               return (
                 <a
-                  key={cta.href}
+                  key={cta.id}
                   className={className}
                   href={cta.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  {...(newTab ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                  {...tracking}
                 >
                   {cta.label}
                 </a>
               )
             }
             return (
-              <Link key={cta.href} className={className} href={cta.href}>
+              <Link key={cta.id} className={className} href={cta.href} {...tracking}>
                 {cta.label}
               </Link>
             )

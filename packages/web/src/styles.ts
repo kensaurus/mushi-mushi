@@ -1035,6 +1035,19 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       text-align: center;
       text-transform: uppercase;
     }
+    .mushi-brand-link {
+      color: inherit;
+      text-decoration: none;
+      text-underline-offset: 3px;
+    }
+    .mushi-brand-link:hover { color: ${inkMuted}; text-decoration: underline; }
+    .mushi-brand-link:focus-visible {
+      outline: 2px solid ${widgetAccent};
+      outline-offset: 2px;
+      border-radius: 2px;
+      color: ${widgetAccent};
+      text-decoration: underline;
+    }
 
     .mushi-step-indicator {
       display: flex;

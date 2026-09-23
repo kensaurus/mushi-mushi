@@ -1,9 +1,10 @@
 /** Deno copy of packages/mcp/src/branding.ts — keep in sync. */
 
 import { DEPLOY_INFO } from './deploy-info.ts'
+import { mcpPackageVersion } from './mcp-server-card.ts'
 
 export const MUSHI_WEBSITE_URL = 'https://kensaur.us/mushi-mushi'
-export const MUSHI_ICON_PNG_URL = `${MUSHI_WEBSITE_URL}/integrations/mushi-mark-512.png`
+export const MUSHI_ICON_PNG_URL = `${MUSHI_WEBSITE_URL}/docs/integrations/mushi-mark-512.png`
 export const MUSHI_ICON_SVG_URL = `${MUSHI_WEBSITE_URL}/favicon.svg`
 
 /** Inline stamp mark — served at ?icon=1 when CDN is unreachable. */
@@ -19,12 +20,14 @@ export const MUSHI_SERVER_ICONS = [
   { src: MUSHI_ICON_SVG_URL, mimeType: 'image/svg+xml', sizes: ['any'] },
 ] as const
 
-// Bump on a hosted-MCP protocol or tool-catalog change worth a human-visible
-// version bump. The deployed commit's short SHA is appended below (when
-// available) so clients can tell two deploys apart even between base-version
-// bumps — see deploy-info.ts docblock for why the hosted transport needs
-// this instead of reading package.json the way stdio does.
-const BASE_VERSION = '2.0.0'
+// The @mushi-mushi/mcp version whose catalog this deploy serves (generated
+// into mcp-discovery-tools.json by scripts/sync-mcp-discovery-card.mjs), so
+// the hosted server and the npm package report the same version; it used to
+// be a hand-set 2.0.0 while npm was at 0.21. The deployed commit's short SHA
+// is appended below (when available) so clients can tell two deploys apart —
+// see deploy-info.ts docblock for why the hosted transport needs this
+// instead of reading package.json the way stdio does.
+const BASE_VERSION = mcpPackageVersion()
 const shortSha = DEPLOY_INFO.sha !== 'dev' ? DEPLOY_INFO.sha.slice(0, 7) : null
 
 export const SERVER_INFO_EXTENDED = {

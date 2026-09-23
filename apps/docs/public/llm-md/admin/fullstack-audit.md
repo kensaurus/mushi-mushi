@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/fullstack-audit
 
 ---
 title: Full-stack audit
+description: The Full-stack audit runs one health check across RLS gaps, recent backend errors and API contract drift, and returns a readable scorecard.
 ---
 
 # Full-stack audit
@@ -43,7 +44,7 @@ Add your Supabase PAT under **Settings → API Keys** and set
 ```bash
 mushi audit
 mushi audit --json
-mushi audit --project-id 
+mushi audit --project-id <uuid>
 ```
 
 ---

@@ -65,6 +65,12 @@ export interface SdkConfigRow {
   sdk_min_description_length?: number | null;
   sdk_config_updated_at?: string | null;
   reporter_notifications_enabled?: boolean | null;
+  /**
+   * "Bug reports by Mushi" footer override (20260921000006). NULL = plan
+   * default, resolved by the caller (_shared/brand-footer.ts) and passed in
+   * as `brandFooterDefault` — this module stays pure.
+   */
+  widget_brand_footer?: boolean | null;
   // Workstream E — page-aware assistant.
   assistant_enabled?: boolean | null;
   assistant_label?: string | null;
@@ -100,11 +106,27 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * field as optional (`remote.widget?.x ?? DEFAULT_SDK_CONFIG.x`), so this is
  * safe for both consumers.
  */
-export function normalizeSdkConfig(row?: SdkConfigRow | null) {
+export interface NormalizeSdkConfigOptions {
+  /**
+   * Plan-derived default for the brand footer (true for free cloud tiers).
+   * Emitted as `widget.brandFooter` when the column is NULL; omitted when
+   * the caller does not know the plan (pure unit tests, older callers).
+   */
+  brandFooterDefault?: boolean | null;
+}
+
+export function normalizeSdkConfig(row?: SdkConfigRow | null, opts: NormalizeSdkConfigOptions = {}) {
   return {
     enabled: row?.sdk_config_enabled ?? true,
     version: row?.sdk_config_updated_at ?? null,
     widget: {
+      // Growth loop footer: explicit column wins, then the plan default. The
+      // host's MIT `brandFooter` config is a hard override on the client.
+      ...(typeof row?.widget_brand_footer === 'boolean'
+        ? { brandFooter: row.widget_brand_footer }
+        : typeof opts.brandFooterDefault === 'boolean'
+          ? { brandFooter: opts.brandFooterDefault }
+          : {}),
       ...(isOneOf(row?.sdk_widget_position, SDK_WIDGET_POSITIONS) &&
       row?.sdk_widget_position !== 'bottom-right'
         ? { position: row.sdk_widget_position }
@@ -204,6 +226,9 @@ export function coerceSdkConfigUpdate(body: Record<string, unknown>): Record<str
     updates.sdk_banner_bug_cta = trimmed ? widget.bannerBugCta.slice(0, 60) : null;
   }
   if (typeof widget.bannerFeatureCta === 'boolean') updates.sdk_banner_feature_cta = widget.bannerFeatureCta;
+  // brandFooter: true/false = explicit override, null = back to the plan default.
+  if (typeof widget.brandFooter === 'boolean') updates.widget_brand_footer = widget.brandFooter;
+  else if (widget.brandFooter === null) updates.widget_brand_footer = null;
   if (typeof widget.bannerMessage === 'string') {
     const trimmed = widget.bannerMessage.trim();
     updates.sdk_banner_message = trimmed ? trimmed.slice(0, 240) : null;

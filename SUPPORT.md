@@ -11,8 +11,8 @@ Thanks for using Mushi Mushi. Here's the fastest way to get the help you need.
    [orchestrator-interop](https://kensaur.us/mushi-mushi/docs/concepts/orchestrator-interop)
    recipes (Cursor, Claude Code, MCP, A2A).
 3. **Skim the [README](./README.md).** The "Where it stops" table is honest about
-   what's still partial, and the "Try it" section has copy-paste snippets for every
-   framework.
+   what's still partial, and the "Framework coverage" section has copy-paste
+   snippets for every framework.
 
 ## How to get help
 
@@ -20,7 +20,9 @@ Thanks for using Mushi Mushi. Here's the fastest way to get the help you need.
 |---|---|
 | Report a bug | [Open a bug report](https://github.com/kensaurus/mushi-mushi/issues/new?template=bug_report.yml) |
 | Request a feature | [Open a feature request](https://github.com/kensaurus/mushi-mushi/issues/new?template=feature_request.yml) |
-| Ask a quick question | [Bluesky @mushimushi.dev](https://bsky.app/profile/mushimushi.dev) |
+| Ask a question or share what you built | [GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions) |
+| Ask something privately | Email kensaurus@gmail.com |
+| Follow releases | [GitHub Discussions → Announcements](https://github.com/kensaurus/mushi-mushi/discussions) or [Bluesky @kensaurus.bsky.social](https://bsky.app/profile/kensaurus.bsky.social) |
 | Self-host / run in production | [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [`deploy/helm/`](./deploy/helm/README.md) |
 | Report a security issue | **Privately** — see [`SECURITY.md`](./SECURITY.md). Never open a public issue. |
 | Contribute code | [`CONTRIBUTING.md`](./CONTRIBUTING.md) |
@@ -40,5 +42,6 @@ walks you through each of these.
 ## Commercial / hosted support
 
 The hosted tier and its SLA are described at
-[kensaur.us/mushi-mushi](https://kensaur.us/mushi-mushi/). For partnership or
-enterprise questions, reach out via the channels listed there.
+[kensaur.us/mushi-mushi](https://kensaur.us/mushi-mushi/). For partnership,
+enterprise or commercial-license questions, email **kensaurus@gmail.com** (see
+also [`COMMERCIAL-LICENSE.md`](./COMMERCIAL-LICENSE.md)).

@@ -4,10 +4,24 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { resolveLlmKey } from '../../_shared/byok.ts';
 import { dbError, userCanAccessProject } from '../shared.ts';
-import { ingestReport } from '../helpers.ts';
+import { ingestReport, triggerClassification } from '../helpers.ts';
+import { emitFunnelEvent } from '../../_shared/setup-funnel.ts';
+import { emitProductEvent } from '../../_shared/product-events.ts';
+import { getDemoReportFixture, materializeDemoReport, precomputedClassification } from '../../_shared/demo-report-fixtures.ts';
+import { checkIngestQuota } from '../../_shared/quota.ts';
+import { log } from '../../_shared/logger.ts';
+import { classifyIngestRateLimitError } from './ingest-rate-limit.ts';
 // Pure readiness → dry-run shaping lives in its own import-free module so it
 // can be unit-tested under CI's permission-less `deno test`.
 import { buildDryRunResult, type DispatchReadiness } from './dispatch-dry-run.ts';
+
+/**
+ * Console test reports per user per hour. Each one runs the real Stage-1
+ * fast-filter LLM call, and the route is one click in the console, so without
+ * a cap any signed-in user could turn the button into free LLM spend. Ten is
+ * far above what onboarding needs (one, maybe a retry).
+ */
+export const TEST_REPORTS_PER_USER_PER_HOUR = 10;
 
 /**
  * One query set behind both GET /preflight and POST /fixes/dry-run, so the
@@ -274,13 +288,23 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
     return c.json({ ok: true, data: { autofix_enabled: enabled } });
   });
 
-  // Admin pipeline diagnostic. Exists so the admin console's "Send test report"
-  // buttons (DashboardPage.GettingStartedEmpty, SettingsPage.QuickTestSection)
-  // can verify the ingest path without copy-pasting an API key — the admin is
-  // already JWT-authenticated and owns the project. Goes through ingestReport()
-  // so it really exercises schema validation, queue insert, circuit breaker, and
-  // classification trigger. Tagged with metadata.source so admins can filter
-  // these out of the inbox.
+  // One-click test report. Exists so the admin console's "Send test report"
+  // buttons (onboarding S2, DashboardPage.GettingStartedEmpty,
+  // SettingsPage.QuickTestSection) can produce a real diagnosis without
+  // copy-pasting an API key — the admin is already JWT-authenticated and owns
+  // the project. Goes through ingestReport() so it really exercises schema
+  // validation, queue insert, circuit breaker, and classification trigger.
+  //
+  // The payload is the iPad-Safari login fixture from
+  // _shared/demo-report-fixtures.json (breadcrumbs, a 401 on /api/session,
+  // a real user agent) so the first diagnosis a new user sees is an aha, not
+  // "Admin pipeline test". metadata.source = 'admin_test_report' keeps it out
+  // of activation (first_report_received) and the growth funnel; the console
+  // inbox filters on the same tag.
+  //
+  // Metered like SDK ingest (2026-09-21): a per-user hourly claim
+  // (scoped_rate_limit_claim, scope 'test_report') and the project's monthly
+  // report quota (checkIngestQuota), so the button cannot bypass either.
   app.post('/v1/admin/projects/:id/test-report', jwtAuth, async (c) => {
     const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
@@ -300,35 +324,113 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
     if (!project)
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
 
+    // Per-user hourly cap. Same outcome classification as SDK ingest: a
+    // breach is a 429, a missing claim function (migration window) fails
+    // open, and any other RPC error fails closed.
+    const { error: rateErr } = await db.rpc('scoped_rate_limit_claim', {
+      p_user_id: userId,
+      p_scope: 'test_report',
+      p_max_per_window: TEST_REPORTS_PER_USER_PER_HOUR,
+      p_window: '1 hour',
+    });
+    const rateOutcome = classifyIngestRateLimitError(rateErr);
+    if (rateOutcome === 'breach' || rateOutcome === 'fail-closed') {
+      if (rateOutcome === 'fail-closed') {
+        log.error('test-report: rate-limit claim failed — failing closed', { err: rateErr?.message });
+      }
+      c.header('Retry-After', rateOutcome === 'breach' ? '3600' : '30');
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'RATE_LIMITED',
+            message:
+              rateOutcome === 'breach'
+                ? `Test report limit reached (${TEST_REPORTS_PER_USER_PER_HOUR} per hour). Try again later.`
+                : 'Test reports are temporarily throttled. Retry in 30 seconds.',
+          },
+        },
+        429,
+      );
+    }
+
+    // A test report is a stored report: it counts against the plan like one.
+    const quota = await checkIngestQuota(db, projectId);
+    if (!quota.allowed) {
+      c.header('Retry-After', String(quota.retryAfterSeconds ?? 3600));
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'QUOTA_EXCEEDED',
+            message: `${quota.plan.display_name} plan quota of ${quota.limit?.toLocaleString() ?? 'n/a'} reports/month exceeded. Upgrade or wait until ${quota.periodResetsAt}.`,
+            used: quota.used,
+            limit: quota.limit,
+            plan: quota.plan,
+            reason: quota.reason,
+            periodResetsAt: quota.periodResetsAt,
+          },
+        },
+        402,
+      );
+    }
+
     const ipAddress =
       c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip');
     const userAgent = c.req.header('user-agent') ?? 'mushi-admin';
-    const now = new Date().toISOString();
 
-    const syntheticBody = {
-      projectId, // schema-required; ingestReport actually uses the auth-context projectId
-      category: 'other' as const,
-      description:
-        'Admin pipeline test — verifying ingest, validation, queue, and classification end-to-end.',
-      environment: {
-        userAgent,
-        platform: 'mushi-admin',
-        language: 'en',
-        viewport: { width: 0, height: 0 },
-        url: 'admin://test-report',
-        referrer: '',
-        timestamp: now,
-        timezone: 'UTC',
-      },
+    // projectId in the body is schema-required; ingestReport actually uses the
+    // auth-context projectId. The reporter token is per-admin so repeated test
+    // reports from the same person group under one reporter.
+    const fixture = getDemoReportFixture();
+    const syntheticBody = materializeDemoReport(fixture, {
+      projectId,
       reporterToken: `admin-test-${userId}`,
       metadata: { source: 'admin_test_report', userId },
-      createdAt: now,
-    };
+    });
 
-    const result = await ingestReport(db, projectId, syntheticBody, { ipAddress, userAgent });
+    // The report is synthetic, so its diagnosis is written with the fixture
+    // rather than bought from the LLM pipeline: no Stage-1 call on the
+    // project's budget, and the first diagnosis appears on the next poll.
+    const precomputed = precomputedClassification(fixture);
+    const result = await ingestReport(db, projectId, syntheticBody, {
+      ipAddress,
+      userAgent,
+      skipClassification: precomputed !== null,
+    });
     if (!result.ok) {
       return c.json({ ok: false, error: { code: 'INGEST_ERROR', message: result.error } }, 400);
     }
+    if (precomputed && result.reportId) {
+      const { error: classifyErr } = await db.from('reports').update(precomputed).eq('id', result.reportId);
+      if (classifyErr) {
+        log.warn('test-report: precomputed diagnosis write failed — running the pipeline', {
+          reportId: result.reportId,
+          err: classifyErr.message,
+        });
+        triggerClassification(result.reportId, projectId);
+      }
+    }
+
+    // Activation funnel (setup_funnel_events) + product_events, both
+    // background writes and idempotent on their dedup keys. A deduplicated
+    // ingest returns the existing reportId, so a double click cannot
+    // double-count.
+    const reportId = result.reportId ?? 'unknown';
+    void emitFunnelEvent(db, {
+      userId,
+      projectId,
+      eventName: 'test_report_sent',
+      dedupKey: `${projectId}:${reportId}`,
+      source: 'console',
+    });
+    void emitProductEvent(db, {
+      userId,
+      eventName: 'test_report_sent',
+      surface: 'console',
+      properties: { project_id: projectId },
+      dedupKey: `test_report_sent:${reportId}`,
+    });
 
     return c.json(
       {
@@ -339,4 +441,49 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
     );
   });
 
+  // Activation funnel step `diagnosis_viewed`: the console's first-diagnosis
+  // screen calls this once the classified test report renders. The
+  // setup_funnel_events CHECK (20260921000002) and FunnelEventName allowed the
+  // step from the start, but nothing wrote it — the console has no API key
+  // for POST /v1/cli/funnel. JWT + project access like the test-report route
+  // above; one row per project (dedup_key = project id), so a refresh or a
+  // second diagnosis never adds another.
+  app.post('/v1/admin/projects/:id/setup-funnel/diagnosis-viewed', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+
+    if (!UUID_RE.test(projectId)) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
+        400,
+      );
+    }
+
+    const db = getServiceClient();
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+
+    // Optional `{ reportId }`, kept as metadata when it is a UUID.
+    let reportId: string | null = null;
+    try {
+      const body: unknown = await c.req.json();
+      const raw = body && typeof body === 'object' ? (body as { reportId?: unknown }).reportId : undefined;
+      if (typeof raw === 'string' && UUID_RE.test(raw)) reportId = raw;
+    } catch {
+      /* no body */
+    }
+
+    void emitFunnelEvent(db, {
+      userId,
+      projectId,
+      eventName: 'diagnosis_viewed',
+      dedupKey: projectId,
+      source: 'console',
+      metadata: reportId ? { report_id: reportId } : {},
+    });
+
+    return c.json({ ok: true }, 202);
+  });
 }

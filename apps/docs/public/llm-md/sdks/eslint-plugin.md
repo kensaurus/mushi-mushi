@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/eslint-plugin
 
 ---
 title: 'eslint-plugin-mushi-mushi'
+description: eslint-plugin-mushi-mushi flags empty event handlers and leftover mock data in production code — the no-dead-handler and no-mock-leak rules and preset.
 ---
 
 # `eslint-plugin-mushi-mushi`
@@ -25,6 +26,7 @@ Most projects pick up both rules at their default severity by extending
 the recommended preset:
 
 ```js filename="eslint.config.js"
+import mushi from 'eslint-plugin-mushi-mushi'
 
 export default [
   // …your other configs
@@ -55,15 +57,15 @@ arrow (`() => {}`). The CI gate fails on any non-test file that matches.
 
 ```jsx
 // ✗ caught
- {}}>Submit
-Submit
+<button onClick={() => {}}>Submit</button>
+<form onSubmit={noop}><button type="submit">Submit</button></form>
 
 // ✓ allowed
- mutate()}>Submit
-Submit
+<button onClick={() => mutate()}>Submit</button>
+<form onSubmit={handleSubmit}><button type="submit">Submit</button></form>
 
 // ✓ allowed in tests + stories
- {}} />        // foo.test.tsx, *.stories.tsx
+<button onClick={() => {}} />        // foo.test.tsx, *.stories.tsx
 ```
 
 ### `mushi-mushi/no-mock-leak`
@@ -81,7 +83,7 @@ const projects = [
 ]
 
 // ✓ allowed — apps/web/src/__mocks__/projects.ts
-
+export const projects = [
   { name: 'John Doe', tasks: 12 },
 ]
 ```

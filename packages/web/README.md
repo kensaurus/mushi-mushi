@@ -127,19 +127,29 @@ The details step renders the attached screenshot as a visible preview (not just 
 <details>
 <summary><b>Session replay</b> — opt-in rolling buffer attached on submit</summary>
 
+```bash
+npm install rrweb   # only for replay: 'rrweb' — your app installs it
+```
+
 ```typescript
 Mushi.init({
   projectId: 'proj_xxx',
   apiKey: 'mushi_xxx',
   capture: {
-    // 'rrweb' — full DOM replay (lazy-loaded; text + inputs masked by default)
-    // 'lite'  — dependency-free coarse fallback
+    // 'rrweb' — full DOM replay (every text node and input masked)
+    // 'lite'  — dependency-free, records clicks only
     // 'sentry'— reuse an installed @sentry/replay session
     // 'off'   — default
     replay: 'rrweb',
+    // Hand the SDK your own import of rrweb.
+    rrweb: () => import('rrweb'),
   },
 });
 ```
+
+`replay: 'rrweb'` needs `rrweb` in your app (`npm install rrweb`). It is an optional peer dependency, so apps that don't record replay don't download it.
+
+`rrweb: () => import('rrweb')` is what makes `'rrweb'` mode work in a bundled app. The SDK cannot import rrweb itself: a published package's `import('rrweb')` is invisible to your bundler, so rrweb never reaches your build. An import written in your code is one your bundler sees, and it code-splits rrweb into its own chunk that loads only for sessions sampled into replay. Without the loader the SDK tries a global `rrweb` (the UMD build from a `<script>` tag), then a bare `import('rrweb')` (which resolves only under an import map); if neither works, it records clicks only (`'lite'`) and warns once in the console. The `rrweb` option ships in `@mushi-mushi/web` 1.29.
 
 Records continuously from init (so you capture the moments *before* the report), trimmed to a rolling window. Already on Sentry Replay? See [coexistence](https://kensaur.us/mushi-mushi/docs/sdks/sentry-replay-coexistence).
 </details>
@@ -152,13 +162,13 @@ const mushi = Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' });
 
 mushi.identify('usr_42', { email: 'aya@example.com', segment: 'beta' });
 mushi.setTags({ plan: 'pro', region: 'apac' });
-mushi.addBreadcrumb({ category: 'business', message: 'cart.checkout_started', data: { itemCount: 3 } });
+mushi.addBreadcrumb({ category: 'custom', level: 'info', message: 'cart.checkout_started', data: { itemCount: 3 } });
 
 try {
   await runCheckout();
 } catch (err) {
   // Normalises any throw, attaches breadcrumbs + sticky tags + Sentry context.
-  mushi.captureException(err, { level: 'error', tags: { surface: 'checkout' } });
+  mushi.captureException(err, { severity: 'high', tags: { surface: 'checkout' } });
 }
 ```
 
@@ -169,6 +179,25 @@ try {
 <summary><b>Two-way replies &amp; Rewards</b> — let reporters follow up and earn points, no login</summary>
 
 The widget's "Your reports" tab lets reporters see team replies and respond, signed via HMAC against the public API key (no auth user required): `mushi.listMyReports()`, `mushi.listMyComments(id)`, `mushi.replyToReport(id, text)`. Call `mushi.identify()` and add a `rewards` block to track activity, tiers, and points. See [Rewards & contributor identity](https://kensaur.us/mushi-mushi/docs/concepts/rewards).
+</details>
+
+<details>
+<summary><b>Product analytics</b> — <code>track()</code>, funnels, paths and people in the same console</summary>
+
+```typescript
+const mushi = Mushi.init({
+  projectId: 'proj_xxx',
+  apiKey: 'mushi_xxx',
+  // Optional. Defaults: enabled, consent 'implied', DNT/GPC respected, sampleRate 1.
+  analytics: { consent: 'required' },
+});
+
+mushi.setConsent('granted');                       // only needed with consent: 'required'
+mushi.track('checkout_started', { plan: 'pro' });  // snake_case names, flat properties
+mushi.identify('usr_42');                          // stitches earlier anonymous events to the person
+```
+
+Events batch to `POST /v1/sdk/events` (20 per batch or every 5 s, flushed on `pagehide`, spilled to `localStorage` when offline). Names must match `^[a-z][a-z0-9_]{1,63}$`; properties are flat `string | number | boolean | null`, PII-looking keys (`email`, `phone`, `token`, …) are dropped, and string values run through the PII scrubber. `analytics.enabled: false` turns it off; `navigator.doNotTrack` / Global Privacy Control are honoured by default. The console's **Users & Funnels** page reads the same events; retention defaults to 90 days per project.
 </details>
 
 <details>
@@ -285,7 +314,7 @@ Screenshot capture uses canvas / SVG `foreignObject` serialization — it does n
 
 ## Bundle size
 
-~7 KB brotli, enforced at 89 KB gzipped (105 KB uncompressed) in CI. Requires `@mushi-mushi/core` (installed automatically, not bundled inline). The widget's visual system — washi paper, sumi ink, vermillion 朱 accent, system serif — lives in [`src/styles.ts`](./src/styles.ts).
+~7 KB brotli, enforced at 89.5 KB gzipped (105 KB uncompressed) in CI. Requires `@mushi-mushi/core` (installed automatically, not bundled inline). The widget's visual system — washi paper, sumi ink, vermillion 朱 accent, system serif — lives in [`src/styles.ts`](./src/styles.ts).
 
 ## License
 
@@ -294,4 +323,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 58 edge functions · 348 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 59 edge functions · 368 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

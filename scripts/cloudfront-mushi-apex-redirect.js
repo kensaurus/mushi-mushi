@@ -29,10 +29,13 @@
  *      Must be a redirect, not a URI rewrite: Default origin is the
  *      kensaur homepage bucket; only a new request rematches the
  *      /mushi-mushi* cache behavior.)
- *   3. Static assets (has extension) → pass through
- *   4. Docs routes → /mushi-mushi/docs{uri} (slash-stripped)
- *   5. Admin SPA routes → /mushi-mushi/admin{uri}
- *   6. Unknown → pass through
+ *   3. /mushi-mushi (no slash) → 301 /mushi-mushi/ (the S3 website endpoint
+ *      used to answer it with a 302)
+ *   4. /sdks/mcp-tools.generated → 301 /mushi-mushi/docs/sdks/mcp-tools
+ *   5. Static assets (has extension) → pass through
+ *   6. Docs routes → /mushi-mushi/docs{uri} (slash-stripped)
+ *   7. Admin SPA routes → /mushi-mushi/admin{uri}
+ *   8. Unknown → pass through
  *
  * CONFLICT: /integrations alone is the admin console route; /integrations/*
  * is docs-only (e.g. /integrations/cursor). Nested docs prefixes use a
@@ -63,6 +66,8 @@ var DOCS_EXACT = [
   '/changelog',
   '/cloud',
   '/use-cases',
+  '/compare',
+  '/legal',
 ];
 
 // Docs nested paths — trailing slash required so /integrations (admin) is not
@@ -81,6 +86,8 @@ var DOCS_NESTED_PREFIXES = [
   '/plugins/',
   '/blog/',
   '/use-cases/',
+  '/compare/',
+  '/legal/',
 ];
 
 // SPA route prefixes under /mushi-mushi/admin/.
@@ -112,6 +119,8 @@ var SPA_PREFIXES = [
   '/anti-gaming',
   '/notifications',
   '/billing',
+  '/analytics',
+  '/growth',
   '/organization',
   '/org/',
   '/queue',
@@ -223,7 +232,23 @@ function handler(event) {
     return redirect301('/mushi-mushi/docs' + uri, qs);
   }
 
-  // Static assets: never redirect.
+  // Slashless product root. `/mushi-mushi` does not match the
+  // `/mushi-mushi/*` behavior, so it lands here; passed through, the S3
+  // website endpoint answered with a 302 to `/mushi-mushi/`. The slash form is
+  // the canonical landing URL, so say so permanently.
+  if (uri === '/mushi-mushi') {
+    return redirect301('/mushi-mushi/', qs);
+  }
+
+  // A moved docs page whose old slug contains a dot, so the extension rule
+  // below would pass it through. The apex still sees it from Nextra RSC
+  // payloads; the docs routers carry the full moved-page map.
+  if (uri === '/sdks/mcp-tools.generated') {
+    return redirect301('/mushi-mushi/docs/sdks/mcp-tools', qs);
+  }
+
+  // Static assets: never redirect. Left as "any extension" on purpose: this
+  // runs on the Default behavior in front of other kensaur.us apps.
   if (/\.[a-zA-Z0-9]+$/.test(uri)) {
     return request;
   }

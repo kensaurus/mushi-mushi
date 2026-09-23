@@ -82,6 +82,7 @@ export interface BuiltNavItem {
   beginner?: boolean
   checkBeginnerCore?: boolean
   superAdmin?: boolean
+  operatorOnly?: boolean
   requiresFeature?: FeatureFlag
   requiresAdvancedMode?: boolean
   checkSubGroup?: CheckSubGroupId
@@ -164,6 +165,7 @@ function entryToNavItem(entry: NavRegistryEntry): BuiltNavItem {
     beginner: entry.beginner,
     checkBeginnerCore: entry.checkBeginnerCore,
     superAdmin: entry.superAdmin,
+    operatorOnly: entry.operatorOnly,
     requiresFeature: entry.requiresFeature,
     requiresAdvancedMode: entry.requiresAdvancedMode,
     checkSubGroup: entry.checkSubGroup,

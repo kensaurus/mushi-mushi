@@ -79,6 +79,14 @@ import {
   updateSessionIdentity,
   destroySessionTracker,
   trackPageView,
+  initEventTracker,
+  trackEvent,
+  setEventConsent,
+  updateEventIdentity,
+  destroyEventTracker,
+  getEventAnonymousId,
+  flushEvents,
+  sha256Hex,
 } from '@mushi-mushi/core';
 
 /** Resolve `reports.app_version` from SDK config and captured environment. */
@@ -183,13 +191,18 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     sdkVersion: MUSHI_SDK_VERSION,
   });
 
-  // Session tracking — opt-out via trackSessions:false in MushiConfig
+  // Session tracking — opt-out via trackSessions:false in MushiConfig. It
+  // passes the same analytics gate as Mushi.track() (enabled, DNT / GPC,
+  // bots, consent), so under consent:'required' nothing is sent until
+  // setConsent('granted'), whichever tracker initialises first.
   let unsubPageViewHistory: (() => void) | null = null;
-  if ((bootstrapConfig as unknown as Record<string, unknown>)['trackSessions'] !== false) {
+  if (bootstrapConfig.trackSessions !== false) {
     initSessionTracker({
       client: apiClient,
       sdkVersion: MUSHI_SDK_VERSION,
-      reporterTokenHash: getReporterToken(bootstrapConfig.projectId) ?? null,
+      reporterToken: getReporterToken(bootstrapConfig.projectId) ?? null,
+      projectId: bootstrapConfig.projectId,
+      analytics: bootstrapConfig.analytics,
       // This package owns the history patch (history-patch.ts):
       // installAutoBreadcrumbs() captures History.prototype.pushState (the
       // native) and assigns its own wrapper to history.pushState, which
@@ -212,6 +225,20 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   const offlineQueue = createOfflineQueue(bootstrapConfig.offline);
   const rateLimiter = createRateLimiter({ maxBurst: 10, refillRate: 1, refillIntervalMs: 5_000 });
   const piiScrubber = createPiiScrubber();
+
+  // Product analytics (Mushi.track()) — keyed on the tracker's own random
+  // per-project id, not the reporter token (a credential for the end user's
+  // report threads). DNT/GPC and consent are handled inside the tracker.
+  // Opt-out via analytics.enabled:false. Reserved UTM/referrer props are
+  // attached by the tracker's caller (landing/docs) via trackEvent opts.
+  initEventTracker({
+    client: apiClient,
+    projectId: bootstrapConfig.projectId,
+    sdkVersion: MUSHI_SDK_VERSION,
+    config: bootstrapConfig.analytics,
+    scrub: (s) => piiScrubber.scrub(s),
+    getSessionId,
+  });
 
   // Apply the same scrubber that runs over `description` to the
   // observability surfaces (breadcrumbs, tags, sentry context) right
@@ -464,8 +491,12 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       !replaySampled && onErrorReplayRate > 0 && Math.random() < onErrorReplayRate;
     if ((replayMode === 'rrweb' || replayMode === 'lite') && (replaySampled || replayOnErrorSampled)) {
       const generation = ++replayGeneration;
+      // `loadRrweb` is read from the host's own init config only: a loader is
+      // code, and the console's runtime config must never be able to supply one.
       void createReplayCapture({
         enabled: true,
+        mode: replayMode,
+        loadRrweb: bootstrapConfig.capture?.rrweb,
         redactSelectors: activeConfig.privacy?.redactSelectors,
       }).then((cap) => {
         // A newer sync (config change / flip to 'off') superseded this create
@@ -662,6 +693,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     widget.setScreenshotPreview(pendingScreenshot);
   }
 
+  // Brand-mark ref: SHA-256 prefix of the project id, never the id itself.
+  const brandRefReady: Promise<string | null> = sha256Hex(projectId)
+    .then((hex) => hex.slice(0, 12))
+    .catch(() => null);
+
   widget = new MushiWidget(bootstrapConfig.widget, {
     onSubmit: async ({ category, userCategory, description, intent }) => {
       log.info('Report submitted', { category, userCategory, intent });
@@ -683,6 +719,18 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       // capture between init and open.
       replayCap?.start();
       emit('widget:opened');
+    },
+    // Growth loop (plan-gtm C §5); the tracker already honours DNT/consent/enabled.
+    onBrandFooterImpression: () => {
+      void brandRefReady.then((ref) => {
+        trackEvent('loop_impression', { placement: 'widget' }, ref ? { reserved: { $ref: ref } } : undefined);
+      });
+    },
+    onBrandFooterClick: () => {
+      void brandRefReady.then((ref) => {
+        trackEvent('loop_click', { placement: 'widget' }, ref ? { reserved: { $ref: ref } } : undefined);
+        return flushEvents();
+      });
     },
     onClose: () => {
       log.debug('Widget closed');
@@ -933,6 +981,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       return res.ok ? (res.data ?? null) : null;
     },
   }, MUSHI_SDK_VERSION);
+  void brandRefReady.then((ref) => widget.setBrandRef(ref));
   syncCaptureModules();
 
   if (typeof document !== 'undefined') {
@@ -1035,7 +1084,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       log.debug('Runtime SDK config disabled; using bootstrap config', { version: runtime.version });
       return;
     }
-    activeConfig = mergeRuntimeConfig(activeConfig, runtime);
+    // Host (MIT) config beats remote for host-wins keys even on the second merge.
+    activeConfig = mergeRuntimeConfig(activeConfig, runtime, bootstrapConfig);
     syncCaptureModules();
     if (runtime.widget) widget.updateConfig(activeConfig.widget);
     if (reporterNotificationsEnabled) startReporterInboxPolling();
@@ -1519,6 +1569,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     destroy() {
       proactiveTriggers?.destroy();
       proactiveManager?.reset();
+      destroyEventTracker();
       widget.destroy();
       consoleCap?.destroy();
       networkCap?.destroy();
@@ -1722,6 +1773,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         level: 'info',
         message: `Mushi.identify(${userId})`,
       });
+      // Stitch anonymous analytics history to the person (Users & Funnels).
+      updateEventIdentity(userId, traits ?? null);
 
       // Wire rewards program when enabled
       wireRewardsForIdentifiedUser(
@@ -1841,6 +1894,20 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     recordActivity(action, metadata) {
       if (!activeConfig.rewards?.enabled) return;
       enqueueActivity({ action, metadata });
+    },
+
+    // ─── Product analytics (Users & Funnels) ──────────────────────────
+
+    track(event, properties) {
+      return trackEvent(event, properties);
+    },
+
+    setConsent(state) {
+      setEventConsent(state);
+    },
+
+    getAnonymousId() {
+      return getEventAnonymousId();
     },
 
     pulseTrigger() {
@@ -2210,6 +2277,9 @@ function createNoopInstance(): MushiSDKInstance {
     getReputation: async () => null,
     getTier: async () => null,
     recordActivity: () => {},
+    track: () => false,
+    setConsent: () => {},
+    getAnonymousId: () => null,
     pulseTrigger: () => {},
     listMyReports: async () => [],
     listMyComments: async () => [],

@@ -1,9 +1,10 @@
-# @mushi-mushi/mcp
+# Bug report MCP server for Cursor & Claude Code
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/mcp
 
 ---
-title: '@mushi-mushi/mcp'
+title: Bug report MCP server for Cursor & Claude Code
+description: Reference for @mushi-mushi/mcp, the Mushi MCP server for Cursor, Claude Code, VS Code and Windsurf — stdio and hosted HTTP transports, scopes and setup.
 ---
 
 # `@mushi-mushi/mcp`
@@ -38,7 +39,7 @@ into your IDE.
     "mushi-mushi-hosted": {
       "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
       "headers": {
-        "X-Mushi-Api-Key": "mushi_live_…",
+        "X-Mushi-Api-Key": "mushi_…",
         "X-Mushi-Project-Id": "proj_…"
       }
     }
@@ -71,7 +72,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **73-tool** catalog and
+on npm for the full **76-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 

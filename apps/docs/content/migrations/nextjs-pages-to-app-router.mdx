@@ -1,5 +1,6 @@
 ---
 title: 'Next.js Pages → App Router'
+description: Move a Next.js app from the Pages Router to the App Router step by step — where to mount Mushi, CSP for static export, and client component boundaries.
 ---
 
 # Next.js Pages → App Router
@@ -114,10 +115,10 @@ export default async function Page({ params }: { params: { slug: string } }) {
 
 // app/articles/[slug]/ArticleReportButton.tsx (Client Component)
 'use client'
-import { useMushiReport } from '@mushi-mushi/react'
+import { useMushiSdk } from '@mushi-mushi/react'
 export function ArticleReportButton({ articleId }: { articleId: string }) {
-  const { submit } = useMushiReport()
-  return <button onClick={() => submit({ description: 'Article issue', metadata: { articleId } })}>Report</button>
+  const mushi = useMushiSdk()
+  return <button onClick={() => void mushi?.captureEvent({ description: 'Article issue', metadata: { articleId } })}>Report</button>
 }
 ```
 

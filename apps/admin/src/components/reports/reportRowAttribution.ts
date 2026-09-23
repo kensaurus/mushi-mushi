@@ -2,6 +2,7 @@
  * Pure helpers for compact triage-row attribution — layer, path, who, capture.
  */
 
+import { shortReporterKey } from '../../lib/reporterKey'
 import type { ReportRow } from './types'
 
 export type ReportLayer = 'frontend' | 'backend' | 'server' | 'mobile'
@@ -128,7 +129,7 @@ export function reporterWho(row: ReportRow): { label: string; tooltip: string; v
     return { label: short, tooltip: `Identified user: ${id}` }
   }
   if (row.reporter_token_hash) {
-    const hex = row.reporter_token_hash.slice(0, 6)
+    const hex = shortReporterKey(row.reporter_token_hash, 6)
     return {
       label: `anon·${hex}`,
       tooltip: `Anonymous device fingerprint ·${hex}`,

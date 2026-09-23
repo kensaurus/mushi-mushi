@@ -25,10 +25,25 @@ import { homedir } from 'os'
 import { dirname, join } from 'path'
 import { tryLoadKeyFromKeychain } from './keychain.js'
 
+/**
+ * An ingest-only (report:write) key minted for the SDK env vars, bound to the
+ * project it belongs to so a later `mushi config projectId …` can never pair
+ * it with another project. Kept so re-running the wizard or `mushi connect
+ * --write-env` does not need a new browser sign-in just to mint one — the
+ * private `apiKey` above carries mcp:read and must never go into app env.
+ */
+interface SavedSdkKey {
+  projectId: string
+  key: string
+}
+
 export interface CliConfig {
+  /** Private CLI + MCP key (report:write + mcp:read). Never written to app env. */
   apiKey?: string
   endpoint?: string
   projectId?: string
+  /** Public SDK ingest key for `projectId` (see {@link SavedSdkKey}). */
+  sdkKey?: SavedSdkKey
   /** URL of the Mushi admin console (e.g. http://localhost:6464 for local dev). */
   consoleUrl?: string
   /**
@@ -83,6 +98,16 @@ function isMultiProfileFile(value: unknown): value is MultiProfileConfigFile {
  *   3. the file's persisted `activeProfile`
  *   4. `DEFAULT_PROFILE`
  */
+/**
+ * The saved SDK key for `projectId`, or undefined when none was saved or it
+ * belongs to a different project.
+ */
+export function savedSdkKeyFor(config: CliConfig, projectId: string | undefined): string | undefined {
+  const saved = config.sdkKey
+  if (!projectId || !saved || typeof saved !== 'object') return undefined
+  return saved.projectId === projectId && typeof saved.key === 'string' && saved.key ? saved.key : undefined
+}
+
 export function resolveProfileName(explicit?: string, fileActive?: string): string {
   const fromEnv = process.env['MUSHI_PROFILE']?.trim()
   return explicit?.trim() || fromEnv || fileActive || DEFAULT_PROFILE

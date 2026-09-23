@@ -18,6 +18,8 @@ export interface OnboardingSignals {
   reportCount: number;
   fixCount: number;
   mergedFixCount: number;
+  /** created_at of the project's first real (non-test, non-seed) report. */
+  firstReportAt?: string | null;
 }
 
 /**
@@ -36,7 +38,9 @@ type StepMeta = {
 const ONBOARDING_STEPS: StepMeta[] = [
   { id: 'project_created', label: 'Create your first project', required: true, complete: () => true },
   { id: 'api_key_generated', label: 'Generate an API key', required: true, complete: (s) => s.hasKey },
-  { id: 'sdk_installed', label: 'Install the SDK in your app', required: true, complete: (s) => s.hasSdk },
+  // Recommended, not required — mirrors activation-setup-builder.ts: the
+  // one-click test report reaches the first diagnosis without an SDK install.
+  { id: 'sdk_installed', label: 'Install the SDK in your app', required: false, complete: (s) => s.hasSdk },
   {
     id: 'first_report_received',
     label: 'Receive your first bug report',
@@ -91,6 +95,7 @@ export function buildOnboardingStatsPayload(input: {
       reportCount: 0,
       fixCount: 0,
       mergedFixCount: 0,
+      first_report_at: null as string | null,
       nextStepTo: resolveNextStepTo('project_created'),
     };
   }
@@ -130,6 +135,8 @@ export function buildOnboardingStatsPayload(input: {
     reportCount: s.reportCount,
     fixCount: s.fixCount,
     mergedFixCount: s.mergedFixCount,
+    // ISO timestamp of the first real report (CLI `mushi status` reads it).
+    first_report_at: s.firstReportAt ?? null,
     nextStepTo: resolveNextStepTo(nextRequired?.id),
   };
 }

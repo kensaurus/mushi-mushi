@@ -108,6 +108,9 @@ export class MushiWidget {
   private nudgeEl: HTMLDivElement | null = null;
   private nudgeTimer: ReturnType<typeof setTimeout> | null = null;
   private sdkFreshness: { latest: string | null; current: string; deprecated: boolean; message?: string | null } | null = null;
+  /** Brand-footer ref (SDK sets it once hashed) + once-per-instance impression latch. */
+  private brandRef: string | null = null;
+  private brandImpressionSent = false;
   private reporterReports: MushiReporterReport[] = [];
   private featureBoard: Array<Record<string, unknown>> = [];
   private reporterComments: MushiReporterComment[] = [];
@@ -760,6 +763,12 @@ export class MushiWidget {
 
   setSdkFreshness(info: { latest: string | null; current: string; deprecated: boolean; message?: string | null }): void {
     this.sdkFreshness = info;
+    if (this.isOpen) this.render();
+  }
+
+  setBrandRef(ref: string | null): void {
+    if (this.brandRef === ref) return;
+    this.brandRef = ref;
     if (this.isOpen) this.render();
   }
 
@@ -1451,6 +1460,11 @@ export class MushiWidget {
       panel.innerHTML = `${renderOutdatedBanner(ctx)}${renderStep(ctx)}${renderBrandFooter(ctx)}`;
       this.shadow.appendChild(panel);
       this.attachHandlers(panel);
+      // First render with the mark visible → one impression per instance.
+      if (!this.brandImpressionSent && this.config.brandFooter === true) {
+        this.brandImpressionSent = true;
+        this.callbacks.onBrandFooterImpression?.();
+      }
       // After trapFocus so a preserved caret position beats the default
       // "focus the first field" behavior.
       this.trapFocus(panel);
@@ -1847,6 +1861,7 @@ export class MushiWidget {
       showAllCategories: this.showAllCategories,
       showMoreNav: this.showMoreNav,
       pageFaviconHref: readPageFaviconHref(),
+      brandRef: this.brandRef,
     };
   }
 
@@ -1855,6 +1870,9 @@ export class MushiWidget {
     bindFaviconFallbacks(panel);
 
     panel.querySelector('[data-action="close"]')?.addEventListener('click', () => this.close());
+    panel.querySelector('[data-action="brand-footer"]')?.addEventListener('click', () => {
+      this.callbacks.onBrandFooterClick?.();
+    });
     panel.querySelector('[data-action="back"]')?.addEventListener('click', () => {
       if (this.step === 'intent') { this.step = 'category'; this.selectedCategory = null; }
       else if (this.step === 'details') {

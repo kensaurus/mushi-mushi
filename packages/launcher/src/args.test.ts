@@ -76,6 +76,14 @@ describe('mushi-mushi launcher', () => {
     expect(stdout).toContain('Node.js 20 or newer')
   })
 
+  it('prints the Docs/Console footer exactly once, pointing Docs at the docs site', () => {
+    const { stdout, status } = run(['--help'])
+    expect(status).toBe(0)
+    expect(stdout.match(/^Docs:/gm)).toHaveLength(1)
+    expect(stdout.match(/^Console:/gm)).toHaveLength(1)
+    expect(stdout).toContain('Docs:    https://kensaur.us/mushi-mushi/docs/')
+  })
+
   it('rejects an unknown framework with a useful message', () => {
     const { stderr, status } = run(['--framework', 'rails'])
     expect(status).toBe(1)
@@ -88,10 +96,11 @@ describe('mushi-mushi launcher', () => {
     expect(stderr).toContain('Unknown flag')
   })
 
-  it('bails out in a non-interactive terminal without all required flags', () => {
+  it('bails out in a non-interactive terminal without --yes, naming --yes as the way through', () => {
     const { stderr, status } = run([])
     expect(status).toBe(1)
     expect(stderr).toContain('non-interactive terminal detected')
+    expect(stderr).toContain('npx mushi-mushi --yes')
   })
 
   // Uses `--help` rather than `--dry-run` so this never reaches the real
@@ -102,12 +111,12 @@ describe('mushi-mushi launcher', () => {
     const { stdout, stderr } = run(['setup', '--ide', 'cursor', '--help'])
     expect(stderr).not.toContain('Unknown flag')
     expect(stdout + stderr).not.toContain('non-interactive terminal detected')
-    expect(stdout).toContain('Wire Cursor MCP')
+    expect(stdout).toContain('Wire the Mushi MCP server')
   })
 
   it('forwards a bare `setup` instead of silently running the init wizard', () => {
     const { stdout, stderr } = run(['setup', '--help'])
     expect(stdout + stderr).not.toContain('non-interactive terminal detected')
-    expect(stdout).toContain('Wire Cursor MCP')
+    expect(stdout).toContain('Wire the Mushi MCP server')
   })
 })

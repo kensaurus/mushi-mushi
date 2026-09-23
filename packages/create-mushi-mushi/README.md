@@ -2,10 +2,10 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Scaffold a new app with Mushi pre-wired.
+Add Mushi to the app you already have in one command, or scaffold a Vue, Svelte
+or Node starter with `--template`.
 
-
-> One-line setup for the [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) bug-reporting + AI triage SDK.
+> One-line setup for the [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) bug-reporting SDK: a user's report arrives as a plain-English diagnosis and a paste-ready fix in your editor.
 
 ```bash
 npm create mushi-mushi
@@ -25,7 +25,26 @@ bun create mushi-mushi
 6. **Prints the provider snippet** — framework-specific code to paste in.
 7. **Sends a test report** (opt-in) — closes the loop so you see your first classified bug immediately.
 
-This is a **scaffold for existing projects** — it does not generate a new app from scratch. Run it from the project root of an existing app.
+By default it wires Mushi into an **existing** project, so run it from that project's root. To start from nothing, use a starter template instead.
+
+## Starter templates
+
+`--template` scaffolds a minimal starter app with Mushi already wired, instead of running the wizard:
+
+```bash
+npm create mushi-mushi -- --template vue           # into ./mushi-vue-app
+npm create mushi-mushi -- --template svelte my-app # into ./my-app
+npm create mushi-mushi -- --template node          # into ./mushi-node-app
+```
+
+Valid templates: `vue`, `svelte`, `node`. The target directory must not exist yet. Then:
+
+```bash
+cd mushi-vue-app
+npm install
+npx mushi-mushi   # browser sign-in, writes your env vars
+npm run dev       # npm start for the node starter
+```
 
 ## Flags
 
@@ -36,6 +55,7 @@ npm create mushi-mushi -- --skip-install
 npm create mushi-mushi -- --skip-test-report
 npm create mushi-mushi -- --cwd apps/web
 npm create mushi-mushi -- --endpoint https://mushi.your-company.com
+npm create mushi-mushi -- --template vue [dir]
 npm create mushi-mushi -- -y
 npm create mushi-mushi -- --help
 ```
@@ -78,4 +98,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 58 edge functions · 348 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 59 edge functions · 368 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

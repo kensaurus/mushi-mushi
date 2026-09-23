@@ -19,7 +19,7 @@ import { TOOL_CATALOG, TDD_TOOL_CATALOG, CODEBASE_TOOL_CATALOG, RESOURCE_CATALOG
 import { DEPRECATED_TOOL_ALIASES, DEFAULT_FEATURE_GROUPS, parseFeaturesParam } from '../feature-groups.js'
 
 const API_ENDPOINT = 'https://api.test.mushimushi.dev'
-const API_KEY = 'mushi_test_key_0123456789'
+const API_KEY = 'mushi_test_key_0123456789' // gitleaks:allow
 const PROJECT_ID = 'proj_00000000-0000-0000-0000-000000000000'
 
 interface FetchCall {
@@ -128,7 +128,6 @@ describe('MCP protocol handshake', () => {
       'transition_status',
       'award_bonus_points',
       'set_tier',
-      'setup_repo_for_mushi',
       // Phase 4: TDD write tools
       'map_user_stories',
       'generate_tdd_from_story',
@@ -215,9 +214,10 @@ describe('tool → REST contract', () => {
     expect(call.headers['x-mushi-project-id']).toBe(PROJECT_ID)
 
     expect(res.isError).toBeFalsy()
+    expect(res.structuredContent).toEqual({ reports: [{ id: 'r1' }], total: 1 })
+    // Report rows carry reporter-authored text, so the text block is wrapped.
     const content = res.content as Array<{ type: string; text: string }>
-    const parsed = JSON.parse(content[0].text)
-    expect(parsed).toEqual({ reports: [{ id: 'r1' }], total: 1 })
+    expect(content[0].text).toMatch(/^<mushi-data role="get_recent_reports">/)
   })
 
   it('clamps limit at 100 even if caller asks for more', async () => {

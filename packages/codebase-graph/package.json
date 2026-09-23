@@ -34,9 +34,5 @@
     "type": "git",
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/codebase-graph"
-  },
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/kensaurus"
   }
 }

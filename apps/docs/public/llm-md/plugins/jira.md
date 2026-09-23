@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/plugins/jira
 
 ---
 title: Jira Cloud
+description: Two-way sync between Mushi reports and Jira Cloud issues — create issues on classification, sync status, and comment fix summaries when fixes land.
 ---
 
 # Jira Cloud plugin

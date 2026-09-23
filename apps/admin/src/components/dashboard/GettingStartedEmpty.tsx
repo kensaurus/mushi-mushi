@@ -25,6 +25,7 @@ import { PDCA_STAGES, PDCA_ORDER, PDCA_STAGE_OUTCOMES, type PdcaStageId } from '
 import { PageHeader, Card, Btn, Skeleton } from '../ui'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { SetupChecklist } from '../SetupChecklist'
+import { startFirstRunTour } from '../FirstRunTour'
 import { useActiveProjectId } from '../ProjectSwitcher'
 import { FeedbackHubStrip } from '../support/FeedbackHubStrip'
 import { ActionPill, ContainedBlock, InlineProof, SignalChip } from '../report-detail/ReportSurface'
@@ -113,6 +114,15 @@ export function GettingStartedEmpty({ embedded = false }: { embedded?: boolean }
           {project.report_count} {pluralize(project.report_count, 'report')} · {project.fix_count} {pluralize(project.fix_count, 'fix', 'fixes')} dispatched
         </span>
         <Link to="/projects" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">Switch project →</Link>
+        {/* Click-triggered tour (no auto-launch) — see FirstRunTour.tsx. */}
+        <Btn
+          size="sm"
+          variant="ghost"
+          onClick={() => startFirstRunTour()}
+          className="border-0 bg-transparent shadow-none px-0 py-0 text-2xs text-accent-foreground hover:text-accent underline underline-offset-2"
+        >
+          Take the 2-minute tour
+        </Btn>
       </InlineProof>
     </div>
   )

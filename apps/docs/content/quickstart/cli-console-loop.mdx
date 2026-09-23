@@ -1,5 +1,6 @@
 ---
 title: CLI ↔ console setup loop
+description: How npx mushi-mushi creates a project, mints an SDK key and installs the SDK through browser sign-in, and how to recover when the setup loop fails.
 ---
 
 import { Callout, Steps } from 'nextra/components'
@@ -16,7 +17,7 @@ something goes wrong.
 | Command | When to use | What it does |
 | --- | --- | --- |
 | **`npx mushi-mushi`** / **`mushi init`** | First SDK install in an app repo | Detects framework, opens browser auth, installs SDK, writes `.env.local` |
-| **`mushi login`** | Authenticate the CLI without installing | Browser sign-in only; persists to `~/.config/mushi/config.json` |
+| **`mushi login`** | Authenticate the CLI without installing | Browser sign-in only; persists to the [CLI config file](/sdks/cli#config-file) (`~/.config/mushi/config.json`, or `%APPDATA%\mushi\config.json` on Windows) |
 | **`mushi connect`** | You already have credentials; want env + MCP + proof | Merges env vars, wires `.cursor/mcp.json`, optional `--wait` heartbeat |
 | **`mushi setup`** | MCP-only wiring after login | Writes Cursor/Claude MCP config — **does not** install the SDK |
 
@@ -97,7 +98,8 @@ project picker.
 
 ## How sign-in reliability works
 
-Each machine gets a stable `client_id` (stored in `~/.config/mushi/config.json`).
+Each machine gets a stable `client_id`, stored in the [CLI config file](/sdks/cli#config-file)
+(`~/.config/mushi/config.json`, or `%APPDATA%\mushi\config.json` on Windows).
 The CLI sends it when starting device auth so concurrent logins on the same
 machine behave predictably.
 
@@ -173,8 +175,9 @@ the connection is live.
 | **Local monorepo dev** | [http://localhost:6464](http://localhost:6464) | Run `pnpm dev` from the mushi-mushi repo |
 | **Override** | Set `MUSHI_CONSOLE_URL` | CLI hints + browser opens use this base when set |
 
-The CLI resolves the console in this order: `MUSHI_CONSOLE_URL` → saved
-`~/.config/mushi/config.json` `consoleUrl` → localhost `:6464` probe → hosted default.
+The CLI resolves the console in this order: `MUSHI_CONSOLE_URL` → `consoleUrl`
+saved in the [CLI config file](/sdks/cli#config-file) (`~/.config/mushi/config.json`,
+or `%APPDATA%\mushi\config.json` on Windows) → localhost `:6464` probe → hosted default.
 
 ## Manual paste (fallback / self-hosted)
 

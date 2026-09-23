@@ -11,27 +11,46 @@ export { MUSHI_TAGLINE_V2 }
 export const LANDING_HERO = {
   eyebrow: MUSHI_TAGLINE_V2.category,
   lead:
-    'Plain-English explanation of what broke, plus a fix you can paste into Cursor or Claude Code — so a bug costs five minutes, not your whole afternoon.',
+    'For solo builders shipping Cursor- or Claude-written apps to real users. When someone hits a bug, Mushi turns what they felt into a plain-English diagnosis and a paste-ready fix in your editor. Sentry starts from what the code threw; Mushi starts from what the user felt.',
   proofLine: 'One queue for every bug. Sentry flows in, fixes flow out. Open source.',
 } as const
 
-export const LANDING_HERO_CTAS = [
+export interface LandingHeroCta {
+  /** Stable id — becomes `cta_click.cta_id` and the `?src=` on signup links. */
+  id: string
+  label: string
+  href: string
+  kind: 'primary' | 'secondary' | 'ghost'
+  /** Absolute URL to another app / site (rendered as a plain `<a>`, not next/link). */
+  external: boolean
+  /**
+   * External links open in a new tab by default. The console signup is our
+   * own product — the visitor should stay in this tab and land there.
+   */
+  sameTab?: boolean
+}
+
+export const LANDING_HERO_CTAS: readonly LandingHeroCta[] = [
   {
-    label: 'Run the wizard',
-    href: '/quickstart/incident-loop',
-    kind: 'primary' as const,
+    id: 'landing-hero',
+    label: 'Start free — first diagnosis in 60 seconds',
+    href: `${ADMIN_DEMO_BASE}/signup?src=landing-hero`,
+    kind: 'primary',
+    external: true,
+    sameTab: true,
+  },
+  {
+    id: 'landing-demo',
+    label: 'Try the live demo — no signup',
+    href: '/connect',
+    kind: 'secondary',
     external: false,
   },
   {
-    label: 'Browse the repo',
-    href: MUSHI_CANONICAL_URLS.repo,
-    kind: 'secondary' as const,
-    external: true,
-  },
-  {
-    label: 'Connect your editor',
-    href: '/connect',
-    kind: 'ghost' as const,
+    id: 'landing-terminal',
+    label: 'Prefer the terminal? npx mushi-mushi',
+    href: '/quickstart/incident-loop',
+    kind: 'ghost',
     external: false,
   },
 ] as const
@@ -55,7 +74,7 @@ export const LANDING_SIXTY_SECOND_STEPS = {
       desc: 'The wizard detects your framework, installs the SDK, and writes your env vars.',
     },
     {
-      title: 'Ship, then break something',
+      title: 'Send a test report (or ship and wait)',
       desc: 'When a user hits a bug, the report lands with a plain-English read on the cause.',
     },
     {
@@ -75,7 +94,7 @@ export interface LandingFaqItem {
 export const LANDING_FAQ: readonly LandingFaqItem[] = [
   {
     q: 'Is Mushi Mushi a Sentry alternative?',
-    a: 'Your call — both are first-class. Sentry tells you what threw. Mushi ingests that — plus the bugs that never throw — explains each one in plain English, and closes the loop with a fix your agent can ship. One queue, one audit trail, with or without Sentry.',
+    a: "It can be, or it can run alongside Sentry. Sentry is built around what the code threw, with a User Feedback widget and replay alongside. Mushi starts from what the user reported, ingests Sentry's errors too, explains each one in plain English, and hands your agent a fix prompt to start from. One queue, with or without Sentry.",
   },
   {
     q: 'Do I need Sentry to use it?',
@@ -83,7 +102,7 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   },
   {
     q: 'What does `npx mushi-mushi` do?',
-    a: 'It runs a setup wizard that detects your framework (React, Vue, Svelte, Angular, React Native, Capacitor, Flutter, or Node), installs the matching SDK, writes your env vars, and prints the snippet to paste.',
+    a: 'It runs a setup wizard that detects your framework (React, Next.js, Vue, Nuxt, Svelte, Angular, React Native, Expo, Capacitor, or Node), installs the matching SDK, writes your env vars, and prints the snippet to paste.',
   },
   {
     q: 'How do I debug an app that Cursor or Claude Code wrote?',
@@ -95,14 +114,22 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   },
   {
     q: 'Which frameworks are supported?',
-    a: 'Web: React, Vue, Svelte, Angular, and any site via the browser widget. Mobile: React Native, Capacitor, Flutter, iOS, and Android. Server: Node. One wizard installs any of them.',
+    a: 'Web: React, Vue, Svelte, Angular, and any site via the browser widget. Mobile: React Native and Capacitor. Server: Node. One wizard installs any of them. Native iOS, Android, and Flutter SDKs are in preview and install from the GitHub repo.',
   },
 ] as const
 
 export const LANDING_MEDIA_INTRO =
   'Admin console, the SDK on a real app (glot.it), and light/dark screenshots — click a frame to open the live surface.'
 
+const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
+
 export const LANDING_WHAT_THIS_IS = {
+  /**
+   * One plain "Mushi Mushi is …" sentence, the shape answer engines lift as a
+   * definition. Category and promise come from the brand SSOT so it cannot
+   * drift from the eyebrow, the npm cards or the JSON-LD.
+   */
+  definition: `Mushi Mushi is ${lowerFirst(MUSHI_TAGLINE_V2.category)}, an open-source bug-reporting SDK and queue: ${lowerFirst(MUSHI_TAGLINE_V2.promise)}.`,
   who: 'Built for solo founders who ship with AI and lose afternoons debugging code they did not fully write.',
   boundary:
     'Works inside your editor — not another dashboard. Sentry, Linear, and Slack plug into the same queue; none of them are required to start.',
@@ -116,6 +143,8 @@ export interface LandingPathCard {
   desc: string
   href: string
   cmd?: string
+  /** When set, the card is a tracked CTA (`cta_click.cta_id`). */
+  ctaId?: string
 }
 
 export const LANDING_WHERE_TO_START: readonly LandingPathCard[] = [
@@ -137,8 +166,9 @@ export const LANDING_WHERE_TO_START: readonly LandingPathCard[] = [
     // Absolute URL (not `/admin/onboarding`) so the apex-redirect CloudFront
     // Function — which treats `/admin/*` as a docs-nested prefix — never gets
     // a chance to send this to the *documentation* page instead of the app.
-    href: `${ADMIN_DEMO_BASE}/onboarding`,
+    href: `${ADMIN_DEMO_BASE}/onboarding?src=landing-console`,
     cmd: 'mushi login && mushi status',
+    ctaId: 'landing-console',
   },
 ] as const
 
@@ -212,14 +242,14 @@ export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
     desc: 'Wizard installs the SDK, writes env vars, optional test report.',
   },
   {
-    title: 'iOS · Android · Flutter',
+    title: 'Mobile',
     icon: LANDING_BRAND_MARK,
     iconSlug: 'flutter',
     iconColor: '#02569B',
     href: '/quickstart/mobile',
     cmd: 'npx mushi-mushi',
-    desc: 'Native shake, offline queue, and a Sentry bridge already wired up.',
-    badge: 'Native',
+    desc: 'React Native and Capacitor: shake-to-report and an offline queue. iOS, Android, and Flutter SDKs in preview.',
+    badge: 'Mobile',
   },
 ] as const
 
@@ -232,8 +262,8 @@ export interface LandingComparisonRow {
 export const LANDING_COMPARISON_ROWS: readonly LandingComparisonRow[] = [
   {
     label: 'What it sees',
-    foil: 'Errors your code throws',
-    mushi: 'Everything: user-felt friction, plus the errors Sentry catches — routed into one queue',
+    foil: 'Errors and performance, plus Session Replay and a User Feedback widget',
+    mushi: 'User reports from the widget with a screenshot, plus the errors Sentry catches, in one queue',
   },
   {
     label: 'What lands in your queue',
@@ -242,32 +272,32 @@ export const LANDING_COMPARISON_ROWS: readonly LandingComparisonRow[] = [
   },
   {
     label: 'Repeat bugs',
-    foil: 'Each one shows up as a new issue',
-    mushi: 'The same broken button collapses to one row',
+    foil: 'Repeat events of the same error group into one issue',
+    mushi: 'Repeat user reports of the same broken button collapse to one row, even when nothing threw',
   },
   {
     label: 'What you learn from fixes',
-    foil: 'None — the next dev repeats the mistake',
+    foil: 'A resolved issue reopens as a regression if it recurs; there is no lessons file for your editor',
     mushi: 'Past fixes become rules your editor sees on the next PR (.mushi/lessons.json)',
   },
   {
     label: 'Closing the loop',
-    foil: 'Assign a ticket and remember to update',
-    mushi: 'A draft PR from your agent; merging it resolves the linked Sentry/Linear issue for you',
+    foil: 'Resolve by hand, from a commit that references the issue, or in a release; Seer, the paid AI debugging add-on, is on Team and above',
+    mushi: 'A draft PR from your agent; merging it resolves the linked Linear issue, and the linked Sentry issue once the Sentry plugin is on (Indie and above, or self-hosted)',
   },
   {
     label: 'Reporter attribution',
-    foil: 'Anonymous',
+    foil: 'The user you set with setUser, or the name and email on a feedback submission; no credit when it is fixed',
     mushi: '"Fixed by Kenji" in the changelog and an SDK toast, once Releases is enabled',
   },
   {
     label: 'From your IDE',
-    foil: 'Copy the issue ID into Cursor',
+    foil: 'Sentry\'s MCP server lets Cursor or Claude Code read issues and ask Seer',
     mushi: 'Cursor reads the report + relevant lessons and proposes the diff',
   },
   {
     label: 'Where it runs',
-    foil: 'Their cloud',
+    foil: 'Their cloud, or yours with getsentry/self-hosted (no Seer)',
     mushi: 'Yours, ours, or both',
   },
 ] as const
@@ -317,8 +347,9 @@ export const LANDING_ARCHITECTURE_LINK =
 
 export const LANDING_OPERATOR = {
   question: 'Run the 60-second proof',
-  soloCta: 'npx mushi-mushi →',
-  soloHref: '/quickstart/incident-loop',
+  soloCta: 'Start free →',
+  soloHref: `${ADMIN_DEMO_BASE}/signup?src=landing-closing`,
+  soloCtaId: 'landing-closing',
   teamLead:
     'Need SSO, audit trails, or adapters for a team? Setup notes live in the operators docs on GitHub.',
   teamCta: 'Operators docs →',
@@ -368,5 +399,10 @@ export const LANDING_TRUST_LINKS = [
     label: 'Dogfood',
     text: 'Runs on glot.it',
     href: 'https://kensaur.us/glot-it',
+  },
+  {
+    label: 'Security',
+    text: 'RLS · BYOK · retention sweep',
+    href: '/security',
   },
 ] as const

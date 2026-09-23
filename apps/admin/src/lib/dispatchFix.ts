@@ -10,6 +10,7 @@ import { apiFetch, supabase } from './supabase'
 import { RESOLVED_API_URL } from './env'
 import { openSseStream } from './sseClient'
 import { withAguiHandler } from './agui'
+import { trackSelf } from './track'
 
 export type DispatchStatus =
   | 'idle'
@@ -234,6 +235,7 @@ export function useDispatchFix(reportId: string, projectId: string) {
       return
     }
     const { dispatchId } = res.data
+    trackSelf('fix_dispatched', { report_id: reportId, agent: options?.agentOverride ?? 'default' })
     setState({ status: 'queued', dispatchId })
     void subscribeStream(dispatchId)
   }, [reportId, projectId, subscribeStream])

@@ -6,7 +6,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 
 /** Packages grouped for the docs hub version table (display order). */
-export const VERSION_MATRIX_GROUPS = [
+const VERSION_MATRIX_GROUPS = [
   {
     label: "@mushi-mushi/core, @mushi-mushi/web",
     packages: ["core", "web"],
@@ -45,7 +45,7 @@ function readPackageVersion(packagesDir, dir) {
   return pkg.version ?? null
 }
 
-export function collectPackageVersions(root = process.cwd()) {
+function collectPackageVersions(root = process.cwd()) {
   const packagesDir = path.join(root, "packages")
   const byDir = {}
   if (!existsSync(packagesDir)) return byDir
@@ -85,8 +85,8 @@ export function renderVersionMatrixMarkdown(root = process.cwd()) {
 // MDX v3 (nextra 4) rejects HTML comments — `<` starts a JSX tag and `!` is an
 // illegal name char. Use MDX expression comments so the markers survive the
 // docs build while staying invisible in the rendered page.
-export const VERSION_MATRIX_START = "{/* sdk-version-matrix:start */}"
-export const VERSION_MATRIX_END = "{/* sdk-version-matrix:end */}"
+const VERSION_MATRIX_START = "{/* sdk-version-matrix:start */}"
+const VERSION_MATRIX_END = "{/* sdk-version-matrix:end */}"
 
 export function replaceVersionMatrixBlock(source, tableMarkdown) {
   const start = source.indexOf(VERSION_MATRIX_START)

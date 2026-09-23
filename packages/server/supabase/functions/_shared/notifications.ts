@@ -1,4 +1,4 @@
-import { fetchWithTimeout } from './http.ts'
+import { sendTransactionalEmail } from './email.ts'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
 import { getVapidConfig, sendWebPushToSubscription } from './web-push.ts'
@@ -209,27 +209,11 @@ async function sendEmailNotification(
   subject: string,
   body: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const apiKey = Deno.env.get('RESEND_API_KEY')
-  const from = Deno.env.get('RESEND_FROM_EMAIL') ?? 'Mushi Mushi <noreply@mushi-mushi.dev>'
-  if (!apiKey) return { ok: false, error: 'RESEND_API_KEY not configured' }
-
-  try {
-    const res = await fetchWithTimeout('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ from, to: [to], subject, text: body }),
-    })
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      return { ok: false, error: `Resend ${res.status}: ${text.slice(0, 200)}` }
-    }
-    return { ok: true }
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
-  }
+  // Shared Resend sender (_shared/email.ts): RESEND_FROM_EMAIL is required —
+  // an unset sender skips the send with a warning instead of falling back to
+  // an unverified default address.
+  const result = await sendTransactionalEmail({ to, subject, text: body })
+  return result.ok ? { ok: true } : { ok: false, error: result.error }
 }
 
 interface ReporterPushRow {

@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/compliance
 
 ---
 title: Compliance
+description: The Compliance page shows SOC 2 control status, retention policies and DSAR requests, and exports an evidence PDF for procurement reviews.
 ---
 
 # Compliance

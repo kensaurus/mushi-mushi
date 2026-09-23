@@ -1,3 +1,29 @@
+Copyright (c) 2026 Kenji Sakuramoto
+
+This repository is open core. Not all of it is MIT. Portions are licensed as
+follows:
+
+* Everything under packages/server/ee/ is the Mushi Mushi Enterprise Edition,
+  licensed under packages/server/ee/LICENSE. It is source-available; production
+  use of Enterprise Edition features needs a commercial license key or an
+  Enterprise subscription.
+
+* Everything else under packages/server/, packages/agents/ and packages/verify/
+  is licensed under the GNU Affero General Public License, version 3 only
+  (AGPL-3.0-only). The full text is in the LICENSE file of each of those
+  directories. A commercial license is also available; see
+  COMMERCIAL-LICENSE.md.
+
+* Third-party components keep their original licenses; see NOTICE.
+
+* Everything else in this repository, including every published SDK, the CLI,
+  the MCP server and the plugins, is licensed under the MIT License below.
+
+Where a directory contains its own LICENSE file, that file governs the contents
+of that directory. The trademarks are covered separately in TRADEMARK.md.
+
+--------------------------------------------------------------------------------
+
 MIT License
 
 Copyright (c) 2026 Kenji Sakuramoto

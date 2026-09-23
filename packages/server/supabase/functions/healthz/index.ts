@@ -22,11 +22,14 @@
 
 import { getServiceClient } from '../_shared/db.ts'
 import { log as rootLog } from '../_shared/logger.ts'
+import { DEPLOY_INFO } from '../_shared/deploy-info.ts'
 
 const ALLOWED_ORIGINS = ['*'] // health endpoint is public; no CORS restriction needed
 
+// MUSHI_VERSION was never set, so this always said 'unknown'. The deploy
+// script stamps the commit into _shared/deploy-info.ts ('dev' locally).
 const VERSION: string =
-  (typeof Deno !== 'undefined' ? Deno.env.get('MUSHI_VERSION') : undefined) ?? 'unknown'
+  (typeof Deno !== 'undefined' ? Deno.env.get('MUSHI_VERSION') : undefined) ?? DEPLOY_INFO.sha
 
 const log = rootLog.child('healthz')
 

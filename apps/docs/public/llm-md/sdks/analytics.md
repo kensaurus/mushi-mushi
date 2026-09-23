@@ -1,0 +1,241 @@
+# Product analytics (track)
+
+Source: https://kensaur.us/mushi-mushi/docs/sdks/analytics
+
+---
+title: Product analytics (track)
+description: Mushi.track() reference — named events, consent, sampling and batching, useMushiTrack() for React, Users & Funnels, and the /v1/sdk/events wire format.
+---
+
+# Product analytics: `Mushi.track()`
+
+  **Requires `@mushi-mushi/web` ≥ 1.29** (and `@mushi-mushi/core` ≥ 1.29).
+  `track()`, `setConsent()`, `getAnonymousId()` and the `analytics` config
+  ship in that minor release; on 1.28 and earlier they do not exist. The
+  other SDKs get them in the same release: `@mushi-mushi/react` ≥ 1.29 for
+  `useMushiTrack()`, `@mushi-mushi/react-native` ≥ 0.22 and
+  `@mushi-mushi/node` ≥ 1.3.
+
+Every Mushi SDK can record named product events alongside bug reports and
+sessions, so a solo builder can see a signup funnel, a user's path, and
+retention in the same console that holds the bug reports, without a second
+analytics tool. Mushi's own funnel (landing → signup → first report) runs on
+the same API.
+
+It is deliberately small: named events with flat properties, a funnel, a
+paths view, a people list and retention. If you need replay, feature flags
+or experiments, run PostHog beside it; see
+[PostHog session replay vs Mushi](/compare/posthog-session-replay-vs-mushi).
+
+## Quick start
+
+```ts
+import { Mushi } from '@mushi-mushi/web'
+
+const mushi = Mushi.init({
+  projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
+  apiKey: process.env.NEXT_PUBLIC_MUSHI_API_KEY!,
+  // Optional. Defaults: enabled, consent 'implied', DNT/GPC respected, sampleRate 1.
+  analytics: { consent: 'required' },
+})
+
+mushi.setConsent('granted')                        // only needed with consent: 'required'
+mushi.track('checkout_started', { plan: 'pro' })   // snake_case name, flat properties
+mushi.identify('usr_42')                           // stitches earlier anonymous events to the person
+```
+
+React:
+
+```tsx
+import { useMushiTrack } from '@mushi-mushi/react'
+
+function BuyButton() {
+  const track = useMushiTrack()
+  return <button onClick={() => track('checkout_started', { plan: 'pro' })}>Buy</button>
+}
+```
+
+`useMushiTrack()` returns a stable function that forwards to `sdk.track()`
+and returns `false` until the provider has initialised.
+
+## API
+
+| Method | Returns | Notes |
+|---|---|---|
+| `track(event, properties?)` | `boolean` | `true` when the event was queued. `false` for an invalid name, an over-size payload, or when tracking is off. Never throws. |
+| `setConsent('granted' \| 'denied')` | `void` | Persisted per project in `localStorage`. `granted` releases the pending buffer; `denied` drops it and stops tracking. |
+| `getAnonymousId()` | `string \| null` | The opaque per-project id events are keyed on. `null` when tracking is off, consent is denied, or Do Not Track is active. |
+| `identify(userId, traits?)` | `void` | Existing SDK method. Also attaches `user_id` and traits to the next flush so earlier anonymous rows are stitched to the person server-side. |
+
+## Configuration: `analytics`
+
+| Key | Default | What it does |
+|---|---|---|
+| `enabled` | `true` | Master switch. `false` never initialises the tracker. |
+| `consent` | `'implied'` | `'implied'` sends immediately. `'required'` buffers up to 50 events in memory until `setConsent('granted')`; a stored `denied` wins. |
+| `sampleRate` | `1` | 0..1, decided once per person from a hash of the anonymous id, never per event, so funnels stay consistent. |
+| `respectDoNotTrack` | `true` | Honours `navigator.doNotTrack` and Global Privacy Control. When active, no events are sent and no anonymous id is exposed. |
+| `autoPageviews` | `false` | Emit `pageview` on `history.pushState` and `popstate`. Off because sessions already record page views. |
+| `flushIntervalMs` | `5000` | Timer flush. Floor is 1,000 ms. |
+| `propertyAllowlist` | `[]` | Property keys that may pass the PII key filter (below). |
+| `surface` | `'web'` | Stamped on every event as `$surface`. One of `web`, `console`, `docs`, `cli`, `mcp`, `server`, `mobile`. |
+
+## Event names and properties
+
+Names must match `^[a-z][a-z0-9_]{1,63}$`: lowercase, start with a letter,
+2 to 64 characters. The convention is `object_verb` in snake_case, past
+tense for completions (`checkout_completed`), `_view` for exposure
+(`pricing_view`), `_click` for intent (`cta_click`). An invalid name is
+dropped and `track()` returns `false`.
+
+Properties are flat: `string | number | boolean | null`, depth 1. Objects,
+arrays and functions are dropped; `Date` becomes an ISO string;
+non-finite numbers become `null`.
+
+| Limit | Value |
+|---|---|
+| Keys per event | 40 |
+| Key length | 64 characters |
+| String value length | 256 characters |
+| Serialized properties | 8 KB |
+| Distinct event names per project | 200, then the server returns 422 |
+
+**PII key filter.** Any key matching
+`email`, `phone`, `password`, `passwd`, `token`, `secret`, `ssn`, `address`,
+`credit`, `card` or `iban` (case-insensitive substring) is dropped on the
+client and again on the server, unless it is in `propertyAllowlist`. Every
+string value also runs through the SDK's PII scrubber, the same one reports
+use.
+
+**Reserved keys.** Keys starting with `$` are set by the SDK and dropped if
+a host app sends them. The SDK attaches `$surface` and, in a browser,
+`$route` (the current `location.pathname`) to every event.
+
+## Consent and privacy
+
+- The anonymous id is the same opaque per-project reporter token the SDK
+  already uses for reports and sessions. It is never a cookie you set.
+- With `consent: 'required'`, events are held in memory (up to 50) until
+  `setConsent('granted')`. Reloading the page before consent loses them; that
+  is intended.
+- `setConsent` persists to `localStorage` under a per-project key, so a
+  returning visitor keeps their choice.
+- Do Not Track and Global Privacy Control are respected by default; turn that
+  off only if your own policy covers it.
+- Sampling is per person, not per event.
+
+## Batching and delivery
+
+Events are buffered and sent to `POST /v1/sdk/events` when any of these
+happens: the buffer reaches 20 events, the 5-second timer fires, the page is
+hidden (`visibilitychange`) or unloaded (`pagehide`; the client switches to
+`keepalive` during unload). A batch that fails to send is spilled to
+`localStorage` (up to 200 events, 24-hour TTL) and replayed on the next page
+load. The server accepts at most 50 events and 64 KB per request.
+
+Call `identify()` at any point and the next flush carries an `identify`
+pseudo-event with the user id and traits. The server resolves the person and
+back-fills earlier anonymous rows with the same anonymous id. The
+pseudo-event itself is never stored.
+
+## The console: Users & Funnels
+
+Every project gets a **Users & Funnels** page at `/analytics` in the console
+([kensaur.us/mushi-mushi/admin/analytics](https://kensaur.us/mushi-mushi/admin/analytics)):
+
+| Tab | What it shows |
+|---|---|
+| Overview | Event volume, distinct people and top events for the period |
+| Funnels | Ordered steps (e.g. `session_start → checkout_started → checkout_completed`) with conversion between each and a breakdown by a property |
+| Paths | The most common sequences of events people take from a chosen starting event |
+| People | Identified users with their traits, last seen, and their event history |
+| Retention | Cohorts by first-seen week and the share that came back |
+
+Events are retained for **90 days** per project by default
+(`project_settings.events_retention_days`); a cron deletes older rows. The
+per-project switch `product_events_enabled` turns ingest off; the API then
+answers `200` with `accepted: 0` and `reason: "disabled"` so clients do not
+retry.
+
+  Report opens, fix pulls and dispatches on your own project are recorded by
+  the console as events too, so "did the owner see the diagnosis" is a funnel
+  step you can query, not a guess.
+
+## MCP tools
+
+The Mushi MCP server exposes the same data to Cursor, Claude Code and any
+MCP client, scoped to the project of the MCP key:
+
+| Tool | Answers |
+|---|---|
+| `query_funnel` | "Of people who did A, how many did B, then C, in the last N days?" — ordered steps, optional breakdown property |
+| `get_product_events_summary` | Event counts, distinct people and top properties for a period |
+| `get_user_paths` | The most common next steps after a given event |
+
+Ask your agent "where do people drop off between signup and first report?"
+and it calls `query_funnel` with those steps.
+
+## Wire format: `POST /v1/sdk/events`
+
+Auth is the project's SDK API key (the same header as `/v1/sdk/session`).
+CORS is handled by the `/v1/sdk/*` middleware.
+
+```json
+{
+  "anon_id": "rt_7f3a…",
+  "user_id": "usr_42",
+  "user_traits": { "email": "a@example.com", "name": "Ada" },
+  "session_id": "sess_…",
+  "sdk_version": "0.9.0",
+  "surface": "web",
+  "events": [
+    { "name": "identify", "ts": "2026-09-21T09:00:00.000Z", "properties": {} },
+    {
+      "name": "checkout_started",
+      "ts": "2026-09-21T09:00:01.000Z",
+      "properties": { "plan": "pro", "$surface": "web", "$route": "/pricing" },
+      "dedup_key": "optional-idempotency-key"
+    }
+  ]
+}
+```
+
+| Field | Rules |
+|---|---|
+| `anon_id` | ≤ 128 chars, optional |
+| `user_id` / `user_traits` | ≤ 256 chars; traits `email` ≤ 320, `name` ≤ 120, extra keys pass through |
+| `session_id` | ≤ 128 chars, optional |
+| `surface` | one of the seven surfaces above; falls back to `$surface` on the event, then `web` |
+| `events[]` | 1 to 50 items; `name` must match the regex; `ts` is RFC 3339 with offset, defaults to receive time |
+| `dedup_key` | ≤ 128 chars; a duplicate `(project_id, dedup_key)` is ignored, not an error |
+
+Responses:
+
+| Status | Body |
+|---|---|
+| `200` | `{ "ok": true, "data": { "accepted": 2, "dropped": 0 } }` |
+| `200` (ingest off) | `{ "ok": true, "data": { "accepted": 0, "dropped": 2, "reason": "disabled" } }` |
+| `400` | `INVALID_JSON` |
+| `401` | bad or missing API key |
+| `413` | `PAYLOAD_TOO_LARGE` — body over 64 KB |
+| `422` | `INVALID_EVENT_BATCH` with per-field `issues` |
+| `500` | `INSERT_FAILED` — retry with the same `dedup_key`s |
+
+Server-side, the property contract is applied again: reserved `$` keys are
+kept only from a fixed allowlist (`$surface`, `$route`, `$referrer`,
+`$session_id`, `$sdk_version`, `$utm_*`, `$first_touch`, `$ref`), PII-looking
+keys are dropped, and any event whose properties exceed 8 KB is counted in
+`dropped`.
+
+## Mushi's own events
+
+The SDK's vocabulary for Mushi's own funnel lives in
+[`packages/core/src/analytics-taxonomy.ts`](https://github.com/kensaurus/mushi-mushi/blob/master/packages/core/src/analytics-taxonomy.ts):
+`landing_view`, `cta_click`, `signup_completed`, `project_created`,
+`key_minted`, `first_report_received` (the activation event),
+`report_opened`, `fix_context_pulled`, `fix_dispatched`, and the growth-loop
+trio `loop_impression`, `loop_click`, `loop_signup`. It is a worked example of
+the naming rules, not something your app needs to emit.
+
+**Related:** [`@mushi-mushi/web`](/sdks/web) · [`@mushi-mushi/react`](/sdks/react) ·
+[Runtime config](/concepts/runtime-config)

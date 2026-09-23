@@ -4,6 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/orchestrator-interop
 
 ---
 title: 'Connecting your orchestrator (MCP / A2A / REST / AG-UI)'
+description: Connect any agent orchestrator to Mushi — MCP, A2A, REST and AG-UI surfaces for Cursor, Claude, OpenAI Agents, LangGraph, CrewAI and your own agents.
 ---
 
 # Connecting your orchestrator
@@ -33,16 +34,16 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP73 tools / 8 resources / 4 prompts"]
-    REST["REST /v1/admin/*OpenAPI 3.1 at /openapi.jsonadminOrApiKey({ scope: 'mcp:read|write' })"]
-    A2A["A2A v1.0.0 /v1/a2a/taskscreate / get / cancel / SSE subscribe"]
-    AGUI["AG-UI v0.4 SSEfix dispatch streamAPI key OR JWT"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>76 tools / 8 resources / 4 prompts"]
+    REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
+    A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
+    AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
   end
   subgraph Outbound["Outbound from Mushi"]
-    Hooks["HMAC-signed webhooks10 event typesplugin SDK helpers"]
+    Hooks["HMAC-signed webhooks<br/>10 event types<br/>plugin SDK helpers"]
   end
   subgraph Native["Embed inside Mushi"]
-    FA["FixAgent + SandboxProvideropen contract — JSON Schemasat /v1/schemas/*"]
+    FA["FixAgent + SandboxProvider<br/>open contract — JSON Schemas<br/>at /v1/schemas/*"]
   end
   Orch["Your orchestrator"] -->|"call tools"| MCP
   Orch -->|"REST"| REST
@@ -73,7 +74,7 @@ your client:
     "mushi-mushi-hosted": {
       "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
       "headers": {
-        "X-Mushi-Api-Key": "mushi_live_…",
+        "X-Mushi-Api-Key": "mushi_…",
         "X-Mushi-Project-Id": "proj_…",
       },
     },
@@ -81,9 +82,9 @@ your client:
 }
 ```
 
-The full tool catalog (73 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (76 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
-[`MCP tools (generated)`](/sdks/mcp-tools.generated). Tools that move money
+[`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
 `run_nl_query`) require the `mcp:write` scope; everything else is fine on
 `mcp:read`.
@@ -108,7 +109,7 @@ Google's Agent2Agent v1.0.0 spec (March 2026) requires `tasks/{id}` GET
 ```bash
 # Create a Task
 curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks \
-  -H "X-Mushi-Api-Key: mushi_live_…" \
+  -H "X-Mushi-Api-Key: mushi_…" \
   -H "Content-Type: application/json" \
   -d '{
     "skill": "dispatch_fix",
@@ -120,12 +121,12 @@ curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/ta
   }'
 
 # Subscribe to live updates
-curl -N https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks/:subscribe \
-  -H "X-Mushi-Api-Key: mushi_live_…"
+curl -N https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks/<id>:subscribe \
+  -H "X-Mushi-Api-Key: mushi_…"
 
 # Cancel
-curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks/:cancel \
-  -H "X-Mushi-Api-Key: mushi_live_…"
+curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks/<id>:cancel \
+  -H "X-Mushi-Api-Key: mushi_…"
 ```
 
 ### Push notifications (A2A v1.0.0 PushNotificationConfig)
@@ -134,7 +135,7 @@ Pull (SSE) is fine for a long-running orchestrator process. If you'd rather rece
 
 ```bash
 curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks \
-  -H "X-Mushi-Api-Key: mushi_live_…" \
+  -H "X-Mushi-Api-Key: mushi_…" \
   -H "Content-Type: application/json" \
   -d '{
     "skill": "dispatch_fix",
@@ -156,12 +157,12 @@ A Postgres trigger fires on every status change (`queued → working → complet
 ```
 POST https://orchestrator.example.com/a2a/callback
 Content-Type: application/json
-webhook-id: 
+webhook-id: <uuid>
 webhook-timestamp: <unix-secs>
 webhook-signature: v1,<base64-hmac-sha256>      ← signed with `token` (or per-project Vault secret)
 X-Mushi-Event: a2a.task.completed
 X-Mushi-Schema: a2a/v1.0.0/task
-Authorization: Bearer 
+Authorization: Bearer <your token, if provided>
 ```
 
 Pull _and_ push are supported simultaneously — subscribe to the SSE stream AND configure a push URL if you want belt-and-suspenders delivery. Every push attempt (success, error, timeout, skipped) lands in `a2a_push_deliveries` so operators can debug callback failures from the admin UI without grepping logs.
@@ -236,6 +237,7 @@ Browse the full index at `GET /v1/schemas` for shape `{ schemas: [{ name, url, $
 Sealos DevBox, internal corp envs) register at runtime:
 
 ```ts filename="bootstrap.ts"
+import { registerSandboxProvider, type SandboxProvider } from '@mushi-mushi/agents';
 
 const corpProvider: SandboxProvider = {
   name: 'corp-firecracker',
@@ -256,7 +258,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 73 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 76 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |

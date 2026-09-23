@@ -11,5 +11,17 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    // These tests run in ~1 s each on an idle machine, but `turbo run test`
+    // starts a vitest per workspace and under that contention apiFetchScope
+    // and validators were measured past the 5 s default. 30 s is far above
+    // anything here, so a genuinely hung test still fails.
+    //
+    // This covers CPU starvation only. The knock-on failure it used to hide —
+    // a request left in flight by a timed-out test resolving against the next
+    // test's fetch mock — is fixed at the source in apiFetchScope.test.ts,
+    // which now matches each assertion to its own request instead of reading
+    // `mock.calls[0]`. Raising a timeout never fixes cross-test state.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 })

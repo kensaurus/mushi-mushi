@@ -1,10 +1,22 @@
 /**
  * Rolling session replay buffer (rrweb when available, timeline-lite fallback).
  * Lazy-loaded so the core bundle stays under the size budget.
+ *
+ * Where rrweb comes from, in order: the host's `capture.rrweb` loader (the
+ * only route a bundler can see, so the only one that works in a bundled app),
+ * a global `rrweb` from the UMD script tag, then a bare runtime import that
+ * resolves only under an import map or in Node. When none works, `rrweb` mode
+ * degrades to lite replay and says so once in the console.
  */
+
+import { createLogger } from '@mushi-mushi/core'
 
 export interface ReplayCaptureOptions {
   enabled: boolean
+  /** 'lite' never loads rrweb. Default 'rrweb' (with the lite fallback). */
+  mode?: 'rrweb' | 'lite'
+  /** Host-supplied rrweb loader, e.g. `() => import('rrweb')`. */
+  loadRrweb?: () => Promise<unknown>
   maxDurationMs?: number
   redactSelectors?: string[]
 }
@@ -25,8 +37,8 @@ const MAX_EVENTS = 400
 type RrwebRecordOptions = {
   emit: (event: unknown, isCheckout?: boolean) => void
   maskAllInputs?: boolean
-  maskAllText?: boolean
   maskTextSelector?: string
+  blockSelector?: string
   checkoutEveryNms?: number
   sampling?: Record<string, unknown>
 }
@@ -111,16 +123,40 @@ function createLiteReplay(maxMs: number): ReplayCapture {
   }
 }
 
-let rrwebModule: RrwebModule | null = null
+const DEFAULT_REDACT_SELECTORS = ['input[type="password"]', '[data-mushi-redact]']
 
-async function loadRrweb(): Promise<RrwebModule | null> {
+let rrwebModule: RrwebModule | null = null
+let warnedMissingRrweb = false
+
+/** Accept `import('rrweb')` namespaces and CJS-interop `{ default }` shapes alike. */
+function asRrweb(mod: unknown): RrwebModule | null {
+  if (!mod || typeof mod !== 'object') return null
+  const direct = mod as RrwebModule & { default?: RrwebModule }
+  if (typeof direct.record === 'function') return direct
+  if (direct.default && typeof direct.default.record === 'function') return direct.default
+  return null
+}
+
+async function loadRrweb(loader?: () => Promise<unknown>): Promise<RrwebModule | null> {
   if (rrwebModule) return rrwebModule
+  // 1. The host's loader: a dynamic import in the host's own code is the only
+  //    one its bundler sees, so it is the only route that works when bundled.
+  if (typeof loader === 'function') {
+    try {
+      rrwebModule = asRrweb(await loader())
+      if (rrwebModule) return rrwebModule
+    } catch {
+      /* fall through to the other sources */
+    }
+  }
+  // 2. The UMD build from a <script> tag sets a global.
+  rrwebModule = asRrweb((globalThis as { rrweb?: unknown }).rrweb)
+  if (rrwebModule) return rrwebModule
+  // 3. A bare runtime import. It resolves only under an import map or in
+  //    Node; in a bundled browser app it throws, which is caught.
   try {
-    // `rrweb` is an optional dependency resolved only at runtime when the host
-    // app installs it. The specifier is held in a variable so the bundler/TS
-    // treats it as a dynamic (any) import instead of failing to resolve types.
     const specifier = 'rrweb'
-    rrwebModule = (await import(/* @vite-ignore */ specifier)) as RrwebModule
+    rrwebModule = asRrweb(await import(/* @vite-ignore */ specifier))
     return rrwebModule
   } catch {
     return null
@@ -133,8 +169,19 @@ export async function createReplayCapture(opts: ReplayCaptureOptions): Promise<R
   }
 
   const maxMs = opts.maxDurationMs ?? DEFAULT_MAX_MS
-  const rrweb = await loadRrweb()
+  if (opts.mode === 'lite') return createLiteReplay(maxMs)
+
+  const rrweb = await loadRrweb(opts.loadRrweb)
   if (!rrweb?.record) {
+    // The documented `replay: 'rrweb'` option must not silently become
+    // click-only replay: say so once per page, through the SDK logger.
+    if (!warnedMissingRrweb) {
+      warnedMissingRrweb = true
+      createLogger({ scope: 'mushi' }).warn(
+        "capture.replay is 'rrweb' but rrweb could not be loaded, so replay is recording clicks only. " +
+          "Install rrweb and pass capture: { rrweb: () => import('rrweb') }.",
+      )
+    }
     return createLiteReplay(maxMs)
   }
   const record = rrweb.record
@@ -143,7 +190,9 @@ export async function createReplayCapture(opts: ReplayCaptureOptions): Promise<R
   let stopFn: (() => void) | null = null
   let recording = false
 
-  const maskSelectors = ['input[type="password"]', ...(opts.redactSelectors ?? [])]
+  // Host selectors extend the defaults rather than replace them: replay is
+  // continuous, so it keeps the password / data-mushi-redact floor.
+  const redactSelectors = [...new Set([...DEFAULT_REDACT_SELECTORS, ...(opts.redactSelectors ?? [])])]
 
   const stop = () => {
     stopFn?.()
@@ -155,6 +204,19 @@ export async function createReplayCapture(opts: ReplayCaptureOptions): Promise<R
     start() {
       if (recording) return
       recording = true
+      // Options, kept out of the object literal because the unminified build
+      // ships comments written inside expressions (they count against the
+      // size budget):
+      // - maskAllInputs masks every input value.
+      // - maskTextSelector '*' masks rendered DOM text too; without it rrweb
+      //   records every visible label (emails, names) as plaintext. rrweb 2.x
+      //   has no `maskAllText` option (it was silently ignored). Hosts that
+      //   need richer capture can opt out via their own rrweb integration.
+      // - blockSelector: privacy.redactSelectors black elements out of
+      //   screenshots; the replay equivalent is blocking them (a same-size
+      //   placeholder).
+      // - checkoutEveryNms re-emits a full snapshot roughly once per retained
+      //   window, so trimming never leaves incrementals without a base.
       stopFn = record({
         emit(event: unknown) {
           events.push(event)
@@ -165,13 +227,8 @@ export async function createReplayCapture(opts: ReplayCaptureOptions): Promise<R
           trimReplayBuffer(events, maxMs, MAX_EVENTS)
         },
         maskAllInputs: true,
-        // Mask rendered DOM text too — without this, rrweb records every
-        // visible label (emails, names) as plaintext. Hosts that need richer
-        // capture can opt out via their own rrweb integration.
-        maskAllText: true,
-        maskTextSelector: maskSelectors.join(','),
-        // Re-emit a full snapshot roughly once per retained window so trimming
-        // never leaves incrementals without a base snapshot.
+        maskTextSelector: '*',
+        blockSelector: redactSelectors.join(','),
         checkoutEveryNms: maxMs,
         sampling: { mousemove: false, mouseInteraction: true, scroll: 150, media: 800 },
       }) ?? null

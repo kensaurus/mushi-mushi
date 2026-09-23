@@ -8,6 +8,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useRealtimeReload } from '../lib/realtime'
 import { useToast } from '../lib/toast'
+import { trackSelf } from '../lib/track'
 import { Badge,
   Btn,
   Card,
@@ -429,6 +430,7 @@ export function OrganizationSettingsPage() {
       return
     }
     toast.success('Invite sent', `${email} can now join this organization.`)
+    trackSelf('invite_sent', { role })
     setEmail('')
     setNote('')
     setNoteOpen(false)

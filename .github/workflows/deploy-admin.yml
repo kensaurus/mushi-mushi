@@ -137,6 +137,20 @@ jobs:
             exit 1
           fi
 
+      - name: Assert the dogfooding keys are set
+        # The console runs the Mushi SDK against the mushi-self project. When
+        # these were missing the build simply produced a console with no SDK
+        # and the /growth funnel stayed empty — the failure was invisible
+        # until someone asked why the numbers were zero. Fail loudly instead.
+        run: |
+          missing=""
+          [ -z "${{ secrets.MUSHI_SELF_PROJECT_ID }}" ] && missing="$missing MUSHI_SELF_PROJECT_ID"
+          [ -z "${{ secrets.MUSHI_SELF_API_KEY }}" ] && missing="$missing MUSHI_SELF_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing dogfooding secret(s):$missing. The console would build without the Mushi SDK and the company funnel would record nothing. Set them in GitHub Secrets → Actions, or remove this gate deliberately."
+            exit 1
+          fi
+
       - name: Build admin console
         run: pnpm --filter @mushi-mushi/admin build
         env:
@@ -145,6 +159,14 @@ jobs:
           # SEC S1: wire the cloud anon key explicitly so the hardcoded
           # 2091-expiry fallback in apps/admin/src/lib/env.ts is never reached.
           VITE_CLOUD_SUPABASE_ANON_KEY: ${{ secrets.VITE_CLOUD_SUPABASE_ANON_KEY }}
+          # Dogfooding: the console runs the Mushi web SDK against the
+          # mushi-self project (bug reports + Users & Funnels events for the
+          # company growth funnel). Public SDK ingest key by design (ships in
+          # the bundle, report:write scope only). Unset → the SDK is a no-op
+          # and the /growth funnel stays empty. See apps/admin/src/lib/mushi-self.ts.
+          VITE_MUSHI_SELF_PROJECT_ID: ${{ secrets.MUSHI_SELF_PROJECT_ID }}
+          VITE_MUSHI_SELF_API_KEY: ${{ secrets.MUSHI_SELF_API_KEY }}
+          VITE_MUSHI_SELF_API_ENDPOINT: ${{ secrets.MUSHI_SELF_API_ENDPOINT }}
           # CloudFront serves this build under /mushi-mushi/admin/, so all asset URLs
           # and the React Router basename must be prefixed accordingly. Local
           # dev and other deployments leave this unset and serve from /.
@@ -370,6 +392,7 @@ jobs:
               "/mushi-mushi/*" \
               "/mushi-mushi/hosted-mcp*" \
               "/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp*" \
+              "/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp*" \
               "/quickstart/*" \
               "/concepts/*" \
               "/sdks/*" \
