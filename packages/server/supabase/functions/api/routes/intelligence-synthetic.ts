@@ -7,6 +7,7 @@ import { requireFeature, resolveActiveEntitlement } from '../../_shared/entitlem
 import { dbError, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds } from '../shared.ts';
 import { sanitizeRenderedHtml } from '../../_shared/html-sanitize.ts';
 import { log } from '../../_shared/logger.ts';
+import { isJobFailureSuperseded } from './intelligence-priority.ts';
 
 const syntheticTriggerSchema = z.object({
   count: z.number().int().min(1).max(50).optional(),
@@ -180,7 +181,9 @@ export function registerIntelligenceSyntheticRoutes(app: Hono<{ Variables: Varia
       topPriority = 'job_running';
       topPriorityLabel = `Job ${activeJobs[0]!.id.slice(0, 8)}… is ${activeJobs[0]!.status} — digest lands in Reports when complete (typical 20–60s).`;
       topPriorityTo = '/intelligence?tab=pipeline';
-    } else if (latestJob?.status === 'failed') {
+    } else if (latestJob?.status === 'failed' && !isJobFailureSuperseded(latestJob, reports)) {
+      // A failure only leads while no digest has landed since — the weekly
+      // cron writes digests without a job row (intelligence-priority.ts).
       topPriority = 'job_failed';
       topPriorityLabel = latestJob.error ?? 'Last generation failed — check Settings → LLM Keys and retry.';
       topPriorityTo = '/intelligence?tab=pipeline';
