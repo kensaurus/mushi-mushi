@@ -3,7 +3,7 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { resolveLlmKey } from '../../_shared/byok.ts';
-import { dbError, userCanAccessProject } from '../shared.ts';
+import { dbError, callerCanAccessProject } from '../shared.ts';
 import { ingestReport, triggerClassification } from '../helpers.ts';
 import { emitFunnelEvent } from '../../_shared/setup-funnel.ts';
 import { emitProductEvent } from '../../_shared/product-events.ts';
@@ -80,9 +80,8 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
   //         anthropic (BYOK key present) | autofix (feature flag on)
   //
   // Auth: adminOrApiKey({ scope: 'mcp:read' }) — JWT admins and mcp:read API
-  // keys. An API key grants preflight reads on every project its owner can
-  // access (userCanAccessProject), not only the key's bound project — same
-  // owner-wide semantics as other adminOrApiKey routes.
+  // keys. A project-bound key reads only its own project; an org-scoped key
+  // reads any project its owner can access (callerCanAccessProject).
   // ---------------------------------------------------------------------------
   app.get('/v1/admin/projects/:id/preflight', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const projectId = c.req.param('id')!;
@@ -96,7 +95,7 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
       );
     }
 
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     }
@@ -205,7 +204,7 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
         );
       }
 
-      const access = await userCanAccessProject(db, userId, projectId);
+      const access = await callerCanAccessProject(c, db, userId, projectId);
       if (!access.allowed) {
         return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
       }
@@ -234,7 +233,7 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
       );
     }
 
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     }
@@ -268,7 +267,7 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
       );
     }
 
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     }
@@ -312,7 +311,7 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
 
     // Test reports verify the ingest path — anyone with project access can
     // do this (matches what an end-user reporter could do anyway).
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     }
@@ -460,7 +459,7 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
     }
 
     const db = getServiceClient();
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     }

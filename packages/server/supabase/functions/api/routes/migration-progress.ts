@@ -3,7 +3,7 @@ import type { Variables } from '../types.ts'
 
 import { jwtAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
-import { dbError, accessibleProjectIds, userCanAccessProject } from '../shared.ts';
+import { dbError, accessibleProjectIds, callerCanAccessProject } from '../shared.ts';
 import {
   KNOWN_GUIDE_SLUGS,
   isKnownGuideSlug,
@@ -134,7 +134,7 @@ export function registerMigrationProgressRoutes(app: Hono<{ Variables: Variables
     if (slug) query = query.eq('guide_slug', slug);
 
     if (projectFilter.projectId) {
-      const access = await userCanAccessProject(db, userId, projectFilter.projectId);
+      const access = await callerCanAccessProject(c, db, userId, projectFilter.projectId);
       if (!access.allowed) {
         return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
       }
@@ -223,7 +223,7 @@ export function registerMigrationProgressRoutes(app: Hono<{ Variables: Variables
     // project. RLS would also block this, but checking here lets us return
     // a precise 403 instead of a generic policy-denied DB error.
     if (projectId) {
-      const access = await userCanAccessProject(db, userId, projectId);
+      const access = await callerCanAccessProject(c, db, userId, projectId);
       if (!access.allowed) {
         return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
       }

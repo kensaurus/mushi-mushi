@@ -35,7 +35,7 @@ import { withIdempotency } from '../../_shared/idempotency.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, callerProjectIds, userCanAccessProject } from '../shared.ts';
+import { dbError, ownedProjectIds, callerProjectIds, callerCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -112,9 +112,10 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
       //   2. Org-scoped membership (any role can dispatch — same gate as
       //      legacy project_members which didn't role-check either).
       //   3. Per-project membership (legacy multi-collaborator projects).
-      // Centralised in userCanAccessProject so we don't drift from the
-      // other dispatch / read endpoints.
-      const access = await userCanAccessProject(db, userId, body.projectId);
+      // Centralised in callerCanAccessProject so we don't drift from the
+      // other dispatch / read endpoints; a project-bound API key is also held
+      // to its own project there.
+      const access = await callerCanAccessProject(c, db, userId, body.projectId);
       if (!access.allowed) {
         return c.json(
           { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
@@ -293,7 +294,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
       .single();
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
     // Teams v1: owner / org-member / project-member can all read & cancel.
-    const access = await userCanAccessProject(db, userId, job.project_id);
+    const access = await callerCanAccessProject(c, db, userId, job.project_id);
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
     return c.json({ ok: true, data: job });
   });
@@ -323,7 +324,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
     // Teams v1: owner / org-member / project-member can all read & cancel.
-    const access = await userCanAccessProject(db, userId, job.project_id);
+    const access = await callerCanAccessProject(c, db, userId, job.project_id);
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
     // Terminal states can't be cancelled — return 409 so the UI can show a
@@ -429,8 +430,8 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
   // gate locked out third-party orchestrators (LangGraph, OpenAI Agents,
   // CrewAI) that have a valid API key but no Supabase session — see the
   // 2026-05-09 spec-traceability audit. The API-key path still hits
-  // userCanAccessProject below, so a key holder cannot subscribe to a
-  // dispatch from a project they don't own.
+  // callerCanAccessProject below, so a key holder cannot subscribe to a
+  // dispatch outside the key's project.
   // ------------------------------------------------------------
   app.get('/v1/admin/fixes/dispatch/:id/stream', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
@@ -445,7 +446,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
     // Teams v1: owner / org-member / project-member can all read & cancel.
-    const access = await userCanAccessProject(db, userId, job.project_id);
+    const access = await callerCanAccessProject(c, db, userId, job.project_id);
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
     // RFC 7231 / WHATWG EventSource: the browser sends `Last-Event-ID` (note

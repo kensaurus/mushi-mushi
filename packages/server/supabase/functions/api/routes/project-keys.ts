@@ -6,7 +6,7 @@ import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { emitProductEvent } from '../../_shared/product-events.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
-import { dbError, userCanAccessProject } from '../shared.ts';
+import { dbError, callerCanAccessProject } from '../shared.ts';
 
 export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): void {
   // Scopes vocabulary is enforced at the DB level (CHECK constraint from
@@ -88,7 +88,7 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
           error_description: 'projectId is required for JWT-authenticated registrations.',
         }, 400);
       }
-      const access = await userCanAccessProject(db, userId, body.projectId as string);
+      const access = await callerCanAccessProject(c, db, userId, body.projectId as string);
       if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
         return c.json({ error: 'access_denied', error_description: 'Owner or admin required.' }, 403);
       }
@@ -199,7 +199,7 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
 
     // Minting API keys is owner/admin-only (Teams v1: org owner/admin or
     // legacy direct project owner; viewers and members can't issue tokens).
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     }
@@ -279,7 +279,7 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
     const db = getServiceClient();
 
     // Rotating an API key is owner/admin-only.
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     }
@@ -385,7 +385,7 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
     const db = getServiceClient();
 
     // Revoking an API key is owner/admin-only.
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     }

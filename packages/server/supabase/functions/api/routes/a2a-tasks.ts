@@ -70,7 +70,7 @@ import { streamSSE } from 'npm:hono@4/streaming';
 import { adminOrApiKey } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { invokeFixWorker } from '../helpers.ts';
-import { userCanAccessProject } from '../shared.ts';
+import { callerCanAccessProject } from '../shared.ts';
 import { sanitizeSseString, toSseEvent, sseHeartbeat } from '../../_shared/sse.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { childTraceparent, extractInboundTraceparent } from '../../_shared/trace.ts';
@@ -237,7 +237,7 @@ export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void
       }
 
       const db = getServiceClient();
-      const access = await userCanAccessProject(db, userId, projectId);
+      const access = await callerCanAccessProject(c, db, userId, projectId);
       if (!access.allowed) {
         return c.json(
           { error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
@@ -433,7 +433,7 @@ export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void
     const db = getServiceClient();
     const { data: row } = await db.from('fix_dispatch_jobs').select('*').eq('id', id).single();
     if (!row) return c.json({ error: { code: 'NOT_FOUND' } }, 404);
-    const access = await userCanAccessProject(db, userId, row.project_id);
+    const access = await callerCanAccessProject(c, db, userId, row.project_id);
     if (!access.allowed) return c.json({ error: { code: 'FORBIDDEN' } }, 403);
     return c.json(rowToA2ATask(row as FixDispatchRow));
   });
@@ -457,7 +457,7 @@ export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void
       .eq('id', id)
       .single();
     if (!job) return c.json({ error: { code: 'NOT_FOUND' } }, 404);
-    const access = await userCanAccessProject(db, userId, job.project_id);
+    const access = await callerCanAccessProject(c, db, userId, job.project_id);
     if (!access.allowed) return c.json({ error: { code: 'FORBIDDEN' } }, 403);
     if (job.status !== 'queued' && job.status !== 'running') {
       return c.json(
@@ -507,7 +507,7 @@ export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void
     const db = getServiceClient();
     const { data: row } = await db.from('fix_dispatch_jobs').select('*').eq('id', id).single();
     if (!row) return c.json({ error: { code: 'NOT_FOUND' } }, 404);
-    const access = await userCanAccessProject(db, userId, row.project_id);
+    const access = await callerCanAccessProject(c, db, userId, row.project_id);
     if (!access.allowed) return c.json({ error: { code: 'FORBIDDEN' } }, 403);
 
     const lastEventId = c.req.header('last-event-id') ?? c.req.header('Last-Event-ID') ?? null;
