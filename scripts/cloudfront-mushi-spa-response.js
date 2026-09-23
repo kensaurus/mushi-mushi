@@ -39,8 +39,15 @@ function handler(event) {
     // <MarketingFooter />. Without them those icons are blocked and render as
     // broken images. github.com/<org>.png redirects to the avatars host, so
     // both origins must be listed.
+    //
+    // `*.gstatic.com`: the integrations page loads brand favicons from
+    // www.google.com/s2/favicons (allowed) — but that endpoint 301s to
+    // t{0..3}.gstatic.com and CSP re-checks the redirect target, so every
+    // integration card icon was blocked (9 console errors per visit).
+    // PublicIntegrationsPage already learned this and bundles its marks;
+    // ServiceFavicon on the authenticated page still uses the CDN.
     value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://www.google.com https://*.googleusercontent.com https://avatars.githubusercontent.com https://*.kensaur.us https://github.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://kensaur.us https://*.sentry.io https://*.cloud.langfuse.com; frame-src 'none'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'",
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://www.google.com https://*.gstatic.com https://*.googleusercontent.com https://avatars.githubusercontent.com https://*.kensaur.us https://github.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://kensaur.us https://*.sentry.io https://*.cloud.langfuse.com; frame-src 'none'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'",
   };
 
   if (status !== 403 && status !== 404) {

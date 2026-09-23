@@ -78,6 +78,7 @@ import {
   initSessionTracker,
   updateSessionIdentity,
   destroySessionTracker,
+  trackPageView,
 } from '@mushi-mushi/core';
 
 /** Resolve `reports.app_version` from SDK config and captured environment. */
@@ -183,12 +184,28 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   });
 
   // Session tracking — opt-out via trackSessions:false in MushiConfig
+  let unsubPageViewHistory: (() => void) | null = null;
   if ((bootstrapConfig as unknown as Record<string, unknown>)['trackSessions'] !== false) {
     initSessionTracker({
       client: apiClient,
       sdkVersion: MUSHI_SDK_VERSION,
       reporterTokenHash: getReporterToken(bootstrapConfig.projectId) ?? null,
+      // This package owns the history patch (history-patch.ts):
+      // installAutoBreadcrumbs() captures History.prototype.pushState (the
+      // native) and assigns its own wrapper to history.pushState, which
+      // silently discarded core's page-view wrapper — so no SPA page view
+      // was ever recorded from this SDK. Report views through the shared
+      // patch instead of stacking a second wrapper.
+      patchHistory: false,
     });
+    try {
+      unsubPageViewHistory = subscribeHistory({
+        onPush: () => trackPageView(),
+        onPop: () => trackPageView(),
+      });
+    } catch {
+      // History API unavailable (sandboxed iframe) — heartbeats still flow.
+    }
   }
 
   const preFilter = createPreFilter(bootstrapConfig.preFilter);
@@ -1523,6 +1540,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       replayCap = null;
       offlineQueue.stopAutoSync();
       stopReporterInboxPolling();
+      unsubPageViewHistory?.();
+      unsubPageViewHistory = null;
       destroySessionTracker();
       breadcrumbs.clear();
       listeners.clear();

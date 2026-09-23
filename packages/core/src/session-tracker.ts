@@ -14,6 +14,16 @@
  *   - Respects the SDK-level `trackSessions: false` opt-out option.
  *   - Respects a DNT / Global Privacy Control header at the SDK init layer;
  *     callers should check `shouldRespectDnt()` before calling `initSession`.
+ *
+ * SPA page views:
+ *   The history patch below used to decide push-vs-replace with
+ *   `original === history.pushState` *inside* the wrapper — but by the time
+ *   the wrapper runs, `history.pushState` IS the wrapper, so the comparison
+ *   was always false and no SPA page view was ever emitted. Two of five live
+ *   projects had zero `session_page_views` rows across >1,000 sessions each.
+ *   The kind is now decided at wrap time. Hosts that already own a history
+ *   patch (`@mushi-mushi/web`'s shared one) pass `patchHistory: false` and
+ *   call `trackPageView()` themselves, so wrappers never stack.
  */
 
 import { getSessionId } from './session';
@@ -80,6 +90,14 @@ export interface SessionTrackerOptions {
   sdkVersion?: string;
   reporterTokenHash?: string | null;
   userIdHash?: string | null;
+  /**
+   * Install the built-in `history.pushState` / `popstate` patch that emits
+   * `page_view` events. Default `true`. Pass `false` when the host already
+   * owns a history patch and will call `trackPageView()` itself — stacking a
+   * second wrapper on `history.pushState` is exactly how this tracker's page
+   * views got overwritten and silently dropped in `@mushi-mushi/web`.
+   */
+  patchHistory?: boolean;
 }
 
 /**
@@ -127,13 +145,17 @@ export function initSessionTracker(opts: SessionTrackerOptions): void {
     }, { passive: true });
   }
 
-  // 4. page_view on History API navigation (SPA route changes)
-  patchHistoryForPageViews();
+  // 4. page_view on History API navigation (SPA route changes) — unless the
+  //    host owns the history patch and reports page views via trackPageView().
+  if (opts.patchHistory !== false) {
+    patchHistoryForPageViews();
+  }
 }
 
 /**
  * Record a page view manually — call from framework router hooks where the
- * history patch may fire too early (e.g. React Router v7 loader transitions).
+ * history patch may fire too early (e.g. React Router v7 loader transitions),
+ * or from a host that initialised with `patchHistory: false`.
  */
 export function trackPageView(route?: string): void {
   if (!_initialized || !_client) return;
@@ -164,19 +186,26 @@ function patchHistoryForPageViews(): void {
   if (_historyPatched || typeof history === 'undefined') return;
   _historyPatched = true;
 
-  const wrap = (original: History['pushState'] | History['replaceState']) =>
-    function (this: History, ...args: Parameters<typeof original>) {
-      const result = original.apply(this, args);
+  // `isPush` is decided HERE, at wrap time. The previous implementation
+  // compared `original === history.pushState` inside the wrapper, which is
+  // always false once the wrapper itself has been assigned to
+  // `history.pushState` — so page views never fired.
+  const wrap = <T extends History['pushState'] | History['replaceState']>(
+    original: T,
+    isPush: boolean,
+  ): T =>
+    function (this: History, ...args: Parameters<T>) {
+      const result = (original as (...a: Parameters<T>) => void).apply(this, args);
       // pushState navigation = new page view; replaceState = same page, skip
-      if (original === history.pushState) {
+      if (isPush) {
         _pageViewCount += 1;
         send(buildPayload('page_view', { route: currentRoute() }));
       }
       return result;
-    };
+    } as unknown as T;
 
-  history.pushState = wrap(history.pushState);
-  history.replaceState = wrap(history.replaceState);
+  history.pushState = wrap(history.pushState, true);
+  history.replaceState = wrap(history.replaceState, false);
 
   // popstate (back/forward)
   window.addEventListener('popstate', () => {
