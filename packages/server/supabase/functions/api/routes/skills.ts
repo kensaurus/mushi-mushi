@@ -100,7 +100,7 @@ function skillsRoutes() {
 
     const { data: projectRow } = await db()
       .from('projects')
-      .select('id, project_name')
+      .select('id, name')
       .eq('id', projectId)
       .maybeSingle()
 
@@ -175,7 +175,7 @@ function skillsRoutes() {
       data: {
         hasAnyProject: true,
         projectId,
-        projectName: projectRow?.project_name ?? null,
+        projectName: projectRow?.name ?? null,
         catalogTotal: catalogTotal ?? 0,
         activeRuns,
         failedRuns,

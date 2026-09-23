@@ -13,6 +13,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
 import { HEALTH_PROBE_ANTHROPIC_MODEL, HEALTH_PROBE_OPENAI_MODEL } from './models.ts'
+import { isOperatorProject } from './operator-gate.ts'
 
 // Deno global — declared only where consumed (edge functions).
 declare const Deno: { env: { get(name: string): string | undefined } }
@@ -523,12 +524,16 @@ export async function probeIntegration(
 
   // ── slack ─────────────────────────────────────────────────────────────────
   if (kind === 'slack') {
-    // Try per-project vaulted token (from settings), then env fallback
+    // Per-project vaulted token first. The env token is the operator
+    // workspace's bot: only operator-owned projects may fall back to it, or
+    // every tenant's health card would report the operator's workspace name.
     const ref = settings.slack_bot_token_ref
       ? `vault://${settings.slack_bot_token_ref}`
       : null
     let botToken: string | null = await dereferenceMaybeVault(db, ref)
-    if (!botToken) botToken = Deno.env.get('SLACK_BOT_TOKEN') ?? null
+    if (!botToken && (await isOperatorProject(db, projectId))) {
+      botToken = Deno.env.get('SLACK_BOT_TOKEN') ?? null
+    }
 
     if (!botToken) {
       status = 'unknown'

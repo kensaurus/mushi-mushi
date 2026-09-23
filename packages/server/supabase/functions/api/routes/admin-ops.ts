@@ -71,13 +71,13 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     // Use the first owned project as the active context.
     const projectRes = await db
       .from('projects')
-      .select('id, project_name')
+      .select('id, name')
       .in('id', projectIds)
       .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle()
     const pid = projectRes.data?.id ?? projectIds[0]
-    const projectName = projectRes.data?.project_name ?? null
+    const projectName = projectRes.data?.name ?? null
 
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 

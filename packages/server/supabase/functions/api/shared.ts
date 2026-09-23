@@ -180,6 +180,24 @@ export const accessibleProjectIds = _accessibleProjectIds;
 export const ownedProjectIds = _ownedProjectIds;
 
 /**
+ * Report statuses that still wait on a decision (dispatch, dismiss, fix). The
+ * dashboard's triage queue and `GET /v1/admin/reports?status=open` share it so
+ * the "View backlog" link opens the list the panel previewed. Includes the
+ * legacy `pending` / `submitted` spellings that `status=new` already folds in;
+ * excludes `dispatched`, which has a fix in flight rather than a decision owed.
+ */
+export const OPEN_REPORT_STATUSES = [
+  'new',
+  'queued',
+  'pending',
+  'submitted',
+  'classified',
+  'triaged',
+  'grouped',
+  'reopened',
+] as const;
+
+/**
  * Full accessible project set for enumeration endpoints (project list,
  * setup/switcher, org-wide stats).
  *
@@ -272,7 +290,6 @@ export async function userCanAccessProject(
 export interface OwnedProjectRef {
   id: string;
   name?: string | null;
-  project_name?: string | null;
   organization_id?: string | null;
   organization_role?: string | null;
 }
