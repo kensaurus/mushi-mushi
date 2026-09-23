@@ -43,13 +43,13 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
 
     const projectRes = await db
       .from('projects')
-      .select('id, project_name')
+      .select('id, name')
       .in('id', projectIds)
       .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle()
     const pid = projectRes.data?.id ?? projectIds[0]
-    const projectName = projectRes.data?.project_name ?? null
+    const projectName = projectRes.data?.name ?? null
 
     const todayStart = new Date()
     todayStart.setUTCHours(0, 0, 0, 0)

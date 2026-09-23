@@ -111,7 +111,7 @@ export function registerCodeHealthRoutes(app: Hono<{ Variables: Variables }>): v
     if ('response' in resolved) return resolved.response
     const { project } = resolved
     const projectId = project.id as string
-    const projectName = (project.project_name as string | null) ?? null
+    const projectName = (project.name as string | null) ?? null
 
     const { data: latestRun } = await db
       .from('gate_runs')

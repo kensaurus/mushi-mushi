@@ -13,6 +13,7 @@ import {
   resolveOwnedProject,
   scopedOwnedProjectIds,
   parseUuidParam,
+  OPEN_REPORT_STATUSES,
 } from '../shared.ts';
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts';
 import { postReporterReply, computeTwoWayHealth } from '../../_shared/reporter-comms.ts';
@@ -318,7 +319,10 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       // until the backfill migration has run on every environment.
       const legacyClassified = new Set(['classified', 'triaged', 'grouped', 'dispatched']);
       const legacyFixed = new Set(['fixed', 'resolved', 'completed']);
-      if (status === 'classified') query = query.in('status', [...legacyClassified]);
+      // `open`: everything still waiting on a decision — the same set as the
+      // dashboard's triage queue (dashboard.ts openReports).
+      if (status === 'open') query = query.in('status', [...OPEN_REPORT_STATUSES]);
+      else if (status === 'classified') query = query.in('status', [...legacyClassified]);
       else if (status === 'fixed') query = query.in('status', [...legacyFixed]);
       else if (status === 'new') query = query.in('status', ['new', 'queued', 'pending', 'submitted']);
       else query = query.eq('status', status);

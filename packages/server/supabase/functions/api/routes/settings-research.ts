@@ -21,6 +21,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 import { validateFixBranchTemplate } from '../../_shared/github-pr.ts';
+import { isOperatorProject } from '../../_shared/operator-gate.ts';
 import {
   byokKeyIdSchema,
   type ByokProvider as PooledByokProvider,
@@ -30,6 +31,33 @@ import {
   probeByokKey,
   validateOpenAiBaseUrl,
 } from '../../_shared/byok-validation.ts';
+
+// ── Slack bot token per project ──────────────────────────────────────────────
+// A project's own vaulted install (the "Add to Slack" OAuth flow) always wins.
+// The env SLACK_BOT_TOKEN is the operator workspace's bot, so only projects the
+// operator owns may fall back to it: for any other project it listed the
+// operator's channels in the picker and posted test messages into the
+// operator's channel.
+async function resolveProjectSlackBot(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+): Promise<{ token: string; source: 'project' | 'operator' } | null> {
+  const { data: ps } = await db
+    .from('project_settings')
+    .select('slack_bot_token_ref')
+    .eq('project_id', projectId)
+    .maybeSingle();
+  const tokenRef = (ps as Record<string, unknown> | null)?.slack_bot_token_ref as string | null;
+  if (tokenRef) {
+    const { data } = await db.rpc('vault_get_secret', { secret_id: tokenRef });
+    if (typeof data === 'string' && data) return { token: data, source: 'project' };
+  }
+  const envToken = Deno.env.get('SLACK_BOT_TOKEN');
+  if (envToken && (await isOperatorProject(db, projectId))) {
+    return { token: envToken, source: 'operator' };
+  }
+  return null;
+}
 
 // ── Slack OAuth state signing ────────────────────────────────────────────────
 // The OAuth `state` parameter is round-tripped through the user's browser and
@@ -568,8 +596,11 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const webhookUrl = (settings as Record<string, unknown> | null)?.slack_webhook_url as
       | string
       | null;
-    const botToken = Deno.env.get('SLACK_BOT_TOKEN');
-    const globalChannel = Deno.env.get('SLACK_CHANNEL_ID');
+    const slackBot = await resolveProjectSlackBot(db, project.id);
+    const botToken = slackBot?.token ?? null;
+    // The operator's default channel only backs the operator's own bot.
+    const globalChannel =
+      slackBot?.source === 'operator' ? (Deno.env.get('SLACK_CHANNEL_ID') ?? null) : null;
 
     const targetChannel = channelId || globalChannel;
     if (!targetChannel && !webhookUrl) {
@@ -622,12 +653,16 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       return c.json({ ok: true });
     }
 
+    // A channel ID is set but no bot can post to it.
     return c.json(
       {
         ok: false,
-        error: { code: 'NO_SLACK_CONFIG', message: 'SLACK_BOT_TOKEN env var not set.' },
+        error: {
+          code: 'NO_SLACK_CONFIG',
+          message: 'No Slack bot is connected for this project. Add to Slack, or use an incoming webhook URL.',
+        },
       },
-      500,
+      400,
     );
   });
 
@@ -676,6 +711,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'chat:write.public',
       'commands',
       'channels:read',
+      // The channel picker lists private channels the bot was invited to.
+      'groups:read',
       'users:read',
     ].join(',');
     const url = `https://slack.com/oauth/v2/authorize?client_id=${encodeURIComponent(clientId)}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`;
@@ -764,36 +801,35 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if ('response' in resolvedProject) return resolvedProject.response;
     const projectId = resolvedProject.project.id;
 
-    // Resolve bot token: per-project vault ref first, then env fallback
-    let botToken: string | null = null;
-    const { data: ps } = await db
-      .from('project_settings')
-      .select('slack_bot_token_ref')
-      .eq('project_id', projectId)
-      .maybeSingle();
-    const tokenRef = (ps as Record<string, unknown> | null)?.slack_bot_token_ref as string | null;
-    if (tokenRef) {
-      const { data } = await db.rpc('vault_get_secret', { secret_id: tokenRef });
-      botToken = typeof data === 'string' ? data : null;
-    }
-    if (!botToken) botToken = Deno.env.get('SLACK_BOT_TOKEN') ?? null;
+    // The project's own install, or the operator bot for operator-owned
+    // projects only (resolveProjectSlackBot).
+    const botToken = (await resolveProjectSlackBot(db, projectId))?.token ?? null;
     if (!botToken)
       return c.json(
         { ok: false, error: { code: 'NO_BOT_TOKEN', message: 'Add to Slack first.' } },
         400,
       );
 
-    const res = await fetch(
-      'https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=200&exclude_archived=true',
-      {
-        headers: { Authorization: `Bearer ${botToken}` },
-      },
-    );
-    const data = (await res.json()) as {
+    type ChannelList = {
       ok: boolean;
       error?: string;
+      needed?: string;
       channels?: Array<{ id: string; name: string; is_private: boolean }>;
     };
+    const listChannels = async (types: string): Promise<ChannelList> => {
+      const res = await fetch(
+        `https://slack.com/api/conversations.list?types=${types}&limit=200&exclude_archived=true`,
+        { headers: { Authorization: `Bearer ${botToken}` } },
+      );
+      return (await res.json()) as ChannelList;
+    };
+    let data = await listChannels('public_channel,private_channel');
+    // Private channels need groups:read on top of channels:read. An install
+    // holding only channels:read can still list public channels, so degrade
+    // instead of failing the whole picker.
+    if (!data.ok && data.error === 'missing_scope' && data.needed?.includes('groups:read')) {
+      data = await listChannels('public_channel');
+    }
     if (!data.ok) {
       const errCode = data.error ?? 'SLACK_API_ERROR';
       const isScopeError = errCode === 'missing_scope';
@@ -881,6 +917,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           kind as Parameters<typeof probeIntegration>[0],
           db,
           settings,
+          {},
+          pid,
         );
         return c.json({ ok: true, data: { status: result.status, detail: result.detail ?? null } });
       } catch (err) {
@@ -2436,7 +2474,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       data: {
         hasAnyProject: true,
         projectId: pid,
-        projectName: project.project_name ?? null,
+        projectName: project.name ?? null,
         projectCount: projectIds.length,
         sessions,
         snippets,

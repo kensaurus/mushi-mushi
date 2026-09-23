@@ -128,7 +128,7 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
 
     const { data: project } = await db
       .from('projects')
-      .select('id, project_name')
+      .select('id, name')
       .eq('id', pid)
       .maybeSingle();
 
@@ -231,7 +231,7 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
       data: {
         hasAnyProject: true,
         projectId: pid,
-        projectName: project?.project_name ?? null,
+        projectName: project?.name ?? null,
         totalStories: stories.length,
         enabledStories,
         disabledStories,

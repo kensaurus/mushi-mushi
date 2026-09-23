@@ -160,7 +160,7 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
       data: {
         hasAnyProject: true,
         projectId: pid,
-        projectName: activeProject.project_name ?? null,
+        projectName: activeProject.name ?? null,
         projectCount: projectIds.length,
         openFindings,
         criticalOpen,

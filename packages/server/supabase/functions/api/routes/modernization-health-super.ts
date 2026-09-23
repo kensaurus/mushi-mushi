@@ -272,7 +272,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
       .maybeSingle();
     const routingConfig = (routingRow?.config ?? {}) as Record<string, unknown>;
 
-    const probe = await probeIntegration(kind, db, settings ?? {}, routingConfig);
+    const probe = await probeIntegration(kind, db, settings ?? {}, routingConfig, projectId);
 
     await db.from('integration_health_history').insert({
       project_id: projectId,
