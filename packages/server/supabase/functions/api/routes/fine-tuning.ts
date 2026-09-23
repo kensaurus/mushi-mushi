@@ -5,7 +5,7 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, callerProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
+import { dbError, callerProjectIds, resolveOwnedProject, callerCanAccessProject } from '../shared.ts';
 
 export function registerFineTuningRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/fine-tuning', jwtAuth, async (c) => {
@@ -69,7 +69,7 @@ export function registerFineTuningRoutes(app: Hono<{ Variables: Variables }>): v
 
     // Fine-tuning state transitions are mutations — require an
     // owner/admin role on the project's org (or legacy direct ownership).
-    const access = await userCanAccessProject(db, userId, job.project_id);
+    const access = await callerCanAccessProject(c, db, userId, job.project_id);
     if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
     }
@@ -134,7 +134,7 @@ export function registerFineTuningRoutes(app: Hono<{ Variables: Variables }>): v
 
     // Fine-tuning state transitions are mutations — require an
     // owner/admin role on the project's org (or legacy direct ownership).
-    const access = await userCanAccessProject(db, userId, job.project_id);
+    const access = await callerCanAccessProject(c, db, userId, job.project_id);
     if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
     }
@@ -192,7 +192,7 @@ export function registerFineTuningRoutes(app: Hono<{ Variables: Variables }>): v
 
     // Fine-tuning state transitions are mutations — require an
     // owner/admin role on the project's org (or legacy direct ownership).
-    const access = await userCanAccessProject(db, userId, job.project_id);
+    const access = await callerCanAccessProject(c, db, userId, job.project_id);
     if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
     }
@@ -327,7 +327,7 @@ export function registerFineTuningRoutes(app: Hono<{ Variables: Variables }>): v
 
     // Fine-tuning state transitions are mutations — require an
     // owner/admin role on the project's org (or legacy direct ownership).
-    const access = await userCanAccessProject(db, userId, job.project_id);
+    const access = await callerCanAccessProject(c, db, userId, job.project_id);
     if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
     }
@@ -398,7 +398,7 @@ export function registerFineTuningRoutes(app: Hono<{ Variables: Variables }>): v
 
     // Fine-tuning state transitions are mutations — require an
     // owner/admin role on the project's org (or legacy direct ownership).
-    const access = await userCanAccessProject(db, userId, job.project_id);
+    const access = await callerCanAccessProject(c, db, userId, job.project_id);
     if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
     }
@@ -448,7 +448,7 @@ export function registerFineTuningRoutes(app: Hono<{ Variables: Variables }>): v
 
     // Fine-tuning state transitions are mutations — require an
     // owner/admin role on the project's org (or legacy direct ownership).
-    const access = await userCanAccessProject(db, userId, job.project_id);
+    const access = await callerCanAccessProject(c, db, userId, job.project_id);
     if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
     }
@@ -483,7 +483,7 @@ export function registerFineTuningRoutes(app: Hono<{ Variables: Variables }>): v
 
     // Fine-tuning state transitions are mutations — require an
     // owner/admin role on the project's org (or legacy direct ownership).
-    const access = await userCanAccessProject(db, userId, job.project_id);
+    const access = await callerCanAccessProject(c, db, userId, job.project_id);
     if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
     }

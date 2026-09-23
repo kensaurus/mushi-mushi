@@ -42,7 +42,7 @@ import { jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { log } from '../../_shared/logger.ts'
-import { userCanAccessProject } from '../shared.ts'
+import { callerCanAccessProject } from '../shared.ts'
 import { claimIpRateLimit, extractClientIp } from './cli-auth.ts'
 import { evaluateTokenDelivery } from '../../_shared/cli-auth-helpers.ts'
 import {
@@ -321,7 +321,7 @@ export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): voi
     }
 
     // Minting keys is owner/admin-only — same gate as POST /v1/admin/projects/:id/keys.
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
     }

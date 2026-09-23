@@ -3,7 +3,7 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
-import { dbError, callerProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
+import { dbError, callerProjectIds, resolveOwnedProject, callerCanAccessProject } from '../shared.ts';
 import { buildImportEdges, detectExploreLayer, getProjectCodebaseScope } from '../../_shared/codebase-understand.ts';
 import { pathMatchesScope } from '../../_shared/codebase-scope.ts';
 import { unverifiedGithubInstallsAllowed } from '../../_shared/github-install-trust.ts';
@@ -111,7 +111,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
 
     // Enabling codebase indexing wires GitHub webhooks + secrets — restrict
     // to owner/admin (Teams v1 includes org owner/admin).
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
       return c.json(
         { ok: false, error: { code: 'FORBIDDEN', message: 'Owner or admin access required' } },
@@ -346,7 +346,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
       return c.json(
         { ok: false, error: { code: 'FORBIDDEN', message: 'Owner or admin access required' } },
@@ -400,7 +400,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
 
     // Read-only stats — any role on the project (Teams v1 includes
     // org-members) can view.
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json(
         { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
@@ -649,7 +649,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     const userId = c.get('userId') as string
     const db = getServiceClient()
 
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
     }
@@ -838,7 +838,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       )
     }
 
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
     }

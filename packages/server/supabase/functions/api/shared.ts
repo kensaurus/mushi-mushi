@@ -13,6 +13,7 @@ import {
   ownedProjectIds as _ownedProjectIds,
 } from '../_shared/project-access.ts';
 import { isUuid } from './ids.ts';
+import { boundKeyTargetsOtherProject } from '../_shared/bound-key.ts';
 import {
   type ApiErrorCode,
   SAFE_DB_MESSAGE,
@@ -285,6 +286,24 @@ export async function userCanAccessProject(
   if (projRole) return { allowed: true, role: projRole };
 
   return { allowed: false, role: null };
+}
+
+/**
+ * {@link userCanAccessProject} for the current request. API keys authenticate
+ * as their owner, so a project-bound key must also be aimed at its own
+ * project (_shared/bound-key.ts). Use this in routes; use
+ * userCanAccessProject only where there is no request context.
+ */
+export async function callerCanAccessProject(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  projectId: string,
+): ReturnType<typeof userCanAccessProject> {
+  if (boundKeyTargetsOtherProject(c.get('authMethod'), c.get('projectId'), projectId)) {
+    return { allowed: false, role: null };
+  }
+  return userCanAccessProject(db, userId, projectId);
 }
 
 export interface OwnedProjectRef {
