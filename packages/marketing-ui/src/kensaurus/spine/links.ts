@@ -35,6 +35,12 @@ export const STAMP_ART_URL = 'https://kensaur.us/account/stamps/'
 export type StampInk = 'current' | 'rose' | 'amber'
 
 const STORE_PLATFORMS: readonly KensaurusPlatform[] = ['ios', 'android', 'web']
+/**
+ * An SDK is something developers install, and a physical entry is a real
+ * place. Neither is an app someone opens from inside another app, even when
+ * it has a web page, so neither is cross-promoted.
+ */
+const NON_APP_PLATFORMS: readonly KensaurusPlatform[] = ['sdk', 'physical']
 
 export interface GoLinkOptions {
   /** The app the link is shown in (attribution source). */
@@ -174,7 +180,9 @@ export function sealArtUrl(ink: StampInk = 'current'): string {
 
 /**
  * Apps worth cross-promoting from `idOrAlias`: every manifest app that ships
- * on a store or the web, excluding the app itself and the hub entry.
+ * on a store or the web, excluding the app itself, the hub entry, and
+ * anything that is not an app (SDKs, physical places). The hub's own
+ * portfolio lists everything; an app's "more apps" row lists only apps.
  */
 export function siblings(idOrAlias: string): readonly KensaurusApp[] {
   const self = canonicalAppId(idOrAlias)
@@ -182,6 +190,7 @@ export function siblings(idOrAlias: string): readonly KensaurusApp[] {
     (app) =>
       app.id !== self &&
       app.role !== 'hub' &&
-      app.platforms.some((platform) => STORE_PLATFORMS.includes(platform)),
+      app.platforms.some((platform) => STORE_PLATFORMS.includes(platform)) &&
+      !app.platforms.some((platform) => NON_APP_PLATFORMS.includes(platform)),
   )
 }
