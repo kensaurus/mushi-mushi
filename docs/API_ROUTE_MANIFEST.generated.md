@@ -2,15 +2,15 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-09-12 · **541** routes.
+> Generated: 2026-09-23 · **543** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 95 |
+| `adminOrApiKey` | 96 |
 | `apiKeyAuth` | 46 |
-| `jwtAuth` | 333 |
+| `jwtAuth` | 334 |
 | `jwtOrApiKey` | 3 |
 | `unknown` | 64 |
 
@@ -249,6 +249,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:id/codebase/explore` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-codebase.ts` |
 | GET | `/v1/admin/projects/:id/codebase/impact` | `unknown` | `packages/server/supabase/functions/api/routes/codebase-understand.ts` |
 | GET | `/v1/admin/projects/:id/codebase/knowledge/graph` | `unknown` | `packages/server/supabase/functions/api/routes/codebase-understand.ts` |
+| POST | `/v1/admin/projects/:id/codebase/rotate-secret` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-codebase.ts` |
 | POST | `/v1/admin/projects/:id/codebase/search` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/project-codebase.ts` |
 | GET | `/v1/admin/projects/:id/codebase/settings` | `unknown` | `packages/server/supabase/functions/api/routes/codebase-understand.ts` |
 | PATCH | `/v1/admin/projects/:id/codebase/settings` | `unknown` | `packages/server/supabase/functions/api/routes/codebase-understand.ts` |
@@ -259,6 +260,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:id/codebase/wiki/sources` | `unknown` | `packages/server/supabase/functions/api/routes/codebase-understand.ts` |
 | POST | `/v1/admin/projects/:id/codebase/wiki/sources` | `unknown` | `packages/server/supabase/functions/api/routes/codebase-understand.ts` |
 | GET | `/v1/admin/projects/:id/evolution-history` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/evolution.ts` |
+| POST | `/v1/admin/projects/:id/fixes/dry-run` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
 | DELETE | `/v1/admin/projects/:id/identity-secret` | `jwtAuth` | `packages/server/supabase/functions/api/routes/identity-secret.ts` |
 | GET | `/v1/admin/projects/:id/identity-secret` | `jwtAuth` | `packages/server/supabase/functions/api/routes/identity-secret.ts` |
 | POST | `/v1/admin/projects/:id/identity-secret` | `jwtAuth` | `packages/server/supabase/functions/api/routes/identity-secret.ts` |

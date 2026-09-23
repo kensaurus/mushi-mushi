@@ -299,14 +299,48 @@ app.use('/v1/public/*', cors({ origin: '*' }));
 app.use('/.well-known/*', cors({ origin: '*' }));
 app.use('/health', cors({ origin: '*' }));
 
+// Every header apps/admin's apiFetch stamps on EVERY request (supabase.ts):
+// the tenant scope pair, its legacy alias, the correlation id and the
+// idempotency key. Browsers name all of them in the preflight, so any cors()
+// entry a console page can reach must allow the whole set or the OPTIONS
+// fails with "Request header field x-request-id is not allowed" — which the
+// page only ever sees as `TypeError: Failed to fetch`, reading like an
+// outage. Centralised here, above the FIRST cors() that needs it (the tester
+// and /v1/me entries below are reached from the console's Tester portal), so
+// a new admin-side header is added in one place instead of drifting across
+// every entry.
+const ADMIN_ALLOWED_HEADERS = [
+  'Content-Type',
+  'Authorization',
+  'X-Mushi-Project-Id',
+  'X-Mushi-Org-Id',
+  // Legacy alias stamped alongside X-Mushi-Org-Id by apps/admin apiFetch.
+  // Omitting it fails the whole OPTIONS with "x-org-id is not allowed" —
+  // CLI device approve and every admin page went dark that way once.
+  'x-org-id',
+  'X-Request-Id',
+  'Idempotency-Key',
+];
+
+/** Browser-visible response headers for admin apiFetch correlation. */
+const ADMIN_EXPOSE_HEADERS = ['X-Request-Id'];
+
+/** Tracing headers the SDK widget adds on top of the console's set. */
+const WIDGET_TRACE_HEADERS = ['baggage', 'sentry-trace'];
+
 // Community tester endpoints: called directly from the SDK widget, which runs
-// on arbitrary host app domains. Must be CORS-open so preflight succeeds.
-// Auth is enforced per-route via jwtAuth middleware — CORS and auth are orthogonal.
+// on arbitrary host app domains, AND from the console's own Tester portal
+// (the Portal switch in the sidebar). Must be CORS-open so preflight
+// succeeds, and must allow the console's headers: with only the widget's
+// four listed, /v1/me/tester-status rejected the console's X-Request-Id
+// preflight and every Tester page rendered "Could not load your tester
+// profile — Failed to fetch". Auth is enforced per-route via jwtAuth
+// middleware — CORS and auth are orthogonal.
 app.use(
   '/v1/tester/*',
   cors({
     origin: '*',
-    allowHeaders: ['Content-Type', 'Authorization', 'baggage', 'sentry-trace'],
+    allowHeaders: [...ADMIN_ALLOWED_HEADERS, ...WIDGET_TRACE_HEADERS],
     allowMethods: ['GET', 'POST', 'OPTIONS'],
   }),
 );
@@ -314,7 +348,7 @@ app.use(
   '/v1/me/*',
   cors({
     origin: '*',
-    allowHeaders: ['Content-Type', 'Authorization', 'baggage', 'sentry-trace'],
+    allowHeaders: [...ADMIN_ALLOWED_HEADERS, ...WIDGET_TRACE_HEADERS],
     allowMethods: ['GET', 'OPTIONS'],
   }),
 );
@@ -355,30 +389,9 @@ const MIGRATIONS_PROGRESS_ORIGINS = Array.from(
   new Set([...ADMIN_ORIGIN_ALLOWLIST, ...DOCS_ORIGIN_ALLOWLIST]),
 );
 
-// Canonical header set for any admin-surfaced endpoint. Whenever apps/admin
-// calls apiFetch the browser's preflight asks for this exact set; missing one
-// here drops the preflight and the FE surfaces a "Failed to fetch" toast that
-// reads as a network outage but is really a CORS misconfig. Centralising the
-// list means a new admin-side header gets added in ONE place instead of
-// drifting across every cors() entry below. Declared here (above the first
-// cors() that uses it) to dodge any TDZ pitfall in the module-init path.
-const ADMIN_ALLOWED_HEADERS = [
-  'Content-Type',
-  'Authorization',
-  'X-Mushi-Project-Id',
-  'X-Mushi-Org-Id',
-  // Legacy alias stamped alongside X-Mushi-Org-Id by apps/admin apiFetch
-  // (supabase.ts). Browsers list every requested header in the preflight;
-  // omitting this alias fails the whole OPTIONS with
-  // "Request header field x-org-id is not allowed" — which surfaces as
-  // TypeError: Failed to fetch on CLI device approve + every admin page.
-  'x-org-id',
-  'X-Request-Id',
-  'Idempotency-Key',
-];
-
-/** Browser-visible response headers for admin apiFetch correlation. */
-const ADMIN_EXPOSE_HEADERS = ['X-Request-Id'];
+// ADMIN_ALLOWED_HEADERS / ADMIN_EXPOSE_HEADERS are declared further up, above
+// the /v1/tester and /v1/me entries — the first cors() entries the console's
+// apiFetch reaches — so the whole file shares one list (and no TDZ pitfall).
 
 app.use(
   '/v1/admin/migrations/*',

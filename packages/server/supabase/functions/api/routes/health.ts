@@ -180,11 +180,16 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
         .gte('created_at', since)
         .order('created_at', { ascending: false })
         .limit(500),
+      // Latest row per job (migration 20260923000000). The previous read —
+      // the 100 most recent rows overall — spans ~40 minutes because three
+      // jobs run every minute, so judge-batch, intelligence-report and
+      // data-retention never appeared and were counted as stale: a false
+      // "3 scheduled jobs missed their expected run time" warning on the
+      // dashboard while all three ran on schedule.
       db
-        .from('cron_runs')
+        .from('cron_runs_latest')
         .select('job_name, status, started_at')
-        .order('started_at', { ascending: false })
-        .limit(100),
+        .in('job_name', [...KNOWN_JOBS]),
       db
         .from('llm_invocations')
         .select('created_at')
@@ -454,11 +459,18 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
 
   app.get('/v1/admin/health/cron', jwtAuth, async (c) => {
     const db = getServiceClient();
-    const { data: runs } = await db
-      .from('cron_runs')
-      .select('*')
-      .order('started_at', { ascending: false })
-      .limit(100);
+    // Two reads. `cron_runs_latest` (one row per job_name, migration
+    // 20260923000000) is the source of truth for lastRun / lastStatus /
+    // staleness. The 100 most recent rows overall feed the success-rate and
+    // duration aggregates plus the `recent` list. The latter alone used to
+    // drive everything, and because three jobs run every minute that window
+    // is ~40 minutes — judge-batch (nightly), intelligence-report (weekly)
+    // and data-retention (daily) never made it in and the console reported
+    // all three as "never run" while they ran on schedule.
+    const [{ data: latestRows }, { data: runs }] = await Promise.all([
+      db.from('cron_runs_latest').select('job_name, status, started_at'),
+      db.from('cron_runs').select('*').order('started_at', { ascending: false }).limit(100),
+    ]);
 
     const byJob: Record<
       string,
@@ -490,6 +502,20 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
     const now = Date.now();
     const rowsOrEmpty = runs ?? [];
 
+    // Seed every job from its latest row first, so a job absent from the
+    // recent window still reports its real lastRun instead of `never`.
+    for (const r of latestRows ?? []) {
+      byJob[r.job_name] = {
+        lastRun: r.started_at,
+        lastStatus: r.status,
+        successRate: r.status === 'success' ? 1 : 0,
+        avgDurationMs: 0,
+        runs: 0,
+        stalenessMinutes: null,
+        staleness: 'never',
+      };
+    }
+
     for (const r of rowsOrEmpty) {
       byJob[r.job_name] ??= {
         lastRun: null,
@@ -510,7 +536,9 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
     for (const job of Object.keys(byJob)) {
       const jobRuns = rowsOrEmpty.filter((r) => r.job_name === job);
       const successes = jobRuns.filter((r) => r.status === 'success').length;
-      byJob[job].successRate = jobRuns.length > 0 ? successes / jobRuns.length : 0;
+      // A job outside the recent window only has its seeded latest-run
+      // status; keep that rather than reporting a 0% success rate.
+      if (jobRuns.length > 0) byJob[job].successRate = successes / jobRuns.length;
       const durations = jobRuns.map((r) => r.duration_ms ?? 0).filter((d) => d > 0);
       byJob[job].avgDurationMs =
         durations.length > 0
