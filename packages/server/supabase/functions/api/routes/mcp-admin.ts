@@ -379,16 +379,16 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
         )
       }
 
-      // JWT callers: verify ownership
-      if (authMethod === 'jwt') {
-        const userId = c.get('userId') as string
-        const ownedIds = await callerProjectIds(c, db, userId)
-        if (!ownedIds.includes(targetProjectId)) {
-          return c.json(
-            { ok: false, error: { code: 'NOT_FOUND', message: 'Project not found.' } },
-            404,
-          )
-        }
+      // Every caller — JWT and org-scoped keys (no bound project) alike —
+      // must be able to reach the project. Org-scoped keys previously skipped
+      // both checks and could read any project's logs by id.
+      const userId = c.get('userId') as string
+      const reachable = await callerProjectIds(c, db, userId)
+      if (!reachable.includes(targetProjectId)) {
+        return c.json(
+          { ok: false, error: { code: 'NOT_FOUND', message: 'Project not found.' } },
+          404,
+        )
       }
 
       const rawLimit = parseInt(c.req.query('limit') ?? '50', 10)

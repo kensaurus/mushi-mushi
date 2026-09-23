@@ -6,6 +6,7 @@ import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.t
 import { AguiEmitter } from '../../_shared/agui.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
+import { unverifiedGithubInstallsAllowed } from '../../_shared/github-install-trust.ts';
 import { reportError } from '../../_shared/sentry.ts';
 import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import {
@@ -1478,6 +1479,18 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         setupAction,
       })
       return c.redirect(`${adminBase}/?github_installed=1`, 302)
+    }
+
+    // Neither the installation id nor the state is authenticated here, so the
+    // binding is refused unless this is a single-tenant install that opted in
+    // (see _shared/github-install-trust.ts).
+    if (!unverifiedGithubInstallsAllowed()) {
+      log.warn('refused unverified GitHub App installation binding', {
+        scope: 'github-app-callback',
+        installationId,
+        setupAction,
+      })
+      return c.redirect(`${adminBase}/integrations/config?github_error=install_unverified`, 302)
     }
 
     const db = getServiceClient()

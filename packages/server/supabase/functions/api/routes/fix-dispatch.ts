@@ -122,6 +122,24 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
         );
       }
 
+      // The report must belong to the project being dispatched for. Without
+      // this, a member of one project could queue a fix for another tenant's
+      // report: fix-worker loads the report by id and would feed its contents
+      // into a PR on the caller's repo and flip its status.
+      const { data: ownReport, error: reportErr } = await db
+        .from('reports')
+        .select('id')
+        .eq('id', body.reportId)
+        .eq('project_id', body.projectId)
+        .maybeSingle();
+      if (reportErr) return dbError(c, reportErr);
+      if (!ownReport) {
+        return c.json(
+          { ok: false, error: { code: 'REPORT_NOT_FOUND', message: 'Report not found in this project' } },
+          404,
+        );
+      }
+
       const { data: settings, error: settingsErr } = await db
         .from('project_settings')
         .select('autofix_enabled')

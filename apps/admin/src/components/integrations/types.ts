@@ -248,7 +248,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     fields: [
       { name: 'sentry_org_slug', label: 'Org slug', placeholder: 'my-company', help: 'The segment after sentry.io/organizations/ in your Sentry URL.', required: true, helpId: 'integrations.sentry.org_slug', validator: 'slug' },
       { name: 'sentry_project_slug', label: 'Project slug', placeholder: 'web-app', help: 'Optional — narrows event search to one project (faster enrichment).', helpId: 'integrations.sentry.project_slug', validator: 'slug' },
-      { name: 'sentry_auth_token_ref', label: 'Auth token', placeholder: 'sntrys_… or sntryu_… (or vault://id)', type: 'password', help: 'User auth token with project:read + event:read. Create at sentry.io/settings/account/api/auth-tokens/.', required: true, helpId: 'integrations.sentry.auth_token', validator: 'token' },
+      { name: 'sentry_auth_token_ref', label: 'Auth token', placeholder: 'sntrys_… or sntryu_…', type: 'password', help: 'User auth token with project:read + event:read. Create at sentry.io/settings/account/api/auth-tokens/.', required: true, helpId: 'integrations.sentry.auth_token', validator: 'token' },
       { name: 'sentry_dsn', label: 'DSN (optional)', placeholder: 'https://abc@o0.ingest.sentry.io/0', help: 'DSN for the SDK to send events. Only needed if you want Mushi reports forwarded as Sentry events.', helpId: 'settings.general.sentry_dsn', validator: 'sentryDsn' },
       { name: 'sentry_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'HMAC secret. Set the same value on the Sentry webhook (alert rules and user feedback) that targets the receive URL shown on this card.', helpId: 'settings.general.sentry_webhook_secret', validator: 'token' },
     ],
@@ -278,8 +278,8 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     ],
     fields: [
       { name: 'langfuse_host', label: 'Host', placeholder: 'https://us.cloud.langfuse.com', type: 'url', help: 'Langfuse base URL — US cloud: https://us.cloud.langfuse.com, EU: https://cloud.langfuse.com', required: true, helpId: 'integrations.langfuse.host', validator: 'httpsUrl' },
-      { name: 'langfuse_public_key_ref', label: 'Public key', placeholder: 'pk-lf-… (or vault://id)', type: 'password', help: 'From Langfuse → Project Settings → API Keys.', required: true, helpId: 'integrations.langfuse.public_key', validator: 'token' },
-      { name: 'langfuse_secret_key_ref', label: 'Secret key', placeholder: 'sk-lf-… (or vault://id)', type: 'password', help: 'Secret half of the API key pair — never share publicly.', required: true, helpId: 'integrations.langfuse.secret_key', validator: 'token' },
+      { name: 'langfuse_public_key_ref', label: 'Public key', placeholder: 'pk-lf-…', type: 'password', help: 'From Langfuse → Project Settings → API Keys.', required: true, helpId: 'integrations.langfuse.public_key', validator: 'token' },
+      { name: 'langfuse_secret_key_ref', label: 'Secret key', placeholder: 'sk-lf-…', type: 'password', help: 'Secret half of the API key pair — never share publicly.', required: true, helpId: 'integrations.langfuse.secret_key', validator: 'token' },
     ],
   },
   {
@@ -308,7 +308,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     fields: [
       { name: 'github_repo_url', label: 'Repo URL', placeholder: 'https://github.com/owner/repo', type: 'url', help: 'Full HTTPS URL to the repo Mushi should patch. SSH URLs are normalized server-side.', required: true, helpId: 'integrations.github.repo_url', validator: 'githubRepoUrl' },
       { name: 'github_default_branch', label: 'Default branch', placeholder: 'main', help: 'Defaults to "main" if blank. Change for repos that branch from "master" or "develop".', helpId: 'integrations.github.default_branch' },
-      { name: 'github_installation_token_ref', label: 'Installation token', placeholder: 'ghs_… or ghp_… (or vault://id)', type: 'password', help: 'GitHub App installation token (preferred) or fine-grained PAT. Needs Contents:write + Pull requests:write.', required: true, helpId: 'integrations.github.installation_token', validator: 'token' },
+      { name: 'github_installation_token_ref', label: 'Installation token', placeholder: 'ghs_… or ghp_…', type: 'password', help: 'GitHub App installation token (preferred) or fine-grained PAT. Needs Contents:write + Pull requests:write.', required: true, helpId: 'integrations.github.installation_token', validator: 'token' },
       { name: 'github_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'HMAC secret. Set the same value in GitHub repo Settings → Webhooks (events: Check runs, Check suites).', helpId: 'integrations.github.webhook_secret', validator: 'token' },
     ],
   },
@@ -338,7 +338,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Use "Send to Cursor" from any report to trigger on-demand',
     ],
     fields: [
-      { name: 'cursor_api_key_ref', label: 'API Key', placeholder: 'crsr_… (or vault://id)', type: 'password', help: 'Create at cursor.com/dashboard/integrations → API Keys.', required: true, helpId: 'integrations.cursor_cloud.api_key', validator: 'token' },
+      { name: 'cursor_api_key_ref', label: 'API Key', placeholder: 'crsr_…', type: 'password', help: 'Create at cursor.com/dashboard/integrations → API Keys.', required: true, helpId: 'integrations.cursor_cloud.api_key', validator: 'token' },
       { name: 'cursor_default_model', label: 'Default model', placeholder: 'composer-2.5', help: 'Optional Cursor model slug. Leave blank to use your account default.', helpId: 'integrations.cursor_cloud.default_model' },
       { name: 'cursor_auto_create_pr', label: 'Auto-create PRs', placeholder: 'true', help: 'When enabled (default), Cursor automatically opens a signed draft PR when the agent finishes. Disable to review the branch first.', helpId: 'integrations.cursor_cloud.auto_create_pr' },
       { name: 'cursor_max_iterations', label: 'Max iterations', placeholder: '1', help: 'How many agent iterations Cursor runs per dispatch (1–10). Higher values cost more API credit but can recover from a first-pass miss.', helpId: 'integrations.cursor_cloud.max_iterations' },
@@ -374,7 +374,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       {
         name: 'claude_api_key_ref',
         label: 'Anthropic API key',
-        placeholder: 'sk-ant-… (or vault://id)',
+        placeholder: 'sk-ant-…',
         type: 'password',
         help:
           'Stored in Mushi vault for health probes only. The actual fix run uses ANTHROPIC_API_KEY in your GitHub repo secrets.',

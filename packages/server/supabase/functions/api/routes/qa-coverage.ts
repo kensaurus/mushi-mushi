@@ -25,7 +25,7 @@ import type { Hono } from 'npm:hono@4';
 import type { Context, Next } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { z } from 'npm:zod@3';
-import { jwtAuth, apiKeyAuth } from '../../_shared/auth.ts';
+import { jwtAuth, apiKeyAuth, requireApiKeyScope } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { dbError, ownedProjectIds, jsonError } from '../shared.ts';
 
@@ -63,8 +63,16 @@ async function jwtOrApiKey(c: Context<{ Variables: Variables }>, next: Next) {
   if (apiKey) {
     // Delegate to apiKeyAuth to validate and set projectId
     let called = false;
-    await apiKeyAuth(c as never, async () => { called = true; });
-    if (!called) return; // apiKeyAuth rejected — response already set
+    const rejected = await apiKeyAuth(c as never, async () => { called = true; });
+    if (!called) return rejected; // apiKeyAuth rejected
+    // A project key alone is not enough: the public SDK key (report:write)
+    // ships in every customer's browser bundle. Reads need mcp:read and
+    // anything that starts or changes a run needs mcp:write, like the other
+    // CLI/MCP admin routes.
+    let scoped = false;
+    const needed = c.req.method === 'GET' ? 'mcp:read' : 'mcp:write';
+    const denied = await requireApiKeyScope(needed)(c as never, async () => { scoped = true; });
+    if (!scoped) return denied;
     // Verify the route's :pid matches the key's project
     const keyProjectId = c.get('projectId' as keyof Variables) as string | undefined;
     const routePid = c.req.param('pid');

@@ -6,7 +6,8 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
-import { callerProjectIds, resolveOwnedProject, resolveAccessibleOrg } from '../shared.ts';
+import { callerProjectIds, requireProjectAdmin, resolveOwnedProject, resolveAccessibleOrg } from '../shared.ts';
+import { validatePlatformBody, validateRoutingConfig } from '../../_shared/integration-validation.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
 import { log } from '../../_shared/logger.ts';
 import { resolveEffectivePlatformSettings } from '../../_shared/integration-settings.ts';
@@ -76,6 +77,13 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
+    const forbidden = requireProjectAdmin(c, project);
+    if (forbidden) return forbidden;
+    if (typeof body.type !== 'string' || !/^[a-z_]{2,40}$/.test(body.type)) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'type is required' } }, 400);
+    }
+    const invalid = validateRoutingConfig(body.type, body.config ?? {});
+    if (invalid) return c.json({ ok: false, error: invalid }, 400);
 
     // Pull existing config so we can preserve secret fields the UI re-sent as
     // masked placeholders (e.g. "…abcd"). Without this, re-saving from the
@@ -430,6 +438,11 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
+    const forbidden = requireProjectAdmin(c, project);
+    if (forbidden) return forbidden;
+
+    const invalid = validatePlatformBody(body);
+    if (invalid) return c.json({ ok: false, error: invalid }, 400);
 
     const allowed = PLATFORM_KIND_FIELDS[kind];
     const vaulted = new Set(VAULTED_FIELDS_BY_KIND[kind] ?? []);
@@ -448,25 +461,27 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
         continue;
       }
 
-      if (vaulted.has(k) && typeof v === 'string' && !v.startsWith('vault://')) {
+      if (vaulted.has(k) && typeof v === 'string') {
         // Auto-vault: write the raw secret to Supabase Vault and store the ref.
+        // Never persist the raw value: a failed Vault write fails the request.
         const secretName = `mushi/integration/${project.id}/${kind}/${k}`;
         const { error: vaultErr } = await db.rpc('vault_store_secret', {
           secret_name: secretName,
           secret_value: v,
         });
         if (vaultErr) {
-          // Vault may not be installed in dev — degrade gracefully but warn.
-          log.warn('vault_store_secret failed; persisting raw value', {
+          log.error('vault_store_secret failed for integration secret', {
             scope: 'integrations',
             kind,
             field: k,
             err: vaultErr.message,
           });
-          updates[k] = v;
-        } else {
-          updates[k] = `vault://${secretName}`;
+          return c.json(
+            { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: `Could not store ${k} securely. Retry in a moment.` } },
+            500,
+          );
         }
+        updates[k] = `vault://${secretName}`;
       } else {
         updates[k] = v;
       }
@@ -561,6 +576,9 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       );
     }
 
+    const invalid = validatePlatformBody(body);
+    if (invalid) return c.json({ ok: false, error: invalid }, 400);
+
     const allowed = PLATFORM_KIND_FIELDS[kind];
     const vaulted = new Set(VAULTED_FIELDS_BY_KIND[kind] ?? []);
     const updates: Record<string, unknown> = { organization_id: organizationId };
@@ -575,23 +593,25 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
         continue;
       }
 
-      if (vaulted.has(k) && typeof v === 'string' && !v.startsWith('vault://')) {
+      if (vaulted.has(k) && typeof v === 'string') {
         const secretName = `mushi/org-integration/${organizationId}/${kind}/${k}`;
         const { error: vaultErr } = await db.rpc('vault_store_secret', {
           secret_name: secretName,
           secret_value: v,
         });
         if (vaultErr) {
-          log.warn('vault_store_secret failed for org setting; persisting raw value', {
+          log.error('vault_store_secret failed for org integration secret', {
             scope: 'org-integrations',
             kind,
             field: k,
             err: vaultErr.message,
           });
-          updates[k] = v;
-        } else {
-          updates[k] = `vault://${secretName}`;
+          return c.json(
+            { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: `Could not store ${k} securely. Retry in a moment.` } },
+            500,
+          );
         }
+        updates[k] = `vault://${secretName}`;
       } else {
         updates[k] = v;
       }
@@ -653,6 +673,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     // Source project (the one whose creds to copy).
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
+    const forbidden = requireProjectAdmin(c, resolvedProject.project);
+    if (forbidden) return forbidden;
     const sourceProjectId = resolvedProject.project.id as string;
     const orgId = resolvedProject.project.organization_id as string | null;
 
@@ -729,7 +751,9 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
                 secret_name: secretName,
                 secret_value: rawValue,
               });
-              updates[k] = vaultErr ? rawValue : `vault://${secretName}`;
+              // Never copy a raw secret into another project's row.
+              if (vaultErr) throw new Error(`vault_store_secret failed: ${vaultErr.message}`);
+              updates[k] = `vault://${secretName}`;
             } else {
               updates[k] = rawValue;
             }

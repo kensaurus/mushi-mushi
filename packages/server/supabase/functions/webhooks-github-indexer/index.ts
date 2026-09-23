@@ -20,6 +20,7 @@ import { createEmbedding, createEmbeddingBatch } from '../_shared/embeddings.ts'
 import { log as rootLog } from '../_shared/logger.ts';
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
+import { unverifiedGithubInstallsAllowed } from '../_shared/github-install-trust.ts';
 import { finalizeFixMerge } from '../_shared/fix-merge.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
 import { envInt } from '../_shared/env-int.ts';
@@ -828,7 +829,8 @@ async function handleSweep(
 
       let token: string | null = null;
       try {
-        token = repo.github_app_installation_id
+        // Stored installation ids are not verified yet (github-install-trust.ts).
+        token = repo.github_app_installation_id && unverifiedGithubInstallsAllowed()
           ? await mintInstallationToken(Number(repo.github_app_installation_id))
           : await resolveProjectGithubToken(db, repo.project_id);
       } catch (err) {
@@ -1246,12 +1248,17 @@ app.post('/webhooks-github-indexer', async (c) => {
 
   const db = getDb();
   const repoFullName = `${owner}/${repo}`;
+  // Route to the project that bound this repository to this installation.
+  // The old lookup matched project_integrations.config.repo, which any tenant
+  // could set to someone else's "owner/repo" and receive its indexed source.
   const { data: project } = await db
-    .from('project_integrations')
+    .from('project_repos')
     .select('project_id')
-    .eq('integration_type', 'github')
-    .contains('config', { repo: repoFullName })
-    .single();
+    .eq('repo_url', `https://github.com/${repoFullName}`)
+    .eq('github_app_installation_id', installationId)
+    .eq('indexing_enabled', true)
+    .limit(1)
+    .maybeSingle();
 
   if (!project?.project_id) {
     return c.json({ ok: true, ignored: 'no_project_for_repo', repoFullName }, 202);

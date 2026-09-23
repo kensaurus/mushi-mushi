@@ -6,6 +6,7 @@ import { logAudit } from '../../_shared/audit.ts';
 import { dbError, callerProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
 import { buildImportEdges, detectExploreLayer, getProjectCodebaseScope } from '../../_shared/codebase-understand.ts';
 import { pathMatchesScope } from '../../_shared/codebase-scope.ts';
+import { unverifiedGithubInstallsAllowed } from '../../_shared/github-install-trust.ts';
 import type { KnowledgeGraph } from '../../_shared/codebase-graph-build.ts';
 
 export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -164,6 +165,22 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
         400,
       );
     }
+    // A client-supplied installation id is not proof the caller owns that
+    // installation (see _shared/github-install-trust.ts).
+    if (installationId !== null && !unverifiedGithubInstallsAllowed()) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'INSTALLATION_UNVERIFIED',
+            message:
+              'GitHub App installation ids cannot be bound from a request yet. Use a Personal Access Token ' +
+              '(Integrations → GitHub) for codebase indexing.',
+          },
+        },
+        400,
+      );
+    }
     const pathGlobs = Array.isArray(body.path_globs)
       ? body.path_globs.filter((g) => typeof g === 'string')
       : [];
@@ -171,7 +188,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     // Promote a pending GitHub App installation (user installed the App before
     // registering a repo — the install callback parked the id on project_settings).
     let promotedPendingInstallation = false;
-    if (installationId === null) {
+    if (installationId === null && unverifiedGithubInstallsAllowed()) {
       const { data: pendingRow, error: pendingReadError } = await db
         .from('project_settings')
         .select('github_app_installation_id_pending')

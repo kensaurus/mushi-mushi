@@ -12,8 +12,10 @@ import {
   resolveOwnedProject,
   ownedProjectIds,
   callerProjectIds,
+  requireProjectAdmin,
   userCanAccessProject,
 } from '../shared.ts';
+import { isVaultRef } from '../../_shared/vault-ref.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -495,10 +497,16 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         if (typeof value !== 'string') continue;
         const raw = value.trim();
         if (!raw || (raw.startsWith('…') && raw.length <= 6)) continue;
-        if (raw.startsWith('vault://')) {
-          updates[key] = raw;
-          continue;
+        // References are minted here, never accepted from the client: a
+        // stored `vault://<name>` is resolved by name with the service role.
+        if (isVaultRef(raw)) {
+          return c.json(
+            { error: { code: 'VAULT_REF_NOT_ALLOWED', message: `${key}: paste the token itself. Mushi stores it in Vault.` } },
+            400,
+          );
         }
+        const forbidden = requireProjectAdmin(c, project);
+        if (forbidden) return forbidden;
         const secretName = `mushi/integration/${project.id}/voice/${key}`;
         const { error: vaultErr } = await db.rpc('vault_store_secret', {
           secret_name: secretName,
