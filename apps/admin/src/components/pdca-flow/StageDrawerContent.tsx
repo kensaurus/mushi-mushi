@@ -24,6 +24,9 @@ import type { FixAttempt, DispatchJob } from '../fixes/types'
 import { Btn, RelativeTime, Loading } from '../ui'
 import { useFlowUndo } from '../flow-primitives/useFlowUndo'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { useActiveProjectId } from '../ProjectSwitcher'
+import { useDispatchPreflight } from '../../lib/useDispatchPreflight'
+import { DispatchFixPreflight } from '../reports/DispatchFixPreflight'
 
 interface StageDrawerContentProps {
   stageId: PdcaStageId
@@ -46,12 +49,21 @@ interface ReportRow {
   severity?: string | null
   category?: string | null
   status?: string | null
+  confidence?: number | null
+  unique_users?: number | null
+  dedup_count?: number | null
   created_at: string
 }
 
 function PlanDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () => void }) {
   const navigate = useNavigate()
   const toast = useToast()
+  // Same confirm + prerequisites gate as the reports table. This drawer's
+  // "Dispatch fix" used to POST straight away — the one dispatch entry point
+  // that skipped both, so autofix-off or a missing repo surfaced only as an
+  // error toast after the request, and a click queued an LLM run and a draft
+  // PR with no chance to read what would happen.
+  const preflight = useDispatchPreflight(useActiveProjectId())
   const [reports, setReports] = useState<ReportRow[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -159,14 +171,19 @@ function PlanDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () 
                   </div>
                 </div>
                 <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                  <Btn
-                    size="sm"
-                    variant="primary"
-                    loading={busyId === r.id}
-                    onClick={() => void dispatchFix(r.id)}
-                  >
-                    Dispatch fix
-                  </Btn>
+                  <DispatchFixPreflight
+                    busy={busyId === r.id}
+                    severity={r.severity ?? null}
+                    blastRadius={(r.unique_users ?? 0) > 0 ? (r.unique_users ?? 0) : (r.dedup_count ?? 1)}
+                    confidence={r.confidence ?? null}
+                    onConfirm={() => void dispatchFix(r.id)}
+                    onOpenDetail={() => {
+                      onClose()
+                      navigate(`/reports/${r.id}`)
+                    }}
+                    preflight={preflight}
+                    repoUrl={preflight.repoUrl}
+                  />
                   <Btn size="sm" variant="ghost" onClick={() => dismissReport(r.id)}>
                     Dismiss
                   </Btn>
