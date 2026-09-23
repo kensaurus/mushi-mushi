@@ -12,7 +12,7 @@
  * a hard reload (2026-09-23). Never call array methods on the raw hook value.
  */
 
-export interface PdcaRunsPage<R> {
+interface PdcaRunsPage<R> {
   data: R[]
   total?: number | null
   page?: number

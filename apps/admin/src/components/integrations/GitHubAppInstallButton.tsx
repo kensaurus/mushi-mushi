@@ -29,7 +29,7 @@ interface Props {
  * page. Both entry points now read this one constant, so when the real slug
  * is set they light up together and cannot drift apart.
  */
-export const GITHUB_APP_SLUG = import.meta.env.VITE_GITHUB_APP_SLUG as string | undefined
+const GITHUB_APP_SLUG = import.meta.env.VITE_GITHUB_APP_SLUG as string | undefined
 
 /** The App's install URL for a project, or undefined when the slug is unset. */
 export function githubAppInstallUrl(projectId: string): string | undefined {
