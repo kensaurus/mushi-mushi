@@ -1,0 +1,23 @@
+diff --git a/dist/client/hooks/use-fs-route.js b/dist/client/hooks/use-fs-route.js
+index 0a6443a01fea9ad2d9c8132f798ce01b3a2c3294..bb178be5b6d46723281318f307cd32f56a710c95 100644
+--- a/dist/client/hooks/use-fs-route.js
++++ b/dist/client/hooks/use-fs-route.js
+@@ -2,9 +2,17 @@
+ import { c as _c } from "react-compiler-runtime";
+ import { usePathname } from "next/navigation";
+ const defaultLocale = process.env.NEXTRA_DEFAULT_LOCALE;
++// mushi-mushi patch: the docs export (basePath /mushi-mushi/docs) is also
++// served at its parent path /mushi-mushi/ as the product landing (a CloudFront
++// rewrite to docs/index.html). usePathname() there is outside basePath, so no
++// page-map route matched, the client fell back to the default theme (sidebar,
++// TOC, "Last updated") and hydration failed with React #418. Treat that one
++// alias as the docs root. Unset outside the production build.
++const rootAlias = process.env.NEXT_PUBLIC_MUSHI_ROOT_ALIAS;
+ function useFSRoute() {
+   const $ = _c(2);
+-  const pathname = usePathname();
++  const rawPathname = usePathname();
++  const pathname = rootAlias && (rawPathname === rootAlias || rawPathname === rootAlias + "/") ? "/" : rawPathname;
+   let t0;
+   if ($[0] !== pathname) {
+     t0 = (process.env.NEXTRA_SHOULD_ADD_LOCALE_TO_LINKS !== "true" && defaultLocale ? "/" + pathname.split("/").slice(2).join("/") : pathname).replace(/\.html$/, "").replace(/\/index(\/|$)/, "$1").replace(/\/$/, "") || "/";

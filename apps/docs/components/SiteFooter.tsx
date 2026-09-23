@@ -19,6 +19,7 @@ import { KensaurusPortfolioTable } from '@mushi-mushi/marketing-ui'
 import { Footer } from 'nextra-theme-docs'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { toSitePathname } from '../lib/site-pathname'
 
 /** docs/adr/0015 — kensaurus@gmail.com is the product inbox. */
 const CONTACT_EMAIL = 'kensaurus@gmail.com'
@@ -44,7 +45,10 @@ const FOOTER_LINKS: ReadonlyArray<{ label: string; href: string; external?: true
 ]
 
 export function SiteFooter() {
-  const pathname = usePathname()
+  // Site-relative: the landing is also served at /mushi-mushi/ (outside
+  // basePath), which must count as "/" or the portfolio renders there and the
+  // hydration fails (lib/site-pathname.ts).
+  const pathname = toSitePathname(usePathname())
   const showPortfolio = shouldShowPortfolio(pathname)
 
   return (
