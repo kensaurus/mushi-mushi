@@ -25,6 +25,8 @@ import { FilterChipCell, FilterChipRail } from '../FilterChipRail'
 
 interface StatsResponse {
   total?: number
+  /** Reports still waiting on a decision — the `open` chip (OPEN_REPORT_STATUSES server-side). */
+  openCount?: number
   byStatus?: Record<string, number>
   bySeverity?: Record<string, number>
 }
@@ -37,6 +39,9 @@ interface Props {
 
 const STATUS_BUCKETS: Array<{ value: string; label: string; tone: 'default' | 'warn' | 'info' | 'brand' | 'ok' }> = [
   { value: '',           label: 'All',         tone: 'default' },
+  // Everything still waiting on a decision — what the dashboard's Bug queue
+  // previews and its "View backlog" link opens.
+  { value: 'open',       label: 'Open',        tone: 'warn' },
   { value: 'new',        label: 'New',         tone: 'warn' },
   { value: 'classified', label: 'Classified',  tone: 'brand' },
   { value: 'fixing',     label: 'Fixing',      tone: 'info' },
@@ -76,7 +81,8 @@ export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
     >
       <FilterChipRail trackId="reports-status" aria-label="Status filters">
         {STATUS_BUCKETS.map((b) => {
-          const count = b.value === '' ? total : (byStatus[b.value] ?? 0)
+          const count =
+            b.value === '' ? total : b.value === 'open' ? (stats?.openCount ?? 0) : (byStatus[b.value] ?? 0)
           return (
             <FilterChipCell key={b.value || 'all'} active={status === b.value}>
               <FilterChip
@@ -85,7 +91,13 @@ export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
                 active={status === b.value}
                 onClick={() => onSetFilter('status', status === b.value ? '' : b.value)}
                 tone={b.tone}
-                hint={b.value === '' ? 'Show every report regardless of status' : `Show reports with status "${b.value}"`}
+                hint={
+                  b.value === ''
+                    ? 'Show every report regardless of status'
+                    : b.value === 'open'
+                      ? 'Show every report still waiting on a decision (new through classified, and reopened)'
+                      : `Show reports with status "${b.value}"`
+                }
               />
             </FilterChipCell>
           )
