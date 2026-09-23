@@ -74,7 +74,11 @@ function PlanDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () 
     let cancelled = false
     setLoading(true)
     apiFetch<{ reports: ReportRow[] }>(
-      '/v1/admin/reports?status=new&sort=created_at&dir=desc&limit=6',
+      // `open` — every report still waiting on a decision, the same set the
+      // dashboard's Bug queue lists. `new` alone lasts only the second
+      // classification takes, so this drawer read "Your bug queue is clean"
+      // over 18 classified reports (2026-09-23).
+      '/v1/admin/reports?status=open&sort=created_at&dir=desc&limit=6',
     )
       .then((res) => {
         if (cancelled) return
@@ -147,7 +151,7 @@ function PlanDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () 
           <Loading text="Fetching reports…" />
         ) : reports.length === 0 ? (
           <p className="text-2xs text-fg-muted py-3">
-            No new reports waiting. Your bug queue is clean.
+            No open reports waiting. Your bug queue is clean.
           </p>
         ) : (
           <ul className="space-y-1.5">

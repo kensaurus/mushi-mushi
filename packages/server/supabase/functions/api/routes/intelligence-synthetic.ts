@@ -210,7 +210,7 @@ export function registerIntelligenceSyntheticRoutes(app: Hono<{ Variables: Varia
       data: {
         hasAnyProject: true,
         projectId: pid,
-        projectName: activeProject.project_name ?? null,
+        projectName: activeProject.name ?? null,
         projectCount: projectIds.length,
         featureUnlocked,
         planName,

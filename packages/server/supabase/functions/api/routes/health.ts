@@ -295,7 +295,7 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
       data: {
         hasAnyProject: true,
         projectId: pid,
-        projectName: activeProject.project_name ?? null,
+        projectName: activeProject.name ?? null,
         projectCount: projectIds.length,
         window: windowParam,
         totalCalls,

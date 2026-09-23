@@ -2,7 +2,13 @@ import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey, getOrgIdFromContext } from '../../_shared/auth.ts';
-import { callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds, rpcError } from '../shared.ts';
+import {
+  callerProjectIds,
+  resolveOwnedProject,
+  scopedOwnedProjectIds,
+  rpcError,
+  OPEN_REPORT_STATUSES,
+} from '../shared.ts';
 import { attachReportTitles, bucketFailedFixPreviews } from '../../_shared/failed-fix-preview.ts';
 
 export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -50,11 +56,18 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       const canon = statusAlias[val] ?? val;
       byStatus[canon] = (byStatus[canon] ?? 0) + cnt;
     }
+    // Count for the Reports page's "Open" chip (status=open). Kept out of
+    // byStatus: it overlaps the per-status buckets rather than adding one.
+    const openCount = OPEN_REPORT_STATUSES.reduce(
+      (sum, s) => sum + (Number(rawByStatus[s]) || 0),
+      0,
+    );
 
     return c.json({
       ok: true,
       data: {
         total: total ?? 0,
+        openCount,
         byStatus,
         byCategory: toMap(categoryRows),
         bySeverity: toMap(severityRows),
@@ -695,7 +708,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       .from('reports')
       .select('id, summary, description, status, severity, category, created_at, processing_error')
       .in('project_id', projectIds)
-      .in('status', ['new', 'queued', 'classified', 'triaged', 'grouped', 'reopened'])
+      .in('status', [...OPEN_REPORT_STATUSES])
       .order('created_at', { ascending: false })
       .limit(10);
 

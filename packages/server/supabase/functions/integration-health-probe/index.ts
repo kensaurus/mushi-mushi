@@ -264,7 +264,7 @@ async function handler(req: Request): Promise<Response> {
       const batch = tasks.slice(i, i + CONCURRENCY)
       const results = await Promise.allSettled(
         batch.map(async (t) => {
-          const probe = await probeIntegration(t.kind, db, t.settings, t.routingConfig)
+          const probe = await probeIntegration(t.kind, db, t.settings, t.routingConfig, t.projectId)
           return { task: t, probe }
         }),
       )

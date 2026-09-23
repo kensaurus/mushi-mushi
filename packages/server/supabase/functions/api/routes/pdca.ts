@@ -136,7 +136,7 @@ function pdcaRoutes() {
     })
     if ('response' in resolvedProject) return resolvedProject.response
     const projectId = resolvedProject.project.id
-    const projectName = resolvedProject.project.project_name ?? null
+    const projectName = resolvedProject.project.name ?? null
 
     const { data: runs, error } = await db()
       .from('pdca_runs')

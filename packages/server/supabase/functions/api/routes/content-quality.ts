@@ -375,7 +375,7 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
     if ('response' in resolved) return resolved.response;
     const { project } = resolved;
     const projectId = project.id as string;
-    const projectName = (project.project_name as string | null) ?? null;
+    const projectName = (project.name as string | null) ?? null;
 
     const [
       openRes,

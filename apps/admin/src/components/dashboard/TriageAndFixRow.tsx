@@ -36,7 +36,9 @@ export function TriageAndFixRow({ triageQueue, fixSummary }: Props) {
                   Needs attention
                 </SignalChip>
               )}
-              <ActionPill to="/reports?status=new" tone="brand">
+              {/* `open` matches the list previewed here; `new` alone lasts only
+                  the second classification takes, so it opened an empty list. */}
+              <ActionPill to="/reports?status=open" tone="brand">
                 View backlog →
               </ActionPill>
             </div>
