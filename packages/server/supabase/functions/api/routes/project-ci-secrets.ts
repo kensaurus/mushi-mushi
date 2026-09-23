@@ -38,7 +38,7 @@ import type { Variables } from '../types.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth } from '../../_shared/auth.ts'
 import { logAudit } from '../../_shared/audit.ts'
-import { dbError, userCanAccessProject } from '../shared.ts'
+import { dbError, callerCanAccessProject } from '../shared.ts'
 import { resolveProjectGithubToken, parseGithubRepoUrl } from '../../_shared/github.ts'
 import { ghFetch, ghFetchOptional } from '../../_shared/github-pr.ts'
 
@@ -334,7 +334,7 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
     const userId = c.get('userId') as string
     const db = getServiceClient()
 
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
     }
@@ -480,7 +480,7 @@ export function registerProjectCiSecretsRoutes(app: Hono<{ Variables: Variables 
     const db = getServiceClient()
 
     // Owner or admin only — minting keys + writing secrets is privileged.
-    const access = await userCanAccessProject(db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
     }

@@ -4,7 +4,7 @@
  *          onboarding stats, dispatch preflight, and the next best action.
  */
 
-import type { Hono } from 'npm:hono@4';
+import type { Context, Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { adminOrApiKey } from '../../_shared/auth.ts';
@@ -12,7 +12,7 @@ import {
   callerProjectIds,
   enumerateAccessibleProjectIds,
   resolveOwnedProject,
-  userCanAccessProject,
+  callerCanAccessProject,
 } from '../shared.ts';
 import { resolveLlmKey } from '../../_shared/byok.ts';
 import {
@@ -84,7 +84,7 @@ export function registerActivationRoutes(app: Hono<{ Variables: Variables }>): v
     const [setupData, statsPayload, preflight] = await Promise.all([
       buildSetupResponse(db, userId, adminHost, allAccessibleIds),
       buildOnboardingStatsForProject(db, userId, pid, adminHost),
-      buildPreflightSummary(db, userId, pid),
+      buildPreflightSummary(c, db, userId, pid),
     ]);
 
     const stats = {
@@ -237,11 +237,12 @@ async function buildOnboardingStatsForProject(
 }
 
 async function buildPreflightSummary(
+  c: Context,
   db: ReturnType<typeof getServiceClient>,
   userId: string,
   projectId: string,
 ) {
-  const access = await userCanAccessProject(db, userId, projectId);
+  const access = await callerCanAccessProject(c, db, userId, projectId);
   if (!access.allowed) return null;
 
   const [settingsRes, reposRes, anthropicKey] = await Promise.all([

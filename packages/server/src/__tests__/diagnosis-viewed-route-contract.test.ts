@@ -30,7 +30,8 @@ describe('POST /v1/admin/projects/:id/setup-funnel/diagnosis-viewed', () => {
   })
 
   it('checks project access before it emits', () => {
-    const accessAt = handler.indexOf('userCanAccessProject(')
+    // callerCanAccessProject = userCanAccessProject + the bound-API-key check.
+    const accessAt = handler.indexOf('callerCanAccessProject(')
     const emitAt = handler.indexOf('emitFunnelEvent(')
     expect(accessAt).toBeGreaterThan(-1)
     expect(emitAt).toBeGreaterThan(accessAt)

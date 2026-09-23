@@ -13,7 +13,7 @@ import {
   ownedProjectIds,
   callerProjectIds,
   requireProjectAdmin,
-  userCanAccessProject,
+  callerCanAccessProject,
 } from '../shared.ts';
 import { isVaultRef } from '../../_shared/vault-ref.ts';
 import {
@@ -896,7 +896,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         // header-independent ownership/membership check. callerProjectIds()
         // honours X-Mushi-Project-Id, so it would wrongly 403 a legitimate owner
         // whenever the admin SPA has a *different* project pinned as active.
-        const access = await userCanAccessProject(db, userId, pid);
+        const access = await callerCanAccessProject(c, db, userId, pid);
         if (!access.allowed) return c.json({ error: 'Project not found or access denied' }, 403);
       }
 
