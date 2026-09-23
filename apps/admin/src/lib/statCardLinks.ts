@@ -263,9 +263,16 @@ export const auditLinks = {
   failures: '/audit?tab=log',
   actorMix: '/audit?tab=breakdown',
   allTime: '/audit?tab=log',
-  humanActors: '/audit?tab=breakdown',
-  agentActors: '/audit?tab=breakdown',
-  systemActors: '/audit?tab=breakdown',
+  // These three cards are rendered ON the breakdown tab, so pointing them
+  // at that same tab made them dead affordances — they showed an arrow and
+  // an "Open page →" hint but clicking went nowhere. `actor_type` is a real
+  // filter the Log tab reads (AuditPage ACTOR_TYPE_OPTIONS: human | agent |
+  // system), so send them to the filtered log instead. `since=24h` matches
+  // the cards' own 24h counts; without it the landing row count would not
+  // agree with the number the user clicked.
+  humanActors: '/audit?tab=log&actor_type=human&since=24h',
+  agentActors: '/audit?tab=log&actor_type=agent&since=24h',
+  systemActors: '/audit?tab=log&actor_type=system&since=24h',
 } as const
 
 export const complianceLinks = {

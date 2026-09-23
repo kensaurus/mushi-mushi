@@ -214,6 +214,27 @@ export function deriveRecommendation(
         ]
       : []
 
+    // context_assembly_failed: RAG embedding / retrieval pipeline error.
+    // Checked BEFORE the skipped_no_context branch: the worker skips these
+    // attempts with status skipped_no_context too, and a category is more
+    // specific than a status. Ordered the other way, a revoked embedding key
+    // read as "no relevant code found in the index" and sent the user to
+    // re-index a repo whose index was fine (glot.it, 2026-09-23).
+    if (latest.failure_category === 'context_assembly_failed') {
+      return {
+        title: 'Fix skipped \u2014 context assembly failed',
+        description:
+          'The agent could not build a code context: the RAG embedding or retrieval call failed. If the attempt mentions a 401 from the embedding provider, the BYOK OpenAI key is invalid or revoked \u2014 rotate it under Settings \u2192 BYOK. Otherwise this is usually transient; retry, and check the Fixes pipeline logs if it keeps failing.',
+        tone: 'urgent',
+        meta: lastAttemptMeta,
+        actions: [
+          { label: 'Check BYOK keys \u2192', to: '/settings?tab=byok', tone: 'primary' },
+          { label: 'Open Fixes pipeline \u2192', to: '/fixes', tone: 'ghost' },
+          { label: 'Retry dispatch', onClick: () => onDispatch(), tone: 'ghost' },
+        ],
+      }
+    }
+
     // skipped_no_context | no_relevant_code: no matching files in codebase index
     if (
       latest.status === 'skipped_no_context' ||
@@ -228,21 +249,6 @@ export function deriveRecommendation(
         actions: [
           { label: 'Configure codebase indexing \u2192', to: '/integrations', tone: 'primary' },
           { label: 'Retry dispatch', onClick: () => onDispatch(), tone: 'ghost' },
-        ],
-      }
-    }
-
-    // context_assembly_failed: RAG embedding / retrieval pipeline error
-    if (latest.failure_category === 'context_assembly_failed') {
-      return {
-        title: 'Fix skipped — context assembly failed',
-        description:
-          'The agent could not build a code context (RAG embedding or retrieval error). This is usually transient. Retry the dispatch; if it keeps failing, check the Fixes pipeline logs.',
-        tone: 'urgent',
-        meta: lastAttemptMeta,
-        actions: [
-          { label: 'Open Fixes pipeline \u2192', to: '/fixes', tone: 'ghost' },
-          { label: 'Retry dispatch', onClick: () => onDispatch(), tone: 'primary' },
         ],
       }
     }

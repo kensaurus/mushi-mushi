@@ -714,11 +714,23 @@ ${
           ragReason: ragResult.reason,
           ragDetail: ragResult.detail ?? null,
         });
+        // `embedding_failed` / `rpc_failed` are pipeline faults — a revoked
+        // BYOK key, a missing migration — not "the codebase had nothing
+        // relevant". Filing them as no_relevant_code (an EXPECTED category,
+        // see EXPECTED_FAILURE_CATEGORIES) also kept them out of Sentry:
+        // glot.it's embedding key 401'd for two months and every dispatch was
+        // silently skipped with "couldn't find relevant code". The console
+        // already renders context_assembly_failed as a retrieval-pipeline
+        // error (deriveRecommendation.ts, dispatch-prerequisites.mdx).
+        const failureCategory =
+          ragResult.reason === 'embedding_failed' || ragResult.reason === 'rpc_failed'
+            ? 'context_assembly_failed'
+            : 'no_relevant_code';
         await completeAttempt(db, fixAttemptId, {
           status: 'skipped_no_context',
           error: reason,
           files_changed: [],
-          failure_category: 'no_relevant_code',
+          failure_category: failureCategory,
         });
         await db
           .from('fix_dispatch_jobs')

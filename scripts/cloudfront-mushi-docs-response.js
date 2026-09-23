@@ -31,7 +31,16 @@ function buildSecurityHeaders() {
     'permissions-policy': { value: 'camera=(), microphone=(), geolocation=()' },
     'strict-transport-security': { value: 'max-age=63072000; includeSubDomains; preload' },
     'content-security-policy': {
-      value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co; frame-src 'none'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+      // img-src carries the KENSAURUS sibling-app icons rendered by the
+      // "More from KENSAURUS" footer (packages/marketing-ui). Those icons are
+      // hosted on each app's own origin, so without them the footer showed
+      // four broken-image placeholders (Cooler Heads, Solo Boss, Tsumagoi,
+      // cursor-kenji) while the kensaur.us-hosted ones rendered fine.
+      // `*.kensaur.us` is a wildcard so a new sibling subdomain does not have
+      // to come back here; github.com AND avatars.githubusercontent.com are
+      // both listed because github.com/<org>.png redirects to the avatars
+      // host and CSP checks every URL in the redirect chain.
+      value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://*.kensaur.us https://github.com https://avatars.githubusercontent.com; connect-src 'self' https://*.supabase.co; frame-src 'none'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
     },
   };
 }

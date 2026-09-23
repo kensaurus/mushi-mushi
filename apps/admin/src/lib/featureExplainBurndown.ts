@@ -43,5 +43,5 @@ export const FEATURE_EXPLAIN_BURNDOWN: FeatureExplainBurndownItem[] = [
   { route: '/code-health', label: 'Code Health', status: 'done', liveData: 'done', notes: 'CodeHealthGuide + codeHealthMetricOverlay' },
   { route: '/prompt-lab', label: 'Prompt Lab', status: 'done', liveData: 'done', notes: 'PromptLabGuide + promptLabStageOverlay' },
   { route: '/skills', label: 'Skills', status: 'done', liveData: 'done', notes: 'SkillsPipelineGuide + skillsModeOverlay' },
-  { route: '/dlq', label: 'Processing Queue', status: 'done', liveData: 'done', notes: 'QueueStatusBanner wired; KPI row explains lanes' },
+  { route: '/queue', label: 'Processing Queue', status: 'done', liveData: 'done', notes: 'QueueStatusBanner wired; KPI row explains lanes' },
 ]

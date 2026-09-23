@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { Btn, Toggle } from '../ui/forms'
+import { Card } from '../ui'
 
 interface NotifPrefs {
   'report.classified': boolean
@@ -88,23 +89,65 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
   const [prefs, setPrefs] = useState<NotifPrefs>(DEFAULT_PREFS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  // True when prefs could not be loaded for THIS project. Gates the save so
+  // defaulted state can never be written over a project's real settings.
+  const [error, setError] = useState(false)
+  // Bumped by Retry to re-run the load effect.
+  const [reloadNonce, setReloadNonce] = useState(0)
 
+  // Three bugs lived here:
+  //
+  // 1. A swallowed failure rendered DEFAULT_PREFS — every toggle ON — which
+  //    is indistinguishable from "this project really has everything on".
+  //    The user then believes they are looking at saved settings.
+  // 2. `loading` was only ever set false, so switching projects showed no
+  //    skeleton, and if the next project had no saved prefs `setPrefs` was
+  //    never called — the PREVIOUS project's values stayed on screen.
+  //    Clicking Save then wrote them over the current project.
+  // 3. No stale-response guard, so a fast A→B→A switch could land B's
+  //    response on A.
+  //
+  // Now: reset per project, guard against stale responses, and surface the
+  // failure instead of fabricating state.
+  //
+  // A successful load with `notificationPrefs: null` is NOT a failure: the
+  // project has never saved prefs, and the server then delivers every event
+  // (toggles are `!== false`) with a 'low' severity floor — exactly
+  // DEFAULT_PREFS (classify-report, fast-filter, _shared/plugins.ts). Only a
+  // failed request hides the matrix.
   useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(false)
     apiFetch<{ notificationPrefs?: Partial<NotifPrefs> | null }>('/v1/admin/settings')
       .then((res) => {
-        if (res.ok && res.data?.notificationPrefs) {
-          setPrefs({ ...DEFAULT_PREFS, ...res.data.notificationPrefs })
+        if (cancelled) return
+        if (res.ok) {
+          setPrefs({ ...DEFAULT_PREFS, ...(res.data?.notificationPrefs ?? {}) })
+        } else {
+          setError(true)
         }
       })
-      .catch(() => { /* use defaults */ })
-      .finally(() => setLoading(false))
-  }, [projectId])
+      .catch(() => {
+        if (!cancelled) setError(true)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, reloadNonce])
 
   const toggle = (key: keyof Omit<NotifPrefs, 'report_severity_min'>) => {
     setPrefs((p) => ({ ...p, [key]: !p[key] }))
   }
 
   const handleSave = async () => {
+    // Defence in depth: the error branch returns before the Save button
+    // renders, but never PATCH a full prefs object we could not load — that
+    // is how defaulted state overwrites a project's real suppressions.
+    if (error) return
     setSaving(true)
     try {
       const res = await apiFetch('/v1/admin/settings', {
@@ -125,6 +168,25 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
           <div key={e.key} className="h-14 bg-surface-overlay motion-safe:animate-pulse" />
         ))}
       </div>
+    )
+  }
+
+  // Render the failure rather than a matrix of defaults. Showing all-ON here
+  // would claim these are the project's saved preferences.
+  if (error) {
+    return (
+      <Card className="px-3 py-4 space-y-2">
+        <p className="text-xs font-semibold text-fg">
+          Couldn&apos;t load notification preferences for this project
+        </p>
+        <p className="text-2xs text-fg-muted leading-snug">
+          The toggles aren&apos;t shown because we can&apos;t tell which events are currently
+          enabled — showing defaults would misrepresent your settings.
+        </p>
+        <Btn size="sm" variant="ghost" onClick={() => setReloadNonce((n) => n + 1)}>
+          Retry
+        </Btn>
+      </Card>
     )
   }
 
