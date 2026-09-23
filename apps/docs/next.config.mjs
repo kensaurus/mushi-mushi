@@ -17,6 +17,11 @@ import nextra from 'nextra'
 const rawBase = process.env.MUSHI_BASE_PATH ?? ''
 const basePath = rawBase.replace(/\/+$/, '')
 const assetPrefix = (process.env.MUSHI_ASSET_PREFIX ?? basePath).replace(/\/+$/, '')
+// The export's home page is also served at the basePath's parent
+// (/mushi-mushi/ → docs/index.html, scripts/cloudfront-mushi-spa-router.js).
+// patches/nextra@4.6.1.patch maps that alias to the docs root in useFSRoute;
+// without it the landing hydrated with the default theme and React #418.
+const rootAlias = basePath.includes('/') ? basePath.slice(0, basePath.lastIndexOf('/')) : ''
 
 const withNextra = nextra({
   defaultShowCopyCode: true,
@@ -36,6 +41,7 @@ export default withNextra({
   // Inlined into client bundles (DocScreenshot, AdminDocHero GIFs).
   env: {
     NEXT_PUBLIC_MUSHI_BASE_PATH: basePath,
+    NEXT_PUBLIC_MUSHI_ROOT_ALIAS: rootAlias,
   },
   // Static-export so the build is a pure folder of HTML + assets we can sync
   // to S3 with the same long/short cache pattern the admin already uses.
