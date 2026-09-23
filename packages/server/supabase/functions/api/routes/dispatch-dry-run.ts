@@ -75,10 +75,12 @@ export function buildDryRunResult(r: DispatchReadiness): DryRunResult {
     {
       step: 'context_assembly',
       status: r.hasCodebase && r.hasEmbedding ? 'pass' : 'fail',
+      // Mirrors fix-worker's context floor gate: with no code context and no
+      // web snippets it skips the attempt rather than call the LLM ungrounded.
       detail: !r.hasCodebase
-        ? 'Codebase indexing is off — the agent would work from the report alone.'
+        ? 'Codebase indexing is off — a live dispatch has no code to ground on and is skipped unless a web search supplies context.'
         : !r.hasEmbedding
-          ? 'No OpenAI embedding key resolves (BYOK or platform) — the RAG lookup fails and a live dispatch is skipped as "no relevant code".'
+          ? 'No OpenAI embedding key resolves (BYOK or platform) — the RAG lookup fails and a live dispatch is skipped as context_assembly_failed.'
           : `Codebase index enabled · embeddings via the ${r.embeddingSource ?? 'unknown'} key.`,
     },
     { step: 'llm_call', status: 'simulated', detail: 'Not executed in a dry-run.' },

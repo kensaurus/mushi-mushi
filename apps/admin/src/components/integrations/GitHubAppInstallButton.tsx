@@ -31,9 +31,14 @@ interface Props {
  */
 const GITHUB_APP_SLUG = import.meta.env.VITE_GITHUB_APP_SLUG as string | undefined
 
-/** The App's install URL for a project, or undefined when the slug is unset. */
+/**
+ * The App's install URL for a project, or undefined when the slug is unset or
+ * there is no project yet. `state` is how the installation callback binds the
+ * install to a project, so an empty one would produce an install nothing can
+ * attribute.
+ */
 export function githubAppInstallUrl(projectId: string): string | undefined {
-  if (!GITHUB_APP_SLUG) return undefined
+  if (!GITHUB_APP_SLUG || !projectId) return undefined
   return `https://github.com/apps/${GITHUB_APP_SLUG}/installations/new?state=${encodeURIComponent(projectId)}`
 }
 
@@ -51,7 +56,8 @@ export function GitHubAppInstallButton({ projectId, hasInstallation = false, cla
     )
   }
 
-  const installUrl = `https://github.com/apps/${APP_SLUG}/installations/new?state=${encodeURIComponent(projectId)}`
+  const installUrl = githubAppInstallUrl(projectId)
+  if (!installUrl) return null
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>

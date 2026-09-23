@@ -16,8 +16,8 @@ import { goLink } from './kensaurus/spine/links'
  * reintroduce a local list here.
  *
  * LINKS: app rows go through the apex redirector (`goLink`), so a click is
- * attributed (`ref=mushi-mushi`) and logged as a `crosslink_click` before the
- * visitor is handed on. The hub row is a direct UTM'd URL because it *is* the
+ * attributed — `ref` is the `utmSource` prop, e.g. `mushi-docs` on the docs
+ * site — and logged as a `crosslink_click` before the visitor is handed on. The hub row is a direct UTM'd URL because it *is* the
  * apex — sending it through the apex redirector would be a pointless hop.
  *
  * NO JSON-LD: this deliberately emits no ItemList. It used to, which told

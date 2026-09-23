@@ -109,6 +109,12 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
   //
   // Now: reset per project, guard against stale responses, and surface the
   // failure instead of fabricating state.
+  //
+  // A successful load with `notificationPrefs: null` is NOT a failure: the
+  // project has never saved prefs, and the server then delivers every event
+  // (toggles are `!== false`) with a 'low' severity floor — exactly
+  // DEFAULT_PREFS (classify-report, fast-filter, _shared/plugins.ts). Only a
+  // failed request hides the matrix.
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -116,10 +122,9 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
     apiFetch<{ notificationPrefs?: Partial<NotifPrefs> | null }>('/v1/admin/settings')
       .then((res) => {
         if (cancelled) return
-        if (res.ok && res.data?.notificationPrefs) {
-          setPrefs({ ...DEFAULT_PREFS, ...res.data.notificationPrefs })
+        if (res.ok) {
+          setPrefs({ ...DEFAULT_PREFS, ...(res.data?.notificationPrefs ?? {}) })
         } else {
-          // Covers both a failed request and a 200 with no saved prefs.
           setError(true)
         }
       })
