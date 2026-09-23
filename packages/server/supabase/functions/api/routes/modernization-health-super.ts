@@ -39,7 +39,7 @@ import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, callerProjectIds, scopedOwnedProjectIds, userCanAccessProject, resolveOwnedProject } from '../shared.ts';
+import { dbError, ownedProjectIds, callerProjectIds, scopedOwnedProjectIds, resolveOwnedProject, callerCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -99,7 +99,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
     if (!finding) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
     // Teams v1: owner / org-member / project-member can act on findings.
-    const access = await userCanAccessProject(db, userId, finding.project_id);
+    const access = await callerCanAccessProject(c, db, userId, finding.project_id);
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
     if (!finding.related_report_id) {
@@ -203,7 +203,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
     if (!finding) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
     // Teams v1: owner / org-member / project-member can act on findings.
-    const access = await userCanAccessProject(db, userId, finding.project_id);
+    const access = await callerCanAccessProject(c, db, userId, finding.project_id);
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
     const { error } = await db

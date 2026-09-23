@@ -21,13 +21,13 @@
  *   Cancel a queued or running job (CAS guard).
  */
 
-import type { Context, Hono } from 'npm:hono@4'
+import type { Hono } from 'npm:hono@4'
 import { streamSSE } from 'npm:hono@4/streaming'
 import type { Variables } from '../types.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts'
-import { dbError, userCanAccessProject } from '../shared.ts'
+import { dbError, callerCanAccessProject } from '../shared.ts'
 import { runSdkUpgradeJob } from '../../_shared/sdk-upgrade-runner.ts'
 import { log } from '../../_shared/logger.ts'
 import { findOpenPrByHeadPrefix } from '../../_shared/github-pr.ts'
@@ -47,25 +47,6 @@ import {
   fetchLatestDeploymentStatusForSha,
   normalizeDeployStatus,
 } from '../../_shared/github.ts'
-
-/**
- * Membership check that also keeps a project-bound API key inside its own
- * project: userCanAccessProject alone checks the key owner's access, so a key
- * for project A could act on the owner's project B. Org-scoped keys (no bound
- * project) keep the owner's access, as in callerProjectIds.
- */
-async function projectAccess(
-  c: Context,
-  db: ReturnType<typeof getServiceClient>,
-  userId: string,
-  projectId: string,
-): ReturnType<typeof userCanAccessProject> {
-  if (c.get('authMethod') === 'apiKey') {
-    const bound = c.get('projectId') as string | undefined
-    if (bound && bound !== projectId) return { allowed: false, role: null }
-  }
-  return userCanAccessProject(db, userId, projectId)
-}
 
 function scheduleSdkUpgradeRun(jobId: string): void {
   const run = runSdkUpgradeJob(jobId).catch((err) => {
@@ -89,7 +70,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
 
     const body = await c.req.json().catch(() => ({} as SdkUpgradePostBody)) as SdkUpgradePostBody
 
-    const access = await projectAccess(c, db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
     }
@@ -209,7 +190,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
     const projectId = c.req.param('pid')!
     const db = getServiceClient()
 
-    const access = await projectAccess(c, db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
 
     const { data: active } = await db
@@ -253,7 +234,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
     const jobId = c.req.param('id')!
     const db = getServiceClient()
 
-    const access = await projectAccess(c, db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
 
     const { data: job } = await db
@@ -279,7 +260,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
       const jobId = c.req.param('id')!
       const db = getServiceClient()
 
-      const access = await projectAccess(c, db, userId, projectId)
+      const access = await callerCanAccessProject(c, db, userId, projectId)
       if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
 
       const { data: job } = await db
@@ -368,7 +349,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
     const jobId = c.req.param('id')!
     const db = getServiceClient()
 
-    const access = await projectAccess(c, db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
 
     const { data: job } = await db
@@ -410,7 +391,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
     const jobId = c.req.param('id')!
     const db = getServiceClient()
 
-    const access = await projectAccess(c, db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
 
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>))
@@ -482,7 +463,7 @@ export function registerSdkUpgradeRoutes(app: Hono<{ Variables: Variables }>): v
     const jobId = c.req.param('id')!
     const db = getServiceClient()
 
-    const access = await projectAccess(c, db, userId, projectId)
+    const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
 
     const { data: rawJob, error: jobErr } = await db

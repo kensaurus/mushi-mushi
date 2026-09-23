@@ -42,7 +42,7 @@ import {
 import {
   resolveProjectGithubToken,
 } from '../../_shared/github.ts';
-import { dbError, ownedProjectIds, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds, userCanAccessProject } from '../shared.ts';
+import { dbError, ownedProjectIds, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds, callerCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -812,7 +812,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       .maybeSingle();
     if (!attempt) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
-    const access = await userCanAccessProject(db, userId, attempt.project_id);
+    const access = await callerCanAccessProject(c, db, userId, attempt.project_id);
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -890,7 +890,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
     }
 
-    const access = await userCanAccessProject(db, userId, attempt.project_id);
+    const access = await callerCanAccessProject(c, db, userId, attempt.project_id);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403);
     }
@@ -1432,7 +1432,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // Authz: owner OR org-member OR project-member — single helper covers
     // all three (Teams v1 collaborators don't always have project_members
     // rows because membership is granted at the org level).
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json(
         { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
@@ -1554,7 +1554,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       );
     }
     // Authz: owner OR org-member OR project-member.
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json(
         { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
@@ -1803,7 +1803,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     if (!projectId) {
       return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'project_id required' } }, 400);
     }
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member' } }, 403);
     }
@@ -1831,7 +1831,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     if (!body.projectId || !body.repoUrl) {
       return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'projectId and repoUrl required' } }, 400);
     }
-    const access = await userCanAccessProject(db, userId, body.projectId);
+    const access = await callerCanAccessProject(c, db, userId, body.projectId);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member' } }, 403);
     }
@@ -1872,7 +1872,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     if (!body.projectId) {
       return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'projectId required' } }, 400);
     }
-    const access = await userCanAccessProject(db, userId, body.projectId);
+    const access = await callerCanAccessProject(c, db, userId, body.projectId);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member' } }, 403);
     }
@@ -1903,7 +1903,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     if (!projectId) {
       return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'project_id required' } }, 400);
     }
-    const access = await userCanAccessProject(db, userId, projectId);
+    const access = await callerCanAccessProject(c, db, userId, projectId);
     if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member' } }, 403);
     }

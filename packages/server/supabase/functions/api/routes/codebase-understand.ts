@@ -39,7 +39,7 @@ import {
 } from '../../_shared/codebase-understand.ts'
 import { resolveImpactChangedPaths } from '../../_shared/codebase-impact-resolve.ts'
 import { enqueueCodebaseAnalyzeJob, runCodebaseAnalyzeJob } from '../../_shared/codebase-analyze-runner.ts'
-import { dbError, userCanAccessProject } from '../shared.ts'
+import { dbError, callerCanAccessProject } from '../shared.ts'
 
 const routeLog = log.child('codebase-understand')
 
@@ -73,7 +73,7 @@ async function upsertCodebaseChatThread(
 
 async function assertProjectAccess(c: Context, projectId: string, userId: string) {
   const db = getServiceClient()
-  const access = await userCanAccessProject(db, userId, projectId)
+  const access = await callerCanAccessProject(c, db, userId, projectId)
   if (!access.allowed) {
     return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
   }

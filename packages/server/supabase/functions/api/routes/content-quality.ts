@@ -19,7 +19,7 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { apiKeyAuth, jwtAuth, timingSafeEqual } from '../../_shared/auth.ts';
 import { checkIngestQuota } from '../../_shared/quota.ts';
-import { dbError, userCanAccessProject, resolveOwnedProject } from '../shared.ts';
+import { dbError, resolveOwnedProject, callerCanAccessProject } from '../shared.ts';
 
 const cqlog = log.child('content-quality');
 
@@ -63,7 +63,7 @@ async function loadAccessibleIssue(
   if (error || !issue) return { ok: false, response: notFound() };
 
   const userId = c.get('userId') as string;
-  const access = await userCanAccessProject(db, userId, issue.project_id as string);
+  const access = await callerCanAccessProject(c, db, userId, issue.project_id as string);
   if (!access.allowed) return { ok: false, response: notFound() };
 
   return { ok: true, issue: issue as Record<string, unknown> };
