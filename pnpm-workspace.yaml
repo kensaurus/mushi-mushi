@@ -96,6 +96,8 @@ overrides:
 
 patchedDependencies:
   'nextra-theme-docs@4.6.1': 'patches/nextra-theme-docs@4.6.1.patch'
+  # useFSRoute maps the /mushi-mushi/ landing alias to the docs root (see the patch).
+  'nextra@4.6.1': 'patches/nextra@4.6.1.patch'
 
 auditConfig:
   ignoreGhsas:
