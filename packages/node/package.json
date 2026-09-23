@@ -149,7 +149,7 @@
     "@mushi-mushi/tsconfig": "workspace:*",
     "@size-limit/file": "^12.1.0",
     "@types/express": "^5.0.6",
-    "@types/node": "^22.20.0",
+    "@types/node": "^22.20.3",
     "eslint": "^10.6.0",
     "size-limit": "^12.1.0",
     "tsup": "^8.5.1",

@@ -164,12 +164,12 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
-    "@changesets/cli": "^2.31.0",
+    "@changesets/cli": "^2.31.1",
     "jiti": "^2.7.0",
-    "knip": "^6.34.0",
-    "playwright": "^1.61.1",
-    "prettier": "^3.8.5",
-    "turbo": "^2.10.0"
+    "knip": "^6.36.0",
+    "playwright": "^1.63.0",
+    "prettier": "^3.9.7",
+    "turbo": "^2.10.13"
   },
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
