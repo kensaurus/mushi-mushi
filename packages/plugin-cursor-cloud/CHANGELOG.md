@@ -1,5 +1,14 @@
 # @mushi-mushi/plugin-cursor-cloud
 
+## 0.6.1
+
+### Patch Changes
+
+- f5e94ce: npm metadata. The author link on the npm page now points at an account that exists: the maintainer's GitHub profile, instead of a Bluesky handle that was never registered. The Node floor is `>=20.19.0`, the same as `@mushi-mushi/core`. The `funding` field is gone, because it pointed at a GitHub Sponsors page that is not enabled and `npm fund` listed a dead link.
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+  - @mushi-mushi/plugin-sdk@0.8.1
+
 ## 0.6.0
 
 ### Minor Changes

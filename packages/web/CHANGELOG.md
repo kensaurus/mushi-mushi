@@ -1,5 +1,52 @@
 # @mushi-mushi/web
 
+## 1.29.0
+
+### Minor Changes
+
+- f5e94ce: Add product analytics: `Mushi.track(event, properties)`, `setConsent()`, `getAnonymousId()` and the `analytics` config block (consent mode, per-person sampling, DNT/GPC, PII key filter). Events batch to the new `POST /v1/sdk/events` route and back the console's Users & Funnels page. `@mushi-mushi/react` gains `useMushiTrack()`; `@mushi-mushi/react-native` gains `useMushi().track()` / `setConsent()` (batched, AsyncStorage spill, flush on app background) and `@mushi-mushi/node` gains `client.track(event, { distinctId, properties })` (one `POST /v1/sdk/events` per call, `surface: 'server'`). The shared vocabulary lives in `@mushi-mushi/core` (`MUSHI_EVENTS`, `sanitizeEventProperties`).
+
+  The web widget's `brandFooter` becomes the "Bug reports by Mushi" mark: a new-tab link to the Mushi site carrying `utm_source=widget&utm_medium=powered-by&ref=<hashed project id>` that emits `loop_impression` (once per page) and `loop_click` through the tracker. It is on by default only for Free Cloud projects via the runtime config; an explicit `widget.brandFooter: false` in `Mushi.init` always wins over the remote value.
+
+### Patch Changes
+
+- f5e94ce: Product analytics no longer travel with the reporter token.
+
+  - **Own analytics id.** `Mushi.track()` events are keyed on a random per-project id the tracker creates, stored only once analytics consent is granted. They used to reuse the reporter token, a credential for the end user's report threads. Visitors get a new analytics id once; nothing else changes.
+  - **Refused batches are not replayed forever.** A batch the server rejects with a 4xx (bad shape, wrong key, too large) is dropped. Network errors, 429 and 5xx are still kept and resent on the next page.
+  - **`page_view`.** `analytics.autoPageviews` now emits `page_view`, the taxonomy name (it emitted `pageview`).
+  - **`error.status`.** Failed API calls now include the HTTP status in `MushiApiResponse.error.status` when the server answered.
+  - `initSessionTracker`'s `reporterTokenHash` option is renamed `reporterToken` (it always carried the raw token); the old name still works.
+
+- f5e94ce: npm metadata. Each entry package's description is now a short role followed by one shared pitch — "The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor." — so the `mushi-mushi` card no longer stops mid-word at npm's 255-character cut. The author link points at the maintainer's GitHub account (the Bluesky handle it used to name was never registered), the Node floor is `>=20.19.0` everywhere to match `@mushi-mushi/core`, and the `sentry-alternative` keyword is gone (Mushi runs alongside Sentry). The `funding` field is gone too, because it pointed at a GitHub Sponsors page that is not enabled. `@mushi-mushi/react-native` no longer packs its 60 KB CHANGELOG.
+- b1f5b88: Record SPA page views. The session tracker's history patch decided push-vs-replace with `original === history.pushState` _inside_ the wrapper — always false once the wrapper is installed — so no `page_view` was ever emitted from a `pushState` navigation. In `@mushi-mushi/web` it was doubly dead: the shared history patch captures the native `History.prototype.pushState` and replaces `history.pushState`, discarding core's wrapper entirely. Two of five live projects had zero `session_page_views` across more than a thousand sessions each.
+
+  - `@mushi-mushi/core`: the navigation kind is fixed at wrap time; new `patchHistory: false` option for hosts that own the history patch and call `trackPageView()` themselves.
+  - `@mushi-mushi/web`: initialises the tracker with `patchHistory: false` and reports `pushState` / `popstate` through its own shared history subscriber, torn down on `destroy()`.
+
+  No API change for hosts. Apps that already call `trackPageView()` from a router hook are unaffected: the web layer only reports history navigations, and a router hook that fires on the same navigation would now double-count — pass `trackSessions: false` or drop the hook.
+
+- f5e94ce: Smaller install. The package no longer ships the repository's `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and `SECURITY.md` — 32 KB in every tarball, more than the code in some packages. They are still in the GitHub repository the npm page links to.
+- f5e94ce: Session replay with rrweb works in bundled apps, and rrweb is no longer installed for everyone.
+
+  - **New `capture.rrweb` loader.** Pass `capture: { replay: 'rrweb', rrweb: () => import('rrweb') }`. The SDK used to load rrweb with a runtime import that no bundler can see, so in a bundled app replay quietly fell back to recording clicks only. Your own dynamic import is code-split like any other. A global `rrweb` from the UMD script tag still works without a loader, and when `replay: 'rrweb'` cannot load rrweb the SDK now warns once in the console.
+  - **Rendered text is masked.** rrweb 2.x ignores the `maskAllText` option the SDK passed, so page text would have been recorded in clear. Replay now masks every text node and every input, and blocks `privacy.redactSelectors` (plus password fields and `[data-mushi-redact]`) from the recording.
+  - **`rrweb` is an optional peer dependency.** As an optional dependency it was downloaded with every install of `@mushi-mushi/web`, about 8 MB of replay code most apps never load. Apps that use `replay: 'rrweb'` now install it themselves: `npm install rrweb`.
+
+- f5e94ce: `unpkg` and `jsdelivr` now point at `dist/mushi.loader.global.js`, so `https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1` and `https://unpkg.com/@mushi-mushi/web@1` serve the self-initialising script-tag loader instead of the CommonJS bundle, which throws inside a `<script>` tag.
+
+  The exports map nests `types` under `import` and `require`, so CommonJS consumers get the `.d.cts` declarations instead of ESM types (the "masquerading as ESM" resolution error), and `typesVersions` resolves the `test-utils`, `i18n`, `otel` and `headless` subpaths under `moduleResolution: "node"`. The loader's 1.2 MB source map is no longer packed.
+
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [b1f5b88]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+  - @mushi-mushi/core@1.29.0
+
 ## 1.28.0
 
 ### Patch Changes

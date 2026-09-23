@@ -1,5 +1,5 @@
 {
-  "packagePin": "@mushi-mushi/mcp@0.21.1",
+  "packagePin": "@mushi-mushi/mcp@0.22.0",
   "tools": {
     "activation_status": {
       "title": "Activation cockpit status",

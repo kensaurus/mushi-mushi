@@ -21,4 +21,4 @@ export const MUSHI_CLI_VERSION: string =
  * setup refreshes the pin. Synced to packages/mcp/package.json by
  * `scripts/sync-mcp-pin.mjs` — never hand-edit the version.
  */
-export const MUSHI_MCP_PIN_SPEC = '@mushi-mushi/mcp@0.21.1'
+export const MUSHI_MCP_PIN_SPEC = '@mushi-mushi/mcp@0.22.0'

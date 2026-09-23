@@ -1,5 +1,15 @@
 # @mushi-mushi/plugin-github-issues
 
+## 0.1.6
+
+### Patch Changes
+
+- f5e94ce: npm metadata. The author link on the npm page now points at an account that exists: the maintainer's GitHub profile, instead of a Bluesky handle that was never registered. The Node floor is `>=20.19.0`, the same as `@mushi-mushi/core`. The `funding` field is gone, because it pointed at a GitHub Sponsors page that is not enabled and `npm fund` listed a dead link.
+- f5e94ce: Smaller install. The package no longer ships the repository's `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and `SECURITY.md` — 32 KB in every tarball, more than the code in some packages. They are still in the GitHub repository the npm page links to.
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+  - @mushi-mushi/plugin-sdk@0.8.1
+
 ## 0.1.5
 
 ### Patch Changes
