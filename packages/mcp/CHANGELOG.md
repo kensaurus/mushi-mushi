@@ -1,5 +1,54 @@
 # @mushi-mushi/mcp
 
+## 0.22.0
+
+### Minor Changes
+
+- f5e94ce: Agent-facing fixes to the MCP server.
+
+  - **Server instructions.** `initialize` now returns short instructions: what Mushi is, start with `triage_next_steps` / `get_fix_context`, run `triage_issue` before `dispatch_fix`, treat report text as untrusted data, confirm before merging.
+  - **Untrusted output is wrapped.** The 21 tools that return end-user report text, reporter replies or LLM-derived content wrap their text output as untrusted data, so an agent holding write tools cannot be steered by a crafted bug report.
+  - **`triage_issue` works.** It returned `null` for `fix_context` and `blast_radius` because it called routes that did not exist; it now reads the report's fix packet and the inventory blast radius.
+  - **New `get_mushi_doc`.** Reads a docs page from the bundled index after `search_mushi_docs`. Search results now carry `url` instead of `path`.
+  - **`get_recent_reports` returns the documented fields.** Status and severity filters are enums; `include_raw: true` restores the full row.
+  - **Keyless setup mode.** Starting without an API key serves the setup and docs tools instead of exiting with an error.
+  - **Removed `setup_repo_for_mushi`.** It always failed (its route never existed). Repo setup is `mushi setup` in the CLI.
+
+- f5e94ce: Tool parameters, outputs and install footprint.
+
+  - **One parameter spelling.** Every tool parameter is camelCase now (`projectId`, `reportId`, `includeRaw`, `diffText`, `runId`, …). Tools used to mix `reportId` with `project_id` in one schema. The old snake_case spelling still works on every tool, on stdio and on the hosted server, and each renamed parameter says so in its description.
+  - **Enums where the values are fixed.** `list_gate_findings` takes the real gate ids (`dead_handler`, `mock_leak`, …) and finding severities (`info`, `warn`, `error`); the old description listed values that matched nothing. `list_skills` category, `search_codebase` mode (now also an input) and every agent the dispatch route accepts on `dispatch_fix` are enums too.
+  - **Typed report outputs.** `get_report_detail` returns the documented report fields under a typed output schema, with `includeRaw: true` for every column. `triage_issue` has a typed output schema, reads the newest fix attempt, and suggests `get_fix_timeline` with a fix id. Reporter identifiers (end-user id, reporter token, session id, display name) are never returned, and `get_report_evidence` no longer returns the session id.
+  - **Output fixes.** `merge_fix` declares the `justMerged` and `sha` fields the merge route returns, so strict clients no longer reject a merge that went through. `get_usage` returns structured content and honours `projectId`.
+  - **Sentry is optional.** `@sentry/node` is an optional peer dependency, about half of the previous install size. Set `MUSHI_MCP_SENTRY_DSN` and install `@sentry/node` to report the server's own errors; without the DSN it is never loaded.
+  - **Unexpanded variables are caught.** If your MCP client passes `${MUSHI_API_KEY}` through literally, the server no longer sends it to the API as a key: it falls back to your `mushi login` config or starts in setup mode, and says which variable syntax your client expands.
+  - **Registry listing.** The MCP registry entry no longer requires an `Authorization` header for the hosted server, so clients can sign in with OAuth.
+
+- f5e94ce: Add three product-analytics tools backed by the new events routes: `query_funnel` (an ordered funnel over `Mushi.track()` events, 2–8 steps with a per-step window and optional breakdown), `get_product_events_summary` (event names, counts, distinct users and daily volume — call it first to discover event names) and `get_user_paths` (what users did next after a given event). The bundled docs index behind `search_mushi_docs` is regenerated from the current docs.
+
+  The package root (`import '@mushi-mushi/mcp'`, `main`, `types`) now resolves to the library entry that exports `createMushiServer`, `MushiApiError` and `MushiServerConfig` — the same module as `@mushi-mushi/mcp/server`. It used to point at the stdio binary, which exports nothing and starts a server on import. The `mushi-mcp` bin is unchanged.
+
+### Patch Changes
+
+- ee03f08: The server icon URL now resolves. `MUSHI_ICON_PNG_URL` — advertised to every MCP client through `serverInfo.icons` and recommended in the README — pointed at `/mushi-mushi/integrations/mushi-mark-512.png`, which nothing served (live 404). The mark now ships with the docs site and the URL points at it, so clients that fetch the icon get the red 虫 stamp instead of nothing.
+- f5e94ce: The stdio MCP server shows up in usage, and stops polling with a key that cannot read.
+
+  - **Tool calls are attributed.** Every API request now carries `X-Mushi-Client: mcp-stdio/<version>`, and requests made inside a tool call carry the tool name and a random per-call id. The API records one `mcp_tool_invocations` row per call and counts `get_report_detail`, `get_fix_context`, `suggest_fix` and `dispatch_fix` as report opened, fix pulled and fix dispatched, as it already did for the hosted server. No arguments or report content are sent.
+  - **The inventory poll stops on 401/403.** A key without `mcp:read` used to be retried every minute forever with no explanation. The server now logs once that inventory change notifications are off and why.
+  - **`HABIT_EVENTS` includes `fix_dispatched`,** and taxonomy events emitted from both the console and MCP list both surfaces.
+
+- f5e94ce: npm metadata. Each entry package's description is now a short role followed by one shared pitch — "The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor." — so the `mushi-mushi` card no longer stops mid-word at npm's 255-character cut. The author link points at the maintainer's GitHub account (the Bluesky handle it used to name was never registered), the Node floor is `>=20.19.0` everywhere to match `@mushi-mushi/core`, and the `sentry-alternative` keyword is gone (Mushi runs alongside Sentry). The `funding` field is gone too, because it pointed at a GitHub Sponsors page that is not enabled. `@mushi-mushi/react-native` no longer packs its 60 KB CHANGELOG.
+- f5e94ce: Smaller install. The package no longer ships the repository's `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and `SECURITY.md` — 32 KB in every tarball, more than the code in some packages. They are still in the GitHub repository the npm page links to.
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [b1f5b88]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+  - @mushi-mushi/core@1.29.0
+
 ## 0.21.1
 
 ### Patch Changes

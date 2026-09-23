@@ -1,5 +1,24 @@
 # @mushi-mushi/vue
 
+## 1.0.3
+
+### Patch Changes
+
+- f5e94ce: npm metadata. The author link on the npm page now points at an account that exists: the maintainer's GitHub profile, instead of a Bluesky handle that was never registered. The Node floor is `>=20.19.0`, the same as `@mushi-mushi/core`. The `funding` field is gone, because it pointed at a GitHub Sponsors page that is not enabled and `npm fund` listed a dead link.
+- f5e94ce: Smaller install. The package no longer ships the repository's `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and `SECURITY.md` — 32 KB in every tarball, more than the code in some packages. They are still in the GitHub repository the npm page links to.
+- f5e94ce: The README's setup is one call: `app.use(MushiPlugin, { projectId, apiKey })`. The old README called the plugin API-only and told you to install `@mushi-mushi/web` and call `Mushi.init()` as well, but the plugin already depends on `@mushi-mushi/web` and initialises the widget itself.
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [b1f5b88]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+- Updated dependencies [f5e94ce]
+  - @mushi-mushi/core@1.29.0
+  - @mushi-mushi/web@1.29.0
+
 ## 1.0.2
 
 ### Patch Changes
