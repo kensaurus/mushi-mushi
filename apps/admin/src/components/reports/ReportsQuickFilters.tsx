@@ -95,7 +95,7 @@ export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
                   b.value === ''
                     ? 'Show every report regardless of status'
                     : b.value === 'open'
-                      ? 'Show every report still waiting on a decision (new through classified, and reopened)'
+                      ? 'Show every report still waiting on a decision — anything not yet fixing, fixed or dismissed'
                       : `Show reports with status "${b.value}"`
                 }
               />
