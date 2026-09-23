@@ -1,6 +1,6 @@
 import { assert, assertEquals, assertFalse } from 'https://deno.land/std@0.224.0/assert/mod.ts'
 
-import { isProjectStorageSecretRef, isVaultRef, storageSecretPrefix } from './vault-ref.ts'
+import { isProjectStorageSecretRef, isVaultRef, storageSecretPrefix } from '../../_shared/vault-ref.ts'
 
 const PROJECT = '11111111-2222-4333-8444-555555555555'
 const OTHER = '99999999-8888-4777-8666-555555555555'

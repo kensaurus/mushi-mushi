@@ -1,6 +1,6 @@
 import { assertEquals, assertThrows } from 'https://deno.land/std@0.224.0/assert/mod.ts'
 
-import { sanitizeSql } from './nl-query.ts'
+import { sanitizeSql } from '../../_shared/nl-query.ts'
 
 // The database (execute_readonly_query → mushi_nl.run as mushi_nl_reader) is
 // the tenant boundary; these checks are the first layer. Each rejected case

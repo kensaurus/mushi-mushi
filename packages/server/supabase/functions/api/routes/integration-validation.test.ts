@@ -1,6 +1,6 @@
 import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts'
 
-import { validatePlatformBody, validateRoutingConfig } from './integrations.ts'
+import { validatePlatformBody, validateRoutingConfig } from '../../_shared/integration-validation.ts'
 
 // Each rejected shape below was accepted before the 2026-09-23 security pass.
 

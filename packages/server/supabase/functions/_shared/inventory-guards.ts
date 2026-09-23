@@ -570,7 +570,14 @@ export class RateLimiter {
 function envInt(name: string, fallback: number): number {
   // deno-lint-ignore no-explicit-any -- Deno typing is added by callers.
   const env = (globalThis as any).Deno?.env
-  const raw = env?.get?.(name)
+  let raw: unknown
+  try {
+    raw = env?.get?.(name)
+  } catch {
+    // Env access not granted (e.g. `deno test` without --allow-env, which is
+    // how CI runs unit tests of modules that import this one).
+    return fallback
+  }
   if (typeof raw !== 'string') return fallback
   const n = Number(raw)
   return Number.isFinite(n) && n > 0 ? n : fallback
