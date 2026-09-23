@@ -43,7 +43,7 @@
  * (apps/docs/.env.example). Unset → renders nothing, does nothing.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { usePathname } from 'next/navigation'
+import { useSitePathname } from '../lib/site-pathname'
 import {
   SITE_ANALYTICS_ENV,
   buildFirstTouch,
@@ -133,7 +133,10 @@ function loadTracker(config: SiteAnalyticsConfig): Promise<Tracker | null> {
 const CONFIG = readSiteAnalyticsConfig(SITE_ANALYTICS_ENV)
 
 export function MushiSiteAnalytics() {
-  const pathname = usePathname()
+  // Site-relative: a visit to the /mushi-mushi/ landing alias is a visit to
+  // "/". Raw usePathname() recorded it as docs_page_view on "/mushi-mushi",
+  // so landing_view never fired (lib/site-pathname.ts).
+  const pathname = useSitePathname()
   const [showBar, setShowBar] = useState(false)
 
   const consentRef = useRef<StoredConsent | 'pending' | 'blocked'>('pending')
