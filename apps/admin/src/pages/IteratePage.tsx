@@ -8,6 +8,7 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { pdcaRunsFromEnvelope, type PdcaRunsEnvelope } from '../lib/pdcaRuns'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -108,9 +109,13 @@ export function IteratePage() {
     reload: reloadRuns,
     lastFetchedAt: runsFetchedAt,
     isValidating: runsValidating,
-  } = usePageData<PdcaRun[]>(listPath, { deps: [activeProjectId, activeTab] })
+  } = usePageData<PdcaRunsEnvelope<PdcaRun>>(listPath, { deps: [activeProjectId, activeTab] })
 
-  const runList = runs ?? []
+  // The list route is flat-paginated and coerceApiResult re-nests it under
+  // `data.data`. Reading the hook value as an array threw
+  // `runs.filter is not a function` on every Runs-tab visit and, via the
+  // route boundary, blanked the whole console (2026-09-23).
+  const runList = pdcaRunsFromEnvelope(runs).runs
   const activeRuns = runList.filter((r) => r.status === 'running' || r.status === 'queued')
 
   const reloadAll = useCallback(() => {

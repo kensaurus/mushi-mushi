@@ -320,3 +320,62 @@ describe('updateSessionIdentity', () => {
     destroySessionTracker();
   });
 });
+
+// No test covered the history patch before, which is how a comparison that
+// was always false (`original === history.pushState` evaluated *inside* the
+// wrapper) shipped and silently dropped every SPA page view.
+describe('history patch (SPA page views)', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function pageViews(client: MushiApiClient): Array<Record<string, unknown>> {
+    return (client.postSessionEvent as ReturnType<typeof vi.fn>).mock.calls
+      .map(([p]: [Record<string, unknown>]) => p)
+      .filter((p) => p.kind === 'page_view');
+  }
+
+  it('emits page_view on history.pushState', async () => {
+    const { initSessionTracker, destroySessionTracker } = await freshTracker();
+    const client = makeMockClient();
+
+    initSessionTracker({ client });
+    history.pushState({}, '', '/pushed');
+
+    const views = pageViews(client);
+    expect(views).toHaveLength(1);
+    expect(views[0].route).toBe('/pushed');
+    expect(views[0].page_view_count).toBe(2);
+
+    destroySessionTracker();
+  });
+
+  it('does not emit page_view on history.replaceState', async () => {
+    const { initSessionTracker, destroySessionTracker } = await freshTracker();
+    const client = makeMockClient();
+
+    initSessionTracker({ client });
+    history.replaceState({}, '', '/replaced');
+
+    expect(pageViews(client)).toHaveLength(0);
+
+    destroySessionTracker();
+  });
+
+  it('patchHistory:false leaves pushState untracked so a host can wire page views itself', async () => {
+    const { initSessionTracker, destroySessionTracker } = await freshTracker();
+    const client = makeMockClient();
+
+    initSessionTracker({ client, patchHistory: false });
+    history.pushState({}, '', '/host-owned');
+
+    expect(pageViews(client)).toHaveLength(0);
+
+    destroySessionTracker();
+  });
+});

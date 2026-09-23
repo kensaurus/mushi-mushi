@@ -49,6 +49,7 @@
     "check:changeset-orphans": "node scripts/check-changeset-orphans.mjs",
     "check:changeset-coverage": "node scripts/check-changeset-coverage.mjs",
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
+    "check:spine": "node packages/marketing-ui/src/kensaurus/spine/check-spine.mjs",
     "check:catalog-count": "node scripts/check-catalog-count.mjs",
     "check:server-json": "node scripts/sync-server-json-version.mjs --check",
     "check:dependency-overrides": "node scripts/check-dependency-overrides.mjs",

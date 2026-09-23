@@ -11,6 +11,9 @@ import { getDemoReportFixture, materializeDemoReport, precomputedClassification 
 import { checkIngestQuota } from '../../_shared/quota.ts';
 import { log } from '../../_shared/logger.ts';
 import { classifyIngestRateLimitError } from './ingest-rate-limit.ts';
+// Pure readiness → dry-run shaping lives in its own import-free module so it
+// can be unit-tested under CI's permission-less `deno test`.
+import { buildDryRunResult, type DispatchReadiness } from './dispatch-dry-run.ts';
 
 /**
  * Console test reports per user per hour. Each one runs the real Stage-1
@@ -19,6 +22,46 @@ import { classifyIngestRateLimitError } from './ingest-rate-limit.ts';
  * far above what onboarding needs (one, maybe a retry).
  */
 export const TEST_REPORTS_PER_USER_PER_HOUR = 10;
+
+/**
+ * One query set behind both GET /preflight and POST /fixes/dry-run, so the
+ * two routes cannot drift apart on what "ready" means.
+ */
+export async function loadDispatchReadiness(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+): Promise<DispatchReadiness> {
+  const [settingsRes, reposRes, anthropicKey, embeddingKey] = await Promise.all([
+    db
+      .from('project_settings')
+      .select(
+        'github_repo_url, byok_anthropic_key_ref, codebase_index_enabled, autofix_enabled, codebase_repo_url',
+      )
+      .eq('project_id', projectId)
+      .maybeSingle(),
+    db.from('project_repos').select('repo_url').eq('project_id', projectId).limit(1),
+    resolveLlmKey(db, projectId, 'anthropic'),
+    resolveLlmKey(db, projectId, 'openai'),
+  ]);
+
+  const settings = settingsRes.data;
+  const repos = reposRes.data ?? [];
+  const repoUrl =
+    settings?.github_repo_url ??
+    settings?.codebase_repo_url ??
+    (repos.length > 0 ? (repos[0] as { repo_url?: string | null }).repo_url ?? null : null);
+
+  return {
+    repoUrl,
+    hasGithub: Boolean(settings?.github_repo_url) || repos.length > 0,
+    hasAnthropic: Boolean(anthropicKey),
+    anthropicSource: anthropicKey?.source ?? null,
+    hasCodebase: Boolean(settings?.codebase_index_enabled),
+    hasAutofix: Boolean(settings?.autofix_enabled),
+    hasEmbedding: Boolean(embeddingKey),
+    embeddingSource: embeddingKey?.source ?? null,
+  };
+}
 
 export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variables }>): void {
   // Lenient UUID matcher (mirrors projects-crud.ts; see note there).
@@ -133,6 +176,44 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
 
     return c.json({ ok: true, data: { ready, checks, repoUrl } });
   });
+
+  // ---------------------------------------------------------------------------
+  // Dispatch dry-run — POST /v1/admin/projects/:id/fixes/dry-run
+  //
+  // Consumed by DryRunPanel ("Validate pipeline") on /integrations. Simulates
+  // the auto-fix pipeline WITHOUT calling the LLM or opening a PR: the first
+  // three steps are real checks on the same signals as /preflight (plus the
+  // embedding key, which preflight does not check and which is what actually
+  // sank a live dispatch on 2026-09-23), the last two are always `simulated`.
+  // The panel has POSTed here since it shipped; the route never existed, so
+  // "Run dry-run" got a plain-text 404 and the advertised way to validate the
+  // pipeline before spending a dispatch never worked. Same auth as /preflight:
+  // JWT admins and mcp:read API keys, same owner-wide project access check.
+  // ---------------------------------------------------------------------------
+  app.post(
+    '/v1/admin/projects/:id/fixes/dry-run',
+    adminOrApiKey({ scope: 'mcp:read' }),
+    async (c) => {
+      const projectId = c.req.param('id')!;
+      const userId = c.get('userId') as string;
+      const db = getServiceClient();
+
+      if (!UUID_RE.test(projectId)) {
+        return c.json(
+          { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
+          400,
+        );
+      }
+
+      const access = await userCanAccessProject(db, userId, projectId);
+      if (!access.allowed) {
+        return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+      }
+
+      const readiness = await loadDispatchReadiness(db, projectId);
+      return c.json({ ok: true, data: buildDryRunResult(readiness) });
+    },
+  );
 
   // ---------------------------------------------------------------------------
   // Autofix flag — GET /v1/admin/projects/:id/autofix

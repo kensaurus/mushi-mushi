@@ -313,6 +313,69 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     });
   });
 
+  // ---------------------------------------------------------------------------
+  // POST /v1/admin/projects/:id/codebase/rotate-secret
+  //
+  // Regenerates the GitHub webhook secret without re-enabling indexing.
+  // CodebaseIndexCard's "Rotate secret" button has POSTed here since the card
+  // shipped, but the route never existed: a leaked-secret rotation got a
+  // plain-text 404 and a "Rotate failed" toast. Same owner/admin gate as
+  // `enable` (rotating a webhook credential must not be looser than issuing
+  // one) and the same `{ ok, data: { webhook_secret } }` envelope the card's
+  // one-time reveal reads.
+  // ---------------------------------------------------------------------------
+  app.post('/v1/admin/projects/:id/codebase/rotate-secret', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
+      return c.json(
+        { ok: false, error: { code: 'FORBIDDEN', message: 'Owner or admin access required' } },
+        403,
+      );
+    }
+
+    const { data: settings, error: readErr } = await db
+      .from('project_settings')
+      .select('codebase_index_enabled, github_webhook_secret')
+      .eq('project_id', projectId)
+      .maybeSingle();
+    if (readErr) return dbError(c, readErr);
+
+    // A secret nothing consumes would only mislead: the webhook handler skips
+    // repos whose indexing is off, and the card hides the button in that
+    // state. 409 so a direct API caller learns why instead of getting a
+    // secret that never takes effect.
+    if (!settings?.codebase_index_enabled) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'CODEBASE_NOT_ENABLED',
+            message: 'Enable codebase indexing before rotating its webhook secret.',
+          },
+        },
+        409,
+      );
+    }
+
+    const webhookSecret = await generateWebhookSecret();
+    const { error: writeErr } = await db
+      .from('project_settings')
+      .update({ github_webhook_secret: webhookSecret })
+      .eq('project_id', projectId);
+    if (writeErr) return dbError(c, writeErr);
+
+    await logAudit(db, projectId, userId, 'settings.updated', 'codebase_index', projectId, {
+      action: 'rotate_webhook_secret',
+      had_previous_secret: Boolean(settings.github_webhook_secret),
+    }).catch(() => {});
+
+    return c.json({ ok: true, data: { webhook_secret: webhookSecret } });
+  });
+
   app.get('/v1/admin/projects/:id/codebase/stats', jwtAuth, async (c) => {
     const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;

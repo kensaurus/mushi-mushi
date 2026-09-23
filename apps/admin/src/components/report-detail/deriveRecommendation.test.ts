@@ -211,6 +211,20 @@ describe('deriveRecommendation', () => {
   })
 
   describe('context_assembly_failed', () => {
+    it('wins over skipped_no_context \u2014 the shape the worker emits for a revoked embedding key', () => {
+      // glot.it, 2026-09-23: status skipped_no_context, failure_category
+      // context_assembly_failed, error "RAG embedding call failed (401 ...)".
+      // The status-first ordering used to route this to "no relevant code".
+      const report = makeReport({
+        fix_attempts: [
+          makeFixAttempt({ status: 'skipped_no_context', failure_category: 'context_assembly_failed' }),
+        ],
+      })
+      const rec = deriveRecommendation(report, makeDispatchState(), 0, noOp)
+      expect(rec.title).toContain('context assembly')
+      expect(rec.actions?.some((a) => a.to === '/settings?tab=byok')).toBe(true)
+    })
+
     it('recommends pipeline log + retry', () => {
       const report = makeReport({
         fix_attempts: [makeFixAttempt({ failure_category: 'context_assembly_failed' })],

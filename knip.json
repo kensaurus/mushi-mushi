@@ -59,6 +59,11 @@
         "pod"
       ]
     },
+    "packages/marketing-ui": {
+      "ignore": [
+        "src/kensaurus/spine/**"
+      ]
+    },
     "packages/cli": {
       "ignoreBinaries": [
         "supabase",
