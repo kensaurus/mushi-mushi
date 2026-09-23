@@ -345,6 +345,8 @@ Deno.serve(
               'judge_score',
           )
           .eq('id', dispatch.report_id)
+          // Defence in depth: the dispatch route checks this too.
+          .eq('project_id', dispatch.project_id)
           .single(),
         db
           .from('project_settings')
@@ -1037,7 +1039,8 @@ ${
           // attempt — this attempt made it through.
           processing_error: null,
         })
-        .eq('id', dispatch.report_id);
+        .eq('id', dispatch.report_id)
+        .eq('project_id', dispatch.project_id);
 
       const previousReportStatus =
         typeof (report as Record<string, unknown> | null)?.status === 'string'

@@ -205,7 +205,7 @@ export async function authorizeEndUserPrivacyAccess(
       }
     }
     try {
-      const verified = await verifyHostJwt({ token, projectId, endUserId: eu.id })
+      const verified = await verifyHostJwt({ token, projectId, endUserId: eu.id, expectedSub: externalUserId })
       if (verified.sub !== externalUserId) {
         return { ok: false, status: 403, code: 'HOST_JWT_SUBJECT_MISMATCH', message: 'Host JWT subject does not match userId.' }
       }
@@ -245,6 +245,60 @@ export async function authorizeEndUserPrivacyAccess(
     if ((count ?? 0) > 0) return { ok: true, endUserId: eu.id }
   }
   // Seen only by other projects in the org: indistinguishable from unknown.
+  return { ok: true, endUserId: null }
+}
+
+const SDK_ME_READ_MAX_PER_MINUTE = 300
+
+/**
+ * End user for the /v1/sdk/me/{points,tier,history} reads. These run on the
+ * public SDK key, which is in every visitor's browser, and end_users are
+ * org-wide — so the lookup only resolves users this project has seen, a
+ * presented X-Mushi-User-Token must name the requested user, and the routes
+ * share a per-project rate limit (security pass 2026-09-23).
+ */
+async function resolveEndUserForSdkRead(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  organizationId: string,
+  externalUserId: string,
+): Promise<EndUserAccess> {
+  const { error: rateErr } = await db.rpc('scoped_rate_limit_claim', {
+    p_user_id: projectId,
+    p_scope: 'sdk_me_read',
+    p_max_per_window: SDK_ME_READ_MAX_PER_MINUTE,
+    p_window: '1 minute',
+  })
+  if (rateErr) {
+    return { ok: false, status: 429, code: 'RATE_LIMITED', message: 'Too many requests. Retry in 60 seconds.' }
+  }
+
+  const presented = c.req.header(MUSHI_USER_TOKEN_HEADER)
+  if (presented) {
+    const verified = await verifyEndUserToken(db, projectId, presented)
+    if (!verified || verified.externalUserId !== externalUserId) {
+      return { ok: false, status: 403, code: 'IDENTITY_SUBJECT_MISMATCH', message: 'X-Mushi-User-Token does not match userId.' }
+    }
+  }
+
+  const { data: eu } = await db
+    .from('end_users')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('external_user_id', externalUserId)
+    .maybeSingle()
+  if (!eu) return { ok: true, endUserId: null }
+
+  for (const table of END_USER_FOOTPRINT_TABLES) {
+    const { count } = await db
+      .from(table)
+      .select('end_user_id', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .eq('end_user_id', eu.id)
+      .limit(1)
+    if ((count ?? 0) > 0) return { ok: true, endUserId: eu.id }
+  }
   return { ok: true, endUserId: null }
 }
 
@@ -343,6 +397,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
           token: host_jwt,
           projectId,
           endUserId: endUser.id,
+          expectedSub: user_id,
         })
       } catch (jwtErr) {
         // Non-fatal — activity is still accepted; jwt_verified_at remains null.
@@ -422,12 +477,9 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     const organizationId = await getOrgIdForProject(db, projectId)
     if (!organizationId) return c.json({ ok: false, error: { code: 'NO_ORG' } }, 422)
 
-    const { data: eu } = await db
-      .from('end_users')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('external_user_id', userId)
-      .single()
+    const access = await resolveEndUserForSdkRead(c, db, projectId, organizationId, userId)
+    if (!access.ok) return c.json({ ok: false, error: { code: access.code, message: access.message } }, access.status)
+    const eu = access.endUserId ? { id: access.endUserId } : null
 
     if (!eu) return c.json({ ok: true, data: { total_points: 0, points_30d: 0, points_lifetime: 0, tier: null, next_tier: null, report_submit_pts: 50 } })
 
@@ -481,12 +533,9 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     const organizationId = await getOrgIdForProject(db, projectId)
     if (!organizationId) return c.json({ ok: false, error: { code: 'NO_ORG' } }, 422)
 
-    const { data: eu } = await db
-      .from('end_users')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('external_user_id', userId)
-      .single()
+    const access = await resolveEndUserForSdkRead(c, db, projectId, organizationId, userId)
+    if (!access.ok) return c.json({ ok: false, error: { code: access.code, message: access.message } }, access.status)
+    const eu = access.endUserId ? { id: access.endUserId } : null
 
     if (!eu) return c.json({ ok: true, data: null })
 
@@ -512,12 +561,9 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     const organizationId = await getOrgIdForProject(db, projectId)
     if (!organizationId) return c.json({ ok: false, error: { code: 'NO_ORG' } }, 422)
 
-    const { data: eu } = await db
-      .from('end_users')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('external_user_id', userId)
-      .single()
+    const access = await resolveEndUserForSdkRead(c, db, projectId, organizationId, userId)
+    if (!access.ok) return c.json({ ok: false, error: { code: access.code, message: access.message } }, access.status)
+    const eu = access.endUserId ? { id: access.endUserId } : null
 
     if (!eu) return c.json({ ok: true, data: { items: [], total: 0 } })
 

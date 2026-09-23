@@ -6,11 +6,70 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
-import { callerProjectIds, resolveOwnedProject, resolveAccessibleOrg } from '../shared.ts';
+import { callerProjectIds, requireProjectAdmin, resolveOwnedProject, resolveAccessibleOrg } from '../shared.ts';
+import { isVaultRef } from '../../_shared/vault-ref.ts';
+import { assertSafeOutboundUrl } from '../../_shared/inventory-guards.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
 import { log } from '../../_shared/logger.ts';
 import { resolveEffectivePlatformSettings } from '../../_shared/integration-settings.ts';
 import { getMushiClaudeFixWorkflowYaml, MUSHI_CLAUDE_GITHUB_SECRETS } from '../../_shared/mushi-claude-workflow.ts';
+
+type BodyError = { code: string; message: string };
+
+// Tenant-set hosts the server later calls with credentials attached.
+const PLATFORM_URL_FIELDS = new Set(['langfuse_host']);
+const ROUTING_URL_FIELDS = new Set(['baseUrl', 'base_url', 'url', 'webhookUrl', 'webhook_url']);
+const GITHUB_NAME_RE = /^[A-Za-z0-9._-]{1,100}$/;
+
+function vaultRefError(field: string): BodyError {
+  return {
+    code: 'VAULT_REF_NOT_ALLOWED',
+    message: `${field}: paste the secret itself. Mushi stores it in Vault and keeps the reference.`,
+  };
+}
+
+function unsafeUrlError(field: string, reason: string): BodyError {
+  return { code: 'UNSAFE_URL', message: `${field} must be a public https URL (${reason}).` };
+}
+
+/**
+ * Shapes a settings body must never carry: a `vault://` reference (the server
+ * mints those, see _shared/vault-ref.ts) or an outbound URL that is not public
+ * https.
+ */
+export function validatePlatformBody(body: Record<string, unknown>): BodyError | null {
+  for (const [k, v] of Object.entries(body)) {
+    if (isVaultRef(v)) return vaultRefError(k);
+    if (PLATFORM_URL_FIELDS.has(k) && typeof v === 'string' && v.trim() !== '') {
+      const safe = assertSafeOutboundUrl(v.trim());
+      if (!safe.ok) return unsafeUrlError(k, safe.reason);
+    }
+  }
+  return null;
+}
+
+/** Same rules for a routing provider's config, plus plain GitHub names. */
+export function validateRoutingConfig(type: string, config: Record<string, unknown>): BodyError | null {
+  for (const [k, v] of Object.entries(config)) {
+    if (isVaultRef(v)) return vaultRefError(k);
+    if (ROUTING_URL_FIELDS.has(k) && typeof v === 'string' && v.trim() !== '') {
+      const safe = assertSafeOutboundUrl(v.trim());
+      if (!safe.ok) return unsafeUrlError(k, safe.reason);
+    }
+  }
+  if (type === 'github') {
+    // "owner/repo" in `repo` would also match the push-routing lookup in
+    // webhooks-github-indexer for someone else's repository.
+    for (const k of ['owner', 'repo']) {
+      const v = config[k];
+      if (v == null || v === '') continue;
+      if (typeof v !== 'string' || !GITHUB_NAME_RE.test(v)) {
+        return { code: 'VALIDATION_ERROR', message: `${k} must be a plain GitHub name without "/".` };
+      }
+    }
+  }
+  return null;
+}
 
 export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -76,6 +135,13 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
+    const forbidden = requireProjectAdmin(c, project);
+    if (forbidden) return forbidden;
+    if (typeof body.type !== 'string' || !/^[a-z_]{2,40}$/.test(body.type)) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'type is required' } }, 400);
+    }
+    const invalid = validateRoutingConfig(body.type, body.config ?? {});
+    if (invalid) return c.json({ ok: false, error: invalid }, 400);
 
     // Pull existing config so we can preserve secret fields the UI re-sent as
     // masked placeholders (e.g. "…abcd"). Without this, re-saving from the
@@ -430,6 +496,11 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
+    const forbidden = requireProjectAdmin(c, project);
+    if (forbidden) return forbidden;
+
+    const invalid = validatePlatformBody(body);
+    if (invalid) return c.json({ ok: false, error: invalid }, 400);
 
     const allowed = PLATFORM_KIND_FIELDS[kind];
     const vaulted = new Set(VAULTED_FIELDS_BY_KIND[kind] ?? []);
@@ -448,25 +519,27 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
         continue;
       }
 
-      if (vaulted.has(k) && typeof v === 'string' && !v.startsWith('vault://')) {
+      if (vaulted.has(k) && typeof v === 'string') {
         // Auto-vault: write the raw secret to Supabase Vault and store the ref.
+        // Never persist the raw value: a failed Vault write fails the request.
         const secretName = `mushi/integration/${project.id}/${kind}/${k}`;
         const { error: vaultErr } = await db.rpc('vault_store_secret', {
           secret_name: secretName,
           secret_value: v,
         });
         if (vaultErr) {
-          // Vault may not be installed in dev — degrade gracefully but warn.
-          log.warn('vault_store_secret failed; persisting raw value', {
+          log.error('vault_store_secret failed for integration secret', {
             scope: 'integrations',
             kind,
             field: k,
             err: vaultErr.message,
           });
-          updates[k] = v;
-        } else {
-          updates[k] = `vault://${secretName}`;
+          return c.json(
+            { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: `Could not store ${k} securely. Retry in a moment.` } },
+            500,
+          );
         }
+        updates[k] = `vault://${secretName}`;
       } else {
         updates[k] = v;
       }
@@ -561,6 +634,9 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       );
     }
 
+    const invalid = validatePlatformBody(body);
+    if (invalid) return c.json({ ok: false, error: invalid }, 400);
+
     const allowed = PLATFORM_KIND_FIELDS[kind];
     const vaulted = new Set(VAULTED_FIELDS_BY_KIND[kind] ?? []);
     const updates: Record<string, unknown> = { organization_id: organizationId };
@@ -575,23 +651,25 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
         continue;
       }
 
-      if (vaulted.has(k) && typeof v === 'string' && !v.startsWith('vault://')) {
+      if (vaulted.has(k) && typeof v === 'string') {
         const secretName = `mushi/org-integration/${organizationId}/${kind}/${k}`;
         const { error: vaultErr } = await db.rpc('vault_store_secret', {
           secret_name: secretName,
           secret_value: v,
         });
         if (vaultErr) {
-          log.warn('vault_store_secret failed for org setting; persisting raw value', {
+          log.error('vault_store_secret failed for org integration secret', {
             scope: 'org-integrations',
             kind,
             field: k,
             err: vaultErr.message,
           });
-          updates[k] = v;
-        } else {
-          updates[k] = `vault://${secretName}`;
+          return c.json(
+            { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: `Could not store ${k} securely. Retry in a moment.` } },
+            500,
+          );
         }
+        updates[k] = `vault://${secretName}`;
       } else {
         updates[k] = v;
       }
@@ -653,6 +731,8 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     // Source project (the one whose creds to copy).
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
+    const forbidden = requireProjectAdmin(c, resolvedProject.project);
+    if (forbidden) return forbidden;
     const sourceProjectId = resolvedProject.project.id as string;
     const orgId = resolvedProject.project.organization_id as string | null;
 
@@ -729,7 +809,9 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
                 secret_name: secretName,
                 secret_value: rawValue,
               });
-              updates[k] = vaultErr ? rawValue : `vault://${secretName}`;
+              // Never copy a raw secret into another project's row.
+              if (vaultErr) throw new Error(`vault_store_secret failed: ${vaultErr.message}`);
+              updates[k] = `vault://${secretName}`;
             } else {
               updates[k] = rawValue;
             }

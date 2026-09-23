@@ -75,9 +75,6 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   // Deliberately unauthenticated liveness/readiness surface. It returns only
   // process/DB health and a version, never tenant data.
   healthz: 'Public liveness probe — exposes only status, DB health, and version',
-  // Intelligence report is called by the admin UI via JWT and by internal
-  // callers via service role — handler branches on the caller.
-  'intelligence-report': 'Dual JWT/service-role handled in handler',
   // MCP Streamable HTTP transport — public by design (external orchestrators
   // like Cursor remote MCP / Claude Agent SDK / OpenAI Agents SDK must
   // connect). The transport itself authenticates with the same dual JWT /

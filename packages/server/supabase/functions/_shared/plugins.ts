@@ -761,6 +761,9 @@ export async function postSignedWebhook(req: SignedWebhookRequest): Promise<Sign
       headers,
       body: req.rawBody,
       signal: controller.signal,
+      // The host check above covers this URL only; a 3xx to an internal
+      // address must not be followed (it would also carry the signature).
+      redirect: 'manual',
     })
     clearTimeout(tm)
     httpStatus = res.status
@@ -961,6 +964,13 @@ export async function sendTestDelivery(
     rawBody,
   })
 
+  // Same outbound guard as a real dispatch (postSignedWebhook): the test
+  // delivery used to fetch any stored URL and echo the response body back.
+  const safeUrl = assertSafeOutboundUrl(row.webhook_url, {})
+  if (!safeUrl.ok) {
+    return { ok: false, httpStatus: null, durationMs: 0, excerpt: `blocked: ${safeUrl.reason}` }
+  }
+
   const start = Date.now()
   let status: 'ok' | 'error' | 'timeout' = 'error'
   let httpStatus: number | null = null
@@ -974,6 +984,7 @@ export async function sendTestDelivery(
       headers,
       body: rawBody,
       signal: controller.signal,
+      redirect: 'manual',
     })
     clearTimeout(tm)
     httpStatus = res.status

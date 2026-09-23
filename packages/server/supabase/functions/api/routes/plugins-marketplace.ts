@@ -7,6 +7,7 @@ import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { sendTestDelivery } from '../../_shared/plugins.ts';
 import { dbError, resolveOwnedProject } from '../shared.ts';
+import { assertSafeOutboundUrl } from '../../_shared/inventory-guards.ts';
 
 export function registerPluginsMarketplaceRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/plugins', jwtAuth, async (c) => {
@@ -49,6 +50,15 @@ export function registerPluginsMarketplaceRoutes(app: Hono<{ Variables: Variable
     // D1: webhook plugins carry a slug + URL + signing secret. Built-in
     // plugins (legacy path) keep the slug-less shape for backwards compat.
     const isWebhook = typeof body.webhookUrl === 'string' && body.webhookUrl.length > 0;
+    if (isWebhook) {
+      const safe = assertSafeOutboundUrl(body.webhookUrl, {});
+      if (!safe.ok) {
+        return c.json(
+          { ok: false, error: { code: 'UNSAFE_URL', message: `webhookUrl must be a public https URL (${safe.reason}).` } },
+          400,
+        );
+      }
+    }
     if (isWebhook && !(typeof body.webhookSecret === 'string' && body.webhookSecret.trim().length > 0)) {
       return c.json(
         {
@@ -152,9 +162,10 @@ export function registerPluginsMarketplaceRoutes(app: Hono<{ Variables: Variable
     const patch: Record<string, unknown> = {};
     if (typeof body.isActive === 'boolean') patch.is_active = body.isActive;
     if (typeof body.webhookUrl === 'string') {
-      if (!body.webhookUrl.startsWith('https://')) {
+      const safe = assertSafeOutboundUrl(body.webhookUrl, {});
+      if (!safe.ok) {
         return c.json(
-          { ok: false, error: { code: 'INVALID_INPUT', message: 'webhookUrl must be https://' } },
+          { ok: false, error: { code: 'INVALID_INPUT', message: `webhookUrl must be a public https URL (${safe.reason}).` } },
           400,
         );
       }

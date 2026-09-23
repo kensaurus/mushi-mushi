@@ -46,6 +46,7 @@ import { getServiceClient } from '../_shared/db.ts';
 import { log } from '../_shared/logger.ts';
 import { withSentry } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
+import { assertSafeOutboundUrl } from '../_shared/inventory-guards.ts';
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void;
@@ -229,23 +230,12 @@ export async function buildPushHeaders(input: PushHeadersInput): Promise<Record<
 }
 
 function isHttpsUrl(url: string): boolean {
-  try {
-    const u = new URL(url);
-    if (u.protocol !== 'https:') return false;
-    // Block obvious internal targets — push targets must be reachable from
-    // the public internet; localhost/RFC-1918 hostnames are almost always
-    // misconfiguration and would expose the trigger to SSRF in self-hosted
-    // deployments. We still allow them when MUSHI_ALLOW_INTERNAL_PUSH=1
-    // (used by integration tests).
-    if (Deno.env.get('MUSHI_ALLOW_INTERNAL_PUSH') === '1') return true;
-    const host = u.hostname.toLowerCase();
-    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return false;
-    if (/^10\./.test(host) || /^192\.168\./.test(host)) return false;
-    if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host)) return false;
-    return true;
-  } catch {
-    return false;
-  }
+  // Push targets must be reachable from the public internet. Same guard the
+  // write path uses (assertSafeOutboundUrl): the old local list missed
+  // 169.254.169.254 (cloud metadata), IPv6 ULA/link-local and 0.0.0.0.
+  // MUSHI_ALLOW_INTERNAL_PUSH=1 still opens it for integration tests.
+  const allowInternal = Deno.env.get('MUSHI_ALLOW_INTERNAL_PUSH') === '1';
+  return assertSafeOutboundUrl(url, { allowPrivateHosts: allowInternal }).ok;
 }
 
 async function loadProjectPushSecret(
@@ -343,6 +333,8 @@ export async function handle(req: Request): Promise<Response> {
       headers,
       body: rawBody,
       signal: controller.signal,
+      // Never follow a redirect past the host check above.
+      redirect: 'manual',
     });
     clearTimeout(timer);
     httpStatus = res.status;

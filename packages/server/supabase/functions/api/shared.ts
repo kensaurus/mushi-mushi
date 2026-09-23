@@ -550,6 +550,17 @@ export async function scopedOwnedProjectIds(
 
 export const resolveAccessibleProject = resolveOwnedProject;
 
+/**
+ * Credential writes (integration tokens, storage keys, bot tokens) are for org
+ * owners and admins; members and viewers keep read access and ordinary
+ * settings. API keys resolve as 'owner' in {@link resolveOwnedProject}.
+ */
+export function requireProjectAdmin(c: Context, project: OwnedProjectRef): Response | null {
+  const role = project.organization_role;
+  if (role === 'owner' || role === 'admin') return null;
+  return jsonForbidden(c, 'Only organization owners and admins can change credentials.');
+}
+
 export type OrgRole = 'owner' | 'admin' | 'member' | 'viewer';
 
 export type AccessibleOrgResolution =
