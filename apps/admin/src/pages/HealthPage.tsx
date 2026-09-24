@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
-import { useRealtime } from '../lib/realtime'
+import { useRealtime, useRealtimeReload } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -235,7 +235,10 @@ function HealthPageContent() {
   }, [reloadStats, llmQuery, cronQuery])
 
   useRealtime({ table: 'llm_invocations' }, reloadAll)
-  useRealtime({ table: 'cron_runs' }, reloadAll)
+  // Debounced: the daily cron_runs retention job deletes a few thousand rows
+  // in one statement, and Realtime delivers DELETE events without RLS. An
+  // undebounced subscription would fire reloadAll once per deleted row.
+  useRealtimeReload(['cron_runs'], reloadAll)
 
   useEffect(() => {
     const lastRun = cron?.byJob['judge-batch']?.lastRun
