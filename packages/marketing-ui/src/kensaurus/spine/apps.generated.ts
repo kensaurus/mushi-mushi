@@ -19,7 +19,10 @@ export interface KensaurusDeepLinks {
 export interface KensaurusApp {
   /** Canonical app id: the one id used for events, wallet, quota and URLs. */
   readonly id: string
+  /** Full store name, "brand – what it does": list titles and headings. */
   readonly name: string
+  /** The brand alone, derived from `name`: for sentences ("Get your {brand} stamp"). */
+  readonly brand: string
   /** Short ids still emitted by shipped builds; normalised server-side. */
   readonly aliases: readonly string[]
   /** App-specific event that marks activation (a passport stamp). */
@@ -66,6 +69,7 @@ export const KENSAURUS_MANIFEST = {
     {
       id: 'glot-it',
       name: 'glot.it – Learn Thai',
+      brand: 'glot.it',
       aliases: ['glot'],
       activationEvent: 'lesson_completed',
       deepLinks: {
@@ -87,6 +91,7 @@ export const KENSAURUS_MANIFEST = {
     {
       id: 'yen-yen',
       name: 'yen-yen – Expense Tracker',
+      brand: 'yen-yen',
       aliases: [],
       activationEvent: 'first_expense_saved',
       deepLinks: {
@@ -111,6 +116,7 @@ export const KENSAURUS_MANIFEST = {
     {
       id: 'the-wanting-mind',
       name: 'the wanting mind – Living Book',
+      brand: 'the wanting mind',
       aliases: ['twm'],
       activationEvent: 'chapter_finished',
       deepLinks: {
@@ -135,6 +141,7 @@ export const KENSAURUS_MANIFEST = {
     {
       id: 'help-her-take-photo',
       name: 'help her take photo – Pose Cam',
+      brand: 'help her take photo',
       aliases: ['hhtp'],
       activationEvent: 'first_keeper',
       deepLinks: {
@@ -156,6 +163,7 @@ export const KENSAURUS_MANIFEST = {
     {
       id: 'how-to-talk-to-girls',
       name: 'lets-talk – Conversation Coach',
+      brand: 'lets-talk',
       aliases: ['htttg'],
       activationEvent: 'activated',
       deepLinks: {
@@ -177,6 +185,7 @@ export const KENSAURUS_MANIFEST = {
     {
       id: 'solo-boss',
       name: '一人社長 Solo Boss',
+      brand: '一人社長 Solo Boss',
       aliases: [],
       tagline: {
         ja: '一人で会社を回す人のための、経理と申告の伴走ツール。',
@@ -190,6 +199,7 @@ export const KENSAURUS_MANIFEST = {
     {
       id: 'tsumagoi',
       name: 'Tsumagoi Work&Camp 嬬恋牧場',
+      brand: 'Tsumagoi Work&Camp 嬬恋牧場',
       aliases: [],
       tagline: {
         ja: '標高1,444mのワーケーションキャンプ場。光ファイバー、焚き火、満天の星。',
@@ -206,6 +216,7 @@ export const KENSAURUS_MANIFEST = {
     {
       id: 'mushi-mushi',
       name: 'mushi-mushi',
+      brand: 'mushi-mushi',
       aliases: ['mushi'],
       tagline: {
         en: 'Open-source in-app bug reporting — screenshots, console, and network context in every report.',
@@ -220,6 +231,7 @@ export const KENSAURUS_MANIFEST = {
     {
       id: 'cursor-kenji',
       name: 'cursor-kenji',
+      brand: 'cursor-kenji',
       aliases: [],
       tagline: {
         en: 'Ready-made playbooks for your AI coding editor — agent skills, slash commands, and MCP configs.',
@@ -234,6 +246,7 @@ export const KENSAURUS_MANIFEST = {
     {
       id: 'portfolio',
       name: 'KENSAURUS',
+      brand: 'KENSAURUS',
       aliases: ['kensaurus-hub'],
       tagline: {
         en: 'Everything else built under the same roof.',
