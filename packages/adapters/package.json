@@ -82,7 +82,7 @@
   },
   "dependencies": {
     "@mushi-mushi/core": "workspace:^",
-    "jose": "^6.2.3"
+    "jose": "^6.2.12"
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
