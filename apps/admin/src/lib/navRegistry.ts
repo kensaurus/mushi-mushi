@@ -628,7 +628,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     iconKey: 'skills',
     beginner: true,
     paletteDescription: 'Browse agent skills, track pipeline runs, and sync sources.',
-    paletteKeywords: ['skills', 'skill pipelines', 'cursor-kenji', 'handoff', 'catalog'],
+    paletteKeywords: ['skills', 'skill pipelines', 'kenji skills', 'handoff', 'catalog', 'cursor-kenji'],
     paletteGroup: 'Act',
   },
   {
@@ -846,7 +846,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     sectionId: 'act',
     iconKey: 'catalog',
     inSidebar: false,
-    paletteDescription: 'Browse 70+ cursor-kenji agent skills by category.',
+    paletteDescription: 'Browse 70+ agent skills from kenji skills by category.',
     paletteKeywords: ['catalog', 'skill catalog', 'cursor-kenji', 'kenji skills'],
     paletteGroup: 'Act',
   },

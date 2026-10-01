@@ -58,7 +58,7 @@ The "is this drift?" test for any feature you build or surface you write: *"Does
 | `intelligence-report` | `supabase/functions/intelligence-report/` | cron | Weekly LLM narrative from KPI trends |
 | `a2a-push-notify` | `supabase/functions/a2a-push-notify/` | manual / other agents | Sends A2A protocol notifications to connected agents |
 | `backend-drift-scanner` | `supabase/functions/backend-drift-scanner/` | cron daily 03:05 UTC | Snapshots each linked project's Supabase schema via read-only MCP, diffs vs previous snapshot, writes `gate_findings` of type `schema_drift` for dropped columns / missing RLS / unexpected table changes |
-| `skill-sync` | `supabase/functions/skill-sync/` | cron daily + POST /v1/admin/skills/sources/:id/sync | Fetches SKILL.md files from allowlisted GitHub repos (any skills.sh-compatible repo, default: kensaurus/cursor-kenji), parses frontmatter + chain_slugs, embeds descriptions (pgvector), upserts `agent_skills` catalog; secret-pattern scan guard; drives `classify-report` Stage 2 skill recommendation |
+| `skill-sync` | `supabase/functions/skill-sync/` | cron daily + POST /v1/admin/skills/sources/:id/sync | Fetches SKILL.md files from allowlisted GitHub repos (any skills.sh-compatible repo, default: kensaurus/skills), parses frontmatter + chain_slugs, embeds descriptions (pgvector), upserts `agent_skills` catalog; secret-pattern scan guard; drives `classify-report` Stage 2 skill recommendation |
 
 ### Infrastructure worker edge functions (not pipeline agents)
 
@@ -342,7 +342,7 @@ TDD MCP tools: `map_user_stories`, `get_map_run_status`, `generate_tdd_from_stor
 
 ## Skill-Driven Triage Pipelines
 
-The Skill Pipeline feature (Jun 2026) integrates the [cursor-kenji / skills.sh](https://github.com/kensaurus/cursor-kenji) agent-skill ecosystem into Mushi as a first-class pipeline concept.
+The Skill Pipeline feature (Jun 2026) integrates the [kenji skills / skills.sh](https://github.com/kensaurus/skills) agent-skill ecosystem into Mushi as a first-class pipeline concept.
 
 ### Architecture
 

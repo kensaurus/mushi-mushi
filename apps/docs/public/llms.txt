@@ -87,7 +87,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [SDK health](https://kensaur.us/mushi-mushi/docs/admin/sdk-health): The SDK health card shows the live heartbeat of every Mushi SDK that reported in the last 24 hours, so an SDK that never shipped is obvious.
 - [Settings](https://kensaur.us/mushi-mushi/docs/admin/settings): The Settings page holds every project option — notifications, your own LLM keys, widget copy, Slack alerts and developer settings.
 - [Setup Copilot](https://kensaur.us/mushi-mushi/docs/admin/setup-copilot): Setup Copilot is a guided checklist that verifies SDK ingest and fix dispatch for a project, with copy-paste CLI commands for each step.
-- [Skill Pipelines](https://kensaur.us/mushi-mushi/docs/admin/skill-pipelines): Skill Pipelines recommend agent skills from the cursor-kenji and skills.sh ecosystem for each classified bug and run them during review in Mushi.
+- [Skill Pipelines](https://kensaur.us/mushi-mushi/docs/admin/skill-pipelines): Skill Pipelines recommend agent skills from the kenji skills and skills.sh ecosystem for each classified bug and run them during review in Mushi.
 - [SSO](https://kensaur.us/mushi-mushi/docs/admin/sso): Set up SAML 2.0 or OIDC single sign-on for your Mushi organization so teammates log in with your company's identity provider.
 - [Storage](https://kensaur.us/mushi-mushi/docs/admin/storage): The Storage page chooses where Mushi keeps report attachments and recordings — managed storage, or your own bucket for residency or cost.
 - [Teams and Members](https://kensaur.us/mushi-mushi/docs/admin/teams): How teams work in Mushi — organizations own projects, billing, invitations and the member roster, and project access comes from membership.

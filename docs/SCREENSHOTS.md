@@ -150,7 +150,7 @@ A walk through the rooms inside. Click any panel to land on it in the live demo.
     <p align="center"><b>Connect & Update</b> · <sub>June 2026 hub — GitHub link, SDK snippet, MCP deeplinks, CLI install, and semver-only upgrade PRs via <code>sdk-upgrade-worker</code></sub></p>
   </td>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/admin/skills"><img src="./screenshots/skills-dark.png" alt="Skill Pipelines — 85-skill catalog from cursor-kenji, workflow bundles, pipeline runs tab." /></a>
+    <a href="https://kensaur.us/mushi-mushi/admin/skills"><img src="./screenshots/skills-dark.png" alt="Skill Pipelines — 85-skill catalog from kenji skills, workflow bundles, pipeline runs tab." /></a>
     <p align="center"><b>Skill Pipelines</b> · <sub>skills.sh-compatible catalog synced daily; attach a skill chain to a report and stream step status over Realtime — handoff or Cursor Cloud mode</sub></p>
   </td>
 </tr>
