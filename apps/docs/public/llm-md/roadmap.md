@@ -41,7 +41,7 @@ Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi-mushi
 ## Wave D highlights (shipped)
 
 - **One-click SDK install & upgrade** — `npx mushi-mushi` + `npm create mushi-mushi` wizard, SDK upgrade PRs from the Connect hub
-- **Skill-driven triage** — `skill-sync`, `classify-report` Stage 2, pipeline runs, cursor-kenji integration
+- **Skill-driven triage** — `skill-sync`, `classify-report` Stage 2, pipeline runs, kenji skills integration
 - **Codebase Atlas (`/explore`)** — semantic codebase search, ask, tour, and knowledge surface
 - **sdk-versions-cron** — daily npm sync keeps SDK freshness chips accurate
 - **Backend drift scanner** — daily schema snapshot diff, `gate_findings` of type `schema_drift`

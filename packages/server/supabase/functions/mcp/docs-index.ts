@@ -508,7 +508,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "admin/skill-pipelines.md",
     keywords: ["admin", "skill-pipelines", "skill", "pipelines"],
     headings: ["How it works", "The three tabs", "Catalog", "Pipelines", "Sources", "Execution modes", "Triage links (?skill=)", "CLI quick reference"],
-    excerpt: "Skill Pipelines recommend agent skills from the cursor-kenji and skills.sh ecosystem for each classified bug and run them during review in Mushi.",
+    excerpt: "Skill Pipelines recommend agent skills from the kenji skills and skills.sh ecosystem for each classified bug and run them during review in Mushi.",
   },
   {
     title: "SSO",

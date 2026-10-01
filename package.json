@@ -33,6 +33,7 @@
   "scripts": {
     "prepare": "node scripts/install-git-hooks.mjs",
     "build:console-knowledge": "node scripts/build-console-knowledge.mjs",
+    "check:console-knowledge": "node scripts/build-console-knowledge.mjs --check",
     "build": "turbo run build",
     "predev": "node scripts/kill-port.mjs 6464 3000 3001 4001 && node scripts/clean-next-locks.mjs && turbo daemon stop",
     "dev": "turbo run dev --force --concurrency=30 --log-prefix=none",
@@ -156,7 +157,7 @@
     "test:strip-markup": "node --test scripts/strip-markup.test.mjs",
     "test:scripts": "node --test scripts/cloudfront-functions.test.mjs scripts/verify-hosted-mcp-helpers.test.mjs scripts/strip-markup.test.mjs scripts/mcp-configs.test.mjs scripts/marketing/queue-policy.test.mjs scripts/normalize-package-metadata.test.mjs scripts/check-changeset-coverage.test.mjs scripts/aws-configure-docs-errors.test.mjs scripts/verify-published-tarballs.test.mjs scripts/release-workflow.test.mjs scripts/check-loader-cdn-url.test.mjs scripts/check-site-urls.test.mjs scripts/check-doc-snippets.test.mjs scripts/check-spdx-headers.test.mjs scripts/check-install-size.test.mjs",
     "verify:pipeline": "pnpm --filter @mushi-mushi/server test && cd packages/server/supabase && deno check functions/_shared/rag.ts functions/_shared/observability.ts functions/_shared/env-int.ts functions/api/routes/doctor.ts functions/api/routes/project-codebase.ts functions/webhooks-github-indexer/index.ts",
-    "check:drift": "pnpm check:catalog-sync && pnpm check:mcp-tools-doc && pnpm check:internal-doc-links && pnpm check:onboarding-drift && pnpm check:env-docs && pnpm check:docs-drift && pnpm check:docs-stats && pnpm check:route-manifest && pnpm check:edge-fn-deploy-docs && pnpm check:admin-docs-coverage && pnpm check:humanize-parity && pnpm check:error-codes",
+    "check:drift": "pnpm check:catalog-sync && pnpm check:mcp-tools-doc && pnpm check:internal-doc-links && pnpm check:onboarding-drift && pnpm check:env-docs && pnpm check:docs-drift && pnpm check:docs-stats && pnpm check:route-manifest && pnpm check:console-knowledge && pnpm check:edge-fn-deploy-docs && pnpm check:admin-docs-coverage && pnpm check:humanize-parity && pnpm check:error-codes",
     "check:mcp-tools-doc": "node scripts/gen-mcp-tools-doc.mjs --check",
     "check:page-scaffold": "node scripts/audit-page-scaffold.mjs",
     "check:page-scaffold:cluster": "node scripts/audit-page-scaffold.mjs --cluster",
@@ -177,7 +178,7 @@
   "pnpm": {
     "overrides": {
       "browserslist": ">=4.28.7 <5",
-      "fast-uri": ">=4.1.3 <5",
+      "fast-uri": ">=4.1.5 <5",
       "@xmldom/xmldom": ">=0.9.12 <0.10",
       "sharp": ">=0.35.4 <0.36",
       "js-yaml@3": ">=3.15.2 <4",
@@ -185,12 +186,22 @@
       "@connectrpc/connect-node>undici": "^6.27.0",
       "js-yaml@4": ">=4.3.2 <5",
       "hono": ">=4.13.5 <5",
-      "fastify": ">=5.12.1 <6",
+      "fastify": ">=5.12.5 <6",
       "mermaid": ">=11.16.1 <12",
-      "dompurify": ">=3.4.13 <4",
+      "dompurify": ">=3.4.16 <4",
       "vitest": ">=4.1.11 <5",
       "devalue": "5.9.2",
-      "@angular/core": ">=22.1.0 <23"
+      "@angular/core": ">=22.1.0 <23",
+      "axios": ">=1.20.0 <2",
+      "brace-expansion@1": ">=1.1.21 <2",
+      "brace-expansion@2": ">=2.1.7 <3",
+      "brace-expansion@5": ">=5.0.12 <6",
+      "fflate@0.6": ">=0.6.11 <0.7",
+      "serialize-javascript@7": ">=7.1.2 <8",
+      "qs@6": ">=6.16.0 <7",
+      "body-parser@2": ">=2.3.0 <3",
+      "@hono/node-server@1": ">=1.19.15 <2",
+      "ip-address@10": ">=10.7.1 <11"
     }
   }
 }

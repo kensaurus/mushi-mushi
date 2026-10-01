@@ -39,7 +39,7 @@ export function SkillsStatusBanner({ stats, onTab, plainBanner = false }: Props)
         title={plainBanner ? 'Skill catalog is empty' : 'No skills synced yet'}
         subtitle={
           stats.topPriorityLabel ??
-          'Add a GitHub source (e.g. kensaurus/cursor-kenji) and sync to load 70+ workflows.'
+          'Add a GitHub source (e.g. kensaurus/skills) and sync to load 70+ workflows.'
         }
         action={
           stats.topPriorityTo ? (

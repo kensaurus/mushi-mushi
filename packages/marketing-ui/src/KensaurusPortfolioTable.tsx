@@ -70,9 +70,9 @@ export function KensaurusPortfolioTable({ utmSource }: { utmSource: string }) {
   const all = KENSAURUS_APPS as readonly KensaurusApp[]
 
   // Every sibling worth promoting, in manifest order. Unlike the spine's
-  // `siblings()` helper this keeps sdk-only entries (cursor-kenji): Mushi's
-  // readers are developers, so an editor-playbook repo is on-topic here even
-  // though it is not on-topic in a consumer app's footer.
+  // `siblings()` helper this keeps sdk-only entries (kenji skills, spine id
+  // `cursor-kenji`): Mushi's readers are developers, so an agent-skills repo
+  // is on-topic here even though it is not on-topic in a consumer app's footer.
   const apps = all.filter((app) => app.id !== SELF_ID && app.role !== 'hub')
   const hub = all.find((app) => app.id === HUB_ID)
 

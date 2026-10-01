@@ -53,13 +53,13 @@ jobs:
   classify:
     runs-on: ubuntu-latest
     steps:
-      - uses: mushi-mushi/mushi-mushi/packages/mcp-ci@v1
+      - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
           api-key: ${{ secrets.MUSHI_API_KEY }}
           project-id: ${{ secrets.MUSHI_PROJECT_ID }}
           command: trigger-judge
 
-      - uses: mushi-mushi/mushi-mushi/packages/mcp-ci@v1
+      - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
           api-key: ${{ secrets.MUSHI_API_KEY }}
           project-id: ${{ secrets.MUSHI_PROJECT_ID }}
@@ -79,7 +79,7 @@ jobs:
     if: github.event.label.name == 'mushi:auto-fix'
     runs-on: ubuntu-latest
     steps:
-      - uses: mushi-mushi/mushi-mushi/packages/mcp-ci@v1
+      - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
           api-key: ${{ secrets.MUSHI_API_KEY }}
           project-id: ${{ secrets.MUSHI_PROJECT_ID }}
@@ -101,7 +101,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # Refresh the crawler cookie so Gate 4 can hit auth-gated routes.
-      - uses: mushi-mushi/mushi-mushi/packages/mcp-ci@v1
+      - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
           api-key: ${{ secrets.MUSHI_API_KEY }}
           project-id: ${{ secrets.MUSHI_PROJECT_ID }}
@@ -111,14 +111,14 @@ jobs:
           TEST_USER_PASSWORD: ${{ secrets.MUSHI_TEST_USER_PASSWORD }}
 
       # Feed Gate 3 (api_contract) the current commit's API surface.
-      - uses: mushi-mushi/mushi-mushi/packages/mcp-ci@v1
+      - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
           api-key: ${{ secrets.MUSHI_API_KEY }}
           project-id: ${{ secrets.MUSHI_PROJECT_ID }}
           command: discover-api
 
       # Run Gates 1–5 server-side and gate the PR on the composite status.
-      - uses: mushi-mushi/mushi-mushi/packages/mcp-ci@v1
+      - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
           api-key: ${{ secrets.MUSHI_API_KEY }}
           project-id: ${{ secrets.MUSHI_PROJECT_ID }}
@@ -139,14 +139,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - id: status
-        uses: mushi-mushi/mushi-mushi/packages/mcp-ci@v1
+        uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
           api-key: ${{ secrets.MUSHI_API_KEY }}
           project-id: ${{ secrets.MUSHI_PROJECT_ID }}
           command: discovery-status
 
       - if: steps.status.outputs.ready_to_propose == 'true'
-        uses: mushi-mushi/mushi-mushi/packages/mcp-ci@v1
+        uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
           api-key: ${{ secrets.MUSHI_API_KEY }}
           project-id: ${{ secrets.MUSHI_PROJECT_ID }}
@@ -192,4 +192,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 59 edge functions · 375 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 59 edge functions · 376 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

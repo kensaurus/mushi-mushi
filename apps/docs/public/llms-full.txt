@@ -3,7 +3,7 @@
 > The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Generated: 2026-09-22
+Generated: 2026-10-01
 Pages: 202
 
 This file contains the full prose of every documentation page, stripped of
@@ -204,7 +204,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.21.1"],
+      "args": ["-y", "@mushi-mushi/mcp@0.22.0"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -230,7 +230,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.21.1"],
+      "args": ["-y", "@mushi-mushi/mcp@0.22.0"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -2613,7 +2613,7 @@ device to a merged PR.
 | `@mushi-mushi/mcp` *(stdio + Streamable HTTP)* | `fix-worker` *(sandbox PR + LLM agent)* | Supabase Vault *(BYOK + plugin secrets)* | Marketplace plugins *(PagerDuty, Linear, …)* |
 | `@mushi-mushi/cli` *(init / connect / upgrade)* | `sdk-upgrade-worker` *(semver bump PR)* | `sdk_upgrade_jobs` | GitHub *(upgrade PRs)* |
 | Admin **Connect & Update** (`/connect`) | `sdk-versions-cron` *(daily npm sync)* | `sdk_versions` | npm registry |
-|  | `skill-sync` *(skills.sh ingest)* | `agent_skills` + pipeline runs | cursor-kenji / skills.sh |
+|  | `skill-sync` *(skills.sh ingest)* | `agent_skills` + pipeline runs | kenji skills / skills.sh |
 |  | `intelligence-report` *(weekly digest)* | `contract_snapshots` *(drift baseline)* | Firecrawl *(research + crawl)* |
 |  | `drift-walker` *(live crawl diff)* | `pdca_runs` + `fix_attempts` | Browserbase *(QA story execution)* |
 |  | `contract-graph-builder` *(snapshot builder)* | `qa_stories` + `qa_story_runs` |  |
@@ -2676,7 +2676,7 @@ device to a merged PR.
   (daily pg_cron + post-publish sync) into `sdk_versions` so freshness chips stay
   accurate between releases.
 - **`skill-sync`** ingests allowlisted `SKILL.md` files (default:
-  `kensaurus/cursor-kenji`), embeds descriptions, and powers **Skill Pipelines**
+  `kensaurus/skills`), embeds descriptions, and powers **Skill Pipelines**
   (`/skills`) — attach a skill chain to a report and stream step status over Realtime.
 
 ## MCP surface (2026)
@@ -4750,13 +4750,13 @@ Published npm packages ship on independent semver tracks (see [npm](https://www.
 
 | Package | Version |
 | --- | --- |
-| @mushi-mushi/core, @mushi-mushi/web | 1.28.x |
-| @mushi-mushi/react | 1.21.x |
-| @mushi-mushi/react-native | 0.21.x |
-| @mushi-mushi/cli | 0.27.x |
-| @mushi-mushi/mcp | 0.21.x |
+| @mushi-mushi/core, @mushi-mushi/web | 1.29.x |
+| @mushi-mushi/react | 1.29.x |
+| @mushi-mushi/react-native | 0.22.x |
+| @mushi-mushi/cli | 0.28.x |
+| @mushi-mushi/mcp | 0.22.x |
 | @mushi-mushi/capacitor | 1.1.x |
-| @mushi-mushi/node | 1.2.x |
+| @mushi-mushi/node | 1.3.x |
 | @mushi-mushi/angular, @mushi-mushi/vue, @mushi-mushi/svelte | 1.0.x |
 | mushi-mushi (launcher) | 0.8.x |
 
@@ -13312,7 +13312,7 @@ Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi-mushi
 ## Wave D highlights (shipped)
 
 - **One-click SDK install & upgrade** — `npx mushi-mushi` + `npm create mushi-mushi` wizard, SDK upgrade PRs from the Connect hub
-- **Skill-driven triage** — `skill-sync`, `classify-report` Stage 2, pipeline runs, cursor-kenji integration
+- **Skill-driven triage** — `skill-sync`, `classify-report` Stage 2, pipeline runs, kenji skills integration
 - **Codebase Atlas (`/explore`)** — semantic codebase search, ask, tour, and knowledge surface
 - **sdk-versions-cron** — daily npm sync keeps SDK freshness chips accurate
 - **Backend drift scanner** — daily schema snapshot diff, `gate_findings` of type `schema_drift`
@@ -19609,21 +19609,21 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/skill-pipelines
 
 ---
 title: Skill Pipelines
-description: Skill Pipelines recommend agent skills from the cursor-kenji and skills.sh ecosystem for each classified bug and run them during review in Mushi.
+description: Skill Pipelines recommend agent skills from the kenji skills and skills.sh ecosystem for each classified bug and run them during review in Mushi.
 ---
 
 # Skill Pipelines
 
 **Route:** `/skills`
 
-Skill Pipelines integrate the [cursor-kenji / skills.sh](https://github.com/kensaurus/cursor-kenji) agent-skill ecosystem directly into Mushi bug review. When a bug report is classified, Mushi recommends the most relevant Cursor agent skills — and you can attach a skill chain to any report, visualize it as a live React Flow pipeline, and execute it either as a handoff to your local Cursor agent or automatically via Cursor Cloud.
+Skill Pipelines integrate the [kenji skills / skills.sh](https://github.com/kensaurus/skills) agent-skill ecosystem directly into Mushi bug review. When a bug report is classified, Mushi recommends the most relevant Cursor agent skills — and you can attach a skill chain to any report, visualize it as a live React Flow pipeline, and execute it either as a handoff to your local Cursor agent or automatically via Cursor Cloud.
 
 ---
 
 ## How it works
 
 ```
-git repo skills/SKILL.md (cursor-kenji or any skills.sh-compatible repo)
+git repo skills/SKILL.md (kenji skills or any skills.sh-compatible repo)
   → skill-sync syncs SKILL.md files into the agent_skills catalog (daily cron)
   → classify-report Stage 2 recommends top 3 skills per report (pgvector similarity)
   → You start a pipeline run from the Report Detail page (or via CLI/MCP)
@@ -19646,7 +19646,7 @@ All pipeline runs for your project — past and active. Click a run to see the l
 
 ### Sources
 
-Manage the GitHub repos whose SKILL.md files are synced into your project's catalog. The default seed is `kensaurus/cursor-kenji`. Any [skills.sh](https://skills.sh)-compatible repo works.
+Manage the GitHub repos whose SKILL.md files are synced into your project's catalog. The default seed is `kensaurus/skills`. Any [skills.sh](https://skills.sh)-compatible repo works.
 
 ---
 
