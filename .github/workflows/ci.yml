@@ -53,6 +53,7 @@ jobs:
     # Skip on workflow_dispatch (manual CI trigger fallback for the release PR).
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: write
@@ -367,6 +368,13 @@ jobs:
 
       - name: Check nav registry
         run: pnpm check:nav-registry
+
+      - name: Check console assistant corpus
+        # console-routes.generated.ts and console-knowledge-corpus.json are
+        # built from navRegistry + console-knowledge/recipes. The generator
+        # broke silently in June 2026 and the assistant served a stale corpus
+        # for three months; run `pnpm build:console-knowledge` when this fails.
+        run: pnpm check:console-knowledge
 
       - name: Check SDK docs match the web package surface
         run: pnpm check:sdk-api-surface

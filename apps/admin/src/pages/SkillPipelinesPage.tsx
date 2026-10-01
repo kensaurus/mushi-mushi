@@ -4,11 +4,11 @@
  *          live pipeline flow visualiser (React Flow).
  *
  * TABS:
- *   Catalog   — browse all 73+ skills from cursor-kenji, grouped by category.
+ *   Catalog   — browse all 73+ skills from kenji skills, grouped by category.
  *               Clicking a skill opens a detail drawer with the full SKILL.md.
  *   Pipelines — list of all pipeline runs for the project with status chips.
  *               Clicking a run opens the live React Flow pipeline visualiser.
- *   Sources   — manage skill source repos (add kensaurus/cursor-kenji or any
+ *   Sources   — manage skill source repos (add kensaurus/skills or any
  *               skills.sh-compatible repo; trigger manual sync).
  *
  * REALTIME:
@@ -174,7 +174,7 @@ export function SkillPipelinesPage() {
     title: TAB_META[tab].label,
     summary:
       tab === 'catalog'
-        ? 'Browse cursor-kenji agent skills by category'
+        ? 'Browse agent skills from kenji skills by category'
         : tab === 'pipelines'
           ? 'Track handoff and cloud pipeline runs'
           : 'Sync SKILL.md repos into the catalog',
@@ -205,7 +205,7 @@ export function SkillPipelinesPage() {
       {
         id: 'open-sources',
         label: 'Manage skill sources',
-        hint: 'Add or sync GitHub repos like kensaurus/cursor-kenji',
+        hint: 'Add or sync GitHub repos like kensaurus/skills',
         run: () => setTab('sources'),
       },
     ],
@@ -217,11 +217,11 @@ export function SkillPipelinesPage() {
         title="Skill Pipelines"
 
         helpTitle="About Skill Pipelines"
-        helpWhatIsIt="Browse the cursor-kenji skill catalog, attach skills to bug reports, and run handoff or cloud pipeline steps with live status."
+        helpWhatIsIt="Browse the kenji skills catalog, attach skills to bug reports, and run handoff or cloud pipeline steps with live status."
         helpUseCases={[
           'Run audit-uiux-design-system or other skills against a report',
           'Track pipeline step runs in real time via React Flow',
-          'Sync skill sources from GitHub repos like kensaurus/cursor-kenji',
+          'Sync skill sources from GitHub repos like kensaurus/skills',
         ]}
         helpHowToUse="Pick Catalog to browse skills, Pipelines to watch runs, or Sources to sync repos. Start a handoff run from a skill card with a report ID."
       >
@@ -247,7 +247,7 @@ export function SkillPipelinesPage() {
                 stats={skillsStats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                hint="Catalog size, active pipeline runs, and sync posture for cursor-kenji skills."
+                hint="Catalog size, active pipeline runs, and sync posture for kenji skills."
               />
             ),
           },
@@ -281,7 +281,7 @@ export function SkillPipelinesPage() {
         <Card className="p-6 border-dashed border-edge">
           <h2 className="text-sm font-semibold text-fg">Pick a project first</h2>
           <p className="mt-1 text-xs text-fg-muted">
-            Skill pipelines attach cursor-kenji workflows to bug reports. Select a project in the header, then sync skill sources or start a handoff run.
+            Skill pipelines attach kenji skills workflows to bug reports. Select a project in the header, then sync skill sources or start a handoff run.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Link to="/onboarding" className="text-xs text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">Open setup cockpit</Link>
@@ -1266,7 +1266,7 @@ function SourcesTab({
         <div className="flex gap-2">
           <input
             type="text"
-            placeholder="owner/repo (e.g. kensaurus/cursor-kenji)"
+            placeholder="owner/repo (e.g. kensaurus/skills)"
             value={repoSlug}
             onChange={(e) => setRepoSlug(e.target.value)}
             className="input flex-1 text-sm"
@@ -1289,7 +1289,7 @@ function SourcesTab({
         <div className="text-sm text-fg-muted flex flex-col gap-2">
           <p>No skill sources yet.</p>
           <p className="text-xs">
-            Add <code className="font-mono text-brand">kensaurus/cursor-kenji</code> above, then sync to load 70+ agent skills into the catalog.
+            Add <code className="font-mono text-brand">kensaurus/skills</code> above, then sync to load 70+ agent skills into the catalog.
           </p>
         </div>
       ) : (
@@ -1422,7 +1422,7 @@ function EmptySkills({ onGoToSources }: { onGoToSources: () => void }) {
       <p className="text-sm text-fg-muted">Your skill catalog is empty.</p>
       <p className="text-xs text-fg-muted max-w-sm">
         Add a GitHub source and sync it to load skills.{' '}
-        <code className="font-mono text-brand">kensaurus/cursor-kenji</code> brings in 70+ workflows instantly.
+        <code className="font-mono text-brand">kensaurus/skills</code> brings in 70+ workflows instantly.
       </p>
       <Btn type="button" variant="primary" size="sm" onClick={onGoToSources}>
         Go to Sources

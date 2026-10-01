@@ -150,7 +150,7 @@ function skillsRoutes() {
 
     if ((catalogTotal ?? 0) === 0) {
       topPriority = 'empty_catalog'
-      topPriorityLabel = 'Skill catalog is empty — add a GitHub source and sync (try kensaurus/cursor-kenji).'
+      topPriorityLabel = 'Skill catalog is empty — add a GitHub source and sync (try kensaurus/skills).'
       topPriorityTo = scoped('/skills?tab=sources')
     } else if (failedRuns > 0) {
       topPriority = 'failed_runs'

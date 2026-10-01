@@ -5,20 +5,30 @@
  *
  * OVERVIEW:
  * - Reads recipe markdown from packages/server/console-knowledge/recipes/
- * - Parses STATIC_ROUTES from apps/admin/src/lib/searchIndex.ts
+ * - Loads STATIC_ROUTES from apps/admin/src/lib/searchIndex.ts via jiti. The
+ *   palette routes are derived from navRegistry at runtime (buildStaticRoutes),
+ *   so there are no literals left to regex out of the file; importing the
+ *   module is the only way to see what the command palette actually shows.
  * - Emits console-knowledge-corpus.json for the edge-function builder
  * - Emits console-routes.generated.ts (canonical route directory for LLM nav validation)
  *
- * USAGE: node scripts/build-console-knowledge.mjs
+ * USAGE:
+ *   node scripts/build-console-knowledge.mjs           # write both files
+ *   node scripts/build-console-knowledge.mjs --check   # CI: exit 1 when stale
+ *
+ * The corpus carries a `generatedAt` stamp, so write mode leaves the JSON
+ * untouched when its docs are unchanged, and --check compares docs only.
  */
 
 import { createHash } from 'node:crypto'
-import { readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createJiti } from 'jiti'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..')
+const CHECK_MODE = process.argv.includes('--check')
 
 const RECIPES_DIR = join(ROOT, 'packages/server/console-knowledge/recipes')
 const SEARCH_INDEX = join(ROOT, 'apps/admin/src/lib/searchIndex.ts')
@@ -33,30 +43,56 @@ const ROUTES_OUT = join(
 
 /** @typedef {{ id: string, label: string, path: string, description: string, group: string, keywords: string[] }} StaticRoute */
 
-/** Parse STATIC_ROUTES array from searchIndex.ts (lightweight regex extraction). */
-function parseStaticRoutes() {
-  const src = readFileSync(SEARCH_INDEX, 'utf8')
-  const start = src.indexOf('export const STATIC_ROUTES')
-  if (start === -1) throw new Error('STATIC_ROUTES not found in searchIndex.ts')
-  const slice = src.slice(start)
-  const routes = []
-  const blockRe =
-    /\{\s*id:\s*'([^']+)',\s*label:\s*'([^']+)',\s*path:\s*'([^']+)',\s*description:\s*'([^']*)',\s*group:\s*'([^']+)',\s*keywords:\s*\[([^\]]*)\]/gs
-  let m
-  while ((m = blockRe.exec(slice)) !== null) {
-    const kwRaw = m[6]
-    const keywords = [...kwRaw.matchAll(/'([^']+)'/g)].map((x) => x[1])
-    routes.push({
-      id: m[1],
-      label: m[2],
-      path: m[3],
-      description: m[4],
-      group: m[5],
-      keywords,
-    })
+/**
+ * Load STATIC_ROUTES from searchIndex.ts. The module (and navRegistry, which
+ * it calls) only has type imports, so jiti can evaluate it under plain Node.
+ * Same pattern as scripts/generate-config-reference.mjs.
+ *
+ * This used to regex-parse `{ id: '…', label: '…' }` literals out of the file.
+ * Those literals moved into navRegistry in June 2026 (#230); the regex then
+ * matched nothing and the script threw before writing, so the committed corpus
+ * stayed at its 2026-06-16 snapshot until this was fixed.
+ */
+async function loadStaticRoutes() {
+  const jiti = createJiti(import.meta.url, { interopDefault: true })
+  const mod = await jiti.import(SEARCH_INDEX)
+  const routes = mod?.STATIC_ROUTES
+  if (!Array.isArray(routes) || routes.length === 0) {
+    throw new Error(`STATIC_ROUTES missing or empty in ${relative(ROOT, SEARCH_INDEX)}`)
   }
-  if (routes.length === 0) throw new Error('No routes parsed from searchIndex.ts')
-  return routes
+  for (const r of routes) {
+    const ok =
+      typeof r?.id === 'string' &&
+      typeof r.label === 'string' &&
+      typeof r.path === 'string' &&
+      r.path.startsWith('/') &&
+      typeof r.description === 'string' &&
+      typeof r.group === 'string' &&
+      Array.isArray(r.keywords) &&
+      r.keywords.every((k) => typeof k === 'string')
+    if (!ok) throw new Error(`Malformed STATIC_ROUTES entry: ${JSON.stringify(r)}`)
+  }
+  return routes.map(({ id, label, path, description, group, keywords }) => ({
+    id,
+    label,
+    path,
+    description,
+    group,
+    keywords: [...keywords],
+  }))
+}
+
+/**
+ * Corpus key for a route's page doc. Palette entries can share a base path and
+ * differ only by query (/skills, /skills?tab=catalog, /skills?tab=sources), and
+ * console-knowledge-build upserts on (doc_path, section), so the query has to
+ * be part of the key or the tabs overwrite each other and only one survives.
+ */
+function pageDocPath(path) {
+  const [base, query] = path.split('?')
+  const stem = base.replace(/\/$/, '') || '/index'
+  const suffix = query ? `--${query.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}` : ''
+  return `pages${stem}${suffix}.md`
 }
 
 /** Parse YAML frontmatter from a recipe markdown file. */
@@ -99,12 +135,13 @@ function chunkBody(body, maxChars = 1200) {
   return chunks.length ? chunks : [body.slice(0, maxChars)]
 }
 
-function buildCorpus() {
+async function buildCorpus() {
   /** @type {Array<{ doc_path: string, section: string, title: string, body: string, route_path: string | null, kind: string, content_hash: string }>} */
   const docs = []
 
-  // Recipe docs
-  for (const file of readdirSync(RECIPES_DIR).filter((f) => f.endsWith('.md'))) {
+  // Recipe docs (sorted: readdir order differs between NTFS and ext4, and
+  // --check must produce the same corpus on a dev laptop and in CI)
+  for (const file of readdirSync(RECIPES_DIR).filter((f) => f.endsWith('.md')).sort()) {
     const raw = readFileSync(join(RECIPES_DIR, file), 'utf8')
     const { meta, body } = parseFrontmatter(raw)
     const docPath = `recipes/${file}`
@@ -127,7 +164,7 @@ function buildCorpus() {
   }
 
   // Per-route page docs from STATIC_ROUTES
-  const routes = parseStaticRoutes()
+  const routes = await loadStaticRoutes()
   for (const r of routes) {
     const body = [
       `# ${r.label}`,
@@ -142,7 +179,7 @@ function buildCorpus() {
       'Use this page when the user asks about: ' + r.keywords.slice(0, 6).join(', '),
     ].join('\n')
     docs.push({
-      doc_path: `pages${r.path.replace(/\?.*$/, '').replace(/\/$/, '') || '/index'}.md`,
+      doc_path: pageDocPath(r.path),
       section: 'main',
       title: r.label,
       body,
@@ -152,15 +189,26 @@ function buildCorpus() {
     })
   }
 
+  // console-knowledge-build upserts on (doc_path, section): a repeated key
+  // silently keeps whichever row is written last.
+  const seen = new Map()
+  for (const d of docs) {
+    const key = `${d.doc_path}::${d.section}`
+    if (seen.has(key)) {
+      throw new Error(`Duplicate corpus key ${key} ("${seen.get(key)}" and "${d.title}")`)
+    }
+    seen.set(key, d.title)
+  }
+
   return { docs, routes }
 }
 
-function emitRoutesTs(routes) {
+function renderRoutesTs(routes) {
   const lines = routes.map(
     (r) =>
       `  { path: ${JSON.stringify(r.path.split('?')[0])}, label: ${JSON.stringify(r.label)}, description: ${JSON.stringify(r.description)}, group: ${JSON.stringify(r.group)}, keywords: ${JSON.stringify(r.keywords)} },`,
   )
-  const content = `/**
+  return `/**
  * FILE: console-routes.generated.ts
  * PURPOSE: Canonical admin-console route directory for NL assistant nav validation.
  * GENERATED BY: scripts/build-console-knowledge.mjs — do not edit by hand.
@@ -191,22 +239,66 @@ export function isValidConsoleRoute(path: string): boolean {
   })
 }
 `
-  mkdirSync(dirname(ROUTES_OUT), { recursive: true })
-  writeFileSync(ROUTES_OUT, content, 'utf8')
 }
 
-function main() {
-  const { docs, routes } = buildCorpus()
-  mkdirSync(dirname(CORPUS_OUT), { recursive: true })
-  writeFileSync(
-    CORPUS_OUT,
-    JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), docs }, null, 2),
-    'utf8',
-  )
-  emitRoutesTs(routes)
-  console.log(`Wrote ${docs.length} corpus chunks and ${routes.length} routes`)
-  console.log(`  → ${relative(ROOT, CORPUS_OUT)}`)
-  console.log(`  → ${relative(ROOT, ROUTES_OUT)}`)
+const CORPUS_VERSION = 1
+
+function readText(file) {
+  return existsSync(file) ? readFileSync(file, 'utf8').replace(/\r\n/g, '\n') : null
 }
 
-main()
+/** The committed corpus's docs, or null when it is missing or unreadable. */
+function readCorpusDocs() {
+  const raw = readText(CORPUS_OUT)
+  if (raw === null) return null
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed?.version === CORPUS_VERSION && Array.isArray(parsed.docs) ? parsed.docs : null
+  } catch {
+    return null
+  }
+}
+
+async function main() {
+  const { docs, routes } = await buildCorpus()
+  const routesTs = renderRoutesTs(routes)
+  const committedDocs = readCorpusDocs()
+  const corpusFresh = committedDocs !== null && JSON.stringify(committedDocs) === JSON.stringify(docs)
+  const routesFresh = readText(ROUTES_OUT) === routesTs
+
+  if (CHECK_MODE) {
+    const stale = [
+      !corpusFresh && relative(ROOT, CORPUS_OUT),
+      !routesFresh && relative(ROOT, ROUTES_OUT),
+    ].filter(Boolean)
+    if (stale.length > 0) {
+      for (const file of stale) console.error(`FAIL  ${file} is stale`)
+      console.error('      Run `pnpm build:console-knowledge` and commit the result.')
+      process.exit(1)
+    }
+    console.log(`console-knowledge OK (${docs.length} corpus chunks, ${routes.length} routes)`)
+    return
+  }
+
+  if (!corpusFresh) {
+    mkdirSync(dirname(CORPUS_OUT), { recursive: true })
+    writeFileSync(
+      CORPUS_OUT,
+      JSON.stringify(
+        { version: CORPUS_VERSION, generatedAt: new Date().toISOString(), docs },
+        null,
+        2,
+      ),
+      'utf8',
+    )
+  }
+  if (!routesFresh) {
+    mkdirSync(dirname(ROUTES_OUT), { recursive: true })
+    writeFileSync(ROUTES_OUT, routesTs, 'utf8')
+  }
+  console.log(`${docs.length} corpus chunks, ${routes.length} routes`)
+  console.log(`  ${corpusFresh ? 'unchanged' : 'wrote'} → ${relative(ROOT, CORPUS_OUT)}`)
+  console.log(`  ${routesFresh ? 'unchanged' : 'wrote'} → ${relative(ROOT, ROUTES_OUT)}`)
+}
+
+await main()
