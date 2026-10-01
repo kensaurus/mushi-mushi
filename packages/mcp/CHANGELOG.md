@@ -1,5 +1,11 @@
 # @mushi-mushi/mcp
 
+## 0.22.1
+
+### Patch Changes
+
+- 4a2b8e0: Docs index: the Skill Pipelines excerpt names the skill pack by its new name, kenji skills (`kensaurus/skills`, formerly `cursor-kenji`). Regenerated from the docs; no code change.
+
 ## 0.22.0
 
 ### Minor Changes
