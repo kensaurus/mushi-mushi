@@ -86,6 +86,7 @@ jobs:
           name: mushi-mushi-vscode
           path: packages/vscode-extension/*.vsix
           if-no-files-found: error
+          retention-days: 14
 
       - name: Publish to the VS Code Marketplace
         if: ${{ env.DRY_RUN != 'true' && env.HAS_VSCE == 'true' }}
