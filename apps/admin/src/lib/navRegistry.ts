@@ -868,8 +868,8 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     sectionId: 'act',
     iconKey: 'source',
     inSidebar: false,
-    paletteDescription: 'Add GitHub repos and sync SKILL.md files.',
-    paletteKeywords: ['skill sources', 'skill sync', 'skills.sh'],
+    paletteDescription: 'Add GitHub repos (e.g. kensaurus/skills) and sync SKILL.md files.',
+    paletteKeywords: ['skill sources', 'skill sync', 'skills.sh', 'kenji skills', 'cursor-kenji'],
     paletteGroup: 'Act',
   },
 ]
