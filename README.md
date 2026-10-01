@@ -100,7 +100,7 @@ flowchart LR
     subgraph App["Your app"]
         SDK["mushi-mushi/{react, vue, svelte, angular, …}<br/>shadow-DOM widget · screenshot · console · network"]
     end
-    subgraph Edge["Supabase Edge (Hono gateway + ~50 functions)"]
+    subgraph Edge["Supabase Edge (Hono gateway + ~60 functions)"]
         API["api"]
         FF["fast-filter"]
         CR["classify-report<br/>+ vision + RAG"]
