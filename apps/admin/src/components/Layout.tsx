@@ -456,7 +456,7 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     scope: 'skills',
     decide: {
       label: 'Pipeline status',
-      summary: 'Attach a cursor-kenji skill to a report, run it as a pipeline, and track each step live.',
+      summary: 'Attach a skill from kenji skills to a report, run it as a pipeline, and track each step live.',
       severity: 'info',
     },
     verify: {

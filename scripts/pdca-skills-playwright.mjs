@@ -110,11 +110,25 @@ async function main() {
 
     // 7. Sources tab + full re-sync (after project context is warm)
     await page.goto(`${BASE}/skills?tab=sources`, { waitUntil: 'domcontentloaded', timeout: 30000 })
-    await page.waitForSelector('text=kensaurus/cursor-kenji', { timeout: 15000 }).catch(() => {})
+    // Match the source row itself (the card heading that renders
+    // skill_sources.repo_slug), not body text: the empty state and the input
+    // placeholder also print the slug, so a project with no sources passed.
+    // Both slugs are accepted: rows read kensaurus/cursor-kenji until
+    // migration 20261001061110_skill_sources_kenji_skills_slug is applied.
+    const kenjiSourceRow = page
+      .locator('p.text-sm.font-semibold')
+      .filter({ hasText: /^\s*kensaurus\/(skills|cursor-kenji)\s*$/i })
+      .first()
+    await kenjiSourceRow.waitFor({ timeout: 15000 }).catch(() => {})
     await waitMs(page, 2000)
     await shot(page, 'pdca-09-sources-after-sync')
     const sourcesBody = await page.textContent('body')
-    record('Sources tab — kensaurus/cursor-kenji row', Boolean(sourcesBody?.includes('kensaurus/cursor-kenji')))
+    const kenjiSlug = (await kenjiSourceRow.count()) ? (await kenjiSourceRow.textContent())?.trim() : null
+    record(
+      'Sources tab — kenji skills source row',
+      Boolean(kenjiSlug) && !sourcesBody?.includes('No skill sources yet'),
+      kenjiSlug ?? 'no kensaurus/skills or kensaurus/cursor-kenji row',
+    )
     record('Sources tab — catalog count 85', Boolean(sourcesBody?.includes('85')))
 
     const resync = page.getByRole('button', { name: /full re-sync/i }).first()

@@ -74,6 +74,11 @@ secrets/
 *.swp
 *.swo
 *~
+# merge / patch / editor leftovers (git keeps the history)
+*.orig
+*.rej
+*.bak
+*.tmp
 
 # --- OS ----------------------------------------------------------------------
 .DS_Store

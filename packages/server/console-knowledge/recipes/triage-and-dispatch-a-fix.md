@@ -24,4 +24,4 @@ Use this flow when a user reports a bug and you want Mushi to open a draft pull 
 ## Tips
 
 - Use `@report:<id>` in Ask Mushi to ask questions about a specific report.
-- Skill Pipelines (`/skills`) can attach a cursor-kenji workflow to a report for guided handoff.
+- Skill Pipelines (`/skills`) can attach a kenji skills workflow to a report for guided handoff.

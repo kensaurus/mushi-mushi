@@ -35,7 +35,7 @@ function buildSecurityHeaders() {
       // "More from KENSAURUS" footer (packages/marketing-ui). Those icons are
       // hosted on each app's own origin, so without them the footer showed
       // four broken-image placeholders (Cooler Heads, Solo Boss, Tsumagoi,
-      // cursor-kenji) while the kensaur.us-hosted ones rendered fine.
+      // kenji skills) while the kensaur.us-hosted ones rendered fine.
       // `*.kensaur.us` is a wildcard so a new sibling subdomain does not have
       // to come back here; github.com AND avatars.githubusercontent.com are
       // both listed because github.com/<org>.png redirects to the avatars

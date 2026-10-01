@@ -21,6 +21,11 @@ permissions:
   pull-requests: write
   issues: write
 
+# One guard per PR: a new push supersedes the run for the previous head.
+concurrency:
+  group: pr-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   guard:
     name: Check PR hygiene

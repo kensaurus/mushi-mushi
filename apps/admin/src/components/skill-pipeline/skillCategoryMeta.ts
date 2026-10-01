@@ -1,5 +1,5 @@
 /**
- * Visual + copy metadata for cursor-kenji skill categories.
+ * Visual + copy metadata for kenji skills (kensaurus/skills) categories.
  * Used by SkillPipelinesPage catalog headers and skill cards.
  *
  * Badge/accent classes use admin @theme semantic tokens only (no raw Tailwind

@@ -538,7 +538,9 @@ jobs:
           name: sbom-cyclonedx
           path: ${{ runner.temp }}/sbom/
           if-no-files-found: error
-          retention-days: 90
+          # The durable copy is attached to each GitHub release (next step);
+          # this artifact only needs to outlive a failed attach.
+          retention-days: 14
 
       - name: Attach SBOMs to the GitHub releases
         if: ${{ !cancelled() }}
