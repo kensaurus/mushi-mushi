@@ -42,6 +42,23 @@ export async function lookupGithubDefaultBranch(
     : { ok: false, status: 0 }
 }
 
+/** Head commit sha of `branch`, or null when GitHub cannot be asked. */
+export async function lookupBranchHeadSha(
+  token: string,
+  owner: string,
+  repo: string,
+  branch: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<string | null> {
+  const res = await fetchImpl(
+    `https://api.github.com/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}`,
+    ghInit(token),
+  )
+  if (!res.ok) return null
+  const body = (await res.json().catch(() => null)) as { commit?: { sha?: unknown } } | null
+  return typeof body?.commit?.sha === 'string' ? body.commit.sha : null
+}
+
 /** Default branch and last push time, for the radar's index_branch_mismatch / index_stale checks. */
 export async function lookupGithubRepoFacts(
   token: string,
