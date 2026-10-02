@@ -12,11 +12,11 @@
  *   GET|POST /v1/public/reporter/email/verify?t=       double opt-in
  *   GET|POST /v1/public/reporter/email/unsubscribe?t=  one-click unsubscribe (RFC 8058)
  *
- * GET only renders a page with a button; POST writes. Mail scanners and link
- * previewers fetch URLs on their own, and a write on GET would confirm or
- * unsubscribe people who never clicked. Mail clients send the RFC 8058
- * one-click POST (`List-Unsubscribe=One-Click`) to the same URL; the body is
- * not needed, the token in the URL is the credential.
+ * GET never writes: it redirects to the console page with a button. Mail
+ * scanners and link previewers fetch URLs on their own, and a write on GET
+ * would confirm or unsubscribe people who never clicked. POST writes and
+ * answers JSON. Mail clients send the RFC 8058 one-click POST
+ * (`List-Unsubscribe=One-Click`) here; the token in the URL is the credential.
  */
 
 import type { Context, Hono } from 'npm:hono@4';
@@ -31,8 +31,9 @@ import {
   unsubscribeReporterEmail,
   updateReporterPrefs,
   verifyReporterEmail,
+  type EmailLinkResult,
 } from '../../_shared/reporter-optin.ts';
-import { sha256Hex } from '../../_shared/reporter-email.ts';
+import { emailPageUrl, reporterEmailPageBase, sha256Hex } from '../../_shared/reporter-email.ts';
 import { dbError, jsonError } from '../shared.ts';
 import type { ReporterAuth } from './reporter-auth.ts';
 
@@ -74,16 +75,6 @@ async function readJson(c: Context): Promise<Record<string, unknown> | null> {
     return null;
   }
 }
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] as string);
-}
-
-const page = (title: string, body: string, formHtml = '') =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${escapeHtml(title)}</title></head><body style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:480px;margin:64px auto;padding:0 16px;color:#18181b;line-height:1.5"><h1 style="font-size:20px">${escapeHtml(title)}</h1><p>${escapeHtml(body)}</p>${formHtml}</body></html>`;
-
-const button = (action: string, label: string) =>
-  `<form method="post" action="${escapeHtml(action)}"><button type="submit" style="font:inherit;padding:8px 16px;border-radius:6px;border:1px solid #18181b;background:#18181b;color:#fff;cursor:pointer">${escapeHtml(label)}</button></form>`;
 
 function appName(name: string | null): string {
   return name?.trim() || 'the app';
@@ -173,62 +164,45 @@ export function registerReporterPrefsRoutes(
   });
 
   // ── Links opened from an email ────────────────────────────────────────────
+  //
+  // Supabase serves HTML from Edge Functions as text/plain with a sandbox CSP,
+  // so a page here can not be clicked. A browser GET is redirected to the
+  // console's public /email/reporter page, which POSTs the token back with
+  // `Accept: application/json`. Mail clients send the RFC 8058 one-click POST
+  // straight here; they ignore the response body.
 
-  const invalidLink = (c: Context) =>
-    c.html(page('This link is not valid', 'It may have been cut off by your mail client, or it was already replaced by a newer email.'), 400);
+  const linkResult = (c: Context, result: EmailLinkResult, done: { title: string; body: string }) => {
+    if (result.ok) return c.json({ ok: true, data: { app_name: result.appName, title: done.title, message: done.body } });
+    const status = result.code === 'EXPIRED' ? 410 : result.code === 'DB_ERROR' ? 500 : 400;
+    const message =
+      result.code === 'EXPIRED'
+        ? 'This link has expired. Ask for email updates again in the app to get a new one.'
+        : result.code === 'DB_ERROR'
+          ? 'Something went wrong. Please try the link again in a minute.'
+          : 'This link is not valid. It may have been cut off, or a newer email replaced it.';
+    return c.json({ ok: false, error: { code: result.code === 'DB_ERROR' ? 'DB_ERROR' : `LINK_${result.code}`, message } }, status);
+  };
 
-  app.get('/v1/public/reporter/email/verify', (c) => {
-    const token = c.req.query('t') ?? '';
-    if (!token) return invalidLink(c);
-    return c.html(
-      page(
-        'Confirm your email',
-        'You asked to get email updates about a report you sent. Confirm to start getting them.',
-        button(`?t=${encodeURIComponent(token)}`, 'Confirm'),
-      ),
-    );
-  });
+  app.get('/v1/public/reporter/email/verify', (c) =>
+    c.redirect(emailPageUrl(reporterEmailPageBase(), 'verify', c.req.query('t') ?? ''), 302),
+  );
+  app.get('/v1/public/reporter/email/unsubscribe', (c) =>
+    c.redirect(emailPageUrl(reporterEmailPageBase(), 'unsubscribe', c.req.query('t') ?? ''), 302),
+  );
 
   app.post('/v1/public/reporter/email/verify', async (c) => {
     const result = await verifyReporterEmail(getServiceClient(), c.req.query('t'));
-    if (!result.ok) {
-      if (result.code === 'EXPIRED') {
-        return c.html(page('This link has expired', 'Ask for email updates again in the app to get a new link.'), 410);
-      }
-      if (result.code === 'DB_ERROR') return c.html(page('Something went wrong', 'Please try the link again in a minute.'), 500);
-      return invalidLink(c);
-    }
-    return c.html(
-      page(
-        "You're all set",
-        `You'll get an email from ${appName(result.appName)} when one of your reports has news. Every email has a link to stop them.`,
-      ),
-    );
-  });
-
-  app.get('/v1/public/reporter/email/unsubscribe', (c) => {
-    const token = c.req.query('t') ?? '';
-    if (!token) return invalidLink(c);
-    return c.html(
-      page(
-        'Stop email updates?',
-        'You will stop getting emails about your reports. Updates still show in the app.',
-        button(`?t=${encodeURIComponent(token)}`, 'Stop emails'),
-      ),
-    );
+    return linkResult(c, result, {
+      title: "You're all set",
+      body: `You'll get an email from ${appName(result.ok ? result.appName : null)} when one of your reports has news. Every email has a link to stop them.`,
+    });
   });
 
   app.post('/v1/public/reporter/email/unsubscribe', async (c) => {
     const result = await unsubscribeReporterEmail(getServiceClient(), c.req.query('t'));
-    if (!result.ok) {
-      if (result.code === 'DB_ERROR') return c.html(page('Something went wrong', 'Please try the link again in a minute.'), 500);
-      return invalidLink(c);
-    }
-    return c.html(
-      page(
-        "You're unsubscribed",
-        `No more emails from ${appName(result.appName)} about your reports. You can still see updates in the app.`,
-      ),
-    );
+    return linkResult(c, result, {
+      title: "You're unsubscribed",
+      body: `No more emails from ${appName(result.ok ? result.appName : null)} about your reports. You can still see updates in the app.`,
+    });
   });
 }

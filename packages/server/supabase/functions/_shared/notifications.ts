@@ -6,10 +6,12 @@ import {
   PUSH_TYPES,
   buildReporterUpdateEmail,
   emailCapDecision,
+  emailPageUrl,
   mintEmailToken,
   pushCapAllows,
   renderTemplate,
   reporterEmailApiBase,
+  reporterEmailPageBase,
   sanitizeTemplates,
   templateKeyFor,
   unsubscribeUrl,
@@ -310,7 +312,7 @@ async function claimDeliverySlot(
 
   let lookup = db
     .from('notification_deliveries')
-    .select('id, status, attempts')
+    .select('id, status, attempts, digest_run_id')
     .eq('report_id', reportId)
     .eq('notification_type', type)
     .eq('channel', channel)
@@ -327,6 +329,8 @@ async function claimDeliverySlot(
   if (existing.status === 'sent' || existing.status === 'skipped' || existing.status === 'deferred') {
     return { state: 'done' }
   }
+  // Claimed by a running digest: that run sends it.
+  if (existing.digest_run_id) return { state: 'done' }
 
   const { error: updErr } = await db
     .from('notification_deliveries')
@@ -518,6 +522,7 @@ async function deliverEmail(
     reportTitle: await reportTitleFor(db, target.reportId),
     message: target.message,
     unsubscribeUrl: unsubscribeUrl(reporterEmailApiBase(), token),
+    unsubscribePageUrl: emailPageUrl(reporterEmailPageBase(), 'unsubscribe', token),
   })
   const result = await sendTransactionalEmail({
     to: ctx.prefs.email as string,

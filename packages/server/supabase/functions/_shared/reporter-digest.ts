@@ -8,7 +8,9 @@
  * - Provider unset (RESEND_API_KEY / RESEND_FROM_EMAIL) → nothing is claimed;
  *   rows stay deferred and the run reports `not_configured`.
  * - Claim before send: rows move `deferred → pending` with this run's id, so
- *   two overlapping runs (or a crashed one) can not mail the same row twice.
+ *   two overlapping runs can not mail the same row twice. A claim older than
+ *   STALE_CLAIM_MS (a run that died mid-send) goes back to `deferred` at the
+ *   start of the next run, so nothing is stranded in `pending`.
  * - Re-check at send time: project gate, verification, unsubscribe. A row
  *   that may no longer be mailed is closed `skipped` with the reason.
  * - Send OK → rows `sent`. Send failed → rows back to `deferred` for the next
@@ -24,7 +26,14 @@ import {
   loadReporterPrefs,
   type NotificationType,
 } from './notifications.ts'
-import { buildReporterDigestEmail, mintEmailToken, reporterEmailApiBase, unsubscribeUrl } from './reporter-email.ts'
+import {
+  buildReporterDigestEmail,
+  emailPageUrl,
+  mintEmailToken,
+  reporterEmailApiBase,
+  reporterEmailPageBase,
+  unsubscribeUrl,
+} from './reporter-email.ts'
 import { reporterSafePayload, reporterTitle } from './reporter-copy.ts'
 
 const digestLog = log.child('reporter-digest')
@@ -33,6 +42,8 @@ const digestLog = log.child('reporter-digest')
 const DIGEST_BATCH = 500
 /** A row whose digest failed this many times is closed `failed`. */
 export const MAX_DIGEST_ATTEMPTS = 3
+/** A digest claim this old belongs to a run that died; it is re-armed. */
+export const STALE_CLAIM_MS = 60 * 60 * 1000
 
 interface DeferredRow {
   id: string
@@ -46,6 +57,8 @@ interface DeferredRow {
 
 export interface DigestRunResult {
   not_configured: boolean
+  /** Rows a crashed earlier run had claimed, put back to deferred. */
+  rows_recovered: number
   reporters: number
   emails_sent: number
   rows_sent: number
@@ -65,9 +78,10 @@ async function setRows(
 }
 
 /** Send every reporter their digest. Never throws; the result counts what happened. */
-export async function sendReporterDigests(db: SupabaseClient): Promise<DigestRunResult> {
+export async function sendReporterDigests(db: SupabaseClient, now: Date = new Date()): Promise<DigestRunResult> {
   const result: DigestRunResult = {
     not_configured: false,
+    rows_recovered: 0,
     reporters: 0,
     emails_sent: 0,
     rows_sent: 0,
@@ -75,6 +89,17 @@ export async function sendReporterDigests(db: SupabaseClient): Promise<DigestRun
     rows_retry: 0,
     rows_failed: 0,
   }
+  // Re-arm claims left by a run that died between claim and send.
+  const { data: recovered, error: recoverErr } = await db
+    .from('notification_deliveries')
+    .update({ status: 'deferred', digest_run_id: null, digest_claimed_at: null })
+    .eq('channel', 'email')
+    .eq('status', 'pending')
+    .lt('digest_claimed_at', new Date(now.getTime() - STALE_CLAIM_MS).toISOString())
+    .select('id')
+  if (recoverErr) digestLog.error('digest_recover_failed', { error: recoverErr.message })
+  result.rows_recovered = ((recovered ?? []) as unknown[]).length
+
   if (!emailProviderConfigured()) {
     result.not_configured = true
     return result
@@ -105,7 +130,7 @@ export async function sendReporterDigests(db: SupabaseClient): Promise<DigestRun
     const runId = crypto.randomUUID()
     const { data: claimed, error: claimErr } = await db
       .from('notification_deliveries')
-      .update({ status: 'pending', digest_run_id: runId })
+      .update({ status: 'pending', digest_run_id: runId, digest_claimed_at: now.toISOString() })
       .in('id', rows.map((r) => r.id))
       .eq('status', 'deferred')
       .select('id')
@@ -125,7 +150,7 @@ export async function sendReporterDigests(db: SupabaseClient): Promise<DigestRun
     const block = emailBlockReason(prefs, settings)
     if (block === 'not_configured') {
       // Provider vanished mid-run: put the rows back untouched.
-      await setRows(db, mine.map((r) => r.id), { status: 'deferred', digest_run_id: null })
+      await setRows(db, mine.map((r) => r.id), { status: 'deferred', digest_run_id: null, digest_claimed_at: null })
       result.not_configured = true
       continue
     }
@@ -145,7 +170,7 @@ export async function sendReporterDigests(db: SupabaseClient): Promise<DigestRun
         .eq('reporter_token_hash', tokenHash)
         .is('unsubscribe_token', null)
       if (tokErr) {
-        await setRows(db, mine.map((r) => r.id), { status: 'deferred', digest_run_id: null })
+        await setRows(db, mine.map((r) => r.id), { status: 'deferred', digest_run_id: null, digest_claimed_at: null })
         result.rows_retry += mine.length
         continue
       }
@@ -171,6 +196,7 @@ export async function sendReporterDigests(db: SupabaseClient): Promise<DigestRun
         }).message ?? ''),
       })),
       unsubscribeUrl: unsubscribeUrl(reporterEmailApiBase(), token),
+      unsubscribePageUrl: emailPageUrl(reporterEmailPageBase(), 'unsubscribe', token),
     })
     const sent = await sendTransactionalEmail({
       to: prefs.email as string,
@@ -200,7 +226,7 @@ export async function sendReporterDigests(db: SupabaseClient): Promise<DigestRun
         await setRows(db, [row.id], { status: 'failed', attempts, error_message: `digest: ${reason}`, digest_run_id: null })
         result.rows_failed++
       } else {
-        await setRows(db, [row.id], { status: 'deferred', attempts, error_message: `digest_retry: ${reason}`, digest_run_id: null })
+        await setRows(db, [row.id], { status: 'deferred', attempts, error_message: `digest_retry: ${reason}`, digest_run_id: null, digest_claimed_at: null })
         result.rows_retry++
       }
     }

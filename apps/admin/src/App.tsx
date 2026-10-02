@@ -90,6 +90,7 @@ const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then(m 
 const BillingPage = lazy(() => import('./pages/BillingPage').then(m => ({ default: m.BillingPage })))
 const OrganizationSettingsPage = lazy(() => import('./pages/OrganizationSettingsPage').then(m => ({ default: m.OrganizationSettingsPage })))
 const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage').then(m => ({ default: m.AcceptInvitePage })))
+const ReporterEmailLinkPage = lazy(() => import('./pages/ReporterEmailLinkPage').then(m => ({ default: m.ReporterEmailLinkPage })))
 const CliAuthPage = lazy(() => import('./pages/CliAuthPage').then(m => ({ default: m.CliAuthPage })))
 const McpAuthPage = lazy(() => import('./pages/McpAuthPage').then(m => ({ default: m.McpAuthPage })))
 // Wave T (2026-04-23) — new /inbox page, lazy-loaded like every other route so
@@ -313,6 +314,16 @@ export function App() {
             LoginPage's pathname-based initial mode). */}
         <Route path="/signup" element={<LoginPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        {/* Public: an app's end user confirms or stops report-update emails
+            (Plan 018). The token in the link is the credential. */}
+        <Route
+          path="/email/reporter"
+          element={
+            <Suspense fallback={<Loading text="Loading…" />}>
+              <ReporterEmailLinkPage />
+            </Suspense>
+          }
+        />
         <Route
           path="/invite/accept"
           element={

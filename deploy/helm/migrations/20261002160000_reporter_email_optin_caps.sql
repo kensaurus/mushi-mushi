@@ -23,12 +23,18 @@
 --                         sends it later and flips the row to 'sent'.
 --   digest_run_id         the digest run that claimed a deferred row, so a
 --                         crashed run can not mail the same row twice.
+--   digest_claimed_at     when it was claimed: a claim older than an hour
+--                         (a run that died mid-send) is put back to deferred
+--                         by the next run instead of being stranded.
 --   Index for the per-reporter cap count (sent in the last 24 h).
 --
 -- Verify after apply:
 --   select column_name from information_schema.columns
 --    where table_schema = 'public' and table_name = 'reporter_notification_prefs'
 --      and column_name in ('unsubscribe_token', 'email_verify_sent_at');          -- 2 rows
+--   select column_name from information_schema.columns
+--    where table_schema = 'public' and table_name = 'notification_deliveries'
+--      and column_name in ('digest_run_id', 'digest_claimed_at');                 -- 2 rows
 --   select pg_get_constraintdef(oid) from pg_constraint
 --    where conname = 'notification_deliveries_status_check';                     -- lists 'deferred'
 --   select indexname from pg_indexes
@@ -50,7 +56,8 @@ create index if not exists reporter_notification_prefs_verify_token_idx
   where email_verify_token_hash is not null;
 
 alter table public.notification_deliveries
-  add column if not exists digest_run_id uuid;
+  add column if not exists digest_run_id uuid,
+  add column if not exists digest_claimed_at timestamptz;
 
 alter table public.notification_deliveries
   drop constraint if exists notification_deliveries_status_check;

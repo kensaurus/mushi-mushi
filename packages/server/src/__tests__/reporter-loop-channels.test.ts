@@ -174,6 +174,8 @@ describe('email: every non-send says why in the ledger', () => {
     expect(mail.text).toContain('Can you try again?')
     expect(mail.headers?.['List-Unsubscribe']).toMatch(/^<.*\/v1\/public\/reporter\/email\/unsubscribe\?t=u{43}>$/)
     expect(mail.headers?.['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click')
+    // The visible link is the clickable console page, not the API endpoint.
+    expect(mail.text).toMatch(/\/email\/reporter\?action=unsubscribe&t=u{43}/)
   })
 })
 
@@ -298,6 +300,35 @@ describe('daily digest', () => {
     expect(ledger(fake, 'email').filter((d) => d.error_message === 'digest_unsubscribed')).toHaveLength(2)
   })
 
+  it('a run that died after claiming does not strand the rows: the next run re-arms and sends them once', async () => {
+    const fake = db({ reporter_notification_prefs: [verifiedPrefs()] })
+    await capped(fake)
+    // Simulate a crash: claimed (pending + run id) two hours ago, never sent.
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+    for (const d of ledger(fake, 'email').filter((r) => r.status === 'deferred')) {
+      Object.assign(d, { status: 'pending', digest_run_id: 'dead-run', digest_claimed_at: twoHoursAgo })
+    }
+    // While claimed, a retry of the original notification must not send it either.
+    const retry = await n.createNotification(fake as never, PROJECT, 'r4', OWNER, 'comment_reply', { message: 'reply on r4', reportId: 'r4' }, { dedupeKey: 'k-r4' })
+    expect(retry.duplicate).toContain('email')
+    expect(email.send).not.toHaveBeenCalled()
+
+    const run = await digest.sendReporterDigests(fake as never)
+    expect(run).toMatchObject({ rows_recovered: 2, emails_sent: 1, rows_sent: 2 })
+    expect(email.send).toHaveBeenCalledTimes(1)
+    expect(ledger(fake, 'email').filter((d) => d.status === 'pending')).toHaveLength(0)
+  })
+
+  it('a fresh claim (another run in flight) is left alone', async () => {
+    const fake = db({ reporter_notification_prefs: [verifiedPrefs()] })
+    await capped(fake)
+    for (const d of ledger(fake, 'email').filter((r) => r.status === 'deferred')) {
+      Object.assign(d, { status: 'pending', digest_run_id: 'live-run', digest_claimed_at: new Date().toISOString() })
+    }
+    expect(await digest.sendReporterDigests(fake as never)).toMatchObject({ rows_recovered: 0, emails_sent: 0 })
+    expect(email.send).not.toHaveBeenCalled()
+  })
+
   it('a failed send puts rows back to deferred for the next run', async () => {
     const fake = db({ reporter_notification_prefs: [verifiedPrefs()] })
     await capped(fake)
@@ -322,9 +353,10 @@ describe('double opt-in and one-click unsubscribe', () => {
     expect(email.send).toHaveBeenCalledTimes(1)
     const verifyMail = email.send.mock.calls[0][0]
     expect(verifyMail.to).toBe(ADDRESS)
-    const confirmUrl = /https?:\/\/\S+|\/functions\/v1\/api\S+/.exec(verifyMail.text ?? '')?.[0] ?? ''
-    expect(confirmUrl).toContain('/v1/public/reporter/email/verify?t=')
-    const verifyToken = tokenFrom(`http://x${confirmUrl.slice(confirmUrl.indexOf('/functions'))}`)
+    // The link opens the console's button page (Supabase serves function HTML as text/plain).
+    const confirmUrl = /https:\/\/\S+/.exec(verifyMail.text ?? '')?.[0] ?? ''
+    expect(confirmUrl).toMatch(/\/email\/reporter\?action=verify&t=/)
+    const verifyToken = tokenFrom(confirmUrl)
 
     // The raw verify token is never stored.
     const row = fake.table('reporter_notification_prefs')[0]
@@ -391,7 +423,7 @@ describe('double opt-in and one-click unsubscribe', () => {
     const sentAt = new Date('2026-09-01T00:00:00Z')
     await optin.updateReporterPrefs(fake as never, PROJECT, OWNER, { email: ADDRESS }, sentAt)
     const text = email.send.mock.calls[0][0].text ?? ''
-    const t = /verify\?t=([A-Za-z0-9_-]+)/.exec(text)?.[1]
+    const t = /action=verify&t=([A-Za-z0-9_-]+)/.exec(text)?.[1]
     expect(await optin.verifyReporterEmail(fake as never, t, new Date('2026-10-02T00:00:00Z'))).toMatchObject({ ok: false, code: 'EXPIRED' })
   })
 
