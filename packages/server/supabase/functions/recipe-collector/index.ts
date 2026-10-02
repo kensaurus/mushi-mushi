@@ -60,7 +60,17 @@ async function handler(req: Request): Promise<Response> {
     clog.error('failed to list projects with a repo', { err: error.message })
     return json({ ok: false, error: error.message }, 500)
   }
-  const ids = [...new Set((repos ?? []).map((r: { project_id: string }) => r.project_id))]
+  // Projects with a repo, plus projects only reachable through a bound connector
+  // (App Store Connect, Play, AI spend, RevenueCat) — those need Phase 2 too.
+  const extra: string[] = []
+  if (!only) {
+    const [{ data: binds }, { data: owned }] = await Promise.all([
+      db.from('connector_bindings').select('project_id').limit(1000),
+      db.from('connector_instances').select('project_id').not('project_id', 'is', null).limit(1000),
+    ])
+    for (const r of [...(binds ?? []), ...(owned ?? [])] as Array<{ project_id: string | null }>) if (r.project_id) extra.push(r.project_id)
+  }
+  const ids = [...new Set([...(repos ?? []).map((r: { project_id: string }) => r.project_id), ...extra])]
 
   // Least-recently refreshed first, so a large fleet rotates through the cap.
   const { data: snaps } = await db

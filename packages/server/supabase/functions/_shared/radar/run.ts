@@ -110,12 +110,25 @@ export async function connectorRadarResults(db: Db, projectId: string, manifest:
     .eq('is_current', true)
     .in('kind', [...kinds])
   const snaps = (data ?? []) as Array<{ kind: string; ok: boolean; error: string | null; snapshot: ConnectorSnapshot | null }>
+  // Which of these kinds are connected but not collected yet (vs not connected at all).
+  const [{ data: binds }, { data: owned }, { data: settings }] = await Promise.all([
+    db.from('connector_bindings').select('connector_instance_id').eq('project_id', projectId),
+    db.from('connector_instances').select('id, kind').eq('project_id', projectId),
+    db.from('project_settings').select('supabase_project_ref').eq('project_id', projectId).maybeSingle(),
+  ])
+  const boundIds = ((binds ?? []) as Array<{ connector_instance_id: string }>).map((b) => b.connector_instance_id)
+  const { data: boundRows } = boundIds.length ? await db.from('connector_instances').select('id, kind').in('id', boundIds) : { data: [] }
+  const connectedKinds = new Set([...((owned ?? []) as Array<{ kind: string }>), ...((boundRows ?? []) as Array<{ kind: string }>)].map((r) => r.kind))
+  if ((settings as { supabase_project_ref?: string | null } | null)?.supabase_project_ref) connectedKinds.add('supabase')
   const out: DetectorResult[] = []
   for (const kind of kinds) {
     const rules = RADAR_RULE_IDS.filter((id) => RADAR_RULES[id].connector === kind)
     const snap = snaps.find((x) => x.kind === kind)
     if (!snap) {
-      for (const ruleId of rules) out.push({ ruleId, state: 'unknown', reason: `Not checked: connect ${CONNECTOR_TITLE[kind]} to check this.`, findings: [] })
+      const reason = connectedKinds.has(kind)
+        ? `${CONNECTOR_TITLE[kind]} is connected but has not been read yet. It is read daily at 03:35 UTC.`
+        : `Not checked: connect ${CONNECTOR_TITLE[kind]} to check this.`
+      for (const ruleId of rules) out.push({ ruleId, state: 'unknown', reason, findings: [] })
       continue
     }
     if (!snap.ok || !snap.snapshot) {

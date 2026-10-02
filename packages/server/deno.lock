@@ -321,6 +321,7 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
+        "npm:@ai-sdk/ui-utils@1.2.11",
         "npm:@supabase/supabase-js@^2.108.2",
         "npm:supabase@^2.108.0",
         "npm:typescript@^6.0.3",

@@ -244,3 +244,29 @@ describe('recipe ingest routes', () => {
     expect(ingest.parseCsvLine('domain,"a,b.example","say ""hi"""')).toEqual(['domain', 'a,b.example', 'say "hi"'])
   })
 })
+
+describe('migration drift joins the two connectors', () => {
+  const snap = (facts: Record<string, unknown>) => ({ observedAt: NOW.toISOString(), elements: {}, resources: [], facts })
+  it('flags a migration in the repo that the database never applied, and claims nothing when a side is missing', () => {
+    const found = phase2.migrationDrift([
+      { kind: 'github', snapshot: snap({ migrationFiles: ['20261001000000_a.sql', '20261002000000_b.sql'] }) },
+      { kind: 'supabase', snapshot: snap({ appliedVersions: ['20261001000000'] }) },
+    ] as never)
+    expect(found.map((f) => [f.gate, f.ruleId])).toEqual([['schema_drift', 'migration_unapplied']])
+    expect(phase2.migrationDrift([{ kind: 'github', snapshot: snap({ migrationFiles: ['20261002000000_b.sql'] }) }] as never)).toEqual([])
+  })
+})
+
+describe('a rejected CI push fails the CI step', () => {
+  it('answers 422, not 200, when the snapshot cannot be stored', async () => {
+    const db = makeFakeDb({
+      projects: [{ id: P1, organization_id: ORG }],
+      app_recipe_snapshots: [{ id: 'cur', project_id: P1, is_current: true, tokens_hash: 'x', manifest: null }],
+    } as never, { autoId: true, uniques: { app_recipe_snapshots: ['project_id'] } })
+    const app = new FakeApp()
+    ingest.registerRecipeIngestRoutes(app as never, { getServiceClient: () => db as never, apiKeyAuth: pass, jwtAuth: pass, adminOrApiKeyRead: pass, now: () => NOW } as never)
+    const res = await app.call('POST', '/v1/ingest/recipe', { body: { commitSha: 'abcdef1', files: { 'mushi.recipe.json': '{"version":1}' } }, vars: { projectId: P1 } })
+    expect(res.status).toBe(422)
+    expect(res.body.error.code).toBe('RECIPE_REJECTED')
+  })
+})
