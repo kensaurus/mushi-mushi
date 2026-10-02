@@ -115,6 +115,17 @@ auditConfig:
     # drops @react-three/fiber (the only reason expo is in the tree).
     - 'GHSA-w3rx-r6r6-pgpr'
     - 'GHSA-5p2g-fcmc-qvqq'
+    # node-forge <=1.4.0 (GHSA-86w9-cpqp-85rv, high): no fixed release
+    # exists. Reachability: packages/react-native declares expo-secure-store
+    # and expo-sensors as OPTIONAL peers; autoInstallPeers pulls them into
+    # the dev graph, and their required `expo` peer brings @expo/cli >
+    # @expo/code-signing-certificates > node-forge. Nothing that ships uses
+    # it: the RN SDK loads expo-sensors via a guarded require and
+    # expo-secure-store via dynamic import, and no test or runtime path
+    # imports @expo/cli. Overrides cannot remove a peer (checked 2026-10-02).
+    # Remove when node-forge ships a fix, or when RN's optional expo peers
+    # stop being auto-installed. Owner decision 2026-10-02.
+    - 'GHSA-86w9-cpqp-85rv'
 
 # ---------------------------------------------------------------------------
 # Supply-chain hardening (pnpm)
