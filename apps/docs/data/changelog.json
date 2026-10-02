@@ -1,11 +1,22 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "Unreleased",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.30",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.30.0"
+    ],
     "highlights": [],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.30.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.30.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.29",
@@ -1202,6 +1213,14 @@
       {
         "name": "@mushi-mushi/cli",
         "version": "0.23.1"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
+        "version": "0.23.0"
+      },
+      {
+        "name": "@mushi-mushi/react-native",
+        "version": "0.23.0"
       }
     ]
   },
@@ -2025,6 +2044,10 @@
         "version": "0.9.0"
       },
       {
+        "name": "@mushi-mushi/plugin-sdk",
+        "version": "0.9.0"
+      },
+      {
         "name": "@mushi-mushi/react",
         "version": "0.9.0"
       },
@@ -2336,7 +2359,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-cursor-cloud",
-        "version": "0.6.1"
+        "version": "0.6.2"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -2699,7 +2722,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-linear",
-        "version": "0.3.2"
+        "version": "0.3.3"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -2736,6 +2759,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.2.12",
       "0.2.11",
       "0.2.10",
       "0.2.9",
@@ -2838,7 +2862,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-jira",
-        "version": "0.2.7"
+        "version": "0.2.8"
       },
       {
         "name": "@mushi-mushi/plugin-linear",
@@ -2846,7 +2870,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-pagerduty",
-        "version": "0.2.9"
+        "version": "0.2.10"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -2854,15 +2878,15 @@
       },
       {
         "name": "@mushi-mushi/plugin-sentry",
-        "version": "0.2.11"
+        "version": "0.2.12"
       },
       {
         "name": "@mushi-mushi/plugin-slack-app",
-        "version": "0.2.8"
+        "version": "0.2.9"
       },
       {
         "name": "@mushi-mushi/plugin-zapier",
-        "version": "0.2.9"
+        "version": "0.2.10"
       },
       {
         "name": "@mushi-mushi/react",
@@ -2899,6 +2923,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.1.7",
       "0.1.6",
       "0.1.5",
       "0.1.4",
@@ -2931,27 +2956,27 @@
       },
       {
         "name": "@mushi-mushi/plugin-bugsnag",
-        "version": "0.1.6"
+        "version": "0.1.7"
       },
       {
         "name": "@mushi-mushi/plugin-crashlytics",
-        "version": "0.1.6"
+        "version": "0.1.7"
       },
       {
         "name": "@mushi-mushi/plugin-discord",
-        "version": "0.1.6"
+        "version": "0.1.7"
       },
       {
         "name": "@mushi-mushi/plugin-github-issues",
-        "version": "0.1.6"
+        "version": "0.1.7"
       },
       {
         "name": "@mushi-mushi/plugin-msteams",
-        "version": "0.1.6"
+        "version": "0.1.7"
       },
       {
         "name": "@mushi-mushi/plugin-rollbar",
-        "version": "0.1.6"
+        "version": "0.1.7"
       },
       {
         "name": "@mushi-mushi/react",
