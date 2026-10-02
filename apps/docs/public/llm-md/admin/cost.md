@@ -49,6 +49,8 @@ using public pricing at time of logging).
 | **Max iterations** | Settings → PDCA settings → Max iterations per run |
 | **Fix worker retries** | `fix-worker` retries on Zod validation failure — reduce max_retries in env |
 | **Integration health probe cadence** | Probes run on demand; avoid automating frequent polling |
+| **Monthly AI budget** | Settings → General → Spend limits (or the budget field on this page). AI calls stop for the rest of the month once spend reaches it |
+| **Auto-fix limits** | Settings → General → Spend limits: spend per 30 days, automatic fixes per day, and an approval threshold |
 
 ---
 

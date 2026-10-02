@@ -112,12 +112,12 @@ export function detectSpendCapUnset(settings: {
         `limits what they spend. Suggested: $${DEFAULT_AUTOFIX_MAX_SPEND_USD} per 30 days and ` +
         `${DEFAULT_AUTOFIX_MAX_DISPATCHES_PER_DAY} dispatches a day. Fixes you start yourself are never blocked by a cap.`,
       suggested_fix: {
-        kind: 'api',
-        method: 'PUT',
-        path: '/v1/admin/projects/:id/autofix/caps',
-        body: {
-          maxSpendUsd: settings.autofix_max_spend_usd ?? DEFAULT_AUTOFIX_MAX_SPEND_USD,
-          maxDispatchesPerDay: settings.autofix_max_dispatches_per_day ?? DEFAULT_AUTOFIX_MAX_DISPATCHES_PER_DAY,
+        kind: 'console',
+        path: '/settings?tab=general#spend-limits',
+        // Same fields the console saves through PATCH /v1/admin/settings.
+        values: {
+          autofix_max_spend_usd: settings.autofix_max_spend_usd ?? DEFAULT_AUTOFIX_MAX_SPEND_USD,
+          autofix_max_dispatches_per_day: settings.autofix_max_dispatches_per_day ?? DEFAULT_AUTOFIX_MAX_DISPATCHES_PER_DAY,
         },
       },
     },
