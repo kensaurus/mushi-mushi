@@ -47,6 +47,9 @@ import {
 import { safeParse, ApiReportBodySchema } from '../../_shared/validate.ts';
 import { registerReporterFeatureBoardRoutes } from './reporter-feature-board.ts';
 import { registerReporterInboxRoutes } from './reporter-inbox.ts';
+import { registerReporterPrefsRoutes } from './reporter-prefs.ts';
+import { emailProviderConfigured } from '../../_shared/email.ts';
+import { getVapidConfig } from '../../_shared/web-push.ts';
 import { reporterSafePayload, type ReporterNotificationRow } from '../../_shared/reporter-copy.ts';
 import {
   announceReporterReply,
@@ -285,7 +288,8 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, ' +
           'reporter_notifications_enabled, widget_brand_footer, ' +
-          'assistant_enabled, assistant_label, assistant_greeting, assistant_suggestions',
+          'assistant_enabled, assistant_label, assistant_greeting, assistant_suggestions, ' +
+          'reporter_email_enabled, reporter_push_enabled',
       )
       .eq('project_id', projectId)
       .maybeSingle();
@@ -300,7 +304,11 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     c.header('Vary', 'Origin, X-Mushi-Project, X-Mushi-Api-Key');
     return c.json({
       ok: true,
-      data: normalizeSdkConfig(data as SdkConfigRow | null, { brandFooterDefault }),
+      data: normalizeSdkConfig(data as SdkConfigRow | null, {
+        brandFooterDefault,
+        emailProviderConfigured: emailProviderConfigured(),
+        vapidPublicKey: getVapidConfig()?.publicKey ?? null,
+      }),
     });
   });
 
@@ -1137,6 +1145,8 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   // GET /v1/reporter/reports, GET /v1/reporter/reports/:id, mark-read and
   // /v1/reporter/updates live in reporter-inbox.ts (Plan 018 §2.2–2.3).
   registerReporterInboxRoutes(app, resolveReporterTokenHash);
+  // Email opt-in / unsubscribe and reporter Web Push (Plan 018 §4.1).
+  registerReporterPrefsRoutes(app, resolveReporterTokenHash);
 
   app.get('/v1/reporter/reports/:id/comments', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;

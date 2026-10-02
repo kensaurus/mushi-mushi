@@ -1,7 +1,21 @@
-import { sendTransactionalEmail } from './email.ts'
+import { emailProviderConfigured, sendTransactionalEmail } from './email.ts'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
 import { getVapidConfig, sendWebPushToSubscription } from './web-push.ts'
+import {
+  PUSH_TYPES,
+  buildReporterUpdateEmail,
+  emailCapDecision,
+  mintEmailToken,
+  pushCapAllows,
+  renderTemplate,
+  reporterEmailApiBase,
+  sanitizeTemplates,
+  templateKeyFor,
+  unsubscribeUrl,
+  type ChannelSkipReason,
+  type TemplatableType,
+} from './reporter-email.ts'
 
 const notifLog = log.child('notifications')
 
@@ -66,6 +80,10 @@ export interface NotificationPayload {
   version?: string | null
   /** `closed_reason` for `dismissed` / `closed`. */
   closedReason?: string | null
+  /** For `duplicate_linked`: the report whose updates the reporter now follows. */
+  canonicalReportId?: string
+  /** For `released`: how many reports the release fixed (the `{n}` template placeholder). */
+  fixedCount?: number
   /**
    * Accepted for older callers but never stored: internal triage labels must
    * not reach a reporter (Plan 018 §3 copy rule).
@@ -81,17 +99,22 @@ export interface CreateNotificationOptions {
   reviewable?: boolean
 }
 
-/** What happened on each channel. `duplicate` = already delivered earlier (idempotent no-op). */
+/**
+ * What happened on each channel. `duplicate` = already delivered earlier
+ * (idempotent no-op); `deferred` = an email over the frequency cap, sent in
+ * the daily digest instead.
+ */
 export interface NotificationResult {
   held: boolean
   delivered: NotificationChannel[]
   failed: NotificationChannel[]
   skipped: NotificationChannel[]
   duplicate: NotificationChannel[]
+  deferred: NotificationChannel[]
 }
 
 function emptyResult(): NotificationResult {
-  return { held: false, delivered: [], failed: [], skipped: [], duplicate: [] }
+  return { held: false, delivered: [], failed: [], skipped: [], duplicate: [], deferred: [] }
 }
 
 interface ReporterChannelPrefs {
@@ -155,44 +178,88 @@ export function sanitizeNotificationPayload<T extends Record<string, unknown>>(p
   return rest
 }
 
-async function loadReporterPrefs(
+export interface ReporterPrefs {
+  channels: ReporterChannelPrefs
+  email: string | null
+  emailVerifiedAt: string | null
+  unsubscribedAt: string | null
+  unsubscribeToken: string | null
+}
+
+export async function loadReporterPrefs(
   db: SupabaseClient,
   projectId: string,
   reporterTokenHash: string,
-): Promise<{ channels: ReporterChannelPrefs; email: string | null }> {
-  const { data } = await db
+): Promise<ReporterPrefs> {
+  const { data, error } = await db
     .from('reporter_notification_prefs')
-    .select('channels, notification_email')
+    .select('channels, notification_email, email_verified_at, unsubscribed_at, unsubscribe_token')
     .eq('project_id', projectId)
     .eq('reporter_token_hash', reporterTokenHash)
     .maybeSingle()
+  // A read error falls back to in-app only: email / push are opt-in, so the
+  // safe default is to not send them.
+  if (error) notifLog.error('reporter_prefs_read_failed', { projectId, error: error.message })
+  const row = (error ? null : data) as Record<string, unknown> | null
 
   const channels = {
     ...DEFAULT_CHANNEL_PREFS,
-    ...((data?.channels as Partial<ReporterChannelPrefs> | null) ?? {}),
+    ...((row?.channels as Partial<ReporterChannelPrefs> | null) ?? {}),
   }
+  const str = (v: unknown) => (typeof v === 'string' && v ? v : null)
   return {
     channels,
-    email: typeof data?.notification_email === 'string' ? data.notification_email : null,
+    email: str(row?.notification_email),
+    emailVerifiedAt: str(row?.email_verified_at),
+    unsubscribedAt: str(row?.unsubscribed_at),
+    unsubscribeToken: str(row?.unsubscribe_token),
   }
 }
 
+/** The project-level reporter-update controls (`project_settings.reporter_*`). */
+export interface ProjectReporterSettings {
+  mode: 'auto' | 'review'
+  emailEnabled: boolean
+  pushEnabled: boolean
+  templates: Partial<Record<TemplatableType, string>>
+  appName: string | null
+  /** The settings row could not be read: mode reads 'review', both channels off. */
+  readFailed: boolean
+}
+
 /**
- * The project's `reporter_updates_mode`. On a read error this answers
- * 'review', so a pipeline message waits in the Outbox instead of going out
- * against the operator's setting; the error is logged loudly.
+ * On a read error the mode answers 'review' (a pipeline message waits in the
+ * Outbox instead of going out against the operator's setting) and both
+ * opt-in channels read as off. The error is logged loudly.
  */
-export async function reporterUpdatesMode(db: SupabaseClient, projectId: string): Promise<'auto' | 'review'> {
-  const { data, error } = await db
-    .from('project_settings')
-    .select('reporter_updates_mode')
-    .eq('project_id', projectId)
-    .maybeSingle()
+export async function loadProjectReporterSettings(db: SupabaseClient, projectId: string): Promise<ProjectReporterSettings> {
+  const [{ data, error }, { data: project }] = await Promise.all([
+    db
+      .from('project_settings')
+      .select('reporter_updates_mode, reporter_email_enabled, reporter_push_enabled, reporter_templates')
+      .eq('project_id', projectId)
+      .maybeSingle(),
+    db.from('projects').select('name').eq('id', projectId).maybeSingle(),
+  ])
+  const appName = typeof (project as { name?: unknown } | null)?.name === 'string' ? (project as { name: string }).name : null
   if (error) {
-    notifLog.error('reporter_updates_mode_read_failed', { projectId, error: error.message })
-    return 'review'
+    notifLog.error('reporter_settings_read_failed', { projectId, error: error.message })
+    return { mode: 'review', emailEnabled: false, pushEnabled: false, templates: {}, appName, readFailed: true }
   }
-  return (data as { reporter_updates_mode?: string } | null)?.reporter_updates_mode === 'review' ? 'review' : 'auto'
+  const row = data as Record<string, unknown> | null
+  return {
+    mode: row?.reporter_updates_mode === 'review' ? 'review' : 'auto',
+    emailEnabled: row?.reporter_email_enabled === true,
+    pushEnabled: row?.reporter_push_enabled === true,
+    templates: sanitizeTemplates(row?.reporter_templates),
+    appName,
+    readFailed: false,
+  }
+}
+
+/** The project's `reporter_updates_mode` ('review' on a read error). */
+export async function reporterUpdatesMode(db: SupabaseClient, projectId: string): Promise<'auto' | 'review'> {
+  return (await loadProjectReporterSettings(db, projectId)).mode
 }
 
 type SlotClaim = { state: 'claimed'; id: string } | { state: 'done' } | { state: 'error' }
@@ -255,8 +322,11 @@ async function claimDeliverySlot(
     return { state: 'error' }
   }
 
-  // Already delivered (or deliberately skipped) → idempotent no-op.
-  if (existing.status === 'sent' || existing.status === 'skipped') return { state: 'done' }
+  // Already delivered, deliberately skipped, or waiting for the digest →
+  // idempotent no-op (a retry must not send a deferred email early).
+  if (existing.status === 'sent' || existing.status === 'skipped' || existing.status === 'deferred') {
+    return { state: 'done' }
+  }
 
   const { error: updErr } = await db
     .from('notification_deliveries')
@@ -279,7 +349,7 @@ async function claimDeliverySlot(
 async function markDelivery(
   db: SupabaseClient,
   deliveryId: string,
-  status: 'sent' | 'failed' | 'skipped',
+  status: 'sent' | 'failed' | 'skipped' | 'deferred',
   errorMessage?: string,
 ): Promise<void> {
   try {
@@ -349,16 +419,116 @@ async function inAppRowExists(
   return (data ?? []).length > 0
 }
 
-async function sendEmailNotification(
-  to: string,
-  subject: string,
-  body: string,
-): Promise<{ ok: boolean; error?: string }> {
-  // Shared Resend sender (_shared/email.ts): RESEND_FROM_EMAIL is required —
-  // an unset sender skips the send with a warning instead of falling back to
-  // an unverified default address.
-  const result = await sendTransactionalEmail({ to, subject, text: body })
-  return result.ok ? { ok: true } : { ok: false, error: result.error }
+/** Ledger outcome for one reporter email. */
+type EmailOutcome = { status: 'sent' | 'failed' | 'skipped' | 'deferred'; reason?: string }
+
+/** Emails / pushes this reporter was sent in the last 24 h (for the caps). */
+async function sentInLastDay(
+  db: SupabaseClient,
+  projectId: string,
+  reporterTokenHash: string,
+  channel: 'email' | 'push',
+): Promise<{ rows: Array<{ report_id: string }>; error: string | null }> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const { data, error } = await db
+    .from('notification_deliveries')
+    .select('report_id')
+    .eq('project_id', projectId)
+    .eq('reporter_token_hash', reporterTokenHash)
+    .eq('channel', channel)
+    .eq('status', 'sent')
+    .gte('sent_at', since)
+    .limit(50)
+  if (error) return { rows: [], error: error.message }
+  return { rows: (data ?? []) as Array<{ report_id: string }>, error: null }
+}
+
+/** The reporter's unsubscribe token, minted (and stored) the first time it is needed. */
+async function ensureUnsubscribeToken(
+  db: SupabaseClient,
+  projectId: string,
+  reporterTokenHash: string,
+  prefs: ReporterPrefs,
+): Promise<string | null> {
+  if (prefs.unsubscribeToken) return prefs.unsubscribeToken
+  const token = mintEmailToken()
+  const { error } = await db
+    .from('reporter_notification_prefs')
+    .update({ unsubscribe_token: token })
+    .eq('project_id', projectId)
+    .eq('reporter_token_hash', reporterTokenHash)
+    .is('unsubscribe_token', null)
+  if (error) {
+    notifLog.error('unsubscribe_token_store_failed', { projectId, error: error.message })
+    return null
+  }
+  prefs.unsubscribeToken = token
+  return token
+}
+
+/** Title / summary of a report, for the email body. Null on any error. */
+async function reportTitleFor(db: SupabaseClient, reportId: string): Promise<string | null> {
+  const { data } = await db.from('reports').select('title, summary, description').eq('id', reportId).maybeSingle()
+  const r = data as { title?: string | null; summary?: string | null; description?: string | null } | null
+  const text = r?.title || r?.summary || r?.description || ''
+  return text.trim() ? text.trim() : null
+}
+
+/**
+ * Why an email to this reporter can not go out, checked in a fixed order so
+ * the ledger reason is predictable: provider → project gate → address →
+ * unsubscribe → verification. Null = sendable.
+ */
+export function emailBlockReason(
+  prefs: Pick<ReporterPrefs, 'email' | 'emailVerifiedAt' | 'unsubscribedAt'>,
+  settings: Pick<ProjectReporterSettings, 'emailEnabled'>,
+): ChannelSkipReason | null {
+  if (!emailProviderConfigured()) return 'not_configured'
+  if (!settings.emailEnabled) return 'project_disabled'
+  if (!prefs.email) return 'no_email'
+  if (prefs.unsubscribedAt) return 'unsubscribed'
+  if (!prefs.emailVerifiedAt) return 'unverified'
+  return null
+}
+
+/**
+ * One reporter email. Every outcome that is not a real send says why:
+ * `skipped` with a reason, or `deferred` (over the cap → daily digest).
+ * A provider that turns out unset at send time is `skipped not_configured`,
+ * never `sent` or `failed`.
+ */
+async function deliverEmail(
+  db: SupabaseClient,
+  target: DeliveryTarget,
+  ctx: DeliveryContext,
+): Promise<EmailOutcome> {
+  const block = emailBlockReason(ctx.prefs, ctx.settings)
+  if (block) return { status: 'skipped', reason: block }
+
+  const sent = await sentInLastDay(db, target.projectId, target.reporterTokenHash, 'email')
+  if (sent.error) return { status: 'failed', reason: `cap_check_failed: ${sent.error}` }
+  const cap = emailCapDecision(sent.rows.length, sent.rows.filter((r) => r.report_id === target.reportId).length)
+  if (!cap.ok) return { status: 'deferred', reason: cap.reason }
+
+  const token = await ensureUnsubscribeToken(db, target.projectId, target.reporterTokenHash, ctx.prefs)
+  if (!token) return { status: 'failed', reason: 'unsubscribe_token_unavailable' }
+  const email = buildReporterUpdateEmail({
+    type: target.type,
+    appName: ctx.settings.appName,
+    reportTitle: await reportTitleFor(db, target.reportId),
+    message: target.message,
+    unsubscribeUrl: unsubscribeUrl(reporterEmailApiBase(), token),
+  })
+  const result = await sendTransactionalEmail({
+    to: ctx.prefs.email as string,
+    subject: email.subject,
+    text: email.text,
+    headers: email.headers,
+    tags: { kind: 'reporter_update', type: target.type },
+  })
+  if (result.ok) return { status: 'sent' }
+  if (result.reason === 'no_sender' || result.reason === 'no_api_key') return { status: 'skipped', reason: 'not_configured' }
+  return { status: 'failed', reason: result.error }
 }
 
 interface ReporterPushRow {
@@ -385,6 +555,7 @@ async function sendPushNotification(
   projectId: string,
   reporterTokenHash: string,
   message: string,
+  appName: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
   if (!getVapidConfig()) return { ok: false, error: 'push_not_configured' }
 
@@ -405,7 +576,8 @@ async function sendPushNotification(
   for (const row of rows) {
     const result = await sendWebPushToSubscription(
       { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },
-      { title: 'Mushi Mushi', body: message, tag: `reporter-${reporterTokenHash.slice(0, 12)}` },
+      // The host app is who the reporter knows; Mushi stays out of the title.
+      { title: appName?.trim() || 'Your report', body: message, tag: `reporter-${reporterTokenHash.slice(0, 12)}` },
     )
     if (result.ok) {
       sent++
@@ -445,6 +617,26 @@ interface DeliveryTarget {
   dedupeKey: string | null
 }
 
+/** The reporter's prefs and the project's controls, loaded once per notification. */
+interface DeliveryContext {
+  prefs: ReporterPrefs
+  settings: ProjectReporterSettings
+}
+
+/** One reporter push, after the project gate and the daily cap. */
+async function deliverPush(
+  db: SupabaseClient,
+  target: DeliveryTarget,
+  ctx: DeliveryContext,
+): Promise<{ status: 'sent' | 'failed' | 'skipped'; reason?: string }> {
+  if (!ctx.settings.pushEnabled) return { status: 'skipped', reason: 'project_disabled' }
+  const sent = await sentInLastDay(db, target.projectId, target.reporterTokenHash, 'push')
+  if (sent.error) return { status: 'failed', reason: `cap_check_failed: ${sent.error}` }
+  if (!pushCapAllows(sent.rows.length)) return { status: 'skipped', reason: 'capped' }
+  const result = await sendPushNotification(db, target.projectId, target.reporterTokenHash, target.message, ctx.settings.appName)
+  return { status: pushDeliveryStatus(result), reason: result.error }
+}
+
 /**
  * Deliver on each channel and stamp the ledger only after the send. With
  * `inAppAlreadyWritten`, the in-app row was inserted by another writer (the
@@ -455,11 +647,11 @@ async function deliverChannels(
   db: SupabaseClient,
   target: DeliveryTarget,
   channels: NotificationChannel[],
-  email: string | null,
+  ctx: DeliveryContext,
   inAppAlreadyWritten: boolean,
 ): Promise<NotificationResult> {
   const result = emptyResult()
-  const { projectId, reportId, reporterTokenHash, type, payload, message, dedupeKey } = target
+  const { projectId, reportId, reporterTokenHash, type, payload, dedupeKey } = target
 
   for (const channel of channels) {
     const claim = await claimDeliverySlot(db, projectId, reportId, reporterTokenHash, type, channel, payload, dedupeKey)
@@ -486,47 +678,56 @@ async function deliverChannels(
       continue
     }
 
-    if (channel === 'email') {
-      if (!email) {
-        await markDelivery(db, deliveryId, 'skipped', 'no_email')
-        result.skipped.push('email')
-        continue
-      }
-      // Tenant-neutral subject — this fan-out serves every project, not just
-      // glot.it. Keep the product name generic so cross-tenant emails read
-      // correctly.
-      const sent = await sendEmailNotification(email, `Mushi — ${type.replace(/_/g, ' ')}`, message)
-      await markDelivery(db, deliveryId, sent.ok ? 'sent' : 'failed', sent.error)
-      ;(sent.ok ? result.delivered : result.failed).push('email')
-      continue
-    }
-
-    const sent = await sendPushNotification(db, projectId, reporterTokenHash, message)
-    const status = pushDeliveryStatus(sent)
-    await markDelivery(db, deliveryId, status, sent.error)
-    if (status === 'sent') result.delivered.push('push')
-    else if (status === 'skipped') result.skipped.push('push')
-    else result.failed.push('push')
+    const outcome = channel === 'email' ? await deliverEmail(db, target, ctx) : await deliverPush(db, target, ctx)
+    await markDelivery(db, deliveryId, outcome.status, outcome.reason)
+    if (outcome.status === 'sent') result.delivered.push(channel)
+    else if (outcome.status === 'skipped') result.skipped.push(channel)
+    else if (outcome.status === 'deferred') result.deferred.push(channel)
+    else result.failed.push(channel)
   }
   return result
 }
 
-function channelsFor(type: NotificationType, prefs: { channels: ReporterChannelPrefs; email: string | null }): NotificationChannel[] {
+/**
+ * Channels to attempt. Email is attempted whenever the reporter asked for it
+ * with an address, so a blocked send (provider unset, project gate off, not
+ * verified, unsubscribed) still leaves a ledger row that says why. Push only
+ * carries the four events worth a lock-screen alert (§4.3).
+ */
+function channelsFor(type: NotificationType, prefs: ReporterPrefs): NotificationChannel[] {
   // `in_app` defaults on (DEFAULT_CHANNEL_PREFS) but must be honoured when
   // explicitly disabled.
   const channels: NotificationChannel[] = []
   if (prefs.channels.in_app) channels.push('in_app')
   if (IN_APP_ONLY_TYPES.has(type)) return channels
   if (prefs.channels.email && prefs.email) channels.push('email')
-  if (prefs.channels.push) channels.push('push')
+  if (prefs.channels.push && PUSH_TYPES.has(type)) channels.push('push')
   return channels
+}
+
+/** Developer words and point awards are never replaced by a project template. */
+const VERBATIM_TYPES: ReadonlySet<NotificationType> = new Set(['comment_reply', 'info_requested', 'points_awarded'])
+
+/**
+ * The project's wording for a pipeline message (`reporter_templates`), or
+ * null to keep the built-in copy.
+ */
+function templatedMessage(type: NotificationType, payload: NotificationPayload, settings: ProjectReporterSettings): string | null {
+  if (VERBATIM_TYPES.has(type)) return null
+  const key = templateKeyFor(type)
+  const template = key ? settings.templates[key] : undefined
+  if (!template) return null
+  const text = renderTemplate(template, { version: payload.version ?? null, app: settings.appName, n: payload.fixedCount ?? null })
+  return text || null
 }
 
 /**
  * Fan-out a reporter notification across enabled channels.
  * Idempotent per (report_id, notification_type, channel, dedupe_key) via
  * notification_deliveries. In review mode a `reviewable` message is stored
- * `held` (no ledger rows, nothing sent) until an admin releases it.
+ * `held` (no ledger rows, nothing sent) until an admin releases it. A project
+ * template replaces pipeline copy at write time (`payload.templated`), so the
+ * Outbox, the widget and the email all show the same words.
  */
 export async function createNotification(
   db: SupabaseClient,
@@ -537,11 +738,17 @@ export async function createNotification(
   payload: NotificationPayload,
   options: CreateNotificationOptions = {},
 ): Promise<NotificationResult> {
-  const message = payload.message || buildNotificationMessage(type, payload)
-  const fullPayload = { ...sanitizeNotificationPayload(payload as unknown as Record<string, unknown>), message }
+  const settings = await loadProjectReporterSettings(db, projectId)
+  const templated = templatedMessage(type, payload, settings)
+  const message = templated ?? (payload.message || buildNotificationMessage(type, payload))
+  const fullPayload: Record<string, unknown> = {
+    ...sanitizeNotificationPayload(payload as unknown as Record<string, unknown>),
+    message,
+  }
+  if (templated) fullPayload.templated = true
   const dedupeKey = options.dedupeKey ?? null
 
-  if (options.reviewable && (await reporterUpdatesMode(db, projectId)) === 'review') {
+  if (options.reviewable && settings.mode === 'review') {
     const { error } = await db.from('reporter_notifications').insert({
       project_id: projectId,
       report_id: reportId,
@@ -571,7 +778,7 @@ export async function createNotification(
     db,
     { projectId, reportId, reporterTokenHash, type, payload: fullPayload, message, dedupeKey },
     channelsFor(type, prefs),
-    prefs.email,
+    { prefs, settings },
     false,
   )
 }
@@ -585,9 +792,12 @@ export async function deliverForExistingInAppRow(
   db: SupabaseClient,
   target: Omit<DeliveryTarget, 'message'> & { message?: string },
 ): Promise<NotificationResult> {
-  const prefs = await loadReporterPrefs(db, target.projectId, target.reporterTokenHash)
+  const [prefs, settings] = await Promise.all([
+    loadReporterPrefs(db, target.projectId, target.reporterTokenHash),
+    loadProjectReporterSettings(db, target.projectId),
+  ])
   const message = target.message || buildNotificationMessage(target.type, {})
-  return deliverChannels(db, { ...target, message }, channelsFor(target.type, prefs), prefs.email, true)
+  return deliverChannels(db, { ...target, message }, channelsFor(target.type, prefs), { prefs, settings }, true)
 }
 
 /** Dedupe key for a follower's copy of a canonical report's notification. */
