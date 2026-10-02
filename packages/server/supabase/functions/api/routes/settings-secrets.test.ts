@@ -69,6 +69,7 @@ Deno.test('planSecretSettingWrite: clear, skip round-trips, reject foreign refs,
   const stored = `vault://mushi/integration/${PROJECT}/sentry/sentry_webhook_secret`
   assertEquals(planSecretSettingWrite(null, stored), { action: 'clear' })
   assertEquals(planSecretSettingWrite('', stored), { action: 'clear' })
+  assertEquals(planSecretSettingWrite('   ', stored), { action: 'skip' })
   assertEquals(planSecretSettingWrite('…cret', stored), { action: 'skip' })
   // The General panel saves the whole row: its own stored ref comes back unchanged.
   assertEquals(planSecretSettingWrite(stored, stored), { action: 'skip' })
