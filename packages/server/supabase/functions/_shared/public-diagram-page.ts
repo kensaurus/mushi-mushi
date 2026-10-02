@@ -58,10 +58,20 @@ export function publicPageUrls(owner: string, repo: string, sha: string): Public
   }
 }
 
-/** A README badge that links to the public page. */
-export function diagramBadgeMarkdown(owner: string, repo: string): string {
+/**
+ * Where people should be sent: the crawlable static page once it has been
+ * written, otherwise the interactive docs view (a normal docs page that always
+ * works, whatever the S3 404 setup is).
+ */
+export function livePublicUrl(owner: string, repo: string, staticPageWritten: boolean): string {
   const u = publicPageUrls(owner, repo, '')
-  return `[![Architecture diagram](${u.badgeImage})](${u.page})`
+  return staticPageWritten ? u.page : u.interactive
+}
+
+/** A README badge that links to the public page (or the interactive view until it exists). */
+export function diagramBadgeMarkdown(owner: string, repo: string, staticPageWritten = true): string {
+  const u = publicPageUrls(owner, repo, '')
+  return `[![Architecture diagram](${u.badgeImage})](${livePublicUrl(owner, repo, staticPageWritten)})`
 }
 
 export function escapeHtml(s: string): string {

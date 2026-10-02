@@ -20,7 +20,11 @@ import { publicPageKeys, renderPublicDiagramHtml, renderPublicDiagramMarkdown } 
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>
 
-/** Edge cache lifetime: an unpublished page is gone from every edge within this. */
+/**
+ * `Cache-Control: max-age` on the objects. Whether CloudFront honors it is
+ * the `/mushi-mushi/*` behavior's cache policy (its min/max TTL); with the
+ * default policy an unpublished page leaves the edge when this expires.
+ */
 export const PAGE_MAX_AGE_SECONDS = 300
 
 export interface PublicPageStoreConfig {
@@ -89,6 +93,33 @@ export async function writePublicPage(
   await putObject(cfg, keys.markdown, renderPublicDiagramMarkdown(payload), 'text/markdown; charset=utf-8', fetchImpl)
   await putObject(cfg, keys.html, renderPublicDiagramHtml(payload), 'text/html; charset=utf-8', fetchImpl)
   return 'written'
+}
+
+/**
+ * Best-effort removal of a project's static page before the project (and,
+ * by cascade, its publication row) is deleted. Without this the files would
+ * outlive the only record that names them. Never throws.
+ */
+export async function removeProjectPublicPage(
+  db: { from: (t: string) => any },
+  projectId: string,
+  cfg: PublicPageStoreConfig | null,
+  onError: (err: unknown) => void,
+  fetchImpl: FetchLike = fetch,
+): Promise<StaticPageStatus | 'none'> {
+  try {
+    const { data } = await db
+      .from('public_repo_diagrams')
+      .select('payload, static_page_at')
+      .eq('project_id', projectId)
+      .maybeSingle()
+    const row = data as { payload?: { owner?: string; repo?: string }; static_page_at?: string | null } | null
+    if (!row?.payload?.owner || !row.payload.repo) return 'none'
+    return await deletePublicPage(cfg, row.payload.owner, row.payload.repo, fetchImpl)
+  } catch (err) {
+    onError(err)
+    return 'failed'
+  }
 }
 
 export async function deletePublicPage(

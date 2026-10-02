@@ -70,7 +70,7 @@ import {
 } from '../../_shared/diagram-overlay.ts'
 import { reportFramePaths } from '../../_shared/report-seeds.ts'
 import { deletePublicPage, readPublicPageStoreConfig, writePublicPage, type StaticPageStatus } from '../../_shared/public-page-store.ts'
-import { diagramBadgeMarkdown, publicPageUrls } from '../../_shared/public-diagram-page.ts'
+import { diagramBadgeMarkdown, livePublicUrl, publicPageUrls } from '../../_shared/public-diagram-page.ts'
 import { matchFramePathsToTree } from '../../_shared/sentry-frames.ts'
 import { claimIpRateLimit, extractClientIp } from './cli-auth.ts'
 
@@ -84,7 +84,6 @@ const DIAGRAM_MAX_OUTPUT_TOKENS = 6_000
 const DIAGRAM_GENERATIONS_PER_HOUR = 6
 const MAX_DIAGRAMS_PER_PROJECT = 10
 const PUBLIC_VIEWS_PER_HOUR_PER_IP = 120
-const PUBLIC_PAGE_BASE = 'https://kensaur.us/mushi-mushi/r'
 /**
  * Wall-clock budget: the edge function must finish the GitHub reads and the
  * LLM call well inside the platform limit (150 s), or the console shows an
@@ -126,13 +125,11 @@ const DIAGRAM_COLUMNS = 'id, project_id, commit_sha, repo_owner, repo_name, grap
 const OVERLAY_MAX_REPORTS = 300
 const OVERLAY_MAX_FINDINGS = 1000
 const OVERLAY_FINDINGS_DAYS = 30
+/** Reports without stored frames whose stack text is read. */
+const OVERLAY_MAX_STACK_TEXT = 100
 
 function storeConfig() {
   return readPublicPageStoreConfig((name) => Deno.env.get(name))
-}
-
-export function publicDiagramUrl(owner: string, repo: string): string {
-  return `${PUBLIC_PAGE_BASE}/${owner}/${repo}`
 }
 
 async function claimDiagramGeneration(db: Db, projectId: string): Promise<'ok' | 'limited' | 'unavailable'> {
@@ -153,7 +150,7 @@ async function claimDiagramGeneration(db: Db, projectId: string): Promise<'ok' |
 async function loadPublication(db: Db, projectId: string) {
   const { data } = await db
     .from('public_repo_diagrams')
-    .select('diagram_id, commit_sha, repo_owner, repo_name, repo_private, payload, payload_hash, published_at')
+    .select('diagram_id, commit_sha, repo_owner, repo_name, repo_private, payload, payload_hash, published_at, static_page_at')
     .eq('project_id', projectId)
     .maybeSingle()
   return data as
@@ -166,6 +163,7 @@ async function loadPublication(db: Db, projectId: string) {
         payload: { owner: string; repo: string }
         payload_hash: string
         published_at: string
+        static_page_at: string | null
       }
     | null
 }
@@ -185,9 +183,14 @@ async function publicationView(pub: Awaited<ReturnType<typeof loadPublication>>,
   if (!pub) return { published: false as const }
   return {
     published: true as const,
-    url: publicDiagramUrl(pub.payload.owner, pub.payload.repo),
-    markdown_url: publicPageUrls(pub.payload.owner, pub.payload.repo, pub.commit_sha).markdown,
-    badge_markdown: diagramBadgeMarkdown(pub.payload.owner, pub.payload.repo),
+    url: livePublicUrl(pub.payload.owner, pub.payload.repo, !!pub.static_page_at),
+    /** Only once the static page (and its twin) exist. */
+    ...(pub.static_page_at
+      ? { markdown_url: publicPageUrls(pub.payload.owner, pub.payload.repo, pub.commit_sha).markdown }
+      : {}),
+    badge_markdown: diagramBadgeMarkdown(pub.payload.owner, pub.payload.repo, !!pub.static_page_at),
+    /** False until the crawlable page file exists (page store off or write failed). */
+    indexable: !!pub.static_page_at,
     commit_sha: pub.commit_sha,
     repo_private: pub.repo_private,
     published_at: pub.published_at,
@@ -239,15 +242,30 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     const row = data as DiagramRow | null
     if (!row) return c.json({ ok: false, error: { code: 'NO_DIAGRAM', message: 'Generate a diagram first.' } }, 404)
 
+    // Stored Sentry frames first; the heavier console_logs only for the
+    // reports that have none (and at most OVERLAY_MAX_STACK_TEXT of them).
     const { data: reportRows, error: reportErr } = await db
       .from('reports')
-      .select('id, summary, severity, status, custom_metadata, console_logs')
+      .select('id, summary, severity, status, sentry_frames:custom_metadata->sentryFrames')
       .eq('project_id', projectId)
       .not('status', 'in', `(${DONE_REPORT_STATUSES.join(',')})`)
       .order('created_at', { ascending: false })
       .limit(OVERLAY_MAX_REPORTS)
     if (reportErr) return dbError(c, reportErr)
     const reportIds = (reportRows ?? []).map((r) => r.id as string)
+    const needStackText = (reportRows ?? [])
+      .filter((r) => !Array.isArray(r.sentry_frames) || (r.sentry_frames as unknown[]).length === 0)
+      .map((r) => r.id as string)
+      .slice(0, OVERLAY_MAX_STACK_TEXT)
+    const consoleLogsById = new Map<string, unknown>()
+    if (needStackText.length > 0) {
+      const { data: logRows, error: logErr } = await db
+        .from('reports')
+        .select('id, console_logs')
+        .in('id', needStackText)
+      if (logErr) return dbError(c, logErr)
+      for (const l of logRows ?? []) consoleLogsById.set(l.id as string, l.console_logs)
+    }
 
     const fixFilesByReport = new Map<string, string[]>()
     if (reportIds.length > 0) {
@@ -282,7 +300,11 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     }
 
     const reports: OverlayReport[] = (reportRows ?? []).map((r) => {
-      const frames = treePaths.length > 0 ? matchFramePathsToTree(reportFramePaths(r), treePaths) : []
+      const framePaths = reportFramePaths({
+        custom_metadata: { sentryFrames: r.sentry_frames },
+        console_logs: consoleLogsById.get(r.id as string) ?? null,
+      })
+      const frames = treePaths.length > 0 ? matchFramePathsToTree(framePaths, treePaths) : []
       return {
         id: r.id as string,
         summary: (r.summary as string | null) ?? null,
@@ -519,7 +541,9 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
         repo_private: vis.private,
         payload,
         payload_hash: await publicPayloadHash(payload),
-        url: publicDiagramUrl(vis.owner, vis.repo),
+        // Where the page will live: the crawlable /r/ page when the page store
+        // is set up, else the interactive docs view.
+        url: livePublicUrl(vis.owner, vis.repo, storeConfig() !== null),
         can_publish: (access.role === 'owner' || access.role === 'admin') && vis.canWrite,
         publish_blocked_reason: !(access.role === 'owner' || access.role === 'admin')
           ? 'Only a project owner or admin can publish.'
@@ -596,6 +620,8 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
         payload_hash: hash,
         published_by: userId,
         published_at: new Date().toISOString(),
+        // Set below only after the file is really written.
+        static_page_at: null,
       },
       { onConflict: 'project_id' },
     )
@@ -611,6 +637,14 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
       routeLog.error('public page write failed', { projectId, error: String(err) })
       staticPage = 'failed'
     }
+    if (staticPage === 'written') {
+      const { error: markErr } = await db
+        .from('public_repo_diagrams')
+        .update({ static_page_at: new Date().toISOString() })
+        .eq('project_id', projectId)
+      if (markErr) routeLog.warn('static page mark failed', { projectId, error: markErr.message })
+    }
+    const written = staticPage === 'written'
 
     await logAudit(db, projectId, userId, 'settings.updated', 'public_diagram', row.id, {
       action: 'publish',
@@ -626,10 +660,10 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     return c.json({
       ok: true,
       data: {
-        url: publicDiagramUrl(vis.owner, vis.repo),
+        url: livePublicUrl(vis.owner, vis.repo, written),
         commit_sha: row.commit_sha,
         static_page: staticPage,
-        badge_markdown: diagramBadgeMarkdown(vis.owner, vis.repo),
+        badge_markdown: diagramBadgeMarkdown(vis.owner, vis.repo, written),
       },
     })
   })
@@ -648,6 +682,8 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     let staticPage: StaticPageStatus = 'not_configured'
     if (pub) {
       try {
+        // Delete even when static_page_at is NULL: a write may have landed
+        // after its row update failed. Deleting a missing key is a no-op.
         staticPage = await deletePublicPage(storeConfig(), pub.payload.owner, pub.payload.repo)
       } catch (err) {
         routeLog.error('public page delete failed', { projectId, error: String(err) })

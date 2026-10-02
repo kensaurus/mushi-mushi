@@ -12,7 +12,7 @@ behind it.
 |---|---|---|
 | `/mushi-mushi/r/<owner>/<repo>` | `mushi-mushi/r/<owner>/<repo>.html` in the docs S3 bucket, written by the `api` function on publish | Yes (`robots: index`, canonical, `SoftwareSourceCode` JSON-LD) |
 | `/mushi-mushi/r/<owner>/<repo>.md` | `mushi-mushi/r/<owner>/<repo>.md`, written with it | Linked as `rel="alternate" type="text/markdown"` |
-| Same URL with no object (store not configured, write failed, never published) | The bucket's 404 document: the docs `not-found` page renders the diagram client-side from `GET /v1/public/diagrams/:owner/:repo` | No: the status stays 404 |
+| Same URL with no object (store not configured, write failed, never published) | The bucket's 404 document. Once `scripts/aws-configure-docs-errors.mjs` has pointed it at the docs `404.html`, the docs `not-found` page renders the diagram client-side (best-effort, status 404). **As of 2026-10-02 that is not set up on kensaur.us: a missing key returns the raw S3 `NoSuchKey` page.** | No |
 | `/mushi-mushi/docs/r?repo=<owner>/<repo>` | The docs static shell (interactive view) | No (`noindex`) |
 
 The CloudFront router (`scripts/cloudfront-mushi-spa-router.js`, rule 0c)
@@ -25,9 +25,13 @@ build. Supabase Edge Functions rewrite `GET` responses with `Content-Type:
 text/html` to `text/plain`
 ([Supabase docs](https://supabase.com/docs/guides/functions/http-methods)).
 Overriding that header at CloudFront would sidestep a platform rule, so the
-api writes plain static files instead. Publish and unpublish take effect at
-once. The objects carry `Cache-Control: public, max-age=300`, so an
-unpublished page is gone from every edge within five minutes.
+api writes plain static files instead. Publish and unpublish change the files at
+once. The objects carry `Cache-Control: public, max-age=300`; how long an
+edge keeps serving a deleted page depends on the `/mushi-mushi/*` cache
+behavior's cache policy (its minimum and maximum TTL). With a policy that
+honors origin headers, that is at most five minutes. Check the live
+behavior's policy before promising a takedown time; an invalidation of
+`/mushi-mushi/r/<owner>/<repo>*` removes it at once.
 
 ## One-time setup
 
@@ -51,8 +55,10 @@ unpublished page is gone from every edge within five minutes.
    `MUSHI_PUBLIC_PAGES_BUCKET`, `MUSHI_PUBLIC_PAGES_REGION`,
    `MUSHI_PUBLIC_PAGES_ACCESS_KEY_ID`, `MUSHI_PUBLIC_PAGES_SECRET_ACCESS_KEY`.
    Until all four exist, the publish response says `static_page:
-   "not_configured"` and the console tells the owner. The page still works
-   through the 404 fallback; search engines just don't index it.
+   "not_configured"`, `public_repo_diagrams.static_page_at` stays NULL, and
+   every link and README badge points at the interactive docs view
+   (`/mushi-mushi/docs/r?repo=<owner>/<repo>`), which always works. Search
+   engines don't index it. The console tells the owner.
 3. Deploy the admin site. `deploy-admin.yml` republishes the CloudFront router
    with rule 0c.
 4. The 404 fallback needs the bucket's 404 document set up (see
@@ -65,7 +71,25 @@ curl -sI https://kensaur.us/mushi-mushi/r/<owner>/<repo>     # 200, text/html
 curl -s  https://kensaur.us/mushi-mushi/r/<owner>/<repo>.md  # the Markdown twin
 ```
 
-Then unpublish. Within five minutes the first URL returns 404.
+Then unpublish. Once the edge cache expires (see above), the first URL
+returns 404.
+
+## Takedown runbook
+
+When someone reports a diagram that must come down and the owner can't be
+reached:
+
+1. Delete the row: `DELETE FROM public_repo_diagrams WHERE lower(repo_owner) = '<owner>' AND lower(repo_name) = '<repo>';`
+   (service role; this is a production data change, so confirm first).
+2. Delete both files:
+   `aws s3 rm s3://kensaur.us-mushi-mushi/mushi-mushi/r/<owner>/<repo>.html`
+   and the same key with `.md` (lowercase).
+3. Invalidate `/mushi-mushi/r/<owner>/<repo>*` on the distribution.
+
+**Do not remove the `MUSHI_PUBLIC_PAGES_*` secrets while pages are live.**
+Unpublish and project delete can then no longer delete the files, and the
+pages stay up until someone removes them by hand. Deleting a project removes
+its page first (best-effort, logged on failure).
 
 ## Who can publish, and what becomes public
 

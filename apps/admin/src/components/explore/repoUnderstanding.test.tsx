@@ -217,9 +217,33 @@ describe('ExploreDiagramPublishCard', () => {
         }),
       ),
     )
+    expect(container.querySelector('[data-testid="diagram-publish-not-indexed"]')).toBeNull()
     const block = container.querySelector('[data-testid="diagram-publish-badge"]')!
     expect(block.textContent).toContain(badge)
     expect(block.querySelector('a')?.getAttribute('href')).toBe('https://kensaur.us/mushi-mushi/r/acme/shop.md')
+  })
+
+  it('says when search engines cannot see the page yet', async () => {
+    act(() =>
+      root.render(
+        createElement(ExploreDiagramPublishCard, {
+          projectId: 'p1',
+          publication: {
+            published: true,
+            url: 'https://kensaur.us/mushi-mushi/docs/r?repo=acme%2Fshop',
+            indexable: false,
+            commit_sha: 'c'.repeat(40),
+            repo_private: false,
+            published_at: '',
+            outdated: false,
+          },
+          onChanged: vi.fn(),
+        }),
+      ),
+    )
+    expect(container.querySelector('[data-testid="diagram-publish-not-indexed"]')?.textContent).toContain(
+      'Search engines do not see this page yet',
+    )
   })
 
   it('warns when the search-friendly page could not be saved', async () => {

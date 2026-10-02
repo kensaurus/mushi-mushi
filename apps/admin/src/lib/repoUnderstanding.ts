@@ -122,6 +122,8 @@ export type DiagramPublication =
       markdown_url?: string
       /** A README badge linking to the page. */
       badge_markdown?: string
+      /** False until the crawlable page file exists; the link goes to the interactive view meanwhile. */
+      indexable?: boolean
       commit_sha: string
       repo_private: boolean
       published_at: string
