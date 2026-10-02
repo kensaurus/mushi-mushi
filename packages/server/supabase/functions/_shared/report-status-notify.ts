@@ -50,7 +50,11 @@ export interface ReportStatusTransitionNotifyInput {
   closedReason?: string | null;
 }
 
-/** Owner first, then every follower of the report. */
+/**
+ * Owner first, then every follower of the report. Followers earned no points
+ * on this report, so their copy drops `points` and the owner's
+ * "confirmed, +50 points" becomes a plain `fix_started`.
+ */
 async function notifyOwnerAndFollowers(
   db: SupabaseClient,
   input: ReportStatusTransitionNotifyInput & { reporterTokenHash: string },
@@ -59,7 +63,16 @@ async function notifyOwnerAndFollowers(
   reviewable: boolean,
 ): Promise<void> {
   await createNotification(db, input.projectId, input.reportId, input.reporterTokenHash, type, payload, { reviewable });
-  await notifyFollowers(db, input.projectId, input.reportId, type, payload, { reviewable });
+  const followerType: NotificationType = type === 'confirmed' ? 'fix_started' : type;
+  const { points: _points, ...followerPayload } = payload;
+  await notifyFollowers(
+    db,
+    input.projectId,
+    input.reportId,
+    followerType,
+    { ...followerPayload, message: buildNotificationMessage(followerType, {}) },
+    { reviewable },
+  );
 }
 
 /**
