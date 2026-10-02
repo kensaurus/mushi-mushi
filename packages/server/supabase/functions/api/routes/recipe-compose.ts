@@ -17,7 +17,11 @@ import { evaluateContrast } from '../../_shared/design-deviance.ts'
 import { DESIGN_GATE, STUCK_SCAN_MS, type SnapshotRow } from '../../_shared/design-plane.ts'
 import type { RecipeRepoResolution, RecipeRepo } from '../../_shared/recipe-github.ts'
 import type { WorkflowRunSnapshot } from '../../_shared/github.ts'
+import { assetMime } from '../../_shared/design-assets.ts'
 import type {
+  DesignDirection,
+  DesignDirectionsResponse,
+  DirectionAsset,
   DesignExcerpt,
   DesignPlaneResponse,
   DesignRuleId,
@@ -516,4 +520,101 @@ export function buildDesignExcerpt(plane: Pick<DesignPlaneResponse, 'state' | 't
     }
   }
   return out
+}
+
+// ── Directions board ─────────────────────────────────────────────────────────
+
+const GENERIC_FAMILY = /^(serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-[a-z-]+|emoji|math|fangsong|-apple-system|blinkmacsystemfont|inherit)$/i
+
+const SPECIMENS: Record<DesignDirectionsResponse['specimen']['script'], Omit<DesignDirectionsResponse['specimen'], 'script'>> = {
+  thai: { sample: 'ขอน้ำเปล่าหนึ่งขวดครับ', word: 'น้ำ', latin: 'Order water in a shop' },
+  japanese: { sample: 'お水を一本ください', word: '水', latin: 'Order water in a shop' },
+  korean: { sample: '물 한 병 주세요', word: '물', latin: 'Order water in a shop' },
+  chinese: { sample: '请给我一瓶水', word: '水', latin: 'Order water in a shop' },
+  arabic: { sample: 'زجاجة ماء من فضلك', word: 'ماء', latin: 'Order water in a shop' },
+  devanagari: { sample: 'कृपया एक बोतल पानी दीजिए', word: 'पानी', latin: 'Order water in a shop' },
+  latin: { sample: 'The quick brown fox jumps over the lazy dog', word: 'Water', latin: 'Order water in a shop' },
+}
+
+/** The project's script, from what its directions say about themselves. */
+export function detectScript(text: string): DesignDirectionsResponse['specimen']['script'] {
+  if (/[฀-๿]|thai/i.test(text)) return 'thai'
+  if (/[぀-ヿ]|japanese|\bjp\b/i.test(text)) return 'japanese'
+  if (/[가-힯]|korean|\bkr\b/i.test(text)) return 'korean'
+  if (/[一-鿿]|chinese|\b(sc|tc)\b/i.test(text)) return 'chinese'
+  if (/[؀-ۿ]|arabic/i.test(text)) return 'arabic'
+  if (/[ऀ-ॿ]|devanagari|hindi/i.test(text)) return 'devanagari'
+  return 'latin'
+}
+
+export function googleFontStylesheet(family: string): string {
+  return `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, '+')}&display=swap`
+}
+
+export async function composeDirections(
+  db: Db,
+  projectId: string,
+  snapshot: SnapshotRow | null,
+  repo: RecipeRepoResolution,
+  now: Date,
+  sign: ((path: string) => Promise<string>) | null,
+): Promise<DesignDirectionsResponse> {
+  const stored = (snapshot?.tokens ?? null) as StoredTokens | null
+  const manifest = (snapshot?.manifest ?? null) as RecipeManifest | null
+  const sets = stored?.sets ?? []
+  const directionSets = sets.some((s) => s.kind === 'direction') ? sets.filter((s) => s.kind === 'direction') : sets.filter((s) => s.active && s.kind !== 'export')
+  const pairs = manifest?.design?.contrast ?? []
+  const runs = directionSets.some((s) => s.active) ? (await loadDesignRuns(db, projectId)).filter(isScanRun).map((r) => toDevianceRun(r, now)) : []
+  const lastRun = runs.find((r) => r.status !== 'running') ?? null
+
+  const directions: DesignDirection[] = []
+  for (const s of directionSets) {
+    const assets: DirectionAsset[] = []
+    for (const a of s.assets ?? []) {
+      const servable = assetMime(a.path) !== null
+      assets.push({ path: a.path, kind: a.kind, size: a.size, url: servable && sign ? await sign(a.path) : null })
+    }
+    directions.push({
+      name: s.name,
+      displayName: s.meta?.displayName ?? s.name,
+      nativeName: s.meta?.nativeName ?? null,
+      concept: s.meta?.concept ?? null,
+      active: s.active,
+      files: s.files,
+      tokenCount: s.tokens.length,
+      tokens: s.tokens,
+      issues: s.issues,
+      contrast: evaluateContrast(s.tokens, pairs),
+      fonts: s.tokens
+        .filter((t) => t.type === 'fontFamily' && Array.isArray(t.value))
+        .map((t) => ({ path: t.path, role: t.path.split('.').pop() ?? t.path, families: (t.value as unknown[]).map(String) })),
+      motion: s.tokens.filter((t) => t.group === 'motion').map((t) => ({ path: t.path, display: t.display })),
+      line: s.tokens
+        .filter((t) => t.group === 'border' || t.group === 'radius' || t.path.startsWith('color.line.'))
+        .map((t) => ({ path: t.path, display: t.display })),
+      assets,
+      deviance: s.active && lastRun ? { score: lastRun.score, status: lastRun.status, at: lastRun.completedAt ?? lastRun.startedAt } : null,
+    })
+  }
+
+  const families = new Set<string>()
+  for (const d of directions) for (const f of d.fonts) for (const fam of f.families) if (!GENERIC_FAMILY.test(fam.trim())) families.add(fam.trim())
+  const scriptText = directions.map((d) => [d.nativeName, d.concept, ...d.fonts.flatMap((f) => f.families), ...d.tokens.map((t) => t.path)].join(' ')).join(' ')
+  const script = detectScript(scriptText)
+  const manifestWritable = isWritablePath(RECIPE_MANIFEST_PATH, manifest, [RECIPE_MANIFEST_PATH]).ok
+  const editable = !manifest
+    ? { enabled: false, reason: 'Add a mushi.recipe.json to the repo and refresh.' }
+    : !repo.ok
+      ? { enabled: false, reason: repo.reason }
+      : !manifestWritable
+        ? { enabled: false, reason: 'mushi.recipe.json is not in change.allowPaths, so the active direction cannot be changed by PR.' }
+        : { enabled: true, reason: null }
+  return {
+    projectId,
+    activeDirection: directionSets.find((s) => s.active)?.name ?? null,
+    directions,
+    fontStylesheets: [...families].sort().map(googleFontStylesheet),
+    specimen: { script, ...SPECIMENS[script] },
+    editable,
+  }
 }

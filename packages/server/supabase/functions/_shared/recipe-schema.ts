@@ -63,7 +63,7 @@ const designSchema = z
       })
       .passthrough()
       .optional(),
-    assets: z.array(z.object({ path: repoPath, kind: z.string().optional() }).passthrough()).max(40).optional(),
+    assets: z.array(z.object({ path: repoPath, kind: z.string().optional(), direction: z.string().max(80).optional() }).passthrough()).max(40).optional(),
     contrast: z.array(contrastPairSchema).max(100).optional(),
     rules: z.record(z.string(), ruleSchema).optional(),
   })

@@ -200,3 +200,29 @@ export async function listActionsNames(repo: RecipeRepo): Promise<string[]> {
   }
   return names
 }
+
+/**
+ * Raw bytes of one blob at a pinned ref (for images). Uses the Contents API
+ * for the sha and size, then the Git blobs API, which serves files over the
+ * Contents API's 1 MB inline limit.
+ */
+export async function readRepoBytes(repo: RecipeRepo, ref: string, rawPath: string, maxBytes: number): Promise<{ kind: 'file'; bytes: Uint8Array } | { kind: 'absent' } | { kind: 'too_large'; size: number }> {
+  const path = normalizeRepoPath(rawPath)
+  if (!path) throw new RecipeGithubError(`"${rawPath}" is not a safe repo path`)
+  const encoded = path.split('/').map(encodeURIComponent).join('/')
+  const meta = await ghGet(repo.token, api(repo.ref, `/contents/${encoded}?ref=${encodeURIComponent(ref)}`))
+  if (meta.status === 404) return { kind: 'absent' }
+  if (meta.status !== 200 || Array.isArray(meta.body)) throw new RecipeGithubError(`GitHub answered ${meta.status} for ${path}`, meta.status)
+  const body = meta.body as { type?: string; sha?: string; size?: number }
+  if (body.type !== 'file' || !body.sha) throw new RecipeGithubError(`${path} is not a file`)
+  if ((body.size ?? 0) > maxBytes) return { kind: 'too_large', size: body.size ?? 0 }
+  const blob = await ghGet(repo.token, api(repo.ref, `/git/blobs/${encodeURIComponent(body.sha)}`))
+  const content = (blob.body as { content?: string; encoding?: string } | null)
+  if (blob.status !== 200 || content?.encoding !== 'base64' || typeof content.content !== 'string') {
+    throw new RecipeGithubError(`could not read the blob for ${path} (${blob.status})`, blob.status)
+  }
+  const bin = atob(content.content.replace(/\s/g, ''))
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return { kind: 'file', bytes }
+}

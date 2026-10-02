@@ -8,7 +8,7 @@
  * GET /design, the draft-PR change path (dry run, allowlist refusals,
  * markReady:false, admin-only PRs) and the refresh rate limit.
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
@@ -99,23 +99,27 @@ const P_B = '1000000b-0000-4000-8000-000000000000'
 const GLOT = resolve(__dirname, 'fixtures/recipe/glot')
 const glotFile = (p: string) => readFileSync(resolve(GLOT, p), 'utf8')
 const NOW = new Date('2026-10-02T12:00:00Z')
-const TOKEN_FILE = 'packages/design-tokens/tokens/directions/pha-khram/semantic.tokens.json'
-const PRIMITIVE_FILE = 'packages/design-tokens/tokens/directions/pha-khram/primitive.tokens.json'
+const TOKEN_FILE = 'packages/design-tokens/tokens/directions/soi-signpaint/semantic.tokens.json'
+const PRIMITIVE_FILE = 'packages/design-tokens/tokens/directions/soi-signpaint/primitive.tokens.json'
+const DIRS = ['soi-signpaint', 'pha-khram', 'nang-lamp']
+const TREE = DIRS.flatMap((d) => ['primitive', 'semantic', 'component'].map((n) => `packages/design-tokens/tokens/directions/${d}/${n}.tokens.json`))
+  .concat(['packages/design-tokens/tokens/directions/pha-khram/assets/key-art.png', 'packages/design-tokens/tokens/directions/pha-khram/assets/notes.txt'])
 
 function glotSnapshot(projectId: string) {
   const parsed = schema.parseRecipeManifest(readFileSync(resolve(__dirname, 'fixtures/recipe/glot-extended.recipe.json'), 'utf8'))
   if (!parsed.ok) throw new Error('fixture manifest invalid')
-  const plan = sets.planTokenSets(parsed.manifest.design!.tokens! as never, [
-    'packages/design-tokens/tokens/directions/nang-lamp/primitive.tokens.json',
-    'packages/design-tokens/tokens/directions/nang-lamp/semantic.tokens.json',
-    'packages/design-tokens/tokens/directions/nang-lamp/component.tokens.json',
-  ])
+  const plan = sets.planTokenSets(parsed.manifest.design!.tokens! as never, TREE)
+  const tree = TREE.map((path) => ({ path, size: 1234 }))
   const stored = {
     version: 1,
-    active: 'pha-khram',
+    active: 'soi-signpaint',
+    // Mirrors refreshRecipeSnapshot: normalize, then meta and assets for directions.
     sets: plan.sets.map((s) => {
-      const n = dtcg.normalizeTokenSet(s.files.map((f) => ({ path: f.path, role: f.role, text: glotFile(f.path) })))
-      return { ...s, tokens: n.tokens, issues: n.issues }
+      const texts = s.files.map((f) => glotFile(f.path))
+      const n = dtcg.normalizeTokenSet(s.files.map((f, i) => ({ path: f.path, role: f.role, text: texts[i] })))
+      return s.kind === 'direction'
+        ? { ...s, tokens: n.tokens, issues: n.issues, meta: sets.readDirectionMeta(s.name, texts), assets: sets.collectSetAssets(s, parsed.manifest.design!.assets as never, tree) }
+        : { ...s, tokens: n.tokens, issues: n.issues }
     }),
   }
   return {
@@ -156,7 +160,12 @@ function harness(db: FakeDb, over: Partial<RecipeModule['defaultRecipeDeps']> = 
     getDefaultHead: vi.fn(async () => ({ branch: 'main', sha: 'head999' })),
     fetchWorkflowRun: vi.fn(async () => null),
     listActionsNames: vi.fn(async () => ['NEXT_PUBLIC_MUSHI_PROJECT_ID']),
-    readRepoFile: vi.fn(async (_r: unknown, _ref: string, path: string) => ({ kind: 'file' as const, path, text: glotFile(path), sha: 's', size: 1 })),
+    readRepoFile: vi.fn(async (_r: unknown, _ref: string, path: string) =>
+      path === 'mushi.recipe.json'
+        ? { kind: 'file' as const, path, text: readFileSync(resolve(__dirname, 'fixtures/recipe/glot-extended.recipe.json'), 'utf8'), sha: 's', size: 1 }
+        : existsSync(resolve(GLOT, path)) ? { kind: 'file' as const, path, text: glotFile(path), sha: 's', size: 1 } : { kind: 'absent' as const, path }),
+    readRepoBytes: vi.fn(async () => ({ kind: 'file' as const, bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) })),
+    assetSecret: () => 'test-asset-secret',
     createPr: vi.fn(async () => ({ url: 'https://github.com/kensaurus/glot.it/pull/9', number: 9, branch: 'mushi/recipe-design-x', commitSha: 'c' })),
     refresh: vi.fn(async () => ({ ok: true, state: 'unknown' as const, reason: 'ok', snapshotId: 's', tokensHash: 'h', manifestPresent: true, tokenCount: 87, issues: [] })),
     startDeviance: vi.fn(async () => ({ ok: true as const, runId: 'run-1', startedAt: NOW.toISOString(), commitSha: 'abc1234def', execute: vi.fn(async () => ({ ok: false as const, error: 'not awaited here' })) })),
@@ -257,12 +266,12 @@ describe('GET /design (glot.it Pha Khram fixture)', () => {
     const d = res.body.data as Record<string, any>
     expect(d.state).toBe('unknown')
     expect(d.reason).toMatch(/never run/)
-    expect(d.sets.map((s: any) => [s.name, s.active])).toEqual([['pha-khram', true], ['nang-lamp', false], ['export', false]])
-    expect(d.shownSet).toBe('pha-khram')
-    expect(d.tokens.length).toBe(122)
-    expect(d.tokens.find((t: any) => t.path === 'font.family.thai').display).toContain('Thai')
-    expect(d.contrast).toHaveLength(8)
-    expect(d.contrast.filter((p: any) => p.pass === false).map((p: any) => p.ratio)).toEqual([2.73])
+    expect(d.sets.map((s: any) => [s.name, s.active])).toEqual([['soi-signpaint', true], ['nang-lamp', false], ['pha-khram', false], ['export', false]])
+    expect(d.shownSet).toBe('soi-signpaint')
+    expect(d.tokens.length).toBe(84)
+    expect(d.tokens.find((t: any) => t.path === 'font.family.body').display).toBe('Sarabun, sans-serif')
+    expect(d.contrast).toHaveLength(7)
+    expect(d.contrast.filter((p: any) => p.pass === false).map((p: any) => p.ratio)).toEqual([1.63])
     expect(d.components).toEqual([{ name: 'Button', file: 'design-system/primitives/Button.tsx' }])
     expect(d.editable).toMatchObject({ enabled: true, manifestWritable: true })
     expect(d.editable.tokenFiles).toContain(TOKEN_FILE)
@@ -283,7 +292,7 @@ describe('GET /design (glot.it Pha Khram fixture)', () => {
     const d = res.body.data as any
     expect(d.tokens.every((t: any) => t.group === 'color')).toBe(true)
     expect(d.nameMap['--color-cta']).toBe('color.action.primary')
-    expect(d.nameMap['phaKhram.color.action.primary']).toBe('color.action.primary')
+    expect(Object.values(d.nameMap)).toContain('color.action.primary')
   })
 
   it('GET /design/excerpt stays under 4 KB and leads with mapped tokens', async () => {
@@ -292,7 +301,7 @@ describe('GET /design (glot.it Pha Khram fixture)', () => {
     const d = res.body.data as any
     expect(new TextEncoder().encode(JSON.stringify(d)).length).toBeLessThanOrEqual(4096)
     expect(d.tokens[0].cssVar ?? d.tokens[0].ts).toBeTruthy()
-    expect(d.set).toBe('pha-khram')
+    expect(d.set).toBe('soi-signpaint')
   })
 })
 
@@ -397,6 +406,132 @@ describe('deviance runs', () => {
     const ex = (await app.call('GET', `/v1/admin/projects/${P_A}/design/excerpt?files=app/page.tsx`)).body.data as any
     expect(ex.findings).toEqual([{ file: 'app/page.tsx', line: 4, rule: 'off_token_color', value: '#E8387F', use: '--color-cta' }])
     expect(ex.score).toBe(21)
+  })
+})
+
+// ── the Directions board ─────────────────────────────────────────────────────
+
+describe('GET /design/directions (glot.it: three directions, Soi Signpaint active)', () => {
+  it('renders all three directions side by side with names, contrast, fonts, motion, assets and one active', async () => {
+    const { app } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)] }))
+    const res = await app.call('GET', `/v1/admin/projects/${P_A}/design/directions`)
+    expect(res.status).toBe(200)
+    const d = res.body.data as any
+    expect(d.directions.map((x: any) => [x.name, x.displayName, x.nativeName, x.active])).toEqual([
+      ['soi-signpaint', 'Soi Signpaint', 'ป้ายเขียนมือ', true],
+      ['nang-lamp', 'Nang Lamp', 'หนังตะลุง', false],
+      ['pha-khram', 'Pha Khram', 'ผ้าคราม', false],
+    ])
+    expect(d.activeDirection).toBe('soi-signpaint')
+    for (const dir of d.directions) {
+      expect(dir.contrast).toHaveLength(7)
+      expect(dir.fonts.length).toBeGreaterThan(0)
+      expect(dir.motion.some((m: any) => m.path.startsWith('motion.duration'))).toBe(true)
+      expect(dir.line.some((l: any) => l.path.startsWith('radius.'))).toBe(true)
+    }
+    expect(d.directions[0].fonts.find((f: any) => f.path === 'font.family.display').families).toEqual(['Chonburi', 'serif'])
+    // Only images under directions/<name>/ are listed, each with a signed URL.
+    const pha = d.directions[2]
+    expect(pha.assets).toEqual([{ path: 'packages/design-tokens/tokens/directions/pha-khram/assets/key-art.png', kind: 'illustration', size: 1234, url: expect.stringMatching(/^\/v1\/design-assets\/.+\?path=.+&exp=\d+&sig=[0-9a-f]{64}$/) }])
+    expect(d.specimen).toMatchObject({ script: 'thai', word: 'น้ำ' })
+    expect(d.fontStylesheets).toContain('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped&display=swap')
+    expect(d.fontStylesheets).toContain('https://fonts.googleapis.com/css2?family=Chonburi&display=swap')
+    expect(d.fontStylesheets.some((u: string) => /family=(sans-serif|serif|monospace)&/.test(u))).toBe(false)
+    expect(d.editable).toEqual({ enabled: true, reason: null })
+    // Only the active direction carries a deviance result, and none has run yet.
+    expect(d.directions.every((x: any) => x.deviance === null)).toBe(true)
+    if (process.env.WRITE_ADMIN_FIXTURE === '1') {
+      const out = resolve(__dirname, '../../../../apps/admin/src/components/design/__fixtures__')
+      mkdirSync(out, { recursive: true })
+      writeFileSync(resolve(out, 'glot-directions.json'), JSON.stringify(d, null, 2) + '\n')
+    }
+  })
+
+  it('serves a signed asset that the snapshot lists, and refuses tampered, expired or unlisted requests', async () => {
+    const { app, deps } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)] }))
+    const d = (await app.call('GET', `/v1/admin/projects/${P_A}/design/directions`)).body.data as any
+    const url: string = d.directions[2].assets[0].url
+    const ok = (await app.call('GET', url)) as unknown as Response
+    expect(ok.status).toBe(200)
+    expect(ok.headers.get('Content-Type')).toBe('image/png')
+    expect(ok.headers.get('Content-Security-Policy')).toContain('sandbox')
+    const tampered = url.replace('key-art.png', 'semantic.tokens.json')
+    expect(((await app.call('GET', tampered)) as unknown as Response).status).toBe(403)
+    const badSig = url.replace(/sig=([0-9a-f])/, (_m, c) => `sig=${c === 'a' ? 'b' : 'a'}`)
+    expect(((await app.call('GET', badSig)) as unknown as Response).status).toBe(403)
+    const later = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)] }), { now: () => new Date(NOW.getTime() + 60 * 60 * 1000) })
+    expect(((await later.app.call('GET', url)) as unknown as Response).status).toBe(403)
+    // A valid signature for a path the snapshot does not list is still refused.
+    const { signAssetUrl } = await import('../../supabase/functions/_shared/design-assets.ts')
+    const unlisted = await signAssetUrl('test-asset-secret', P_A, 'packages/design-tokens/tokens/directions/pha-khram/assets/secret.png', NOW.getTime())
+    expect(((await app.call('GET', unlisted)) as unknown as Response).status).toBe(404)
+    expect(deps.readRepoBytes).toHaveBeenCalledTimes(1)
+  })
+
+  it('without a signing secret, assets list with url null and the route is closed', async () => {
+    const { app } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)] }), { assetSecret: () => null })
+    const d = (await app.call('GET', `/v1/admin/projects/${P_A}/design/directions`)).body.data as any
+    expect(d.directions[2].assets[0].url).toBeNull()
+  })
+
+  it('is closed to another organization', async () => {
+    const { app } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_B)] }))
+    expect((await app.call('GET', `/v1/admin/projects/${P_B}/design/directions`)).status).toBe(404)
+  })
+})
+
+describe('POST /design/changes — directions', () => {
+  const url = `/v1/admin/projects/${P_A}/design/changes`
+
+  it('"Set active direction" opens a draft PR that only rewrites mushi.recipe.json token paths', async () => {
+    const { app, deps } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)] }))
+    const dry = await app.call('POST', url, { body: { kind: 'activate', direction: 'pha-khram' } })
+    expect(dry.status).toBe(200)
+    expect((dry.body.data as any).files.map((f: any) => f.path)).toEqual(['mushi.recipe.json'])
+    const diff: string = (dry.body.data as any).files[0].diff
+    expect(diff).toMatch(/^\+\s+"path": "packages\/design-tokens\/tokens\/directions\/pha-khram\/primitive.tokens.json",$/m)
+    expect(diff).toMatch(/^-\s+"path": "packages\/design-tokens\/tokens\/directions\/soi-signpaint\/primitive.tokens.json",$/m)
+    const real = await app.call('POST', url, { body: { kind: 'activate', direction: 'pha-khram', dryRun: false } })
+    expect(real.status).toBe(200)
+    const arg = (deps.createPr as any).mock.calls[0][0]
+    expect(arg.markReady).toBe(false)
+    expect(arg.files.map((f: any) => f.path)).toEqual(['mushi.recipe.json'])
+    const tokens = JSON.parse(arg.files[0].contents).design.tokens
+    expect(tokens.filter((t: any) => t.role === 'source').map((t: any) => t.path.split('/')[4])).toEqual(['pha-khram', 'pha-khram', 'pha-khram'])
+    expect(tokens.filter((t: any) => t.role === 'export')).toHaveLength(1)
+    expect(arg.title).toBe('chore(design): make pha-khram the active direction')
+  })
+
+  it('refuses activating the active direction or an unknown one', async () => {
+    const { app } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)] }))
+    expect((await app.call('POST', url, { body: { kind: 'activate', direction: 'soi-signpaint' } })).status).toBe(400)
+    expect((await app.call('POST', url, { body: { kind: 'activate', direction: 'nope' } })).status).toBe(400)
+  })
+
+  it('"Duplicate / edit direction" opens a draft PR adding only the new folder, with the edit applied to the copy', async () => {
+    const { app, deps } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)] }))
+    const body = { kind: 'duplicate', from: 'soi-signpaint', name: 'soi-night', displayName: 'Soi Night', edits: [{ path: 'color.palette.signal', value: '#1A1A1A' }], dryRun: false }
+    const res = await app.call('POST', url, { body })
+    expect(res.status).toBe(200)
+    const arg = (deps.createPr as any).mock.calls[0][0]
+    expect(arg.markReady).toBe(false)
+    expect(arg.files.map((f: any) => f.path)).toEqual(['primitive', 'semantic', 'component'].map((n) => `packages/design-tokens/tokens/directions/soi-night/${n}.tokens.json`))
+    const primitive = JSON.parse(arg.files[0].contents)
+    expect(primitive.$extensions['us.kensaur.mushi'].direction).toEqual({ name: 'Soi Night', duplicatedFrom: 'soi-signpaint' })
+    expect(primitive.color.palette.signal.$value.hex).toBe('#1A1A1A')
+  })
+
+  it('refuses a name that exists, a bad name, or a copy outside change.allowPaths', async () => {
+    const { app, deps } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)] }))
+    expect((await app.call('POST', url, { body: { kind: 'duplicate', from: 'soi-signpaint', name: 'pha-khram' } })).status).toBe(409)
+    expect((await app.call('POST', url, { body: { kind: 'duplicate', from: 'soi-signpaint', name: '../evil' } })).status).toBe(400)
+    const snap = glotSnapshot(P_A)
+    snap.manifest = { ...snap.manifest, change: { allowPaths: ['mushi.recipe.json'] } }
+    const narrow = harness(seed({ app_recipe_snapshots: [snap] }))
+    const res = await narrow.app.call('POST', url, { body: { kind: 'duplicate', from: 'soi-signpaint', name: 'soi-night', dryRun: false } })
+    expect(res.status).toBe(400)
+    expect(res.body).toMatchObject({ error: { code: 'PATH_NOT_WRITABLE' } })
+    expect(deps.createPr).not.toHaveBeenCalled()
   })
 })
 

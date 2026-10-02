@@ -27,7 +27,7 @@ import {
   scanSourceFile,
   sortFindings,
 } from './design-deviance.ts'
-import { judgingSet, MAX_TOKEN_FILE_BYTES, planTokenSets, type StoredTokens, type StoredTokenSet } from './design-sets.ts'
+import { collectSetAssets, judgingSet, MAX_TOKEN_FILE_BYTES, planTokenSets, readDirectionMeta, type StoredTokens, type StoredTokenSet } from './design-sets.ts'
 import { matchAny } from './recipe-glob.ts'
 import {
   getDefaultHead,
@@ -174,7 +174,14 @@ export async function refreshRecipeSnapshot(db: Db, projectId: string, triggered
           files.push({ path: f.path, role: f.role, text: file.text })
         }
         const norm = normalizeTokenSet(files)
-        sets.push({ ...set, tokens: norm.tokens, issues: norm.issues })
+        const stored: StoredTokenSet = { ...set, tokens: norm.tokens, issues: norm.issues }
+        if (set.kind === 'direction') {
+          stored.meta = readDirectionMeta(set.name, files.map((f) => f.text))
+          stored.assets = collectSetAssets(set, (manifest.design?.assets ?? []) as Array<{ path: string; kind?: string; direction?: string }>, tree.entries)
+        } else if (set.active) {
+          stored.assets = collectSetAssets(set, (manifest.design?.assets ?? []) as Array<{ path: string; kind?: string; direction?: string }>, tree.entries)
+        }
+        sets.push(stored)
       }
       stored = { version: 1, active: sets.find((s) => s.active)?.name ?? null, sets }
       const globs = manifest.design?.components?.globs ?? []
