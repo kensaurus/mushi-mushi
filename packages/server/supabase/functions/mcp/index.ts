@@ -543,6 +543,22 @@ const BASE_TOOLS: Record<string, HostedTool> = {
       })
     },
   },
+  // Portfolio (Plan 019 P1). The api refuses project-bound keys and other
+  // organizations; `current` resolves the key owner's only organization.
+  get_portfolio: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const org = typeof args.organizationId === 'string' && args.organizationId ? args.organizationId : 'current'
+      return apiCall(`/v1/admin/orgs/${encodeURIComponent(org)}/portfolio`, { headers: ctx.authHeaders })
+    },
+  },
+  list_portfolio_findings: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const org = typeof args.organizationId === 'string' && args.organizationId ? args.organizationId : 'current'
+      return apiCall(`/v1/admin/orgs/${encodeURIComponent(org)}/portfolio/findings`, { headers: ctx.authHeaders })
+    },
+  },
   get_graph_node: {
     scope: 'mcp:read',
     handler: async (args, ctx) => {
@@ -1802,6 +1818,8 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'get_app_recipe',
   'get_design_tokens',
   'get_design_deviance',
+  'get_portfolio',
+  'list_portfolio_findings',
 ])
 
 /**

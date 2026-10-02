@@ -4,7 +4,7 @@
     "kensaurus"
   ],
   "name": "mushi-mushi",
-  "description": "MCP server for Cursor, Claude Code and Copilot. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor. 83 tools to triage user-reported bugs, pull a fix packet with evidence and blast radius, and dispatch a fix PR. Run it with npx @mushi-mushi/mcp. SDKs MIT · server AGPLv3 · enterprise edition commercial.",
+  "description": "MCP server for Cursor, Claude Code and Copilot. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor. 85 tools to triage user-reported bugs, pull a fix packet with evidence and blast radius, and dispatch a fix PR. Run it with npx @mushi-mushi/mcp. SDKs MIT · server AGPLv3 · enterprise edition commercial.",
   "license": "MIT",
   "tools": [
     {
@@ -70,6 +70,14 @@
     {
       "name": "get_design_deviance",
       "description": "Return how far the code drifts off the design system: the latest 0–100 deviance score (lower is better; null means not scored yet), its per-rule breakdown, the score trend, a scan still running if any, the top findings (file, line, literal value, rule, and the nearest token to use instead), and the active rules (off_token_color, off_token_font, off_scale_spacing, off_scale_radius, contrast_below_aa, raw_interactive_element). Optional limit: findings to return (1–200, default 25). Returns { projectId, latest, running, trend, findings, rules }. Read-only. Use to find and fix off-token code; use get_design_tokens for the full token list."
+    },
+    {
+      "name": "get_portfolio",
+      "description": "Return every project in one organization as a card: the worst App Recipe state (ok | drift | unknown | not_connected | error; unknown and not_connected never mean healthy), open reports, the latest release, the Mushi SDK version against the latest release of the same package, the hole-check (radar) status with open findings by severity (never_run means not checked yet), and the 30-day LLM spend Mushi itself used. Optional organizationId (UUID); omitted, the only organization of the key owner is used, and a 400 ORG_REQUIRED lists the choices when there are several. Needs an account-level key; a project-bound key gets 403. Returns { organizationId, organizationName, cards, totalProjects, repeatedGroups, holes }. Read-only. Use list_portfolio_findings for the problems open in two or more apps."
+    },
+    {
+      "name": "list_portfolio_findings",
+      "description": "Return what to fix across the apps of one organization: groups of the same finding rule open in two or more projects (rule, gate, highest severity, affected projectIds, a sample message and one paste-ready fix prompt), the Mushi SDK version per project and package (current | behind | unknown), and integrations most sibling projects have but one lacks. Open means the latest completed gate run per project and gate, not allowlisted; info findings are left out. Optional organizationId as for get_portfolio. Needs an account-level key. Returns { organizationId, groups, sdkSkew, holes }. Read-only. Fix a group repo by repo with list_gate_findings in each project."
     },
     {
       "name": "get_graph_neighborhood",

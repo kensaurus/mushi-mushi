@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-02 · **584** routes.
+> Generated: 2026-10-02 · **586** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 120 |
+| `adminOrApiKey` | 122 |
 | `apiKeyAuth` | 51 |
 | `jwtAuth` | 342 |
 | `jwtOrApiKey` | 3 |
@@ -226,6 +226,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/ontology` | `jwtAuth` | `packages/server/supabase/functions/api/routes/graph-query.ts` |
 | GET | `/v1/admin/org/integrations/platform/:kind` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | PUT | `/v1/admin/org/integrations/platform/:kind` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
+| GET | `/v1/admin/orgs/:orgId/portfolio` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/portfolio.ts` |
+| GET | `/v1/admin/orgs/:orgId/portfolio/findings` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/portfolio.ts` |
 | GET | `/v1/admin/plugins` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | POST | `/v1/admin/plugins` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | DELETE | `/v1/admin/plugins/:slug` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |

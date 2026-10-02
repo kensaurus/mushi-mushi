@@ -79,8 +79,8 @@ function errMessage(err: unknown): string {
 }
 
 /** Latest completed run per gate among the given rows (rows newest first). */
-function latestPerGate(rows: GateRunRow[]): GateRunRow[] {
-  const seen = new Map<string, GateRunRow>()
+export function latestPerGate<T extends Pick<GateRunRow, 'gate' | 'status'>>(rows: T[]): T[] {
+  const seen = new Map<string, T>()
   for (const r of rows) {
     if (r.status === 'running' || r.status === 'queued') continue
     if (!seen.has(r.gate)) seen.set(r.gate, r)

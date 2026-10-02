@@ -226,6 +226,26 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Where does the code drift off the design tokens?',
   },
   {
+    name: 'get_portfolio',
+    title: 'Portfolio — every app at once',
+    description:
+      'Return every project in one organization as a card: the worst App Recipe state (ok | drift | unknown | not_connected | error; unknown and not_connected never mean healthy), open reports, the latest release, the Mushi SDK version against the latest release of the same package, the hole-check (radar) status with open findings by severity (never_run means not checked yet), and the 30-day LLM spend Mushi itself used. Optional organizationId (UUID); omitted, the only organization of the key owner is used, and a 400 ORG_REQUIRED lists the choices when there are several. Needs an account-level key; a project-bound key gets 403. Returns { organizationId, organizationName, cards, totalProjects, repeatedGroups, holes }. Read-only. Use list_portfolio_findings for the problems open in two or more apps.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Which of my apps needs attention first?',
+  },
+  {
+    name: 'list_portfolio_findings',
+    title: 'Portfolio findings — fix once',
+    description:
+      'Return what to fix across the apps of one organization: groups of the same finding rule open in two or more projects (rule, gate, highest severity, affected projectIds, a sample message and one paste-ready fix prompt), the Mushi SDK version per project and package (current | behind | unknown), and integrations most sibling projects have but one lacks. Open means the latest completed gate run per project and gate, not allowlisted; info findings are left out. Optional organizationId as for get_portfolio. Needs an account-level key. Returns { organizationId, groups, sdkSkew, holes }. Read-only. Fix a group repo by repo with list_gate_findings in each project.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Which problem shows up in several of my apps, so I fix it once?',
+  },
+  {
     name: 'get_graph_neighborhood',
     title: 'Graph neighborhood',
     description:

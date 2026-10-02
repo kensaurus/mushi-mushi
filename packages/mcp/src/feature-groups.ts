@@ -77,6 +77,8 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   // App Recipe + design plane (Plan 019) — default-on with the inventory tools
   get_app_recipe: 'inventory',
   get_design_tokens: 'inventory',
+  get_portfolio: 'inventory',
+  list_portfolio_findings: 'inventory',
   get_design_deviance: 'inventory',
 
   // setup
