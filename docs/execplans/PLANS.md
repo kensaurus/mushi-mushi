@@ -591,3 +591,12 @@ package moved every run. Detail as bug 11 in
 
 `pnpm install` was run and `pnpm-lock.yaml` is updated — CI's
 `--frozen-lockfile` needs it.
+
+## Plan 018 — Reporter Loop v2 (2026-10-02) `PLANNED`
+
+One widget on web and RN, an end-user status vocabulary, two-way replies, opt-in notifications, and fix/release links back to the reporter. Spec and audit: [reporter-loop-v2.md](./reporter-loop-v2.md).
+
+- [ ] Phase 0: correctness hotfix (reporter request timeout and retry, thread error state, mark-read, core status table, no severity in reporter copy)
+- [ ] Phase 1: widget parity (one screen, host-adaptive theme, masking, accessibility)
+- [ ] Phase 2: loop wiring (migrations 1–4, fan-out, release linkage, duplicate follows, Waiting on you, outbox)
+- [ ] Phase 3: opt-in email and web push, caps, DPA / 委託 template
