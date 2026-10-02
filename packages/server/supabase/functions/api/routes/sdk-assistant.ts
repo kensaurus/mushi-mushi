@@ -23,7 +23,6 @@
 import type { Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { createOpenAI } from 'npm:@ai-sdk/openai@1'
 import { z } from 'npm:zod@3'
 
@@ -31,7 +30,13 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { log as rootLog } from '../../_shared/logger.ts'
 import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts'
 import { estimateCallCostUsd } from '../../_shared/pricing.ts'
-import { ASSIST_MODEL, ASSIST_FALLBACK } from '../../_shared/models.ts'
+import {
+  ASSIST_EFFORT,
+  ASSIST_FALLBACK,
+  ASSIST_MODEL,
+  THINKING_HEADROOM_TOKENS,
+} from '../../_shared/models.ts'
+import { claudeGenerateObject } from '../../_shared/claude-messages.ts'
 import { logLlmInvocation } from '../../_shared/telemetry.ts'
 import { createTrace } from '../../_shared/observability.ts'
 import { tagLangfuseTrace } from '../../_shared/sentry.ts'
@@ -247,14 +252,14 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
         db,
         projectId,
         (key) => {
-          const anthropic = createAnthropic({ apiKey: key.key })
-          return generateValidatedObject(ReplyLlmSchema, {
-            model: anthropic(ASSIST_MODEL),
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: message },
-            ],
-            maxTokens,
+          return claudeGenerateObject({
+            apiKey: key.key,
+            model: ASSIST_MODEL,
+            schema: ReplyLlmSchema,
+            effort: ASSIST_EFFORT,
+            system: systemPrompt,
+            messages: [{ role: 'user', content: message }],
+            maxTokens: maxTokens + THINKING_HEADROOM_TOKENS,
           })
         },
         (key) => {

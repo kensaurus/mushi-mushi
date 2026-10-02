@@ -121,13 +121,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Which LLM writes the plain-English read on each report after noise is filtered out.
 
-**How it works** — Stage 2 is the deep classifier — it labels severity, category, intent, dedup hints, and reproduction steps. The choice trades cost vs depth: Sonnet 4.6 is the recommended default; Opus is slow but catches subtle cases; Haiku is cheap but rougher. The selected model is read on every report, so changes apply immediately to new traffic.
+**How it works** — Stage 2 is the deep classifier — it labels severity, category, intent, dedup hints, and reproduction steps. The choice trades cost vs depth: Sonnet 5.5 is the recommended default; Opus is slow but catches subtle cases; Haiku is cheap but rougher. The selected model is read on every report, so changes apply immediately to new traffic.
 
-**Default** — `claude-sonnet-4-6`
+**Default** — `claude-sonnet-5-5`
 
 **Where it lives** — table `project_settings.stage2_model` · endpoint `PATCH /v1/admin/settings` · read by `classify-report edge function`
 
-**When to change** — Stay on Sonnet 4.6 unless cost is biting (drop to Haiku) or you're finding misses on subtle pattern reports (try Opus on a small slice via Prompt Lab first).
+**When to change** — Stay on Sonnet 5.5 unless cost is biting (drop to Haiku) or you're finding misses on subtle pattern reports (try Opus on a small slice via Prompt Lab first).
 
 **Learn more** — [Architecture overview](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
 

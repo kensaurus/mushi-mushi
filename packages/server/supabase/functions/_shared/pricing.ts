@@ -8,7 +8,14 @@
 
 /** USD per 1M tokens. Add new models here; the SQL backfill must mirror. */
 export const LLM_PRICING_PER_M_TOKENS: Record<string, { in: number; out: number }> = {
-  // Anthropic — current generation (2026-Q1/Q2)
+  // Anthropic — 5.x generation (Claude API list prices, 2026-09-25). A
+  // server-side refusal fallback from Sonnet 5.5 is served (and billed) as
+  // `claude-sonnet-5`, so that row must exist too.
+  'claude-sonnet-5-5':           { in: 2.00, out: 10.00 },
+  'claude-sonnet-5':             { in: 2.00, out: 10.00 },
+  'claude-opus-5-5':             { in: 4.00, out: 20.00 },
+  'claude-opus-5':               { in: 5.00, out: 25.00 },
+  // Anthropic — 4.x generation
   'claude-haiku-4-5':            { in: 1.00, out: 5.00 },
   'claude-haiku-4-5-20251001':   { in: 1.00, out: 5.00 },
   'claude-haiku-4-6':            { in: 0.25, out: 1.25 },
@@ -16,8 +23,10 @@ export const LLM_PRICING_PER_M_TOKENS: Record<string, { in: number; out: number 
   'claude-sonnet-4-5-20250929':  { in: 3.00, out: 15.00 },
   'claude-sonnet-4-6':           { in: 3.00, out: 15.00 },
   'claude-sonnet-3-7':           { in: 3.00, out: 15.00 },
-  'claude-opus-4-6':             { in: 15.00, out: 75.00 },
-  'claude-opus-4-7':             { in: 15.00, out: 75.00 },
+  // Opus 4.6 / 4.7 list at $5/$25 (the old 15/75 was the Opus 4.0/4.1 price,
+  // which tripled the cost shown for every judge run on the Opus 4.7 default).
+  'claude-opus-4-6':             { in: 5.00,  out: 25.00 },
+  'claude-opus-4-7':             { in: 5.00,  out: 25.00 },
   'claude-opus-4-8':             { in: 5.00,  out: 25.00 },
   // OpenAI — current generation (GPT-5 family, released 2026)
   'gpt-4.1':                     { in: 2.00, out: 8.00 },

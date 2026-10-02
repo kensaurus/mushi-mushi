@@ -17,7 +17,7 @@ import { log } from '../../_shared/logger.ts'
 import { adminOrApiKey } from '../../_shared/auth.ts'
 import { toSseEvent } from '../../_shared/sse.ts'
 import { createTrace } from '../../_shared/observability.ts'
-import { ASSIST_MODEL, ASSIST_FALLBACK } from '../../_shared/models.ts'
+import { CODEBASE_ASSIST_MODEL, ASSIST_FALLBACK } from '../../_shared/models.ts'
 import { estimateCallCostUsd } from '../../_shared/pricing.ts'
 import { logLlmInvocation, extractAnthropicCacheUsage } from '../../_shared/telemetry.ts'
 import { withAnthropicOrOpenAi, LlmFailoverError } from '../../_shared/llm-failover.ts'
@@ -231,7 +231,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
     const trace = createTrace('codebase-chat', { projectId, threadId })
     const llmSpan = trace.span('codebase-chat.generate')
     const started = Date.now()
-    let usedModel = ASSIST_MODEL
+    let usedModel = CODEBASE_ASSIST_MODEL
     let keySource: 'byok' | 'env' = 'env'
     let inputTokens: number | undefined
     let outputTokens: number | undefined
@@ -244,7 +244,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           keySource = key.source
           const anthropic = createAnthropic({ apiKey: key.key })
           return generateText({
-            model: anthropic(ASSIST_MODEL),
+            model: anthropic(CODEBASE_ASSIST_MODEL),
             messages: [
               {
                 role: 'system',
@@ -273,7 +273,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           })
         },
       )
-      usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : ASSIST_MODEL
+      usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
       inputTokens = result.usage?.promptTokens
       outputTokens = result.usage?.completionTokens
       const cache = extractAnthropicCacheUsage(result.experimental_providerMetadata)
@@ -322,7 +322,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         projectId,
         functionName: 'codebase-chat',
         stage: 'codebase-chat',
-        primaryModel: ASSIST_MODEL,
+        primaryModel: CODEBASE_ASSIST_MODEL,
         usedModel,
         fallbackUsed: usedProvider === 'openai',
         status: 'success',
@@ -411,7 +411,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       const trace = createTrace('codebase-chat-stream', { projectId, threadId })
       const started = Date.now()
       let acc = ''
-      let usedModel = ASSIST_MODEL
+      let usedModel = CODEBASE_ASSIST_MODEL
       let keySource: 'byok' | 'env' = 'env'
       let inputTokens: number | undefined
       let outputTokens: number | undefined
@@ -426,7 +426,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
             keySource = key.source
             const anthropic = createAnthropic({ apiKey: key.key })
             return streamText({
-              model: anthropic(ASSIST_MODEL),
+              model: anthropic(CODEBASE_ASSIST_MODEL),
               messages: [
                 {
                   role: 'system',
@@ -455,7 +455,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
             })
           },
         )
-        usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : ASSIST_MODEL
+        usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
         for await (const delta of result.textStream) {
           acc += delta
           await stream.write(toSseEvent({ delta }, { event: 'delta' }))
@@ -495,7 +495,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           projectId,
           functionName: 'codebase-chat',
           stage: 'codebase-chat-stream',
-          primaryModel: ASSIST_MODEL,
+          primaryModel: CODEBASE_ASSIST_MODEL,
           usedModel,
           fallbackUsed: usedProvider === 'openai',
           status: 'success',
@@ -601,7 +601,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
 
     const trace = createTrace('codebase-summary', { projectId, filePath })
     const started = Date.now()
-    let usedModel = ASSIST_MODEL
+    let usedModel = CODEBASE_ASSIST_MODEL
     let keySource: 'byok' | 'env' = 'env'
 
     try {
@@ -612,7 +612,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           keySource = key.source
           const anthropic = createAnthropic({ apiKey: key.key })
           return generateText({
-            model: anthropic(ASSIST_MODEL),
+            model: anthropic(CODEBASE_ASSIST_MODEL),
             prompt,
             maxTokens: 400,
           })
@@ -631,7 +631,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           })
         },
       )
-      usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : ASSIST_MODEL
+      usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
       const summary = result.text.trim()
       const latencyMs = Date.now() - started
 
@@ -652,7 +652,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         projectId,
         functionName: 'codebase-summary',
         stage: 'summary',
-        primaryModel: ASSIST_MODEL,
+        primaryModel: CODEBASE_ASSIST_MODEL,
         usedModel,
         fallbackUsed: usedProvider === 'openai',
         status: 'success',
@@ -730,7 +730,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       try {
         const trace = createTrace('codebase-tour', { projectId })
         const started = Date.now()
-        let usedModel = ASSIST_MODEL
+        let usedModel = CODEBASE_ASSIST_MODEL
         let keySource: 'byok' | 'env' = 'env'
         const tourContext = stops
           .map((s) => `${s.order}. ${s.title} (${s.layer}): ${s.file_paths.join(', ')}`)
@@ -742,7 +742,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
             keySource = key.source
             const anthropic = createAnthropic({ apiKey: key.key })
             return generateText({
-              model: anthropic(ASSIST_MODEL),
+              model: anthropic(CODEBASE_ASSIST_MODEL),
               prompt: `Improve these guided-tour stop rationales for onboarding a new developer. Keep the same order. Return JSON array of {order, rationale} only.\n\n${tourContext}`,
               maxTokens: 800,
             })
@@ -758,13 +758,13 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
             })
           },
         )
-        usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : ASSIST_MODEL
+        usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
         const latencyMs = Date.now() - started
         void logLlmInvocation(db, {
           projectId,
           functionName: 'codebase-tour',
           stage: 'tour',
-          primaryModel: ASSIST_MODEL,
+          primaryModel: CODEBASE_ASSIST_MODEL,
           usedModel,
           fallbackUsed: usedProvider === 'openai',
           status: 'success',
@@ -853,7 +853,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
     try {
       const trace = createTrace('codebase-domains', { projectId })
       const started = Date.now()
-      let usedModel = ASSIST_MODEL
+      let usedModel = CODEBASE_ASSIST_MODEL
       let keySource: 'byok' | 'env' = 'env'
       const { result, usedProvider } = await withAnthropicOrOpenAi(
         db,
@@ -862,7 +862,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           keySource = key.source
           const anthropic = createAnthropic({ apiKey: key.key })
           return generateText({
-            model: anthropic(ASSIST_MODEL),
+            model: anthropic(CODEBASE_ASSIST_MODEL),
             prompt: `From this indexed file list, extract business domains, user flows, and steps. Return JSON matching {domains:[{id,name,description,flows:[{id,name,description,steps:[{id,name,description,file_paths[]}]}]}]}.\n\nFiles:\n${fileList}`,
             maxTokens: 1200,
           })
@@ -878,13 +878,13 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           })
         },
       )
-      usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : ASSIST_MODEL
+      usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
       const latencyMs = Date.now() - started
       void logLlmInvocation(db, {
         projectId,
         functionName: 'codebase-domains',
         stage: 'domains',
-        primaryModel: ASSIST_MODEL,
+        primaryModel: CODEBASE_ASSIST_MODEL,
         usedModel,
         fallbackUsed: usedProvider === 'openai',
         status: 'success',
