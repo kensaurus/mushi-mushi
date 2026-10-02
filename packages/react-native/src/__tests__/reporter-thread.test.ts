@@ -22,7 +22,7 @@ vi.mock('@mushi-mushi/core', () => ({
 }))
 
 import { loadReporterThread, markReporterReportRead, settleWithin, THREAD_LOAD_TIMEOUT_MS } from '../reporter-thread'
-import { contrastingText, resolveRNTheme } from '../theme'
+import { resolveRNTheme } from '../theme'
 
 const comment = { id: 1, author_kind: 'admin' as const, body: 'Which page?', created_at: '2026-10-02T00:00:00Z' }
 
@@ -117,6 +117,7 @@ describe('resolveRNTheme', () => {
   })
 
   it('falls back when the accent is not a hex colour', () => {
-    expect(contrastingText('rebeccapurple', '#FFF')).toBe('#FFF')
+    // A named colour can not be measured: the default text colour is kept.
+    expect(resolveRNTheme(false, { accent: 'rebeccapurple' }).accentFg).toBe(resolveRNTheme(false).accentFg)
   })
 })
