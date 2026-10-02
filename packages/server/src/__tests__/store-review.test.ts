@@ -9,6 +9,8 @@ import {
   judgeClaims,
   readImageSize,
   releaseCalendar,
+  calendarAppsFrom,
+  isNativeChange,
   reviewRiskChecklist,
   screenshotPlatformMismatch,
   screenshotStale,
@@ -131,5 +133,40 @@ describe('releaseCalendar', () => {
     expect(rows.map((r) => r.stage)).toEqual(['waiting_for_build', 'in_review', 'unknown'])
     expect(batchSuggestion).toMatchObject({ otaNow: ['glot'], nextStoreBatch: ['glot'], ciMinutesNow: 120, ciMinutesBatched: 40 })
     expect(batchSuggestion.note).toMatch(/estimate/)
+  })
+})
+
+describe('calendarAppsFrom', () => {
+  it('splits fixes merged since the last live deploy into native and JS-only, and leaves unknowns null', () => {
+    const [glot, quiet] = calendarAppsFrom(
+      [{ id: 'g', name: 'glot.it' }, { id: 'q', name: null }],
+      [
+        { project_id: 'g', observed_version: '1.2.0', observed_at: '2026-09-20T00:00:00Z', ok: true },
+        { project_id: 'g', observed_version: '1.3.0', observed_at: '2026-09-25T00:00:00Z', ok: false },
+      ],
+      [
+        { project_id: 'g', merged_at: '2026-09-21T00:00:00Z', files_changed: ['android/app/build.gradle'] },
+        { project_id: 'g', merged_at: '2026-09-22T00:00:00Z', files_changed: ['src/App.tsx'] },
+        { project_id: 'g', merged_at: '2026-09-23T00:00:00Z', files_changed: ['capacitor.config.ts'] },
+        { project_id: 'g', merged_at: '2026-09-10T00:00:00Z', files_changed: ['ios/App/Podfile'] },
+        { project_id: 'g', merged_at: null, files_changed: ['ios/x'] },
+      ],
+      [
+        { project_id: 'g', kind: 'play_console', snapshot: { elements: { deploy: { summary: { rolloutPct: 20 } } } } },
+        { project_id: 'g', kind: 'app_store_connect', snapshot: { elements: { deploy: { summary: { iosInReview: false } } } } },
+      ],
+    )
+    expect(glot).toMatchObject({ mergedNotBuilt: 2, otaPending: 1, builtNotSubmitted: null, inReview: false, live: { version: '1.2.0', rolloutPct: 20 } })
+    expect(quiet).toMatchObject({ name: 'q', mergedNotBuilt: 0, otaPending: 0, inReview: null, live: null })
+    const { rows, batchSuggestion } = releaseCalendar([glot, quiet], { g: 12 })
+    expect(rows.map((r) => r.stage)).toEqual(['rolling_out', 'unknown'])
+    expect(batchSuggestion).toMatchObject({ otaNow: ['g'], nextStoreBatch: ['g'], ciMinutesNow: 24, ciMinutesBatched: 12 })
+  })
+
+  it('treats only native code and native app config as needing a store build', () => {
+    expect(isNativeChange(['ios/App/AppDelegate.swift'])).toBe(true)
+    expect(isNativeChange(['apps/mobile/app.json'])).toBe(true)
+    expect(isNativeChange(['src/ios/helpers.ts', 'README.md'])).toBe(false)
+    expect(isNativeChange(null)).toBe(false)
   })
 })

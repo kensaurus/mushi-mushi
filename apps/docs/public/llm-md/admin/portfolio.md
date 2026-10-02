@@ -36,6 +36,7 @@ Below the cards:
 | Section | What it means |
 |---------|---------------|
 | **Across your apps** | Problems only visible across apps: a deep link to a sibling app that no longer resolves, many apps posting to one channel, CI cost in two repos. |
+| **Releases** | For each app: what is live and at what rollout, native changes waiting for a store build, and JS-only changes that can ship as an over-the-air update. It suggests one store release per app to save CI minutes. Your own CI builds and submits. |
 | **Daily digest** | One message a day across all apps. Off until an owner picks Slack, email or push. |
 | **Shared between apps** | Domains, store apps, Supabase projects and channels two or more apps use. |
 | **Connected sources** | App Store Connect, Google Play, AI spend, RevenueCat or your own endpoint. Read-only by default. |

@@ -193,11 +193,36 @@ The public checks read a `store` block in `mushi.recipe.json`:
     "ios": { "bundleId": "com.example.app", "appleId": "1234567890" },
     "android": { "package": "com.example.app" },
     "locales": ["en-US", "ja"],
-    "privacyUrl": "https://example.com/privacy"
+    "privacyUrl": "https://example.com/privacy",
+    "listingDir": "fastlane/metadata"
   },
   "links": { "domains": ["example.com"] }
 }
 ```
+
+## Store review
+
+Keep the store listing in the repo, in fastlane's `metadata` layout under
+`store.listingDir`. To copy what is live today into the repo once, run
+`mushi store pull` on your machine with your own store keys. From then on you
+change the listing in a pull request, and your own CI publishes it with
+`fastlane deliver`, `fastlane supply` or EAS. Mushi never holds a key that can
+publish a listing.
+
+**Run store review** on the Recipe page then checks:
+
+| Check | What it catches |
+|-------|-----------------|
+| Listing matches live | The text in the repo is not what the store shows. |
+| Same languages | A language is in the repo but not live, or live but not in the repo. |
+| Store length limits | A name, subtitle, keyword list or description is longer than the store allows. |
+| Claims match the code | The listing says something the code does not back up, such as "photos never leave your phone" while the app uploads them, or "open source" for a private repo. |
+| Privacy labels | The SDKs that collect data, read from `package.json`, so you can check them against your privacy labels. |
+| iOS screenshots | Screenshots that are Android-shaped, or older than your last few releases. |
+
+It ends with a short pre-submission checklist, each item marked high, medium
+or low risk. Reading the claims uses your own AI key; without one, that check
+says **Not checked**. This is a check against your code, not legal advice.
 
 ## Connected sources
 
@@ -248,4 +273,5 @@ including Jenkins or a cron on a server.
 | `get_app_recipe` | Every element with its state and reason |
 | `get_design_tokens` | The normalized tokens and a CSS-variable / TS-name map, so a fix uses tokens instead of literals |
 | `get_design_deviance` | The score, the per-rule breakdown, the trend and the top findings |
+| `get_store_status` | The latest store review: listing vs live, claims vs code, screenshots and the checklist |
 | `get_fix_context` | Now includes a `recipe` block (at most 4 KB) with the tokens to use |

@@ -260,7 +260,8 @@ export interface ReviewRiskFacts {
   privacyUrlOk: boolean | null
   externalPurchaseLinks: string[]
   byokPurchaseFlow: boolean | null
-  hardcodedPersonas: string[]
+  /** null = not checked (never read as "none found"). */
+  hardcodedPersonas: string[] | null
   accountDeletionPath: boolean | null
   playTargetOk: boolean | null
   iosSdkOk: boolean | null
@@ -307,7 +308,9 @@ export function reviewRiskChecklist(f: ReviewRiskFacts): { items: ReviewRiskItem
         : { id: 'review_risk_purchase_steering', title: 'Purchases outside the store', risk: 'low', reason: 'No purchase links outside the store were found.', fix: null },
   )
   items.push(
-    f.hardcodedPersonas.length
+    f.hardcodedPersonas === null
+      ? { id: 'review_risk_default_persona', title: 'Demo identities in the build', risk: 'unknown', reason: 'The build was not checked for hard-coded demo identities.', fix: null }
+      : f.hardcodedPersonas.length
       ? { id: 'review_risk_default_persona', title: 'Demo identities in the build', risk: 'medium', reason: `Hard-coded demo people or accounts ship in the app: ${f.hardcodedPersonas.slice(0, 3).join(', ')}.`, fix: 'Remove demo identities from production builds, or put them behind a flag reviewers do not see.' }
       : { id: 'review_risk_default_persona', title: 'Demo identities in the build', risk: 'low', reason: 'No hard-coded demo identities were found.', fix: null },
   )
@@ -331,8 +334,10 @@ export function reviewRiskChecklist(f: ReviewRiskFacts): { items: ReviewRiskItem
 export interface CalendarApp {
   projectId: string
   name: string
+  /** Merged native changes (android/, ios/, app config) since the last live deploy. */
   mergedNotBuilt: number
-  builtNotSubmitted: number
+  /** null: no build source is connected, so this is not known. */
+  builtNotSubmitted: number | null
   inReview: boolean | null
   live: { version: string; rolloutPct: number | null } | null
   otaPending: number
@@ -356,10 +361,51 @@ function stageOf(a: CalendarApp): CalendarRow['stage'] {
   if (a.inReview === null && a.live === null) return 'unknown'
   if (a.inReview) return 'in_review'
   if (a.live && a.live.rolloutPct !== null && a.live.rolloutPct < 100) return 'rolling_out'
-  if (a.builtNotSubmitted > 0) return 'ready_to_submit'
+  if ((a.builtNotSubmitted ?? 0) > 0) return 'ready_to_submit'
   if (a.mergedNotBuilt > 0) return 'waiting_for_build'
   if (a.otaPending > 0) return 'ota_ready'
   return 'idle'
+}
+
+const NATIVE_PATH = /^(android|ios)\//
+const NATIVE_CONFIG = /(^|\/)(capacitor\.config\.[a-z]+|app\.json|app\.config\.[a-z]+|eas\.json|Podfile|build\.gradle(\.kts)?)$/
+
+/** A merged change needs a store build when it touches native code or native app config. */
+export function isNativeChange(files: unknown): boolean {
+  return Array.isArray(files) && files.some((f) => NATIVE_PATH.test(String(f)) || NATIVE_CONFIG.test(String(f)))
+}
+
+interface StoreDeploySnapshot { project_id: string; kind: string; snapshot: { elements?: { deploy?: { summary?: Record<string, unknown> } } } }
+
+/**
+ * Build calendar rows from what Mushi has read: live deploys, fixes merged
+ * since the last live deploy (split into native and JS-only), and the App
+ * Store / Google Play connector snapshots. Nothing is guessed: a value with
+ * no source stays null.
+ */
+export function calendarAppsFrom(
+  projects: ReadonlyArray<{ id: string; name: string | null }>,
+  observations: ReadonlyArray<{ project_id: string; observed_version: string | null; observed_at: string; ok: boolean }>,
+  fixes: ReadonlyArray<{ project_id: string; merged_at: string | null; files_changed?: unknown }>,
+  snapshots: ReadonlyArray<StoreDeploySnapshot>,
+): CalendarApp[] {
+  return projects.map((p) => {
+    const lastDeploy = observations.filter((o) => o.project_id === p.id && o.ok).sort((a, b) => b.observed_at.localeCompare(a.observed_at))[0]
+    const merged = fixes.filter((f) => f.project_id === p.id && f.merged_at && (!lastDeploy || f.merged_at > lastDeploy.observed_at))
+    const native = merged.filter((f) => isNativeChange(f.files_changed)).length
+    const asc = snapshots.find((s) => s.project_id === p.id && s.kind === 'app_store_connect')?.snapshot?.elements?.deploy?.summary
+    const play = snapshots.find((s) => s.project_id === p.id && s.kind === 'play_console')?.snapshot?.elements?.deploy?.summary
+    const rollout = play?.rolloutPct
+    return {
+      projectId: p.id,
+      name: p.name ?? p.id.slice(0, 8),
+      mergedNotBuilt: native,
+      builtNotSubmitted: null,
+      inReview: typeof asc?.iosInReview === 'boolean' ? asc.iosInReview : null,
+      live: lastDeploy ? { version: lastDeploy.observed_version ?? 'unknown', rolloutPct: typeof rollout === 'number' ? rollout : null } : null,
+      otaPending: merged.length - native,
+    }
+  })
 }
 
 /**

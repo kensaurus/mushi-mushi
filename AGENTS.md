@@ -258,7 +258,7 @@ Live App URL
 | Group | Commands |
 | --- | --- |
 | **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi doctor`, `mushi ping`, `mushi completion`, `mushi nudge` |
-| **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show` |
+| **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show`, `mushi store pull` |
 | **Reports & lessons** | `mushi reports list/show/search/triage/…`, `mushi lessons list/show`, `mushi sync-lessons`, `mushi feedback board` |
 | **Fixes** | `mushi fix`, `mushi fixes tail/refresh-ci/merge`, `mushi console watch <reportId>` |
 | **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map` |
@@ -334,7 +334,7 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **91 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **92 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 
