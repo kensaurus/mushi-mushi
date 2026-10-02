@@ -7,15 +7,30 @@ DELETE FROM public.gate_findings
  WHERE gate_run_id IN (SELECT id FROM public.gate_runs WHERE gate = 'radar');
 DELETE FROM public.gate_runs WHERE gate = 'radar';
 
-ALTER TABLE public.gate_runs
-  DROP CONSTRAINT IF EXISTS gate_runs_gate_check;
-ALTER TABLE public.gate_runs
-  ADD CONSTRAINT gate_runs_gate_check
-  CHECK (gate IN (
-    'dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim',
-    'spec_drift', 'orphan_endpoint', 'unknown_call', 'schema_drift',
-    'code_health'
-  ));
+-- Remove only 'radar', keeping whatever else other branches added.
+DO $$
+DECLARE
+  v_def  text;
+  v_vals text[];
+BEGIN
+  SELECT pg_get_constraintdef(oid) INTO v_def
+    FROM pg_constraint
+   WHERE conrelid = 'public.gate_runs'::regclass
+     AND conname = 'gate_runs_gate_check';
+  IF v_def IS NULL THEN
+    RETURN;
+  END IF;
+  SELECT array_agg(DISTINCT m[1] ORDER BY m[1]) INTO v_vals
+    FROM regexp_matches(v_def, '''([^'']+)''', 'g') AS m;
+  IF NOT ('radar' = ANY (v_vals)) THEN
+    RETURN;
+  END IF;
+  EXECUTE 'ALTER TABLE public.gate_runs DROP CONSTRAINT gate_runs_gate_check';
+  EXECUTE format(
+    'ALTER TABLE public.gate_runs ADD CONSTRAINT gate_runs_gate_check CHECK (gate IN (%s))',
+    (SELECT string_agg(quote_literal(x), ', ' ORDER BY x) FROM unnest(array_remove(v_vals, 'radar')) AS x)
+  );
+END $$;
 
 ALTER TABLE public.project_codebase_files DROP COLUMN IF EXISTS imports;
 ALTER TABLE public.project_repos
