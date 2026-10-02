@@ -10,6 +10,9 @@
  * Why (2026-09-22): the setup_funnel_events CHECK and the server's
  * FunnelEventName allowed `diagnosis_viewed` from 2026-09-21, but nothing
  * wrote it, so the onboarding funnel had a step that always read zero.
+ *
+ * 2026-10-02: the same render also emits the product event
+ * `diagnosis_viewed` with `surface` and `sample: true` (lib/diagnosisViewed.ts).
  */
 
 import { act, createElement } from 'react'
@@ -27,7 +30,7 @@ vi.mock('../ClientConnectButton', () => ({ ClientConnectButton: () => null }))
 vi.mock('../FirstRunTour', () => ({ startFirstRunTour: vi.fn() }))
 vi.mock('@mushi-mushi/mcp/clients', () => ({ getMcpClient: () => ({ id: 'cursor' }) }))
 
-import { FirstDiagnosisScreen } from './FirstDiagnosisScreen'
+import { FirstDiagnosisInline, FirstDiagnosisScreen } from './FirstDiagnosisScreen'
 
 const REPORT = '22222222-2222-4222-8222-222222222222'
 
@@ -78,6 +81,8 @@ describe('FirstDiagnosisScreen — diagnosis_viewed', () => {
     api.apiFetch.mockReset()
     tracking.trackSelf.mockReset()
     tracking.trackAdHoc.mockReset()
+    // The product-event dedup is per report per session; REPORT is shared.
+    window.sessionStorage.clear()
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -127,6 +132,41 @@ describe('FirstDiagnosisScreen — diagnosis_viewed', () => {
     expect(init?.method).toBe('POST')
     expect(JSON.parse(init?.body ?? '{}')).toEqual({ reportId: REPORT })
     expect(tracking.trackSelf).toHaveBeenCalledWith('report_opened', expect.objectContaining({ report_id: REPORT }))
+    expect(tracking.trackSelf).toHaveBeenCalledWith('diagnosis_viewed', {
+      report_id: REPORT,
+      project_id: PROJECT,
+      surface: 'onboarding',
+      sample: true,
+    })
+  })
+
+  it('the inline card reports the page that embeds it as the surface', async () => {
+    serveDiagnosis()
+    act(() => {
+      root.render(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(FirstDiagnosisInline, { projectId: PROJECT, projectName: 'Demo', surface: 'reports' }),
+        ),
+      )
+    })
+    const send = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Send test report'))
+    expect(send).toBeTruthy()
+    await act(async () => {
+      send!.click()
+      await flush()
+    })
+    await act(async () => {
+      vi.advanceTimersByTime(2_000)
+      await flush()
+    })
+    expect(container.querySelector('[data-testid="first-diagnosis-card"]')).toBeTruthy()
+    expect(tracking.trackSelf).toHaveBeenCalledWith(
+      'diagnosis_viewed',
+      expect.objectContaining({ report_id: REPORT, surface: 'reports', sample: true }),
+    )
+    expect(viewedCalls()).toHaveLength(1)
   })
 
   it('does not post before a diagnosis exists', async () => {
@@ -150,6 +190,8 @@ describe('FirstDiagnosisScreen — diagnosis_viewed', () => {
     renderScreen()
     await sendAndDiagnose()
     expect(viewedCalls()).toHaveLength(1)
+    const views = tracking.trackSelf.mock.calls.filter(([name]) => name === 'diagnosis_viewed')
+    expect(views).toHaveLength(1)
   })
 
   it('retries on the next diagnosis when the post failed', async () => {

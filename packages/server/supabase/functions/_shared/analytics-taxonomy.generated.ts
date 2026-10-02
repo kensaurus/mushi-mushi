@@ -118,6 +118,14 @@ export const MUSHI_EVENTS = {
       "project_id"
     ]
   },
+  "diagnosis_viewed": {
+    "surface": "console",
+    "required": [
+      "report_id",
+      "project_id",
+      "surface"
+    ]
+  },
   "project_created": {
     "surface": "server",
     "required": [

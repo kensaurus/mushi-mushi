@@ -225,6 +225,7 @@ export function OverviewPage() {
         // right here; a brand-new org with no project gets the wizard link.
         emptyStateProject ? (
           <FirstDiagnosisInline
+            surface="overview"
             projectId={emptyStateProject.project_id}
             projectName={emptyStateProject.project_name}
             onDiagnosed={() => {

@@ -79,14 +79,26 @@ export function toDiagnosis(report: PolledReport): Diagnosis {
   }
 }
 
+/**
+ * True once the row carries something a person reads as a diagnosis: a
+ * summary, a Stage-2 analysis or a severity. The report detail page uses the
+ * same test to decide when a diagnosis became visible.
+ */
+export function hasDiagnosis(report: {
+  summary?: string | null
+  severity?: string | null
+  stage2_analysis?: object | null
+}): boolean {
+  const hasStage2 = report.stage2_analysis != null && typeof report.stage2_analysis === 'object'
+  return Boolean(nonEmpty(report.summary)) || hasStage2 || Boolean(nonEmpty(report.severity))
+}
+
 /** Classify a polled row into what the screen should say. @internal */
 export function readReport(report: PolledReport): ReportReading {
   if (report.status === 'quota_exceeded') {
     return { kind: 'quota_exhausted', message: QUOTA_MESSAGE }
   }
-  const hasStage2 = report.stage2_analysis != null && typeof report.stage2_analysis === 'object'
-  const diagnosed = Boolean(nonEmpty(report.summary)) || hasStage2 || Boolean(nonEmpty(report.severity))
-  if (diagnosed) {
+  if (hasDiagnosis(report)) {
     return { kind: 'diagnosed', diagnosis: toDiagnosis(report) }
   }
   if (report.status === 'error' || report.status === 'failed') {
