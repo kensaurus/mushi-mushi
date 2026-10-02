@@ -122,6 +122,7 @@ import {
 import { fixSchema, type FixOutput } from '../_shared/fix-schema.ts';
 import { sentryFixesTrailers, sentryShortIdsForReport } from '../_shared/sentry-resolve-back.ts';
 import { validateEdgeSpec, renderSpecContextEdge } from '../_shared/spec-validation.ts';
+import { loadRecipeTokenBlock } from '../_shared/fix-recipe-block.ts';
 
 const SYSTEM_PROMPT = `You are a senior staff engineer fixing one specific bug report.
 
@@ -785,6 +786,7 @@ ${
         webSnippets,
         inventoryAnchor,
         pastFixesContext,
+        await loadRecipeTokenBlock(db, dispatch.project_id),
       );
 
       // Resolve the fix-worker system prompt from `prompt_versions` (stage='fix').
@@ -2251,6 +2253,7 @@ function buildUserPrompt(
   webSnippets: FirecrawlSearchResult[] = [],
   inventoryAnchor: InventoryAnchor | null = null,
   pastFixesContext = '',
+  recipeTokenBlock = '',
 ): string {
   const env = (report.environment ?? {}) as Record<string, unknown>;
   const consoleErrors = ((report.console_logs ?? []) as Array<{ level: string; message: string }>)
@@ -2318,7 +2321,7 @@ The local RAG was sparse OR this report has been judged "stubborn" in the past, 
 ${webSnippets.map((s, i) => `### [${i + 1}] ${s.title}\n<${s.url}>\n${s.snippet}`).join('\n\n')}
 `
     : ''
-}
+}${recipeTokenBlock ? `\n${recipeTokenBlock}` : ''}
 ## Your Task
 Output a structured fix plan. Touch the minimum number of files. Match the existing code style. If you change behavior, add or update a test. If you are not confident, set needsHumanReview=true.`;
 }
