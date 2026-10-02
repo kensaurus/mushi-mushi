@@ -35,6 +35,33 @@ export function formatSettingValue(
   return s
 }
 
+/**
+ * Form base for a `/v1/admin/settings` payload. The server masks every stored
+ * secret and adds a `<column>_set` flag beside it; the form starts those
+ * fields empty so the mask is never shown as a value or sent back.
+ */
+export function settingsFormBase<T extends object>(data: T | null | undefined): T {
+  const out = { ...(data ?? {}) } as Record<string, unknown>
+  for (const key of Object.keys(out)) {
+    if (key.endsWith('_set') && typeof out[key] === 'boolean') {
+      const column = key.slice(0, -'_set'.length)
+      if (column in out) out[column] = ''
+    }
+  }
+  return out as T
+}
+
+/** Only the fields the user changed: a save never echoes untouched values. */
+export function changedSettings<T extends object>(current: T, saved: T): Partial<T> {
+  const cur = current as Record<string, unknown>
+  const prev = saved as Record<string, unknown>
+  const out: Record<string, unknown> = {}
+  for (const key of Object.keys(cur)) {
+    if (!valuesEqual(cur[key], prev[key])) out[key] = cur[key]
+  }
+  return out as Partial<T>
+}
+
 export function countChangedFields(
   pairs: Array<{ current: unknown; saved: unknown }>,
 ): number {

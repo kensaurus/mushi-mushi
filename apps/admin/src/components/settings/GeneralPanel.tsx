@@ -5,7 +5,7 @@
  *          Loads + persists `/v1/admin/settings` with optimistic save toasts.
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Card } from '../../components/ui'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
@@ -16,10 +16,11 @@ import { ConfigHelp } from '../ConfigHelp'
 import { slackWebhookUrl, sentryDsn, token } from '../../lib/validators'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { SettingsChangeHint } from './SettingsChangeHint'
+import { StoredSecretStatus } from './StoredSecretStatus'
 import { SettingsFormFooter } from './SettingsFormFooter'
 import { SettingsPanelLayout } from './SettingsPanelLayout'
 import { SettingEffectCallout } from '../FeatureExplainPanel'
-import { countChangedFields } from './settingsDiff'
+import { changedSettings, countChangedFields, settingsFormBase } from './settingsDiff'
 import { ContainedBlock } from '../report-detail/ReportSurface'
 import { ConsoleHelpPanel } from '../ConsoleHelpPanel'
 import { LifecycleEmailsToggle } from './LifecycleEmailsToggle'
@@ -45,6 +46,9 @@ interface ProjectSettings {
   slack_team_id?: string
   sentry_dsn?: string
   sentry_webhook_secret?: string
+  /** Server flags beside masked secrets: the value itself never reaches the console. */
+  sentry_webhook_secret_set?: boolean
+  slack_webhook_url_set?: boolean
   sentry_consume_user_feedback?: boolean
   stage2_model?: string
   stage1_confidence_threshold?: number
@@ -67,7 +71,8 @@ export function GeneralPanel() {
   const [draft, setDraft] = useState<ProjectSettings | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const saved: ProjectSettings = data ?? {}
+  // Masked secrets start empty in the form; their `_set` flags say whether one is stored.
+  const saved: ProjectSettings = useMemo(() => settingsFormBase(data), [data])
   const settings: ProjectSettings = draft ?? saved
 
   const update = (patch: Partial<ProjectSettings>) =>
@@ -108,7 +113,7 @@ export function GeneralPanel() {
     setSaving(true)
     const res = await apiFetch('/v1/admin/settings', {
       method: 'PATCH',
-      body: JSON.stringify(settings),
+      body: JSON.stringify(changedSettings(settings, saved)),
     })
     setSaving(false)
     if (res.ok) {
@@ -207,13 +212,24 @@ export function GeneralPanel() {
                 type="url"
                 value={settings.slack_webhook_url ?? ''}
                 onChange={(e) => update({ slack_webhook_url: e.target.value })}
-                placeholder="https://hooks.slack.com/services/..."
+                placeholder={
+                  saved.slack_webhook_url_set
+                    ? 'Saved. Paste a new URL to replace it.'
+                    : 'https://hooks.slack.com/services/...'
+                }
                 validate={slackWebhookUrl()}
               />
               <SettingsChangeHint
                 current={settings.slack_webhook_url ?? ''}
                 saved={saved.slack_webhook_url ?? ''}
                 kind="url"
+              />
+              <StoredSecretStatus
+                column="slack_webhook_url"
+                label="Slack webhook URL"
+                isSet={saved.slack_webhook_url_set === true}
+                consequence="Bug alerts stop posting through this webhook. The Slack bot channel above is not affected."
+                onRemoved={reload}
               />
             </div>
           </details>
@@ -248,13 +264,24 @@ export function GeneralPanel() {
             type="password"
             value={settings.sentry_webhook_secret ?? ''}
             onChange={(e) => update({ sentry_webhook_secret: e.target.value })}
-            placeholder="Paste from Sentry → Settings → Integrations → Webhook → Client Secret"
+            placeholder={
+              saved.sentry_webhook_secret_set
+                ? 'Saved in Vault. Paste a new secret to replace it.'
+                : 'Paste from Sentry → Settings → Integrations → Webhook → Client Secret'
+            }
             validate={token({ minLength: 16 })}
           />
           <SettingsChangeHint
             current={settings.sentry_webhook_secret ?? ''}
             saved={saved.sentry_webhook_secret ?? ''}
             kind="secret"
+          />
+          <StoredSecretStatus
+            column="sentry_webhook_secret"
+            label="Sentry webhook secret"
+            isSet={saved.sentry_webhook_secret_set === true}
+            consequence="Mushi rejects Sentry deliveries until you paste a new secret."
+            onRemoved={reload}
           />
         </div>
         <div>

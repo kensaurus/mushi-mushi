@@ -884,7 +884,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   // Configure in GitHub: Settings → Webhooks → Add webhook
   //   Payload URL: <api>/v1/webhooks/github
   //   Content type: application/json
-  //   Secret: same value as project_settings.github_webhook_secret
+  //   Secret: the value project_settings.github_webhook_secret refers to in Vault
   //   Events: "Check runs" + "Check suites"
 
   app.post('/v1/webhooks/github', async (c) => {
@@ -961,6 +961,9 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     // posture is FAIL CLOSED: if we can't verify the signature, we refuse the
     // write entirely. Operators must either configure a github_webhook_secret
     // per project or stop sending the webhook.
+    // The column holds a `vault://` ref; an unreadable ref resolves to null
+    // and is skipped like a missing secret.
+    const { dereferenceMaybeVault } = await import('../../_shared/settings-secrets.ts');
     let verified = false;
     let verifiedProjectId: string | null = null;
     for (const cand of candidates) {
@@ -969,7 +972,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         .select('github_webhook_secret')
         .eq('project_id', cand.project_id)
         .single();
-      const secret = settings?.github_webhook_secret as string | undefined;
+      const secret = await dereferenceMaybeVault(db, (settings?.github_webhook_secret as string | null) ?? null);
       if (!secret) continue;
       if (await verifyGithubSignature(sig, body, secret)) {
         verified = true;
