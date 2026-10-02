@@ -30,6 +30,7 @@ import { otlpSpan, setGenAiAttributes } from '../_shared/otlp-exporter.ts';
 import { estimateCallCostUsd } from '../_shared/pricing.ts';
 import { checkDiagnosisQuota, invalidateDiagnosisCache } from '../_shared/quota.ts';
 import { emitProductEvent } from '../_shared/product-events.ts';
+import { keepAlive } from '../_shared/background.ts';
 import { isNonRealReport, type OldestReportRow } from '../_shared/first-report.ts';
 import {
   findInventoryCandidates,
@@ -803,13 +804,18 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
       // had diagnoses before this emitter shipped would otherwise get one
       // stamped on its next diagnosis, so check for an earlier real one. The
       // console test fixture (stage2_model 'precomputed') never counts.
+      // Only reports created BEFORE this one count as earlier: two first
+      // diagnoses finishing together would otherwise each see the other and
+      // both skip, losing the event for good. A tie emits twice and the
+      // dedup key keeps one. keepAlive covers the lookups, not just the insert.
       if (!isNonRealReport(report.custom_metadata as Record<string, unknown> | null)) {
-        void (async () => {
+        void keepAlive((async () => {
           const { data: prior, error: priorErr } = await db
             .from('reports')
             .select('id, custom_metadata')
             .eq('project_id', projectId)
             .neq('id', reportId)
+            .lt('created_at', report.created_at)
             .not('stage2_analysis', 'is', null)
             .or('stage2_model.is.null,stage2_model.neq.precomputed')
             .limit(20);
@@ -840,7 +846,7 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
             },
             dedupKey: `first_diagnosis_ready:${projectId}`,
           });
-        })().catch((err) =>
+        })()).catch((err) =>
           log.error('first_diagnosis_ready emit failed', { err: String(err) }),
         );
       }
