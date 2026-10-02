@@ -161,10 +161,14 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
     internalKind?: MushiInternalRequestKind,
     extraHeaders?: Record<string, string>,
   ): Promise<MushiApiResponse<T>> {
+    // Reporter-inbox reads/replies sit outside the breaker in both directions:
+    // a flaky inbox route must never trip it and push real report submissions
+    // into the offline queue, and an open breaker shouldn't block the inbox.
+    const tracked = internalKind !== 'reporter-poll';
     // Fast-fail while the circuit is open (cooldown not elapsed). Returns a
     // transient error so callers (e.g. the offline queue) capture the report
     // instead of blocking on a known-down endpoint.
-    if (cbIsOpen()) {
+    if (tracked && cbIsOpen()) {
       return { ok: false, error: { code: 'CIRCUIT_OPEN', message: 'Endpoint temporarily unavailable; retrying later.' } };
     }
     const url = `${baseUrl}${path}`;
@@ -258,8 +262,10 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
         // A 5xx or 429 that survived all retries means the endpoint is
         // effectively unusable; any other 4xx means it's reachable (app-level
         // error) — reset the circuit.
-        if (unusable) cbRecordUnreachable();
-        else cbRecordReachable();
+        if (tracked) {
+          if (unusable) cbRecordUnreachable();
+          else cbRecordReachable();
+        }
         return {
           ok: false,
           error: {
@@ -279,7 +285,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
       const data = payload && typeof payload === 'object' && 'ok' in payload && 'data' in payload
         ? (payload as { data: T }).data
         : payload as T;
-      cbRecordReachable();
+      if (tracked) cbRecordReachable();
       return { ok: true, data };
     } catch (error) {
       clearTimeout(timer);
@@ -293,7 +299,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
 
       // Network error (timeout / DNS / refused) that exhausted retries —
       // count it toward tripping the circuit.
-      cbRecordUnreachable();
+      if (tracked) cbRecordUnreachable();
       return {
         ok: false,
         error: {
@@ -305,8 +311,9 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
   }
 
   /**
-   * Reporter-inbox calls ride request() — its timeout, retries and circuit
-   * breaker — adding only the signed digest headers. The hand-rolled fetch this
+   * Reporter-inbox calls ride request() — its timeout and retries, but outside
+   * the circuit breaker (see `tracked`), so a flaky inbox can't degrade report
+   * submission — adding only the signed digest headers. The hand-rolled fetch this
    * replaces had no timeout and could reject, which left the widget on
    * "Loading thread…" forever. Never rejects: crypto failures (e.g. no
    * SubtleCrypto on an insecure origin) resolve as a NETWORK_ERROR result.
