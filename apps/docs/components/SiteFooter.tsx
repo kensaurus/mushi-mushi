@@ -26,7 +26,7 @@ const CONTACT_EMAIL = 'kensaurus@gmail.com'
 const STATUS_PAGE_URL = 'https://updown.io/p/b6lod'
 
 /** Routes where the portfolio table is hidden (exact, or the `/legal/*` prefix). */
-const PORTFOLIO_HIDDEN_EXACT = new Set(['/', '/pricing', '/connect', '/security', '/investors'])
+const PORTFOLIO_HIDDEN_EXACT = new Set(['/', '/pricing', '/connect', '/security', '/open'])
 
 function shouldShowPortfolio(pathname: string | null): boolean {
   if (!pathname) return true
@@ -41,8 +41,8 @@ const FOOTER_LINKS: ReadonlyArray<{ label: string; href: string; external?: true
   { label: 'Terms', href: '/legal/terms' },
   { label: 'Security', href: '/security' },
   { label: 'Status', href: STATUS_PAGE_URL, external: true },
+  { label: 'Open metrics', href: '/open' },
   { label: 'Contact', href: `mailto:${CONTACT_EMAIL}`, external: true },
-  { label: 'Investors', href: '/investors' },
 ]
 
 export function SiteFooter() {

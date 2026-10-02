@@ -22,7 +22,7 @@ import { SdkEnvMatrix } from './components/SdkEnvMatrix'
 import { EvolutionDiagram } from './components/EvolutionDiagram'
 import { LoopComparison } from './components/LoopComparison'
 import { PricingEstimator } from './components/PricingEstimator'
-import { InvestorsJsonLd } from './components/InvestorsJsonLd'
+import { OpenMetrics } from './components/OpenMetrics'
 import {
   CinematicEditorialHero,
   ProofPinSection,
@@ -66,7 +66,7 @@ export const useMDXComponents = (components?: Record<string, unknown>) => ({
   EvolutionDiagram,
   LoopComparison,
   PricingEstimator,
-  InvestorsJsonLd,
+  OpenMetrics,
   CinematicEditorialHero,
   ProofPinSection,
   DiagnosisScrollStage,

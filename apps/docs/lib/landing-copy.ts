@@ -13,6 +13,16 @@ export const LANDING_HERO = {
   lead:
     'For solo builders shipping Cursor- or Claude-written apps to real users. When someone hits a bug, Mushi turns what they felt into a plain-English diagnosis and a paste-ready fix in your editor. Sentry starts from what the code threw; Mushi starts from what the user felt.',
   proofLine: 'One queue for every bug. Sentry flows in, fixes flow out. Open source.',
+  /**
+   * Stage-fit proof under the CTAs: what it costs to try and what you can
+   * read. No star count — at this stage a small number is anti-proof.
+   */
+  reassure: 'Free Cloud: 50 diagnoses a month, no credit card. Self-hosting is free.',
+  star: {
+    label: 'Star on GitHub',
+    href: MUSHI_CANONICAL_URLS.repo,
+    ctaId: 'landing-star',
+  },
 } as const
 
 export interface LandingHeroCta {

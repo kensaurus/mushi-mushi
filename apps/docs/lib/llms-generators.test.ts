@@ -16,31 +16,12 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { buildRssFeed, escapeXml } from '../../../scripts/lib/blog-feed.mjs'
-import { isNoindex, parseFrontmatter } from '../../../scripts/lib/frontmatter.mjs'
+import { parseFrontmatter } from '../../../scripts/lib/frontmatter.mjs'
 import { mdxToPlainMarkdown } from '../../../scripts/lib/mdx-prose.mjs'
 import { BLOG_FEED_URL, blogPostingJsonLd } from './structured-data'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PUBLIC_DIR = join(__dirname, '..', 'public')
-
-describe('isNoindex', () => {
-  it('reads the robots scalar Next.js also accepts', () => {
-    expect(isNoindex({ robots: 'noindex, follow' })).toBe(true)
-    expect(isNoindex({ robots: 'index, follow' })).toBe(false)
-    expect(isNoindex({})).toBe(false)
-  })
-
-  it('keeps a noindex page out of llms.txt, llms-full.txt and the md twins', () => {
-    // content/investors.mdx is noindex while it carries owner placeholders.
-    const investors = parseFrontmatter(
-      readFileSync(join(__dirname, '..', 'content', 'investors.mdx'), 'utf8'),
-    ).data
-    if (!isNoindex(investors)) return
-    expect(readFileSync(join(PUBLIC_DIR, 'llms.txt'), 'utf8')).not.toContain('/investors')
-    expect(readFileSync(join(PUBLIC_DIR, 'llms-full.txt'), 'utf8')).not.toContain('/docs/investors')
-    expect(existsSync(join(PUBLIC_DIR, 'llm-md', 'investors.md'))).toBe(false)
-  })
-})
 
 describe('parseFrontmatter', () => {
   it('keeps apostrophes in plain, single- and double-quoted scalars', () => {

@@ -45,18 +45,6 @@ function parseScalar(raw) {
  * @param {string} src
  * @returns {{ data: Record<string, string>, body: string }}
  */
-/**
- * True when a page's front matter opts out of indexing (`robots: noindex…`).
- * The sitemap and the llms surfaces skip such a page, so a page that search
- * engines are told not to index is not handed to answer engines either.
- *
- * @param {Record<string, string>} data parsed front matter
- * @returns {boolean}
- */
-export function isNoindex(data) {
-  return typeof data.robots === 'string' && /\bnoindex\b/i.test(data.robots)
-}
-
 export function parseFrontmatter(src) {
   if (!OPEN.test(src)) return { data: {}, body: src }
   const afterOpen = src.replace(OPEN, '')

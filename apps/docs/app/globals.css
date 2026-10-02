@@ -1228,6 +1228,26 @@ html:has(.landing-cinematic-hero) {
   color: var(--mushi-dark-ink-muted);
 }
 
+.landing-hero-reassure {
+  margin: 0.85rem 0 0;
+  font-size: 0.88rem;
+  color: var(--mushi-ink-muted);
+}
+
+.dark .landing-hero-reassure {
+  color: var(--mushi-dark-ink-muted);
+}
+
+.landing-hero-reassure a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.landing-hero-reassure a:hover {
+  color: var(--mushi-vermillion);
+}
+
 .landing-hero-ctas {
   display: flex;
   flex-wrap: wrap;
@@ -1940,6 +1960,81 @@ html:has(.landing-cinematic-hero) {
 
 .dark .landing-mediator__gating {
   color: var(--mushi-dark-ink-muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * /open (<OpenMetrics />) — build-time public numbers.
+ * ------------------------------------------------------------------------- */
+.docs-open {
+  margin: 1.5rem 0 2rem;
+}
+
+.docs-open__stamp,
+.docs-open__caption {
+  margin: 0 0 1rem;
+  font-size: 0.88rem;
+  color: var(--mushi-ink-muted);
+}
+
+.dark .docs-open__stamp,
+.dark .docs-open__caption {
+  color: var(--mushi-dark-ink-muted);
+}
+
+.docs-open__heading {
+  margin: 2rem 0 0.75rem !important;
+  font-family: var(--mushi-font-display);
+  font-size: 1.35rem !important;
+  font-weight: 600;
+}
+
+.docs-open__grid {
+  margin: 0;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 1024px) {
+  .docs-open__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.docs-open__grid > div {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.5rem;
+  min-width: 0;
+}
+
+.docs-open__grid dt {
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--mushi-ink-muted);
+}
+
+.dark .docs-open__grid dt {
+  color: var(--mushi-dark-ink-muted);
+}
+
+.docs-open__grid dd {
+  margin: 0.35rem 0 0;
+  font-family: var(--mushi-font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.docs-open__grid dd code {
+  font-size: 0.85rem;
+}
+
+.docs-open__na {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--mushi-ink-muted);
 }
 
 /* ---------------------------------------------------------------------------

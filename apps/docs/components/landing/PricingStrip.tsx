@@ -11,26 +11,13 @@ const tiers = LANDING_PRICING_STRIP.tierIds
   .map((id) => PRICING_TIERS.find((t) => t.id === id))
   .filter((t): t is PricingTierRow => t !== undefined)
 
-interface PricingStripProps {
-  /** Overrides for reuse on /investors; the landing uses the defaults. */
-  heading?: string
-  lead?: string
-  /** `cta_click.location` — tells the landing and /investors clicks apart. */
-  location?: string
-}
-
-export function PricingStrip({
-  heading = LANDING_PRICING_STRIP.heading,
-  lead = LANDING_PRICING_STRIP.lead,
-  location = 'pricing-strip',
-}: PricingStripProps) {
-  const headingId = `${location}-heading`
+export function PricingStrip() {
   return (
-    <section className="landing-pricing not-prose" aria-labelledby={headingId}>
-      <h2 id={headingId} className="landing-section-title">
-        {heading}
+    <section className="landing-pricing not-prose" aria-labelledby="landing-pricing-heading">
+      <h2 id="landing-pricing-heading" className="landing-section-title">
+        {LANDING_PRICING_STRIP.heading}
       </h2>
-      <p className="landing-section-lead">{lead}</p>
+      <p className="landing-section-lead">{LANDING_PRICING_STRIP.lead}</p>
       <ul className="landing-pricing__tiers">
         {tiers.map((tier) => (
           <li key={tier.id} className="landing-pricing__tier">
@@ -44,7 +31,7 @@ export function PricingStrip({
         className="landing-hero-cta landing-hero-cta--secondary"
         href={LANDING_PRICING_STRIP.href}
         data-mushi-cta={LANDING_PRICING_STRIP.ctaId}
-        data-mushi-location={location}
+        data-mushi-location="pricing-strip"
       >
         {LANDING_PRICING_STRIP.cta}
       </Link>

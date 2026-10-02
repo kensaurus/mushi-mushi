@@ -95,8 +95,9 @@ const PUBLIC_PATHS = [
   'apps/docs/content/legal/terms.mdx',
   'apps/docs/content/security/index.mdx',
   'apps/docs/components/SiteFooter.tsx',
-  // GTM investors + landing feature selling (2026-10-02).
-  'apps/docs/content/investors.mdx',
+  // GTM landing feature selling + open metrics (2026-10-02).
+  'apps/docs/content/open.mdx',
+  'apps/docs/components/OpenMetrics.tsx',
   'apps/docs/components/landing/RealDiagnosisCard.tsx',
   'apps/docs/components/landing/MediatorMap.tsx',
   'apps/docs/components/landing/PricingStrip.tsx',
