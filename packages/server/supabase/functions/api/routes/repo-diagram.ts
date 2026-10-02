@@ -48,6 +48,7 @@ import {
 } from '../../_shared/repo-digest.ts'
 import {
   buildDiagramUserPrompt,
+  decidePublish,
   DIAGRAM_SYSTEM_PROMPT,
   fetchRepoVisibility,
   isValidRepoSlug,
@@ -430,21 +431,21 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
 
     const payload = publicDiagramPayload({ ...row, repo_owner: vis.owner, repo_name: vis.repo })
     const hash = await publicPayloadHash(payload)
-    if (hash !== body.payload_hash) {
-      return c.json({ ok: false, error: { code: 'STALE_PREVIEW', message: 'The diagram changed since you previewed it. Review it again before publishing.' } }, 409)
-    }
-    if (vis.private && body.confirm_private !== true) {
-      return c.json({ ok: false, error: { code: 'CONSENT_REQUIRED', message: 'This repo is private. Confirm the preview to publish its diagram.' } }, 409)
-    }
-
     const { data: taken } = await db
       .from('public_repo_diagrams')
       .select('project_id')
       .eq('repo_owner', vis.owner.toLowerCase())
       .eq('repo_name', vis.repo.toLowerCase())
       .maybeSingle()
-    if (taken && taken.project_id !== projectId) {
-      return c.json({ ok: false, error: { code: 'ALREADY_PUBLISHED', message: 'Another project already publishes a diagram for this repo.' } }, 409)
+    const decision = decidePublish({
+      previewedHash: body.payload_hash,
+      currentHash: hash,
+      repoPrivate: vis.private,
+      confirmPrivate: body.confirm_private === true,
+      publishedByOtherProject: !!taken && taken.project_id !== projectId,
+    })
+    if (!decision.ok) {
+      return c.json({ ok: false, error: { code: decision.code, message: decision.message } }, decision.status)
     }
 
     const { error } = await db.from('public_repo_diagrams').upsert(

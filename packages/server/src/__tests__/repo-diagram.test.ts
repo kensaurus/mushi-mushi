@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildDiagramUserPrompt,
+  decidePublish,
   fetchRepoVisibility,
   isValidRepoSlug,
   layoutDiagram,
@@ -145,6 +146,26 @@ describe('publicDiagramPayload', () => {
     expect(h1).toMatch(/^[0-9a-f]{64}$/)
     expect(h1).not.toBe(h2)
     expect(await publicPayloadHash(publicDiagramPayload(row))).toBe(h1)
+  })
+})
+
+describe('decidePublish', () => {
+  const base = { previewedHash: 'h1', currentHash: 'h1', repoPrivate: false, confirmPrivate: false, publishedByOtherProject: false }
+  it('publishes a public repo whose preview is current', () => {
+    expect(decidePublish(base)).toEqual({ ok: true })
+  })
+  it('refuses when the diagram changed after the preview', () => {
+    expect(decidePublish({ ...base, currentHash: 'h2' })).toMatchObject({ ok: false, status: 409, code: 'STALE_PREVIEW' })
+  })
+  it('refuses a private repo without explicit consent, and allows it with consent', () => {
+    expect(decidePublish({ ...base, repoPrivate: true })).toMatchObject({ ok: false, code: 'CONSENT_REQUIRED' })
+    expect(decidePublish({ ...base, repoPrivate: true, confirmPrivate: true })).toEqual({ ok: true })
+  })
+  it('checks the preview before consent, so consent never covers an unseen diagram', () => {
+    expect(decidePublish({ ...base, currentHash: 'h2', repoPrivate: true, confirmPrivate: true })).toMatchObject({ code: 'STALE_PREVIEW' })
+  })
+  it('keeps one public page per repo', () => {
+    expect(decidePublish({ ...base, publishedByOtherProject: true })).toMatchObject({ ok: false, code: 'ALREADY_PUBLISHED' })
   })
 })
 

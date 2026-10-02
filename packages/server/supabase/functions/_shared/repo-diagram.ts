@@ -306,6 +306,34 @@ export function publicPayloadHash(payload: PublicDiagramPayload): Promise<string
   return sha256HexOf(JSON.stringify(payload))
 }
 
+export type PublishDecision =
+  | { ok: true }
+  | { ok: false; status: 409; code: 'STALE_PREVIEW' | 'CONSENT_REQUIRED' | 'ALREADY_PUBLISHED'; message: string }
+
+/**
+ * Whether a publish request may go ahead. Consent is bound to the exact
+ * payload the owner previewed (its hash), a private repo needs an explicit
+ * confirmation, and one repo has at most one public page.
+ */
+export function decidePublish(input: {
+  previewedHash: string
+  currentHash: string
+  repoPrivate: boolean
+  confirmPrivate: boolean
+  publishedByOtherProject: boolean
+}): PublishDecision {
+  if (input.previewedHash !== input.currentHash) {
+    return { ok: false, status: 409, code: 'STALE_PREVIEW', message: 'The diagram changed since you previewed it. Review it again before publishing.' }
+  }
+  if (input.repoPrivate && !input.confirmPrivate) {
+    return { ok: false, status: 409, code: 'CONSENT_REQUIRED', message: 'This repo is private. Confirm the preview to publish its diagram.' }
+  }
+  if (input.publishedByOtherProject) {
+    return { ok: false, status: 409, code: 'ALREADY_PUBLISHED', message: 'Another project already publishes a diagram for this repo.' }
+  }
+  return { ok: true }
+}
+
 const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/
 const REPO_RE = /^[A-Za-z0-9._-]{1,100}$/
 
