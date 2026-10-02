@@ -379,7 +379,7 @@ export function envDrift(input: {
 
 // ── schema ───────────────────────────────────────────────────────────────────
 
-/** The migration version: the leading digits of a filename (`20261002160000_x.sql` → `20261002160000`). */
+/** The migration version: the leading digits of a filename (`20261002170000_x.sql` → `20261002170000`). */
 export function migrationVersion(nameOrVersion: string): string | null {
   const base = nameOrVersion.split('/').pop() ?? nameOrVersion
   const m = /^(\d{3,})/.exec(base.trim())

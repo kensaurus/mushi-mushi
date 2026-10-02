@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261002160300_portfolio_resources
+-- 20261002170300_portfolio_resources
 --
 -- Plan 019 §5.1 migration 6 (Phase P2, gate struck by ADR 0017).
 -- ADDITIVE: apply BEFORE deploying the api and recipe-collector functions.

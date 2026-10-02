@@ -248,7 +248,7 @@ const REPORT_STATUSES = [
 const REPORT_CATEGORIES = ['bug', 'slow', 'visual', 'confusing', 'other'] as const;
 const REPORT_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 
-/** gate_runs.gate CHECK constraint (migrations 20260612061520, 20261002130100_recipe_gate_types, 20261002160000_radar_gates_and_digest). */
+/** gate_runs.gate CHECK constraint (migrations 20260612061520, 20261002130100_recipe_gate_types, 20261002170000_radar_gates_and_digest). */
 const GATE_IDS = [
   'dead_handler',
   'mock_leak',
