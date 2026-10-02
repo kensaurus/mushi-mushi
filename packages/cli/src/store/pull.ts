@@ -55,7 +55,9 @@ export async function pullAppStore(fetchImpl: Fetch, appId: string, key: { keyId
   const base = 'https://api.appstoreconnect.apple.com/v1'
   const out: Record<string, string> = {}
   const infos = await json(fetchImpl, `${base}/apps/${appId}/appInfos`, auth)
-  const info = (infos.data ?? []).find((i: any) => i.attributes?.appStoreState === 'READY_FOR_SALE') ?? infos.data?.[0]
+  // `state` / `appVersionState` replaced the deprecated `appStoreState`; accept either.
+  const isLive = (a: any) => a?.state === 'READY_FOR_DISTRIBUTION' || a?.appStoreState === 'READY_FOR_SALE'
+  const info = (infos.data ?? []).find((i: any) => isLive(i.attributes)) ?? infos.data?.[0]
   if (info) {
     const locs = await json(fetchImpl, `${base}/appInfos/${info.id}/appInfoLocalizations`, auth)
     for (const l of locs.data ?? []) {
@@ -63,7 +65,7 @@ export async function pullAppStore(fetchImpl: Fetch, appId: string, key: { keyId
       for (const k of ['name', 'subtitle', 'privacyPolicyUrl'] as const) if (typeof a[k] === 'string') out[`${a.locale}/${IOS_FILES[k]}`] = a[k]
     }
   }
-  const versions = await json(fetchImpl, `${base}/apps/${appId}/appStoreVersions?filter[appStoreState]=READY_FOR_SALE&limit=1`, auth)
+  const versions = await json(fetchImpl, `${base}/apps/${appId}/appStoreVersions?filter[appVersionState]=READY_FOR_DISTRIBUTION&limit=1`, auth)
   const version = versions.data?.[0]
   if (version) {
     const locs = await json(fetchImpl, `${base}/appStoreVersions/${version.id}/appStoreVersionLocalizations`, auth)

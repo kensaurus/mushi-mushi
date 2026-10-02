@@ -98,7 +98,7 @@ function recorded(url: string, init?: RequestInit): Response {
     return json(200, { observedAt: NOW.toISOString(), elements: { deploy: { summary: { version: '3.1.0' } } }, resources: [], facts: { findings: [] } })
   }
   if (url.includes('api.appstoreconnect.apple.com')) {
-    if (url.includes('/appStoreVersions')) return json(200, { data: [{ attributes: { versionString: '1.102.0', appStoreState: 'READY_FOR_SALE', createdDate: '2026-09-20T00:00:00Z' } }] })
+    if (url.includes('/appStoreVersions')) return json(200, { data: [{ attributes: { versionString: '1.102.0', appVersionState: 'READY_FOR_DISTRIBUTION', createdDate: '2026-09-20T00:00:00Z' } }] })
     if (url.includes('/builds')) return json(200, { data: [{ attributes: { version: '412', processingState: 'VALID', uploadedDate: '2026-09-19T00:00:00Z' } }] })
     return json(200, { data: [] })
   }

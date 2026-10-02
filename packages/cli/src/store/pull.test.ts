@@ -54,9 +54,9 @@ describe('pullAppStore', () => {
     const calls: string[] = []
     const fetchImpl = async (url: string) => {
       calls.push(url)
-      if (url.endsWith('/apps/123/appInfos')) return ok({ data: [{ id: 'info-1', attributes: { appStoreState: 'READY_FOR_SALE' } }] })
+      if (url.endsWith('/apps/123/appInfos')) return ok({ data: [{ id: 'info-1', attributes: { state: 'READY_FOR_DISTRIBUTION' } }] })
       if (url.includes('/appInfos/info-1/appInfoLocalizations')) return ok({ data: [{ attributes: { locale: 'en-US', name: 'Hand', subtitle: 'Take photos', privacyPolicyUrl: 'https://x.test/p' } }] })
-      if (url.includes('/apps/123/appStoreVersions')) return ok({ data: [{ id: 'v1' }] })
+      if (url.includes('/apps/123/appStoreVersions?filter[appVersionState]=READY_FOR_DISTRIBUTION')) return ok({ data: [{ id: 'v1' }] })
       if (url.includes('/appStoreVersions/v1/appStoreVersionLocalizations')) return ok({ data: [{ attributes: { locale: 'en-US', description: 'Long text', keywords: 'photo,help', promotionalText: null, whatsNew: 'Fixes' } }] })
       return ok({}, 404)
     }
