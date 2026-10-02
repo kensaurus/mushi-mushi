@@ -83,7 +83,14 @@
     "description": "Import existing Sentry issues into the report queue.",
     "method": "POST",
     "path": "/v1/admin/projects/{projectId}/sentry/import",
-    "body": { "issueIds": "{issueIds}", "query": "{query}", "limit": "{limit}" },
+    "body": {
+      "issueIds": "{issueIds}",
+      "query": "{query}",
+      "limit": "{limit}",
+      "sinceDays": "{sinceDays}",
+      "cursor": "{cursor}",
+      "sentryProject": "{sentryProject}"
+    },
     "hints": { "destructive": false, "idempotent": true }
   },
   "reopen_report": {

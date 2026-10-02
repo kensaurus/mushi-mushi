@@ -469,8 +469,9 @@ export const TOOL_CATALOG: ToolSpec[] = [
     title: 'Import Sentry issues',
     description:
       "Pull existing Sentry issues into Mushi's report queue: by issueIds (numeric ids or short ids like WEB-12, at most 10) or by a Sentry search query (default is:unresolved) within the project's configured Sentry project, limit 1-10. " +
+      'For a backlog, add sinceDays (1-90) and call again with cursor set to the returned nextCursor until it is null; sentryProject picks another of the project\'s Sentry projects. ' +
       'Each issue goes through the same path as a Sentry webhook delivery: deduped per issue, linked, classified. An issue already linked to a report answers linked and is never reopened. ' +
-      "Returns { items: [{ input, issueId, shortId, outcome, reportId, error? }], created, linked, failed, indexing }. Write; idempotent; spends classification budget per new report. " +
+      "Returns { items: [{ input, issueId, shortId, outcome, reportId, error? }], created, linked, failed, indexing, sentryProject, sentryProjects, nextCursor }. Write; idempotent; spends classification budget per new report. " +
       'Needs the Sentry org slug, project slug and an auth token (event:read, project:read) in Integrations → Sentry. Use for issues that existed before the webhook was wired; then call triage_issue on a created report.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
