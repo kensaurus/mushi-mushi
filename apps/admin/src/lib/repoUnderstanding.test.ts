@@ -10,6 +10,7 @@ import {
   digestCopiedSummary,
   digestPath,
   githubPathUrl,
+  publishToast,
   type DiagramGraph,
   type RepoDigestResponse,
 } from './repoUnderstanding'
@@ -102,6 +103,14 @@ describe('diagramToFlow', () => {
     const { nodes, edges } = diagramToFlow(graph, 'ui')
     expect(nodes.find((n) => n.id === 'ui')?.data.selected).toBe(true)
     expect(edges[0].animated).toBe(true)
+  })
+})
+
+describe('publishToast', () => {
+  it('says plainly whether search engines can see the page', () => {
+    expect(publishToast('written').tone).toBe('success')
+    expect(publishToast('not_configured')).toMatchObject({ tone: 'success', title: 'Public page is live' })
+    expect(publishToast('failed').tone).toBe('warn')
   })
 })
 

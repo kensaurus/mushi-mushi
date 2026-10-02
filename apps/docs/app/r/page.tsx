@@ -1,13 +1,12 @@
 /**
- * /r — public architecture diagram of one repo, published by its owner from
- * the Mushi console (Plan 020 §10.3.3).
+ * /r — the interactive public architecture diagram (docs/operators/public-diagram-pages.md).
  *
- * The docs build is a static export, so this is one shell page: the client
- * reads the repo from `/r/<owner>/<repo>` (CloudFront rewrites
- * kensaur.us/mushi-mushi/r/* to this shell and keeps the URL — see
- * scripts/cloudfront-mushi-spa-router.js) or from `?repo=<owner>/<repo>`,
- * and fetches the published diagram from the public API. Kept noindex: the
- * shell has no per-repo content for a crawler until the page renders.
+ * The indexable page for a repo lives at kensaur.us/mushi-mushi/r/<owner>/<repo>:
+ * a static HTML file the api writes on publish. This docs page is the
+ * interactive view it links to (`/mushi-mushi/docs/r?repo=<owner>/<repo>`):
+ * click a part to read about it, or report a wrong diagram privately. The same
+ * client also renders inside the docs 404 page when no static file exists yet.
+ * Kept noindex: the static page is the one search engines should find.
  */
 
 import type { Metadata } from 'next'

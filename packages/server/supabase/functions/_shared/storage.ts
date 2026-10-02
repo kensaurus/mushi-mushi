@@ -646,7 +646,7 @@ class GcsAdapter implements StorageAdapter {
 // runtime (each AWS SDK package is ~300KB+ at cold start).
 // ──────────────────────────────────────────────────────────────────────────
 
-async function sigV4(
+export async function sigV4(
   opts: { region: string; accessKey: string; secretKey: string },
   method: string,
   url: string,

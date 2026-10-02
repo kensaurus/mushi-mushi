@@ -77,6 +77,15 @@ export function parseRepoFromLocation(pathname: string, search: string): { owner
   return { owner, repo }
 }
 
+/**
+ * Whether a missing-page path is a public diagram URL (`…/r/<owner>/<repo>`),
+ * so the docs 404 renders the diagram instead. Path form only: `?repo=` on an
+ * arbitrary missing page is not a diagram URL.
+ */
+export function isDiagramPath(pathname: string): boolean {
+  return /\/r\/[^/]+\/[^/]+\/?$/.test(pathname) && parseRepoFromLocation(pathname, '') !== null
+}
+
 /** Canvas size that holds every group, with a margin. */
 export function canvasSize(d: Pick<PublicDiagram, 'groups' | 'nodes'>): { width: number; height: number } {
   let w = 0

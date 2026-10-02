@@ -8,6 +8,7 @@ import {
   canvasSize,
   diagramSignupHref,
   edgePath,
+  isDiagramPath,
   NODE_H,
   NODE_W,
   parseRepoFromLocation,
@@ -30,6 +31,19 @@ describe('parseRepoFromLocation', () => {
     expect(parseRepoFromLocation('/mushi-mushi/r/acme/..', '')).toBeNull()
     expect(parseRepoFromLocation('/mushi-mushi/r/-bad/x', '')).toBeNull()
     expect(parseRepoFromLocation('/mushi-mushi/r/a%2Fb/x', '')).toBeNull()
+  })
+})
+
+describe('isDiagramPath', () => {
+  it('recognises published-diagram URLs the 404 page should render', () => {
+    expect(isDiagramPath('/mushi-mushi/r/acme/shop')).toBe(true)
+    expect(isDiagramPath('/mushi-mushi/r/vercel/next.js/')).toBe(true)
+  })
+  it('leaves every other missing page as a 404', () => {
+    expect(isDiagramPath('/mushi-mushi/docs/quickstart/nope')).toBe(false)
+    expect(isDiagramPath('/mushi-mushi/r/acme')).toBe(false)
+    expect(isDiagramPath('/mushi-mushi/r/acme/shop/extra')).toBe(false)
+    expect(isDiagramPath('/mushi-mushi/r/-bad/x')).toBe(false)
   })
 })
 

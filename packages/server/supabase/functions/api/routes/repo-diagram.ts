@@ -69,6 +69,8 @@ import {
   type OverlayReport,
 } from '../../_shared/diagram-overlay.ts'
 import { reportFramePaths } from '../../_shared/report-seeds.ts'
+import { deletePublicPage, readPublicPageStoreConfig, writePublicPage, type StaticPageStatus } from '../../_shared/public-page-store.ts'
+import { diagramBadgeMarkdown, publicPageUrls } from '../../_shared/public-diagram-page.ts'
 import { matchFramePathsToTree } from '../../_shared/sentry-frames.ts'
 import { claimIpRateLimit, extractClientIp } from './cli-auth.ts'
 
@@ -125,6 +127,10 @@ const OVERLAY_MAX_REPORTS = 300
 const OVERLAY_MAX_FINDINGS = 1000
 const OVERLAY_FINDINGS_DAYS = 30
 
+function storeConfig() {
+  return readPublicPageStoreConfig((name) => Deno.env.get(name))
+}
+
 export function publicDiagramUrl(owner: string, repo: string): string {
   return `${PUBLIC_PAGE_BASE}/${owner}/${repo}`
 }
@@ -180,6 +186,8 @@ async function publicationView(pub: Awaited<ReturnType<typeof loadPublication>>,
   return {
     published: true as const,
     url: publicDiagramUrl(pub.payload.owner, pub.payload.repo),
+    markdown_url: publicPageUrls(pub.payload.owner, pub.payload.repo, pub.commit_sha).markdown,
+    badge_markdown: diagramBadgeMarkdown(pub.payload.owner, pub.payload.repo),
     commit_sha: pub.commit_sha,
     repo_private: pub.repo_private,
     published_at: pub.published_at,
@@ -593,6 +601,17 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     )
     if (error) return dbError(c, error)
 
+    // The crawlable static page + `.md` twin. A failure does not undo the
+    // publication (the docs 404 fallback still renders it, unindexed); the
+    // console says so and the owner can publish again to retry.
+    let staticPage: StaticPageStatus
+    try {
+      staticPage = await writePublicPage(storeConfig(), payload)
+    } catch (err) {
+      routeLog.error('public page write failed', { projectId, error: String(err) })
+      staticPage = 'failed'
+    }
+
     await logAudit(db, projectId, userId, 'settings.updated', 'public_diagram', row.id, {
       action: 'publish',
       commit_sha: row.commit_sha,
@@ -604,7 +623,15 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
       surface: 'server',
       properties: { project_id: projectId, repo_private: vis.private },
     })
-    return c.json({ ok: true, data: { url: publicDiagramUrl(vis.owner, vis.repo), commit_sha: row.commit_sha } })
+    return c.json({
+      ok: true,
+      data: {
+        url: publicDiagramUrl(vis.owner, vis.repo),
+        commit_sha: row.commit_sha,
+        static_page: staticPage,
+        badge_markdown: diagramBadgeMarkdown(vis.owner, vis.repo),
+      },
+    })
   })
 
   app.delete('/v1/admin/projects/:id/codebase/diagram/publish', jwtAuth, async (c) => {
@@ -615,10 +642,22 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
       return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Only a project owner or admin can unpublish' } }, 403)
     }
+    // Remove the static page before the row: if S3 fails, the row still
+    // names the page, so the owner can retry instead of leaving it live.
+    const pub = await loadPublication(db, projectId)
+    let staticPage: StaticPageStatus = 'not_configured'
+    if (pub) {
+      try {
+        staticPage = await deletePublicPage(storeConfig(), pub.payload.owner, pub.payload.repo)
+      } catch (err) {
+        routeLog.error('public page delete failed', { projectId, error: String(err) })
+        return c.json({ ok: false, error: { code: 'UNPUBLISH_FAILED', message: 'Could not remove the public page. Try again in a minute.' } }, 503)
+      }
+    }
     const { error } = await db.from('public_repo_diagrams').delete().eq('project_id', projectId)
     if (error) return dbError(c, error)
     await logAudit(db, projectId, userId, 'settings.updated', 'public_diagram', undefined, { action: 'unpublish' }).catch(() => {})
-    return c.json({ ok: true, data: { published: false } })
+    return c.json({ ok: true, data: { published: false, static_page: staticPage } })
   })
 
   app.get('/v1/public/diagrams/:owner/:repo', async (c) => {

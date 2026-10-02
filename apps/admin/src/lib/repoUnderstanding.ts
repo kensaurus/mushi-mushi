@@ -118,6 +118,10 @@ export type DiagramPublication =
   | {
       published: true
       url: string
+      /** The page's Markdown twin, for agents and answer engines. */
+      markdown_url?: string
+      /** A README badge linking to the page. */
+      badge_markdown?: string
       commit_sha: string
       repo_private: boolean
       published_at: string
@@ -157,6 +161,28 @@ export interface DiagramOverlayResponse {
   /** False when GitHub could not be read, so stack frames were not placed. */
   frames_matched: boolean
   considered: { reports: number; findings: number; findings_days: number }
+}
+
+/** Whether the crawlable static page was written (or removed) alongside the publish. */
+export type StaticPageStatus = 'written' | 'deleted' | 'not_configured' | 'failed'
+
+/** Toast after a publish: plain English about the search-friendly page. */
+export function publishToast(staticPage: StaticPageStatus | undefined): { tone: 'success' | 'warn'; title: string; description: string } {
+  if (staticPage === 'failed') {
+    return {
+      tone: 'warn',
+      title: 'Public page is live, but not yet for search engines',
+      description: 'The search-friendly version could not be saved. Publish again to retry.',
+    }
+  }
+  if (staticPage === 'not_configured') {
+    return {
+      tone: 'success',
+      title: 'Public page is live',
+      description: 'Search engines will see it once the page store is set up (docs/operators/public-diagram-pages.md).',
+    }
+  }
+  return { tone: 'success', title: 'Public page is live', description: 'Search engines can find it, and a Markdown copy is published too.' }
 }
 
 /** Must match DIAGRAM_NODE_W / _H in _shared/repo-diagram.ts. */
