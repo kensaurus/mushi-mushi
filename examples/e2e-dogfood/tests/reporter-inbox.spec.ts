@@ -67,8 +67,6 @@ async function openToDetailsStep(page: Page) {
   await shadowWaitFor(page, '.mushi-panel.open')
   await shadowWaitFor(page, '[data-category="bug"]')
   await shadowClick(page, '[data-category="bug"]')
-  await shadowWaitFor(page, '.mushi-intent-btn')
-  await shadowClick(page, '.mushi-intent-btn')
   await shadowWaitFor(page, '.mushi-textarea', 8000)
 }
 

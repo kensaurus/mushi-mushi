@@ -1,0 +1,13 @@
+---
+"@mushi-mushi/web": minor
+---
+
+The widget is now one screen, looks like part of your app, and keeps reporters in the loop (Plan 018, Phase 1).
+
+- **One-screen report.** The 3-step category → intent → details flow is gone. Reporters type first, optionally pick a type chip (Bug, Slow, Looks wrong, Confusing, Idea, plus your own categories under "More…"), optionally narrow it with a sub-chip, attach a screenshot or point at an element, and press Send. `minDescriptionLength` now defaults to 8 (halved for Japanese, Chinese and Korean); an element the reporter picked, or a screenshot they asked for, also enables Send. With no chip picked the report is sent as `category: 'other'` and the classifier assigns the type.
+- **Looks like your app.** The panel uses your page's font and system light/dark colours. The accent comes from `widget.accent`, then your `--mushi-accent`, `accent-color` or `<meta name="theme-color">` (a page colour that would vanish against the panel is ignored). Every colour is a `--mushi-*` CSS token you can set on `:root` or `#mushi-mushi-widget`, and CSS wins over JS config. The banner now defaults to the `subtle` variant; `brand` and `neon` are opt-in.
+- **Your reports.** A header pill opens the list with an unread badge. Rows show a plain-English status ("Looking into it", "Waiting on you", "Fixed in v1.4"), the reporter's own type and page, and the news: the developer's words or "Update to v1.4. Does it work for you now?". Internal statuses, categories and severities are never shown. The detail view shows the report, a timeline, developer replies, "Yes / Not yet" on fixes, and a composer whose replies appear at once ("Sending…", then sent, or "Failed · Retry"). Opening a report marks its updates read.
+- **Toast on the next visit.** When a device's reports have unread updates, one toast appears near the launcher ("The developer replied to your report"), at most once per session and per 24 hours, wherever the launcher is allowed. Turn it off with `notifications: { toast: false }`.
+- **Less polling.** The reporter list is checked every 5 minutes while the page is visible (was 60 s), plus when the tab becomes visible, and never from a device that has not filed a report.
+- **Smoother and more accessible.** The panel is built once and patched region by region, so a poll or a config update no longer rebuilds what the reporter is typing. Focus moves into the dialog, Tab stays inside, Escape closes (or goes back from a report), focus returns to the launcher, chips are a roving radio group, and "Sent" / reply status / errors are announced. All motion respects `prefers-reduced-motion`.
+- `MushiLocale` gains a `panel` section; keys used only by the retired steps are now optional and deprecated.

@@ -1417,6 +1417,27 @@ describe('MushiWidget — reporter loop v2 (Phase 1)', () => {
     w.destroy();
   });
 
+  it('renders server text as text: titles, previews and comments never become markup', async () => {
+    const evil = '<img src=x onerror="window.__pwned=1">"><b>x</b>';
+    const w = new MushiWidget({}, {
+      ...noopCallbacks,
+      onReporterReportsRequest: () => Promise.resolve([{ id: 'r"x', status: 'classified', title: evil, page: evil, last_event_preview: evil, unread_count: 1, created_at: '2026-10-01T00:00:00Z' }] as never),
+      onReporterCommentsRequest: () => Promise.resolve([{ id: 1, author_kind: 'admin', author_name: evil, body: evil, created_at: '2026-10-01T01:00:00Z' }]),
+    });
+    w.mount();
+    w.open();
+    q<HTMLButtonElement>(w, '[data-action="reports"]')!.click();
+    await vi.waitFor(() => expect(qa(w, '.mushi-report-row').length).toBe(1));
+    expect(q(w, '.mushi-report-list img, .mushi-report-list b')).toBeNull();
+    expect(q(w, '.mushi-row-title')!.textContent).toBe(evil);
+    qa(w, '.mushi-report-row')[0]!.click();
+    await vi.waitFor(() => expect(q(w, '.mushi-bubble.dev')).not.toBeNull());
+    expect(q(w, '[data-region] img:not(.mushi-header-host-icon):not(.mushi-card-thumb), [data-region] b')).toBeNull();
+    expect(q(w, '.mushi-bubble.dev p')!.textContent).toBe(evil);
+    expect((window as unknown as { __pwned?: number }).__pwned).toBeUndefined();
+    w.destroy();
+  });
+
   it('shows the empty state, and a failed list load offers Retry', async () => {
     const list = vi.fn().mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('HTTP 503')).mockResolvedValueOnce([]);
     const w = new MushiWidget({}, { ...noopCallbacks, onReporterReportsRequest: list });
