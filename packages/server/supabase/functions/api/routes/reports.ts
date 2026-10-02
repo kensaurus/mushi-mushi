@@ -571,7 +571,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // Build trace_id filter for backend_spans: match on sentry_trace_id or W3C traceparent trace-id.
     const traceIds = Array.from(new Set([traceparentTraceId, sentryTraceId].filter((t): t is string => Boolean(t))))
 
-    const [invocationsRes, fixesRes, judgeRes, inventoryAnchorRes, endUserRes, childrenRes, testerSubRes, backendSpansRes, anomaliesRes] = await Promise.all([
+    const [invocationsRes, fixesRes, judgeRes, inventoryAnchorRes, endUserRes, childrenRes, testerSubRes, backendSpansRes, anomaliesRes, projectRes] = await Promise.all([
       db
         .from('llm_invocations')
         .select(
@@ -583,7 +583,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       db
         .from('fix_attempts')
         .select(
-          'id, status, agent, pr_url, pr_number, branch, commit_sha, files_changed, lines_changed, review_passed, check_run_status, check_run_conclusion, pr_state, llm_model, error, started_at, completed_at, created_at, langfuse_trace_id, inventory_action_node_id, spec_validation_warnings',
+          'id, status, agent, pr_url, pr_number, branch, commit_sha, files_changed, lines_changed, review_passed, check_run_status, check_run_conclusion, pr_state, merged_at, llm_model, error, started_at, completed_at, created_at, langfuse_trace_id, inventory_action_node_id, spec_validation_warnings',
         )
         .eq('report_id', reportId)
         .order('created_at', { ascending: false })
@@ -654,6 +654,8 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         .eq('auto_report_id', reportId)
         .order('ts', { ascending: false })
         .limit(5),
+      // The header's Project chip shows the name, not an 8-char uuid prefix.
+      db.from('projects').select('name').eq('id', data.project_id as string).maybeSingle(),
     ]);
 
     const testerSubRow = testerSubRes.data as {
@@ -715,6 +717,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         })(),
         llm_invocations: invocationsRes.data ?? [],
         fix_attempts: fixesRes.data ?? [],
+        project_name: (projectRes.data as { name?: string | null } | null)?.name ?? null,
         judge_eval: judgeRes.data ?? null,
         inventory_action: inventoryAnchorRes.data ?? null,
         reporter_identity: endUserRes.data ?? null,
