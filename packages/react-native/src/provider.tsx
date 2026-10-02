@@ -59,7 +59,14 @@ import {
   type MushiPageContext,
   type MushiAssistantReply,
   type MushiPropertyValue,
+  type MushiApiResponse,
 } from '@mushi-mushi/core'
+import {
+  reporterChannels,
+  type MushiReporterNotificationPrefs,
+  type MushiReporterPrefsUpdate,
+  type MushiReporterUpdates,
+} from '@mushi-mushi/core/reporter-channels'
 import { setupConsoleCapture } from './capture/console-capture'
 import { setupNetworkCapture } from './capture/network-capture'
 import { getDeviceInfo } from './capture/device-info'
@@ -73,7 +80,7 @@ import { createRNEventTracker, type RNAnalyticsConfig, type RNEventTracker } fro
 import { createRNSessionTracker, type RNSessionTracker } from './analytics/session-tracker'
 import { MUSHI_SDK_PACKAGE, MUSHI_SDK_VERSION } from './version'
 import type { MushiRNTheme } from './theme'
-import { markReporterReportRead } from './reporter-thread'
+import { createReporterUpdateHub, markReporterReportRead } from './reporter-thread'
 
 export interface MushiRNConfig {
   projectId: string
@@ -225,6 +232,23 @@ export interface MushiRNInstance {
   loadMyThread(reportId: string): Promise<MushiReporterComment[] | null>
   /** Mark this device's unread notifications for a report as read. Resolves the number marked (0 on failure). */
   markReportRead(reportId: string): Promise<number>
+  /** Unread count and the newest unread updates on this device's reports (null on failure). */
+  getReporterUpdates(): Promise<MushiReporterUpdates | null>
+  /**
+   * Fires with the unread count and newest updates when you subscribe and
+   * each time the app comes back to the foreground, so the host can draw its
+   * own badge (a feedback band, a tab dot). Returns an unsubscribe function.
+   */
+  onReporterUpdate(cb: (updates: MushiReporterUpdates) => void): () => void
+  /** This reporter's email choices; the address comes back masked (null on failure). */
+  getNotificationPrefs(): Promise<MushiReporterNotificationPrefs | null>
+  /**
+   * Ask for email updates (`{ email }` sends a confirmation email first) or
+   * change channels. Only when the reporter asked — never pre-tick an opt-in.
+   * Resolves the server's answer, including `EMAIL_NOT_AVAILABLE` when this
+   * app does not offer email. (No native push on React Native.)
+   */
+  setNotificationPrefs(update: MushiReporterPrefsUpdate): Promise<MushiApiResponse<MushiReporterNotificationPrefs>>
   /** Post a reporter reply on a report thread. Returns the new comment or null on failure. */
   replyToReport(reportId: string, body: string): Promise<MushiReporterComment | null>
   /** Record a reporter feedback signal (e.g. `confirms`, `not_fixed`) on a report. Returns the outcome or null. */
@@ -811,6 +835,32 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
     config.trackSessions,
   ])
 
+  // Host badges (onReporterUpdate): refreshed on subscribe and each time the
+  // app returns to the foreground; no listener means no request.
+  const reporterUpdatesRef = useRef(
+    createReporterUpdateHub(async () => {
+      const client = apiClientRef.current
+      if (!client) return null
+      await reporterTokenReadyRef.current
+      const res = await reporterChannels(client).getUpdates(reporterTokenRef.current)
+      return res.ok ? res.data ?? null : null
+    }),
+  )
+
+  useEffect(() => {
+    let sub: NativeEventSubscription | undefined
+    try {
+      if (typeof AppState?.addEventListener === 'function') {
+        sub = AppState.addEventListener('change', (state) => {
+          if (state === 'active' && reporterUpdatesRef.current.listenerCount() > 0) void reporterUpdatesRef.current.emit()
+        })
+      }
+    } catch {
+      /* AppState unavailable (tests, web) */
+    }
+    return () => sub?.remove()
+  }, [])
+
   const instance: MushiRNInstance = useMemo(
     () => ({
       open,
@@ -915,13 +965,28 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         }
       },
       async markReportRead(reportId: string) {
-        // Phase 0 path: the existing notification routes, matched on
-        // payload.reportId (both the comment trigger and createNotification
-        // write it). Best effort — a failure only leaves the badge as it was.
+        // One call to the v2 mark-read route (legacy per-notification routes
+        // on an older server). Best effort — a failure only leaves the badge
+        // as it was.
         const client = apiClientRef.current
         if (!client) return 0
         await reporterTokenReadyRef.current
         return markReporterReportRead(client, reporterTokenRef.current, reportId)
+      },
+      getReporterUpdates: () => reporterUpdatesRef.current.emit(),
+      onReporterUpdate: (cb) => reporterUpdatesRef.current.subscribe(cb),
+      async getNotificationPrefs() {
+        const client = apiClientRef.current
+        if (!client) return null
+        await reporterTokenReadyRef.current
+        const res = await reporterChannels(client).getPrefs(reporterTokenRef.current)
+        return res.ok ? res.data ?? null : null
+      },
+      async setNotificationPrefs(update) {
+        const client = apiClientRef.current
+        if (!client) return { ok: false, error: { code: 'NOT_INITIALIZED', message: 'Mushi is not ready yet' } }
+        await reporterTokenReadyRef.current
+        return reporterChannels(client).setPrefs(reporterTokenRef.current, update)
       },
       async replyToReport(reportId: string, body: string) {
         const client = apiClientRef.current
