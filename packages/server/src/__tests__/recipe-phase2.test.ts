@@ -169,6 +169,21 @@ describe('collectOrgPortfolio', () => {
   })
 })
 
+describe('collectOrgPortfolio cross-promotion', () => {
+  it('opens each cross-promo link through the probe and records a 404 as broken', async () => {
+    const db = seed({
+      app_recipe_snapshots: [
+        { project_id: P1, is_current: true, manifest: { version: 1, links: { crossPromo: [{ url: 'https://apps.apple.com/app/id9?ct=glot', toProject: 'yen-yen' }] } } },
+        { project_id: P2, is_current: true, manifest: { version: 1 } },
+      ],
+    })
+    const probe = vi.fn(async (url: string) => ({ status: url.includes('apps.apple.com') ? 404 : 200, text: '' }))
+    await phase2.collectOrgPortfolio(db as never, ORG, { fetch: vi.fn(), now: () => NOW, probe })
+    expect(probe).toHaveBeenCalledWith('https://apps.apple.com/app/id9?ct=glot')
+    expect(db.table('portfolio_findings').find((f) => f.rule_id === 'cross_promo_link_broken')).toMatchObject({ status: 'open', severity: 'error', project_ids: [P1, P2].sort() })
+  })
+})
+
 describe('authInputsFrom', () => {
   it('says unknown, not divergent, when no repo in a shared-auth group declares its settings', () => {
     const auth = { provider: 'supabase', ref: 'abcdefghijklmnopqrst' }

@@ -23,10 +23,13 @@ import {
   billingConsistency,
   ciCostConcentration,
   completenessChecklist,
+  crossPromoChecks,
+  crossPromoLinksFrom,
   deriveResourceUses,
   evaluateDeepLinks,
   sharedChannels,
   type AuthConfigInput,
+  type CrossPromoProbe,
   type DeepLinkFiles,
   type PortfolioRuleFinding,
   type PortfolioRuleUnknown,
@@ -55,7 +58,7 @@ export interface Phase2Deps extends RuntimeDeps {
 export const livePhase2Deps: Phase2Deps = {
   fetch: (url, init) => fetch(url, init),
   now: () => new Date(),
-  probe: (url) => publicFetch(url, { accept: 'application/json' }),
+  probe: (url) => publicFetch(url, { accept: 'application/json, text/html;q=0.9' }),
 }
 
 export interface Phase2Summary {
@@ -359,8 +362,25 @@ export async function collectOrgPortfolio(db: Db, organizationId: string, deps: 
     findings.push(...deep.findings)
     unknown.push(...deep.unknown)
 
+    const portfolioProjects = rows.map((p) => ({ id: p.id, name: p.name ?? p.id.slice(0, 8), kind: p.kind, manifest: manifestOf.get(p.id) ?? null }))
+
     // Billing: apps that share credits must name the same Stripe account.
-    findings.push(...billingConsistency(rows.map((p) => ({ id: p.id, name: p.name ?? p.id.slice(0, 8), kind: p.kind, manifest: manifestOf.get(p.id) ?? null }))))
+    findings.push(...billingConsistency(portfolioProjects))
+
+    // Cross-promotion links: each must open (through the SSRF-guarded probe) and carry a campaign tag.
+    const promoLinks = crossPromoLinksFrom(portfolioProjects).slice(0, 40)
+    const promoProbes: Record<string, CrossPromoProbe> = {}
+    // At most 20 distinct URLs, fetched together (each probe has its own timeout); the rest stay unknown.
+    await Promise.all([...new Set(promoLinks.map((l) => l.url))].filter((u) => u.startsWith('https://')).slice(0, 20).map(async (url) => {
+      try {
+        promoProbes[url] = { status: (await deps.probe(url)).status }
+      } catch (err) {
+        promoProbes[url] = { status: null, error: String((err as Error)?.message ?? err).slice(0, 120) }
+      }
+    }))
+    const promo = crossPromoChecks(promoLinks, promoProbes, names)
+    findings.push(...promo.findings)
+    unknown.push(...promo.unknown)
 
     // Shared auth: settings declared in each repo's supabase/config.toml.
     const declaredOf = new Map(((ghRes.data ?? []) as Array<{ project_id: string; snapshot: { facts?: { supabaseAuth?: { path: string; settings: DeclaredAuthSettings | null } } } }>).map((g) => [g.project_id, g.snapshot?.facts?.supabaseAuth]))

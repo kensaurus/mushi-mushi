@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 205 pages, generated from llms.txt. */
+/** 206 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -851,6 +851,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["concepts", "runtime-config", "runtime", "config"],
     headings: ["Setup default", "When host init wins", "Console tuning without rebuild", "Widget draft persistence", "Troubleshooting", "Related"],
     excerpt: "How the Mushi SDK fetches widget and capture settings from the console at startup, how they merge with your init options, and when to turn it off.",
+  },
+  {
+    title: "One login and one purchase across your apps",
+    url: docUrl("/concepts/shared-login"),
+    route: "/concepts/shared-login",
+    markdown: "concepts/shared-login.md",
+    keywords: ["concepts", "shared-login", "shared", "login", "one", "purchase", "across", "apps"],
+    headings: ["Signing in once", "What Mushi checks", "Keeping a purchase in every app", "Sending users between your apps", "Comparing apps"],
+    excerpt: "How to let people sign in once and keep what they bought across several of your apps, and what Mushi checks so it keeps working.",
   },
   {
     title: "Where the report button lives",
