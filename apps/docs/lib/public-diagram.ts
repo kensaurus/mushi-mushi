@@ -6,7 +6,7 @@
  *          position (_shared/repo-diagram.ts); this page only draws.
  */
 
-export interface PublicDiagramGroup {
+interface PublicDiagramGroup {
   id: string
   label: string
   x: number
@@ -25,7 +25,7 @@ export interface PublicDiagramNode {
   y: number
 }
 
-export interface PublicDiagramEdge {
+interface PublicDiagramEdge {
   from: string
   to: string
   label: string

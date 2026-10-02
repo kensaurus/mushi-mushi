@@ -70,7 +70,7 @@ export function digestCopiedSummary(d: RepoDigestResponse): string {
   return line
 }
 
-export interface DiagramGroup {
+interface DiagramGroup {
   id: string
   label: string
   x: number
@@ -79,7 +79,7 @@ export interface DiagramGroup {
   h: number
 }
 
-export interface DiagramNode {
+interface DiagramNode {
   id: string
   label: string
   group: string
@@ -90,7 +90,7 @@ export interface DiagramNode {
   y: number
 }
 
-export interface DiagramEdge {
+interface DiagramEdge {
   from: string
   to: string
   label: string
@@ -102,7 +102,7 @@ export interface DiagramGraph {
   edges: DiagramEdge[]
 }
 
-export interface DiagramRow {
+interface DiagramRow {
   id: string
   commit_sha: string
   repo_owner: string
@@ -140,8 +140,8 @@ export interface DiagramPublishPreview {
 }
 
 /** Must match DIAGRAM_NODE_W / _H in _shared/repo-diagram.ts. */
-export const DIAGRAM_NODE_W = 220
-export const DIAGRAM_NODE_H = 64
+const DIAGRAM_NODE_W = 220
+const DIAGRAM_NODE_H = 64
 
 export interface DiagramFlowData extends Record<string, unknown> {
   kind: 'group' | 'component'
