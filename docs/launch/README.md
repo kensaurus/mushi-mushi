@@ -16,15 +16,37 @@ Earlier drafts and the comment-reply rules live in
 [`docs/marketing/snippets.md`](../marketing/snippets.md); the runbook and
 post-mortem template in [`docs/marketing/launch-week.md`](../marketing/launch-week.md).
 
-## How this fits the public launch page
+## Owner decision: one post per release, or a five-day week
 
-[`/launch-week`](https://kensaur.us/mushi-mushi/docs/launch-week) says Mushi
-launches one public post per release, and "will not post the same text to two
-places". This kit keeps both rules. The week is five days of posts on channels
-we own (the blog, Bluesky, GitHub Discussions), one feature a day, and only
-**one** external launch post: the Show HN on Day 2. Product Hunt is the next
-Tuesday, as release R2 on that page. If the founder wants a different shape,
-change `/launch-week` first so the page and the posts never disagree.
+[`/launch-week`](https://kensaur.us/mushi-mushi/docs/launch-week) (public,
+2026-09-21) says Mushi launches **one public post per release** and "will not
+post the same text to two places". The request on 2026-10-02 was a **five-day
+Launch Week**. The two disagree, and only the owner can pick:
+
+- **A. Keep one post per release (this kit's default).** The five days are
+  posts on channels we own (the blog, Bluesky, GitHub Discussions), one
+  feature a day, with **one** external launch post: the Show HN on Day 2.
+  Product Hunt is the next Tuesday, as release R2. `/launch-week` stays as is.
+- **B. A full five-day external launch week.** Rewrite `/launch-week` first,
+  in the same PR as the decision, so the public page and the posts never
+  disagree. Then add one external channel per day to the table below.
+
+Record the choice here with a date before Day 1.
+
+## Owner: product numbers on /open
+
+`/open` shows a "Product" section only when
+[`apps/docs/data/open-product-metrics.ts`](../../apps/docs/data/open-product-metrics.ts)
+holds data; while `OPEN_PRODUCT_METRICS` is `null`, the section is not
+rendered and no placeholder appears. To publish:
+
+1. Take the latest weekly row from
+   [`docs/marketing/scorecard.md`](../marketing/scorecard.md).
+2. Set `OPEN_PRODUCT_METRICS` to `{ asOf: '<that Monday, YYYY-MM-DD>', rows: [...] }`
+   with rows such as signups, activated external projects and paying customers,
+   values exactly as the scorecard has them (never rounded).
+3. Commit with the next docs batch. Update it each week, or set it back to
+   `null` rather than let it go stale.
 
 ## Angle
 

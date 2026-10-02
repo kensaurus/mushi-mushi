@@ -4,6 +4,7 @@
  * so the page ships plain HTML and the visitor's browser calls no API.
  * A source that failed renders as "unavailable at build time", never as 0.
  */
+import { OPEN_PRODUCT_METRICS } from '../data/open-product-metrics'
 import { fetchOpenMetrics } from '../lib/open-metrics'
 
 const fmt = new Intl.NumberFormat('en-US')
@@ -55,6 +56,24 @@ export async function OpenMetrics() {
           </dd>
         </div>
       </dl>
+
+      {OPEN_PRODUCT_METRICS ? (
+        <>
+          <h2 className="docs-open__heading">Product</h2>
+          <p className="docs-open__caption">
+            From our own database, as of {OPEN_PRODUCT_METRICS.asOf}. Copied by hand from the weekly
+            scorecard.
+          </p>
+          <dl className="docs-open__grid">
+            {OPEN_PRODUCT_METRICS.rows.map((row) => (
+              <div key={row.label}>
+                <dt>{row.label}</dt>
+                <dd>{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </>
+      ) : null}
 
       <h2 className="docs-open__heading">npm downloads, last 7 days</h2>
       <p className="docs-open__caption">
