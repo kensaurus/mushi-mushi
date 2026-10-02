@@ -28,11 +28,14 @@ export function radarLabel(r: PortfolioRadarColumn): { text: string; tone: Badge
   if (r.status === 'nothing_to_check') {
     return { text: 'Nothing to check yet', tone: 'neutral', hint: 'The hole checks ran, but this app declares no store ids, domains or privacy link to check. Add a store block to mushi.recipe.json.' }
   }
-  if (r.status === 'error') return { text: 'Check failed', tone: 'danger', hint: 'The last hole check could not finish.' }
+  if (r.status === 'error') {
+    const n = r.errored > 0 ? ` ${r.errored} check${r.errored === 1 ? '' : 's'} could not run.` : ''
+    return { text: 'Check failed', tone: 'danger', hint: `The last hole check could not finish.${n} This is not a pass.` }
+  }
   const total = r.open.error + r.open.warn
   if (r.open.error > 0) return { text: `${total} hole${total === 1 ? '' : 's'}`, tone: 'dangerSubtle', hint: `${r.open.error} serious, ${r.open.warn} to look at.` }
   if (r.open.warn > 0) return { text: `${total} to look at`, tone: 'warnSubtle', hint: `${r.open.warn} findings to look at.` }
-  const extra = r.unchecked > 0 ? ` ${r.unchecked} checks had nothing to look at.` : ''
+  const extra = r.unchecked > 0 ? ` ${r.unchecked} check${r.unchecked === 1 ? '' : 's'} could not decide and ${r.unchecked === 1 ? 'is' : 'are'} not counted as passing.` : ''
   return { text: 'No holes found', tone: 'okSubtle', hint: `The last check found nothing to fix.${extra}` }
 }
 

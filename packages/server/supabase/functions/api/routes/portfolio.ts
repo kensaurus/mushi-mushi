@@ -215,21 +215,25 @@ const STATUS_RANK: Record<string, number> = { error: 4, fail: 3, warn: 2, pass: 
 
 /**
  * Radar column from the latest scheduled run and the latest host-CI run
- * (`radar` + `radar_ci`). Never-run is `never_run`; a run that found nothing
+ * (`portfolio_radar` + `portfolio_radar_ci`). Never-run is `never_run`; a run that found nothing
  * declared to check is `nothing_to_check` — neither reads as green.
  */
 export function radarColumn(runs: readonly RunRow[], findings: readonly OpenFindingRow[]): PortfolioRadarColumn {
-  if (runs.length === 0) return { checkedAt: null, status: 'never_run', open: { error: 0, warn: 0, info: 0 }, unchecked: 0 }
+  if (runs.length === 0) return { checkedAt: null, status: 'never_run', open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 0 }
   const open = { error: 0, warn: 0, info: 0 }
   for (const f of findings) {
     if (f.severity === 'error' || f.severity === 'warn' || f.severity === 'info') open[f.severity]++
   }
   const worst = runs.reduce((w, r) => ((STATUS_RANK[r.status] ?? 4) > (STATUS_RANK[w.status] ?? 4) ? r : w))
-  const status: PortfolioRadarColumn['status'] = worst.status === 'skipped' ? 'nothing_to_check'
-    : worst.status === 'pass' || worst.status === 'warn' || worst.status === 'fail' ? worst.status : 'error'
+  const errored = runs.reduce((n, r) => n + Number((r.summary as { errored?: number } | null)?.errored ?? 0), 0)
+  // A check that failed to run is never shown as green, whatever the run status says.
+  const status: PortfolioRadarColumn['status'] = worst.status === 'fail' ? 'fail'
+    : worst.status === 'error' || errored > 0 ? 'error'
+    : worst.status === 'skipped' ? 'nothing_to_check'
+    : worst.status === 'pass' || worst.status === 'warn' ? worst.status : 'error'
   const unchecked = runs.reduce((n, r) => n + Number((r.summary as { unchecked?: number } | null)?.unchecked ?? 0), 0)
   const checkedAt = runs.map((r) => r.completed_at ?? r.started_at).sort().pop() ?? null
-  return { checkedAt, status, open, unchecked: Number.isFinite(unchecked) ? unchecked : 0 }
+  return { checkedAt, status, open, unchecked: Number.isFinite(unchecked) ? unchecked : 0, errored: Number.isFinite(errored) ? errored : 0 }
 }
 
 async function loadSpend(db: Db, projectIds: string[], since: string): Promise<Map<string, PortfolioSpendColumn>> {

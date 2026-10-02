@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261002170100_connectors
+-- 20261002180100_connectors
 --
 -- Plan 019 §5.1 migration 7 (Phase 2, gate struck by ADR 0017), plus the
 -- snapshot store the connector collector and the spend ledger read.

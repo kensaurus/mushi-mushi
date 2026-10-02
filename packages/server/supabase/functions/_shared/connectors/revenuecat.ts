@@ -84,7 +84,7 @@ export const revenuecatConnector: RecipeConnector = {
         const a = rcOf.get(projectId)
         const b = rcOf.get(other)
         if (a && b && a !== b) {
-          out.push({ gate: 'radar', ruleId: 'revenuecat_project_split', severity: 'warn', message: `These apps share credits, but sit in two RevenueCat projects (${a} and ${b}). Entitlements are only shared inside one project, so a purchase in one app will not unlock the other.`, suggestedFix: { kind: 'prompt', text: 'Move both apps into one RevenueCat project, or stop declaring shared credits.' } })
+          out.push({ gate: 'portfolio_radar', ruleId: 'revenuecat_project_split', severity: 'warn', message: `These apps share credits, but sit in two RevenueCat projects (${a} and ${b}). Entitlements are only shared inside one project, so a purchase in one app will not unlock the other.`, suggestedFix: { kind: 'prompt', text: 'Move both apps into one RevenueCat project, or stop declaring shared credits.' } })
         }
       }
       const rcProject = projects.find((p) => p.projectIds.includes(projectId))
@@ -92,11 +92,11 @@ export const revenuecatConnector: RecipeConnector = {
       if (rcProject) {
         for (const id of ids) {
           if (!rcProject.apps.some((a) => a.storeId === id)) {
-            out.push({ gate: 'radar', ruleId: 'revenuecat_app_missing', severity: 'warn', message: `The store app ${id} is not registered in its RevenueCat project, so its purchases will not be seen.`, suggestedFix: { kind: 'prompt', text: `Add ${id} as an app in RevenueCat project ${rcProject.rcProjectId}.` } })
+            out.push({ gate: 'portfolio_radar', ruleId: 'revenuecat_app_missing', severity: 'warn', message: `The store app ${id} is not registered in its RevenueCat project, so its purchases will not be seen.`, suggestedFix: { kind: 'prompt', text: `Add ${id} as an app in RevenueCat project ${rcProject.rcProjectId}.` } })
           }
         }
         if (rcProject.entitlements.length > 0 && !rcProject.offerings.some((o) => o.isCurrent)) {
-          out.push({ gate: 'radar', ruleId: 'revenuecat_offering_missing', severity: 'info', message: `RevenueCat project ${rcProject.rcProjectId} has entitlements but no current offering, so the paywall has nothing to show.`, suggestedFix: { kind: 'prompt', text: 'Mark one offering as current in RevenueCat.' } })
+          out.push({ gate: 'portfolio_radar', ruleId: 'revenuecat_offering_missing', severity: 'info', message: `RevenueCat project ${rcProject.rcProjectId} has entitlements but no current offering, so the paywall has nothing to show.`, suggestedFix: { kind: 'prompt', text: 'Mark one offering as current in RevenueCat.' } })
         }
       }
     }

@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261002170400_connector_actions_and_recipe_changes
+-- 20261002180400_connector_actions_and_recipe_changes
 --
 -- Plan 019 §5.1 migrations 5 and 8 (Phase 3 / Plan 020 Phase 4; ADR 0017).
 -- ADDITIVE: apply BEFORE deploying the api function that reads these tables.

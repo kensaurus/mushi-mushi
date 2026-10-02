@@ -37,7 +37,7 @@ const P2 = '1000000b-0000-4000-8000-000000000000'
 const NOW = new Date('2026-10-02T09:30:00Z')
 
 const line = (over: Partial<import('../../supabase/functions/_shared/operator-digest.ts').DigestProjectLine>) => ({
-  projectId: P1, name: 'glot.it', newReports24h: 0, openReports: 0, radar: { error: 0, warn: 0, checked: true },
+  projectId: P1, name: 'glot.it', newReports24h: 0, openReports: 0, radar: { error: 0, warn: 0, checked: true, failed: false },
   draftReleases: 0, publishedReleases24h: 0, spend: { last24hUsd: 0, avgPrior7dUsd: 0 }, ...over,
 })
 
@@ -47,8 +47,8 @@ describe('composeDigest', () => {
       organizationId: ORG, organizationName: 'Kenji apps', generatedAt: NOW.toISOString(),
       projects: [
         line({ name: 'yen-yen', newReports24h: 2, openReports: 5 }),
-        line({ projectId: P2, name: 'glot.it', radar: { error: 1, warn: 2, checked: true } }),
-        line({ projectId: 'p3', name: 'quiet', radar: { error: 0, warn: 0, checked: false } }),
+        line({ projectId: P2, name: 'glot.it', radar: { error: 1, warn: 2, checked: true, failed: false } }),
+        line({ projectId: 'p3', name: 'quiet', radar: { error: 0, warn: 0, checked: false, failed: false } }),
       ],
     }, 'https://example.test/portfolio')
     expect(d.hasContent).toBe(true)
@@ -59,6 +59,16 @@ describe('composeDigest', () => {
     const empty = digest.composeDigest({ organizationId: ORG, organizationName: null, generatedAt: '', projects: [line({})] }, 'u')
     expect(empty.hasContent).toBe(false)
     expect(empty.text).toContain('Nothing new across your apps today.')
+  })
+
+  it('says when hole checks failed, and an org whose checks never ran still gets a digest saying so', () => {
+    const failed = digest.composeDigest({ organizationId: ORG, organizationName: null, generatedAt: '', projects: [line({ radar: { error: 0, warn: 0, checked: false, failed: true } })] }, 'u')
+    expect(failed.hasContent).toBe(true)
+    expect(failed.lines).toEqual(['glot.it: hole checks failed to run'])
+    const never = digest.composeDigest({ organizationId: ORG, organizationName: null, generatedAt: '', projects: [line({ radar: { error: 0, warn: 0, checked: false, failed: false } }), line({ projectId: P2, name: 'yen', radar: { error: 0, warn: 0, checked: false, failed: false } })] }, 'u')
+    expect(never.hasContent).toBe(true)
+    expect(never.lines).toEqual(['2 apps have not had hole checks yet.'])
+    expect(never.text).not.toContain('Nothing new')
   })
 
   it('mentions a spend jump only above $1 and twice the prior daily average', () => {
@@ -210,5 +220,20 @@ describe('digest routes', () => {
     expect(delivery.sendSlack).toHaveBeenCalledTimes(1)
     expect(db.table('operator_digest_settings')[0]).toMatchObject({ last_status: 'sent' })
     expect((await app.call('POST', `/v1/admin/orgs/${ORG}/digest/send`)).status).toBe(429)
+  })
+})
+
+describe('collectDigest hole-check state', () => {
+  it('an app whose latest check errored is failed, not checked; an app with no run is neither', async () => {
+    const db = makeFakeDb({
+      organizations: [{ id: ORG, name: 'A' }],
+      projects: [{ id: P1, name: 'glot.it', organization_id: ORG }, { id: P2, name: 'yen', organization_id: ORG }],
+      reports: [], releases: [], llm_invocations: [], gate_findings: [],
+      gate_runs: [{ id: 'r1', project_id: P1, gate: 'portfolio_radar', status: 'pass', summary: { errored: 1 }, started_at: '2026-10-02T04:05:00Z' }],
+    } as never)
+    const data = await digest.collectDigest(db as never, ORG, NOW)
+    const by = Object.fromEntries(data.projects.map((p) => [p.projectId, p.radar]))
+    expect(by[P1]).toMatchObject({ checked: false, failed: true })
+    expect(by[P2]).toMatchObject({ checked: false, failed: false })
   })
 })

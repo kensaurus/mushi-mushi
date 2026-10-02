@@ -39,7 +39,7 @@ export const publicProbeConnector: RecipeConnector = {
   detectDrift(_prev, next) {
     const results = (next.facts.results ?? []) as DetectorResult[]
     return results.flatMap((r) => r.findings.map((f): DriftFinding => ({
-      gate: 'radar',
+      gate: 'portfolio_radar',
       ruleId: f.ruleId,
       severity: f.severity,
       message: f.message,

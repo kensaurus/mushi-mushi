@@ -112,7 +112,7 @@ describe('runRadar', () => {
     expect(summary.checked).toBe(0)
     const rows = db.table('gate_runs')
     expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({ gate: 'radar', status: 'skipped', project_id: P_A })
+    expect(rows[0]).toMatchObject({ gate: 'portfolio_radar', status: 'skipped', project_id: P_A })
     expect((rows[0].summary as { results: Array<{ state: string }> }).results.every((r) => r.state === 'unknown')).toBe(true)
   })
 
@@ -151,7 +151,7 @@ describe('runRadar', () => {
   it('leaves the store-policy rules to a fresh CI report instead of counting them twice', async () => {
     const db = seed({
       gate_runs: [{
-        id: 'ci-1', project_id: P_A, gate: 'radar_ci', status: 'warn', started_at: '2026-09-30T00:00:00Z', completed_at: '2026-09-30T00:00:00Z',
+        id: 'ci-1', project_id: P_A, gate: 'portfolio_radar_ci', status: 'warn', started_at: '2026-09-30T00:00:00Z', completed_at: '2026-09-30T00:00:00Z',
         summary: { results: [{ ruleId: 'play_target_sdk_behind', state: 'finding' }] },
       }],
     })
@@ -201,7 +201,7 @@ describe('recordCiRadar and readRadar', () => {
     // Connector-backed checks with no connector say how to turn them on.
     expect(view.detectors.find((d) => d.ruleId === 'rpc_secret_reachable_by_anon')).toMatchObject({ state: 'unknown' })
     const storage = view.detectors.find((d) => d.ruleId === 'storage_sql_delete')!
-    expect(storage).toMatchObject({ state: 'finding', from: 'radar_ci' })
+    expect(storage).toMatchObject({ state: 'finding', from: 'portfolio_radar_ci' })
     expect(storage.findings[0]).toMatchObject({ filePath: 'supabase/x.sql', line: 3 })
     const never = view.detectors.find((d) => d.ruleId === 'domain_expiring')!
     expect(never).toMatchObject({ state: 'unknown', reason: 'Not checked yet.', checkedAt: null })
@@ -223,7 +223,7 @@ describe('the recipe gates card ignores the radar gates', () => {
       requiredEnvNames: () => [], now: () => NOW,
     }
     const before = await compose.composeRecipe(seed() as never, composeDeps as never, P_A)
-    const db = seed({ gate_runs: [{ id: 'r1', project_id: P_A, gate: 'radar', status: 'fail', started_at: '2026-10-02T00:00:00Z', completed_at: '2026-10-02T00:00:00Z', summary: {} }] })
+    const db = seed({ gate_runs: [{ id: 'r1', project_id: P_A, gate: 'portfolio_radar', status: 'fail', started_at: '2026-10-02T00:00:00Z', completed_at: '2026-10-02T00:00:00Z', summary: {} }] })
     const after = await compose.composeRecipe(db as never, composeDeps as never, P_A)
     expect(after.response.elements.gates.state).toBe(before.response.elements.gates.state)
     expect(after.response.elements.gates.findingsCount).toBe(0)
@@ -294,7 +294,7 @@ describe('radar routes', () => {
     const first = await app.call('POST', `/v1/admin/projects/${P_A}/radar/run`)
     expect(first.status).toBe(202)
     expect(d.runInBackground).toHaveBeenCalledTimes(1)
-    db.table('gate_runs').push({ id: 'r', project_id: P_A, gate: 'radar', status: 'pass', started_at: new Date(NOW.getTime() - 60_000).toISOString() })
+    db.table('gate_runs').push({ id: 'r', project_id: P_A, gate: 'portfolio_radar', status: 'pass', started_at: new Date(NOW.getTime() - 60_000).toISOString() })
     const second = await app.call('POST', `/v1/admin/projects/${P_A}/radar/run`)
     expect(second.status).toBe(429)
   })
@@ -311,9 +311,37 @@ describe('radar routes', () => {
       vars: { projectId: P_A },
     })
     expect(ok.status).toBe(200)
-    expect(ok.body.data.gate).toBe('radar_ci')
+    expect(ok.body.data.gate).toBe('portfolio_radar_ci')
     const f = db.table('gate_findings')[0]
     expect(f.message).toContain('supabase/migrations/1.sql:9')
     expect(String(f.message)).not.toContain('IGNORE')
+  })
+})
+
+describe('a check that failed to run is never a pass', () => {
+  it('one errored connector next to passing public probes makes the run error, counted apart from unknown', () => {
+    const results = [
+      { ruleId: 'store_name_mismatch', state: 'ok', reason: 'match', findings: [] },
+      { ruleId: 'domain_expiring', state: 'unknown', reason: 'registry silent', findings: [] },
+      { ruleId: 'rpc_secret_reachable_by_anon', state: 'error', reason: 'Supabase unreachable', findings: [] },
+    ] as never
+    expect(run.runStatus(results)).toBe('error')
+    expect(run.runStatus([results[0], results[1]] as never)).toBe('pass')
+  })
+
+  it('the stored run says error and splits unknown from errored; the portfolio card is not green', async () => {
+    const db = seed({
+      connector_snapshots: [{ project_id: P_A, kind: 'supabase', is_current: true, ok: false, error: 'MCP timeout', snapshot: null }],
+    })
+    const summary = await run.runRadar(db as never, P_A, deps() as never)
+    expect(summary.status).toBe('error')
+    expect(summary.errored).toBeGreaterThan(0)
+    expect(summary.results.filter((r) => r.state === 'unknown').length).toBe(summary.unchecked)
+    const stored = db.table('gate_runs').find((r) => r.id === summary.runId)!
+    expect(stored).toMatchObject({ gate: 'portfolio_radar', status: 'error' })
+    const portfolio = await import('../../supabase/functions/api/routes/portfolio.ts')
+    const col = portfolio.radarColumn([stored as never], [])
+    expect(col.status).toBe('error')
+    expect(col.errored).toBe(summary.errored)
   })
 })

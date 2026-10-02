@@ -1,7 +1,7 @@
 // ============================================================
 // radar-scan — daily hole checks across projects (Plan 020 Phase 1, ADR 0017).
 //
-// Trigger: pg_cron daily at 04:05 UTC (migration 20261002170000), and
+// Trigger: pg_cron daily at 04:05 UTC (migration 20261002180000), and
 //          POST {"projectId": "<uuid>"} from an internal caller.
 // Auth:    requireServiceRoleAuth (internal only).
 //
@@ -9,7 +9,7 @@
 // MAX_PROJECTS a run, least-recently checked first, and no new project after
 // START_BUDGET_MS): runRadar runs the public probes (store names, listing
 // locales, domain and certificate expiry, security headers, the privacy link)
-// and the store-policy rules read from the repo, then records one `radar`
+// and the store-policy rules read from the repo, then records one `portfolio_radar`
 // gate run. A project whose run throws gets an errored radar run, never a
 // silent skip; one failing project never stops the others.
 // ============================================================
@@ -75,7 +75,7 @@ async function handler(req: Request): Promise<Response> {
   }
   const batch = ids.sort((a, b) => (last.get(a) ?? 0) - (last.get(b) ?? 0)).slice(0, MAX_PROJECTS)
 
-  const results: Array<{ projectId: string; status: string; checked?: number; unchecked?: number; error?: string }> = []
+  const results: Array<{ projectId: string; status: string; checked?: number; unchecked?: number; errored?: number; error?: string }> = []
   const t0 = Date.now()
   for (const projectId of batch) {
     if (Date.now() - t0 > START_BUDGET_MS) {
@@ -84,7 +84,7 @@ async function handler(req: Request): Promise<Response> {
     }
     try {
       const run = await runRadar(db, projectId, defaultRadarRunDeps, 'cron')
-      results.push({ projectId, status: run.status, checked: run.checked, unchecked: run.unchecked })
+      results.push({ projectId, status: run.status, checked: run.checked, unchecked: run.unchecked, errored: run.errored })
     } catch (err) {
       const message = String((err as Error)?.message ?? err).slice(0, 300)
       slog.error('radar run failed', { projectId, err: message })

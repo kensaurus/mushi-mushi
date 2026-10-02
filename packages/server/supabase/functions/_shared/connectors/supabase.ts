@@ -168,7 +168,7 @@ export const supabaseConnector: RecipeConnector = {
     // this connector's appliedVersions with the GitHub connector's migrationFiles.
     const radar = supabaseRadarResults(f)
     for (const r of radar) {
-      for (const x of r.findings) out.push({ gate: 'radar', ruleId: x.ruleId, severity: x.severity, message: x.message, filePath: x.filePath ?? null, suggestedFix: { kind: 'prompt', text: x.fix } })
+      for (const x of r.findings) out.push({ gate: 'portfolio_radar', ruleId: x.ruleId, severity: x.severity, message: x.message, filePath: x.filePath ?? null, suggestedFix: { kind: 'prompt', text: x.fix } })
     }
     return out
   },

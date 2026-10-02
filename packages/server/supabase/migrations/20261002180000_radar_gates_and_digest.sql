@@ -1,20 +1,19 @@
 -- ============================================================================
--- 20261002170000_radar_gates_and_digest
+-- 20261002180000_radar_gates_and_digest
 --
 -- Plan 020 Phase 1 (ADR 0017). ADDITIVE: apply BEFORE deploying the api,
 -- radar-scan and operator-digest functions (they write these gate names and
 -- read this table).
 --
--- 1. gate_runs_gate_check gains the three radar gates:
---      radar         the scheduled hole checks (public probes + repo reads)
---      radar_ci      hole-check results pushed from the host's own CI
---      store_review  the on-demand store review checklist (Phase 2)
---    The new CHECK is the UNION of the constraint's CURRENT definition (read
---    from pg_get_constraintdef at apply time), a floor of every name known on
---    2026-10-02 (the 10 live names, design-plane's four recipe gates from
---    20261002130100, T1's `radar` from 20261002140100), and these three. So
---    applying every branch in timestamp order never drops another branch's
---    gate name, whichever branch defined the constraint last.
+-- 1. gate_runs_gate_check gains three gates:
+--      portfolio_radar     the scheduled app hole checks (public probes, repo reads, connectors)
+--      portfolio_radar_ci  app hole-check results pushed from the host's own CI
+--      store_review        the on-demand store review checklist (Phase 2)
+--    `radar` belongs to T1 (Mushi's own setup checks, 20261002140100); these
+--    names keep the two producers apart. The values are appended to whatever
+--    the constraint allows NOW (read from pg_get_constraintdef, the same
+--    pattern as 20261002140100), so no other branch's gate is dropped. It
+--    raises instead of guessing if the constraint cannot be read.
 -- 2. operator_digest_settings: one row per organization, delivery OFF by
 --    default. Member SELECT; writes only through the api (service role).
 -- 3. Two crons: radar-scan daily 04:05 UTC (clear of 03:05 drift scanner and
@@ -23,8 +22,8 @@
 --
 -- Verify after apply:
 --   select pg_get_constraintdef(oid) from pg_constraint where conname = 'gate_runs_gate_check';
---     -- expect at least 17 names incl. design_drift, radar, radar_ci, store_review,
---     -- plus any name another branch added before this ran
+--     -- every name it allowed before (compare before and after) plus
+--     -- portfolio_radar, portfolio_radar_ci and store_review
 --   select relrowsecurity from pg_class where oid = 'public.operator_digest_settings'::regclass; -- t
 --   select policyname, roles, cmd from pg_policies where tablename = 'operator_digest_settings';
 --   select jobname, schedule from cron.job where jobname in ('mushi-radar-scan-daily','mushi-operator-digest-hourly');
@@ -35,41 +34,42 @@
 --    order by start_time desc limit 3;
 -- ============================================================================
 
-do $$
-declare
-  v_def   text;
-  v_names text[];
-  v_list  text;
-begin
-  select pg_get_constraintdef(oid) into v_def
-    from pg_constraint
-   where conrelid = 'public.gate_runs'::regclass and conname = 'gate_runs_gate_check';
+-- Append to the live list; never restate it (see 20261002140100).
+DO $$
+DECLARE
+  v_def  text;
+  v_vals text[];
+  v_add  text[] := ARRAY['portfolio_radar', 'portfolio_radar_ci', 'store_review'];
+BEGIN
+  SELECT pg_get_constraintdef(oid) INTO v_def
+    FROM pg_constraint
+   WHERE conrelid = 'public.gate_runs'::regclass
+     AND conname = 'gate_runs_gate_check';
+  IF v_def IS NULL THEN
+    RAISE EXCEPTION 'gate_runs_gate_check not found; refusing to guess the allowed gates';
+  END IF;
 
-  -- Every quoted literal in the current definition, e.g. 'radar'::text.
-  select coalesce(array_agg(distinct m[1]), '{}') into v_names
-    from regexp_matches(coalesce(v_def, ''), '''([a-z0-9_]+)''', 'g') as m;
+  SELECT array_agg(DISTINCT m[1] ORDER BY m[1]) INTO v_vals
+    FROM regexp_matches(v_def, '''([^'']+)''', 'g') AS m;
+  IF v_vals IS NULL OR array_length(v_vals, 1) = 0 THEN
+    RAISE EXCEPTION 'could not read the values of gate_runs_gate_check: %', v_def;
+  END IF;
+  IF v_add <@ v_vals THEN
+    RETURN;
+  END IF;
 
-  select string_agg(quote_literal(n), ', ' order by n) into v_list
-    from (
-      select unnest(v_names) as n
-      union
-      select unnest(array[
-        'dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim',
-        'spec_drift', 'orphan_endpoint', 'unknown_call', 'schema_drift',
-        'code_health',
-        'design_drift', 'ci_drift', 'deploy_drift', 'env_drift',
-        'radar', 'radar_ci', 'store_review'
-      ])
-    ) u;
+  EXECUTE 'ALTER TABLE public.gate_runs DROP CONSTRAINT gate_runs_gate_check';
+  EXECUTE format(
+    'ALTER TABLE public.gate_runs ADD CONSTRAINT gate_runs_gate_check CHECK (gate IN (%s))',
+    (SELECT string_agg(quote_literal(x), ', ' ORDER BY x) FROM (SELECT DISTINCT unnest(v_vals || v_add) AS x) u)
+  );
+END $$;
 
-  execute 'alter table public.gate_runs drop constraint if exists gate_runs_gate_check';
-  execute format('alter table public.gate_runs add constraint gate_runs_gate_check check (gate in (%s))', v_list);
-end
-$$;
-
-comment on constraint gate_runs_gate_check on public.gate_runs is
-  'Allowlist of valid gate discriminators. radar / radar_ci / store_review are the '
-  'Plan 020 hole checks (ADR 0017). Last extended: 2026-10-02 (20261002170000).';
+COMMENT ON CONSTRAINT gate_runs_gate_check ON public.gate_runs IS
+  'Allowlist of valid gate discriminators. portfolio_radar / portfolio_radar_ci / store_review '
+  'are the Plan 020 app hole checks (ADR 0017); radar is Mushi''s own setup checks (T1). '
+  'Extend it by reading the current values (see 20261002140100), not by restating a list. '
+  'Last extended: 2026-10-02.';
 
 -- ── operator digest settings ─────────────────────────────────────────────────
 

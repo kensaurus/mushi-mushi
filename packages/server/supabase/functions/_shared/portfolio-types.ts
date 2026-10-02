@@ -65,6 +65,8 @@ export interface PortfolioRadarColumn {
   open: { error: number; warn: number; info: number }
   /** Detectors with no result for this project (no data to check, or never run). */
   unchecked: number
+  /** Checks that failed to run in the latest runs (never counted as passing). */
+  errored: number
 }
 
 /**

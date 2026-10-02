@@ -102,7 +102,7 @@ export const llmUsageConnector: RecipeConnector = {
     const f = next.facts as { provider: string; unattributedUsd: number; totalUsd: number }
     if (f.totalUsd > 0 && f.unattributedUsd / f.totalUsd > 0.25) {
       return [{
-        gate: 'radar', ruleId: 'key_shared_across_apps', severity: 'info',
+        gate: 'portfolio_radar', ruleId: 'key_shared_across_apps', severity: 'info',
         message: `About $${f.unattributedUsd.toFixed(2)} of ${f.provider} spend in 30 days is not tied to any app. Spend you cannot attribute is spend you cannot cap.`,
         suggestedFix: { kind: 'prompt', text: `Give each app its own ${f.provider === 'openai' ? 'OpenAI project' : 'Anthropic workspace'} and key, then bind each one to its app in Mushi.` },
       }]
