@@ -53,6 +53,8 @@ import { PageHero } from '../components/PageHero'
 import type { PageAction } from '../components/PageActionBar'
 import { ExploreCanvas } from '../components/explore/ExploreCanvas'
 import { ExploreLayerLane } from '../components/explore/ExploreLayerLane'
+import { ExploreDiagramPanel } from '../components/explore/ExploreDiagramPanel'
+import { CopyRepoDigestButton } from '../components/explore/CopyRepoDigestButton'
 import { ExploreSymbolPanel } from '../components/explore/ExploreSymbolPanel'
 import { ExploreChatPanel } from '../components/explore/ExploreChatPanel'
 import { ExploreTourPanel } from '../components/explore/ExploreTourPanel'
@@ -107,6 +109,7 @@ const EXPLORE_TAB_META: Record<ExploreTabId, { label: string; description: strin
   knowledge: { label: 'Knowledge', description: 'Wiki and docs knowledge graph — entities merged into Ask answers.' },
   graph: { label: 'Graph', description: 'ReactFlow canvas — nodes coloured by architectural layer.' },
   layers: { label: 'Layers', description: 'Horizontal Sankey lane (UI → Library → Backend → …).' },
+  diagram: { label: 'Diagram', description: 'AI architecture diagram of the connected repo, every path checked against GitHub.' },
   search: { label: 'Search', description: 'Semantic search via embeddings — plain English queries.' },
   index: { label: 'Index', description: 'Indexer debug — repo, webhook, last error, embedding coverage.' },
 }
@@ -562,6 +565,7 @@ export function ExplorePage() {
     activeTab === 'knowledge' ||
     activeTab === 'graph' ||
     activeTab === 'layers' ||
+    activeTab === 'diagram' ||
     activeTab === 'search'
 
   usePublishPageContext({
@@ -757,7 +761,14 @@ export function ExplorePage() {
       </div>
     ) : null
 
-  const mapContent = loading ? (
+  // The diagram reads GitHub directly, so it works before (or without) codebase indexing.
+  const mapContent = activeTab === 'diagram' ? (
+    projectId ? (
+      <ExploreDiagramPanel projectId={projectId} />
+    ) : (
+      <EmptySectionMessage text="Pick a project first" hint="The diagram is drawn from the project's connected GitHub repo." />
+    )
+  ) : loading ? (
     <GraphSkeleton />
   ) : error ? (
     <ErrorAlert message={exploreErrorMessage(error) ?? error} onRetry={reloadAll} />
@@ -883,6 +894,7 @@ export function ExplorePage() {
             </Btn>
           </>
         )}
+        {projectId && <CopyRepoDigestButton projectId={projectId} />}
       </PageHeaderBar>
 
       {!ux.hideOverviewChrome ? (

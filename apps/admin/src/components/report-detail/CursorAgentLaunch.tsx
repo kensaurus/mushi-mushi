@@ -29,6 +29,7 @@ import { IconExternalLink } from '../icons'
 import { useToast } from '../../lib/toast'
 import { trackSelf } from '../../lib/track'
 import { ContainedBlock } from './ReportSurface'
+import { CopyRepoDigestButton } from '../explore/CopyRepoDigestButton'
 import type { ReportDetail } from './types'
 
 interface CursorAgentLaunchProps {
@@ -145,6 +146,14 @@ export function CursorAgentLaunch({ report, cursorWorkspace }: CursorAgentLaunch
         <Btn variant="ghost" size="sm" onClick={onCopy}>
           {copied ? 'Copied ✓' : 'Copy prompt'}
         </Btn>
+        {report.project_id && (
+          <CopyRepoDigestButton
+            projectId={report.project_id}
+            reportId={report.id}
+            showBudgetPicker={false}
+            label="Copy code for this bug"
+          />
+        )}
       </div>
 
       <details className="mt-2 rounded-md border border-edge-subtle/60 bg-surface-overlay/20 px-2.5 py-2 text-2xs text-fg-muted">
