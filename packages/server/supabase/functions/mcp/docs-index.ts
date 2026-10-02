@@ -192,7 +192,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/explore",
     markdown: "admin/explore.md",
     keywords: ["admin", "explore", "codebase", "atlas"],
-    headings: ["Tab groups", "Map views", "Graph", "Layers", "Search", "The detail panel", "Layer filter chips", "Stats bar"],
+    headings: ["Tab groups", "Copy digest", "Map views", "Diagram", "Graph", "Layers", "Search", "The detail panel"],
     excerpt: "Visual, searchable map of every indexed source file — explore architectural layers, import dependencies, and find code by meaning.",
   },
   {
