@@ -24,7 +24,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
-import { useSetupStatus } from '../../lib/useSetupStatus'
+import { invalidateSetupStatus, SETUP_STEPS, useSetupStatus } from '../../lib/useSetupStatus'
+import { useRealtimeReload } from '../../lib/realtime'
 import { useProjectSnapshots } from '../../lib/useProjectSnapshots'
 import { useActiveProjectId } from '../ProjectSwitcher'
 import { buildSetupGuideModel } from '../../lib/setupGuideSteps'
@@ -45,6 +46,27 @@ export function SetupGuide() {
   const setup = useSetupStatus(activeProjectId)
   const snapshots = useProjectSnapshots()
   const [storedView, setStoredView] = useSetupGuideView()
+
+  // While the first report is still outstanding, watch for it to land so the
+  // guide (and every other setup surface) moves on without a page reload.
+  // Off once the step completes, so steady-state sessions hold no channel.
+  const awaitingProjectId =
+    setup.activeProject && setup.isStepIncomplete(SETUP_STEPS.firstReportReceived)
+      ? setup.activeProject.project_id
+      : null
+  const { channelState } = useRealtimeReload(
+    [{ table: 'reports', event: 'INSERT', filter: `project_id=eq.${awaitingProjectId ?? ''}` }],
+    invalidateSetupStatus,
+    { debounceMs: 1000, enabled: !!user && !!awaitingProjectId },
+  )
+  // Realtime can be blocked (proxy, extension); fall back to a slow poll.
+  useEffect(() => {
+    if (!user || !awaitingProjectId || channelState === 'live') return
+    const t = setInterval(() => {
+      if (!document.hidden) invalidateSetupStatus()
+    }, 30_000)
+    return () => clearInterval(t)
+  }, [user, awaitingProjectId, channelState])
 
   const headingRef = useRef<HTMLHeadingElement | null>(null)
   const previousView = useRef<string | null>(null)

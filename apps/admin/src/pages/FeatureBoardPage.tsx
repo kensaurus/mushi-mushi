@@ -19,7 +19,6 @@ import { ContainedBlock, InlineProof } from '../components/report-detail/ReportS
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 import { Modal } from '../components/Modal'
-import { FeatureBoardReadout } from '../components/feature-board/FeatureBoardReadout'
 import { FeatureBoardSnapshotStrip } from '../components/feature-board/FeatureBoardSnapshotStrip'
 import { type FeatureBoardClientStats } from '../components/feature-board/FeatureBoardStatsTypes'
 import {
@@ -501,16 +500,6 @@ export function FeatureBoardPage() {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
             children: (
               <FeatureBoardSnapshotStrip
-                stats={clientStats}
-                fetchedAt={lastFetchedAt}
-                isValidating={isValidating}
-              />
-            ),
-          },
-          {
-            priority: POSTURE_PRIORITY.guide,
-            children: (
-              <FeatureBoardReadout
                 stats={clientStats}
                 fetchedAt={lastFetchedAt}
                 isValidating={isValidating}
