@@ -17,3 +17,13 @@ export const PUBLIC_CORS_ORIGIN = '*'
 export const PUBLIC_CORS_HEADERS = {
   'Access-Control-Allow-Origin': PUBLIC_CORS_ORIGIN,
 } as const
+
+/**
+ * Preflight cache lifetime for the public SDK / reporter surfaces. The SDK's
+ * custom headers (X-Mushi-Api-Key, X-Reporter-*) force a preflight on every
+ * call; without this every 60 s badge poll was an OPTIONS plus a GET
+ * (300–900 ms each from Japan). Browsers cap it lower (Chrome: 2 h,
+ * Firefox: 24 h), and the cache is keyed per URL, so a poll URL should stay
+ * stable (Plan 018 §4.4).
+ */
+export const PUBLIC_CORS_MAX_AGE_SECONDS = 86_400
