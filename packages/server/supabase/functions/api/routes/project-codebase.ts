@@ -9,6 +9,8 @@ import { pathMatchesScope } from '../../_shared/codebase-scope.ts';
 import { unverifiedGithubInstallsAllowed } from '../../_shared/github-install-trust.ts';
 import { resolveProjectGithubToken } from '../../_shared/github.ts';
 import { resolveBranchForConnect } from '../../_shared/github-branch.ts';
+import { dereferenceMaybeVault, storeSettingsSecret } from '../../_shared/settings-secrets.ts';
+import { isVaultRef } from '../../_shared/vault-ref.ts';
 import type { KnowledgeGraph } from '../../_shared/codebase-graph-build.ts';
 
 export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -307,13 +309,34 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       .eq('project_id', projectId)
       .maybeSingle();
 
-    const webhookSecret = currentSettings?.github_webhook_secret ?? (await generateWebhookSecret());
+    // Keep a readable existing secret (the GitHub side already has it). A
+    // missing or unreadable one is replaced, and `webhook_secret_issued` makes
+    // the card reveal the new value. The column only ever stores a Vault ref.
+    const storedSecret = (currentSettings?.github_webhook_secret as string | null | undefined) ?? null;
+    const existingSecret = await dereferenceMaybeVault(db, storedSecret);
+    const webhookSecretIssued = !existingSecret;
+    const webhookSecret = existingSecret ?? (await generateWebhookSecret());
+    let webhookSecretRef: string | null = null;
+    if (webhookSecretIssued || !isVaultRef(storedSecret)) {
+      try {
+        webhookSecretRef = await storeSettingsSecret(db, projectId, 'github', 'github_webhook_secret', webhookSecret);
+      } catch (err) {
+        console.error('[project-codebase] could not store webhook secret in Vault', {
+          projectId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return c.json(
+          { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: 'Could not store the webhook secret securely. Retry in a moment.' } },
+          500,
+        );
+      }
+    }
     const { error: settingsErr } = await db
       .from('project_settings')
       .update({
         codebase_index_enabled: true,
         codebase_repo_url: repoUrl,
-        github_webhook_secret: webhookSecret,
+        ...(webhookSecretRef ? { github_webhook_secret: webhookSecretRef } : {}),
         ...(promotedPendingInstallation ? { github_app_installation_id_pending: null } : {}),
       })
       .eq('project_id', projectId);
@@ -325,7 +348,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       repo_url: repoUrl,
       default_branch: defaultBranch,
       installation_id: installationId,
-      issued_webhook_secret: !currentSettings?.github_webhook_secret,
+      issued_webhook_secret: webhookSecretIssued,
     }).catch(() => {});
 
     return c.json({
@@ -334,7 +357,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
         repo_url: repoUrl,
         default_branch: defaultBranch,
         webhook_secret: webhookSecret,
-        webhook_secret_issued: !currentSettings?.github_webhook_secret,
+        webhook_secret_issued: webhookSecretIssued,
         indexed_files_eta_seconds: 90,
       },
     });
@@ -389,9 +412,22 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     }
 
     const webhookSecret = await generateWebhookSecret();
+    let webhookSecretRef: string;
+    try {
+      webhookSecretRef = await storeSettingsSecret(db, projectId, 'github', 'github_webhook_secret', webhookSecret);
+    } catch (err) {
+      console.error('[project-codebase] could not store rotated webhook secret in Vault', {
+        projectId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return c.json(
+        { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: 'Could not store the webhook secret securely. Retry in a moment.' } },
+        500,
+      );
+    }
     const { error: writeErr } = await db
       .from('project_settings')
-      .update({ github_webhook_secret: webhookSecret })
+      .update({ github_webhook_secret: webhookSecretRef })
       .eq('project_id', projectId);
     if (writeErr) return dbError(c, writeErr);
 
