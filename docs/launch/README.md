@@ -33,6 +33,11 @@ Launch Week**. The two disagree, and only the owner can pick:
 
 Record the choice here with a date before Day 1.
 
+**Decided 2026-10-02 (owner-delegated): A.** One external post per release
+keeps the public `/launch-week` promise and avoids posting the same text
+twice. At 3 stars, a single strong Show HN with the no-signup demo beats five
+thin external posts. Revisit B after the first launch's numbers are in.
+
 ## Owner: product numbers on /open
 
 `/open` shows a "Product" section only when
