@@ -5,11 +5,13 @@ const EXPORT_RE = /^\s*export\s+/m
 
 export function fingerprintFile(row: IndexedFileRow): FileFingerprint {
   const preview = row.content_preview ?? ''
-  let importCount = 0
-  let m: RegExpExecArray | null
-  IMPORT_RE.lastIndex = 0
-  while ((m = IMPORT_RE.exec(preview)) !== null) {
-    if (m[1] ?? m[2]) importCount++
+  let importCount = row.imports?.length ?? 0
+  if (!row.imports) {
+    let m: RegExpExecArray | null
+    IMPORT_RE.lastIndex = 0
+    while ((m = IMPORT_RE.exec(preview)) !== null) {
+      if (m[1] ?? m[2]) importCount++
+    }
   }
   const exportCount = (preview.match(EXPORT_RE) ?? []).length
   return {
