@@ -125,7 +125,7 @@ export async function collectDigest(db: Db, organizationId: string, now: Date): 
   const ids = rows.map((p) => p.id)
   const day = new Date(now.getTime() - 86400_000).toISOString()
   const week = new Date(now.getTime() - 8 * 86400_000).toISOString()
-  const empty = { data: [] as unknown[] }
+  const empty = { data: [] as unknown[], error: null }
   const [reports, openReports, runs, releases, spend] = ids.length
     ? await Promise.all([
       db.from('reports').select('project_id').in('project_id', ids).gte('created_at', day).limit(5000),
