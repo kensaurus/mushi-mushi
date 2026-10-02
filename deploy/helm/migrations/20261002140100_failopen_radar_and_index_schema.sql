@@ -32,23 +32,50 @@
 --      and ((table_name = 'project_repos' and column_name in ('commit_sha', 'indexed_branch'))
 --        or (table_name = 'project_codebase_files' and column_name = 'imports'));
 --   -- expect radar_ok = true and three rows (text, text, ARRAY).
+--   -- Every gate allowed before still is (e.g. design_drift, if 20261002130100
+--   -- was applied first): compare pg_get_constraintdef before and after.
 -- ============================================================================
 
-ALTER TABLE public.gate_runs
-  DROP CONSTRAINT IF EXISTS gate_runs_gate_check;
+-- Add 'radar' to whatever the constraint allows NOW. Several branches extend
+-- this list (design-plane's 20261002130100 adds design_drift, ci_drift,
+-- deploy_drift, env_drift); a fixed list here would drop theirs. The values
+-- are read from pg_get_constraintdef and the constraint is rebuilt as
+-- IN ('a', 'b', ...), which Postgres stores as ARRAY['a'::text, ...], so the
+-- next migration can read it the same way.
+DO $$
+DECLARE
+  v_def  text;
+  v_vals text[];
+BEGIN
+  SELECT pg_get_constraintdef(oid) INTO v_def
+    FROM pg_constraint
+   WHERE conrelid = 'public.gate_runs'::regclass
+     AND conname = 'gate_runs_gate_check';
+  IF v_def IS NULL THEN
+    RAISE EXCEPTION 'gate_runs_gate_check not found; refusing to guess the allowed gates';
+  END IF;
 
-ALTER TABLE public.gate_runs
-  ADD CONSTRAINT gate_runs_gate_check
-  CHECK (gate IN (
-    'dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim',
-    'spec_drift', 'orphan_endpoint', 'unknown_call', 'schema_drift',
-    'code_health', 'radar'
-  ));
+  SELECT array_agg(DISTINCT m[1] ORDER BY m[1]) INTO v_vals
+    FROM regexp_matches(v_def, '''([^'']+)''', 'g') AS m;
+  IF v_vals IS NULL OR array_length(v_vals, 1) = 0 THEN
+    RAISE EXCEPTION 'could not read the values of gate_runs_gate_check: %', v_def;
+  END IF;
+  IF 'radar' = ANY (v_vals) THEN
+    RETURN;
+  END IF;
+
+  EXECUTE 'ALTER TABLE public.gate_runs DROP CONSTRAINT gate_runs_gate_check';
+  EXECUTE format(
+    'ALTER TABLE public.gate_runs ADD CONSTRAINT gate_runs_gate_check CHECK (gate IN (%s))',
+    (SELECT string_agg(quote_literal(x), ', ' ORDER BY x) FROM unnest(v_vals || 'radar'::text) AS x)
+  );
+END $$;
 
 COMMENT ON CONSTRAINT gate_runs_gate_check ON public.gate_runs IS
   'Allowlist of valid gate discriminators. radar is written daily by '
   'integration-health-probe with Mushi''s own setup checks (_shared/radar.ts). '
-  'Last extended: 2026-10-02.';
+  'Extend it by reading the current values (see 20261002140100), not by '
+  'restating a list. Last extended: 2026-10-02.';
 
 ALTER TABLE public.project_repos
   ADD COLUMN IF NOT EXISTS commit_sha text,
