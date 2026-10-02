@@ -54,8 +54,8 @@ type Db = ReturnType<typeof getServiceClient>
 
 export interface RecipeRouteDeps extends ComposeDeps {
   getServiceClient: () => Db
-  readAuth: MiddlewareHandler
-  writeAuth: MiddlewareHandler
+  adminOrApiKeyRead: MiddlewareHandler
+  adminOrApiKeyWrite: MiddlewareHandler
   refresh: typeof refreshRecipeSnapshot
   startDeviance: typeof startDesignDeviance
   runInBackground: typeof runInBackground
@@ -66,8 +66,8 @@ export interface RecipeRouteDeps extends ComposeDeps {
 
 export const defaultRecipeDeps: RecipeRouteDeps = {
   getServiceClient,
-  readAuth: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
-  writeAuth: adminOrApiKey({ scope: 'mcp:write' }) as MiddlewareHandler,
+  adminOrApiKeyRead: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
+  adminOrApiKeyWrite: adminOrApiKey({ scope: 'mcp:write' }) as MiddlewareHandler,
   refresh: refreshRecipeSnapshot,
   startDeviance: startDesignDeviance,
   runInBackground,
@@ -117,7 +117,7 @@ const changeSchema = z.discriminatedUnion('kind', [
 
 export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: RecipeRouteDeps = defaultRecipeDeps): void {
   // ── GET /v1/admin/projects/:id/recipe ──────────────────────────────────────
-  app.get('/v1/admin/projects/:id/recipe', deps.readAuth, async (c) => {
+  app.get('/v1/admin/projects/:id/recipe', deps.adminOrApiKeyRead, async (c) => {
     const db = deps.getServiceClient()
     const access = await projectAccess(c, db)
     if (!access.ok) return access.response
@@ -131,7 +131,7 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
   })
 
   // ── GET /v1/admin/projects/:id/recipe/elements/:element ────────────────────
-  app.get('/v1/admin/projects/:id/recipe/elements/:element', deps.readAuth, async (c) => {
+  app.get('/v1/admin/projects/:id/recipe/elements/:element', deps.adminOrApiKeyRead, async (c) => {
     const db = deps.getServiceClient()
     const access = await projectAccess(c, db)
     if (!access.ok) return access.response
@@ -149,7 +149,7 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
   })
 
   // ── POST /v1/admin/projects/:id/recipe/refresh ─────────────────────────────
-  app.post('/v1/admin/projects/:id/recipe/refresh', deps.writeAuth, async (c) => {
+  app.post('/v1/admin/projects/:id/recipe/refresh', deps.adminOrApiKeyWrite, async (c) => {
     const db = deps.getServiceClient()
     const access = await projectAccess(c, db)
     if (!access.ok) return access.response
@@ -162,7 +162,7 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
   })
 
   // ── GET /v1/admin/projects/:id/recipe/history ──────────────────────────────
-  app.get('/v1/admin/projects/:id/recipe/history', deps.readAuth, async (c) => {
+  app.get('/v1/admin/projects/:id/recipe/history', deps.adminOrApiKeyRead, async (c) => {
     const db = deps.getServiceClient()
     const access = await projectAccess(c, db)
     if (!access.ok) return access.response
@@ -201,7 +201,7 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
   })
 
   // ── GET /v1/admin/projects/:id/design ──────────────────────────────────────
-  app.get('/v1/admin/projects/:id/design', deps.readAuth, async (c) => {
+  app.get('/v1/admin/projects/:id/design', deps.adminOrApiKeyRead, async (c) => {
     const db = deps.getServiceClient()
     const access = await projectAccess(c, db)
     if (!access.ok) return access.response
@@ -216,7 +216,7 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
   })
 
   // ── GET /v1/admin/projects/:id/design/tokens ───────────────────────────────
-  app.get('/v1/admin/projects/:id/design/tokens', deps.readAuth, async (c) => {
+  app.get('/v1/admin/projects/:id/design/tokens', deps.adminOrApiKeyRead, async (c) => {
     const db = deps.getServiceClient()
     const access = await projectAccess(c, db)
     if (!access.ok) return access.response
@@ -237,7 +237,7 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
   })
 
   // ── GET /v1/admin/projects/:id/design/deviance ─────────────────────────────
-  app.get('/v1/admin/projects/:id/design/deviance', deps.readAuth, async (c) => {
+  app.get('/v1/admin/projects/:id/design/deviance', deps.adminOrApiKeyRead, async (c) => {
     const db = deps.getServiceClient()
     const access = await projectAccess(c, db)
     if (!access.ok) return access.response
@@ -261,7 +261,7 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
   })
 
   // ── POST /v1/admin/projects/:id/design/deviance/run ────────────────────────
-  app.post('/v1/admin/projects/:id/design/deviance/run', deps.writeAuth, async (c) => {
+  app.post('/v1/admin/projects/:id/design/deviance/run', deps.adminOrApiKeyWrite, async (c) => {
     const db = deps.getServiceClient()
     const access = await projectAccess(c, db)
     if (!access.ok) return access.response
@@ -290,7 +290,7 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
   })
 
   // ── GET /v1/admin/projects/:id/design/excerpt ──────────────────────────────
-  app.get('/v1/admin/projects/:id/design/excerpt', deps.readAuth, async (c) => {
+  app.get('/v1/admin/projects/:id/design/excerpt', deps.adminOrApiKeyRead, async (c) => {
     const db = deps.getServiceClient()
     const access = await projectAccess(c, db)
     if (!access.ok) return access.response
@@ -303,7 +303,7 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
   })
 
   // ── POST /v1/admin/projects/:id/design/changes ─────────────────────────────
-  app.post('/v1/admin/projects/:id/design/changes', deps.writeAuth, async (c) => {
+  app.post('/v1/admin/projects/:id/design/changes', deps.adminOrApiKeyWrite, async (c) => {
     const db = deps.getServiceClient()
     const body = await c.req.json().catch(() => null)
     const parsed = changeSchema.safeParse(body)

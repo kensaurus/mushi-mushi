@@ -4,16 +4,16 @@
     "kensaurus"
   ],
   "name": "mushi-mushi",
-  "description": "MCP server for Cursor, Claude Code and Copilot. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor. 80 tools to triage user-reported bugs, pull a fix packet with evidence and blast radius, and dispatch a fix PR. Run it with npx @mushi-mushi/mcp. SDKs MIT · server AGPLv3 · enterprise edition commercial.",
+  "description": "MCP server for Cursor, Claude Code and Copilot. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor. 83 tools to triage user-reported bugs, pull a fix packet with evidence and blast radius, and dispatch a fix PR. Run it with npx @mushi-mushi/mcp. SDKs MIT · server AGPLv3 · enterprise edition commercial.",
   "license": "MIT",
   "tools": [
     {
       "name": "get_recent_reports",
-      "description": "List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, component, created_at, processing_error }], total }; include_raw=true returns every list column instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed|…), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports."
+      "description": "List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, component, created_at, processing_error }], total }; includeRaw=true returns every list column instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed|…), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports."
     },
     {
       "name": "get_report_detail",
-      "description": "Fetch the full record for one bug report by id: description, console logs, network requests, screenshot URL, classification (stage 1/2), and fix history. Returns { report }. Read-only. Use when you have a reportId and need everything about it; for evidence only use get_report_evidence, for the activity thread use get_report_timeline, for a one-call fix bundle use get_fix_context."
+      "description": "Fetch the full record for one bug report by id: description, console logs, network requests, screenshot URL, classification (stage 1/2), fix history, the paste-ready fix packet and the inventory action it is filed against. Returns { report } with the documented fields; includeRaw=true returns every column the detail route has instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Read-only. Use when you have a reportId and need everything about it; for evidence only use get_report_evidence, for the activity thread use get_report_timeline, for a one-call fix bundle use get_fix_context."
     },
     {
       "name": "get_report_timeline",
@@ -29,7 +29,7 @@
     },
     {
       "name": "get_fix_context",
-      "description": "Bundle everything an agent needs to fix one bug in a single call: a paste-ready fixPrompt (plain-English diagnosis + reproduction + suggested fix + relevant code + blast radius), plus report detail, repro steps, component, root cause, and ontology tags. Returns { fixPrompt, report, reproduction, component, rootCause, tags }. Read-only; no second LLM key needed. Use before writing a fix; use triage_issue for a multi-report review packet, or suggest_fix for just the Stage-2 hint."
+      "description": "Bundle everything an agent needs to fix one bug in a single call: a paste-ready fixPrompt (plain-English diagnosis + reproduction + suggested fix + relevant code + blast radius), plus report detail, repro steps, component, root cause, ontology tags, and the inventory action (with its expected_outcome contract) the report is filed against, plus recipe: a ≤4 KB design excerpt (the app's tokens with their CSS var / TS names, the design deviance score, and deviance findings in the files this fix touches) so the fix uses the app's tokens instead of literals. Returns { report, fixPrompt, reproductionSteps, component, rootCause, bugOntologyTags, inventoryAction, recipe }; recipe is always { state, note, … } with state ok | drift | unknown | not_connected | error, never null. Read-only; no second LLM key needed. Use before writing a fix; use triage_issue for a multi-report review packet, or suggest_fix for just the Stage-2 hint."
     },
     {
       "name": "get_fix_timeline",
@@ -57,7 +57,19 @@
     },
     {
       "name": "list_gate_findings",
-      "description": "List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead-handler | mock-leak | crawl | status-claim) or minimum severity (low|medium|high|critical). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot."
+      "description": "List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead_handler | mock_leak | api_contract | crawl | status_claim | spec_drift | orphan_endpoint | unknown_call | schema_drift | code_health | design_drift | ci_drift | deploy_drift | env_drift) or finding severity (info | warn | error). The *_drift gates are the App Recipe checks: design_drift is code that drifts off the design tokens, ci_drift / deploy_drift / env_drift are CI, deploy and env vars that drift from the recipe. Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot."
+    },
+    {
+      "name": "get_app_recipe",
+      "description": "Return the App Recipe for a project: one card per element (schema, design, routes, gates, ci, deploy, env, integrations), each with a state, a plain-English reason, key facts, a findings count and console links, plus the worst state overall and the mushi.recipe.json manifest status. Every element is exactly one of ok | drift | unknown | not_connected | error. unknown means configured but not observed recently and never means healthy; not_connected means nothing is configured. Returns { projectId, worst, elements: { <element>: { state, reason, facts, findingsCount, lastCheckedAt, links } }, manifest, snapshotHash }. Read-only. Use to see how the app is put together and which part is drifting; use get_design_tokens for the token values, get_design_deviance for code that drifts off them, or list_gate_findings for gate detail."
+    },
+    {
+      "name": "get_design_tokens",
+      "description": "Return the app's normalized design tokens (DTCG: path, type, resolved value, hex / px, alias, CSS var, TS and RN names, description, defining file) for the active token set, plus nameMap (CSS var or TS name → token path). This is the tool that makes a fix use the app's tokens instead of hard-coded literals: look up the token for a colour, spacing, radius or font before writing one. Optional filters: group (first path segment, e.g. color, space), type (color | dimension | fontFamily | …), direction (a named token set instead of the active one). Returns { projectId, set, tokens, nameMap, total }; at most 500 tokens. Read-only. Use get_design_deviance to see where code drifts off these tokens, or get_app_recipe for the overall state."
+    },
+    {
+      "name": "get_design_deviance",
+      "description": "Return how far the code drifts off the design system: the latest 0–100 deviance score (lower is better; null means not scored yet), its per-rule breakdown, the score trend, a scan still running if any, the top findings (file, line, literal value, rule, and the nearest token to use instead), and the active rules (off_token_color, off_token_font, off_scale_spacing, off_scale_radius, contrast_below_aa, raw_interactive_element). Optional limit: findings to return (1–200, default 25). Returns { projectId, latest, running, trend, findings, rules }. Read-only. Use to find and fix off-token code; use get_design_tokens for the full token list."
     },
     {
       "name": "get_graph_neighborhood",
@@ -105,7 +117,7 @@
     },
     {
       "name": "transition_status",
-      "description": "Move a report to a new workflow state, enforcing the same transition rules as the admin UI. Valid targets: classified, grouped, fixing, fixed, verified, reopened, dismissed. Returns { report } with the updated status. Write; idempotent (setting the current status is a no-op); rejects illegal transitions. Use to dismiss a duplicate or mark fixed; use merge_fix to mark fixed via a merged PR, or reopen_report for the reopened path."
+      "description": "Move a report to a new workflow state, enforcing the same transition rules as the admin UI. Valid targets: classified, grouped, fixing, fixed, verified, reopened, dismissed. When dismissing, closedReason (duplicate, not_reproducible, wont_fix, working_as_intended, spam) sets what the reporter is told — spam closes silently, and duplicate needs the report grouped under another one first; reporterMessage posts your note to the reporter verbatim. Returns { ok }. Write; idempotent (setting the current status is a no-op); rejects illegal transitions. Use to dismiss a duplicate or mark fixed; use merge_fix to mark fixed via a merged PR, or reopen_report for the reopened path."
     },
     {
       "name": "merge_fix",
@@ -145,15 +157,19 @@
     },
     {
       "name": "get_pipeline_logs",
-      "description": "Pull recent log entries from the Mushi pipeline services: fix-worker, qa-story-runner, pipeline, or all. Accepts project_id, service, since (ISO-8601), limit (max 200), and level (info | warn | error | fatal) filters. Returns structured log rows with timestamp, level, service, message, and a trace_id/report_id when available. Use this when a fix failed, a QA story keeps erroring, or an ingest pipeline went silent."
+      "description": "Pull recent log entries from the Mushi pipeline services: fix-worker, qa-story-runner, pipeline, or all. Accepts projectId, service, since (ISO-8601), limit (max 200), and level (info | warn | error | fatal) filters. Returns structured log rows with timestamp, level, service, message, and a trace_id/report_id when available. Use this when a fix failed, a QA story keeps erroring, or an ingest pipeline went silent."
     },
     {
       "name": "get_report_evidence",
-      "description": "Return the full evidence package for a single bug report covering all three observability pillars: (1) LOGS — console_logs (error/warn/info/debug entries with timestamps), breadcrumbs (SDK ring buffer: navigation, clicks, network, lifecycle events with category/level), repro_timeline (merged SDK event stream: route/click/request/log/screen), and the reporter's own comments thread; (2) TRACES — network_requests (SDK-captured fetch/XHR with method/status/duration/traceId), backend_spans (server-side spans joined by W3C trace_id: name/duration_ms/parentSpanId/status), and Sentry trace correlation IDs (sentry_trace_id, sentry_event_id) for deeplinks; (3) METRICS — performance_metrics (Web Vitals snapshot: LCP/CLS/INP/TTFB/FCP + INP attribution + page timing + connection info), anomalies (statistical provenance when auto-filed by CI metric regression: baseline_mean/std, score in σ, threshold); plus screenshot_url, browser environment (user agent, URL, viewport, SDK version), and tags. This is the same data an engineer would collect for a root-cause investigation. Faster than calling get_report_detail + report timeline separately."
+      "description": "Return the full evidence package for a single bug report covering all three observability pillars: (1) LOGS — console_logs (error/warn/info/debug entries with timestamps), breadcrumbs (SDK ring buffer: navigation, clicks, network, lifecycle events with category/level), repro_timeline (merged SDK event stream: route/click/request/log/screen), and the reporter's own comments thread; (2) TRACES — network_requests (SDK-captured fetch/XHR with method/status/duration/traceId), backend_spans (server-side spans joined by W3C trace_id: name/duration_ms/parentSpanId/status), and Sentry trace correlation IDs (sentry_trace_id, sentry_event_id) for deeplinks; (3) METRICS — performance_metrics (Web Vitals snapshot: LCP/CLS/INP/TTFB/FCP + INP attribution + page timing + connection info), anomalies (statistical provenance when auto-filed by CI metric regression: baseline_mean/std, score in σ, threshold); plus screenshot_url, browser environment (user agent, URL, viewport, SDK version), and tags. Reporter identifiers (session id, end-user id) are never returned. This is the same data an engineer would collect for a root-cause investigation. Faster than calling get_report_detail + report timeline separately."
     },
     {
       "name": "triage_issue",
-      "description": "Read-only combined tool: merges report detail, the reporter thread, similar bugs (matched on the report summary), the fix context (paste-ready fix prompt, repro steps, root cause), the blast radius of the inventory action the report is filed against, and recent pipeline warnings into a single structured review packet. Returns the packet plus prioritised recommended_actions, partial_errors for any source that failed, and notes for any source that does not apply (e.g. no blast radius when the report is not anchored to an inventory action). Equivalent to a Sentry \"Analyze with Seer\" flow grounded in user-felt reports. Pass report_id to kick off review. Call this before dispatch_fix."
+      "description": "Read-only combined tool: merges report detail, the reporter thread, similar bugs (matched on the report summary), the fix context (paste-ready fix prompt, repro steps, root cause), the blast radius of the inventory action the report is filed against, and recent pipeline warnings into a single structured review packet. Returns the packet plus prioritised recommended_actions, partial_errors for any source that failed, and notes for any source that does not apply (e.g. no blast radius when the report is not anchored to an inventory action). Equivalent to a Sentry \"Analyze with Seer\" flow grounded in user-felt reports. Pass reportId to kick off review. Call this before dispatch_fix."
+    },
+    {
+      "name": "import_sentry_issues",
+      "description": "Pull existing Sentry issues into Mushi's report queue: by issueIds (numeric ids or short ids like WEB-12, at most 10) or by a Sentry search query (default is:unresolved) within the project's configured Sentry project, limit 1-10. Each issue goes through the same path as a Sentry webhook delivery: deduped per issue, linked, classified. An issue already linked to a report answers linked and is never reopened. Returns { items: [{ input, issueId, shortId, outcome, reportId, error? }], created, linked, failed, indexing }. Write; idempotent; spends classification budget per new report. Needs the Sentry org slug, project slug and an auth token (event:read, project:read) in Integrations → Sentry. Use for issues that existed before the webhook was wired; then call triage_issue on a created report."
     },
     {
       "name": "triage_next_steps",
@@ -161,7 +177,7 @@
     },
     {
       "name": "query_lessons",
-      "description": "Retrieve the learning rules (\"lessons\") most relevant to a given code diff or PR context, packed within a token budget. Uses bi-encoder retrieval + severity-weighted scoring; pass the diff/description as the query and max_tokens (default 2000). Returns ranked { lessons: [{ title, rule, severity }] }. Read-only. Use before writing a fix or opening a PR; use list_lessons to browse all lessons unfiltered."
+      "description": "Retrieve the learning rules (\"lessons\") most relevant to a given code diff or PR context, packed within a token budget. Uses bi-encoder retrieval + severity-weighted scoring; pass the diff/description as diffText and a maxTokens budget (default 3000). Returns ranked { lessons: [{ title, rule, severity }] }. Read-only. Use before writing a fix or opening a PR; use list_lessons to browse all lessons unfiltered."
     },
     {
       "name": "list_lessons",
@@ -232,6 +248,18 @@
       "description": "Send a visible message to the end-user who filed a bug report. The reply appears in the in-app Mushi widget as an admin comment and creates an unread notification badge so the reporter sees it immediately. Use this to answer questions, request reproduction steps, or confirm a fix — without leaving the Cursor IDE."
     },
     {
+      "name": "request_reporter_info",
+      "description": "Ask the end-user who filed a report a question: it appears in their in-app \"Your reports\" thread, marks the report \"Waiting on you\", and the waiting state clears when they answer (their reply reaches Slack and the console). Returns { comment_id, awaiting_reporter }. Write; messages a real end user and is NOT idempotent — each call posts another question, so confirm the wording with the user first. Fails with NO_REPORTER for reports that came from an integration. Use when you need reproduction details; use reply_to_reporter for a plain reply."
+    },
+    {
+      "name": "list_reporter_outbox",
+      "description": "List pipeline messages waiting for review before they reach reporters (projects in review mode hold \"fix in progress\", \"fixed\", \"shipped in vX\" and \"closed\" messages). Each row has { id, report_id, report_title, notification_type, text, body_override, created_at }; text is exactly what the reporter will see. Read-only. Use before release_reporter_update; an empty list means nothing is waiting (or the project sends updates automatically)."
+    },
+    {
+      "name": "release_reporter_update",
+      "description": "Send (action=release, the default) or drop (action=discard) one held reporter message from list_reporter_outbox; bodyOverride replaces its text before sending. Returns { delivered, skipped, failed }. Write; messages a real end user — confirm with the user first. Idempotent in effect: a message that is no longer held returns CONFLICT instead of sending twice."
+    },
+    {
       "name": "get_two_way_comms_health",
       "description": "Summarize SDK ↔ admin two-way reporter health for a host app: last SDK heartbeat, app version/platform last seen, unread reporter messages, recent reporter replies, and pending QA/TDD follow-ups. Use after wiring @mushi-mushi/web in a Vite/Capacitor app to confirm reports land in the console and admin/MCP replies reach the in-app widget."
     },
@@ -261,7 +289,7 @@
     },
     {
       "name": "start_skill_pipeline",
-      "description": "Start a new skill pipeline run for a report. Pass root_skill_slug and optionally report_id. Returns run_id, context_packet (full instructions + report context), and step list. Read the context_packet — it contains skill instructions plus full report context (repro steps, root cause, RAG files). After executing each step, call checkin_pipeline_step. The PM watching the console sees progress live."
+      "description": "Start a new skill pipeline run for a report. Pass rootSkillSlug and optionally reportId. Returns run_id, context_packet (full instructions + report context), and step list. Read the context_packet — it contains skill instructions plus full report context (repro steps, root cause, RAG files). After executing each step, call checkin_pipeline_step. The PM watching the console sees progress live."
     },
     {
       "name": "get_pipeline_run",
