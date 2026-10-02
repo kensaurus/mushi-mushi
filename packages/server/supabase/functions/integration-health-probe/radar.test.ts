@@ -86,7 +86,8 @@ Deno.test('spend_cap_unset: auto-fix on with a missing cap; silent when off or c
   assertEquals(detectSpendCapUnset({ autofix_enabled: true, autofix_max_spend_usd: 2, autofix_max_dispatches_per_day: 3 }), [])
   const [f] = detectSpendCapUnset({ autofix_enabled: true, autofix_max_spend_usd: null, autofix_max_dispatches_per_day: 3 })
   assertEquals(f.rule_id, 'spend_cap_unset')
-  assertEquals((f.suggested_fix?.body as Record<string, unknown>).maxSpendUsd, 2)
+  assertEquals(f.suggested_fix?.path, '/settings?tab=general#spend-limits')
+  assertEquals((f.suggested_fix?.values as Record<string, unknown>).autofix_max_spend_usd, 2)
 })
 
 Deno.test('webhook_never_delivered: configured 7+ days, nothing accepted', () => {

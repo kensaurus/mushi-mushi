@@ -6,7 +6,7 @@ import {
   checkAutofixBudget,
   dispatchTrigger,
   isSiblingDispatch,
-  parseAutofixCapsBody,
+  validateSpendLimit,
 } from '../_shared/autofix-budget.ts'
 import { siblingDispatchRow } from '../_shared/sibling-dispatch.ts'
 
@@ -182,14 +182,15 @@ Deno.test('a sibling job never fans out again', () => {
   assertEquals(isSiblingDispatch({ coordination_id: null, dispatch_metadata: { trigger: 'manual' } }), false)
 })
 
-Deno.test('caps body: positive numbers or null, at least one field', () => {
-  assertEquals(parseAutofixCapsBody({ maxSpendUsd: 2, maxDispatchesPerDay: 3 }), {
-    ok: true,
-    patch: { autofix_max_spend_usd: 2, autofix_max_dispatches_per_day: 3 },
-  })
-  assertEquals(parseAutofixCapsBody({ maxSpendUsd: null }), { ok: true, patch: { autofix_max_spend_usd: null } })
-  assertEquals(parseAutofixCapsBody({ maxSpendUsd: 0 }).ok, false)
-  assertEquals(parseAutofixCapsBody({ maxDispatchesPerDay: 1.5 }).ok, false)
-  assertEquals(parseAutofixCapsBody({}).ok, false)
-  assertEquals(parseAutofixCapsBody(null).ok, false)
+Deno.test('spend limits: positive numbers (whole for the daily cap) or null', () => {
+  assertEquals(validateSpendLimit('autofix_max_spend_usd', 2), { ok: true, value: 2 })
+  assertEquals(validateSpendLimit('autofix_max_spend_usd', 2.345), { ok: true, value: 2.35 })
+  assertEquals(validateSpendLimit('monthly_llm_budget_usd', null), { ok: true, value: null })
+  assertEquals(validateSpendLimit('autofix_max_dispatches_per_day', 3), { ok: true, value: 3 })
+  assertEquals(validateSpendLimit('autofix_max_dispatches_per_day', 1.5).ok, false)
+  assertEquals(validateSpendLimit('autofix_max_dispatches_per_day', 0).ok, false)
+  assertEquals(validateSpendLimit('autofix_approval_cost_threshold_usd', 0).ok, false)
+  assertEquals(validateSpendLimit('monthly_llm_budget_usd', -5).ok, false)
+  assertEquals(validateSpendLimit('monthly_llm_budget_usd', '5').ok, false)
+  assertEquals(validateSpendLimit('monthly_llm_budget_usd', 1_000_000).ok, false)
 })

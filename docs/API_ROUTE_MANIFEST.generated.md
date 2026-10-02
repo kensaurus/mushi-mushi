@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-02 · **575** routes.
+> Generated: 2026-10-02 · **574** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 109 |
 | `apiKeyAuth` | 51 |
-| `jwtAuth` | 342 |
+| `jwtAuth` | 341 |
 | `jwtOrApiKey` | 3 |
 | `unknown` | 70 |
 
@@ -246,7 +246,6 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | PUT | `/v1/admin/projects/:id/assistant` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sdk-assistant.ts` |
 | GET | `/v1/admin/projects/:id/assistant/logs` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sdk-assistant.ts` |
 | GET | `/v1/admin/projects/:id/autofix` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
-| PUT | `/v1/admin/projects/:id/autofix/caps` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
 | POST | `/v1/admin/projects/:id/autofix/toggle` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
 | POST | `/v1/admin/projects/:id/codebase/analyze` | `unknown` | `packages/server/supabase/functions/api/routes/codebase-understand.ts` |
 | GET | `/v1/admin/projects/:id/codebase/analyze/:jobId` | `unknown` | `packages/server/supabase/functions/api/routes/codebase-understand.ts` |

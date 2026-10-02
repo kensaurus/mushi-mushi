@@ -178,30 +178,43 @@ export const DEFAULT_AUTOFIX_MAX_SPEND_USD = 2
 export const DEFAULT_AUTOFIX_MAX_DISPATCHES_PER_DAY = 3
 
 /**
- * Validate a caps update. Each field may be a positive number or null
- * (no cap); an absent field is left unchanged.
+ * The project spend limits the console edits through PATCH /v1/admin/settings.
+ * Each is a positive number, or null for "no limit".
+ *   autofix_max_spend_usd                 fix-worker LLM spend per 30 days (automatic dispatches)
+ *   autofix_max_dispatches_per_day        automatic dispatches per UTC day
+ *   autofix_approval_cost_threshold_usd   estimated fix cost that needs approval (high/critical)
+ *   monthly_llm_budget_usd                all LLM spend per UTC month (_shared/llm-budget.ts)
  */
-export function parseAutofixCapsBody(
-  body: unknown,
-): { ok: true; patch: Record<string, number | null> } | { ok: false; message: string } {
-  const b = (body ?? {}) as Record<string, unknown>
-  const patch: Record<string, number | null> = {}
-  if ('maxSpendUsd' in b) {
-    const v = b.maxSpendUsd
-    if (v !== null && (typeof v !== 'number' || !Number.isFinite(v) || v <= 0 || v > 100_000)) {
-      return { ok: false, message: 'maxSpendUsd must be a positive number of dollars, or null for no cap' }
+export const SPEND_LIMIT_FIELDS = [
+  'autofix_max_spend_usd',
+  'autofix_max_dispatches_per_day',
+  'autofix_approval_cost_threshold_usd',
+  'monthly_llm_budget_usd',
+] as const
+
+export type SpendLimitField = (typeof SPEND_LIMIT_FIELDS)[number]
+
+export function isSpendLimitField(key: string): key is SpendLimitField {
+  return (SPEND_LIMIT_FIELDS as readonly string[]).includes(key)
+}
+
+/** Validate one spend-limit value: a positive number (whole for the daily cap) or null. */
+export function validateSpendLimit(
+  field: SpendLimitField,
+  value: unknown,
+): { ok: true; value: number | null } | { ok: false; message: string } {
+  if (value === null) return { ok: true, value: null }
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return { ok: false, message: `${field} must be a number, or null for no limit` }
+  }
+  if (field === 'autofix_max_dispatches_per_day') {
+    if (!Number.isInteger(value) || value < 1 || value > 1_000) {
+      return { ok: false, message: `${field} must be a whole number from 1 to 1000, or null for no limit` }
     }
-    patch.autofix_max_spend_usd = v as number | null
+    return { ok: true, value }
   }
-  if ('maxDispatchesPerDay' in b) {
-    const v = b.maxDispatchesPerDay
-    if (v !== null && (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > 1_000)) {
-      return { ok: false, message: 'maxDispatchesPerDay must be a whole number from 1 to 1000, or null for no cap' }
-    }
-    patch.autofix_max_dispatches_per_day = v as number | null
+  if (value <= 0 || value > 100_000) {
+    return { ok: false, message: `${field} must be more than 0 and at most 100000 dollars, or null for no limit` }
   }
-  if (Object.keys(patch).length === 0) {
-    return { ok: false, message: 'Send maxSpendUsd and/or maxDispatchesPerDay' }
-  }
-  return { ok: true, patch }
+  return { ok: true, value: Math.round(value * 100) / 100 }
 }
