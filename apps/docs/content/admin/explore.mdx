@@ -37,7 +37,7 @@ MCP equivalents: `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `searc
 **Copy digest** (top of the page) copies your repo as one paste for an AI chat or coding agent: the folder tree plus the most useful files, in this order — README, manifests (`package.json`, …), entry points, source, then tests. Pick a size first; the digest stops at that many tokens (an estimate: characters ÷ 4) and says what it left out.
 
 - It reads GitHub at one commit and names the commit, so the paste matches a real version of your code.
-- `.env` files, private keys and similar files are never included. A file that looks like it holds a secret is replaced with a notice.
+- Real env files (`.env`, `.env.local`, `.env.production`), private keys and similar files are never included. Env templates such as `.env.example` are included, because they explain the setup. Any file that looks like it holds a secret, templates too, is replaced with a notice.
 - On a bug report, **Copy code for this bug** puts the bug's files first: files from its stack trace, files earlier fixes changed, related code from the index, then the files that import them.
 
 The same digest is the MCP tool `get_repo_digest`, on the default tool set.

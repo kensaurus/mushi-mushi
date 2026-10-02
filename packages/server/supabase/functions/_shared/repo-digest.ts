@@ -221,7 +221,27 @@ const VENDOR_DIR_RE =
  * name. The tree still shows the name (a file name is not a secret).
  */
 const SENSITIVE_FILE_RE =
-  /(?:^|\/)(?:\.env(?:\..*)?|\.npmrc|\.pypirc|\.netrc|local\.properties|id_(?:rsa|dsa|ecdsa|ed25519)(?:\.pub)?|credentials(?:\.json)?|service-account[^/]*\.json|google-services\.json|GoogleService-Info\.plist)$|\.(?:pem|key|p12|pfx|keystore|jks|mobileprovision|p8|asc|gpg)$|(?:^|\/)secrets?\//i
+  /(?:^|\/)(?:\.envrc|\.npmrc|\.pypirc|\.netrc|local\.properties|id_(?:rsa|dsa|ecdsa|ed25519)(?:\.pub)?|credentials(?:\.json)?|service-account[^/]*\.json|google-services\.json|GoogleService-Info\.plist)$|\.(?:pem|key|p12|pfx|keystore|jks|mobileprovision|p8|asc|gpg)$|(?:^|\/)secrets?\//i
+
+/** `.env`, `.env.local`, `.env.production`, `prod.env`: real environment files. */
+const ENV_FILE_RE = /^(?:\.env(?:\..+)?|[^/]+\.env)$/i
+/**
+ * Env templates are meant to be committed and explain how to configure the
+ * app, so they are useful context: `.env.example`, `.env.sample`,
+ * `.env.template`, `.env.local.example`, `example.env`. They still go through
+ * the secret scan like every other file.
+ */
+const ENV_TEMPLATE_RE = /(?:\.(?:example|sample|template)|^(?:example|sample|template)\.env)$/i
+
+/**
+ * Files whose contents never leave the repo, whatever the include globs say:
+ * real env files (not templates), keys, keystores, credentials, `secrets/`.
+ */
+export function isSensitiveRepoPath(path: string): boolean {
+  if (SENSITIVE_FILE_RE.test(path)) return true
+  const base = path.slice(path.lastIndexOf('/') + 1)
+  return ENV_FILE_RE.test(base) && !ENV_TEMPLATE_RE.test(base)
+}
 
 const LOCKFILE_RE =
   /(?:^|\/)(?:pnpm-lock\.yaml|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|bun\.lockb?|Cargo\.lock|poetry\.lock|Pipfile\.lock|Gemfile\.lock|composer\.lock|go\.sum|deno\.lock|Podfile\.lock|packages\.lock\.json|flake\.lock|uv\.lock|pubspec\.lock|mix\.lock)$/
@@ -330,7 +350,7 @@ export function planRepoDigest(entries: readonly RepoTreeEntry[], opts: RepoDige
     if (exclude.some((re) => re.test(path))) continue
     treePaths.push(path)
     const est = Math.ceil(size / 4)
-    if (SENSITIVE_FILE_RE.test(path)) { dropped.push({ path, reason: 'sensitive_file', tokens: est }); continue }
+    if (isSensitiveRepoPath(path)) { dropped.push({ path, reason: 'sensitive_file', tokens: est }); continue }
     if (BINARY_EXT_RE.test(path)) { dropped.push({ path, reason: 'binary', tokens: est }); continue }
     if (size > MAX_FILE_BYTES) { dropped.push({ path, reason: 'too_large', tokens: est }); continue }
     const explicitlyIncluded = include.some((re) => re.test(path))

@@ -12,6 +12,7 @@ import {
   digestCacheKeyInput,
   estimateTokens,
   globToRegExp,
+  isSensitiveRepoPath,
   planRepoDigest,
   renderDigestTree,
   treePathSet,
@@ -52,6 +53,29 @@ describe('globToRegExp', () => {
   })
 })
 
+describe('isSensitiveRepoPath', () => {
+  it('denies real env files', () => {
+    for (const p of ['.env', '.env.local', '.env.production', '.env.development.local', '.env.staging', 'apps/web/.env', 'prod.env', '.envrc', 'apps/api/.env.test.local']) {
+      expect(isSensitiveRepoPath(p), p).toBe(true)
+    }
+  })
+  it('allows env templates', () => {
+    for (const p of ['.env.example', '.env.sample', '.env.template', 'apps/web/.env.local.example', '.env.production.example', 'example.env', 'apps/api/.ENV.EXAMPLE']) {
+      expect(isSensitiveRepoPath(p), p).toBe(false)
+    }
+  })
+  it('still denies a template inside a secrets folder, and keys and credentials', () => {
+    for (const p of ['secrets/.env.example', 'config/secret/.env.sample', 'certs/server.pem', 'android/app/release.keystore', 'credentials.json', '.npmrc', 'id_ed25519']) {
+      expect(isSensitiveRepoPath(p), p).toBe(true)
+    }
+  })
+  it('leaves ordinary files alone', () => {
+    for (const p of ['src/env.ts', 'docs/environment.md', 'src/.envy/thing.ts', 'README.md']) {
+      expect(isSensitiveRepoPath(p), p).toBe(false)
+    }
+  })
+})
+
 describe('planRepoDigest', () => {
   const tree = entries({
     'README.md': 400,
@@ -80,6 +104,7 @@ describe('planRepoDigest', () => {
       'package.json',
       'src/index.ts',
       'src/lib/cart.ts',
+      '.env.example',
       'tests/cart.test.ts',
     ])
     expect(plan.selected[0].rank).toBe('linked')
@@ -90,8 +115,9 @@ describe('planRepoDigest', () => {
     const plan = planRepoDigest(tree, { include: ['.env*', '*.pem', '*.ts'] })
     const picked = plan.selected.map((f) => f.path)
     expect(picked).not.toContain('.env')
-    expect(picked).not.toContain('.env.example')
     expect(picked).not.toContain('certs/server.pem')
+    // An env template is context, not a secret store; it is scanned like any file.
+    expect(picked).toContain('.env.example')
     const reasons = Object.fromEntries(plan.dropped.map((d) => [d.path, d.reason]))
     expect(reasons['.env']).toBe('sensitive_file')
     expect(reasons['certs/server.pem']).toBe('sensitive_file')
@@ -167,6 +193,15 @@ describe('assembleRepoDigest', () => {
     expect(digest.text).toContain("Mushi left this file's contents out: it looks like it holds a secret (Anthropic key).")
     expect(digest.text).toContain('FILE: README.md')
     expect(digest.text).toContain(`Commit: ${SHA} (main)`)
+  })
+
+  it('redacts an env template that holds a real key', () => {
+    const key = ['sk', 'ant', 'z'.repeat(30)].join('-')
+    const plan = planRepoDigest(entries({ '.env.example': 100 }))
+    const digest = assembleRepoDigest(plan, new Map<string, FetchedContent>([['.env.example', `ANTHROPIC_API_KEY=${key}
+`]]), META)
+    expect(digest.text).not.toContain(key)
+    expect(digest.redacted).toEqual([{ path: '.env.example', label: 'Anthropic key' }])
   })
 
   it('also catches keys the shared scanner does not (Google, Stripe test)', () => {
