@@ -7,7 +7,8 @@
 //   GET  /v1/admin/releases/:id         — release detail with credits
 //   PATCH /v1/admin/releases/:id        — edit body, title, status
 //   DELETE /v1/admin/releases/:id       — delete draft (not published)
-//   POST /v1/admin/releases/:id/publish — publish + send widget notifications
+//   POST /v1/admin/releases/:id/publish — publish; resolve fixed_report_ids,
+//                                          message each reporter, credit after delivery
 //
 // SDK (apiKeyAuth):
 //   GET /v1/sdk/me/credits              — releases where the user is credited
@@ -30,6 +31,10 @@ import {
 } from '../shared.ts'
 import { log } from '../../_shared/logger.ts'
 import { reporterKey } from '../../_shared/reporter-token.ts'
+import { buildNotificationMessage, createNotification, notifyFollowers } from '../../_shared/notifications.ts'
+import { runStatusTransitionSideEffects } from '../../_shared/report-transition.ts'
+import { toStoredStatus } from '../../_shared/report-status.ts'
+import { awardPoints } from '../../_shared/reputation.ts'
 
 async function assertReleaseRowAccess(
   c: Parameters<typeof assertTargetProjectAccess>[0],
@@ -407,9 +412,98 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
       }
     }
 
+    // ── Reports this release fixed (Plan 018 §5) ─────────────────────────────
+    // Each report in fixed_report_ids moves to the stored fixed state with the
+    // version stamped, and its reporter gets ONE `released` message ("Shipped
+    // in vX — does it work for you now?"), keyed by the release id so a retry
+    // can not send it twice. In review mode the message is held in the Outbox.
+    const fixedIds = [...new Set((release.fixed_report_ids ?? []) as string[])]
+    const delivery = {
+      reports_listed: fixedIds.length,
+      reports_resolved: 0,
+      reports_not_found: 0,
+      reporters_notified: 0,
+      reporters_held: 0,
+      reporters_failed: 0,
+      reports_without_reporter: 0,
+      credits_stamped: 0,
+      credits_pending: 0,
+    }
+    if (fixedIds.length > 0) {
+      // fixed_report_ids is caller-editable: only this project's reports.
+      const { data: fixedReports, error: fixedErr } = await db
+        .from('reports')
+        .select('id, status, reporter_token_hash')
+        .in('id', fixedIds)
+        .eq('project_id', release.project_id)
+      if (fixedErr) {
+        return c.json(
+          { ok: false, error: `release published, but loading its ${fixedIds.length} fixed report(s) failed: ${fixedErr.message}` },
+          500,
+        )
+      }
+      delivery.reports_not_found = fixedIds.length - (fixedReports ?? []).length
+      const message = buildNotificationMessage('released', { version: release.version })
+
+      for (const report of (fixedReports ?? []) as Array<{ id: string; status: string; reporter_token_hash: string | null }>) {
+        const { error: updErr } = await db
+          .from('reports')
+          .update({ status: 'fixed', fixed_in_version: release.version, fixed_release_id: release.id })
+          .eq('id', report.id)
+          .eq('project_id', release.project_id)
+        if (updErr) {
+          log.error('release_report_resolve_failed', { releaseId: release.id, reportId: report.id, error: updErr.message })
+          delivery.reporters_failed++
+          continue
+        }
+        delivery.reports_resolved++
+
+        if (toStoredStatus(report.status) !== 'fixed') {
+          // Plugins, linked issues; the reporter hears `released` below, not `fixed`.
+          runStatusTransitionSideEffects(db, {
+            reportId: report.id,
+            projectId: release.project_id,
+            reporterTokenHash: report.reporter_token_hash,
+            previousStatus: report.status,
+            newStatus: 'fixed',
+            actor: { kind: 'admin', id: userId },
+            notifyReporter: false,
+          })
+          if (report.reporter_token_hash) {
+            await awardPoints(db, release.project_id, report.reporter_token_hash, { action: 'fixed' }).catch((e) =>
+              log.warn('release_points_award_failed', { reportId: report.id, err: String(e) }),
+            )
+          }
+        }
+
+        if (!report.reporter_token_hash) {
+          delivery.reports_without_reporter++
+          continue
+        }
+        const payload = { message, reportId: report.id, version: release.version }
+        const results = [
+          await createNotification(db, release.project_id, report.id, report.reporter_token_hash, 'released', payload, {
+            reviewable: true,
+            dedupeKey: release.id,
+          }),
+          ...(await notifyFollowers(db, release.project_id, report.id, 'released', payload, {
+            reviewable: true,
+            dedupeKey: release.id,
+          })),
+        ]
+        for (const r of results) {
+          if (r.held) delivery.reporters_held++
+          else if (r.delivered.includes('in_app') || r.duplicate.includes('in_app')) delivery.reporters_notified++
+          else delivery.reporters_failed++
+        }
+      }
+    }
+
+    // ── Credits: stamp notified_at only where a delivered ledger row exists ──
+    // Until 2026-10 this stamped every credit without sending anything.
     const { data: credits, error: creditsFetchError } = await db
       .from('release_credits')
-      .select('id, end_user_id, display_name_at_time')
+      .select('id, report_id')
       .eq('release_id', release.id)
       .is('notified_at', null)
     if (creditsFetchError) {
@@ -418,29 +512,60 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
         500,
       )
     }
-
-    if ((credits ?? []).length > 0) {
-      const { error: creditsUpdateError } = await db
+    const creditReportIds = [
+      ...new Set(
+        ((credits ?? []) as Array<{ report_id: string | null }>)
+          .map((cr) => cr.report_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ]
+    const deliveredReportIds = new Set<string>()
+    if (creditReportIds.length > 0) {
+      const { data: ledger, error: ledgerErr } = await db
+        .from('notification_deliveries')
+        .select('report_id')
+        .eq('notification_type', 'released')
+        .eq('channel', 'in_app')
+        .eq('status', 'sent')
+        .eq('dedupe_key', release.id)
+        .in('report_id', creditReportIds)
+      if (ledgerErr) {
+        return c.json(
+          { ok: false, error: `release published, but reading the delivery ledger failed: ${ledgerErr.message}` },
+          500,
+        )
+      }
+      for (const row of (ledger ?? []) as Array<{ report_id: string }>) deliveredReportIds.add(row.report_id)
+    }
+    const stampIds = ((credits ?? []) as Array<{ id: string; report_id: string | null }>)
+      .filter((cr) => cr.report_id && deliveredReportIds.has(cr.report_id))
+      .map((cr) => cr.id)
+    delivery.credits_pending = (credits ?? []).length - stampIds.length
+    if (stampIds.length > 0) {
+      const { error: creditsUpdateError, count } = await db
         .from('release_credits')
-        .update({ notified_at: new Date().toISOString() })
-        .eq('release_id', release.id)
+        .update({ notified_at: new Date().toISOString() }, { count: 'exact' })
+        .in('id', stampIds)
         .is('notified_at', null)
       if (creditsUpdateError) {
         return c.json(
           {
             ok: false,
-            error: `release published, but marking ${(credits ?? []).length} credit(s) notified failed: ${creditsUpdateError.message}`,
+            error: `release published, but marking ${stampIds.length} credit(s) notified failed: ${creditsUpdateError.message}`,
           },
           500,
         )
       }
+      delivery.credits_stamped = count ?? 0
     }
 
     return c.json({
       ok: true,
       data: release,
-      notified: (credits ?? []).length,
+      // Credits whose reporter actually received the release message.
+      notified: delivery.credits_stamped,
       tickets_fulfilled: ticketIds.length,
+      delivery,
     })
   })
 

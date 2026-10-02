@@ -6,11 +6,21 @@
  * - Gates on project_settings.reporter_notifications_enabled (default true).
  * - Idempotent via createNotification's delivery ledger.
  * - Used by admin PATCH, fix-worker, and finalizeFixMerge so paths never diverge.
+ * - Pipeline messages (fix started, fixed, closed) are `reviewable`: a project
+ *   in review mode holds them in the console Outbox (Plan 018 decision 7).
+ *   Reporters following the report (theirs was a duplicate) get a copy.
+ * - closed_reason 'spam' closes silently: no message at all.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { awardPoints } from './reputation.ts';
-import { createNotification, buildNotificationMessage } from './notifications.ts';
+import {
+  createNotification,
+  buildNotificationMessage,
+  notifyFollowers,
+  type NotificationPayload,
+  type NotificationType,
+} from './notifications.ts';
 import { isReporterFixedStatus, toStoredStatus } from './report-status.ts';
 import { log } from './logger.ts';
 
@@ -36,6 +46,20 @@ export interface ReportStatusTransitionNotifyInput {
   reporterTokenHash: string | null | undefined;
   previousStatus: string | null | undefined;
   newStatus: string;
+  /** For `dismissed`: why it was closed (shown to the reporter; 'spam' sends nothing). */
+  closedReason?: string | null;
+}
+
+/** Owner first, then every follower of the report. */
+async function notifyOwnerAndFollowers(
+  db: SupabaseClient,
+  input: ReportStatusTransitionNotifyInput & { reporterTokenHash: string },
+  type: NotificationType,
+  payload: NotificationPayload,
+  reviewable: boolean,
+): Promise<void> {
+  await createNotification(db, input.projectId, input.reportId, input.reporterTokenHash, type, payload, { reviewable });
+  await notifyFollowers(db, input.projectId, input.reportId, type, payload, { reviewable });
 }
 
 /**
@@ -48,6 +72,7 @@ export async function notifyReportStatusTransition(
 ): Promise<void> {
   const { projectId, reportId, reporterTokenHash } = input;
   if (!reporterTokenHash) return;
+  const owner = { ...input, reporterTokenHash };
 
   const previousStatus = toStoredStatus(input.previousStatus) ?? input.previousStatus ?? null;
   const newStatus = toStoredStatus(input.newStatus) ?? input.newStatus;
@@ -60,11 +85,11 @@ export async function notifyReportStatusTransition(
       await awardPoints(db, projectId, reporterTokenHash, { action: 'confirmed' }).catch((e) =>
         notifyLog.warn('Reputation award failed', { action: 'confirmed', err: String(e) }),
       );
-      await createNotification(db, projectId, reportId, reporterTokenHash, 'confirmed', {
+      await notifyOwnerAndFollowers(db, owner, 'confirmed', {
         message: buildNotificationMessage('confirmed', { points: 50 }),
         points: 50,
         reportId,
-      });
+      }, true);
       return;
     }
 
@@ -72,11 +97,11 @@ export async function notifyReportStatusTransition(
       await awardPoints(db, projectId, reporterTokenHash, { action: 'fixed' }).catch((e) =>
         notifyLog.warn('Reputation award failed', { action: 'fixed', err: String(e) }),
       );
-      await createNotification(db, projectId, reportId, reporterTokenHash, 'fixed', {
+      await notifyOwnerAndFollowers(db, owner, 'fixed', {
         message: buildNotificationMessage('fixed', { points: 25 }),
         points: 25,
         reportId,
-      });
+      }, true);
       return;
     }
 
@@ -97,13 +122,23 @@ export async function notifyReportStatusTransition(
     }
 
     if (newStatus === 'dismissed' && previousStatus !== 'dismissed') {
+      if (input.closedReason === 'spam') return;
       await awardPoints(db, projectId, reporterTokenHash, { action: 'dismissed' }).catch((e) =>
         notifyLog.warn('Reputation award failed', { action: 'dismissed', err: String(e) }),
       );
-      await createNotification(db, projectId, reportId, reporterTokenHash, 'dismissed', {
+      const payload = {
         message: buildNotificationMessage('dismissed', {}),
         reportId,
-      });
+        closedReason: input.closedReason ?? null,
+      };
+      // A duplicate close tells only its own reporter (the trigger's
+      // duplicate_linked notice carries the follow); any other close of a
+      // canonical report reaches its followers too.
+      if (input.closedReason === 'duplicate') {
+        await createNotification(db, projectId, reportId, reporterTokenHash, 'dismissed', payload, { reviewable: true });
+      } else {
+        await notifyOwnerAndFollowers(db, owner, 'dismissed', payload, true);
+      }
     }
   } catch (e) {
     notifyLog.warn('notifyReportStatusTransition failed', {

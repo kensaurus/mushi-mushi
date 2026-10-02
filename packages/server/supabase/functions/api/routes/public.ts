@@ -46,6 +46,14 @@ import {
 } from '../helpers.ts';
 import { safeParse, ApiReportBodySchema } from '../../_shared/validate.ts';
 import { registerReporterFeatureBoardRoutes } from './reporter-feature-board.ts';
+import { registerReporterInboxRoutes } from './reporter-inbox.ts';
+import { reporterSafePayload, type ReporterNotificationRow } from '../../_shared/reporter-copy.ts';
+import {
+  announceReporterReply,
+  claimReporterReplySlot,
+  REPORTER_REPLY_MAX_CHARS,
+} from '../../_shared/reporter-reply-signals.ts';
+import { runInBackground } from '../../_shared/background.ts';
 import { resolveReporterAuth } from './reporter-auth.ts';
 import { reporterKey } from '../../_shared/reporter-token.ts';
 import { claimIpRateLimit, extractClientIp } from './cli-auth.ts';
@@ -1131,50 +1139,9 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   // one-way key the reporter tables store.
   const resolveReporterTokenHash = resolveReporterAuth;
 
-  app.get('/v1/reporter/reports', apiKeyAuth, async (c) => {
-    const projectId = c.get('projectId') as string;
-    const auth = await resolveReporterTokenHash(c, projectId);
-    if (!auth.ok)
-      return c.json(
-        { ok: false, error: { code: auth.code, message: auth.message } },
-        auth.status as 400 | 401,
-      );
-
-    const db = getServiceClient();
-    const { data: reports, error } = await db
-      .from('reports')
-      .select('id, status, category, severity, summary, description, created_at, last_admin_reply_at, last_reporter_reply_at, parent_report_id, verified_at, reopened_at, regression_count')
-      .eq('project_id', projectId)
-      .eq('reporter_token_hash', auth.tokenHash)
-      .order('created_at', { ascending: false })
-      .limit(25);
-    if (error) return dbError(c, error);
-
-    const reportIds = (reports ?? []).map((r) => r.id);
-    const unreadByReport = new Map<string, number>();
-    if (reportIds.length > 0) {
-      const { data: unread } = await db
-        .from('reporter_notifications')
-        .select('report_id')
-        .eq('project_id', projectId)
-        .eq('reporter_token_hash', auth.tokenHash)
-        .is('read_at', null)
-        .in('report_id', reportIds);
-      for (const row of unread ?? []) {
-        unreadByReport.set(row.report_id, (unreadByReport.get(row.report_id) ?? 0) + 1);
-      }
-    }
-
-    return c.json({
-      ok: true,
-      data: {
-        reports: (reports ?? []).map((r) => ({
-          ...r,
-          unread_count: unreadByReport.get(r.id) ?? 0,
-        })),
-      },
-    });
-  });
+  // GET /v1/reporter/reports, GET /v1/reporter/reports/:id, mark-read and
+  // /v1/reporter/updates live in reporter-inbox.ts (Plan 018 §2.2–2.3).
+  registerReporterInboxRoutes(app, resolveReporterTokenHash);
 
   app.get('/v1/reporter/reports/:id/comments', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;
@@ -1259,8 +1226,40 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         400,
       );
     }
+    if (text.length > REPORTER_REPLY_MAX_CHARS) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'REPLY_TOO_LONG',
+            message: `Reply must be at most ${REPORTER_REPLY_MAX_CHARS} characters.`,
+          },
+        },
+        400,
+      );
+    }
 
     const db = getServiceClient();
+    // 10 replies per hour per reporter per project. Fails closed (429) on an
+    // unexpected limiter error — see reporter-reply-signals.ts.
+    const slot = await claimReporterReplySlot(db, projectId, auth.tokenHash);
+    if (!slot.ok) {
+      c.header('Retry-After', String(slot.retryAfterSeconds));
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'RATE_LIMITED',
+            message:
+              slot.reason === 'limit'
+                ? 'Too many replies on this report thread — try again later.'
+                : 'Replies are briefly unavailable — try again in a moment.',
+          },
+        },
+        429,
+      );
+    }
+
     const { data: report, error: reportError } = await db
       .from('reports')
       .select('id')
@@ -1315,7 +1314,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         // Chip-only replies still need a body for the audit trail —
         // synthesise a human-readable phrase from the signal so the
         // admin UI doesn't render an empty bubble.
-        body: (text || (rawSignal ? `[${rawSignal}]` : '')).slice(0, 10000),
+        body: text || (rawSignal ? `[${rawSignal}]` : ''),
         visible_to_reporter: true,
         feedback_signal: rawSignal,
       })
@@ -1324,6 +1323,19 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       )
       .single();
     if (error) return dbError(c, error);
+
+    // The reporter answered: tell the people who can act on it (plugin event,
+    // Slack thread, console push) and reopen a "couldn't reproduce" close.
+    // The trigger already cleared awaiting_reporter_at.
+    runInBackground(
+      announceReporterReply(db, {
+        projectId,
+        reportId,
+        commentId: (comment as { id: number }).id,
+        body: (comment as { body: string }).body,
+      }),
+      'reporter_reply_signals',
+    );
 
     return c.json({ ok: true, data: { comment, feedback: feedbackOutcome } }, 201);
   });
@@ -1420,9 +1432,10 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     const db = getServiceClient();
     let query = db
       .from('reporter_notifications')
-      .select('id, notification_type, payload, read_at, created_at')
+      .select('id, report_id, notification_type, payload, read_at, created_at, body_override')
       .eq('project_id', projectId)
       .eq('reporter_token_hash', auth.tokenHash)
+      .eq('status', 'sent')
       .order('created_at', { ascending: false })
       .limit(limit);
     if (!includeRead) query = query.is('read_at', null);
@@ -1437,7 +1450,17 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     return c.json({
       ok: true,
       data: {
-        notifications: notifications ?? [],
+        // Payload text is re-rendered from templates on every read, so rows
+        // written before Plan 018 ("classified as bug/high") never reach a
+        // reporter, and category / severity are dropped.
+        notifications: ((notifications ?? []) as ReporterNotificationRow[]).map((n) => ({
+          id: n.id,
+          report_id: n.report_id ?? null,
+          notification_type: n.notification_type === 'classified' ? 'reviewing' : n.notification_type,
+          payload: reporterSafePayload(n),
+          read_at: n.read_at ?? null,
+          created_at: n.created_at,
+        })),
         server_time: new Date().toISOString(),
       },
     });
@@ -1591,7 +1614,8 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       .update({ read_at: new Date().toISOString() })
       .eq('id', notifId)
       .eq('project_id', projectId)
-      .eq('reporter_token_hash', auth.tokenHash);
+      .eq('reporter_token_hash', auth.tokenHash)
+      .eq('status', 'sent');
     if (error) return dbError(c, error);
     return c.json({ ok: true });
   });
