@@ -861,9 +861,7 @@ function PipelinesTab({
               <Btn type="button" variant="primary" size="sm" onClick={onGoToCatalog}>
                 Browse Catalog →
               </Btn>
-              <Link to="/reports">
-                <Btn size="sm" variant="ghost">Open Reports</Btn>
-              </Link>
+              <Btn to="/reports" size="sm" variant="ghost">Open Reports</Btn>
             </div>
           </div>
         ) : (

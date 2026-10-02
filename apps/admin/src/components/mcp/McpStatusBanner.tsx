@@ -3,7 +3,6 @@
  * PURPOSE: Stats-driven MCP readiness banner for the active project.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
@@ -70,9 +69,7 @@ export function McpStatusBanner({ stats, onTab, onRefresh, refreshing, plainBann
           `report:write keys capture bugs but cannot list tools — mint mcp:read on /projects for ${projectLabel}.`
         }
         action={
-          <Link to="/projects">
-            <Btn size="sm" variant="primary">{actions.mint ?? 'Mint MCP key'}</Btn>
-          </Link>
+          <Btn to="/projects" size="sm" variant="primary">{actions.mint ?? 'Mint MCP key'}</Btn>
         }
       />
     )
@@ -85,9 +82,7 @@ export function McpStatusBanner({ stats, onTab, onRefresh, refreshing, plainBann
         title={plainBanner ? 'No MCP keys yet' : `No MCP keys for ${projectLabel}`}
         subtitle={label}
         action={
-          <Link to="/projects">
-            <Btn size="sm" variant="primary">{actions.generate ?? 'Generate key'}</Btn>
-          </Link>
+          <Btn to="/projects" size="sm" variant="primary">{actions.generate ?? 'Generate key'}</Btn>
         }
       />
     )
@@ -103,9 +98,7 @@ export function McpStatusBanner({ stats, onTab, onRefresh, refreshing, plainBann
           onTab && actionTab ? (
             <Btn size="sm" variant="primary" onClick={() => onTab(actionTab)}>{actions.setup ?? 'Paste snippet'}</Btn>
           ) : (
-            <Link to="/mcp?tab=setup">
-              <Btn size="sm" variant="primary">{actions.setup ?? 'Paste snippet'}</Btn>
-            </Link>
+            <Btn to="/mcp?tab=setup" size="sm" variant="primary">{actions.setup ?? 'Paste snippet'}</Btn>
           )
         }
       />

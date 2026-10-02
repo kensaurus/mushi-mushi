@@ -3,7 +3,6 @@
  * PURPOSE: BYO bucket health — probe status, defaults, and upload risk.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { StorageStats, StorageTabId } from './types'
@@ -35,9 +34,7 @@ export function StorageStatusBanner({ stats, onTab, onHealthCheck, checking }: P
         title="No project selected"
         subtitle="Storage backends are per-project — pick an app in the header switcher before configuring a bucket."
         action={
-          <Link to="/projects">
-            <Btn size="sm" variant="ghost">Go to Projects</Btn>
-          </Link>
+          <Btn to="/projects" size="sm" variant="ghost">Go to Projects</Btn>
         }
       />
     )

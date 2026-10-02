@@ -3,7 +3,6 @@
  * PURPOSE: Stats-driven reporter notification health for the active project.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
@@ -60,9 +59,7 @@ export function NotificationsStatusBanner({
         title={plainBanner ? 'Reporter updates are turned off' : 'Reporter notifications disabled'}
         subtitle={label}
         action={
-          <Link to="/settings">
-            <Btn size="sm" variant="primary">{actions.settings ?? 'Open Settings'}</Btn>
-          </Link>
+          <Btn to="/settings" size="sm" variant="primary">{actions.settings ?? 'Open Settings'}</Btn>
         }
       />
     )
@@ -82,9 +79,7 @@ export function NotificationsStatusBanner({
           onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('inbox')}>{actions.inbox ?? 'Review inbox'}</Btn>
           ) : actionTab ? (
-            <Link to={stats.topPriorityTo ?? '/notifications?tab=inbox'}>
-              <Btn size="sm" variant="ghost">{actions.inbox ?? 'Review inbox'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo ?? '/notifications?tab=inbox'} size="sm" variant="ghost">{actions.inbox ?? 'Review inbox'}</Btn>
           ) : null
         }
       />
@@ -101,9 +96,7 @@ export function NotificationsStatusBanner({
           onTab ? (
             <Btn size="sm" variant="primary" onClick={() => onTab('setup')}>{actions.setup ?? 'Open Setup'}</Btn>
           ) : (
-            <Link to="/notifications?tab=setup">
-              <Btn size="sm" variant="primary">{actions.setup ?? 'Open Setup'}</Btn>
-            </Link>
+            <Btn to="/notifications?tab=setup" size="sm" variant="primary">{actions.setup ?? 'Open Setup'}</Btn>
           )
         }
       />

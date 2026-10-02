@@ -6,7 +6,6 @@
  */
 
 import { useCallback, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -487,11 +486,9 @@ export function FeatureBoardPage() {
         <Btn size="sm" variant="ghost" onClick={reload} loading={isValidating}>
           Refresh
         </Btn>
-        <Link to="/feedback">
-          <Btn size="sm" variant="ghost">
+        <Btn to="/feedback" size="sm" variant="ghost">
             My feedback
           </Btn>
-        </Link>
       </PageHeaderBar>
 
       <PagePosture
@@ -583,9 +580,7 @@ export function FeatureBoardPage() {
                     'Mark shipped when the idea lands in a release',
                   ]}
                   action={
-                    <Link to="/feedback">
-                      <Btn size="sm">Open My feedback</Btn>
-                    </Link>
+                    <Btn to="/feedback" size="sm">Open My feedback</Btn>
                   }
                 />
               )}

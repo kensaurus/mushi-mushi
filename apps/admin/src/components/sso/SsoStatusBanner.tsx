@@ -2,7 +2,6 @@
  * SSO posture banner — entitlement, registration failures, pending setup.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { SsoStats } from './types'
@@ -24,9 +23,7 @@ export function SsoStatusBanner({ stats, ssoUnlocked, onRefresh, refreshing }: P
         title="Pick a project first"
         subtitle="SSO configs are per app — choose one in the header switcher."
         action={
-          <Link to="/projects">
-            <Btn size="sm" variant="ghost">Go to Projects</Btn>
-          </Link>
+          <Btn to="/projects" size="sm" variant="ghost">Go to Projects</Btn>
         }
       />
     )
@@ -39,9 +36,7 @@ export function SsoStatusBanner({ stats, ssoUnlocked, onRefresh, refreshing }: P
         title="SSO requires Enterprise"
         subtitle={`${stats.planDisplayName} on ${projectLabel} does not include SAML/OIDC — upgrade to enable corporate login.`}
         action={
-          <Link to="/billing?tab=plans">
-            <Btn size="sm" variant="ghost">View plans</Btn>
-          </Link>
+          <Btn to="/billing?tab=plans" size="sm" variant="ghost">View plans</Btn>
         }
       />
     )
@@ -73,7 +68,7 @@ export function SsoStatusBanner({ stats, ssoUnlocked, onRefresh, refreshing }: P
         tone="warn"
         title="Finish IdP configuration"
         subtitle={label}
-        action={to ? <Link to={to}><Btn size="sm" variant="ghost">Continue setup</Btn></Link> : null}
+        action={to ? <Btn to={to} size="sm" variant="ghost">Continue setup</Btn> : null}
       />
     )
   }

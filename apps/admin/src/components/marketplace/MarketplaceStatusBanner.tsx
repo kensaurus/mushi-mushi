@@ -3,7 +3,6 @@
  * PURPOSE: Stats-driven plugin marketplace health for the active project.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
@@ -54,9 +53,7 @@ export function MarketplaceStatusBanner({
         title={plainBanner ? 'Plugins need a Pro plan' : 'Plugins require a Pro plan or higher'}
         subtitle="Browse the catalog read-only — installing webhook plugins needs the plugins entitlement."
         action={
-          <Link to="/billing">
-            <Btn size="sm" variant="ghost">{actions.plans ?? 'View plans'}</Btn>
-          </Link>
+          <Btn to="/billing" size="sm" variant="ghost">{actions.plans ?? 'View plans'}</Btn>
         }
       />
     )
@@ -80,9 +77,7 @@ export function MarketplaceStatusBanner({
           onTab && actionTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab(actionTab)}>{actions.deliveries ?? 'View deliveries'}</Btn>
           ) : (
-            <Link to="/marketplace?tab=deliveries">
-              <Btn size="sm" variant="ghost">{actions.deliveries ?? 'View deliveries'}</Btn>
-            </Link>
+            <Btn to="/marketplace?tab=deliveries" size="sm" variant="ghost">{actions.deliveries ?? 'View deliveries'}</Btn>
           )
         }
       />
@@ -114,9 +109,7 @@ export function MarketplaceStatusBanner({
           onTab ? (
             <Btn size="sm" variant="primary" onClick={() => onTab('browse')}>{actions.browse ?? 'Browse catalog'}</Btn>
           ) : (
-            <Link to="/marketplace?tab=browse">
-              <Btn size="sm" variant="primary">{actions.browse ?? 'Browse catalog'}</Btn>
-            </Link>
+            <Btn to="/marketplace?tab=browse" size="sm" variant="primary">{actions.browse ?? 'Browse catalog'}</Btn>
           )
         }
       />

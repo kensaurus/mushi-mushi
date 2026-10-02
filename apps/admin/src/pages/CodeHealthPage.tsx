@@ -501,11 +501,9 @@ export function CodeHealthPage() {
                     Mint ingest key
                   </Btn>
                 </Link>
-                <Link to="/fullstack-audit">
-                  <Btn size="sm" variant="ghost">
+                <Btn to="/fullstack-audit" size="sm" variant="ghost">
                     Full-Stack Audit →
                   </Btn>
-                </Link>
               </div>
             }
           />

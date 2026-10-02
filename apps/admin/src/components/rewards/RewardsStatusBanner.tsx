@@ -2,7 +2,6 @@
  * FILE: apps/admin/src/components/rewards/RewardsStatusBanner.tsx
  */
 
-import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { RewardsStats, RewardsTabId } from './types'
@@ -54,9 +53,7 @@ export function RewardsStatusBanner({ stats, rewardsEntitlement, onTab, onRefres
         title="Rewards program requires Starter or higher"
         subtitle={`Preview tabs below are read-only on Hobby — upgrade to edit rules, tiers, and webhooks for ${orgLabel}.`}
         action={
-          <Link to="/billing">
-            <Btn size="sm" variant="ghost">View plans</Btn>
-          </Link>
+          <Btn to="/billing" size="sm" variant="ghost">View plans</Btn>
         }
       />
     )
@@ -73,9 +70,7 @@ export function RewardsStatusBanner({ stats, rewardsEntitlement, onTab, onRefres
         title={`Rewards disabled for ${projectLabel}`}
         subtitle={label ?? 'Turn on rewards_enabled in project settings.'}
         action={
-          <Link to="/settings?tab=dev">
-            <Btn size="sm" variant="primary">Open Settings</Btn>
-          </Link>
+          <Btn to="/settings?tab=dev" size="sm" variant="primary">Open Settings</Btn>
         }
       />
     )
@@ -91,9 +86,7 @@ export function RewardsStatusBanner({ stats, rewardsEntitlement, onTab, onRefres
           onTab && actionTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab(actionTab)}>Fix webhooks</Btn>
           ) : (
-            <Link to="/rewards?tab=settings">
-              <Btn size="sm" variant="ghost">Fix webhooks</Btn>
-            </Link>
+            <Btn to="/rewards?tab=settings" size="sm" variant="ghost">Fix webhooks</Btn>
           )
         }
       />
@@ -110,9 +103,7 @@ export function RewardsStatusBanner({ stats, rewardsEntitlement, onTab, onRefres
           onTab && actionTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab(actionTab)}>Review disputes</Btn>
           ) : (
-            <Link to="/rewards?tab=settings">
-              <Btn size="sm" variant="ghost">Review disputes</Btn>
-            </Link>
+            <Btn to="/rewards?tab=settings" size="sm" variant="ghost">Review disputes</Btn>
           )
         }
       />

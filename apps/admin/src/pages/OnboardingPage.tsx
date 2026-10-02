@@ -1141,11 +1141,9 @@ export function OnboardingPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Link to={`/reports?filter=test`}>
-              <Btn size="sm" variant="primary">
+            <Btn to={`/reports?filter=test`} size="sm" variant="primary">
                 Watch the loop →
               </Btn>
-            </Link>
             <Link to="/judge" className="text-xs text-fg-muted underline hover:no-underline">
               See judge scores
             </Link>

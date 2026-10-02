@@ -3,7 +3,6 @@
  * PURPOSE: Firecrawl research posture — BYOK setup, test failures, ready, healthy.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn, Badge } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
@@ -33,9 +32,7 @@ export function ResearchStatusBanner({ stats, onTab, onRefresh, refreshing, plai
             : 'Pick a project to run Firecrawl web research during triage.'
         }
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
-          </Link>
+          <Btn to="/onboarding" size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
         }
       />
     )
@@ -48,9 +45,7 @@ export function ResearchStatusBanner({ stats, onTab, onRefresh, refreshing, plai
         title={plainBanner ? 'Web search not set up' : `Firecrawl not configured on ${projectLabel}`}
         subtitle={stats.topPriorityLabel}
         action={
-          <Link to="/settings?tab=firecrawl">
-            <Btn size="sm" variant="primary">{actions.configure ?? 'Configure Firecrawl'}</Btn>
-          </Link>
+          <Btn to="/settings?tab=firecrawl" size="sm" variant="primary">{actions.configure ?? 'Configure Firecrawl'}</Btn>
         }
       />
     )
@@ -65,9 +60,7 @@ export function ResearchStatusBanner({ stats, onTab, onRefresh, refreshing, plai
         }
         subtitle={stats.topPriorityLabel}
         action={
-          <Link to="/settings?tab=firecrawl">
-            <Btn size="sm" variant="ghost">{actions.fix ?? 'Fix in Settings'}</Btn>
-          </Link>
+          <Btn to="/settings?tab=firecrawl" size="sm" variant="ghost">{actions.fix ?? 'Fix in Settings'}</Btn>
         }
       />
     )
@@ -80,9 +73,7 @@ export function ResearchStatusBanner({ stats, onTab, onRefresh, refreshing, plai
         title="Firecrawl key saved — test required"
         subtitle={stats.topPriorityLabel}
         action={
-          <Link to="/settings?tab=firecrawl">
-            <Btn size="sm" variant="ghost">{actions.test ?? 'Test connection'}</Btn>
-          </Link>
+          <Btn to="/settings?tab=firecrawl" size="sm" variant="ghost">{actions.test ?? 'Test connection'}</Btn>
         }
       />
     )
@@ -98,9 +89,7 @@ export function ResearchStatusBanner({ stats, onTab, onRefresh, refreshing, plai
           onTab ? (
             <Btn size="sm" variant="primary" onClick={() => onTab('search')}>{actions.search ?? 'Run first search'}</Btn>
           ) : (
-            <Link to="/research?tab=search">
-              <Btn size="sm" variant="primary">{actions.search ?? 'Run first search'}</Btn>
-            </Link>
+            <Btn to="/research?tab=search" size="sm" variant="primary">{actions.search ?? 'Run first search'}</Btn>
           )
         }
       />
@@ -117,9 +106,7 @@ export function ResearchStatusBanner({ stats, onTab, onRefresh, refreshing, plai
           onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('search')}>{actions.attach ?? 'Attach evidence'}</Btn>
           ) : (
-            <Link to="/research?tab=search">
-              <Btn size="sm" variant="ghost">{actions.attach ?? 'Attach evidence'}</Btn>
-            </Link>
+            <Btn to="/research?tab=search" size="sm" variant="ghost">{actions.attach ?? 'Attach evidence'}</Btn>
           )
         }
       />
@@ -144,9 +131,7 @@ export function ResearchStatusBanner({ stats, onTab, onRefresh, refreshing, plai
             {actions.refresh ?? 'Refresh'}
           </Btn>
         ) : stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">{actions.history ?? 'View history'}</Btn>
-          </Link>
+          <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.history ?? 'View history'}</Btn>
         ) : null
       }
     />
