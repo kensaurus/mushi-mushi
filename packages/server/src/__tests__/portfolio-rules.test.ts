@@ -109,6 +109,24 @@ describe('authConfigDivergent', () => {
     ])).toEqual([])
   })
 
+  it('compares only apps whose settings were read, and labels a declared-only miss as a warning', () => {
+    const out = authConfigDivergent([
+      { ...base, projectId: 'glot', settings: { redirectUrls: ['https://glot.it/**'], providers: ['email', 'google'] }, declaredOrigins: ['glot.it'], source: 'k/glot/supabase/config.toml' },
+      { ...base, projectId: 'yen', settings: {}, settingsKnown: false, declaredOrigins: ['yenyen.app'] },
+    ], PROJECTS)
+    expect(out.some((f) => f.ruleId === 'auth_config_divergent')).toBe(false)
+    const missing = out.filter((f) => f.ruleId === 'auth_redirect_missing')
+    expect(missing).toEqual([expect.objectContaining({ severity: 'warn', projectIds: ['yen'] })])
+    expect(missing[0].message).toContain('declared in k/glot/supabase/config.toml')
+  })
+
+  it('says nothing when no app in the group declares its settings', () => {
+    expect(authConfigDivergent([
+      { ...base, projectId: 'glot', settings: {}, settingsKnown: false, declaredOrigins: ['glot.it'] },
+      { ...base, projectId: 'yen', settings: {}, settingsKnown: false, declaredOrigins: ['yenyen.app'] },
+    ])).toEqual([])
+  })
+
   it('ignores a provider used by only one app', () => {
     expect(authConfigDivergent([{ ...base, projectId: 'glot', settings: { providers: ['email'] }, declaredOrigins: ['nowhere.example'] }])).toEqual([])
   })
@@ -133,6 +151,13 @@ describe('billingConsistency', () => {
     const out = billingConsistency(same, { glot: { account: 'acct_1', priceIds: ['price_A'], priceIdsInCode: ['price_A', 'price_GONE'] } })
     expect(out).toEqual([expect.objectContaining({ ruleId: 'stripe_price_missing', projectIds: ['glot'], resourceKey: 'stripe_account:acct_1' })])
     expect(out[0].message).toContain('price_GONE')
+  })
+
+  it('does not call it a mismatch when one side names no account', () => {
+    const undeclared = PROJECTS.map((p) => (p.id === 'yen' ? { ...p, manifest: { links: { billing: {} } } } : p))
+    const out = billingConsistency(undeclared)
+    expect(out).toEqual([expect.objectContaining({ ruleId: 'billing_account_undeclared', severity: 'info', projectIds: ['glot', 'yen'] })])
+    expect(out[0].message).toContain('yen-yen names no Stripe account')
   })
 })
 

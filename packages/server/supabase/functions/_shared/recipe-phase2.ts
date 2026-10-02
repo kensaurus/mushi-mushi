@@ -19,15 +19,20 @@ import { loadConnectorEntries, runConnector, type ConnectorRunResult, type Runti
 import type { DriftFinding } from './connectors/types.ts'
 import { publicFetch } from './safe-fetch.ts'
 import {
+  authConfigDivergent,
+  billingConsistency,
   ciCostConcentration,
   completenessChecklist,
   deriveResourceUses,
   evaluateDeepLinks,
   sharedChannels,
+  type AuthConfigInput,
   type DeepLinkFiles,
   type PortfolioRuleFinding,
+  type PortfolioRuleUnknown,
   type ProjectKindValue,
 } from './portfolio-rules.ts'
+import type { DeclaredAuthSettings } from './supabase-config-toml.ts'
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -236,91 +241,173 @@ function toConnectorFinding(d: RecipeDriftFinding): DriftFinding {
 
 // ── organization ─────────────────────────────────────────────────────────────
 
-export async function collectOrgPortfolio(db: Db, organizationId: string, deps: Phase2Deps = livePhase2Deps): Promise<{ findings: number; resolved: number; unknown: number }> {
-  const now = deps.now()
-  const { data: projects } = await db.from('projects').select('id, name, kind').eq('organization_id', organizationId).limit(100)
-  const rows = (projects ?? []) as Array<{ id: string; name: string | null; kind: ProjectKindValue | null }>
-  if (rows.length < 2) return { findings: 0, resolved: 0, unknown: 0 }
-  const ids = rows.map((p) => p.id)
-  const [{ data: snaps }, { data: settings }, { data: ciRuns }] = await Promise.all([
-    db.from('app_recipe_snapshots').select('project_id, manifest').in('project_id', ids).eq('is_current', true),
-    db.from('project_settings').select('project_id, slack_channel_id, sentry_dsn, sentry_org_slug').in('project_id', ids),
-    db.from('ci_workflow_runs').select('project_id, repo, est_billable_minutes, started_at').in('project_id', ids).gte('started_at', new Date(now.getTime() - 30 * 86400_000).toISOString()).limit(20000),
-  ])
-  const manifestOf = new Map(((snaps ?? []) as Array<{ project_id: string; manifest: unknown }>).map((s) => [s.project_id, s.manifest]))
-  const names = rows.map((p) => ({ id: p.id, name: p.name ?? p.id.slice(0, 8) }))
-  const findings: PortfolioRuleFinding[] = []
-
-  findings.push(...sharedChannels(((settings ?? []) as Array<{ project_id: string; slack_channel_id: string | null }>).map((s) => ({ projectId: s.project_id, slackChannelId: s.slack_channel_id, pushKeyId: null })), names))
-
-  const minutes = new Map<string, { projectId: string; repo: string; minutes30d: number }>()
-  for (const r of (ciRuns ?? []) as Array<{ project_id: string; repo: string; est_billable_minutes: number | null }>) {
-    const key = `${r.project_id}:${r.repo}`
-    const m = minutes.get(key) ?? { projectId: r.project_id, repo: r.repo, minutes30d: 0 }
-    m.minutes30d += Number(r.est_billable_minutes ?? 0)
-    minutes.set(key, m)
-  }
-  findings.push(...ciCostConcentration([...minutes.values()]))
-
-  // Deep links between sibling apps: fetch each declared domain's files once.
-  const appLinks: Array<{ fromProjectId: string; toProjectId: string; domain: string }> = []
-  const targets: Record<string, { bundleId?: string; appleTeamId?: string; androidPackage?: string }> = {}
+/**
+ * Shared-auth inputs: every project naming the same `links.auth` provider +
+ * ref, with the login settings its repo declares in supabase/config.toml (the
+ * GitHub connector's snapshot). A project whose file was not read is left out
+ * of the settings comparison; a group where nobody declares settings is
+ * `unknown`. The live dashboard config is never read (ADR 0017: the Supabase
+ * connector stays read-only MCP, and that endpoint returns secrets).
+ */
+export function authInputsFrom(
+  rows: ReadonlyArray<{ id: string }>,
+  manifestOf: ReadonlyMap<string, unknown>,
+  declaredOf: ReadonlyMap<string, { path: string; settings: DeclaredAuthSettings | null } | undefined>,
+): { inputs: AuthConfigInput[]; unknown: PortfolioRuleUnknown[] } {
+  const inputs: AuthConfigInput[] = []
   for (const p of rows) {
     const m = (manifestOf.get(p.id) ?? {}) as Record<string, any>
-    const ids2 = m.app?.ids ?? {}
-    targets[p.id] = { bundleId: str(ids2.bundleId) ?? undefined, appleTeamId: str(ids2.appleTeamId) ?? undefined, androidPackage: str(ids2.androidPackage) ?? undefined }
-    for (const l of Array.isArray(m.links?.deepLinks?.appLinks) ? m.links.deepLinks.appLinks.slice(0, 20) : []) {
-      const to = rows.find((x) => x.id === l?.toProject || x.name === l?.toProject)
-      const domain = str((manifestOf.get(to?.id ?? '') as Record<string, any> | undefined)?.links?.deepLinks?.universalLinkDomains?.[0])
-      if (to && domain) appLinks.push({ fromProjectId: p.id, toProjectId: to.id, domain })
+    const provider = str(m.links?.auth?.provider)
+    const ref = str(m.links?.auth?.ref)
+    if (!provider || !ref) continue
+    const declared = declaredOf.get(p.id)
+    const origins = [
+      ...(Array.isArray(m.links?.domains) ? m.links.domains : []),
+      ...(Array.isArray(m.links?.deepLinks?.schemes) ? m.links.deepLinks.schemes.map((x: unknown) => (typeof x === 'string' ? `${x}://` : null)) : []),
+    ].filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length <= 300).slice(0, 20)
+    inputs.push({
+      projectId: p.id,
+      provider,
+      ref,
+      settings: declared?.settings ?? {},
+      settingsKnown: Boolean(declared?.settings),
+      source: declared?.settings ? declared.path : undefined,
+      declaredOrigins: origins,
+    })
+  }
+  const unknown: PortfolioRuleUnknown[] = []
+  const groups = new Map<string, AuthConfigInput[]>()
+  for (const i of inputs) groups.set(`${i.provider}:${i.ref}`, [...(groups.get(`${i.provider}:${i.ref}`) ?? []), i])
+  for (const [key, group] of groups) {
+    if (group.length < 2 || group.some((g) => g.settingsKnown)) continue
+    for (const ruleId of ['auth_config_divergent', 'auth_redirect_missing']) {
+      unknown.push({ ruleId, projectIds: group.map((g) => g.projectId), resourceKey: `auth_provider:${key}`, reason: 'No repo in this group declares its login settings in supabase/config.toml.' })
     }
   }
-  const files: Record<string, DeepLinkFiles> = {}
-  for (const domain of [...new Set(appLinks.map((a) => a.domain))].slice(0, 10)) {
-    const get = async (path: string) => {
-      const r = await deps.probe(`https://${domain}${path}`)
-      return r.status === 200 ? r.text : null
+  return { inputs, unknown }
+}
+
+/** An open finding whose rule could not decide this run stays open: no data is not a fix. */
+export function isUndecided(open: { rule_id: string; resource_key: string | null; project_ids: string[] }, unknown: readonly PortfolioRuleUnknown[]): boolean {
+  return unknown.some((u) => u.ruleId === open.rule_id && (u.resourceKey ?? null) === (open.resource_key ?? null) && u.projectIds.some((id) => open.project_ids.includes(id)))
+}
+
+export async function collectOrgPortfolio(db: Db, organizationId: string, deps: Phase2Deps = livePhase2Deps): Promise<{ findings: number; resolved: number; unknown: number }> {
+  const now = deps.now()
+  const { data: projects, error: projectsError } = await db.from('projects').select('id, name, kind').eq('organization_id', organizationId).limit(100)
+  if (projectsError) throw new Error(`collectOrgPortfolio: could not list projects: ${projectsError.message}`)
+  const rows = (projects ?? []) as Array<{ id: string; name: string | null; kind: ProjectKindValue | null }>
+  const findings: PortfolioRuleFinding[] = []
+  const unknown: PortfolioRuleUnknown[] = []
+
+  // Cross-app rules need two apps. With fewer, nothing is open any more, so
+  // the sweep below resolves whatever was.
+  if (rows.length >= 2) {
+    const ids = rows.map((p) => p.id)
+    const [snapsRes, settingsRes, ciRes, ghRes] = await Promise.all([
+      db.from('app_recipe_snapshots').select('project_id, manifest').in('project_id', ids).eq('is_current', true),
+      db.from('project_settings').select('project_id, slack_channel_id, sentry_dsn, sentry_org_slug').in('project_id', ids),
+      db.from('ci_workflow_runs').select('project_id, repo, est_billable_minutes, started_at').in('project_id', ids).gte('started_at', new Date(now.getTime() - 30 * 86400_000).toISOString()).limit(20000),
+      db.from('connector_snapshots').select('project_id, snapshot').in('project_id', ids).eq('kind', 'github').eq('is_current', true).eq('ok', true),
+    ])
+    // A failed read must not look like "nothing is wrong": stop before the sweep.
+    const readError = [snapsRes, settingsRes, ciRes, ghRes].find((r) => r.error)?.error
+    if (readError) throw new Error(`collectOrgPortfolio: a read failed, findings left as they were: ${readError.message}`)
+    const snaps = snapsRes.data
+    const settings = settingsRes.data
+    const ciRuns = ciRes.data
+    const manifestOf = new Map(((snaps ?? []) as Array<{ project_id: string; manifest: unknown }>).map((s) => [s.project_id, s.manifest]))
+    const names = rows.map((p) => ({ id: p.id, name: p.name ?? p.id.slice(0, 8) }))
+
+    findings.push(...sharedChannels(((settings ?? []) as Array<{ project_id: string; slack_channel_id: string | null }>).map((s) => ({ projectId: s.project_id, slackChannelId: s.slack_channel_id, pushKeyId: null })), names))
+
+    const minutes = new Map<string, { projectId: string; repo: string; minutes30d: number }>()
+    for (const r of (ciRuns ?? []) as Array<{ project_id: string; repo: string; est_billable_minutes: number | null }>) {
+      const key = `${r.project_id}:${r.repo}`
+      const m = minutes.get(key) ?? { projectId: r.project_id, repo: r.repo, minutes30d: 0 }
+      m.minutes30d += Number(r.est_billable_minutes ?? 0)
+      minutes.set(key, m)
     }
-    try {
-      files[domain] = { aasa: await get('/.well-known/apple-app-site-association'), assetlinks: await get('/.well-known/assetlinks.json') }
-    } catch (err) {
-      files[domain] = { aasa: null, assetlinks: null, fetchError: String((err as Error)?.message ?? err).slice(0, 120) }
+    findings.push(...ciCostConcentration([...minutes.values()]))
+
+    // Deep links between sibling apps: fetch each declared domain's files once.
+    const appLinks: Array<{ fromProjectId: string; toProjectId: string; domain: string }> = []
+    const targets: Record<string, { bundleId?: string; appleTeamId?: string; androidPackage?: string }> = {}
+    for (const p of rows) {
+      const m = (manifestOf.get(p.id) ?? {}) as Record<string, any>
+      const ids2 = m.app?.ids ?? {}
+      targets[p.id] = { bundleId: str(ids2.bundleId) ?? undefined, appleTeamId: str(ids2.appleTeamId) ?? undefined, androidPackage: str(ids2.androidPackage) ?? undefined }
+      for (const l of Array.isArray(m.links?.deepLinks?.appLinks) ? m.links.deepLinks.appLinks.slice(0, 20) : []) {
+        const to = rows.find((x) => x.id === l?.toProject || x.name === l?.toProject)
+        const domain = str((manifestOf.get(to?.id ?? '') as Record<string, any> | undefined)?.links?.deepLinks?.universalLinkDomains?.[0])
+        if (to && domain) appLinks.push({ fromProjectId: p.id, toProjectId: to.id, domain })
+      }
+    }
+    const files: Record<string, DeepLinkFiles> = {}
+    for (const domain of [...new Set(appLinks.map((a) => a.domain))].slice(0, 10)) {
+      const get = async (path: string) => {
+        const r = await deps.probe(`https://${domain}${path}`)
+        return r.status === 200 ? r.text : null
+      }
+      try {
+        files[domain] = { aasa: await get('/.well-known/apple-app-site-association'), assetlinks: await get('/.well-known/assetlinks.json') }
+      } catch (err) {
+        files[domain] = { aasa: null, assetlinks: null, fetchError: String((err as Error)?.message ?? err).slice(0, 120) }
+      }
+    }
+    const deep = evaluateDeepLinks(appLinks, files, targets, names)
+    findings.push(...deep.findings)
+    unknown.push(...deep.unknown)
+
+    // Billing: apps that share credits must name the same Stripe account.
+    findings.push(...billingConsistency(rows.map((p) => ({ id: p.id, name: p.name ?? p.id.slice(0, 8), kind: p.kind, manifest: manifestOf.get(p.id) ?? null }))))
+
+    // Shared auth: settings declared in each repo's supabase/config.toml.
+    const declaredOf = new Map(((ghRes.data ?? []) as Array<{ project_id: string; snapshot: { facts?: { supabaseAuth?: { path: string; settings: DeclaredAuthSettings | null } } } }>).map((g) => [g.project_id, g.snapshot?.facts?.supabaseAuth]))
+    const auth = authInputsFrom(rows, manifestOf, declaredOf)
+    findings.push(...authConfigDivergent(auth.inputs, names))
+    unknown.push(...auth.unknown)
+
+    const completeness = rows.map((p) => {
+      const m = (manifestOf.get(p.id) ?? null) as Record<string, any> | null
+      const s = ((settings ?? []) as Array<{ project_id: string; sentry_dsn: string | null; sentry_org_slug: string | null }>).find((x) => x.project_id === p.id)
+      return {
+        id: p.id,
+        name: p.name ?? p.id.slice(0, 8),
+        kind: (p.kind ?? m?.app?.kind ?? null) as ProjectKindValue | null,
+        signals: {
+          hasCrashReporting: s ? Boolean(s.sentry_dsn || s.sentry_org_slug) : undefined,
+          hasVersionProbe: m ? Array.isArray(m.deploy?.targets) && m.deploy.targets.some((t: any) => t?.probe?.type === 'version_json') : undefined,
+        },
+      }
+    })
+    findings.push(...completenessChecklist(completeness))
+    // A signal that was not read keeps that project's open completeness items as they were.
+    for (const c of completeness) {
+      if (c.kind && Object.values(c.signals).some((v) => v === undefined)) unknown.push({ ruleId: 'recipe_incomplete', projectIds: [c.id], resourceKey: null, reason: 'Not every completeness signal was read.' })
     }
   }
-  const deep = evaluateDeepLinks(appLinks, files, targets, names)
-  findings.push(...deep.findings)
 
-  findings.push(...completenessChecklist(rows.map((p) => {
-    const m = (manifestOf.get(p.id) ?? null) as Record<string, any> | null
-    const s = ((settings ?? []) as Array<{ project_id: string; sentry_dsn: string | null; sentry_org_slug: string | null }>).find((x) => x.project_id === p.id)
-    return {
-      id: p.id,
-      name: p.name ?? p.id.slice(0, 8),
-      kind: (p.kind ?? m?.app?.kind ?? null) as ProjectKindValue | null,
-      signals: {
-        hasCrashReporting: s ? Boolean(s.sentry_dsn || s.sentry_org_slug) : undefined,
-        hasVersionProbe: m ? Array.isArray(m.deploy?.targets) && m.deploy.targets.some((t: any) => t?.probe?.type === 'version_json') : undefined,
-      },
-    }
-  })))
-
-  // Upsert open findings; resolve the open ones this run did not see.
-  const { data: open } = await db.from('portfolio_findings').select('id, rule_id, resource_key, project_ids').eq('organization_id', organizationId).eq('status', 'open')
+  // Upsert open findings; resolve the open ones this run saw go away. A rule
+  // that could not decide this run leaves its open findings as they were.
+  const { data: open, error: openError } = await db.from('portfolio_findings').select('id, rule_id, resource_key, project_ids').eq('organization_id', organizationId).eq('status', 'open')
+  if (openError) throw new Error(`collectOrgPortfolio: could not read open findings: ${openError.message}`)
   const keyOf = (f: { rule_id?: string; ruleId?: string; resource_key?: string | null; resourceKey?: string | null; project_ids?: string[]; projectIds?: string[] }) =>
     `${f.rule_id ?? f.ruleId}|${f.resource_key ?? f.resourceKey ?? ''}|${[...(f.project_ids ?? f.projectIds ?? [])].sort().join(',')}`
   const seen = new Set(findings.map(keyOf))
-  const existing = new Map(((open ?? []) as Array<{ id: string; rule_id: string; resource_key: string | null; project_ids: string[] }>).map((o) => [keyOf(o), o.id]))
+  const openRows = (open ?? []) as Array<{ id: string; rule_id: string; resource_key: string | null; project_ids: string[] }>
+  const existing = new Map(openRows.map((o) => [keyOf(o), o]))
   for (const f of findings) {
-    const id = existing.get(keyOf(f))
+    const id = existing.get(keyOf(f))?.id
     const row = { organization_id: organizationId, rule_id: f.ruleId, severity: f.severity, project_ids: [...f.projectIds].sort(), resource_key: f.resourceKey, message: f.message.slice(0, 1000), evidence: f.evidence ?? {}, suggested_fix: { text: f.suggestedFix }, status: 'open', updated_at: now.toISOString() }
     if (id) await db.from('portfolio_findings').update(row).eq('id', id)
     else await db.from('portfolio_findings').insert(row)
   }
   let resolved = 0
-  for (const [k, id] of existing) {
-    if (seen.has(k)) continue
-    await db.from('portfolio_findings').update({ status: 'resolved', resolved_at: now.toISOString(), updated_at: now.toISOString() }).eq('id', id)
+  for (const [k, o] of existing) {
+    if (seen.has(k) || isUndecided(o, unknown)) continue
+    await db.from('portfolio_findings').update({ status: 'resolved', resolved_at: now.toISOString(), updated_at: now.toISOString() }).eq('id', o.id)
     resolved++
   }
-  return { findings: findings.length, resolved, unknown: deep.unknown.length }
+  return { findings: findings.length, resolved, unknown: unknown.length }
 }

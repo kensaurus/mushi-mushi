@@ -80,6 +80,7 @@ function recorded(url: string, init?: RequestInit): Response {
     if (url.includes('/jobs')) return json(200, { jobs: [{ started_at: '2026-10-01T00:00:00Z', completed_at: '2026-10-01T00:04:30Z', labels: ['ubuntu-latest'] }] })
     if (url.includes('/actions/secrets')) return json(200, { secrets: [{ name: 'NEXT_PUBLIC_MUSHI_API_KEY' }] })
     if (url.includes('/actions/variables')) return json(200, { variables: [] })
+    if (url.includes('/contents/supabase/config.toml')) return json(200, { content: btoa('[auth]\nsite_url = "https://glot.it"\n[auth.external.google]\nenabled = true\nsecret = "s3cr3t"\n') })
   }
   if (url.includes('mcp.supabase.com')) {
     const body = JSON.parse(String(init?.body ?? '{}')) as { params?: { name?: string; arguments?: { query?: string } } }
@@ -171,6 +172,13 @@ describe('connector contract', () => {
 })
 
 describe('connector specifics', () => {
+  it('GitHub reads the login settings declared in supabase/config.toml, without secret values', async () => {
+    const snap = await registry.getConnector('github').snapshot(ctx('github', async (u, i) => recorded(u, i)) as never, [])
+    const auth = (snap.facts as { supabaseAuth?: unknown }).supabaseAuth
+    expect(auth).toEqual({ path: 'kensaurus/glot.it/supabase/config.toml', settings: { siteUrl: 'https://glot.it', providers: ['email', 'google'] } })
+    expect(JSON.stringify(snap)).not.toContain('s3cr3t')
+  })
+
   it('App Store Connect reads an unaccepted agreement as blocked, with the step to take', async () => {
     const c = registry.getConnector('app_store_connect')
     const r = await c.probe(ctx('app_store_connect', always(403, { errors: [{ code: 'FORBIDDEN.REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED', title: 'A required agreement is missing or has expired.' }] })) as never)
