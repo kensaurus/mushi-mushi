@@ -1643,8 +1643,10 @@ export interface MushiSDKInstance {
 
   /**
    * Fires with the unread count and newest updates whenever the SDK checks
-   * for updates (on load, every minute while visible, on tab focus), so a
-   * host can draw its own badge. Returns an unsubscribe function.
+   * for updates, so a host can draw its own badge: right away on subscribe,
+   * then every 5 minutes while the page is visible and on tab focus, and
+   * only from a device that has filed a report (Plan 018 §4.4). Returns an
+   * unsubscribe function.
    */
   onReporterUpdate(cb: (updates: MushiReporterUpdates) => void): () => void;
 
