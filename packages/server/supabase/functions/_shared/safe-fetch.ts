@@ -42,6 +42,13 @@ export interface PublicFetchOptions {
   resolve?: (host: string) => Promise<string[]>
   /** For tests. Defaults to the global fetch. */
   fetchImpl?: typeof fetch
+  /**
+   * The generic HTTP connector only: a JSON POST body and its
+   * `X-Mushi-Signature: t=…,v1=…` HMAC (plugin-sdk format). The signature
+   * proves the request came from Mushi; it is not a reusable credential.
+   * Redirects are refused for a signed POST.
+   */
+  signedPost?: { body: string; signature: string }
 }
 
 export interface PublicFetchResult {
@@ -136,6 +143,10 @@ export async function publicFetch(rawUrl: string, opts: PublicFetchOptions = {})
   const resolve = opts.resolve ?? defaultResolver()
   const headers: Record<string, string> = { 'User-Agent': PUBLIC_FETCH_USER_AGENT }
   if (opts.accept) headers.Accept = opts.accept
+  if (opts.signedPost) {
+    headers['Content-Type'] = 'application/json'
+    headers['X-Mushi-Signature'] = opts.signedPost.signature
+  }
 
   let current = rawUrl
   for (let hop = 0; hop <= maxRedirects; hop++) {
@@ -147,7 +158,8 @@ export async function publicFetch(rawUrl: string, opts: PublicFetchOptions = {})
     const timer = setTimeout(() => ac.abort(), timeoutMs)
     try {
       const res = await fetchImpl(check.url.toString(), {
-        method: 'GET',
+        method: opts.signedPost ? 'POST' : 'GET',
+        ...(opts.signedPost ? { body: opts.signedPost.body } : {}),
         headers,
         redirect: 'manual',
         credentials: 'omit',
@@ -157,6 +169,7 @@ export async function publicFetch(rawUrl: string, opts: PublicFetchOptions = {})
       if (res.status >= 300 && res.status < 400 && location) {
         await res.body?.cancel().catch(() => {})
         if (hop >= maxRedirects) throw new Error('outbound-blocked: TOO_MANY_REDIRECTS')
+        if (opts.signedPost) throw new Error('outbound-blocked: REDIRECT_ON_SIGNED_POST')
         current = new URL(location, check.url).toString()
         continue
       }

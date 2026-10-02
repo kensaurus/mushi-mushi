@@ -76,11 +76,18 @@ export type ElementInput =
       tokenAvailable: boolean
       fetchError: string | null
       run: { status: string | null; conclusion: string | null; updatedAt: string | null; name: string | null } | null
+      /** Open ci_drift findings from the connector collector (Phase 2); undefined = not collected. */
+      driftFindings?: number
     }
   | {
       key: 'deploy'
       releaseCount: number
       appVersions: string[]
+      /** Phase 2: declared deploy targets and their latest observation each. */
+      targetsDeclared?: number
+      observations?: Array<{ targetId: string; ok: boolean; observedAt: string; error: string | null }>
+      /** Open deploy_drift findings (not_deployed, platform_skew…). */
+      driftFindings?: number
     }
   | {
       key: 'env'
@@ -89,6 +96,8 @@ export type ElementInput =
       fetchError: string | null
       required: string[]
       missing: string[] | null
+      /** Open env_drift findings from the declared env (Phase 2). */
+      driftFindings?: number
     }
   | {
       key: 'integrations'
@@ -172,7 +181,10 @@ export function deriveElementState(input: ElementInput, now: Date = new Date()):
       if (input.fetchError) return { state: 'error', reason: `Could not read CI runs: ${input.fetchError}` }
       if (!input.run) return { state: 'unknown', reason: 'No workflow run found for the latest default-branch commit.' }
       if (input.run.status !== 'completed') return { state: 'unknown', reason: `CI is ${input.run.status ?? 'in an unknown state'} on the latest commit.` }
-      if (input.run.conclusion === 'success') return { state: 'ok', reason: 'CI passed on the latest default-branch commit.' }
+      if (input.run.conclusion === 'success') {
+        if (input.driftFindings && input.driftFindings > 0) return { state: 'drift', reason: `CI passed, but ${plural(input.driftFindings, 'workflow finding')} to fix (timeouts, concurrency, cost).` }
+        return { state: 'ok', reason: 'CI passed on the latest default-branch commit.' }
+      }
       if (input.run.conclusion === 'skipped' || input.run.conclusion === 'neutral') {
         return { state: 'unknown', reason: `CI was ${input.run.conclusion} on the latest commit.` }
       }
@@ -180,6 +192,16 @@ export function deriveElementState(input: ElementInput, now: Date = new Date()):
     }
 
     case 'deploy': {
+      if (input.targetsDeclared && input.targetsDeclared > 0) {
+        const obs = input.observations ?? []
+        if (obs.length === 0) return { state: 'unknown', reason: `${plural(input.targetsDeclared, 'deploy target')} declared, but none has been probed yet.` }
+        const failed = obs.filter((o) => !o.ok)
+        if (failed.length > 0) return { state: 'error', reason: `The probe of ${failed.map((o) => o.targetId).join(', ')} failed${failed[0].error ? `: ${failed[0].error}` : ''}.` }
+        if (obs.every((o) => isStale(o.observedAt, now, 2))) return { state: 'unknown', reason: 'No deploy target has been probed in two days.' }
+        if (input.driftFindings && input.driftFindings > 0) return { state: 'drift', reason: `${plural(input.driftFindings, 'deploy finding')}: a fix may be merged but not live.` }
+        if (obs.length < input.targetsDeclared) return { state: 'unknown', reason: `${obs.length} of ${plural(input.targetsDeclared, 'target')} observed; the rest have no signal yet.` }
+        return { state: 'ok', reason: 'Every observed target runs what the default branch has.' }
+      }
       if (input.releaseCount === 0 && input.appVersions.length === 0) {
         return { state: 'not_connected', reason: 'No deploy target declared and no app versions seen yet.' }
       }
@@ -192,6 +214,7 @@ export function deriveElementState(input: ElementInput, now: Date = new Date()):
       if (input.fetchError) return { state: 'error', reason: `Could not list CI secrets and variables: ${input.fetchError}` }
       if (input.missing == null) return { state: 'unknown', reason: 'CI env names have not been listed.' }
       if (input.missing.length > 0) return { state: 'drift', reason: `Missing from CI: ${input.missing.join(', ')}.` }
+      if (input.driftFindings && input.driftFindings > 0) return { state: 'drift', reason: `${plural(input.driftFindings, 'declared env name')} missing or out of step.` }
       return { state: 'ok', reason: `All ${plural(input.required.length, 'required Mushi variable')} exist in CI.` }
     }
 

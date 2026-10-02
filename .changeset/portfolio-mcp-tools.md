@@ -9,3 +9,5 @@ Add three tools, on by default in the `inventory` group. The two portfolio tools
 - `get_radar` returns the hole checks: store names that differ between stores, a missing listing language, an expiring domain or certificate, missing security headers, a broken privacy link, storage rows deleted with SQL, and store build rules your app no longer meets. A check that never ran reads `unknown`, never healthy. `scope: "organization"` lists the open findings of every app.
 
 The portfolio tools take an optional `organizationId`; without it, your only organization is used.
+
+Also adds `get_recipe_drift` (what drifted from the recipe — CI workflows, deploys not live, env names, unapplied migrations, off-token values — each with a fix) and `list_connectors` (the sources an organization connected, their status and scopes; never credentials). `list_gate_findings` accepts the `radar`, `radar_ci` and `store_review` gates.

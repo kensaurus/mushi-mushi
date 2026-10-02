@@ -31,6 +31,15 @@ This page **reads only**. It builds on each app's [Recipe](/concepts/app-recipe)
 
 In **Advanced** mode each card also shows Mushi's own AI spend for that app over 30 days and its monthly budget.
 
+Below the cards:
+
+| Section | What it means |
+|---------|---------------|
+| **Across your apps** | Problems only visible across apps: a deep link to a sibling app that no longer resolves, many apps posting to one channel, CI cost in two repos. |
+| **Daily digest** | One message a day across all apps. Off until an owner picks Slack, email or push. |
+| **Shared between apps** | Domains, store apps, Supabase projects and channels two or more apps use. |
+| **Connected sources** | App Store Connect, Google Play, AI spend, RevenueCat or your own endpoint. Read-only by default. |
+
 ---
 
 ## From your editor

@@ -50,6 +50,7 @@ export interface ComposeDeps {
 
 /** Plan 020 hole-check gates; shown in the radar, never counted in the recipe's gates card. */
 export const RADAR_GATES = ['radar', 'radar_ci', 'store_review']
+const ELEMENT_DRIFT_GATES = ['ci_drift', 'env_drift', 'deploy_drift']
 
 const INVENTORY_GATES = ['dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim', 'spec_drift', 'orphan_endpoint', 'unknown_call']
 
@@ -240,6 +241,11 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
   // The radar gates (Plan 020) are hole checks with their own column, not recipe gates.
   const latest = latestPerGate(allRuns.filter((r) => (r.gate !== DESIGN_GATE || isScanRun(r)) && !RADAR_GATES.includes(r.gate)))
   const findingCounts = await openFindingCounts(db, latest.map((r) => r.id))
+  /** Open findings of an element's own drift gate (Phase 2); undefined when that gate never ran. */
+  const driftOf = (gate: string): number | undefined => {
+    const r = latest.find((x) => x.gate === gate)
+    return r ? findingCounts.get(r.id) ?? 0 : undefined
+  }
 
   // ── schema
   const { data: schemaSnap } = await db
@@ -282,7 +288,8 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
 
   // ── gates
   const cadence = Math.min(...Object.values(manifest?.gates?.cadence ?? {}).map((c) => cadenceDays(c, 7)), 7)
-  const gateInputs = latest.map((r) => ({ gate: r.gate, status: r.status, completedAt: r.completed_at, openFindings: findingCounts.get(r.id) ?? 0 }))
+  // ci_drift / env_drift / deploy_drift belong to their own elements, not the gates card.
+  const gateInputs = latest.filter((r) => !ELEMENT_DRIFT_GATES.includes(r.gate)).map((r) => ({ gate: r.gate, status: r.status, completedAt: r.completed_at, openFindings: findingCounts.get(r.id) ?? 0 }))
   const gatesState = deriveElementState({ key: 'gates', runs: gateInputs, cadenceDays: cadence }, now)
   const { data: metricRows } = await db
     .from('metric_series')
@@ -306,7 +313,7 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
     try {
       const head = await cached(`head:${projectId}`, nowMs, () => deps.getDefaultHead(repo.repo))
       const run = await cached(`ci:${projectId}:${head.sha}`, nowMs, () => deps.fetchWorkflowRun(repo.repo, head.branch, head.sha))
-      ciInput = { key: 'ci', repoConnected: true, tokenAvailable: true, fetchError: null, run: run ? { status: run.status, conclusion: run.conclusion, updatedAt: run.updatedAt, name: run.name } : null }
+      ciInput = { key: 'ci', repoConnected: true, tokenAvailable: true, fetchError: null, run: run ? { status: run.status, conclusion: run.conclusion, updatedAt: run.updatedAt, name: run.name } : null, driftFindings: driftOf('ci_drift') }
       ciDetail = { branch: head.branch, headSha: head.sha, run }
     } catch (err) {
       ciInput = { key: 'ci', repoConnected: true, tokenAvailable: true, fetchError: errMessage(err), run: null }
@@ -314,7 +321,7 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
     try {
       presentNames = await cached(`env:${projectId}`, nowMs, () => deps.listActionsNames(repo.repo))
       const required = deps.requiredEnvNames(project?.slug ?? null)
-      envInput = { key: 'env', repoConnected: true, tokenAvailable: true, fetchError: null, required, missing: required.filter((n) => !presentNames!.includes(n)) }
+      envInput = { key: 'env', repoConnected: true, tokenAvailable: true, fetchError: null, required, missing: required.filter((n) => !presentNames!.includes(n)), driftFindings: driftOf('env_drift') }
     } catch (err) {
       envInput = { key: 'env', repoConnected: true, tokenAvailable: true, fetchError: errMessage(err), required: deps.requiredEnvNames(project?.slug ?? null), missing: null }
     }
@@ -341,7 +348,19 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
     }
   }
   const releaseRows = (releases ?? []) as Array<{ version: string; status: string; published_at: string | null }>
-  const deployState = deriveElementState({ key: 'deploy', releaseCount: releaseRows.length, appVersions: [...versions.keys()] }, now)
+  const rawTargets = (manifest as { deploy?: { targets?: unknown } } | null)?.deploy?.targets
+  const declaredTargets = Array.isArray(rawTargets) ? (rawTargets as Array<{ id?: unknown }>).filter((t) => typeof t?.id === 'string') : []
+  const { data: obsRows } = declaredTargets.length
+    ? await db.from('deploy_observations').select('target_id, ok, error, observed_at, observed_version, observed_commit').eq('project_id', projectId).order('observed_at', { ascending: false }).limit(100)
+    : { data: [] }
+  const latestObs = new Map<string, { targetId: string; ok: boolean; observedAt: string; error: string | null; version: string | null; commit: string | null }>()
+  for (const o of (obsRows ?? []) as Array<{ target_id: string; ok: boolean; error: string | null; observed_at: string; observed_version: string | null; observed_commit: string | null }>) {
+    if (!latestObs.has(o.target_id)) latestObs.set(o.target_id, { targetId: o.target_id, ok: o.ok, observedAt: o.observed_at, error: o.error, version: o.observed_version, commit: o.observed_commit })
+  }
+  const deployState = deriveElementState({
+    key: 'deploy', releaseCount: releaseRows.length, appVersions: [...versions.keys()],
+    targetsDeclared: declaredTargets.length, observations: [...latestObs.values()], driftFindings: driftOf('deploy_drift'),
+  }, now)
 
   // ── integrations
   const configured: Array<{ kind: string }> = []
@@ -405,7 +424,7 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
     routes: { inventory: invRow, graphNodes, gateRuns: invRuns.map((r) => ({ gate: r.gate, status: r.status, completedAt: r.completed_at, openFindings: findingCounts.get(r.id) ?? 0 })) },
     gates: { runs: gateInputs, latestMetrics: Object.fromEntries(latestMetrics), budgets: manifest?.gates?.budgets ?? {} },
     ci: { ...ciDetail, error: ciInput.key === 'ci' ? ciInput.fetchError : null },
-    deploy: { releases: releaseRows, appVersions30d: Object.fromEntries(versions), note: 'No deploy probe yet (Phase 2). Versions come from report environments.' },
+    deploy: { releases: releaseRows, appVersions30d: Object.fromEntries(versions), targets: [...latestObs.values()], declaredTargets: declaredTargets.length },
     env: { required: envInput.key === 'env' ? envInput.required : [], missing: envInput.key === 'env' ? envInput.missing : null, presentCount: presentNames?.length ?? null, error: envInput.key === 'env' ? envInput.fetchError : null },
     integrations: { configured: integrationsList },
   }

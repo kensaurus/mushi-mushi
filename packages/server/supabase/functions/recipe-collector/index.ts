@@ -22,6 +22,7 @@ import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { DESIGN_GATE, refreshRecipeSnapshot, runDesignDeviance } from '../_shared/design-plane.ts'
+import { collectOrgPortfolio, collectProjectPhase2 } from '../_shared/recipe-phase2.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -70,7 +71,7 @@ async function handler(req: Request): Promise<Response> {
   const last = new Map((snaps ?? []).map((s: { project_id: string; captured_at: string }) => [s.project_id, Date.parse(s.captured_at)]))
   const batch = ids.sort((a, b) => (last.get(a) ?? 0) - (last.get(b) ?? 0)).slice(0, MAX_PROJECTS)
 
-  const results: Array<{ projectId: string; refresh: string; scan: string }> = []
+  const results: Array<{ projectId: string; refresh: string; scan: string; phase2?: string }> = []
   const t0 = Date.now()
   for (const projectId of batch) {
     if (Date.now() - t0 > START_BUDGET_MS) {
@@ -101,8 +102,26 @@ async function handler(req: Request): Promise<Response> {
       clog.error('recipe collection failed', { projectId, err: String(err) })
       row.refresh = `threw:${String(err).slice(0, 80)}`
     }
+    // Phase 2 (ADR 0017): connectors, CI / env / schema / deploy drift, resources.
+    try {
+      const p2 = await collectProjectPhase2(db, projectId)
+      ;(row as { phase2?: string }).phase2 = p2.gates.map((g) => `${g.gate}:${g.status}`).join(',') || 'no connected source'
+    } catch (err) {
+      clog.error('phase 2 collection failed', { projectId, err: String(err) })
+      ;(row as { phase2?: string }).phase2 = `threw:${String(err).slice(0, 80)}`
+    }
     results.push(row)
   }
+  // Cross-project rules once per organization touched by this run (Plan 019 P2).
+  const { data: orgRows } = await db.from('projects').select('organization_id').in('id', batch.length ? batch : ['00000000-0000-0000-0000-000000000000'])
+  for (const orgId of [...new Set(((orgRows ?? []) as Array<{ organization_id: string | null }>).map((r) => r.organization_id).filter((x): x is string => Boolean(x)))]) {
+    try {
+      await collectOrgPortfolio(db, orgId)
+    } catch (err) {
+      clog.error('portfolio rules failed', { orgId, err: String(err) })
+    }
+  }
+  await db.rpc('recipe_observations_prune', { p_days: 90 }).then(() => {}, () => {})
   clog.info('recipe collection complete', { total: ids.length, collected: batch.length })
   return json({ ok: true, data: { total: ids.length, collected: batch.length, results } })
 }
