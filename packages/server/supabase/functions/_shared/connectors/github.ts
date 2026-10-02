@@ -4,7 +4,9 @@
  *          project's existing vaulted token (resolveProjectGithubToken); no
  *          credential is migrated. Snapshot: workflows at the head SHA,
  *          recent default-branch runs, Actions secret and variable NAMES
- *          (never values). Drift: ci_drift, default_branch_red, env_drift.
+ *          (never values), and the login settings declared in
+ *          supabase/config.toml (non-secret keys only). Drift: ci_drift,
+ *          default_branch_red, env_drift.
  *          It is the only connector that proposes file edits; the PR itself
  *          is opened by the recipe-change worker as a draft.
  *
@@ -14,6 +16,7 @@
 import { ciWorkflowDrift, defaultBranchRed, envDrift } from '../recipe-drift.ts'
 import { estimateRunMinutes } from '../ci-minutes.ts'
 import { isWritablePath, type RecipeManifest } from '../recipe-schema.ts'
+import { parseSupabaseAuthConfig, type DeclaredAuthSettings } from '../supabase-config-toml.ts'
 import { fetchJson, statusReason } from './http-util.ts'
 import { ConnectorError, notConnected, type ConnectorContext, type DriftFinding, type FileEdit, type RecipeConnector } from './types.ts'
 
@@ -119,6 +122,14 @@ export const githubConnector: RecipeConnector = {
       }
     }
 
+    // Declared login settings (supabase/config.toml next to the migrations), for the shared-auth rule.
+    // Only non-secret keys are kept; `null` = no file or no [auth] table; `undefined` = could not read.
+    const tomlPath = migDir && /(^|\/)migrations$/.test(migDir) ? migDir.replace(/migrations$/, 'config.toml') : 'supabase/config.toml'
+    let supabaseAuth: { path: string; settings: DeclaredAuthSettings | null } | undefined
+    const toml = await gh(ctx, `/repos/${r.owner}/${r.repo}/contents/${tomlPath.split('/').map(encodeURIComponent).join('/')}?ref=${headSha}`)
+    if (toml.status === 200 && typeof toml.body?.content === 'string') supabaseAuth = { path: `${r.owner}/${r.repo}/${tomlPath}`, settings: parseSupabaseAuthConfig(decode(toml.body.content)) }
+    else if (toml.status === 404) supabaseAuth = { path: `${r.owner}/${r.repo}/${tomlPath}`, settings: null }
+
     const latest = runs.find((x) => x.status === 'completed') ?? null
     return {
       observedAt: ctx.now().toISOString(),
@@ -127,7 +138,7 @@ export const githubConnector: RecipeConnector = {
         env: { summary: { actionsNames: names.length } },
       },
       resources: [{ kind: 'repo', externalId: `${r.owner}/${r.repo}`, role: 'source' }],
-      facts: { branch, headSha, headCommittedAt, workflowFiles, runs, actionsNames: names, migrationsDir: migDir, migrationFiles },
+      facts: { branch, headSha, headCommittedAt, workflowFiles, runs, actionsNames: names, migrationsDir: migDir, migrationFiles, supabaseAuth },
       cursor: runs[0]?.run_id ? String(runs[0].run_id) : undefined,
     }
   },

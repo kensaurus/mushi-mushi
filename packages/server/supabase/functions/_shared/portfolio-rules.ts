@@ -173,6 +173,14 @@ export interface AuthConfigInput {
   }
   /** What the project declares should be able to log in: its domains and deep-link schemes. */
   declaredOrigins?: string[]
+  /**
+   * false: this project's settings were not read (no config file in its repo).
+   * It is left out of the settings comparison; its origins are still checked
+   * against the allowlist the others declare. Default true.
+   */
+  settingsKnown?: boolean
+  /** Where the settings came from, e.g. "owner/repo/supabase/config.toml" (declared, not live). */
+  source?: string
 }
 
 /** Does an allowlist entry (exact or `*` wildcard, Supabase style) cover this URL? */
@@ -209,33 +217,40 @@ export function authConfigDivergent(configs: readonly AuthConfigInput[], project
     const rk = `auth_provider:${key}`
     const ids = group.map((g) => g.projectId)
     const diffs: string[] = []
+    const known = group.filter((g) => g.settingsKnown !== false)
     const providersOf = (g: AuthConfigInput) => [...(g.settings.providers ?? [])].sort().join(',')
-    if (new Set(group.map(providersOf)).size > 1) diffs.push('sign-in methods')
-    if (new Set(group.map((g) => String(g.settings.emailConfirm ?? 'unset'))).size > 1) diffs.push('email confirmation')
-    if (new Set(group.map((g) => String(g.settings.mfa ?? 'unset'))).size > 1) diffs.push('two-factor sign-in')
-    if (diffs.length) {
+    if (new Set(known.map(providersOf)).size > 1) diffs.push('sign-in methods')
+    if (new Set(known.map((g) => String(g.settings.emailConfirm ?? 'unset'))).size > 1) diffs.push('email confirmation')
+    if (new Set(known.map((g) => String(g.settings.mfa ?? 'unset'))).size > 1) diffs.push('two-factor sign-in')
+    if (diffs.length && known.length >= 2) {
       out.push({
         ruleId: 'auth_config_divergent',
         severity: 'warn',
         projectIds: ids,
         resourceKey: rk,
-        message: `${names(projects, ids)} share one login setup but disagree on ${diffs.join(', ')}.`,
-        evidence: { differences: diffs, perProject: group.map((g) => ({ projectId: g.projectId, providers: g.settings.providers ?? [], emailConfirm: g.settings.emailConfirm ?? null, mfa: g.settings.mfa ?? null })) },
+        message: `${names(projects, ids)} share one login setup but ${known.some((g) => g.source) ? 'their config files declare different' : 'disagree on'} ${diffs.join(', ')}.`,
+        evidence: { differences: diffs, perProject: known.map((g) => ({ projectId: g.projectId, providers: g.settings.providers ?? [], emailConfirm: g.settings.emailConfirm ?? null, mfa: g.settings.mfa ?? null, source: g.source ?? null })) },
         suggestedFix: 'These apps use the same auth project, so the settings are shared. Decide which setting is right and check each app still signs in, then note the choice in each mushi.recipe.json.',
       })
     }
-    const allowlist = [...new Set(group.flatMap((g) => [...(g.settings.redirectUrls ?? []), ...(g.settings.siteUrl ? [g.settings.siteUrl] : [])]))]
+    const allowlist = [...new Set(known.flatMap((g) => [...(g.settings.redirectUrls ?? []), ...(g.settings.siteUrl ? [g.settings.siteUrl] : [])]))]
+    // Nothing declares the allowlist: there is nothing to check against.
+    if (known.length === 0) continue
+    const sources = [...new Set(known.map((g) => g.source).filter((x): x is string => Boolean(x)))]
     for (const g of group) {
       for (const origin of g.declaredOrigins ?? []) {
         const url = origin.includes('://') ? origin : `https://${origin}`
         if (redirectAllowed(allowlist, url)) continue
         out.push({
           ruleId: 'auth_redirect_missing',
-          severity: 'error',
+          // A declared file can lag the dashboard, so a declared-only miss is a warning.
+          severity: sources.length ? 'warn' : 'error',
           projectIds: [g.projectId],
           resourceKey: rk,
-          message: `${names(projects, [g.projectId])} sends logins back to ${url}, which the shared auth setup does not allow. Login breaks there.`,
-          evidence: { missing: url, allowlist },
+          message: sources.length
+            ? `${names(projects, [g.projectId])} sends logins back to ${url}, which is not in the redirect list declared in ${sources.join(', ')}. If the live project does not allow it either, login breaks there.`
+            : `${names(projects, [g.projectId])} sends logins back to ${url}, which the shared auth setup does not allow. Login breaks there.`,
+          evidence: { missing: url, allowlist, sources },
           suggestedFix: `Add ${url.endsWith('://') ? `${url}**` : `${url.replace(/\/+$/, '')}/**`} to the redirect URL allowlist of the shared auth project.`,
         })
       }
@@ -281,12 +296,26 @@ export function billingConsistency(projects: readonly PortfolioProject[], stripe
       const b = declared.get(other.id) ?? null
       if (a && b && a === b) continue
       reported.add(pair)
+      if (!a || !b) {
+        // Not a mismatch Mushi can see: one side names no account.
+        const missing = [!a ? p : null, !b ? other : null].filter((x): x is PortfolioProject => x !== null)
+        out.push({
+          ruleId: 'billing_account_undeclared',
+          severity: 'info',
+          projectIds: [p.id, other.id],
+          resourceKey: null,
+          message: `${p.name} shares credits with ${other.name}, but ${missing.map((m) => m.name).join(' and ')} ${missing.length === 1 ? 'names' : 'name'} no Stripe account, so Mushi cannot check they bill through the same one.`,
+          evidence: { [p.id]: a, [other.id]: b },
+          suggestedFix: 'Set `links.billing.stripeAccount` in each mushi.recipe.json to the Stripe account id the app bills through.',
+        })
+        continue
+      }
       out.push({
         ruleId: 'billing_account_mismatch',
         severity: 'error',
         projectIds: [p.id, other.id],
-        resourceKey: a ? resourceKey('stripe_account', a) : null,
-        message: `${p.name} shares credits with ${other.name}, but they ${a && b ? 'bill through different Stripe accounts' : 'do not both name a Stripe account'}. A credit bought in one will not show up in the other.`,
+        resourceKey: resourceKey('stripe_account', a),
+        message: `${p.name} shares credits with ${other.name}, but they bill through different Stripe accounts. A credit bought in one will not show up in the other.`,
         evidence: { [p.id]: a, [other.id]: b },
         suggestedFix: 'Point both apps at the same Stripe account and set `links.billing.stripeAccount` to it in each mushi.recipe.json.',
       })

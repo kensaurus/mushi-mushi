@@ -107,6 +107,75 @@ describe('collectOrgPortfolio', () => {
     expect(open.some((f) => f.rule_id === 'deep_link_broken')).toBe(true)
     expect(db.table('portfolio_findings').find((f) => f.id === 'old')).toMatchObject({ status: 'resolved' })
   })
+
+  const linked = () => {
+    const m1 = { ...manifest, links: { ...manifest.links, deepLinks: { appLinks: [{ toProject: 'yen-yen' }] } } }
+    const m2 = { version: 1, app: { ids: { bundleId: 'com.yenyen.app' } }, links: { deepLinks: { universalLinkDomains: ['yen-yen.app'] } } }
+    return [{ project_id: P1, is_current: true, manifest: m1 }, { project_id: P2, is_current: true, manifest: m2 }]
+  }
+  const openDeep = { id: 'deep', organization_id: ORG, rule_id: 'deep_link_broken', resource_key: 'deep_link_domain:yen-yen.app', project_ids: [P1, P2], status: 'open' }
+
+  it('keeps an open finding open when its check could not run this time', async () => {
+    const db = seed({ app_recipe_snapshots: linked(), portfolio_findings: [openDeep] })
+    const probe = vi.fn(async () => { throw new Error('timeout') })
+    const r = await phase2.collectOrgPortfolio(db as never, ORG, { fetch: vi.fn(), now: () => NOW, probe })
+    expect(r.unknown).toBeGreaterThanOrEqual(1)
+    expect(db.table('portfolio_findings').find((f) => f.id === 'deep')).toMatchObject({ status: 'open' })
+  })
+
+  it('resolves cross-app findings once only one app is left', async () => {
+    const db = seed({ portfolio_findings: [openDeep] })
+    db.table('projects').splice(db.table('projects').findIndex((p) => p.id === P2), 1)
+    const r = await phase2.collectOrgPortfolio(db as never, ORG, { fetch: vi.fn(), now: () => NOW, probe: vi.fn() })
+    expect(r.resolved).toBe(1)
+    expect(db.table('portfolio_findings').find((f) => f.id === 'deep')).toMatchObject({ status: 'resolved' })
+  })
+
+  it('stops without resolving anything when a read fails', async () => {
+    const db = seed({ app_recipe_snapshots: linked(), portfolio_findings: [openDeep] })
+    const failing = new Proxy(db, {
+      get(target, prop, recv) {
+        if (prop !== 'from') return Reflect.get(target, prop, recv)
+        return (table: string) => {
+          const q = target.from(table)
+          if (table !== 'app_recipe_snapshots') return q
+          return { select: () => ({ in: () => ({ eq: async () => ({ data: null, error: { message: 'statement timeout' } }) }) }) }
+        }
+      },
+    })
+    await expect(phase2.collectOrgPortfolio(failing as never, ORG, { fetch: vi.fn(), now: () => NOW, probe: vi.fn() })).rejects.toThrow(/statement timeout/)
+    expect(db.table('portfolio_findings').find((f) => f.id === 'deep')).toMatchObject({ status: 'open' })
+  })
+
+  it('checks shared login redirects against the settings a repo declares, and billing between apps that share credits', async () => {
+    const auth = { provider: 'supabase', ref: 'abcdefghijklmnopqrst' }
+    const db = seed({
+      app_recipe_snapshots: [
+        { project_id: P1, is_current: true, manifest: { version: 1, links: { domains: ['glot.it'], auth, billing: { stripeAccount: 'acct_1', sharedCreditsWith: ['yen-yen'] } } } },
+        { project_id: P2, is_current: true, manifest: { version: 1, links: { domains: ['yenyen.app'], auth, billing: { stripeAccount: 'acct_2' } } } },
+      ],
+      connector_snapshots: [
+        { project_id: P1, kind: 'github', is_current: true, ok: true, snapshot: { facts: { supabaseAuth: { path: 'k/glot/supabase/config.toml', settings: { siteUrl: 'https://glot.it', redirectUrls: ['https://glot.it/**'], providers: ['email'] } } } } },
+        { project_id: P2, kind: 'github', is_current: true, ok: true, snapshot: { facts: { supabaseAuth: { path: 'k/yen/supabase/config.toml', settings: null } } } },
+      ],
+    })
+    await phase2.collectOrgPortfolio(db as never, ORG, { fetch: vi.fn(), now: () => NOW, probe: vi.fn() })
+    const open = db.table('portfolio_findings').filter((f) => f.status === 'open')
+    const redirect = open.find((f) => f.rule_id === 'auth_redirect_missing')
+    expect(redirect).toMatchObject({ severity: 'warn', project_ids: [P2] })
+    expect(String(redirect?.message)).toContain('declared in k/glot/supabase/config.toml')
+    expect(open.some((f) => f.rule_id === 'auth_config_divergent')).toBe(false)
+    expect(open.find((f) => f.rule_id === 'billing_account_mismatch')).toMatchObject({ severity: 'error' })
+  })
+})
+
+describe('authInputsFrom', () => {
+  it('says unknown, not divergent, when no repo in a shared-auth group declares its settings', () => {
+    const auth = { provider: 'supabase', ref: 'abcdefghijklmnopqrst' }
+    const r = phase2.authInputsFrom([{ id: P1 }, { id: P2 }], new Map([[P1, { links: { auth } }], [P2, { links: { auth } }]]), new Map())
+    expect(r.inputs.every((i) => i.settingsKnown === false)).toBe(true)
+    expect(r.unknown.map((u) => u.ruleId).sort()).toEqual(['auth_config_divergent', 'auth_redirect_missing'])
+  })
 })
 
 // ── routes ───────────────────────────────────────────────────────────────────
