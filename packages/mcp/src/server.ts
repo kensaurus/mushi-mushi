@@ -2632,6 +2632,23 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           .optional()
           .describe('Sentry search query within the configured Sentry project (default is:unresolved). Not with issueIds.'),
         limit: z.number().int().min(1).max(10).optional().describe('How many issues a query imports (1-10, default 5)'),
+        sinceDays: z
+          .number()
+          .int()
+          .min(1)
+          .max(90)
+          .optional()
+          .describe('Only issues seen in the last N days (1-90). Search mode only.'),
+        cursor: z
+          .string()
+          .regex(/^[0-9][0-9.:-]{0,63}$/)
+          .optional()
+          .describe('nextCursor from the previous import, to fetch the next page of a backlog. Search mode only.'),
+        sentryProject: z
+          .string()
+          .regex(/^[a-z0-9][a-z0-9_-]{0,49}$/)
+          .optional()
+          .describe("Which of the project's Sentry projects to search (default: the primary one). Search mode only."),
         projectId: z.string().optional().describe('Project UUID. Defaults to configured project.'),
       }),
       outputSchema: z.object({
@@ -2653,13 +2670,27 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         indexing: z
           .looseObject({ queued: z.boolean(), paths: z.number() })
           .describe('Whether stack-frame files were queued for codebase indexing'),
+        sentryProject: z.string().nullable().optional().describe('The Sentry project a search ran in (null for issueIds)'),
+        sentryProjects: z.array(z.string()).optional().describe("This project's Sentry projects, primary first"),
+        nextCursor: z
+          .string()
+          .nullable()
+          .optional()
+          .describe('Pass back as cursor to import the next page; null when the backlog is done'),
       }),
     },
     async (args) => {
       const pid = await resolveProjectId(args.projectId);
       const data = await apiCall<Record<string, unknown>>(`/v1/admin/projects/${pid}/sentry/import`, {
         method: 'POST',
-        body: JSON.stringify({ issueIds: args.issueIds, query: args.query, limit: args.limit }),
+        body: JSON.stringify({
+          issueIds: args.issueIds,
+          query: args.query,
+          limit: args.limit,
+          sinceDays: args.sinceDays,
+          cursor: args.cursor,
+          sentryProject: args.sentryProject,
+        }),
       });
       return jsonResult(data);
     },
