@@ -234,17 +234,21 @@ describe('computeDevianceScore', () => {
 })
 
 describe('glot.it fixture', () => {
-  it('Pha Khram tokens + the fixture manifest: every declared pair passes AA and an off-token literal is caught', () => {
+  it("Pha Khram tokens + the extended fixture: glot's own 2.73:1 CTA-fill-on-raised limit is the one failing pair, and an off-token literal is caught", () => {
     const GLOT = resolve(__dirname, 'fixtures/recipe/glot')
-    const parsed = parseRecipeManifest(readFileSync(resolve(GLOT, 'mushi.recipe.json'), 'utf8'))
+    const parsed = parseRecipeManifest(readFileSync(resolve(__dirname, 'fixtures/recipe/glot-extended.recipe.json'), 'utf8'))
     if (!parsed.ok) throw new Error(JSON.stringify(parsed.issues))
     const files = parsed.manifest.design!.tokens!.filter((t) => t.role === 'source').map((t) => ({ path: t.path, role: 'source' as const, text: readFileSync(resolve(GLOT, t.path), 'utf8') }))
     const { tokens } = normalizeTokenSet(files)
     const contrast = evaluateContrast(tokens, parsed.manifest.design!.contrast!)
-    expect(contrast.every((c) => c.pass === true)).toBe(true)
+    const failing = contrast.filter((c) => c.pass !== true)
+    expect(failing.map((c) => [c.fg, c.bg, c.ratio])).toEqual([['color.action.primary', 'color.surface.raised', 2.73]])
+    expect(contrast.find((c) => c.fg === 'color.text.primary')!.ratio).toBe(15.14)
+    expect(contrast.find((c) => c.fg === 'color.text.onAction')!.ratio).toBe(4.93)
     const ctx = buildDevianceContext(tokens, effectiveDesignRules(parsed.manifest), parsed.manifest.design!.components!.globs)
     const f = scanSourceFile('app/page.tsx', `export default () => <button className="bg-[#E8387F] rounded-[18px]">Go</button>`, ctx).findings
     expect(f.map((x) => x.rule_id).sort()).toEqual(['off_scale_radius', 'off_token_color', 'raw_interactive_element'])
-    expect(f.find((x) => x.rule_id === 'off_token_color')!.suggestion).toMatchObject({ token: 'color.action.primary', cssVar: '--color-cta' })
+    // #E8387F (glot's old CTA pink) is nearest the new lac-red hover state.
+    expect(f.find((x) => x.rule_id === 'off_token_color')!.suggestion).toMatchObject({ token: 'color.action.primaryHover', cssVar: '--color-cta-hover' })
   })
 })

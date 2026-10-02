@@ -1,0 +1,170 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/2025.10/schema.json",
+  "$description": "glot.it art direction Soi Signpaint (ป้ายเขียนมือ): raw palette. Contrast evidence in docs/design/art-directions-2026-10/contrast.json.",
+  "color": {
+    "$type": "color",
+    "palette": {
+      "canvas": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9529,
+            0.9176,
+            0.8549
+          ],
+          "hex": "#F3EADA"
+        }
+      },
+      "plate": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1.0,
+            0.9843,
+            0.949
+          ],
+          "hex": "#FFFBF2"
+        }
+      },
+      "ink": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0863,
+            0.0745,
+            0.0667
+          ],
+          "hex": "#161311"
+        }
+      },
+      "ink-2": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.3529,
+            0.3176,
+            0.2824
+          ],
+          "hex": "#5A5148"
+        }
+      },
+      "signal": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.7686,
+            0.1647,
+            0.1333
+          ],
+          "hex": "#C42A22"
+        }
+      },
+      "on-signal": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1.0,
+            0.9843,
+            0.949
+          ],
+          "hex": "#FFFBF2"
+        }
+      },
+      "sign-blue": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1098,
+            0.298,
+            0.5882
+          ],
+          "hex": "#1C4C96"
+        }
+      },
+      "mustard": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.898,
+            0.698,
+            0.2275
+          ],
+          "hex": "#E5B23A"
+        }
+      },
+      "shade": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0863,
+            0.0745,
+            0.0667
+          ],
+          "hex": "#161311"
+        }
+      }
+    },
+    "toneInk": {
+      "mid": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.3529,
+            0.3176,
+            0.2824
+          ],
+          "hex": "#5A5148"
+        },
+        "$description": "7.52:1 on plate"
+      },
+      "low": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1098,
+            0.298,
+            0.5882
+          ],
+          "hex": "#1C4C96"
+        },
+        "$description": "8.06:1 on plate"
+      },
+      "falling": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.7686,
+            0.1647,
+            0.1333
+          ],
+          "hex": "#C42A22"
+        },
+        "$description": "5.49:1 on plate"
+      },
+      "high": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1098,
+            0.4314,
+            0.2627
+          ],
+          "hex": "#1C6E43"
+        },
+        "$description": "6.05:1 on plate"
+      },
+      "rising": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4863,
+            0.2471,
+            0.5843
+          ],
+          "hex": "#7C3F95"
+        },
+        "$description": "6.77:1 on plate"
+      }
+    }
+  }
+}

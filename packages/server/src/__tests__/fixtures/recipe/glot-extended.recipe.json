@@ -1,0 +1,262 @@
+{
+  "version": 1,
+  "x-fixture-note": "glot.it's own mushi.recipe.json at glot commit 42a793c20, plus two keys Mushi adds in Plan 019 Phase 1b (design.contrast, design.rules). The additions are Mushi's test declarations, not glot's; the CTA-fill-on-raised pair is the 2.73:1 limit glot documents in its own token description.",
+  "app": {
+    "name": "glot.it",
+    "kind": "app",
+    "platforms": [
+      "web",
+      "android",
+      "ios"
+    ],
+    "ids": {
+      "bundleId": "com.glotit.app",
+      "androidPackage": "com.glotit.app"
+    }
+  },
+  "links": {
+    "domains": [
+      "kensaur.us"
+    ],
+    "deepLinks": {
+      "schemes": [
+        "com.glotit.app"
+      ],
+      "universalLinkDomains": [
+        "kensaur.us"
+      ],
+      "appLinks": []
+    },
+    "auth": {
+      "provider": "supabase",
+      "ref": "ixrdttionueowivjdlyb"
+    }
+  },
+  "design": {
+    "tokens": [
+      {
+        "path": "packages/design-tokens/tokens/directions/pha-khram/primitive.tokens.json",
+        "role": "source",
+        "format": "dtcg-2025.10"
+      },
+      {
+        "path": "packages/design-tokens/tokens/directions/pha-khram/semantic.tokens.json",
+        "role": "source",
+        "format": "dtcg-2025.10"
+      },
+      {
+        "path": "packages/design-tokens/tokens/directions/pha-khram/component.tokens.json",
+        "role": "source",
+        "format": "dtcg-2025.10"
+      },
+      {
+        "path": "packages/design-tokens/dtcg/tokens.json",
+        "role": "export",
+        "format": "dtcg-2025.10",
+        "generator": "npm run tokens:dtcg"
+      }
+    ],
+    "css": [
+      {
+        "path": "app/styles/globals/theme-pha-khram.css",
+        "role": "export"
+      },
+      {
+        "path": "packages/design-tokens/src/cross-platform-tokens.css",
+        "role": "export"
+      }
+    ],
+    "components": {
+      "globs": [
+        "design-system/primitives/**/*.tsx",
+        "design-system/loom/**/*.tsx"
+      ]
+    },
+    "assets": [
+      {
+        "path": "assets/icon-only.png",
+        "kind": "icon"
+      },
+      {
+        "path": "assets/icon-foreground.png",
+        "kind": "icon"
+      },
+      {
+        "path": "assets/icon-background.png",
+        "kind": "icon"
+      },
+      {
+        "path": "app/icon.svg",
+        "kind": "icon"
+      }
+    ],
+    "literalScan": {
+      "globs": [
+        "app/**/*.{ts,tsx,css}",
+        "components/**/*.tsx",
+        "features/**/*.tsx",
+        "design-system/loom/**/*.tsx"
+      ],
+      "ignore": [
+        "**/*.test.*",
+        "app/styles/globals/theme-*.css",
+        "design-system/directions/**"
+      ]
+    },
+    "contrast": [
+      {
+        "fg": "color.text.primary",
+        "bg": "color.surface.base",
+        "use": "body text on the page"
+      },
+      {
+        "fg": "color.text.secondary",
+        "bg": "color.surface.base",
+        "use": "secondary text on the page"
+      },
+      {
+        "fg": "color.text.tertiary",
+        "bg": "color.surface.base",
+        "use": "tertiary text on the page"
+      },
+      {
+        "fg": "color.text.onAction",
+        "bg": "color.action.primary",
+        "use": "CTA label"
+      },
+      {
+        "fg": "color.text.signal",
+        "bg": "color.surface.base",
+        "use": "lac-red text"
+      },
+      {
+        "fg": "color.tone.mid",
+        "bg": "color.surface.base",
+        "use": "tone colours on the page"
+      },
+      {
+        "fg": "color.tone.high",
+        "bg": "color.surface.base",
+        "use": "tone colours on the page"
+      },
+      {
+        "fg": "color.action.primary",
+        "bg": "color.surface.raised",
+        "large": true,
+        "use": "CTA fill on a raised card (non-text, 3:1)"
+      }
+    ],
+    "rules": {
+      "raw_interactive_element": {
+        "enabled": true,
+        "severity": "info",
+        "primitives": {
+          "button": "Button"
+        }
+      }
+    }
+  },
+  "data": {
+    "provider": "supabase",
+    "projectRef": "ixrdttionueowivjdlyb",
+    "migrationsDir": "supabase/migrations"
+  },
+  "routes": {
+    "inventory": "inventory.yaml"
+  },
+  "ci": {
+    "provider": "github-actions",
+    "defaultBranch": "main",
+    "workflows": {
+      "ci.yml": {
+        "role": "pr-gate"
+      },
+      "deploy.yml": {
+        "role": "deploy-web"
+      },
+      "build-mobile-capacitor.yml": {
+        "role": "build-mobile"
+      }
+    }
+  },
+  "deploy": {
+    "targets": [
+      {
+        "id": "web-prod",
+        "kind": "cloudfront-s3",
+        "environment": "production",
+        "url": "https://kensaur.us/glot-it",
+        "probe": {
+          "type": "version_json",
+          "url": "https://kensaur.us/glot-it/version.json"
+        },
+        "workflow": "deploy.yml",
+        "maxLagHours": 24
+      },
+      {
+        "id": "android-play",
+        "kind": "capacitor-android",
+        "environment": "production",
+        "probe": {
+          "type": "sdk_heartbeat"
+        },
+        "workflow": "build-mobile-capacitor.yml"
+      },
+      {
+        "id": "ios-app-store",
+        "kind": "capacitor-ios",
+        "environment": "production",
+        "probe": {
+          "type": "sdk_heartbeat"
+        },
+        "workflow": "build-mobile-capacitor.yml"
+      }
+    ]
+  },
+  "env": {
+    "environments": [
+      "production"
+    ],
+    "required": [
+      {
+        "name": "NEXT_PUBLIC_MUSHI_PROJECT_ID",
+        "in": [
+          "github-actions"
+        ],
+        "environments": [
+          "production"
+        ]
+      },
+      {
+        "name": "NEXT_PUBLIC_MUSHI_API_KEY",
+        "in": [
+          "github-actions"
+        ],
+        "environments": [
+          "production"
+        ]
+      },
+      {
+        "name": "NEXT_PUBLIC_SUPABASE_URL",
+        "in": [
+          "github-actions"
+        ],
+        "environments": [
+          "production"
+        ]
+      }
+    ]
+  },
+  "integrations": {
+    "sentry": {
+      "project": "glot-it"
+    }
+  },
+  "change": {
+    "allowPaths": [
+      "mushi.recipe.json",
+      "packages/design-tokens/tokens/**",
+      "inventory.yaml"
+    ]
+  }
+}
