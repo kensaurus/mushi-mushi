@@ -221,7 +221,7 @@ export function renderBrandFooter(ctx: WidgetRenderCtx): string {
 // ─── Report screen (§1.1) ─────────────────────────────────────────
 
 /** Label of a type id — built-in, idea, or the host's custom category. */
-export function chipLabel(ctx: WidgetRenderCtx, id: string): string {
+function chipLabel(ctx: WidgetRenderCtx, id: string): string {
   if (id === 'idea' || id === 'feature') return ctx.config.featureRequestLabel || ctx.rc.categories.idea;
   const custom = ctx.resolveCustomCategory(id);
   if (custom) return custom.label;
@@ -413,7 +413,7 @@ function skeleton(label: string, rows = 3): string {
 }
 
 /** Unread first, then newest activity. */
-export function orderReports(reports: MushiReporterReport[]): MushiReporterReport[] {
+function orderReports(reports: MushiReporterReport[]): MushiReporterReport[] {
   const at = (r: MushiReporterReport) => Date.parse(r.last_event_at ?? r.created_at) || 0;
   return [...reports].sort((a, b) => Number((b.unread_count ?? 0) > 0) - Number((a.unread_count ?? 0) > 0) || at(b) - at(a));
 }
@@ -446,7 +446,7 @@ function reportsView(ctx: WidgetRenderCtx): ViewRegions {
 interface Entry { kind: ReporterTimelineKind; at: string; text: string; who?: string; pending?: PendingReply }
 
 /** Merge the server timeline (or the comments, on older servers) with replies still in flight. */
-export function buildTimeline(ctx: WidgetRenderCtx, report: MushiReporterReport | undefined): Entry[] {
+function buildTimeline(ctx: WidgetRenderCtx, report: MushiReporterReport | undefined): Entry[] {
   const rc = ctx.rc;
   const out: Entry[] = [];
   if (ctx.timeline) {
