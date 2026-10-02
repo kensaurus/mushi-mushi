@@ -169,6 +169,20 @@ describe('assembleRepoDigest', () => {
     expect(digest.text).toContain(`Commit: ${SHA} (main)`)
   })
 
+  it('also catches keys the shared scanner does not (Google, Stripe test)', () => {
+    const google = ['AIza', 'B'.repeat(35)].join('')
+    const stripe = ['sk', 'test', 'C'.repeat(24)].join('_')
+    const plan = planRepoDigest(entries({ 'a.ts': 100, 'b.ts': 100 }))
+    const digest = assembleRepoDigest(
+      plan,
+      new Map<string, FetchedContent>([['a.ts', `k = '${google}'`], ['b.ts', `s = '${stripe}'`]]),
+      META,
+    )
+    expect(digest.text).not.toContain(google)
+    expect(digest.text).not.toContain(stripe)
+    expect(digest.redacted.map((r) => r.label).sort()).toEqual(['Google API key', 'Stripe test key'])
+  })
+
   it('records binary and unreadable files as left out', () => {
     const plan = planRepoDigest(entries({ 'a.ts': 100, 'b.ts': 100 }))
     const contents = new Map<string, FetchedContent>([['a.ts', { binary: true }], ['b.ts', null]])
@@ -216,10 +230,14 @@ describe('treePathSet', () => {
 
 describe('digestCacheKeyInput', () => {
   it('ignores glob order and whitespace but not the seeds', () => {
-    const a = digestCacheKeyInput({ include: ['b', ' a'], budgetTokens: 1e9 }, ['x.ts'])
-    const b = digestCacheKeyInput({ include: ['a', 'b'], budgetTokens: MAX_DIGEST_BUDGET_TOKENS }, ['./x.ts'])
+    const a = digestCacheKeyInput({ include: ['b', ' a'], budgetTokens: 1e9 }, ['x.ts'], 'repo')
+    const b = digestCacheKeyInput({ include: ['a', 'b'], budgetTokens: MAX_DIGEST_BUDGET_TOKENS }, ['./x.ts'], 'repo')
     expect(a).toBe(b)
-    expect(digestCacheKeyInput({}, ['y.ts'])).not.toBe(digestCacheKeyInput({}, ['x.ts']))
+    expect(digestCacheKeyInput({}, ['y.ts'], 'repo')).not.toBe(digestCacheKeyInput({}, ['x.ts'], 'repo'))
+  })
+  it('keeps a report digest with no linked files apart from the whole-repo digest', () => {
+    // Same options and no seeds, but the text's Scope line differs.
+    expect(digestCacheKeyInput({}, [], 'report:r1')).not.toBe(digestCacheKeyInput({}, [], 'repo'))
   })
 })
 

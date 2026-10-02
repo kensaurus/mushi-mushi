@@ -150,7 +150,7 @@ describe('publicDiagramPayload', () => {
 })
 
 describe('decidePublish', () => {
-  const base = { previewedHash: 'h1', currentHash: 'h1', repoPrivate: false, confirmPrivate: false, publishedByOtherProject: false }
+  const base = { repoWriteAccess: true, previewedHash: 'h1', currentHash: 'h1', repoPrivate: false, confirmPrivate: false, publishedByOtherProject: false }
   it('publishes a public repo whose preview is current', () => {
     expect(decidePublish(base)).toEqual({ ok: true })
   })
@@ -163,6 +163,12 @@ describe('decidePublish', () => {
   })
   it('checks the preview before consent, so consent never covers an unseen diagram', () => {
     expect(decidePublish({ ...base, currentHash: 'h2', repoPrivate: true, confirmPrivate: true })).toMatchObject({ code: 'STALE_PREVIEW' })
+  })
+  it('refuses anyone who cannot write to the repo, before anything else', () => {
+    // Reading a public repo is not ownership: otherwise anyone could publish
+    // a page about vercel/next.js and lock the real owner out.
+    expect(decidePublish({ ...base, repoWriteAccess: false })).toMatchObject({ ok: false, status: 403, code: 'REPO_WRITE_REQUIRED' })
+    expect(decidePublish({ ...base, repoWriteAccess: false, repoPrivate: true, confirmPrivate: true })).toMatchObject({ code: 'REPO_WRITE_REQUIRED' })
   })
   it('keeps one public page per repo', () => {
     expect(decidePublish({ ...base, publishedByOtherProject: true })).toMatchObject({ ok: false, code: 'ALREADY_PUBLISHED' })
@@ -189,10 +195,16 @@ describe('buildDiagramUserPrompt', () => {
 
 describe('fetchRepoVisibility', () => {
   it("reads GitHub's private flag and spelling", async () => {
-    const fetchImpl = async () => Response.json({ private: false, name: 'Shop', owner: { login: 'Acme' } })
+    const fetchImpl = async () => Response.json({ private: false, name: 'Shop', owner: { login: 'Acme' }, permissions: { pull: true, push: true } })
     expect(await fetchRepoVisibility({ token: 't', owner: 'acme', repo: 'shop', fetchImpl })).toEqual({
-      ok: true, private: false, owner: 'Acme', repo: 'Shop',
+      ok: true, private: false, canWrite: true, owner: 'Acme', repo: 'Shop',
     })
+  })
+  it('treats read-only or missing permissions as no write access', async () => {
+    const readOnly = async () => Response.json({ private: false, name: 'next.js', owner: { login: 'vercel' }, permissions: { pull: true, push: false, admin: false } })
+    expect(await fetchRepoVisibility({ token: 't', owner: 'vercel', repo: 'next.js', fetchImpl: readOnly })).toMatchObject({ ok: true, canWrite: false })
+    const noPerms = async () => Response.json({ private: true, name: 'x', owner: { login: 'y' } })
+    expect(await fetchRepoVisibility({ token: 't', owner: 'y', repo: 'x', fetchImpl: noPerms })).toMatchObject({ ok: true, canWrite: false })
   })
   it('reports a failure instead of guessing public', async () => {
     const fetchImpl = async () => new Response('nope', { status: 404 })

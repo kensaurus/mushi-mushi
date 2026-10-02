@@ -18,8 +18,7 @@
  * in api/routes/repo-diagram.ts).
  */
 
-import { scanForSecrets } from './secret-scan.ts'
-import { normalizeRepoPathForDigest, sha256HexOf } from './repo-digest.ts'
+import { normalizeRepoPathForDigest, scanRepoTextForSecrets, sha256HexOf } from './repo-digest.ts'
 import type { FetchLike } from './github-branch.ts'
 
 export const MAX_DIAGRAM_GROUPS = 10
@@ -96,7 +95,7 @@ function slugId(v: unknown, fallback: string): string {
 
 function cleanText(text: string, counter: { n: number }): string {
   if (!text) return text
-  if (scanForSecrets(text)) {
+  if (scanRepoTextForSecrets(text)) {
     counter.n++
     return ''
   }
@@ -308,20 +307,29 @@ export function publicPayloadHash(payload: PublicDiagramPayload): Promise<string
 
 export type PublishDecision =
   | { ok: true }
+  | { ok: false; status: 403; code: 'REPO_WRITE_REQUIRED'; message: string }
   | { ok: false; status: 409; code: 'STALE_PREVIEW' | 'CONSENT_REQUIRED' | 'ALREADY_PUBLISHED'; message: string }
 
 /**
- * Whether a publish request may go ahead. Consent is bound to the exact
+ * Whether a publish request may go ahead. Only someone who can write to the
+ * repo on GitHub may put a page about it on the web (reading a public repo is
+ * not ownership: without this, anyone could publish an AI diagram of any
+ * public repo and lock its real owner out). Consent is bound to the exact
  * payload the owner previewed (its hash), a private repo needs an explicit
  * confirmation, and one repo has at most one public page.
  */
 export function decidePublish(input: {
+  /** GitHub says the project's token can push to (or administer) the repo. Unknown counts as no. */
+  repoWriteAccess: boolean
   previewedHash: string
   currentHash: string
   repoPrivate: boolean
   confirmPrivate: boolean
   publishedByOtherProject: boolean
 }): PublishDecision {
+  if (!input.repoWriteAccess) {
+    return { ok: false, status: 403, code: 'REPO_WRITE_REQUIRED', message: 'Only someone with write access to this repo on GitHub can publish its diagram.' }
+  }
   if (input.previewedHash !== input.currentHash) {
     return { ok: false, status: 409, code: 'STALE_PREVIEW', message: 'The diagram changed since you previewed it. Review it again before publishing.' }
   }
@@ -347,7 +355,7 @@ export async function fetchRepoVisibility(opts: {
   owner: string
   repo: string
   fetchImpl?: FetchLike
-}): Promise<{ ok: true; private: boolean; owner: string; repo: string } | { ok: false; status: number }> {
+}): Promise<{ ok: true; private: boolean; canWrite: boolean; owner: string; repo: string } | { ok: false; status: number }> {
   const fetchImpl = opts.fetchImpl ?? fetch
   const res = await fetchImpl(`https://api.github.com/repos/${opts.owner}/${opts.repo}`, {
     headers: {
@@ -360,12 +368,16 @@ export async function fetchRepoVisibility(opts: {
   })
   if (!res.ok) return { ok: false, status: res.status }
   const body = (await res.json().catch(() => null)) as
-    | { private?: unknown; name?: unknown; owner?: { login?: unknown } }
+    | { private?: unknown; name?: unknown; owner?: { login?: unknown }; permissions?: Record<string, unknown> }
     | null
   if (typeof body?.private !== 'boolean') return { ok: false, status: 0 }
+  // `permissions` describes the token's own access. Some installation tokens
+  // omit it; then write access is unknown and counts as no.
+  const perms = body.permissions ?? {}
   return {
     ok: true,
     private: body.private,
+    canWrite: perms.admin === true || perms.maintain === true || perms.push === true,
     owner: typeof body.owner?.login === 'string' ? body.owner.login : opts.owner,
     repo: typeof body.name === 'string' ? body.name : opts.repo,
   }
