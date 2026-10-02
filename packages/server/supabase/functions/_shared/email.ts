@@ -49,6 +49,14 @@ export function resolveSenderAddress(): string | null {
   return from ? from : null
 }
 
+/**
+ * Whether email can go out at all: RESEND_API_KEY and RESEND_FROM_EMAIL are
+ * both set. Callers report `not_configured` instead of attempting a send.
+ */
+export function emailProviderConfigured(): boolean {
+  return Boolean(resolveSenderAddress() && Deno.env.get('RESEND_API_KEY')?.trim())
+}
+
 export async function sendTransactionalEmail(email: TransactionalEmail): Promise<SendEmailResult> {
   const from = resolveSenderAddress()
   if (!from) {

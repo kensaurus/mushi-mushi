@@ -108,7 +108,7 @@ export async function notifyReleaseReporters(
       delivery.reports_without_reporter++
       continue
     }
-    const payload = { message, reportId: report.id, version: release.version }
+    const payload = { message, reportId: report.id, version: release.version, fixedCount: reports.length }
     const results = [
       await createNotification(db, release.project_id, report.id, report.reporter_token_hash, 'released', payload, {
         reviewable: true,

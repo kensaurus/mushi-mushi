@@ -76,6 +76,8 @@ export interface SdkConfigRow {
   assistant_label?: string | null;
   assistant_greeting?: string | null;
   assistant_suggestions?: unknown;
+  reporter_email_enabled?: boolean | null;
+  reporter_push_enabled?: boolean | null;
 }
 
 function oneOf<T extends readonly string[]>(
@@ -113,6 +115,10 @@ export interface NormalizeSdkConfigOptions {
    * the caller does not know the plan (pure unit tests, older callers).
    */
   brandFooterDefault?: boolean | null;
+  /** RESEND_API_KEY and RESEND_FROM_EMAIL are set (the caller checks env). */
+  emailProviderConfigured?: boolean;
+  /** VAPID public key when Web Push is configured, else null. */
+  vapidPublicKey?: string | null;
 }
 
 export function normalizeSdkConfig(row?: SdkConfigRow | null, opts: NormalizeSdkConfigOptions = {}) {
@@ -183,6 +189,14 @@ export function normalizeSdkConfig(row?: SdkConfigRow | null, opts: NormalizeSdk
       minDescriptionLength: Math.max(0, Math.min(1000, row?.sdk_min_description_length ?? 20)),
     },
     reporterNotificationsEnabled: row?.reporter_notifications_enabled !== false,
+    // Plan 018 §4.1 opt-in channels. A channel is offered to reporters only
+    // when the project turned it on AND the server can actually send it, so
+    // the widget never shows a checkbox that leads nowhere.
+    reporter: {
+      emailEnabled: row?.reporter_email_enabled === true && opts.emailProviderConfigured === true,
+      pushEnabled: row?.reporter_push_enabled === true && Boolean(opts.vapidPublicKey),
+      vapidPublicKey: row?.reporter_push_enabled === true && opts.vapidPublicKey ? opts.vapidPublicKey : null,
+    },
     // Workstream E — page-aware assistant. `enabled` gates the "Ask" tab in
     // the widget; greeting/suggestions are display-only. The knowledge
     // corpus and LLM keys never leave the server (POST /v1/sdk/assistant).

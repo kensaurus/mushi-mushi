@@ -204,20 +204,67 @@ describe('status transitions', () => {
     expect(fake.table('reporter_notifications')).toHaveLength(0)
   })
 
-  it('a duplicate close tells only its own reporter, with the reason', async () => {
-    const fake = db({ reporter_report_follows: [follow] })
-    await statusNotify.notifyReportStatusTransition(fake as never, {
-      projectId: PROJECT,
-      reportId: REPORT,
-      reporterTokenHash: OWNER,
-      previousStatus: 'classified',
-      newStatus: 'dismissed',
-      closedReason: 'duplicate',
+  describe('duplicate close — exactly one notice', () => {
+    const CANONICAL = 'r-canonical'
+    const grouped = {
+      reports: [{ id: REPORT, project_id: PROJECT, report_group_id: 'g1' }],
+      report_groups: [{ id: 'g1', canonical_report_id: CANONICAL }],
+    }
+    const close = (fake: FakeDb) =>
+      statusNotify.notifyReportStatusTransition(fake as never, {
+        projectId: PROJECT,
+        reportId: REPORT,
+        reporterTokenHash: OWNER,
+        previousStatus: 'classified',
+        newStatus: 'dismissed',
+        closedReason: 'duplicate',
+      })
+    // reporter_notifications: unique (report_id, notification_type, dedupe_key) where dedupe_key is not null
+    const dbWithNotifUnique = (seed: Record<string, Row[]>) =>
+      makeFakeDb(
+        { project_settings: [{ project_id: PROJECT, reporter_updates_mode: 'auto' }], ...seed },
+        {
+          autoId: true,
+          strictSingle: true,
+          uniques: {
+            notification_deliveries: ['report_id', 'notification_type', 'channel', 'dedupe_key'],
+            reporter_notifications: ['report_id', 'notification_type', 'dedupe_key'],
+          },
+        },
+      )
+
+    it('closed without prior grouping notice: one duplicate_linked, keyed by the canonical id, nothing for followers', async () => {
+      const fake = dbWithNotifUnique({ ...grouped, reporter_report_follows: [follow] })
+      await close(fake)
+      const rows = fake.table('reporter_notifications')
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({
+        reporter_token_hash: OWNER,
+        notification_type: 'duplicate_linked',
+        dedupe_key: CANONICAL,
+      })
+      expect(rows[0].payload).toMatchObject({ canonicalReportId: CANONICAL })
+      expect(fake.table('notification_deliveries')[0]).toMatchObject({ channel: 'in_app', status: 'sent', dedupe_key: CANONICAL })
     })
-    const rows = fake.table('reporter_notifications')
-    expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({ reporter_token_hash: OWNER, notification_type: 'dismissed' })
-    expect(rows[0].payload).toMatchObject({ closedReason: 'duplicate' })
+
+    it('grouped first (the trigger already wrote the notice), then closed: still one row', async () => {
+      const fake = dbWithNotifUnique({
+        ...grouped,
+        reporter_notifications: [
+          { id: 'trig', report_id: REPORT, reporter_token_hash: OWNER, notification_type: 'duplicate_linked', status: 'sent', dedupe_key: CANONICAL, payload: {} },
+        ],
+      })
+      await close(fake)
+      expect(fake.table('reporter_notifications')).toHaveLength(1)
+      expect(fake.table('reporter_notifications').some((r) => r.notification_type === 'dismissed')).toBe(false)
+    })
+
+    it('closing again is a no-op', async () => {
+      const fake = dbWithNotifUnique(grouped)
+      await close(fake)
+      await close(fake)
+      expect(fake.table('reporter_notifications')).toHaveLength(1)
+    })
   })
 
   it('holds pipeline messages in review mode', async () => {
