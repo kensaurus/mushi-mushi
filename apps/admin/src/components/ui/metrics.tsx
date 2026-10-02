@@ -722,11 +722,13 @@ export function StatCard({ label, value, accent, delta, trend, detail, hint, too
 
   if (to) {
     return (
-      <Card elevated className="stat-card-link px-3 py-2.5">
+      // The link fills the card: the card used to carry the padding and a
+      // pointer cursor, so a click on its edge looked live and did nothing.
+      <Card elevated className="stat-card-link">
         <Link
           to={to}
           aria-label={`${label} — go to ${destination}`}
-          className="group/stat relative z-[1] block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+          className="group/stat relative z-[1] block rounded-[inherit] px-3 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/60"
         >
           {inner}
         </Link>

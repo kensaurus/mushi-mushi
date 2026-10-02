@@ -1,5 +1,6 @@
 import React, { useState, useEffect, forwardRef } from 'react';
 import type { ReactNode, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, LabelHelp } from './layout';
 import { CHIP_TONE } from '../../lib/chipTone'
 
@@ -60,9 +61,11 @@ interface SegmentedControlProps<T extends string> {
   className?: string
 }
 
+// Hit-area floor (WCAG 2.5.8): 24px on mouse layouts, 32px where the
+// primary pointer is coarse. min-height keeps dense desktop chrome compact.
 const SEGMENT_SIZE = {
-  sm: 'px-1.5 py-0.5 text-2xs',
-  md: 'px-2 py-1 text-2xs font-medium',
+  sm: 'px-1.5 py-0.5 text-2xs min-h-6 pointer-coarse:min-h-8',
+  md: 'px-2 py-1 text-2xs font-medium min-h-6 pointer-coarse:min-h-8',
 } as const
 
 export function SegmentedControl<T extends string>({
@@ -154,6 +157,13 @@ interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean
   /** Optional icon rendered before children. Sized to match the variant. */
   leadingIcon?: ReactNode
+  /**
+   * In-app route. Renders the button as a router link, so a navigation CTA
+   * is one Tab stop. `<Link><Btn/></Link>` nests a button in a link: two
+   * stops for one action, and invalid HTML. A disabled or loading Btn stays
+   * a button, since a link cannot be disabled.
+   */
+  to?: string
 }
 
 const BTN_BASE =
@@ -162,9 +172,10 @@ const BTN_BASE =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface ' +
   'motion-safe:transition-[transform,opacity] motion-safe:duration-150 motion-safe:active:scale-[0.97]'
 
+// Same hit-area floor as SEGMENT_SIZE: sm reached ~22px at compact density.
 const BTN_SIZES = {
-  sm: 'px-2 py-1 text-xs gap-1.5',
-  md: 'px-3 py-1.5 text-sm gap-2',
+  sm: 'px-2 py-1 text-xs gap-1.5 min-h-6 pointer-coarse:min-h-8',
+  md: 'px-3 py-1.5 text-sm gap-2 min-h-8',
 } as const
 
 // Expressive control set (2026-07 expressive pass): the primary action is a
@@ -205,9 +216,24 @@ export function Btn({
   loading,
   leadingIcon,
   disabled,
+  to,
   ...rest
 }: BtnProps) {
   const isDisabled = disabled || loading
+  if (to && !isDisabled) {
+    // Button-only attributes (type, form*) have no meaning on a link.
+    const { type: _type, form: _form, formAction: _formAction, ...anchorRest } = rest
+    return (
+      <Link
+        {...(anchorRest as unknown as React.AnchorHTMLAttributes<HTMLAnchorElement>)}
+        to={to}
+        className={`${BTN_BASE} ${BTN_SIZES[size]} ${BTN_VARIANTS[variant]} ${className}`}
+      >
+        {leadingIcon}
+        {children}
+      </Link>
+    )
+  }
   return (
     <button
       className={`${BTN_BASE} ${BTN_SIZES[size]} ${BTN_VARIANTS[variant]} ${className}`}
