@@ -64,7 +64,9 @@ import { callerCanAccessProject, dbError } from '../shared.ts'
 import { resolveConnectedRepo } from './repo-digest.ts'
 import {
   buildDiagramOverlay,
+  chunk,
   DONE_REPORT_STATUSES,
+  MAX_ITEMS_FULL_NODE,
   type OverlayFinding,
   type OverlayReport,
 } from '../../_shared/diagram-overlay.ts'
@@ -277,12 +279,12 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
 
     const fixFilesByReport = new Map<string, string[]>()
     // Chunked: 300 UUIDs in one `in.()` filter is an ~11 KB URL.
-    for (let i = 0; i < reportIds.length; i += OVERLAY_ID_CHUNK) {
+    for (const ids of chunk(reportIds, OVERLAY_ID_CHUNK)) {
       const { data: fixes, error: fixErr } = await db
         .from('fix_attempts')
         .select('report_id, files_changed')
         .eq('project_id', projectId)
-        .in('report_id', reportIds.slice(i, i + OVERLAY_ID_CHUNK))
+        .in('report_id', ids)
       if (fixErr) return dbError(c, fixErr)
       for (const f of fixes ?? []) {
         const list = fixFilesByReport.get(f.report_id as string) ?? []
@@ -335,7 +337,15 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
       .limit(OVERLAY_MAX_FINDINGS)
     if (findingErr) return dbError(c, findingErr)
 
-    const overlay = buildDiagramOverlay(row.graph.nodes, reports, (findingRows ?? []) as OverlayFinding[])
+    // `?node=<id>`: one part's complete lists ("Show all" in the console).
+    const onlyNode = c.req.query('node')?.trim() || null
+    const overlay = buildDiagramOverlay(
+      row.graph.nodes,
+      reports,
+      (findingRows ?? []) as OverlayFinding[],
+      onlyNode ? MAX_ITEMS_FULL_NODE : undefined,
+    )
+    if (onlyNode) overlay.nodes = overlay.nodes[onlyNode] ? { [onlyNode]: overlay.nodes[onlyNode] } : {}
     return c.json({
       ok: true,
       data: {

@@ -21,6 +21,15 @@ export const DONE_REPORT_STATUSES = ['fixed', 'resolved', 'verified', 'dismissed
 
 /** Per-node list size; the counts cover the rest. */
 export const MAX_ITEMS_PER_NODE = 25
+/** Upper bound for one part's full list ("Show all"). */
+export const MAX_ITEMS_FULL_NODE = 500
+
+/** Split ids so each PostgREST `in.()` filter keeps the URL short. */
+export function chunk<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += Math.max(1, size)) out.push(items.slice(i, i + Math.max(1, size)))
+  return out
+}
 
 export interface OverlayReport {
   id: string
@@ -85,6 +94,7 @@ export function buildDiagramOverlay(
   nodes: ReadonlyArray<{ id: string; path: string | null }>,
   reports: readonly OverlayReport[],
   findings: readonly OverlayFinding[],
+  maxPerNode: number = MAX_ITEMS_PER_NODE,
 ): DiagramOverlay {
   const out: Record<string, NodeOverlay> = {}
   const unplaced = { reports: 0, findings: 0 }
@@ -123,8 +133,8 @@ export function buildDiagramOverlay(
   }
 
   for (const o of Object.values(out)) {
-    o.reports = o.reports.sort(bySeverity).slice(0, MAX_ITEMS_PER_NODE)
-    o.findings = o.findings.sort(bySeverity).slice(0, MAX_ITEMS_PER_NODE)
+    o.reports = o.reports.sort(bySeverity).slice(0, maxPerNode)
+    o.findings = o.findings.sort(bySeverity).slice(0, maxPerNode)
   }
   return { nodes: out, unplaced }
 }

@@ -141,6 +141,43 @@ describe('ExploreDiagramPanel overlay', () => {
     )
   })
 
+  it('loads one part\'s full list from "Show all"', async () => {
+    const capped = {
+      ...overlayResponse,
+      data: {
+        ...overlayResponse.data,
+        nodes: { auth: { ...overlayResponse.data.nodes.auth, report_count: 30 } },
+      },
+    }
+    const full = {
+      ok: true,
+      data: {
+        ...overlayResponse.data,
+        nodes: {
+          auth: {
+            ...overlayResponse.data.nodes.auth,
+            report_count: 30,
+            reports: Array.from({ length: 30 }, (_, i) => ({ id: `r-${i}`, summary: `Bug ${i}`, severity: 'low', status: 'new' })),
+          },
+        },
+      },
+    }
+    apiFetch.mockImplementation((path: string) =>
+      Promise.resolve(path.endsWith('/overlay?node=auth') ? full : path.endsWith('/overlay') ? capped : diagramResponse),
+    )
+    render()
+    await flush()
+    const authButton = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Auth (30)')!
+    await act(async () => authButton.click())
+    const showAll = [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Show all'))!
+    expect(showAll.textContent).toBe('Show all (29 more)')
+    await act(async () => showAll.click())
+    await flush()
+    expect(apiFetch).toHaveBeenCalledWith('/v1/admin/projects/p1/codebase/diagram/overlay?node=auth', { cache: 'no-store' })
+    expect(container.querySelectorAll('[data-testid="explore-diagram-selected-reports"] li')).toHaveLength(30)
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent?.startsWith('Show all'))).toBe(false)
+  })
+
   it('still shows the diagram when the overlay fails', async () => {
     apiFetch.mockImplementation((path: string) =>
       Promise.resolve(path.endsWith('/overlay') ? { ok: false, error: { code: 'X', message: 'Overlay down' } } : diagramResponse),
