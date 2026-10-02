@@ -2158,6 +2158,24 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         });
       }
 
+      // Reporters who answered in the widget and have not been read yet
+      // (last_reporter_reply_at > admin_seen_at) — Plan 018 decision 10.
+      const waiting = reports.filter(
+        (r) =>
+          typeof r.last_reporter_reply_at === 'string' &&
+          (typeof r.admin_seen_at !== 'string' ||
+            Date.parse(r.last_reporter_reply_at) > Date.parse(r.admin_seen_at)),
+      );
+      if (waiting.length > 0) {
+        steps.push({
+          priority: priority++,
+          action: `Answer ${waiting.length} reporter${waiting.length === 1 ? '' : 's'} waiting for a reply`,
+          reason: `They replied in your app's "Your reports" thread. Latest: ${label(waiting[0])}. Read it, then answer with reply_to_reporter.`,
+          tool: 'get_report_timeline',
+          args: { reportId: waiting[0].id },
+        });
+      }
+
       const fixing = reports.filter((r) => r.status === 'fixing');
       for (const r of fixing.slice(0, 2)) {
         steps.push({
@@ -2201,7 +2219,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
 
       const summary =
         steps.length === 0
-          ? 'Inbox is clear — no blocked fixes, no open user reports, no chores. Nothing needs your attention.'
+          ? 'Inbox is clear — no blocked fixes, no reporters waiting, no open user reports, no chores. Nothing needs your attention.'
           : `${steps.length} prioritised step${steps.length === 1 ? '' : 's'}: ` +
             steps.map((s) => s.action).join(' → ');
       return jsonResult({ steps, summary });
