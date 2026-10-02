@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-02 · **579** routes.
+> Generated: 2026-10-02 · **580** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -12,7 +12,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | `apiKeyAuth` | 51 |
 | `jwtAuth` | 345 |
 | `jwtOrApiKey` | 3 |
-| `unknown` | 71 |
+| `unknown` | 72 |
 
 ## Routes by path
 
@@ -254,6 +254,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:id/codebase/chat/threads/:threadId/messages` | `unknown` | `packages/server/supabase/functions/api/routes/codebase-understand.ts` |
 | GET | `/v1/admin/projects/:id/codebase/diagram` | `unknown` | `packages/server/supabase/functions/api/routes/repo-diagram.ts` |
 | POST | `/v1/admin/projects/:id/codebase/diagram` | `unknown` | `packages/server/supabase/functions/api/routes/repo-diagram.ts` |
+| GET | `/v1/admin/projects/:id/codebase/diagram/overlay` | `unknown` | `packages/server/supabase/functions/api/routes/repo-diagram.ts` |
 | DELETE | `/v1/admin/projects/:id/codebase/diagram/publish` | `jwtAuth` | `packages/server/supabase/functions/api/routes/repo-diagram.ts` |
 | POST | `/v1/admin/projects/:id/codebase/diagram/publish` | `jwtAuth` | `packages/server/supabase/functions/api/routes/repo-diagram.ts` |
 | GET | `/v1/admin/projects/:id/codebase/diagram/publish-preview` | `jwtAuth` | `packages/server/supabase/functions/api/routes/repo-diagram.ts` |

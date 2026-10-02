@@ -8,7 +8,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch, apiFetchMutate } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
-import { githubPathUrl, type DiagramResponse } from '../../lib/repoUnderstanding'
+import { Link } from 'react-router-dom'
+import { githubPathUrl, type DiagramOverlayResponse, type DiagramResponse } from '../../lib/repoUnderstanding'
 import { Btn, Card, ErrorAlert } from '../ui'
 import { ExploreDiagramCanvas } from './ExploreDiagramCanvas'
 import { ExploreDiagramPublishCard } from './ExploreDiagramPublishCard'
@@ -24,8 +25,33 @@ export function ExploreDiagramPanel({ projectId }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [drawing, setDrawing] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [overlay, setOverlay] = useState<DiagramOverlayResponse | null>(null)
+  const [overlayError, setOverlayError] = useState<string | null>(null)
 
   const path = `/v1/admin/projects/${projectId}/codebase/diagram`
+  const diagramId = data?.diagram?.id ?? null
+  const diagramUpdatedAt = data?.diagram?.updated_at ?? null
+
+  // Open bugs and code findings per part. Optional: the diagram works without it.
+  useEffect(() => {
+    if (!diagramId) {
+      setOverlay(null)
+      return
+    }
+    let cancelled = false
+    setOverlayError(null)
+    void apiFetch<DiagramOverlayResponse>(`${path}/overlay`, { cache: 'no-store' }).then((res) => {
+      if (cancelled) return
+      if (res.ok && res.data) setOverlay(res.data)
+      else {
+        setOverlay(null)
+        setOverlayError(res.error?.message ?? 'Could not load bugs and findings for the diagram')
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [path, diagramId, diagramUpdatedAt])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -80,6 +106,7 @@ export function ExploreDiagramPanel({ projectId }: Props) {
   }
 
   const selected = diagram.graph.nodes.find((n) => n.id === selectedId) ?? null
+  const selectedOverlay = selected ? overlay?.nodes[selected.id] ?? null : null
   const invalid = diagram.stats.invalid_paths?.length ?? 0
 
   return (
@@ -101,7 +128,16 @@ export function ExploreDiagramPanel({ projectId }: Props) {
         </div>
       </div>
 
-      <ExploreDiagramCanvas graph={diagram.graph} selectedId={selectedId} onSelect={setSelectedId} />
+      <ExploreDiagramCanvas graph={diagram.graph} selectedId={selectedId} onSelect={setSelectedId} overlay={overlay} />
+      {overlay && (
+        <p className="text-xs text-fg-muted" data-testid="explore-diagram-overlay-summary">
+          Badges show open bug reports and code findings from the last {overlay.considered.findings_days} days on each part.
+          {(overlay.unplaced.reports > 0 || overlay.unplaced.findings > 0) &&
+            ` ${overlay.unplaced.reports} report${overlay.unplaced.reports === 1 ? '' : 's'} and ${overlay.unplaced.findings} finding${overlay.unplaced.findings === 1 ? '' : 's'} are in files no part covers.`}
+          {!overlay.frames_matched && ' GitHub could not be read, so stack traces were not placed.'}
+        </p>
+      )}
+      {overlayError && <p className="text-xs text-warn">{overlayError}</p>}
 
       {selected && (
         <div data-testid="explore-diagram-selected">
@@ -123,6 +159,47 @@ export function ExploreDiagramPanel({ projectId }: Props) {
                 ? 'The AI named a path that is not in the repo, so Mushi removed it.'
                 : 'No single file or folder implements this part.'}
             </p>
+          )}
+          {selectedOverlay && selectedOverlay.report_count > 0 && (
+            <div className="pt-2" data-testid="explore-diagram-selected-reports">
+              <h4 className="text-xs font-semibold text-fg">
+                Open bug reports ({selectedOverlay.report_count})
+              </h4>
+              <ul className="space-y-0.5 text-xs">
+                {selectedOverlay.reports.map((r) => (
+                  <li key={r.id}>
+                    <Link className="text-brand underline" to={`/reports/${r.id}`}>
+                      {r.summary || `Report ${r.id.slice(0, 8)}`}
+                    </Link>
+                    {r.severity && <span className="ml-1 text-fg-faint">· {r.severity}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {selectedOverlay && selectedOverlay.finding_count > 0 && (
+            <div className="pt-2" data-testid="explore-diagram-selected-findings">
+              <h4 className="text-xs font-semibold text-fg">
+                Code findings ({selectedOverlay.finding_count})
+              </h4>
+              <ul className="space-y-0.5 text-xs">
+                {selectedOverlay.findings.map((f) => (
+                  <li key={f.id}>
+                    <span className="font-medium text-fg-secondary">{f.rule_id}</span>
+                    <span className="text-fg-muted">: {f.message} </span>
+                    <a
+                      className="font-mono text-brand underline"
+                      href={`${githubPathUrl(diagram.repo_owner, diagram.repo_name, diagram.commit_sha, f.file_path)}${f.line ? `#L${f.line}` : ''}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {f.file_path}
+                      {f.line ? `:${f.line}` : ''}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </Card>
         </div>
