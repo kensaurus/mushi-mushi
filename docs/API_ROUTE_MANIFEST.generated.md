@@ -2,17 +2,17 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-02 · **572** routes.
+> Generated: 2026-10-02 · **582** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
 | `adminOrApiKey` | 109 |
-| `apiKeyAuth` | 51 |
-| `jwtAuth` | 342 |
+| `apiKeyAuth` | 55 |
+| `jwtAuth` | 344 |
 | `jwtOrApiKey` | 3 |
-| `unknown` | 67 |
+| `unknown` | 71 |
 
 ## Routes by path
 
@@ -278,6 +278,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:id/preflight` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
 | GET | `/v1/admin/projects/:id/privacy-status` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/evolution.ts` |
 | POST | `/v1/admin/projects/:id/repo/bootstrap` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/report-agent-context.ts` |
+| GET | `/v1/admin/projects/:id/reporter-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |
+| PUT | `/v1/admin/projects/:id/reporter-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |
 | GET | `/v1/admin/projects/:id/sdk-config` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | PUT | `/v1/admin/projects/:id/sdk-config` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/projects/:id/sdk-diagnostics` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-ci-secrets.ts` |
@@ -500,6 +502,10 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/public/marketplace/apps` | `unknown` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | GET | `/v1/public/marketplace/apps/:slug` | `unknown` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | GET | `/v1/public/marketplace/leaderboard` | `unknown` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
+| GET | `/v1/public/reporter/email/unsubscribe` | `unknown` | `packages/server/supabase/functions/api/routes/reporter-prefs.ts` |
+| POST | `/v1/public/reporter/email/unsubscribe` | `unknown` | `packages/server/supabase/functions/api/routes/reporter-prefs.ts` |
+| GET | `/v1/public/reporter/email/verify` | `unknown` | `packages/server/supabase/functions/api/routes/reporter-prefs.ts` |
+| POST | `/v1/public/reporter/email/verify` | `unknown` | `packages/server/supabase/functions/api/routes/reporter-prefs.ts` |
 | GET | `/v1/public/roadmap/:projectSlug` | `unknown` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | POST | `/v1/public/roadmap/:projectSlug/:id/vote` | `unknown` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | GET | `/v1/public/tester-leaderboard` | `unknown` | `packages/server/supabase/functions/api/routes/community.ts` |
@@ -510,7 +516,11 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/region/resolve` | `unknown` | `packages/server/supabase/functions/api/routes/discovery.ts` |
 | GET | `/v1/reporter/feature-board` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/reporter-feature-board.ts` |
 | POST | `/v1/reporter/feature-board/:id/vote` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/reporter-feature-board.ts` |
+| GET | `/v1/reporter/notification-prefs` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/reporter-prefs.ts` |
+| PUT | `/v1/reporter/notification-prefs` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/reporter-prefs.ts` |
 | POST | `/v1/reporter/notifications/read-all` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/reporter-inbox.ts` |
+| DELETE | `/v1/reporter/push-subscriptions` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/reporter-prefs.ts` |
+| POST | `/v1/reporter/push-subscriptions` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/reporter-prefs.ts` |
 | GET | `/v1/reporter/reports` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/reporter-inbox.ts` |
 | GET | `/v1/reporter/reports/:id` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/reporter-inbox.ts` |
 | GET | `/v1/reporter/reports/:id/comments` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
