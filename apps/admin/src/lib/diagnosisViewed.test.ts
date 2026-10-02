@@ -14,6 +14,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as DiagnosisViewedModule from './diagnosisViewed'
 
 const api = vi.hoisted(() => ({ apiFetch: vi.fn() }))
 const tracking = vi.hoisted(() => ({ trackSelf: vi.fn() }))
@@ -21,7 +22,7 @@ const tracking = vi.hoisted(() => ({ trackSelf: vi.fn() }))
 vi.mock('./supabase', () => api)
 vi.mock('./track', () => tracking)
 
-type Recorder = typeof import('./diagnosisViewed')
+type Recorder = typeof DiagnosisViewedModule
 
 /** A fresh module = a fresh page load; sessionStorage survives it. */
 async function loadPage(): Promise<Recorder> {
