@@ -92,7 +92,7 @@ function buildCiVars(params: {
 }
 
 /** Required names (no values) for diagnosis/comparison. */
-function requiredCiVarNames(stack: 'nextjs' | 'expo' | 'vite'): Array<{ name: string; ghKind: 'secret' | 'variable' }> {
+export function requiredCiVarNames(stack: 'nextjs' | 'expo' | 'vite'): Array<{ name: string; ghKind: 'secret' | 'variable' }> {
   return buildCiVars({ stack, projectId: '', endpoint: '', mintedKey: '' })
     .map(({ name, ghKind }) => ({ name, ghKind }))
 }
@@ -101,7 +101,7 @@ function requiredCiVarNames(stack: 'nextjs' | 'expo' | 'vite'): Array<{ name: st
 // Detect stack from project slug / known config (simple heuristic for now)
 // ---------------------------------------------------------------------------
 
-function inferStack(slug: string | null): 'nextjs' | 'expo' | 'vite' {
+export function inferStack(slug: string | null): 'nextjs' | 'expo' | 'vite' {
   if (!slug) return 'nextjs'
   const s = slug.toLowerCase()
   if (s === 'yen-yen') return 'expo'

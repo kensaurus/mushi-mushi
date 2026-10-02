@@ -146,7 +146,7 @@ export const QUICK_SUB_GROUPS: readonly QuickSubGroup[] = [
     title: 'Daily loop',
     paths: ['/dashboard', '/inbox', '/reports', '/fixes', '/code-health', '/analytics'],
   },
-  { id: 'quick-tools', title: 'More tools', paths: ['/skills', '/mcp', '/feedback'] },
+  { id: 'quick-tools', title: 'More tools', paths: ['/skills', '/mcp', '/feedback', '/recipe'] },
 ]
 
 export const NAV_SECTION_META: Record<
@@ -531,6 +531,31 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     iconKey: 'gauge',
     paletteDescription: 'Bundle-size trends and god-file LOC findings pushed from host-repo CI.',
     paletteKeywords: ['bundle', 'loc', 'god file', 'refactor', 'gzip', 'code health', 'ci', 'budget', 'file size'],
+    paletteGroup: 'Check',
+  },
+  {
+    id: 'nav:recipe',
+    path: '/recipe',
+    label: 'Recipe',
+    quickstartLabel: 'Recipe',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'pipeline',
+    paletteDescription: 'What this app is made of — schema, design system, routes, gates, CI, deploy, env and integrations — and where each drifted.',
+    paletteKeywords: ['recipe', 'app recipe', 'schema', 'design system', 'tokens', 'gates', 'ci', 'deploy', 'env', 'integrations', 'drift', 'manifest', 'mushi.recipe.json'],
+    paletteGroup: 'Check',
+  },
+  {
+    id: 'nav:design',
+    path: '/design',
+    label: 'Design system',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'quality-gates',
+    iconKey: 'content',
+    paletteDescription: 'Design tokens, contrast pairs, type scale and the deviance score for off-token code; token and rule edits open a draft PR.',
+    paletteKeywords: ['design', 'design system', 'tokens', 'dtcg', 'colors', 'contrast', 'typography', 'spacing', 'radius', 'deviance', 'off-token', 'rules'],
     paletteGroup: 'Check',
   },
   {
