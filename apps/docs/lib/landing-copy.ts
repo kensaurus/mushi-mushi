@@ -356,18 +356,18 @@ export const LANDING_PILLARS: readonly LandingPillar[] = [
 export const LANDING_REAL_DIAGNOSIS = {
   heading: 'This is what a diagnosis looks like',
   report:
-    "After finishing the daily lesson the celebration sheet shows '+0 XP earned today' but my streak counter on the home screen incremented by 1. … Also the haptic 'tada' on the celebration sheet that used to fire is silent now.",
+    "After finishing the daily lesson the celebration sheet shows '+0 XP earned today' but my streak counter on the home screen incremented by 1. … Also the haptic 'tada' on the celebration sheet that used to fire is silent now. …",
   title: 'Celebration screen shows +0 XP and haptic feedback is silent after lesson',
   severity: 'high',
   category: 'bug',
   confidence: '0.82',
   rootCause:
-    'The XP value passed to the CelebrationSheet is read from state or props before the XP award async operation resolves, resulting in a stale 0 value being displayed … The haptic \'tada\' feedback call is either gated on the XP value being non-zero, is invoked before the component is fully mounted, or … missing/unreachable on this code path entirely.',
+    '… The XP value passed to the CelebrationSheet is read from state or props before the XP award async operation resolves, resulting in a stale 0 value being displayed … The haptic \'tada\' feedback call is either gated on the XP value being non-zero, is invoked before the component is fully mounted, or … missing/unreachable on this code path entirely.',
   suggestedFix:
-    "Ensure the XP earned value is sourced from the resolved result of the lesson-completion API call … Guard against rendering '0' as a fallback when the value is undefined/null — use a loading indicator instead. … Verify the haptic 'tada' trigger is called unconditionally on sheet presentation … and is not gated behind the XP value being truthy.",
+    "… Ensure the XP earned value is sourced from the resolved result of the lesson-completion API call … Guard against rendering '0' as a fallback when the value is undefined/null — use a loading indicator instead. … Verify the haptic 'tada' trigger is called unconditionally on sheet presentation … and is not gated behind the XP value being truthy.",
   editorCmd: 'get_fix_context',
   provenance:
-    'Real classifier output from the public demo project, 2026-09-20, trimmed where marked with an ellipsis. The report itself is a sample we wrote to resemble a real one. A diagnosis is a model’s reading and can be wrong; check it before you merge.',
+    'Real classifier output from the public demo project, 2026-09-20, trimmed where marked with an ellipsis (numbering and headings inside the answer included). The report itself is a sample we wrote to resemble a real one. A diagnosis is a model’s reading and can be wrong; check it before you merge.',
   nextHref: '/quickstart/incident-loop',
   nextLabel: 'Pull a diagnosis into Cursor or Claude Code →',
 } as const

@@ -131,7 +131,7 @@ export function blogPostingJsonLd(post: BlogPostMeta): Record<string, unknown> {
 }
 
 /** Canonical URL of the investors page (content/investors.mdx). */
-export const INVESTORS_URL = `${DOCS_SITE}/investors`
+const INVESTORS_URL = `${DOCS_SITE}/investors`
 
 /**
  * schema.org AboutPage for /investors — rendered by <InvestorsJsonLd /> from

@@ -11,7 +11,7 @@ export function RealDiagnosisCard() {
   return (
     <figure className="landing-real-diagnosis not-prose" aria-labelledby="landing-real-diagnosis-title">
       <div className="landing-real-diagnosis__report">
-        <span className="landing-real-diagnosis__label">The user wrote</span>
+        <span className="landing-real-diagnosis__label">The report</span>
         <blockquote className="landing-real-diagnosis__quote">{D.report}</blockquote>
       </div>
 

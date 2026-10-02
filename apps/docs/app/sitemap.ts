@@ -14,6 +14,17 @@ function frontMatterOf(item: PageMapItem): FrontMatter {
 }
 
 /**
+ * A page whose front matter sets `robots: noindex…` (e.g. /investors while it
+ * still carries owner placeholders) must not be submitted — a sitemap URL
+ * marked noindex is a Search Console error. Same rule as `isNoindex` in
+ * scripts/lib/frontmatter.mjs, which keeps the page out of the llms files.
+ */
+function isNoindex(frontMatter: FrontMatter): boolean {
+  const robots = frontMatter?.robots
+  return typeof robots === 'string' && /\bnoindex\b/i.test(robots)
+}
+
+/**
  * Walk Nextra’s nested page map and collect every route that is a real PAGE.
  *
  * A folder appears in the page map with a `route` whether or not it has an
@@ -24,16 +35,6 @@ function frontMatterOf(item: PageMapItem): FrontMatter {
  * single 404. So a folder counts only when it has an index child, and its
  * front matter (for `<lastmod>`) is that index page's.
  */
-/**
- * A page whose front matter sets `robots.index: false` (e.g. /investors while
- * it still carries owner placeholders) must not be submitted — a sitemap URL
- * marked noindex is a Search Console error.
- */
-function isNoindex(frontMatter: FrontMatter): boolean {
-  const robots = frontMatter?.robots
-  return typeof robots === 'object' && robots !== null && (robots as { index?: unknown }).index === false
-}
-
 function collectRoutes(items: PageMapItem[], acc: Map<string, Date | undefined>): void {
   for (const item of items) {
     const children = 'children' in item && Array.isArray(item.children) ? item.children : null

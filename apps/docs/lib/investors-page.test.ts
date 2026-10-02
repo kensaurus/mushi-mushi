@@ -49,5 +49,9 @@ describe('landing real-diagnosis card', () => {
     for (const field of [LANDING_REAL_DIAGNOSIS.report, LANDING_REAL_DIAGNOSIS.rootCause]) {
       expect(field).toContain('…')
     }
+    // Both answers open with numbering ("(1)", "1. **XP display**:") that the
+    // card drops, so each must start with an ellipsis.
+    expect(LANDING_REAL_DIAGNOSIS.rootCause.startsWith('… ')).toBe(true)
+    expect(LANDING_REAL_DIAGNOSIS.suggestedFix.startsWith('… ')).toBe(true)
   })
 })
