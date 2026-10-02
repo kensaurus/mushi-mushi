@@ -60,7 +60,7 @@ function luminance([r, g, b]: [number, number, number]): number {
 }
 
 /** Black or white, whichever contrasts more with `bg`. Non-hex input returns `fallback`. */
-export function contrastingText(bg: string, fallback: string): string {
+function contrastingText(bg: string, fallback: string): string {
   const rgb = hexToRgb(bg)
   if (!rgb) return fallback
   const l = luminance(rgb)
