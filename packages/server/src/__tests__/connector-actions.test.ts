@@ -112,6 +112,7 @@ function harness(db: FakeDb, over: Record<string, unknown> = {}) {
 }
 
 const ACTIONS = `/v1/admin/orgs/${ORG}/connector-actions`
+const shaOf = (db: FakeDb, id: string) => String(db.table('connector_actions').find((r) => r.id === id)!.payload_sha256)
 const payload = { package: 'com.glotit.app', track: 'production', userFraction: 0.2, versionCodes: ['412'] }
 
 describe('connector action approval', () => {
@@ -128,7 +129,10 @@ describe('connector action approval', () => {
     expect((await app.call('POST', `${ACTIONS}/${id}/approve`, { vars: { userId: 'member' } })).status).toBe(403)
     expect((await app.call('POST', `${ACTIONS}/${id}/execute`)).body.error.code).toBe('NOT_APPROVED')
 
-    const ok = await app.call('POST', `${ACTIONS}/${id}/approve`)
+    // The approval must carry the hash of the payload the person saw.
+    expect((await app.call('POST', `${ACTIONS}/${id}/approve`)).body.error.code).toBe('VALIDATION_ERROR')
+    expect((await app.call('POST', `${ACTIONS}/${id}/approve`, { body: { payloadSha256: 'a'.repeat(64) } })).body.error.code).toBe('HASH_MISMATCH')
+    const ok = await app.call('POST', `${ACTIONS}/${id}/approve`, { body: { payloadSha256: req.body.data.payloadSha256 } })
     expect(ok.status).toBe(200)
     expect(ok.body.data.expiresAt).toBe('2026-10-02T13:00:00.000Z')
 
@@ -146,21 +150,35 @@ describe('connector action approval', () => {
     const { app, calls } = harness(db)
     const make = async () => (await app.call('POST', ACTIONS, { body: { connectorId: INST, action: 'set_rollout', payload } })).body.data.id
     const a = await make()
-    await app.call('POST', `${ACTIONS}/${a}/approve`)
+    await app.call('POST', `${ACTIONS}/${a}/approve`, { body: { payloadSha256: shaOf(db, a) } })
     clock = new Date('2026-10-02T13:30:00Z')
     expect((await app.call('POST', `${ACTIONS}/${a}/execute`)).body.error.code).toBe('APPROVAL_EXPIRED')
 
     clock = new Date('2026-10-02T12:00:00Z')
     const b = await make()
-    await app.call('POST', `${ACTIONS}/${b}/approve`)
+    await app.call('POST', `${ACTIONS}/${b}/approve`, { body: { payloadSha256: shaOf(db, b) } })
     db.table('connector_actions').find((r) => r.id === b)!.payload = { ...payload, userFraction: 1 }
     expect((await app.call('POST', `${ACTIONS}/${b}/execute`)).body.error.code).toBe('HASH_MISMATCH')
 
     const c = await make()
-    await app.call('POST', `${ACTIONS}/${c}/approve`)
+    await app.call('POST', `${ACTIONS}/${c}/approve`, { body: { payloadSha256: shaOf(db, c) } })
     db.table('connector_instances')[0].enabled_capabilities = ['snapshot']
     expect((await app.call('POST', `${ACTIONS}/${c}/execute`)).body.error.code).toBe('ACT_DISABLED')
     expect(calls.filter((x) => x.startsWith('PUT'))).toHaveLength(0)
+  })
+
+  it('refuses to approve when the stored payload changed after the person saw it', async () => {
+    clock = new Date('2026-10-02T12:00:00Z')
+    const db = seed()
+    const { app } = harness(db)
+    const req = await app.call('POST', ACTIONS, { body: { connectorId: INST, action: 'set_rollout', payload } })
+    const seen = req.body.data.payloadSha256
+    const row = db.table('connector_actions').find((r) => r.id === req.body.data.id)!
+    row.payload = { ...payload, userFraction: 1 }
+    const r = await app.call('POST', `${ACTIONS}/${row.id}/approve`, { body: { payloadSha256: seen } })
+    expect(r.status).toBe(409)
+    expect(r.body.error.code).toBe('HASH_MISMATCH')
+    expect(row.status).toBe('pending_approval')
   })
 
   it('refuses an action the connector does not have', async () => {

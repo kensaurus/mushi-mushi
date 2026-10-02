@@ -218,8 +218,9 @@ export function registerRecipeChangeRoutes(app: Hono<{ Variables: Variables }>, 
       if (!who.ok) return who.response
       const id = c.req.param('actionId') ?? ''
       if (!UUID_RE.test(id)) return jsonError(c, 'NOT_FOUND', 'Action not found.', 404)
+      const body = verb === 'approve' ? ((await c.req.json().catch(() => null)) as { payloadSha256?: unknown } | null) : null
       const r = verb === 'approve'
-        ? await approveConnectorAction(db, id, who.orgId, who.userId, deps.execute.now())
+        ? await approveConnectorAction(db, id, who.orgId, who.userId, deps.execute.now(), body?.payloadSha256)
         : verb === 'reject'
           ? await rejectConnectorAction(db, id, who.orgId, who.userId)
           : await executeConnectorAction(db, id, who.orgId, who.userId, deps.execute)
