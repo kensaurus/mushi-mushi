@@ -2,7 +2,10 @@ import { assertEquals, assertRejects } from 'https://deno.land/std@0.224.0/asser
 
 import {
   dereferenceMaybeVault,
+  isSecretSettingsColumn,
+  maskSettingsRow,
   planSecretSettingWrite,
+  SECRET_MASK,
   settingsSecretName,
   storeSettingsSecret,
   type VaultRpcClient,
@@ -71,6 +74,7 @@ Deno.test('planSecretSettingWrite: clear, skip round-trips, reject foreign refs,
   assertEquals(planSecretSettingWrite('', stored), { action: 'clear' })
   assertEquals(planSecretSettingWrite('   ', stored), { action: 'skip' })
   assertEquals(planSecretSettingWrite('…cret', stored), { action: 'skip' })
+  assertEquals(planSecretSettingWrite(SECRET_MASK, stored), { action: 'skip' })
   // The General panel saves the whole row: its own stored ref comes back unchanged.
   assertEquals(planSecretSettingWrite(stored, stored), { action: 'skip' })
   // A ref the server did not store for this row is never accepted from a client.
@@ -81,4 +85,50 @@ Deno.test('planSecretSettingWrite: clear, skip round-trips, reject foreign refs,
   assertEquals(planSecretSettingWrite('vault://x', null), { action: 'reject' })
   assertEquals(planSecretSettingWrite(42, stored), { action: 'skip' })
   assertEquals(planSecretSettingWrite('  whsec_new  ', stored), { action: 'store', value: 'whsec_new' })
+})
+
+Deno.test('isSecretSettingsColumn covers credential columns and spares ids, hints and timestamps', () => {
+  for (const col of [
+    'github_installation_token_ref', 'github_webhook_secret', 'github_deploy_key', 'sentry_webhook_secret',
+    'regen_webhook_secret', 'slack_bot_token_ref', 'telegram_webhook_secret_hash', 'assistant_identity_secret_ref',
+    'autofix_mcp_bearer', 'byok_openai_key_ref', 'linear_webhook_secret_ref', 'slack_webhook_url',
+    'discord_webhook_url', 'teams_webhook_url', 'crawler_auth_config', 'integrations_config',
+  ]) {
+    assertEquals(isSecretSettingsColumn(col), true, col)
+  }
+  for (const col of [
+    'supabase_project_ref', 'byok_openai_key_hint', 'identity_secret_created_at', 'regen_webhook_url',
+    'sentry_dsn', 'github_repo_url', 'slack_channel_id', 'byok_anthropic_test_status',
+  ]) {
+    assertEquals(isSecretSettingsColumn(col), false, col)
+  }
+})
+
+Deno.test('maskSettingsRow returns no secret value or Vault ref, only masks and _set flags', () => {
+  const secrets = ['ghp_rawtoken1234567890', 'whsec_plaintext_value', 'https://hooks.slack.com/services/T0/B0/xyz']
+  const row = {
+    project_id: PROJECT,
+    github_installation_token_ref: secrets[0],
+    sentry_webhook_secret: `vault://mushi/integration/${PROJECT}/sentry/sentry_webhook_secret`,
+    github_webhook_secret: secrets[1],
+    slack_webhook_url: secrets[2],
+    crawler_auth_config: { type: 'cookie', config: { value: 'session=abc' } },
+    regen_webhook_secret: null,
+    github_deploy_key: '',
+    sentry_dsn: 'https://pub@o0.ingest.sentry.io/1',
+    supabase_project_ref: 'abcdefghijklmnop',
+  }
+  const masked = maskSettingsRow(row)
+  const wire = JSON.stringify(masked)
+  for (const s of [...secrets, 'vault://', 'session=abc']) assertEquals(wire.includes(s), false, s)
+  assertEquals(masked.github_installation_token_ref, SECRET_MASK)
+  assertEquals(masked.github_installation_token_ref_set, true)
+  assertEquals(masked.sentry_webhook_secret, SECRET_MASK)
+  assertEquals(masked.crawler_auth_config_set, true)
+  assertEquals(masked.regen_webhook_secret, null)
+  assertEquals(masked.regen_webhook_secret_set, false)
+  assertEquals(masked.github_deploy_key_set, false)
+  // Non-secret columns pass through untouched.
+  assertEquals(masked.sentry_dsn, row.sentry_dsn)
+  assertEquals(masked.supabase_project_ref, row.supabase_project_ref)
 })
