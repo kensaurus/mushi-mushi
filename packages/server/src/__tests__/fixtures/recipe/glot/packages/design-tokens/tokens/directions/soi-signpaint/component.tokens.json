@@ -1,15 +1,27 @@
 {
   "$schema": "https://design-tokens.github.io/community-group/format/2025.10/schema.json",
-  "$description": "glot.it art direction Soi Signpaint: lesson-loop components.",
+  "$description": "Soi Signpaint component tokens. Every value aliases a semantic token.",
   "button": {
     "primary": {
       "background": {
         "$type": "color",
         "$value": "{color.action.primary}"
       },
+      "hover": {
+        "$type": "color",
+        "$value": "{color.action.primaryHover}"
+      },
       "foreground": {
         "$type": "color",
-        "$value": "{color.action.onPrimary}"
+        "$value": "{color.text.onAction}"
+      },
+      "outline": {
+        "$type": "color",
+        "$value": "{color.line.default}"
+      },
+      "shade": {
+        "$type": "shadow",
+        "$value": "{shadow.shade}"
       },
       "radius": {
         "$type": "dimension",
@@ -30,13 +42,29 @@
       "$type": "color",
       "$value": "{color.surface.raised}"
     },
+    "outline": {
+      "$type": "color",
+      "$value": "{color.line.default}"
+    },
+    "outlineWidth": {
+      "$type": "dimension",
+      "$value": "{border.outline}"
+    },
+    "selected": {
+      "$type": "color",
+      "$value": "{color.line.focus}"
+    },
     "foreground": {
       "$type": "color",
-      "$value": "{color.text.onRaised}"
+      "$value": "{color.text.primary}"
     },
-    "selectedOutline": {
+    "correctMark": {
       "$type": "color",
-      "$value": "{color.feedback.reward}"
+      "$value": "{color.text.signal}"
+    },
+    "shade": {
+      "$type": "shadow",
+      "$value": "{shadow.shade}"
     },
     "radius": {
       "$type": "dimension",
@@ -56,9 +84,37 @@
       "$type": "color",
       "$value": "{color.text.primary}"
     },
+    "label": {
+      "$type": "typography",
+      "$value": "{typography.label}"
+    },
     "exitTarget": {
       "$type": "dimension",
       "$value": "{space.target.min}"
+    }
+  },
+  "progress": {
+    "slot": {
+      "$type": "color",
+      "$value": "{color.line.default}"
+    },
+    "painted": {
+      "$type": "color",
+      "$value": "{color.action.secondary}"
+    },
+    "current": {
+      "$type": "color",
+      "$value": "{color.line.focus}"
+    }
+  },
+  "actionBar": {
+    "background": {
+      "$type": "color",
+      "$value": "{color.surface.base}"
+    },
+    "rule": {
+      "$type": "color",
+      "$value": "{color.line.default}"
     }
   },
   "prompt": {
@@ -68,17 +124,57 @@
     },
     "foreground": {
       "$type": "color",
-      "$value": "{color.text.onRaised}"
+      "$value": "{color.text.primary}"
+    }
+  },
+  "signHeader": {
+    "type": {
+      "$type": "typography",
+      "$value": "{typography.title}"
+    },
+    "foreground": {
+      "$type": "color",
+      "$value": "{color.text.primary}"
     }
   },
   "lessonFeedback": {
-    "accent": {
+    "correct": {
+      "$type": "color",
+      "$value": "{color.text.signal}"
+    },
+    "neutral": {
+      "$type": "color",
+      "$value": "{color.text.secondary}"
+    },
+    "reward": {
       "$type": "color",
       "$value": "{color.feedback.reward}"
     },
     "enter": {
       "$type": "duration",
       "$value": "{motion.duration.base}"
+    }
+  },
+  "street": {
+    "wall": {
+      "$type": "color",
+      "$value": "{color.street.wall}"
+    },
+    "facade": {
+      "$type": "color",
+      "$value": "{color.street.facade}"
+    },
+    "ink": {
+      "$type": "color",
+      "$value": "{color.street.ink}"
+    },
+    "paint": {
+      "$type": "duration",
+      "$value": "{motion.duration.paint}"
+    },
+    "ease": {
+      "$type": "cubicBezier",
+      "$value": "{motion.easing.brush}"
     }
   }
 }

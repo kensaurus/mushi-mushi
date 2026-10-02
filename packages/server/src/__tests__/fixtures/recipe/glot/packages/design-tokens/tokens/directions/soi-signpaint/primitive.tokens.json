@@ -1,10 +1,10 @@
 {
   "$schema": "https://design-tokens.github.io/community-group/format/2025.10/schema.json",
-  "$description": "glot.it art direction Soi Signpaint (ป้ายเขียนมือ): raw palette. Contrast evidence in docs/design/art-directions-2026-10/contrast.json.",
+  "$description": "glot.it art direction Soi Signpaint (ป้ายเขียนมือ): raw palette. Active direction since 2026-10-02 (ADR 0010): the sign-painted street look with Pha Khram's earned-progress mechanic. Source of truth for the generated scoped layer app/styles/globals/theme-soi-signpaint.css and design-system/directions/soi-signpaint.ts (npm run tokens:direction).",
   "color": {
     "$type": "color",
     "palette": {
-      "canvas": {
+      "wall": {
         "$value": {
           "colorSpace": "srgb",
           "components": [
@@ -13,17 +13,41 @@
             0.8549
           ],
           "hex": "#F3EADA"
-        }
+        },
+        "$description": "Limewash wall: the page."
       },
       "plate": {
         "$value": {
           "colorSpace": "srgb",
           "components": [
-            1.0,
+            1,
             0.9843,
             0.949
           ],
           "hex": "#FFFBF2"
+        },
+        "$description": "Enamel plate cream: raised surfaces."
+      },
+      "plate-hover": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9373,
+            0.898,
+            0.8235
+          ],
+          "hex": "#EFE5D2"
+        }
+      },
+      "sunken": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.902,
+            0.8549,
+            0.7686
+          ],
+          "hex": "#E6DAC4"
         }
       },
       "ink": {
@@ -35,7 +59,8 @@
             0.0667
           ],
           "hex": "#161311"
-        }
+        },
+        "$description": "Sign-writer ink: text, 3px outlines, hard shade."
       },
       "ink-2": {
         "$value": {
@@ -48,6 +73,18 @@
           "hex": "#5A5148"
         }
       },
+      "ink-3": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4196,
+            0.3804,
+            0.3412
+          ],
+          "hex": "#6B6157"
+        },
+        "$description": "Tertiary text; still 4.84:1 on plate-hover."
+      },
       "signal": {
         "$value": {
           "colorSpace": "srgb",
@@ -57,20 +94,32 @@
             0.1333
           ],
           "hex": "#C42A22"
+        },
+        "$description": "Enamel red. The one filled action per view, and correctness."
+      },
+      "signal-hover": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.6588,
+            0.1373,
+            0.1098
+          ],
+          "hex": "#A8231C"
         }
       },
       "on-signal": {
         "$value": {
           "colorSpace": "srgb",
           "components": [
-            1.0,
+            1,
             0.9843,
             0.949
           ],
           "hex": "#FFFBF2"
         }
       },
-      "sign-blue": {
+      "blue": {
         "$value": {
           "colorSpace": "srgb",
           "components": [
@@ -79,7 +128,8 @@
             0.5882
           ],
           "hex": "#1C4C96"
-        }
+        },
+        "$description": "Street-plate blue: secondary, selection, focus."
       },
       "mustard": {
         "$value": {
@@ -90,21 +140,231 @@
             0.2275
           ],
           "hex": "#E5B23A"
+        },
+        "$description": "Turmeric: reward moments only, as a fill under ink text (9.48:1)."
+      },
+      "mustard-text": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4784,
+            0.3333,
+            0
+          ],
+          "hex": "#7A5500"
+        },
+        "$description": "Turmeric as text on cream."
+      },
+      "facade": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9137,
+            0.8627,
+            0.7686
+          ],
+          "hex": "#E9DCC4"
+        },
+        "$description": "Shophouse facade on the street canvas."
+      },
+      "shutter": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.7882,
+            0.7373,
+            0.651
+          ],
+          "hex": "#C9BCA6"
+        },
+        "$description": "Folding shutter lines on the street canvas."
+      }
+    },
+    "night": {
+      "$description": "Night street (dark mode): neon-lit signs. Light leads; this is the dark variant.",
+      "wall": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0784,
+            0.0667,
+            0.0549
+          ],
+          "hex": "#14110E"
+        }
+      },
+      "plate": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1333,
+            0.1098,
+            0.0902
+          ],
+          "hex": "#221C17"
+        }
+      },
+      "plate-hover": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1725,
+            0.1451,
+            0.1176
+          ],
+          "hex": "#2C251E"
+        }
+      },
+      "sunken": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.051,
+            0.0431,
+            0.0353
+          ],
+          "hex": "#0D0B09"
+        }
+      },
+      "cream": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9529,
+            0.9176,
+            0.8549
+          ],
+          "hex": "#F3EADA"
+        }
+      },
+      "cream-2": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8039,
+            0.749,
+            0.6588
+          ],
+          "hex": "#CDBFA8"
+        }
+      },
+      "cream-3": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.6627,
+            0.6078,
+            0.5216
+          ],
+          "hex": "#A99B85"
+        }
+      },
+      "line": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5412,
+            0.4902,
+            0.4196
+          ],
+          "hex": "#8A7D6B"
+        },
+        "$description": "Plate outlines at night; 4.68:1 on the night wall."
+      },
+      "signal": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8275,
+            0.1961,
+            0.1647
+          ],
+          "hex": "#D3322A"
+        },
+        "$description": "Enamel red at night: fill 3.82:1 on the night wall, label 4.77:1."
+      },
+      "signal-hover": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.749,
+            0.1765,
+            0.1451
+          ],
+          "hex": "#BF2D25"
+        },
+        "$description": "Night hover darkens: label 5.62:1, fill 3.24:1 on the night wall."
+      },
+      "neon-red": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            0.4157,
+            0.3608
+          ],
+          "hex": "#FF6A5C"
+        },
+        "$description": "Red neon as text or tube."
+      },
+      "neon-blue": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.498,
+            0.651,
+            0.9412
+          ],
+          "hex": "#7FA6F0"
+        }
+      },
+      "neon-mustard": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.949,
+            0.7569,
+            0.3059
+          ],
+          "hex": "#F2C14E"
+        }
+      },
+      "facade": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1176,
+            0.098,
+            0.0824
+          ],
+          "hex": "#1E1915"
+        }
+      },
+      "shutter": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1804,
+            0.149,
+            0.1255
+          ],
+          "hex": "#2E2620"
         }
       },
       "shade": {
         "$value": {
           "colorSpace": "srgb",
           "components": [
-            0.0863,
-            0.0745,
-            0.0667
+            0,
+            0,
+            0
           ],
-          "hex": "#161311"
+          "hex": "#000000"
         }
       }
     },
-    "toneInk": {
+    "tone-ink": {
+      "$description": "Thai tone contours on cream. Always paired with a contour glyph; colour is never the only cue.",
       "mid": {
         "$value": {
           "colorSpace": "srgb",
@@ -114,8 +374,7 @@
             0.2824
           ],
           "hex": "#5A5148"
-        },
-        "$description": "7.52:1 on plate"
+        }
       },
       "low": {
         "$value": {
@@ -126,8 +385,7 @@
             0.5882
           ],
           "hex": "#1C4C96"
-        },
-        "$description": "8.06:1 on plate"
+        }
       },
       "falling": {
         "$value": {
@@ -138,8 +396,7 @@
             0.1333
           ],
           "hex": "#C42A22"
-        },
-        "$description": "5.49:1 on plate"
+        }
       },
       "high": {
         "$value": {
@@ -150,8 +407,7 @@
             0.2627
           ],
           "hex": "#1C6E43"
-        },
-        "$description": "6.05:1 on plate"
+        }
       },
       "rising": {
         "$value": {
@@ -162,8 +418,65 @@
             0.5843
           ],
           "hex": "#7C3F95"
-        },
-        "$description": "6.77:1 on plate"
+        }
+      }
+    },
+    "tone-night": {
+      "$description": "Thai tone contours on the night wall.",
+      "mid": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8039,
+            0.749,
+            0.6588
+          ],
+          "hex": "#CDBFA8"
+        }
+      },
+      "low": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5608,
+            0.7059,
+            0.9608
+          ],
+          "hex": "#8FB4F5"
+        }
+      },
+      "falling": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            0.5412,
+            0.4863
+          ],
+          "hex": "#FF8A7C"
+        }
+      },
+      "high": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4353,
+            0.8118,
+            0.6039
+          ],
+          "hex": "#6FCF9A"
+        }
+      },
+      "rising": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8275,
+            0.651,
+            0.9333
+          ],
+          "hex": "#D3A6EE"
+        }
       }
     }
   }

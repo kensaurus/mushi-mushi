@@ -40,6 +40,8 @@ import {
 } from './recipe-github.ts'
 import { effectiveDesignRules, parseRecipeManifest, RECIPE_MANIFEST_MAX_BYTES, RECIPE_MANIFEST_PATH, type RecipeManifest } from './recipe-schema.ts'
 import { scanForSecrets } from './secret-scan.ts'
+import { parseCssScopes } from './css-scopes.ts'
+import type { StoredCss } from './design-sets.ts'
 import type {
   DesignComponentEntry,
   DesignRuleId,
@@ -151,7 +153,11 @@ export async function refreshRecipeSnapshot(db: Db, projectId: string, triggered
       })
       if (tree.truncated) issues.push(issue('TREE_TRUNCATED', 'GitHub truncated the repo tree; some directions or components may be missing.', 'warn'))
       const paths = tree.entries.map((e) => e.path)
-      const plan = planTokenSets((manifest.design?.tokens ?? []) as Array<{ path: string; role: 'source' | 'export'; generator?: string }>, paths)
+      const plan = planTokenSets(
+        (manifest.design?.tokens ?? []) as Array<{ path: string; role: 'source' | 'export'; generator?: string }>,
+        paths,
+        (manifest.design?.directions ?? []) as Array<{ name: string; status: 'active' | 'inactive'; tokens: string[]; note?: string }>,
+      )
       issues.push(...plan.issues)
       const sets: StoredTokenSet[] = []
       for (const set of plan.sets) {
@@ -183,7 +189,22 @@ export async function refreshRecipeSnapshot(db: Db, projectId: string, triggered
         }
         sets.push(stored)
       }
-      stored = { version: 1, active: sets.find((s) => s.active)?.name ?? null, sets }
+      const css: StoredCss[] = []
+      for (const entry of (manifest.design?.css ?? []).slice(0, 10) as Array<{ path: string; role?: string; scopes?: string[] }>) {
+        try {
+          const file = await readRepoFile(repo, head.sha, entry.path, 512 * 1024)
+          if (file.kind !== 'file') {
+            issues.push(issue('CSS_FILE_UNREADABLE', `${entry.path} is ${file.kind === 'absent' ? 'missing' : 'over 512 KB'}; its scopes were not read.`, 'warn', entry.path))
+            continue
+          }
+          const parsed = parseCssScopes(entry.path, file.text, entry.scopes ?? [])
+          issues.push(...parsed.issues)
+          css.push({ path: entry.path, role: entry.role ?? 'export', scopes: parsed.scopes })
+        } catch (err) {
+          issues.push(issue('CSS_FILE_UNREADABLE', `${entry.path} could not be read: ${String((err as Error).message ?? err).slice(0, 160)}`, 'warn', entry.path))
+        }
+      }
+      stored = { version: 1, active: sets.find((s) => s.active)?.name ?? null, sets, css }
       const globs = manifest.design?.components?.globs ?? []
       if (globs.length > 0) {
         components = paths

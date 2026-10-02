@@ -33,6 +33,7 @@ let recipe: RecipeModule
 let dtcg: typeof import('../../supabase/functions/_shared/dtcg.ts')
 let sets: typeof import('../../supabase/functions/_shared/design-sets.ts')
 let schema: typeof import('../../supabase/functions/_shared/recipe-schema.ts')
+let cssScopes: typeof import('../../supabase/functions/_shared/css-scopes.ts')
 
 beforeAll(async () => {
   ;(globalThis as { Deno?: unknown }).Deno = { env: { get: (k: string) => process.env[k] } }
@@ -40,6 +41,7 @@ beforeAll(async () => {
   dtcg = await import('../../supabase/functions/_shared/dtcg.ts')
   sets = await import('../../supabase/functions/_shared/design-sets.ts')
   schema = await import('../../supabase/functions/_shared/recipe-schema.ts')
+  cssScopes = await import('../../supabase/functions/_shared/css-scopes.ts')
 })
 
 // ── fake Hono surface ────────────────────────────────────────────────────────
@@ -108,11 +110,15 @@ const TREE = DIRS.flatMap((d) => ['primitive', 'semantic', 'component'].map((n) 
 function glotSnapshot(projectId: string) {
   const parsed = schema.parseRecipeManifest(readFileSync(resolve(__dirname, 'fixtures/recipe/glot-extended.recipe.json'), 'utf8'))
   if (!parsed.ok) throw new Error('fixture manifest invalid')
-  const plan = sets.planTokenSets(parsed.manifest.design!.tokens! as never, TREE)
+  const plan = sets.planTokenSets(parsed.manifest.design!.tokens! as never, TREE, parsed.manifest.design!.directions as never)
   const tree = TREE.map((path) => ({ path, size: 1234 }))
+  const css = (parsed.manifest.design!.css ?? [])
+    .filter((e) => existsSync(resolve(GLOT, e.path)))
+    .map((e) => ({ path: e.path, role: e.role ?? 'export', scopes: cssScopes.parseCssScopes(e.path, glotFile(e.path), (e as { scopes?: string[] }).scopes ?? []).scopes }))
   const stored = {
     version: 1,
     active: 'soi-signpaint',
+    css,
     // Mirrors refreshRecipeSnapshot: normalize, then meta and assets for directions.
     sets: plan.sets.map((s) => {
       const texts = s.files.map((f) => glotFile(f.path))
@@ -266,9 +272,10 @@ describe('GET /design (glot.it Pha Khram fixture)', () => {
     const d = res.body.data as Record<string, any>
     expect(d.state).toBe('unknown')
     expect(d.reason).toMatch(/never run/)
-    expect(d.sets.map((s: any) => [s.name, s.active])).toEqual([['soi-signpaint', true], ['nang-lamp', false], ['pha-khram', false], ['export', false]])
+    expect(d.sets.map((s: any) => [s.name, s.active])).toEqual([['soi-signpaint', true], ['pha-khram', false], ['nang-lamp', false], ['export', false]])
+    expect(d.cssScopes.map((s: any) => s.selector)).toEqual(['html:root[data-direction="soi-signpaint"]', 'html.dark:root[data-direction="soi-signpaint"]'])
     expect(d.shownSet).toBe('soi-signpaint')
-    expect(d.tokens.length).toBe(84)
+    expect(d.tokens.length).toBe(151)
     expect(d.tokens.find((t: any) => t.path === 'font.family.body').display).toBe('Sarabun, sans-serif')
     expect(d.contrast).toHaveLength(7)
     expect(d.contrast.filter((p: any) => p.pass === false).map((p: any) => p.ratio)).toEqual([1.63])
@@ -417,11 +424,12 @@ describe('GET /design/directions (glot.it: three directions, Soi Signpaint activ
     const res = await app.call('GET', `/v1/admin/projects/${P_A}/design/directions`)
     expect(res.status).toBe(200)
     const d = res.body.data as any
-    expect(d.directions.map((x: any) => [x.name, x.displayName, x.nativeName, x.active])).toEqual([
-      ['soi-signpaint', 'Soi Signpaint', 'ป้ายเขียนมือ', true],
-      ['nang-lamp', 'Nang Lamp', 'หนังตะลุง', false],
-      ['pha-khram', 'Pha Khram', 'ผ้าคราม', false],
+    expect(d.directions.map((x: any) => [x.name, x.displayName, x.nativeName, x.active, x.readOnly])).toEqual([
+      ['soi-signpaint', 'Soi Signpaint', 'ป้ายเขียนมือ', true, false],
+      ['pha-khram', 'Pha Khram', 'ผ้าคราม', false, true],
+      ['nang-lamp', 'Nang Lamp', 'หนังตะลุง', false, true],
     ])
+    expect(d.directions[0].note).toMatch(/Soi Signpaint look/)
     expect(d.activeDirection).toBe('soi-signpaint')
     for (const dir of d.directions) {
       expect(dir.contrast).toHaveLength(7)
@@ -431,7 +439,7 @@ describe('GET /design/directions (glot.it: three directions, Soi Signpaint activ
     }
     expect(d.directions[0].fonts.find((f: any) => f.path === 'font.family.display').families).toEqual(['Chonburi', 'serif'])
     // Only images under directions/<name>/ are listed, each with a signed URL.
-    const pha = d.directions[2]
+    const pha = d.directions.find((x: any) => x.name === 'pha-khram')
     expect(pha.assets).toEqual([{ path: 'packages/design-tokens/tokens/directions/pha-khram/assets/key-art.png', kind: 'illustration', size: 1234, url: expect.stringMatching(/^\/v1\/design-assets\/.+\?path=.+&exp=\d+&sig=[0-9a-f]{64}$/) }])
     expect(d.specimen).toMatchObject({ script: 'thai', word: 'น้ำ' })
     expect(d.fontStylesheets).toContain('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped&display=swap')
@@ -450,7 +458,7 @@ describe('GET /design/directions (glot.it: three directions, Soi Signpaint activ
   it('serves a signed asset that the snapshot lists, and refuses tampered, expired or unlisted requests', async () => {
     const { app, deps } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)] }))
     const d = (await app.call('GET', `/v1/admin/projects/${P_A}/design/directions`)).body.data as any
-    const url: string = d.directions[2].assets[0].url
+    const url: string = d.directions.find((x: any) => x.name === 'pha-khram').assets[0].url
     const ok = (await app.call('GET', url)) as unknown as Response
     expect(ok.status).toBe(200)
     expect(ok.headers.get('Content-Type')).toBe('image/png')
@@ -471,7 +479,7 @@ describe('GET /design/directions (glot.it: three directions, Soi Signpaint activ
   it('without a signing secret, assets list with url null and the route is closed', async () => {
     const { app } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)] }), { assetSecret: () => null })
     const d = (await app.call('GET', `/v1/admin/projects/${P_A}/design/directions`)).body.data as any
-    expect(d.directions[2].assets[0].url).toBeNull()
+    expect(d.directions.find((x: any) => x.name === 'pha-khram').assets[0].url).toBeNull()
   })
 
   it('is closed to another organization', async () => {
@@ -496,10 +504,24 @@ describe('POST /design/changes — directions', () => {
     const arg = (deps.createPr as any).mock.calls[0][0]
     expect(arg.markReady).toBe(false)
     expect(arg.files.map((f: any) => f.path)).toEqual(['mushi.recipe.json'])
-    const tokens = JSON.parse(arg.files[0].contents).design.tokens
+    const next = JSON.parse(arg.files[0].contents)
+    // design.directions[] follows: pha-khram active with the new source paths, soi inactive, and the result validates.
+    expect(next.design.directions.map((d: any) => [d.name, d.status])).toEqual([['soi-signpaint', 'inactive'], ['pha-khram', 'active'], ['nang-lamp', 'inactive']])
+    expect(schema.parseRecipeManifest(arg.files[0].contents).ok).toBe(true)
+    const tokens = next.design.tokens
     expect(tokens.filter((t: any) => t.role === 'source').map((t: any) => t.path.split('/')[4])).toEqual(['pha-khram', 'pha-khram', 'pha-khram'])
     expect(tokens.filter((t: any) => t.role === 'export')).toHaveLength(1)
     expect(arg.title).toBe('chore(design): make pha-khram the active direction')
+  })
+
+  it('never edits an inactive direction in place: token edits to it are refused', async () => {
+    const { app, deps } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)] }))
+    const res = await app.call('POST', url, { body: { kind: 'tokens', edits: [{ path: 'color.palette.signal', value: '#000000', set: 'pha-khram' }], dryRun: false } })
+    expect(res.status).toBe(400)
+    expect(res.body).toMatchObject({ error: { code: 'READ_ONLY_DIRECTION' } })
+    const shown = (await app.call('GET', `/v1/admin/projects/${P_A}/design?direction=pha-khram`)).body.data as any
+    expect(shown.editable).toMatchObject({ enabled: false, reason: expect.stringMatching(/inactive direction/) })
+    expect(deps.createPr).not.toHaveBeenCalled()
   })
 
   it('refuses activating the active direction or an unknown one', async () => {
@@ -515,7 +537,12 @@ describe('POST /design/changes — directions', () => {
     expect(res.status).toBe(200)
     const arg = (deps.createPr as any).mock.calls[0][0]
     expect(arg.markReady).toBe(false)
-    expect(arg.files.map((f: any) => f.path)).toEqual(['primitive', 'semantic', 'component'].map((n) => `packages/design-tokens/tokens/directions/soi-night/${n}.tokens.json`))
+    const newFiles = ['primitive', 'semantic', 'component'].map((n) => `packages/design-tokens/tokens/directions/soi-night/${n}.tokens.json`)
+    // New files only, plus the manifest declaring the copy as an inactive direction; no existing token file is edited.
+    expect(arg.files.map((f: any) => f.path)).toEqual([...newFiles, 'mushi.recipe.json'])
+    const manifest = JSON.parse(arg.files[3].contents)
+    expect(manifest.design.directions.at(-1)).toEqual({ name: 'soi-night', status: 'inactive', tokens: newFiles, note: 'copied from soi-signpaint' })
+    expect(schema.parseRecipeManifest(arg.files[3].contents).ok).toBe(true)
     const primitive = JSON.parse(arg.files[0].contents)
     expect(primitive.$extensions['us.kensaur.mushi'].direction).toEqual({ name: 'Soi Night', duplicatedFrom: 'soi-signpaint' })
     expect(primitive.color.palette.signal.$value.hex).toBe('#1A1A1A')

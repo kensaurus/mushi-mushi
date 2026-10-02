@@ -1,11 +1,11 @@
 {
   "$schema": "https://design-tokens.github.io/community-group/format/2025.10/schema.json",
-  "$description": "glot.it art direction Soi Signpaint: semantic roles and scales.",
+  "$description": "Soi Signpaint semantic roles. us.kensaur.mushi.cssVar is the glot CSS variable each role sets. us.kensaur.glot.dark is the night-street primitive for dark mode, alsoSets lists legacy variables the scoped layer also points at the role, and contrast / contrastDark record WCAG 2.x ratios, recomputed and asserted by `npm run tokens:direction -- --check` and __tests__/direction-tokens.test.ts.",
   "color": {
     "$type": "color",
     "surface": {
       "base": {
-        "$value": "{color.palette.canvas}",
+        "$value": "{color.palette.wall}",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -13,7 +13,15 @@
               "capacitor"
             ],
             "cssVar": "--color-bg",
-            "ts": "colors.bg"
+            "ts": "soiSignpaint.color.surface.base"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.wall}",
+            "alsoSets": [
+              "--register-canvas",
+              "--active-domain-bg",
+              "--color-surface-app"
+            ]
           }
         }
       },
@@ -26,12 +34,36 @@
               "capacitor"
             ],
             "cssVar": "--color-surface",
-            "ts": "colors.surface"
+            "ts": "soiSignpaint.color.surface.raised"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.plate}",
+            "alsoSets": [
+              "--color-surface-elevated"
+            ]
+          }
+        }
+      },
+      "raisedHover": {
+        "$value": "{color.palette.plate-hover}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-surface-hover"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.plate-hover}",
+            "alsoSets": [
+              "--color-surface-active"
+            ]
           }
         }
       },
       "sunken": {
-        "$value": "{color.palette.canvas}",
+        "$value": "{color.palette.sunken}",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -39,6 +71,9 @@
               "capacitor"
             ],
             "cssVar": "--color-surface-sunken"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.sunken}"
           }
         }
       }
@@ -53,7 +88,50 @@
               "capacitor"
             ],
             "cssVar": "--color-text-primary",
-            "ts": "colors.textPrimary"
+            "ts": "soiSignpaint.color.text.primary"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.cream}",
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 15.5,
+                "use": "body text on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 17.91,
+                "use": "body text on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 14.8,
+                "use": "body text on a hovered plate"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 15.76,
+                "use": "body text on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 14.11,
+                "use": "body text on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 12.65,
+                "use": "body text on a hovered plate"
+              }
+            ]
           }
         }
       },
@@ -66,32 +144,112 @@
               "capacitor"
             ],
             "cssVar": "--color-text-secondary",
-            "ts": "colors.textSecondary"
+            "ts": "soiSignpaint.color.text.secondary"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.cream-2}",
+            "alsoSets": [
+              "--color-muted"
+            ],
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 6.5,
+                "use": "secondary text on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 7.52,
+                "use": "secondary text on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 6.21,
+                "use": "secondary text on a hovered plate"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 10.4,
+                "use": "secondary text on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 9.32,
+                "use": "secondary text on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 8.35,
+                "use": "secondary text on a hovered plate"
+              }
+            ]
           }
         }
       },
-      "onRaised": {
-        "$value": "{color.palette.ink}"
-      },
-      "onRaisedSecondary": {
-        "$value": "{color.palette.ink-2}"
-      }
-    },
-    "action": {
-      "primary": {
-        "$value": "{color.palette.signal}",
+      "tertiary": {
+        "$value": "{color.palette.ink-3}",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
               "web",
               "capacitor"
             ],
-            "cssVar": "--color-cta",
-            "ts": "colors.cta"
+            "cssVar": "--color-text-tertiary"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.cream-3}",
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 5.07,
+                "use": "tertiary text on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 5.86,
+                "use": "tertiary text on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 4.84,
+                "use": "tertiary text on a hovered plate"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 6.91,
+                "use": "tertiary text on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 6.19,
+                "use": "tertiary text on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 5.55,
+                "use": "tertiary text on a hovered plate"
+              }
+            ]
           }
         }
       },
-      "onPrimary": {
+      "onAction": {
         "$value": "{color.palette.on-signal}",
         "$extensions": {
           "us.kensaur.mushi": {
@@ -100,7 +258,392 @@
               "capacitor"
             ],
             "cssVar": "--color-on-cta",
-            "ts": "colors.ctaForeground"
+            "ts": "soiSignpaint.color.text.onAction"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.palette.on-signal}",
+            "contrast": [
+              {
+                "against": "{color.action.primary}",
+                "min": 4.5,
+                "ratio": 5.49,
+                "use": "label on the enamel-red action"
+              },
+              {
+                "against": "{color.action.primaryHover}",
+                "min": 4.5,
+                "ratio": 6.96,
+                "use": "label on hover"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.action.primary}",
+                "min": 4.5,
+                "ratio": 4.77,
+                "use": "label on the enamel-red action"
+              },
+              {
+                "against": "{color.action.primaryHover}",
+                "min": 4.5,
+                "ratio": 5.62,
+                "use": "label on hover"
+              }
+            ]
+          }
+        }
+      },
+      "onSecondary": {
+        "$value": "{color.palette.plate}",
+        "$description": "Text on a plate-blue fill (selection, positive marks).",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-text-inverse"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.wall}",
+            "contrast": [
+              {
+                "against": "{color.action.secondary}",
+                "min": 4.5,
+                "ratio": 8.06,
+                "use": "text on plate blue"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.action.secondary}",
+                "min": 4.5,
+                "ratio": 7.72,
+                "use": "text on plate blue"
+              }
+            ]
+          }
+        }
+      },
+      "onReward": {
+        "$value": "{color.palette.ink}",
+        "$description": "Ink on a turmeric reward plate.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--soi-on-reward"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.wall}",
+            "contrast": [
+              {
+                "against": "{color.feedback.reward}",
+                "min": 4.5,
+                "ratio": 9.48,
+                "use": "ink on turmeric"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.feedback.reward}",
+                "min": 4.5,
+                "ratio": 11.21,
+                "use": "ink on turmeric"
+              }
+            ]
+          }
+        }
+      },
+      "signal": {
+        "$value": "{color.palette.signal}",
+        "$description": "Enamel red as text or icon (correctness).",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-cta-foreground"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.neon-red}",
+            "alsoSets": [
+              "--color-error",
+              "--color-error-foreground"
+            ],
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 4.75,
+                "use": "red text on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 5.49,
+                "use": "red text on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 4.54,
+                "use": "red text on a hovered plate"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 6.69,
+                "use": "red text on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 5.99,
+                "use": "red text on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 5.37,
+                "use": "red text on a hovered plate"
+              }
+            ]
+          }
+        }
+      },
+      "reward": {
+        "$value": "{color.palette.mustard-text}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-accent-text"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.neon-mustard}",
+            "alsoSets": [
+              "--color-warning-foreground"
+            ],
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 5.63,
+                "use": "turmeric text on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 6.5,
+                "use": "turmeric text on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 5.38,
+                "use": "turmeric text on a hovered plate"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 11.21,
+                "use": "turmeric text on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 10.04,
+                "use": "turmeric text on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 9,
+                "use": "turmeric text on a hovered plate"
+              }
+            ]
+          }
+        }
+      },
+      "link": {
+        "$value": "{color.palette.blue}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--soi-link",
+            "ts": "soiSignpaint.color.text.link"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.neon-blue}",
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 6.97,
+                "use": "plate-blue text on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 8.06,
+                "use": "plate-blue text on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 6.66,
+                "use": "plate-blue text on a hovered plate"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 7.72,
+                "use": "plate-blue text on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 6.91,
+                "use": "plate-blue text on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 6.2,
+                "use": "plate-blue text on a hovered plate"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "action": {
+      "primary": {
+        "$value": "{color.palette.signal}",
+        "$description": "The one filled action per view.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-cta",
+            "ts": "soiSignpaint.color.action.primary"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.signal}",
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 4.75,
+                "use": "action fill vs the wall (UI)"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 3,
+                "ratio": 5.49,
+                "use": "action fill vs a plate (UI)"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 3.82,
+                "use": "action fill vs the wall (UI)"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 3,
+                "ratio": 3.42,
+                "use": "action fill vs a plate (UI)"
+              }
+            ]
+          }
+        }
+      },
+      "primaryHover": {
+        "$value": "{color.palette.signal-hover}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-cta-hover"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.signal-hover}",
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 6.02,
+                "use": "hover fill vs the wall (UI)"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 3.24,
+                "use": "hover fill vs the wall (UI)"
+              }
+            ]
+          }
+        }
+      },
+      "secondary": {
+        "$value": "{color.palette.blue}",
+        "$description": "Street-plate blue: selection and positive state. Never a second filled CTA.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-success",
+            "ts": "soiSignpaint.color.action.secondary"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.neon-blue}",
+            "alsoSets": [
+              "--color-success-foreground",
+              "--color-info",
+              "--color-info-foreground"
+            ],
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 6.97,
+                "use": "plate blue vs the wall (UI)"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 7.72,
+                "use": "plate blue vs the wall (UI)"
+              }
+            ]
           }
         }
       }
@@ -108,6 +651,7 @@
     "feedback": {
       "reward": {
         "$value": "{color.palette.mustard}",
+        "$description": "Earned reward moments only: a turmeric plate under ink text, or a neon at night.",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -115,7 +659,14 @@
               "capacitor"
             ],
             "cssVar": "--color-accent",
-            "ts": "colors.accent"
+            "ts": "soiSignpaint.color.feedback.reward"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.neon-mustard}",
+            "alsoSets": [
+              "--color-accent-hover",
+              "--color-warning"
+            ]
           }
         }
       }
@@ -123,13 +674,46 @@
     "line": {
       "default": {
         "$value": "{color.palette.ink}",
+        "$description": "Painted 3px sign outline.",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
               "web",
               "capacitor"
             ],
-            "cssVar": "--color-border"
+            "cssVar": "--color-border",
+            "ts": "soiSignpaint.color.line.default"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.line}",
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 15.5,
+                "use": "outline vs the wall (UI)"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 3,
+                "ratio": 17.91,
+                "use": "outline vs a plate (UI)"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 4.68,
+                "use": "outline vs the wall (UI)"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 3,
+                "ratio": 4.19,
+                "use": "outline vs a plate (UI)"
+              }
+            ]
           }
         }
       },
@@ -142,13 +726,223 @@
               "capacitor"
             ],
             "cssVar": "--color-border-strong"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.cream-2}",
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 15.5,
+                "use": "strong line vs the wall (UI)"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 10.4,
+                "use": "strong line vs the wall (UI)"
+              }
+            ]
+          }
+        }
+      },
+      "focus": {
+        "$value": "{color.palette.blue}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--color-focus-ring",
+            "ts": "soiSignpaint.color.line.focus"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.neon-blue}",
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 6.97,
+                "use": "focus ring vs the wall (UI)"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 3,
+                "ratio": 7.72,
+                "use": "focus ring vs the wall (UI)"
+              }
+            ]
+          }
+        }
+      },
+      "shade": {
+        "$value": "{color.palette.ink}",
+        "$description": "Hard offset shade, never blurred.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "cssVar": "--soi-shade-color",
+            "ts": "soiSignpaint.color.line.shade"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.shade}",
+            "alsoSets": [
+              "--color-cta-shadow"
+            ]
+          }
+        }
+      }
+    },
+    "street": {
+      "$description": "Street canvas colours. Decorative: the HUD states the same counts in text.",
+      "wall": {
+        "$value": "{color.palette.wall}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "ts": "soiSignpaint.color.street.wall"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.wall}"
+          }
+        }
+      },
+      "facade": {
+        "$value": "{color.palette.facade}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "ts": "soiSignpaint.color.street.facade"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.facade}"
+          }
+        }
+      },
+      "shutter": {
+        "$value": "{color.palette.shutter}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "ts": "soiSignpaint.color.street.shutter"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.shutter}"
+          }
+        }
+      },
+      "ink": {
+        "$value": "{color.palette.ink}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "ts": "soiSignpaint.color.street.ink"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.line}"
+          }
+        }
+      },
+      "plateCream": {
+        "$value": "{color.palette.plate}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "ts": "soiSignpaint.color.street.plateCream"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.neon-mustard}"
+          }
+        }
+      },
+      "plateBlue": {
+        "$value": "{color.palette.blue}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "ts": "soiSignpaint.color.street.plateBlue"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.neon-blue}"
+          }
+        }
+      },
+      "plateRed": {
+        "$value": "{color.palette.signal}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "ts": "soiSignpaint.color.street.plateRed"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.neon-red}"
+          }
+        }
+      },
+      "signText": {
+        "$value": "{color.palette.ink}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "ts": "soiSignpaint.color.street.signText"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.cream}"
+          }
+        }
+      },
+      "signTextOnColour": {
+        "$value": "{color.palette.plate}",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "platforms": [
+              "web",
+              "capacitor"
+            ],
+            "ts": "soiSignpaint.color.street.signTextOnColour"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.night.cream}"
           }
         }
       }
     },
     "tone": {
       "mid": {
-        "$value": "{color.toneInk.mid}",
+        "$value": "{color.tone-ink.mid}",
+        "$description": "Always paired with a contour glyph; colour is never the only cue.",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -156,13 +950,56 @@
               "capacitor"
             ],
             "cssVar": "--color-tone-mid",
-            "ts": "toneColors.mid"
+            "ts": "soiSignpaint.color.tone.mid"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.tone-night.mid}",
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 6.5,
+                "use": "mid tone on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 7.52,
+                "use": "mid tone on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 6.21,
+                "use": "mid tone on a hovered plate"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 10.4,
+                "use": "mid tone on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 9.32,
+                "use": "mid tone on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 8.35,
+                "use": "mid tone on a hovered plate"
+              }
+            ]
           }
-        },
-        "$description": "Always paired with a contour glyph; colour is never the only cue"
+        }
       },
       "low": {
-        "$value": "{color.toneInk.low}",
+        "$value": "{color.tone-ink.low}",
+        "$description": "Always paired with a contour glyph; colour is never the only cue.",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -170,13 +1007,56 @@
               "capacitor"
             ],
             "cssVar": "--color-tone-low",
-            "ts": "toneColors.low"
+            "ts": "soiSignpaint.color.tone.low"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.tone-night.low}",
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 6.97,
+                "use": "low tone on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 8.06,
+                "use": "low tone on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 6.66,
+                "use": "low tone on a hovered plate"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 8.97,
+                "use": "low tone on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 8.03,
+                "use": "low tone on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 7.2,
+                "use": "low tone on a hovered plate"
+              }
+            ]
           }
-        },
-        "$description": "Always paired with a contour glyph; colour is never the only cue"
+        }
       },
       "falling": {
-        "$value": "{color.toneInk.falling}",
+        "$value": "{color.tone-ink.falling}",
+        "$description": "Always paired with a contour glyph; colour is never the only cue.",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -184,13 +1064,56 @@
               "capacitor"
             ],
             "cssVar": "--color-tone-falling",
-            "ts": "toneColors.falling"
+            "ts": "soiSignpaint.color.tone.falling"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.tone-night.falling}",
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 4.75,
+                "use": "falling tone on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 5.49,
+                "use": "falling tone on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 4.54,
+                "use": "falling tone on a hovered plate"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 8.22,
+                "use": "falling tone on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 7.36,
+                "use": "falling tone on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 6.6,
+                "use": "falling tone on a hovered plate"
+              }
+            ]
           }
-        },
-        "$description": "Always paired with a contour glyph; colour is never the only cue"
+        }
       },
       "high": {
-        "$value": "{color.toneInk.high}",
+        "$value": "{color.tone-ink.high}",
+        "$description": "Always paired with a contour glyph; colour is never the only cue.",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -198,13 +1121,56 @@
               "capacitor"
             ],
             "cssVar": "--color-tone-high",
-            "ts": "toneColors.high"
+            "ts": "soiSignpaint.color.tone.high"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.tone-night.high}",
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 5.23,
+                "use": "high tone on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 6.05,
+                "use": "high tone on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 5,
+                "use": "high tone on a hovered plate"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 9.91,
+                "use": "high tone on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 8.88,
+                "use": "high tone on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 7.96,
+                "use": "high tone on a hovered plate"
+              }
+            ]
           }
-        },
-        "$description": "Always paired with a contour glyph; colour is never the only cue"
+        }
       },
       "rising": {
-        "$value": "{color.toneInk.rising}",
+        "$value": "{color.tone-ink.rising}",
+        "$description": "Always paired with a contour glyph; colour is never the only cue.",
         "$extensions": {
           "us.kensaur.mushi": {
             "platforms": [
@@ -212,10 +1178,52 @@
               "capacitor"
             ],
             "cssVar": "--color-tone-rising",
-            "ts": "toneColors.rising"
+            "ts": "soiSignpaint.color.tone.rising"
+          },
+          "us.kensaur.glot": {
+            "dark": "{color.tone-night.rising}",
+            "contrast": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 5.86,
+                "use": "rising tone on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 6.77,
+                "use": "rising tone on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 5.6,
+                "use": "rising tone on a hovered plate"
+              }
+            ],
+            "contrastDark": [
+              {
+                "against": "{color.surface.base}",
+                "min": 4.5,
+                "ratio": 9.37,
+                "use": "rising tone on the wall"
+              },
+              {
+                "against": "{color.surface.raised}",
+                "min": 4.5,
+                "ratio": 8.39,
+                "use": "rising tone on a plate"
+              },
+              {
+                "against": "{color.surface.raisedHover}",
+                "min": 4.5,
+                "ratio": 7.52,
+                "use": "rising tone on a hovered plate"
+              }
+            ]
           }
-        },
-        "$description": "Always paired with a contour glyph; colour is never the only cue"
+        }
       }
     }
   },
@@ -227,22 +1235,61 @@
           "Chonburi",
           "serif"
         ],
-        "$description": "high-contrast looped Thai display, sign-writer voice"
+        "$description": "Sign-writer display for sign headers and titles.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--soi-font-display",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          },
+          "us.kensaur.glot": {
+            "nextFontVar": "--font-chonburi",
+            "alsoSets": [
+              "--font-display"
+            ]
+          }
+        }
       },
       "body": {
         "$value": [
           "Sarabun",
           "sans-serif"
         ],
-        "$description": "looped; keeps today's body face (continuity)",
+        "$description": "UI body.",
         "$extensions": {
           "us.kensaur.mushi": {
+            "cssVar": "--soi-font-body",
             "platforms": [
               "web",
               "capacitor"
-            ],
-            "cssVar": "--font-sans",
-            "ts": "fontFamily.sans"
+            ]
+          },
+          "us.kensaur.glot": {
+            "nextFontVar": "--font-thai",
+            "alsoSets": [
+              "--font-sans"
+            ]
+          }
+        }
+      },
+      "thai": {
+        "$value": [
+          "IBM Plex Sans Thai Looped",
+          "sans-serif"
+        ],
+        "$description": "All Thai lesson text: looped forms keep letter heads visible for learners.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--soi-font-thai",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          },
+          "us.kensaur.glot": {
+            "nextFontVar": "--font-plex-thai-looped"
           }
         }
       },
@@ -251,7 +1298,19 @@
           "Kanit",
           "sans-serif"
         ],
-        "$description": "bus-plate numerals and counters only (loopless, chrome only)"
+        "$description": "Bus-plate numerals and counters (italic).",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--soi-font-label",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          },
+          "us.kensaur.glot": {
+            "nextFontVar": "--font-kanit"
+          }
+        }
       }
     },
     "weight": {
@@ -291,14 +1350,23 @@
           "value": 64,
           "unit": "px"
         },
-        "$description": "The Thai word under study; looped face so letter heads stay visible"
+        "$description": "The Thai word under study.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--soi-size-prompt",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          }
+        }
       }
     },
     "lineHeight": {
       "$type": "number",
       "thaiBody": {
         "$value": 1.6,
-        "$description": "Never below 1.5 for Thai body: stacked tone marks and vowels"
+        "$description": "Never below 1.5 for Thai: stacked tone marks and vowels."
       },
       "thaiDisplay": {
         "$value": 1.5
@@ -314,7 +1382,7 @@
           "value": 0,
           "unit": "px"
         },
-        "$description": "Never letterspace Thai"
+        "$description": "Never letterspace Thai."
       }
     }
   },
@@ -322,8 +1390,8 @@
     "$type": "typography",
     "prompt": {
       "$value": {
-        "fontFamily": "{font.family.display}",
-        "fontWeight": "{font.weight.regular}",
+        "fontFamily": "{font.family.thai}",
+        "fontWeight": "{font.weight.bold}",
         "fontSize": "{font.size.prompt}",
         "lineHeight": "{font.lineHeight.thaiDisplay}",
         "letterSpacing": "{font.letterSpacing.none}"
@@ -358,7 +1426,6 @@
     }
   },
   "space": {
-    "$type": "dimension",
     "1": {
       "$value": {
         "value": 4,
@@ -395,26 +1462,54 @@
         "unit": "px"
       }
     },
+    "$type": "dimension",
     "target": {
       "min": {
         "$value": {
           "value": 44,
           "unit": "px"
         },
-        "$description": "WCAG 2.5.5 / Apple HIG floor"
+        "$description": "WCAG 2.5.5 / Apple HIG floor.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--soi-target-min",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          }
+        }
       },
       "primary": {
         "$value": {
           "value": 56,
           "unit": "px"
         },
-        "$description": "Primary action and answer tiles in the lesson loop"
+        "$description": "Primary action and answer plates.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--soi-target-primary",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          }
+        }
       }
     },
     "hud": {
       "$value": {
         "value": 52,
         "unit": "px"
+      },
+      "$extensions": {
+        "us.kensaur.mushi": {
+          "cssVar": "--soi-hud-height",
+          "platforms": [
+            "web",
+            "capacitor"
+          ]
+        }
       }
     }
   },
@@ -424,12 +1519,16 @@
       "$value": {
         "value": 10,
         "unit": "px"
-      }
-    },
-    "card": {
-      "$value": {
-        "value": 12,
-        "unit": "px"
+      },
+      "$description": "Enamel plate corners.",
+      "$extensions": {
+        "us.kensaur.mushi": {
+          "cssVar": "--soi-radius",
+          "platforms": [
+            "web",
+            "capacitor"
+          ]
+        }
       }
     },
     "round": {
@@ -437,51 +1536,24 @@
         "value": 9999,
         "unit": "px"
       },
-      "$description": "True circles only (audio button, rivets)"
-    }
-  },
-  "motion": {
-    "duration": {
-      "$type": "duration",
-      "quick": {
-        "$value": {
-          "value": 120,
-          "unit": "ms"
-        }
-      },
-      "base": {
-        "$value": {
-          "value": 240,
-          "unit": "ms"
-        }
-      },
-      "advance": {
-        "$value": {
-          "value": 300,
-          "unit": "ms"
-        },
-        "$description": "Item-to-item transition in the lesson loop"
-      }
-    },
-    "easing": {
-      "$type": "cubicBezier",
-      "standard": {
-        "$value": [
-          0.3,
-          0.7,
-          0.1,
-          1
-        ]
-      }
+      "$description": "True circles only (audio button, rivets)."
     }
   },
   "border": {
-    "width": {
-      "$type": "dimension",
-      "outline": {
-        "$value": {
-          "value": 3,
-          "unit": "px"
+    "$type": "dimension",
+    "outline": {
+      "$value": {
+        "value": 3,
+        "unit": "px"
+      },
+      "$description": "Even sign-writer outline.",
+      "$extensions": {
+        "us.kensaur.mushi": {
+          "cssVar": "--soi-outline",
+          "platforms": [
+            "web",
+            "capacitor"
+          ]
         }
       }
     }
@@ -490,7 +1562,7 @@
     "$type": "shadow",
     "shade": {
       "$value": {
-        "color": "{color.palette.shade}",
+        "color": "{color.palette.ink}",
         "offsetX": {
           "value": 4,
           "unit": "px"
@@ -508,7 +1580,92 @@
           "unit": "px"
         }
       },
-      "$description": "Hard sign-writer shade, never blurred"
+      "$description": "Hard sign-writer shade, never blurred.",
+      "$extensions": {
+        "us.kensaur.mushi": {
+          "cssVar": "--soi-shade",
+          "platforms": [
+            "web",
+            "capacitor"
+          ]
+        },
+        "us.kensaur.glot": {
+          "darkColor": "{color.night.shade}"
+        }
+      }
+    }
+  },
+  "motion": {
+    "duration": {
+      "$type": "duration",
+      "quick": {
+        "$value": {
+          "value": 120,
+          "unit": "ms"
+        },
+        "$description": "Plate press; the reduced-motion crossfade.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--soi-dur-quick",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          }
+        }
+      },
+      "base": {
+        "$value": {
+          "value": 240,
+          "unit": "ms"
+        },
+        "$description": "Wrong-answer plate swing; feedback enter.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--soi-dur-base",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          }
+        }
+      },
+      "paint": {
+        "$value": {
+          "value": 320,
+          "unit": "ms"
+        },
+        "$description": "Brush wipe that paints a new sign.",
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--soi-dur-paint",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          }
+        }
+      }
+    },
+    "easing": {
+      "$type": "cubicBezier",
+      "brush": {
+        "$value": [
+          0.3,
+          0.7,
+          0.1,
+          1
+        ],
+        "$extensions": {
+          "us.kensaur.mushi": {
+            "cssVar": "--soi-ease",
+            "platforms": [
+              "web",
+              "capacitor"
+            ]
+          }
+        }
+      }
     }
   }
 }

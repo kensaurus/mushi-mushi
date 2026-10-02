@@ -191,7 +191,7 @@ Every element is optional. **State without data:** `not_connected` if nothing is
 | | |
 |---|---|
 | **Diagnosis value** | "This button uses `#E8387F` inline; your CTA token is `{color.action.primary}`" — and the fix the agent writes uses tokens, not literals. |
-| **Source (new)** | `recipe.design.tokens[]`: DTCG files with `role: "source"` (hand-authored) or `"export"` (generated). Optional `recipe.design.css[]`, statically parsed for `:root { --x: … }` and Tailwind v4 `@theme { … }` blocks. **Mushi never executes `tailwind.config.*` or any host code.** The component inventory is `recipe.design.components.globs` matched against `project_codebase_files.symbol_name` (exported components are already indexed). |
+| **Source (new)** | `recipe.design.tokens[]`: DTCG files with `role: "source"` (hand-authored) or `"export"` (generated). Optional `recipe.design.css[]`, statically parsed for custom properties in `:root { --x: … }`, Tailwind v4 `@theme { … }`, and any selector named in the entry's `scopes[]`, e.g. `html:root[data-direction="pha-khram"]` for a design layer limited to migrated surfaces. Custom properties found only under an *undeclared* selector produce an `info` finding (`css_vars_in_undeclared_scope`), never silence. **Mushi never executes `tailwind.config.*` or any host code.** The component inventory is `recipe.design.components.globs` matched against `project_codebase_files.symbol_name` (exported components are already indexed). |
 | **Snapshot** | Normalized token tree plus `tokens_hash` in `app_recipe_snapshots` (§5). |
 | **Drift (`design_drift`)** | `token_nonconformant` (info: legacy shorthand, a dotted name, an unresolved alias); `token_changed` (info, the per-commit changelog); `off_token_literal` (warn: hex, rgb or px literals in declared globs that match no token, pushed from host CI by `mushi recipe check`); `component_unlisted` (info: a component exported outside the declared primitives). |
 | **Change path** | Phase 3: edit a token in the console → a draft PR that changes **only** the `role: "source"` file. If the only token file is `role: "export"` (glot today), editing is disabled with the reason "this file is generated from `<generator>`; edit the source". |
@@ -273,6 +273,11 @@ Location: repo root (or `recipe.path` in project settings for monorepos). JSON, 
 - The file is secret-scanned with `_shared/secret-scan.ts`; a hit rejects the snapshot with `SECRET_DETECTED`.
 - Every string is untrusted. The file is wrapped before any LLM prompt.
 - Unknown keys are kept and ignored.
+- **`design.directions[]` rules.** `design.tokens[]` stays the single source of truth for drift; directions are for comparison only.
+  - At most one entry may be `active`, and its `tokens` must equal the set of `role: "source"` paths in `design.tokens[]`. A mismatch is a validation error (`directions_active_mismatch`), so the board can never disagree with what drift checks.
+  - Inactive directions are parsed and normalized for the side-by-side view (swatches, type, contrast). They never produce drift findings, never feed `get_design_tokens` by default (`?direction=<name>` opts in) and are never edited by a recipe PR.
+- **Modes (light/dark) are not modelled in v1.** DTCG 2025.10 has no mode construct. A mode expressed as a scoped CSS selector (e.g. `html.dark:root[…]`) is read per scope, and the detail view shows one column per declared scope. A mode expressed in a tool's own `$extensions` stays informational.
+- In token files, Mushi reads only `$extensions["us.kensaur.mushi"]`. Other namespaces (e.g. `us.kensaur.glot` with `alsoSets` and `contrast[]`) are preserved in the snapshot and shown read-only in the token detail view, but never interpreted. A namespace becomes interpreted only through a spec change here.
 
 The schema is published at `apps/docs/public/schemas/recipe/v1.json` (served from the docs site) and validated with Zod in `_shared/recipe-schema.ts`.
 
@@ -282,7 +287,7 @@ Top-level keys, all optional except `version`:
 |---|---|
 | `version` | `1` |
 | `app` | `{name, kind: "app"\|"site"\|"service"\|"library", platforms: ("web"\|"android"\|"ios")[], ids?: {bundleId?, androidPackage?, appStoreId?}}`. `kind` is mirrored to `projects.kind`. |
-| `design` | `tokens[]` `{path, role: "source"\|"export", format: "dtcg-2025.10", generator?}`; `css[]` `{path, role}`; `components` `{globs[]}`; `literalScan` `{globs[], ignore[]}`; `assets[]` `{path, kind: "icon"\|"illustration"\|"image"\|"font"\|"lottie", license?}` (assets are not tokens) |
+| `design` | `tokens[]` `{path, role: "source"\|"export", format: "dtcg-2025.10", generator?}`; `css[]` `{path, role, scopes?: string[]}` (selectors whose custom properties count, in addition to `:root` and `@theme`); `directions[]` `{name, status: "active"\|"inactive", tokens: string[], note?}` (candidate design directions kept for comparison; rules below); `components` `{globs[]}`; `literalScan` `{globs[], ignore[]}`; `assets[]` `{path, kind: "icon"\|"illustration"\|"image"\|"font"\|"lottie", license?}` (assets are not tokens) |
 | `data` | `{provider: "supabase"\|"other", projectRef?, migrationsDir?}` |
 | `routes` | `{inventory: "inventory.yaml"}` |
 | `gates` | `{budgets: {<metric>: number}, cadence: {<gate>: "P1D"}}` |
@@ -400,7 +405,7 @@ The credential and scope column records the design intent. Vendor permission mod
 
 | View | Contents |
 |---|---|
-| Design system | Swatches, type scale, spacing, radius, motion; the component list; the off-token literal list |
+| Design system | Swatches, type scale, spacing, radius, motion; the component list; the off-token literal list; a **direction board** comparing `design.directions[]` side by side (read-only, Phase 1b); one column per declared CSS scope (e.g. light and dark) |
 | Schema | Table list plus a diff against the previous snapshot |
 | CI | Recent runs and estimated minutes (Advanced) |
 | Deploy | Expected vs observed version per target |
@@ -844,7 +849,24 @@ glot.it's new design system is being designed in parallel (glot branch `design/a
 - 255 tokens and 0 errors on that agent's validator, which checks dotted names, hex shorthand, unresolved aliases, layer direction and component ranges;
 - `$extensions["us.kensaur.mushi"]` maps tokens to glot's existing CSS vars and TS names.
 
-Those are deliberate values, not placeholders. The manifest lists one direction once the owner picks it. Mushi's own `_shared/dtcg.ts` fixtures should include one of these files when Phase 1b is built.
+Those are deliberate values, not placeholders. Mushi's own `_shared/dtcg.ts` fixtures should include one of these files when Phase 1b is built.
+
+**Latest, 2026-10-02:** the active direction changed to **soi-signpaint**, reported at glot `design/art-direction` 16335e6c1 with brand assets at 13f5130a6 (both local, not pushed). The shape below is as reported by the glot agent.
+
+- **Directions:** all three are listed in `design.directions[]`, with soi-signpaint active and pha-khram and nang-lamp inactive. `design.tokens[]` lists only soi-signpaint as `source`, plus `dtcg/tokens.json` as `export`. The glot agent proposed the `directions[]` key.
+- **CSS:** `app/styles/globals/theme-soi-signpaint.css` (`export`) declares two scopes: `html:root[data-direction="soi-signpaint"]` and `html.dark:root[data-direction="soi-signpaint"]`, the second being the night-street dark mode.
+- **Dark-mode data:** semantic tokens carry `$extensions["us.kensaur.glot"].dark` and `contrastDark[]`, and the file root carries `colorScheme`. All of it is informational.
+- **Shadow:** `shadow.shade` (`$type: shadow`, cssVar `--soi-shade`).
+- **Literal scan:** `literalScan.globs` adds `design-system/primitives/street/**/*.tsx`; `design-system/directions/**` is ignored.
+- **Assets:** `public/images/soi/signs`, `public/images/soi/mae-muang`, `store-assets/soi-signpaint`, plus the icon files.
+
+**Earlier, 2026-10-02 (superseded):** **pha-khram** was the active direction, reported at glot `design/art-direction` 42a793c20 (local, not pushed). Its shape, as reported by that agent:
+
+- **Root manifest:** a root `mushi.recipe.json` lists only `pha-khram/{primitive,semantic,component}.tokens.json` as `source`, plus `dtcg/tokens.json` as `export`.
+- **Colour groups:** primitives are `color.palette.*`, `color.vat.*` and `color.tone-on-canvas.*`. Semantic roles are `color.{surface,text,action,feedback,line,dye,tone}.*`, plus `font`, `typography`, `space`, `radius`, `border` and `motion`. Component tokens alias semantic only.
+- **Glot-only extension data:** sits under `$extensions["us.kensaur.glot"]` (`alsoSets`, `contrast[]`). Per §2, Mushi preserves it and does not interpret it.
+- **Generated CSS:** `app/styles/globals/theme-pha-khram.css` is an `export`. Its variables live under `html:root[data-direction="pha-khram"]`, not `:root`, because the layer is scoped to migrated surfaces (glot's own ADR 0010). The manifest therefore declares that selector in `css[].scopes`.
+- **Literal scan:** the generated `design-system/directions/pha-khram.ts` holds hex literals by design and is in `literalScan.ignore`. New code under `design-system/loom/**` is in `literalScan.globs`.
 
 ### B.1 Files
 
@@ -873,7 +895,14 @@ Those are deliberate values, not placeholders. The manifest lists one direction 
       { "path": "packages/design-tokens/tokens/directions/<chosen>/component.tokens.json", "role": "source", "format": "dtcg-2025.10" },
       { "path": "packages/design-tokens/dtcg/tokens.json", "role": "export", "format": "dtcg-2025.10", "generator": "pnpm tokens:dtcg" }
     ],
-    "css": [{ "path": "packages/design-tokens/src/cross-platform-tokens.css", "role": "export" }],
+    "css": [
+      { "path": "packages/design-tokens/src/cross-platform-tokens.css", "role": "export" },
+      { "path": "app/styles/globals/theme-<chosen>.css", "role": "export", "scopes": ["html:root[data-direction=\"<chosen>\"]", "html.dark:root[data-direction=\"<chosen>\"]"] }
+    ],
+    "directions": [
+      { "name": "<chosen>", "status": "active", "tokens": ["packages/design-tokens/tokens/directions/<chosen>/primitive.tokens.json", "packages/design-tokens/tokens/directions/<chosen>/semantic.tokens.json", "packages/design-tokens/tokens/directions/<chosen>/component.tokens.json"] },
+      { "name": "<other>", "status": "inactive", "tokens": ["packages/design-tokens/tokens/directions/<other>/primitive.tokens.json", "packages/design-tokens/tokens/directions/<other>/semantic.tokens.json", "packages/design-tokens/tokens/directions/<other>/component.tokens.json"], "note": "kept for comparison" }
+    ],
     "components": { "globs": ["design-system/primitives/**/*.tsx", "packages/ui-mobile/src/**/*.tsx"] },
     "assets": [{ "path": "<icons dir>", "kind": "icon" }],
     "literalScan": { "globs": ["app/**/*.{ts,tsx,css}", "components/**/*.tsx", "features/**/*.tsx"], "ignore": ["**/*.test.*", "design-system/**"] }

@@ -446,6 +446,7 @@ export async function composeDesignPlane(db: Db, projectId: string, snapshot: Sn
   const manifestWritable = isWritablePath(RECIPE_MANIFEST_PATH, manifest, scope).ok
   if (!snapshot || !manifest) editable = { enabled: false, reason: 'Add a mushi.recipe.json to the repo and refresh.', tokenFiles: [], manifestWritable: false }
   else if (!repo.ok) editable = { enabled: false, reason: repo.reason, tokenFiles: [], manifestWritable: false }
+  else if (shown && shown.kind === 'direction' && !shown.active) editable = { enabled: false, reason: `${shown.name} is an inactive direction, kept read-only for comparison. Set it active to edit its tokens.`, tokenFiles: [], manifestWritable }
   else if (shown?.kind === 'export') editable = { enabled: false, reason: `These tokens are a generated export${shown.files[0]?.generator ? ` (${shown.files[0].generator})` : ''}; edit the source files instead.`, tokenFiles: [], manifestWritable }
   else if (writable.length === 0) editable = { enabled: false, reason: 'None of these token files is in change.allowPaths of mushi.recipe.json.', tokenFiles: [], manifestWritable }
   else editable = { enabled: true, reason: null, tokenFiles: writable, manifestWritable }
@@ -477,6 +478,7 @@ export async function composeDesignPlane(db: Db, projectId: string, snapshot: Sn
     issues,
     contrast,
     components: (snapshot?.components ?? []) as DesignPlaneResponse['components'],
+    cssScopes: (stored?.css ?? []).flatMap((f) => f.scopes.map((s) => ({ path: f.path, selector: s.selector, kind: s.kind, vars: s.vars }))),
     rules,
     editable,
     deviance: { latest, trend, topFindings },
@@ -580,6 +582,8 @@ export async function composeDirections(
       nativeName: s.meta?.nativeName ?? null,
       concept: s.meta?.concept ?? null,
       active: s.active,
+      note: s.note ?? null,
+      readOnly: !s.active,
       files: s.files,
       tokenCount: s.tokens.length,
       tokens: s.tokens,

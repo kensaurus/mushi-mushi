@@ -185,6 +185,8 @@ export interface DesignTokenSet {
   kind: 'direction' | 'export' | 'default'
   files: Array<{ path: string; role: 'source' | 'export'; generator: string | null }>
   tokenCount: number
+  /** design.directions[].note, when declared. */
+  note?: string | null
 }
 
 export interface ContrastPairResult {
@@ -320,6 +322,8 @@ export interface DesignPlaneResponse {
   issues: RecipeIssue[]
   contrast: ContrastPairResult[]
   components: DesignComponentEntry[]
+  /** design.css[] custom properties per scope: :root, @theme, and declared scopes (light/dark modes are scopes). */
+  cssScopes: Array<{ path: string; selector: string; kind: 'root' | 'theme' | 'declared'; vars: Array<{ name: string; value: string; hex: string | null }> }>
   rules: DesignRuleConfig[]
   editable: DesignEditability
   deviance: {
@@ -433,6 +437,10 @@ export interface DesignDirection {
   nativeName: string | null
   concept: string | null
   active: boolean
+  /** design.directions[].note, when declared. */
+  note: string | null
+  /** Inactive directions are read-only comparison sets: never scanned, never edited by a recipe PR. */
+  readOnly: boolean
   files: Array<{ path: string; role: 'source' | 'export'; generator: string | null }>
   tokenCount: number
   /** Every normalized token of the direction (the board picks roles from these). */
