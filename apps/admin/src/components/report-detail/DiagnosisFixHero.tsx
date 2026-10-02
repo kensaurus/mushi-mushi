@@ -19,6 +19,7 @@
  *          "Not sure yet — here's what I'd check first."
  */
 
+import type { ReactNode } from 'react'
 import { Badge } from '../ui'
 import { Card } from '../../components/ui'
 import { IconIntelligence } from '../icons'
@@ -28,6 +29,7 @@ import {
   severityLabel,
   confidenceBadgeClass,
 } from '../../lib/tokens'
+import { reportDiagnosisView, type Stage2Diagnosis } from '../../lib/reportDiagnosis'
 import { CursorAgentLaunch } from './CursorAgentLaunch'
 import type { ReportDetail } from './types'
 
@@ -49,6 +51,10 @@ export function DiagnosisFixHero({
   const categoryText = CATEGORY_LABELS[report.category] ?? report.category
   const severityText = report.severity ? severityLabel(report.severity) : null
 
+  // Stage 2's root cause / fix / repro, when it ran (lib/reportDiagnosis.ts).
+  const view = reportDiagnosisView(report)
+  const stage2 = view.kind === 'full' || view.kind === 'streaming' ? view.diagnosis : null
+
   // Confident enough to lead with an answer?
   const isConfident = Boolean(summary) && (conf == null || conf >= LOW_CONFIDENCE)
 
@@ -68,7 +74,9 @@ export function DiagnosisFixHero({
         <div className="mb-1.5 flex items-start justify-between gap-2">
           <div className="flex items-center gap-1.5 text-sm font-semibold text-fg">
             <IconIntelligence className="text-info" />
-            {isConfident ? 'Classification' : 'Low confidence — check these first'}
+            {stage2
+              ? isConfident ? 'Diagnosis' : 'Diagnosis — low confidence'
+              : isConfident ? 'Classification' : 'Low confidence — check these first'}
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
             {severityText && (
@@ -88,7 +96,9 @@ export function DiagnosisFixHero({
           </div>
         </div>
 
-        {isConfident ? (
+        {stage2 ? (
+          <Stage2DiagnosisBody diagnosis={stage2} summary={summary ?? null} streaming={view.kind === 'streaming'} />
+        ) : isConfident ? (
           <p className="text-sm leading-relaxed text-fg-secondary">{summary}</p>
         ) : (
           <div className="text-sm leading-relaxed text-fg-secondary">
@@ -110,9 +120,11 @@ export function DiagnosisFixHero({
           </div>
         )}
 
+        {!stage2 && <Stage2AbsentNote view={view} />}
+
         <CodeContextBadge report={report} />
 
-        {isConfident && report.component && (
+        {!stage2 && isConfident && report.component && (
           <p className="mt-1.5 text-2xs text-fg-faint">
             Likely in{' '}
             <code className="rounded-sm border border-edge-subtle bg-surface-overlay/50 px-1 py-0.5 font-mono text-fg-secondary">
@@ -127,6 +139,80 @@ export function DiagnosisFixHero({
       <CursorAgentLaunch report={report} cursorWorkspace={cursorWorkspace} />
     </>
   )
+}
+
+/**
+ * Stage 2's answer: why it broke, what to change, how to reproduce. All of it
+ * is model output from an untrusted report, so it renders as plain text.
+ */
+function Stage2DiagnosisBody({
+  diagnosis,
+  summary,
+  streaming,
+}: {
+  diagnosis: Stage2Diagnosis
+  summary: string | null
+  streaming: boolean
+}) {
+  const meta = [
+    diagnosis.component ? `Component: ${diagnosis.component}` : null,
+    diagnosis.confidence != null ? `${Math.round(diagnosis.confidence * 100)}% confidence` : null,
+    diagnosis.model ? `Model: ${diagnosis.model}` : null,
+  ].filter((x): x is string => Boolean(x))
+
+  return (
+    <div className="space-y-2 text-sm leading-relaxed text-fg-secondary">
+      {streaming && <p className="text-2xs text-fg-faint italic">Full diagnosis still running — fields fill in as they arrive.</p>}
+      <DiagnosisField label="Why it broke">{diagnosis.rootCause ?? summary ?? 'No root cause yet.'}</DiagnosisField>
+      {diagnosis.suggestedFix && (
+        <DiagnosisField label="Suggested fix">
+          <span className="whitespace-pre-line">{diagnosis.suggestedFix}</span>
+        </DiagnosisField>
+      )}
+      {diagnosis.reproductionSteps.length > 0 && (
+        <DiagnosisField label="How to reproduce">
+          <ol className="list-decimal space-y-0.5 pl-5 text-fg-muted">
+            {diagnosis.reproductionSteps.map((step, i) => (
+              <li key={i}>{step}</li>
+            ))}
+          </ol>
+        </DiagnosisField>
+      )}
+      {meta.length > 0 && <p className="text-2xs text-fg-faint">{meta.join(' · ')}</p>}
+    </div>
+  )
+}
+
+function DiagnosisField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <p className="text-2xs font-medium uppercase tracking-wide text-fg-faint">{label}</p>
+      <div className="mt-0.5">{children}</div>
+    </div>
+  )
+}
+
+/**
+ * Honest note when Stage 2 did not produce a diagnosis. There is no server
+ * route that re-runs Stage 2 for a classified report, so no button is offered.
+ */
+function Stage2AbsentNote({ view }: { view: ReturnType<typeof reportDiagnosisView> }) {
+  if (view.kind === 'stage1_only') {
+    return (
+      <p className="mt-1.5 text-2xs text-fg-faint">
+        Full diagnosis not run (classifier confident) — this is the quick classifier&rsquo;s summary, without a root
+        cause or suggested fix.
+      </p>
+    )
+  }
+  if (view.kind === 'failed') {
+    return (
+      <p className="mt-1.5 text-2xs text-fg-faint">
+        Full diagnosis failed: <span className="wrap-break-word">{view.message}</span>
+      </p>
+    )
+  }
+  return null
 }
 
 /** Why grounding was absent, per RagSkipReason, with what to do about it. */
