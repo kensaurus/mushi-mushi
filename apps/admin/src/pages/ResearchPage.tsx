@@ -5,7 +5,7 @@
 
 import { useCallback, useMemo, useState, useEffect } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
@@ -519,9 +519,7 @@ export function ResearchPage() {
                   title="Firecrawl not ready"
                   description="Add and test your Firecrawl API key before searching. The fix-worker also uses this key when local RAG is sparse."
                   action={
-                    <Link to="/settings?tab=firecrawl">
-                      <Btn size="sm" variant="primary">Open Firecrawl settings</Btn>
-                    </Link>
+                    <Btn to="/settings?tab=firecrawl" size="sm" variant="primary">Open Firecrawl settings</Btn>
                   }
                   hints={[
                     'Set an allow-list of domains to keep results on-topic',

@@ -24,6 +24,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { log as rootLog } from './logger.ts';
 import { applyReportStatusTransition } from './report-transition.ts';
+import { extractFramePaths } from './sentry-frames.ts';
 
 const log = rootLog.child('sentry-ingest');
 
@@ -43,9 +44,11 @@ export function mapSentryLevelToSeverity(level: string | undefined | null): stri
 
 interface SentryFrame {
   filename?: string;
+  abs_path?: string;
   function?: string;
   lineno?: number;
   colno?: number;
+  in_app?: boolean;
 }
 
 interface SentryExceptionValue {
@@ -68,6 +71,9 @@ export interface SentryEventPayload {
   request?: { url?: string };
   tags?: Array<[string, string]>;
   exception?: { values?: SentryExceptionValue[] };
+  /** `extra` context. Message-type events (`logger.error('x', { error })`)
+   *  carry their only detail here. */
+  extra?: Record<string, unknown> | null;
 }
 
 export interface SentryIssuePayload {
@@ -103,8 +109,29 @@ export function renderStackText(exception: SentryEventPayload['exception']): str
 }
 
 export interface SentryIngestResult {
-  outcome: 'created' | 'deduped' | 'reopened' | 'resolved' | 'ignored';
+  /** `linked`: an import found the issue already linked to a report. */
+  outcome: 'created' | 'deduped' | 'reopened' | 'resolved' | 'ignored' | 'linked';
   reportId?: string;
+}
+
+/** Render `extra` as `key: value` lines for the report description, each
+ *  value capped at 300 chars and the whole block at `max`. */
+export function formatSentryExtra(extra: Record<string, unknown> | null | undefined, max = 1500): string | null {
+  if (!extra || typeof extra !== 'object') return null;
+  const lines: string[] = [];
+  for (const [key, value] of Object.entries(extra)) {
+    if (value === null || value === undefined || value === '') continue;
+    let text: string;
+    try {
+      text = typeof value === 'string' ? value : JSON.stringify(value);
+    } catch {
+      text = String(value);
+    }
+    lines.push(`${key}: ${text.length > 300 ? `${text.slice(0, 300)}…` : text}`);
+  }
+  if (lines.length === 0) return null;
+  const block = lines.join('\n');
+  return block.length > max ? `${block.slice(0, max)}…` : block;
 }
 
 /** Statuses that mean "this was considered done" — a fresh Sentry alert on
@@ -150,9 +177,14 @@ export async function ingestSentryError(
     event?: SentryEventPayload | null;
     issue?: SentryIssuePayload | null;
     triggerClassification: (reportId: string, projectId: string) => void;
+    /** `import` = an operator pulled an existing issue. A linked issue then
+     *  answers `linked` and is never reopened: re-importing is not a
+     *  regression signal, a fresh alert is. Default `webhook`. */
+    intake?: 'webhook' | 'import';
   },
 ): Promise<SentryIngestResult> {
   const { projectId, event, issue } = input;
+  const intake = input.intake ?? 'webhook';
 
   const sentryIssueId = String(event?.issue_id ?? issue?.id ?? '') || null;
   const title = event?.title ?? issue?.title ?? null;
@@ -162,6 +194,7 @@ export async function ingestSentryError(
   if (sentryIssueId) {
     const linked = await findLinkedReport(db, projectId, sentryIssueId);
     if (linked) {
+      if (intake === 'import') return { outcome: 'linked', reportId: linked.reportId };
       if (DONE_STATUSES.has(linked.status)) {
         // The fix didn't hold — reopen instead of filing a duplicate.
         await db
@@ -193,13 +226,16 @@ export async function ingestSentryError(
   const release = event?.release ?? tagValue(event?.tags, 'release');
   const environment = event?.environment ?? tagValue(event?.tags, 'environment');
 
+  const extraText = formatSentryExtra(event?.extra);
   const description = [
-    title,
-    culprit ? `in ${culprit}` : null,
-    '(captured by Sentry — no user description)',
+    [title, culprit ? `in ${culprit}` : null, '(captured by Sentry — no user description)']
+      .filter(Boolean)
+      .join(' '),
+    extraText ? `Event extra:\n${extraText}` : null,
   ]
     .filter(Boolean)
-    .join(' ');
+    .join('\n\n');
+  const framePaths = extractFramePaths(event?.exception?.values);
 
   const { error: insertError } = await db.from('reports').insert({
     id: reportId,
@@ -220,8 +256,10 @@ export async function ingestSentryError(
     custom_metadata: {
       source: 'sentry_webhook',
       kind: 'error_event',
+      intake,
       sentryIssueId,
       sentryShortId: issue?.shortId ?? null,
+      sentryFrames: framePaths,
       culprit,
       platform: event?.platform ?? issue?.platform ?? null,
     },

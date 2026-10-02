@@ -11,6 +11,14 @@ Your AI wrote it. Mushi tells you why it broke.</>}
   lead={LANDING_HERO.lead}
 />
 
+## This is what a diagnosis looks like
+
+A user writes one or two sentences about what went wrong. Mushi reads them with
+the screenshot, console and network tail, and writes back a plain-English title,
+a severity, the likely cause and a suggested fix. Below is a real one.
+
+  
+
 ## See it in action
 
   
@@ -29,6 +37,10 @@ Sentry is built around what the code threw, with a User Feedback widget and
 replay alongside. Mushi starts from what the user reported, ingests Sentry's
 errors too, explains each one in plain English, and hands your agent a fix
 prompt to start from. With or without Sentry.
+
+Sentry is one on-ramp of several. Bugs come in from your users, your
+monitoring and your voice; fixes and status go out to your editor, your coding
+agents, your tracker and your chat. Nothing has to be ripped out.
 
   
 

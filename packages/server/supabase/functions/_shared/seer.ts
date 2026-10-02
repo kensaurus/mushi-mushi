@@ -127,41 +127,6 @@ export async function applySeerAnalysis(
 }
 
 /**
- * Constant-time HMAC-SHA256 verification used by the webhook handler. The
- * raw body must be the exact bytes Sentry sent — JSON-decode + re-encode
- * will silently change whitespace and break the signature.
- *
- * Sentry's `Sentry-Hook-Signature` is a hex digest of HMAC-SHA256(secret, body).
- */
-export async function verifySentryHookSignature(
-  rawBody: string,
-  signatureHeader: string | null,
-  secret: string,
-): Promise<boolean> {
-  if (!signatureHeader || !secret) return false
-  const enc = new TextEncoder()
-  const key = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  )
-  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(rawBody))
-  const expected = Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-
-  // Constant-time compare to avoid timing attacks.
-  if (expected.length !== signatureHeader.length) return false
-  let diff = 0
-  for (let i = 0; i < expected.length; i++) {
-    diff |= expected.charCodeAt(i) ^ signatureHeader.charCodeAt(i)
-  }
-  return diff === 0
-}
-
-/**
  * Best-effort extraction of (issueId, shortId, permalink, fixabilityScore)
  * from a Sentry issue-event webhook body. Sentry has shipped at least three
  * payload shapes over the years — we accept the modern v2 (`data.issue`),

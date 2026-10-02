@@ -230,7 +230,13 @@ export interface MushiWidgetConfig {
    * 3. Default `false`.
    */
   brandFooter?: boolean;
-  /** How the widget should surface SDK freshness warnings. Defaults to auto. */
+  /**
+   * How the widget surfaces the "update @mushi-mushi/web" notice. It is a
+   * developer instruction, so `'auto'` (default) shows it in the widget only on
+   * a dev host (localhost, loopback, `*.localhost`, `*.local`, `file:`) or with
+   * `debug: true` — never to an app's end users. `'banner'` always shows it;
+   * `'console-only'` and `'off'` never render it in the widget.
+   */
   outdatedBanner?: 'auto' | 'banner' | 'console-only' | 'off';
   /**
    * Privacy nudge shown beside an attached screenshot preview, reminding the
@@ -615,9 +621,10 @@ export interface MushiPrivacyConfig {
    * sensitive fields that should never appear in any form — passwords, PII,
    * financial data. Applied in addition to `maskSelectors`.
    *
-   * Default: `['input[type="password"]', '[data-mushi-redact]']`
-   *
-   * To disable the default redaction, pass an empty array.
+   * Always redacted, whatever this is set to: `input[type="password"]`,
+   * `input[autocomplete^="cc-"]`, `[data-private]`, `[data-mushi-mask]`.
+   * This list is added on top; it defaults to `['[data-mushi-redact]']`,
+   * and an empty array drops only that default.
    */
   redactSelectors?: string[];
   /** Let reporters remove an attached screenshot before submitting. Defaults to true. */
@@ -1892,8 +1899,30 @@ export interface MushiSdkVersionInfo {
 export interface MushiReporterReport {
   id: string;
   status: string;
-  category: string;
+  /** @deprecated No longer sent to reporters (Plan 018); internal triage only. */
+  category?: string;
+  /** @deprecated No longer sent to reporters (Plan 018); internal triage only. */
   severity?: string | null;
+  /** Reporter-safe title (the summary, or the first line of the description). */
+  title?: string | null;
+  /** The type the reporter picked (`user_category`), if any. */
+  user_category?: string | null;
+  /** Page path the report was filed on. */
+  page?: string | null;
+  app_version?: string | null;
+  /** Signed, short-lived thumbnail URL; null without a screenshot. */
+  screenshot_thumb_url?: string | null;
+  /** Bucketed duplicate count: never a raw number. */
+  group_bucket?: 'none' | 'few' | 'many';
+  closed_reason?: string | null;
+  fixed_in_version?: string | null;
+  /** The developer asked a question and is waiting on the reporter. */
+  awaiting_reporter?: boolean;
+  /** True when this row is a report the reporter follows (theirs was a duplicate of it). */
+  followed?: boolean;
+  last_event_at?: string | null;
+  /** Template-rendered (or verbatim developer) text of the latest event. */
+  last_event_preview?: string | null;
   summary?: string | null;
   description?: string | null;
   created_at: string;

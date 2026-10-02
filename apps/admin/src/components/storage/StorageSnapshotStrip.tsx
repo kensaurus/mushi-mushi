@@ -40,7 +40,7 @@ export function StorageSnapshotStrip({
       {hint ? <SnapshotSectionHint text={hint} /> : null}
       <MetricStrip cols={4} ariaLabel="Storage snapshot">
         <StatCard
-          label={statLabels?.healthy ?? 'Healthy'}
+          label={statLabels?.healthy ?? 'Healthy buckets'}
           value={`${stats.healthyCount}/${stats.configuredCount}`}
           accent={
             stats.failingCount > 0

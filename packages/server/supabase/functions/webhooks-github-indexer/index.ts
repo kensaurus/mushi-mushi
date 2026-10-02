@@ -21,9 +21,16 @@ import { log as rootLog } from '../_shared/logger.ts';
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { unverifiedGithubInstallsAllowed } from '../_shared/github-install-trust.ts';
-import { finalizeFixMerge } from '../_shared/fix-merge.ts';
+import { finalizeFixClosedUnmerged, finalizeFixMerge } from '../_shared/fix-merge.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
+import { fetchRepoTreeWithBranchFallback } from '../_shared/github-branch.ts';
 import { envInt } from '../_shared/env-int.ts';
+import { prioritizeSweepFiles } from '../_shared/sweep-file-priority.ts';
+import {
+  framePathsFromStackText,
+  matchFramePathsToTree,
+  normalizeFramePath,
+} from '../_shared/sentry-frames.ts';
 import { createWebhookMiddleware, ReplayAttackError, RateLimitError } from '../_shared/webhook-middleware.ts';
 import {
   DISPATCHABLE_CLOUD_AGENTS,
@@ -284,6 +291,7 @@ async function handlePullRequestState(
       number?: number;
       draft?: boolean;
       state?: string;
+      closed_at?: string | null;
       delivery_id?: string;
       head?: { ref?: string };
     };
@@ -298,7 +306,7 @@ async function handlePullRequestState(
   const db = getDb();
   let { data: attempt } = await db
     .from('fix_attempts')
-    .select('id, project_id, pr_state')
+    .select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, pr_state')
     .eq('pr_url', prUrl)
     .maybeSingle();
   if (!attempt) {
@@ -338,7 +346,7 @@ async function handlePullRequestState(
     // that now owns this PR (ours, or the one that won the race).
     const reread = await db
       .from('fix_attempts')
-      .select('id, project_id, pr_state')
+      .select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, pr_state')
       .eq('pr_url', prUrl)
       .maybeSingle();
     attempt = reread.data;
@@ -357,6 +365,21 @@ async function handlePullRequestState(
   else if (payload.pull_request?.draft) newState = 'draft';
   else newState = 'open';
 
+  // Closed without merge: shared bookkeeping (pr_state, one "PR closed
+  // without merge" event, report back out of 'fixing') so ci-sync and this
+  // webhook agree and never double-emit.
+  if (newState === 'closed') {
+    const closed = await finalizeFixClosedUnmerged(db, attempt, {
+      prNumber: payload.pull_request?.number ?? null,
+      closedAt: payload.pull_request?.closed_at ?? null,
+      source: 'webhook',
+    });
+    return new Response(
+      JSON.stringify({ ok: true, fix_attempt_id: attempt.id, pr_state: newState, report_status: closed.reportStatus }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
+
   if (attempt.pr_state !== newState) {
     await db.from('fix_attempts').update({ pr_state: newState }).eq('id', attempt.id);
   }
@@ -365,7 +388,7 @@ async function handlePullRequestState(
     fix_attempt_id: attempt.id,
     project_id: attempt.project_id,
     kind: 'pr_state_changed',
-    status: newState === 'closed' ? 'fail' : newState === 'merged' ? 'ok' : 'pending',
+    status: newState === 'merged' ? 'ok' : 'pending',
     label: `PR ${newState}`,
     detail: `#${payload.pull_request?.number ?? '—'}`,
     dedupe_key: `pr:${deliveryId}`,
@@ -759,7 +782,7 @@ async function resolveProjectGithubToken(
  */
 async function handleSweep(
   req: Request,
-  parsedBody: { project_id?: string } | null,
+  parsedBody: { project_id?: string; frame_paths?: unknown } | null,
 ): Promise<Response> {
   // Accept either the auto-injected SUPABASE_SERVICE_ROLE_KEY (edge-to-edge
   // calls) or MUSHI_INTERNAL_CALLER_SECRET (pg_cron → pg_net callers, which
@@ -785,6 +808,11 @@ async function handleSweep(
     .from('project_repos')
     .select('id, project_id, repo_url, default_branch, github_app_installation_id, last_indexed_at')
     .eq('indexing_enabled', true);
+
+  // `{ mode:'sweep', project_id, frame_paths }` (from the Sentry import
+  // route) embeds only the files those stack frames name — a few files, not
+  // a full sweep — and leaves the repo's sweep bookkeeping alone.
+  const targetFramePaths = scopedProjectId ? parseTargetFramePaths(parsedBody?.frame_paths) : [];
 
   if (scopedProjectId) {
     query = query.eq('project_id', scopedProjectId);
@@ -863,7 +891,13 @@ async function handleSweep(
           owner,
           name,
           repo.default_branch ?? 'main',
+          { targetFramePaths },
         );
+        if (targetFramePaths.length > 0) {
+          log.info('sweep: frame-path index', { repo: repo.repo_url, ...stats });
+          summary.push({ repo: repo.repo_url, ok: stats.inserted > 0 || stats.failed === 0, ...stats });
+          continue;
+        }
         if (stats.inserted === 0 && stats.failed > 0) {
           const msg = stats.lastError ?? 'all chunk embeddings failed';
           const kind = classifyIndexerError(msg);
@@ -893,6 +927,9 @@ async function handleSweep(
             .update({
               last_index_attempt_at: new Date().toISOString(),
               last_index_error: msg.slice(0, 500),
+              // The tree fetch on GitHub's default branch did succeed, so the
+              // branch truth is known even though embeddings failed.
+              ...(stats.correctedBranch ? { default_branch: stats.correctedBranch } : {}),
             })
             .eq('id', repo.id);
           summary.push({ repo: repo.repo_url, ok: false, error: msg });
@@ -906,6 +943,9 @@ async function handleSweep(
                 stats.failed > 0
                   ? (stats.lastError ?? 'partial: some chunks failed').slice(0, 500)
                   : (stats.partial?.slice(0, 500) ?? null),
+              // Persist the branch GitHub actually serves so the next sweep,
+              // the fix-worker base and the console all agree.
+              ...(stats.correctedBranch ? { default_branch: stats.correctedBranch } : {}),
             })
             .eq('id', repo.id);
           summary.push({ repo: repo.repo_url, ok: true, ...stats });
@@ -964,6 +1004,76 @@ async function handleSweep(
  * a GitHub App installation token and a user PAT. Both authenticate the same
  * read-only `tree` + `contents` endpoints used below.
  */
+/** Ceiling for a targeted (frame-path) run: an import names ≤10 issues. */
+const TARGETED_FILE_CAP = 25;
+/** Statuses whose fix site no longer needs to be in the index first. */
+const DONE_REPORT_STATUSES = ['fixed', 'resolved', 'verified', 'dismissed'];
+
+function parseTargetFramePaths(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out = new Set<string>();
+  for (const v of raw.slice(0, TARGETED_FILE_CAP)) {
+    const p = typeof v === 'string' ? normalizeFramePath(v) : null;
+    if (p) out.add(p);
+  }
+  return [...out];
+}
+
+/**
+ * Stack-frame paths of this project's open Sentry-linked reports (newest 50).
+ * Reads `custom_metadata.sentryFrames`, falling back to the stored stack text
+ * for reports ingested before that field existed. Best-effort: a failed read
+ * just means no frame priority this sweep.
+ */
+async function loadOpenSentryFramePaths(db: ReturnType<typeof getDb>, projectId: string): Promise<string[]> {
+  const { data, error } = await db
+    .from('reports')
+    .select('custom_metadata, console_logs')
+    .eq('project_id', projectId)
+    .eq('custom_metadata->>source', 'sentry_webhook')
+    .not('status', 'in', `(${DONE_REPORT_STATUSES.join(',')})`)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) {
+    log.warn('sweep: sentry frame lookup failed', { projectId, error: error.message });
+    return [];
+  }
+  const out = new Set<string>();
+  for (const row of data ?? []) {
+    const meta = (row.custom_metadata ?? {}) as { sentryFrames?: unknown };
+    const stored = Array.isArray(meta.sentryFrames)
+      ? meta.sentryFrames.filter((p): p is string => typeof p === 'string')
+      : [];
+    const fromStack = stored.length > 0
+      ? []
+      : ((row.console_logs ?? []) as Array<{ stack?: string }>).flatMap((l) => framePathsFromStackText(l?.stack));
+    for (const p of [...stored, ...fromStack]) out.add(p);
+  }
+  return [...out].slice(0, 100);
+}
+
+/** Paths already in the index (live rows), paged past PostgREST's 1000-row cap. */
+async function loadIndexedPaths(db: ReturnType<typeof getDb>, projectId: string): Promise<Set<string>> {
+  const out = new Set<string>();
+  const page = 1000;
+  for (let from = 0; from < 20_000; from += page) {
+    const { data, error } = await db
+      .from('project_codebase_files')
+      .select('file_path')
+      .eq('project_id', projectId)
+      .is('tombstoned_at', null)
+      .order('id', { ascending: true })
+      .range(from, from + page - 1);
+    if (error) {
+      log.warn('sweep: indexed-path lookup failed', { projectId, error: error.message });
+      break;
+    }
+    for (const r of data ?? []) out.add(r.file_path as string);
+    if (!data || data.length < page) break;
+  }
+  return out;
+}
+
 async function sweepIndexRepo(
   db: ReturnType<typeof getDb>,
   projectId: string,
@@ -971,6 +1081,7 @@ async function sweepIndexRepo(
   owner: string,
   repo: string,
   branch: string,
+  opts: { targetFramePaths?: string[] } = {},
 ): Promise<{
   inserted: number;
   skipped: number;
@@ -978,22 +1089,22 @@ async function sweepIndexRepo(
   lastError?: string;
   /** Set when the sweep could not cover the whole repo (file cap / GitHub tree truncation). */
   partial?: string;
+  /** Set when the configured branch 404'd and GitHub's default branch was used instead. */
+  correctedBranch?: string;
 }> {
-  const treeRes = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    },
-  );
-  if (!treeRes.ok) throw new Error(`tree fetch ${treeRes.status}`);
-  const tree = (await treeRes.json()) as {
-    tree?: Array<{ path: string; type: string }>;
-    truncated?: boolean;
-  };
+  // A stale default_branch ('main' on a 'master' repo) used to throw
+  // "tree fetch 404" on every sweep; the helper retries once with GitHub's
+  // real default and reports it so the success update can persist it.
+  const resolved = await fetchRepoTreeWithBranchFallback({ token, owner, repo, branch });
+  if (resolved.correctedFrom) {
+    log.warn('sweep: configured branch not found, indexed GitHub default branch instead', {
+      repo: `${owner}/${repo}`,
+      configured: resolved.correctedFrom,
+      githubDefault: resolved.branch,
+    });
+  }
+  branch = resolved.branch;
+  const tree = resolved.tree;
   const files = (tree.tree ?? []).filter((t) => t.type === 'blob' && shouldIndex(t.path));
   let inserted = 0;
   let skipped = 0;
@@ -1036,18 +1147,38 @@ async function sweepIndexRepo(
     chunk: ReturnType<typeof chunk>[number];
     text: string;
   }
+  // Which files: see _shared/sweep-file-priority.ts. Stack-frame files of
+  // open Sentry-linked reports first, then application source, unindexed
+  // before indexed. A targeted run embeds only the given frame files.
+  const treePaths = files.map((f) => f.path);
+  const targeted = (opts.targetFramePaths?.length ?? 0) > 0;
+  let selected: string[];
+  if (targeted) {
+    selected = matchFramePathsToTree(opts.targetFramePaths ?? [], treePaths).slice(0, TARGETED_FILE_CAP);
+  } else {
+    const [framePaths, indexedPaths] = await Promise.all([
+      loadOpenSentryFramePaths(db, projectId),
+      loadIndexedPaths(db, projectId),
+    ]);
+    selected = prioritizeSweepFiles(treePaths, {
+      framePaths: matchFramePathsToTree(framePaths, treePaths),
+      indexedPaths,
+      cap,
+    });
+  }
+
   const pending: PendingChunk[] = [];
-  for (const f of files.slice(0, cap)) {
-    const source = await fetchFileContents(token, owner, repo, f.path, branch);
+  for (const path of selected) {
+    const source = await fetchFileContents(token, owner, repo, path, branch);
     if (!source) {
       skipped++;
       continue;
     }
-    for (const ch of chunk(f.path, source)) {
+    for (const ch of chunk(path, source)) {
       pending.push({
-        path: f.path,
+        path,
         chunk: ch,
-        text: `${f.path}::${ch.symbolName ?? 'whole'}\n${ch.body}`,
+        text: `${path}::${ch.symbolName ?? 'whole'}\n${ch.body}`,
       });
     }
   }
@@ -1110,12 +1241,19 @@ async function sweepIndexRepo(
   // Honesty over unconditional success: a capped or truncated sweep used to
   // report clean success, leaving big monorepos silently half-indexed.
   let partial: string | undefined;
-  if (tree.truncated) {
+  if (!targeted && tree.truncated) {
     partial = `partial: GitHub tree listing truncated — indexed ${Math.min(files.length, cap)} files, repo has more`;
-  } else if (files.length > cap) {
+  } else if (!targeted && files.length > cap) {
     partial = `partial: indexed ${cap} of ${files.length} eligible files (MUSHI_REPO_INDEX_SWEEP_FILE_CAP=${cap})`;
   }
-  return { inserted, skipped, failed, lastError, partial };
+  return {
+    inserted,
+    skipped,
+    failed,
+    lastError,
+    partial,
+    ...(resolved.correctedFrom ? { correctedBranch: resolved.branch } : {}),
+  };
 }
 
 app.post('/webhooks-github-indexer', async (c) => {

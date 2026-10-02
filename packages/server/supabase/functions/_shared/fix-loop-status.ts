@@ -1,0 +1,87 @@
+/**
+ * FILE: packages/server/supabase/functions/_shared/fix-loop-status.ts
+ * PURPOSE: Pure rules for closing the fix loop when a PR ends WITHOUT a
+ *          merge. Shared by ci-sync (poll), the refresh-ci route (via
+ *          ci-sync) and webhooks-github-indexer (pull_request.closed), so
+ *          the three paths agree on what "closed unmerged" means and where
+ *          the report goes next.
+ *
+ * No imports and no env reads: the Deno CI test runs without permissions
+ * and the vitest suite imports this file directly.
+ */
+
+/** GitHub PR lifecycle as stored in `fix_attempts.pr_state` (CHECK-constrained). */
+export type PrLifecycle = 'open' | 'closed' | 'merged' | 'draft'
+
+export function prLifecycleFrom(pr: { merged?: boolean | null; state?: string | null; draft?: boolean | null }): PrLifecycle {
+  if (pr.merged) return 'merged'
+  if (pr.state === 'closed') return 'closed'
+  if (pr.draft) return 'draft'
+  return 'open'
+}
+
+/**
+ * Where a report goes when its only fix PR is closed unmerged. fix-worker
+ * overwrites the status with 'fixing' and keeps no history, so this is
+ * derived: a report the classifier already scored goes back to the triage
+ * queue as 'classified' (the canonical form of triaged); anything else is
+ * 'new'.
+ */
+export function preFixReportStatus(report: {
+  category?: string | null
+  severity?: string | null
+  stage1_classification?: unknown
+}): 'classified' | 'new' {
+  if (report.category || report.severity || report.stage1_classification) return 'classified'
+  return 'new'
+}
+
+/**
+ * Only a report still parked in 'fixing' is reverted. A human who already
+ * moved it (fixed, dismissed, reopened…) wins over a stale PR event, and
+ * another live attempt keeps it in 'fixing'.
+ */
+export function shouldRevertReportOnPrClose(input: {
+  reportStatus: string | null | undefined
+  otherOpenAttempts: number
+}): boolean {
+  return input.reportStatus === 'fixing' && input.otherOpenAttempts === 0
+}
+
+export const PR_CLOSED_UNMERGED_LABEL = 'PR closed without merge'
+
+const CI_HARD_FAIL = new Set(['failure', 'timed_out', 'cancelled', 'action_required'])
+
+/**
+ * One definition of a "failed" fix for every count on /fixes (status banner,
+ * tab badge, "Failed / skipped" filter). Before 2026-10-02 the counts only
+ * looked at `status === 'failed'`, so an attempt that opened a PR whose CI
+ * went red (or that was closed unmerged) showed Check = Failed on its card
+ * while every count read 0.
+ */
+export function isFixCountedFailed(a: {
+  status?: string | null
+  pr_url?: string | null
+  pr_state?: string | null
+  merged_at?: string | null
+  check_run_conclusion?: string | null
+}): boolean {
+  const status = (a.status ?? '').toLowerCase()
+  if (status === 'failed' || status.startsWith('skipped')) return true
+  if (!a.pr_url || a.merged_at || a.pr_state === 'merged') return false
+  if (a.pr_state === 'closed') return true
+  return CI_HARD_FAIL.has((a.check_run_conclusion ?? '').toLowerCase())
+}
+
+/** Breakdown key for a counted failure: the worker's category, else why the PR is blocked. */
+export function fixFailureBucket(a: {
+  status?: string | null
+  pr_url?: string | null
+  pr_state?: string | null
+  failure_category?: string | null
+}): string {
+  if (typeof a.failure_category === 'string' && a.failure_category) return a.failure_category
+  if (a.pr_state === 'closed') return 'pr_closed_unmerged'
+  if (a.pr_url && a.status === 'completed') return 'ci_failed'
+  return 'unknown'
+}

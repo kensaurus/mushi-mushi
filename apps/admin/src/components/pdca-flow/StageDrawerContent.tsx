@@ -27,6 +27,7 @@ import { CHIP_TONE } from '../../lib/chipTone'
 import { useActiveProjectId } from '../ProjectSwitcher'
 import { useDispatchPreflight } from '../../lib/useDispatchPreflight'
 import { DispatchFixPreflight } from '../reports/DispatchFixPreflight'
+import { describeJudgeRun, type JudgeRunResponse } from '../../lib/judgeRun'
 
 interface StageDrawerContentProps {
   stageId: PdcaStageId
@@ -469,11 +470,12 @@ function CheckDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: ()
   const runJudge = useCallback(async () => {
     setRunning(true)
     try {
-      const res = await apiFetch<{ dispatched: number }>('/v1/admin/judge/run', { method: 'POST' })
+      const res = await apiFetch<JudgeRunResponse>('/v1/admin/judge/run', { method: 'POST' })
       if (res.ok) {
-        toast.success(
-          `Judge run dispatched${res.data?.dispatched ? ` · ${res.data.dispatched} batched` : ''}`,
-        )
+        // Nothing eligible is not a success: say so instead of "dispatched".
+        const outcome = describeJudgeRun(res.data)
+        if (outcome.kind === 'nothing') toast.info(outcome.title, outcome.description)
+        else toast.success(outcome.title, outcome.description)
       } else {
         toast.error('Judge run failed', res.error?.message)
       }

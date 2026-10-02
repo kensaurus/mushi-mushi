@@ -41,6 +41,10 @@ export function runStatusTransitionSideEffects(
     previousStatus: string;
     newStatus: string;
     actor: TransitionActor;
+    /** Why a dismissed report was closed; forwarded to the reporter message. */
+    closedReason?: string | null;
+    /** False when the caller sends its own reporter message (release publish). */
+    notifyReporter?: boolean;
   },
 ): void {
   try {
@@ -72,13 +76,14 @@ export function runStatusTransitionSideEffects(
       }),
     );
   }
-  if (input.reporterTokenHash) {
+  if (input.reporterTokenHash && input.notifyReporter !== false) {
     notifyReportStatusTransition(db, {
       projectId: input.projectId,
       reportId: input.reportId,
       reporterTokenHash: input.reporterTokenHash,
       previousStatus: input.previousStatus,
       newStatus: input.newStatus,
+      closedReason: input.closedReason ?? null,
     }).catch((e) =>
       transitionLog.error('Notification failed', { reportId: input.reportId, err: String(e) }),
     );

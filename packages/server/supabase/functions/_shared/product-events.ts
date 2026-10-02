@@ -29,7 +29,17 @@ import {
 } from './analytics-taxonomy.generated.ts'
 
 export interface ProductEventPayload {
-  /** Defaults to MUSHI_SELF_PROJECT_ID (Mushi's own funnel). */
+  /**
+   * The project whose analytics this row belongs to — NOT the project the
+   * event is about. Defaults to MUSHI_SELF_PROJECT_ID: server milestones
+   * (project_created, first_report_received, first_diagnosis_ready, …) are
+   * Mushi's own company funnel, so they live in the self project and never
+   * appear in a customer's Users & Funnels. The customer project they describe
+   * is `properties.project_id` (required by the taxonomy for every server
+   * event). Activation-by-project queries must filter
+   * `project_id = <self> AND properties->>'project_id' = <host>`, as
+   * mushi.product_event_shortfall_check() does.
+   */
   projectId?: string | null
   /** Console (auth.users) id — resolved to end_users under the self org. */
   userId?: string | null

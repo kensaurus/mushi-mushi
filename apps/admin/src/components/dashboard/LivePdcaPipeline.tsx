@@ -19,10 +19,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Btn, Card } from '../ui'
-import { apiFetch } from '../../lib/supabase'
-import { useToast } from '../../lib/toast'
+import { useSendTestReport } from '../../lib/useSendTestReport'
 import { useAdminMode } from '../../lib/mode'
 import { PDCA_ORDER, PDCA_STAGES, PDCA_STAGE_OUTCOMES, type PdcaStageId } from '../../lib/pdca'
 import type { PdcaStage } from './types'
@@ -58,8 +57,7 @@ const STAGE_MS = 1100
 
 export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages }: Props) {
   const { isBeginner } = useAdminMode()
-  const toast = useToast()
-  const navigate = useNavigate()
+  const sendTestReport = useSendTestReport()
   const [demoState, setDemoState] = useState<DemoState>('idle')
   const [activeStage, setActiveStage] = useState<PdcaStageId | null>(null)
   const [doneStages, setDoneStages] = useState<Set<PdcaStageId>>(new Set())
@@ -145,28 +143,15 @@ export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages }: Pr
       return
     }
 
-    const res = await apiFetch<{ reportId: string; projectName: string }>(
-      `/v1/admin/projects/${projectId}/test-report`,
-      { method: 'POST' },
-    )
-    if (!res.ok || !res.data) {
+    const res = await sendTestReport(projectId)
+    if (!res.ok) {
       if (timerRef.current) clearTimeout(timerRef.current)
       setActiveStage(null)
       setDemoState('error')
-      toast.error('Demo failed', res.error?.message ?? 'Could not send the test bug. Try again.')
       return
     }
-    const reportId = res.data.reportId
-    toast.success(
-      'Demo bug sent',
-      'Watch the loop above, then open Reports to see the real entry.',
-      {
-        label: 'Open report',
-        onClick: () => navigate(`/reports/${reportId}`),
-      },
-    )
     onDemoReportSent?.()
-  }, [animate, demoState, navigate, onDemoReportSent, projectId, toast])
+  }, [animate, demoState, onDemoReportSent, projectId, sendTestReport])
 
   if (!isBeginner) return null
 

@@ -15,6 +15,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { HEALTH_PROBE_ANTHROPIC_MODEL, HEALTH_PROBE_OPENAI_MODEL } from './models.ts'
 import { isOperatorProject } from './operator-gate.ts'
 import { safeFetch } from './inventory-guards.ts'
+import { isCodebaseIndexFailing } from './sweep-error-classifier.ts'
 
 // Deno global — declared only where consumed (edge functions).
 declare const Deno: { env: { get(name: string): string | undefined } }
@@ -279,6 +280,30 @@ export async function probeIntegration(
             ? 'down'
             : 'degraded'
         if (!res.ok) detail = `HTTP ${res.status}`
+        // Repo access alone said "ok" for 3 months while every index sweep
+        // failed "tree fetch 404" (wrong default branch). A dead index starves
+        // the fix-worker of code context, so it degrades this card.
+        if (res.ok && projectId) {
+          const { data: repos } = await db
+            .from('project_repos')
+            .select('repo_url, default_branch, last_index_error, last_indexed_at, last_index_attempt_at')
+            .eq('project_id', projectId)
+            .eq('indexing_enabled', true)
+          const failing = ((repos ?? []) as Array<{
+            repo_url: string
+            default_branch: string | null
+            last_index_error: string | null
+            last_indexed_at: string | null
+            last_index_attempt_at: string | null
+          }>).filter((r) => isCodebaseIndexFailing(r))
+          if (failing.length > 0) {
+            status = 'degraded'
+            detail = failing
+              .map((r) => `Codebase index failing for ${r.repo_url}@${r.default_branch ?? 'main'}: ${r.last_index_error}`)
+              .join(' · ')
+              .slice(0, 480)
+          }
+        }
       }
 
     } else if (kind === 'jira') {

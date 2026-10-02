@@ -52,7 +52,17 @@ async function loadOrgTiers(db: SupabaseClient, organizationId: string): Promise
   return (data?.length ? data : DEFAULT_TIERS) as TierRow[]
 }
 
-function resolveTier(totalPoints: number, tiers: TierRow[]): TierRow | null {
+/**
+ * DEFAULT_TIERS carry placeholder ids (`__free__`, …) that are not rows in
+ * reward_tiers. end_user_points.current_tier_id is a uuid FK, so only a real
+ * row id may be persisted; the fallback ladder keeps current_tier_id NULL.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+export function isPersistedTier(tier: Pick<TierRow, 'id'>): boolean {
+  return UUID_RE.test(tier.id)
+}
+
+export function resolveTier(totalPoints: number, tiers: TierRow[]): TierRow | null {
   // Return the highest threshold the user has met.
   let matched: TierRow | null = null
   for (const t of tiers) {
@@ -65,6 +75,10 @@ export async function evaluateTier(
   db: SupabaseClient,
   endUserId: string,
   organizationId: string,
+  /** Points granted by the award that triggered this evaluation. The fallback
+   *  ladder has no persisted tier, so a crossing is detected from the total
+   *  before and after this award. */
+  pointsJustAwarded = 0,
 ): Promise<{ tierChanged: boolean; tier: TierRow | null }> {
   // 1. Fetch current points + tier
   const { data: pts, error: ptsErr } = await db
@@ -84,25 +98,33 @@ export async function evaluateTier(
 
   if (!newTier) return { tierChanged: false, tier: null }
 
-  // No change
-  if (pts.current_tier_id === newTier.id) return { tierChanged: false, tier: newTier }
+  let oldTier: TierRow | null
+  if (isPersistedTier(newTier)) {
+    // No change
+    if (pts.current_tier_id === newTier.id) return { tierChanged: false, tier: newTier }
 
-  // 3. Fetch previous tier for the webhook payload
-  const oldTier = tiers.find((t) => t.id === pts.current_tier_id) ?? null
+    // 3. Fetch previous tier for the webhook payload
+    oldTier = tiers.find((t) => t.id === pts.current_tier_id) ?? null
 
-  // 4. Write new tier to end_user_points
-  const { error: upErr } = await db
-    .from('end_user_points')
-    .update({
-      current_tier_id: newTier.id,
-      last_evaluated_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('end_user_id', endUserId)
+    // 4. Write new tier to end_user_points
+    const { error: upErr } = await db
+      .from('end_user_points')
+      .update({
+        current_tier_id: newTier.id,
+        last_evaluated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('end_user_id', endUserId)
 
-  if (upErr) {
-    tlog.error('tier_update_failed', { endUserId, newTierId: newTier.id, error: upErr.message })
-    return { tierChanged: false, tier: newTier }
+    if (upErr) {
+      tlog.error('tier_update_failed', { endUserId, newTierId: newTier.id, error: upErr.message })
+      return { tierChanged: false, tier: newTier }
+    }
+  } else {
+    // Fallback ladder: nothing to persist. A tier changed only when this
+    // award moved the total across a threshold.
+    oldTier = resolveTier(pts.total_points - Math.max(0, pointsJustAwarded), tiers)
+    if (oldTier?.id === newTier.id) return { tierChanged: false, tier: newTier }
   }
 
   tlog.info('tier_changed', {

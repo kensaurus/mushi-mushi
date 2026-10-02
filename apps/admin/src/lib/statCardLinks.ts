@@ -141,10 +141,10 @@ export const billingLinks = {
 } as const
 
 export const mcpLinks = {
-  activeKeys: '/mcp?tab=keys',
-  mcpRead: '/mcp?tab=keys',
-  connected: '/mcp?tab=keys',
-  sdkOnly: '/mcp?tab=keys',
+  activeKeys: '/mcp?tab=setup',
+  mcpRead: '/mcp?tab=setup',
+  connected: '/mcp?tab=setup',
+  sdkOnly: '/mcp?tab=setup',
   tools: '/mcp?tab=tools',
   endpoint: '/mcp?tab=setup',
 } as const
@@ -153,8 +153,8 @@ export const connectLinks = {
   github: '/integrations/config',
   sdk: '/connect#sdk-install',
   sdkVersion: '/connect',
-  mcpConnected: '/mcp?tab=keys',
-  mcpUnused: '/mcp?tab=keys',
+  mcpConnected: '/mcp?tab=setup',
+  mcpUnused: '/mcp?tab=setup',
   tools: '/mcp?tab=tools',
 } as const
 

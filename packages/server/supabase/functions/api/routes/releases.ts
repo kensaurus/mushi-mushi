@@ -7,7 +7,8 @@
 //   GET  /v1/admin/releases/:id         — release detail with credits
 //   PATCH /v1/admin/releases/:id        — edit body, title, status
 //   DELETE /v1/admin/releases/:id       — delete draft (not published)
-//   POST /v1/admin/releases/:id/publish — publish + send widget notifications
+//   POST /v1/admin/releases/:id/publish — publish; resolve fixed_report_ids,
+//                                          message each reporter, credit after delivery
 //
 // SDK (apiKeyAuth):
 //   GET /v1/sdk/me/credits              — releases where the user is credited
@@ -30,6 +31,7 @@ import {
 } from '../shared.ts'
 import { log } from '../../_shared/logger.ts'
 import { reporterKey } from '../../_shared/reporter-token.ts'
+import { notifyReleaseReporters, stampDeliveredReleaseCredits } from '../../_shared/release-reporters.ts'
 
 async function assertReleaseRowAccess(
   c: Parameters<typeof assertTargetProjectAccess>[0],
@@ -407,40 +409,26 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
       }
     }
 
-    const { data: credits, error: creditsFetchError } = await db
-      .from('release_credits')
-      .select('id, end_user_id, display_name_at_time')
-      .eq('release_id', release.id)
-      .is('notified_at', null)
-    if (creditsFetchError) {
-      return c.json(
-        { ok: false, error: `release published, but fetching credits failed: ${creditsFetchError.message}` },
-        500,
-      )
+    // ── Reports this release fixed (Plan 018 §5) ─────────────────────────────
+    // One `released` message per reporter (held in review mode); verified
+    // reports keep their status, dismissed ones are skipped. Credits are
+    // stamped only where a delivered ledger row exists.
+    const linked = await notifyReleaseReporters(db, release, userId)
+    if (!linked.ok) {
+      return c.json({ ok: false, error: `release published, but ${linked.error}` }, 500)
     }
-
-    if ((credits ?? []).length > 0) {
-      const { error: creditsUpdateError } = await db
-        .from('release_credits')
-        .update({ notified_at: new Date().toISOString() })
-        .eq('release_id', release.id)
-        .is('notified_at', null)
-      if (creditsUpdateError) {
-        return c.json(
-          {
-            ok: false,
-            error: `release published, but marking ${(credits ?? []).length} credit(s) notified failed: ${creditsUpdateError.message}`,
-          },
-          500,
-        )
-      }
+    const credits = await stampDeliveredReleaseCredits(db, release.id)
+    if (!credits.ok) {
+      return c.json({ ok: false, error: `release published, but ${credits.error}` }, 500)
     }
 
     return c.json({
       ok: true,
       data: release,
-      notified: (credits ?? []).length,
+      // Credits whose reporter actually received the release message.
+      notified: credits.stamped,
       tickets_fulfilled: ticketIds.length,
+      delivery: { ...linked.delivery, credits_stamped: credits.stamped, credits_pending: credits.pending },
     })
   })
 

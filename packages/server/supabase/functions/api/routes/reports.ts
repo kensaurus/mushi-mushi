@@ -20,6 +20,10 @@ import { postReporterReply, computeTwoWayHealth } from '../../_shared/reporter-c
 import { buildReportFixPacket } from './report-agent-context.ts';
 import { inventoryAnchorOf } from './report-agent-context-helpers.ts';
 import { getStorageAdapter } from '../../_shared/storage.ts';
+import { runInBackground } from '../../_shared/background.ts';
+
+/** `reports_closed_reason_check` values (migration 20261002120000). */
+const CLOSED_REASONS = new Set(['duplicate', 'not_reproducible', 'wont_fix', 'working_as_intended', 'spam']);
 
 export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -307,7 +311,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         // quota) and autofix_blocked stamps were invisible in every list
         // view — you had to open each report to learn the pipeline choked
         // (2026-08-16 audit P2-3). ~0.5 KB per affected row.
-        'id, project_id, description, category, severity, summary, title, area_tag, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id, processing_error',
+        'id, project_id, description, category, severity, summary, title, area_tag, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, admin_seen_at, awaiting_reporter_at, closed_reason, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id, processing_error',
         { count: 'exact' },
       )
       .in('project_id', projectIds)
@@ -553,6 +557,22 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
     }
 
+    // A person opening the report in the console has seen the reporter's
+    // latest reply (clears the unread dot). MCP / API-key reads do not count:
+    // an agent reading the report is not the developer seeing it.
+    if (c.get('authMethod') === 'jwt') {
+      runInBackground(
+        (async () => {
+          const { error: seenErr } = await db
+            .from('reports')
+            .update({ admin_seen_at: new Date().toISOString() })
+            .eq('id', reportId);
+          if (seenErr) log.warn('admin_seen_at stamp failed', { reportId, err: seenErr.message });
+        })(),
+        'admin_seen_at',
+      );
+    }
+
     // Attach the LLM invocation timeline for this report so the detail page can
     // deep-link to Langfuse traces for each pipeline stage (fast-filter, classify-report,
     // judge-batch). Cheaper to fetch alongside the report than as a separate round-trip.
@@ -571,7 +591,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // Build trace_id filter for backend_spans: match on sentry_trace_id or W3C traceparent trace-id.
     const traceIds = Array.from(new Set([traceparentTraceId, sentryTraceId].filter((t): t is string => Boolean(t))))
 
-    const [invocationsRes, fixesRes, judgeRes, inventoryAnchorRes, endUserRes, childrenRes, testerSubRes, backendSpansRes, anomaliesRes] = await Promise.all([
+    const [invocationsRes, fixesRes, judgeRes, inventoryAnchorRes, endUserRes, childrenRes, testerSubRes, backendSpansRes, anomaliesRes, projectRes] = await Promise.all([
       db
         .from('llm_invocations')
         .select(
@@ -583,7 +603,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       db
         .from('fix_attempts')
         .select(
-          'id, status, agent, pr_url, pr_number, branch, commit_sha, files_changed, lines_changed, review_passed, check_run_status, check_run_conclusion, pr_state, llm_model, error, started_at, completed_at, created_at, langfuse_trace_id, inventory_action_node_id, spec_validation_warnings',
+          'id, status, agent, pr_url, pr_number, branch, commit_sha, files_changed, lines_changed, review_passed, check_run_status, check_run_conclusion, pr_state, merged_at, llm_model, error, started_at, completed_at, created_at, langfuse_trace_id, inventory_action_node_id, spec_validation_warnings',
         )
         .eq('report_id', reportId)
         .order('created_at', { ascending: false })
@@ -654,6 +674,8 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         .eq('auto_report_id', reportId)
         .order('ts', { ascending: false })
         .limit(5),
+      // The header's Project chip shows the name, not an 8-char uuid prefix.
+      db.from('projects').select('name').eq('id', data.project_id as string).maybeSingle(),
     ]);
 
     const testerSubRow = testerSubRes.data as {
@@ -715,6 +737,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         })(),
         llm_invocations: invocationsRes.data ?? [],
         fix_attempts: fixesRes.data ?? [],
+        project_name: (projectRes.data as { name?: string | null } | null)?.name ?? null,
         judge_eval: judgeRes.data ?? null,
         inventory_action: inventoryAnchorRes.data ?? null,
         reporter_identity: endUserRes.data ?? null,
@@ -914,10 +937,36 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       severity: true,
       category: true,
       component: true,
+      closed_reason: true,
     };
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
       if (allowedFields[key]) updates[key] = value;
+    }
+
+    // Plan 018: why a dismissed report was closed (shown to the reporter) and
+    // an optional message posted to the reporter as a visible developer reply.
+    if (updates.closed_reason !== undefined && updates.closed_reason !== null) {
+      if (typeof updates.closed_reason !== 'string' || !CLOSED_REASONS.has(updates.closed_reason)) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: `closed_reason must be one of: ${[...CLOSED_REASONS].join(', ')}`,
+            },
+          },
+          400,
+        );
+      }
+    }
+    const reporterMessage =
+      typeof body.reporter_message === 'string' ? body.reporter_message.trim() : '';
+    if (reporterMessage.length > 10_000) {
+      return c.json(
+        { ok: false, error: { code: 'VALIDATION_ERROR', message: 'reporter_message is at most 10000 chars' } },
+        400,
+      );
     }
 
     if (typeof updates.status === 'string') {
@@ -932,7 +981,12 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       updates.status = normalized === 'resolved' ? 'fixed' : normalized;
     }
 
-    if (Object.keys(updates).length === 0) {
+    // Leaving `dismissed` clears the reason; a reason only rides on dismissed.
+    if (typeof updates.status === 'string' && updates.status !== 'dismissed' && updates.closed_reason === undefined) {
+      updates.closed_reason = null;
+    }
+
+    if (Object.keys(updates).length === 0 && !reporterMessage) {
       return c.json(
         { ok: false, error: { code: 'NO_FIELDS', message: 'No valid fields to update' } },
         400,
@@ -942,17 +996,50 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // Fetch report before update for reputation tracking
     const { data: report } = await db
       .from('reports')
-      .select('project_id, reporter_token_hash, status')
+      .select('project_id, reporter_token_hash, status, report_group_id')
       .eq('id', reportId)
       .in('project_id', projectIds)
       .single();
 
-    const { error } = await db
-      .from('reports')
-      .update(updates)
-      .eq('id', reportId)
-      .in('project_id', projectIds);
-    if (error) return dbError(c, error);
+    if (typeof updates.closed_reason === 'string') {
+      const targetStatus = (updates.status as string | undefined) ?? report?.status;
+      if (targetStatus !== 'dismissed') {
+        return c.json(
+          { ok: false, error: { code: 'VALIDATION_ERROR', message: 'closed_reason applies only to dismissed reports' } },
+          400,
+        );
+      }
+      // "We'll update you there" must be true: a duplicate close needs a
+      // canonical report for the reporter's updates to follow.
+      if (updates.closed_reason === 'duplicate') {
+        const groupId = report?.report_group_id as string | null | undefined;
+        const { data: group } = groupId
+          ? await db.from('report_groups').select('canonical_report_id').eq('id', groupId).maybeSingle()
+          : { data: null };
+        const canonical = (group as { canonical_report_id?: string | null } | null)?.canonical_report_id ?? null;
+        if (!canonical || canonical === reportId) {
+          return c.json(
+            {
+              ok: false,
+              error: {
+                code: 'VALIDATION_ERROR',
+                message: 'closed_reason "duplicate" needs the report grouped under another canonical report first',
+              },
+            },
+            400,
+          );
+        }
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      const { error } = await db
+        .from('reports')
+        .update(updates)
+        .eq('id', reportId)
+        .in('project_id', projectIds);
+      if (error) return dbError(c, error);
+    }
 
     // Award reputation points on status transitions. Compare on the stored
     // canonical form (resolved is persisted as fixed) so a legacy `resolved`
@@ -968,7 +1055,19 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         previousStatus: report.status,
         newStatus: updates.status as string,
         actor: { kind: 'admin', id: userId },
+        closedReason: (updates.closed_reason as string | null | undefined) ?? null,
       });
+    }
+
+    // The developer's own words go to the reporter verbatim, as a reply.
+    if (report && reporterMessage) {
+      const reply = await postReporterReply(db, {
+        projectId: report.project_id as string,
+        reportId,
+        message: reporterMessage,
+        authorName: 'Developer',
+      });
+      if (reply.status !== 201) return c.json(reply.body, reply.status);
     }
 
     return c.json({ ok: true });

@@ -12,7 +12,6 @@
  *          bottleneck, so the hero never disappears.
  */
 
-import { Link } from 'react-router-dom'
 import { PDCA_STAGES } from '../../lib/pdca'
 import { pluralize } from '../../lib/format'
 import type { PdcaStage, PdcaStageId } from './types'
@@ -72,12 +71,10 @@ export function HeroIntro({ stages, focusStage, projectName, lastReportAt }: Pro
         </div>
 
         <div className="flex flex-col items-stretch gap-1.5 md:items-end shrink-0">
-          <Link to={focus.cta.to}>
-            <Btn size="md">
+          <Btn to={focus.cta.to} size="md">
               {focus.cta.label}
               <span aria-hidden="true"> →</span>
             </Btn>
-          </Link>
           <InlineProof className="text-center md:text-right border-0 bg-transparent px-0 py-0">
             {countCopy(focus)}
           </InlineProof>

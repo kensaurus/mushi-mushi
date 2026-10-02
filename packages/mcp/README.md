@@ -132,7 +132,7 @@ The Mushi backend now exposes the same tool catalog over the **Streamable HTTP**
 
 ### Feature groups (`?features=` / `MUSHI_FEATURES`)
 
-Full catalog is **76 tools** (stdio / `MUSHI_FEATURES=all`). The hosted HTTP
+Full catalog is **80 tools** (stdio / `MUSHI_FEATURES=all`). The hosted HTTP
 endpoint exposes a leaner subset filtered by feature groups (see
 `mcp-hosted-tool-manifest.json`). New installs now default to the lean
 `triage,fixes,inventory,setup,docs` set automatically (stdio: when
@@ -399,7 +399,7 @@ Spawns `dist/index.js` with a dummy unreachable endpoint and confirms it adverti
 pnpm --filter @mushi-mushi/mcp build
 pnpm --filter @mushi-mushi/mcp test:smoke
 # OK; prints live tool/resource/prompt counts from the catalog
-# (see packages/mcp/src/catalog.ts — currently 76 tools / 8 resources / 4 prompts)
+# (see packages/mcp/src/catalog.ts — currently 80 tools / 8 resources / 4 prompts)
 ```
 
 ### Layer 3; Full localhost E2E (real binary + real backend behaviour)
@@ -493,4 +493,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 59 edge functions · 376 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 60 edge functions · 383 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

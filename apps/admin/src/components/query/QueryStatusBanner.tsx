@@ -3,7 +3,6 @@
  * PURPOSE: NL query health — errors, freshness, saved prompts, schema drift.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { QueryStats, QueryTabId } from './types'
@@ -24,9 +23,7 @@ export function QueryStatusBanner({ stats, onTab, onViewErrors }: Props) {
         title="No project selected"
         subtitle="Queries are scoped per project — pick an app in the header switcher before asking questions."
         action={
-          <Link to="/projects">
-            <Btn size="sm" variant="ghost">Go to Projects</Btn>
-          </Link>
+          <Btn to="/projects" size="sm" variant="ghost">Go to Projects</Btn>
         }
       />
     )
@@ -39,9 +36,7 @@ export function QueryStatusBanner({ stats, onTab, onViewErrors }: Props) {
         title="Query history schema pending"
         subtitle="Saved pins and team queries need a DB migration — POST /query still works; history sidebar may be empty."
         action={
-          <Link to="/health">
-            <Btn size="sm" variant="ghost">Check migrations</Btn>
-          </Link>
+          <Btn to="/health" size="sm" variant="ghost">Check migrations</Btn>
         }
       />
     )

@@ -96,15 +96,12 @@ export function InboxOverviewBody({
             text={`${stats.openActions} open action${stats.openActions === 1 ? '' : 's'}`}
             hint="Summarized in the status banner above — use the Actions tab for the full priority queue."
           />
+          {/* The banner above already carries the one "do the top action"
+              button; repeating it here made three equal CTAs to one place. */}
           <ActionPillRow>
-            <ActionPill tone="brand" onClick={() => onTab('actions')}>
+            <ActionPill tone="neutral" onClick={() => onTab('actions')}>
               {actions.queue ?? 'View full queue'} →
             </ActionPill>
-            {stats.topPriorityTo ? (
-              <ActionPill to={stats.topPriorityTo} tone="neutral">
-                {actions.takeAction ?? 'Take top action'}
-              </ActionPill>
-            ) : null}
           </ActionPillRow>
           {openCards.length > 0 ? (
             <section aria-label="Open actions preview" className="space-y-2 pt-1">

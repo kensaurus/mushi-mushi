@@ -4,6 +4,7 @@
  */
 
 import { hasPageOwnedHero, shouldSkipLayoutHero } from './pageHeroOwnership'
+import { shouldShowPipelineRibbon } from './pipelineRibbonVisibility'
 
 /** Layout-injected PageHero fallback — off when the page owns loop chrome. */
 export function shouldShowLayoutPageHero(pathname: string, postureHasStatusBanner = false): boolean {
@@ -17,10 +18,13 @@ export function shouldDefaultCollapsePipelineRibbon(pathname: string): boolean {
 }
 
 /**
- * Coachmark explains Workspace pipeline vs page hero — obsolete on Dashboard
- * where PdcaFlow is the primary loop surface.
+ * Coachmark explains Workspace pipeline vs page hero, so it only makes sense
+ * where the pipeline ribbon actually renders (advanced mode, ribbon routes)
+ * next to a page-owned hero. Obsolete on Dashboard, where PdcaFlow is the
+ * primary loop surface.
  */
-export function shouldShowDavCoachmark(pathname: string): boolean {
+export function shouldShowDavCoachmark(pathname: string, ribbonVisible = shouldShowPipelineRibbon(pathname)): boolean {
   if (pathname === '/dashboard') return false
+  if (!ribbonVisible) return false
   return hasPageOwnedHero(pathname)
 }

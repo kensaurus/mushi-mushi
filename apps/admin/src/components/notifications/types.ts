@@ -57,7 +57,7 @@ export const EMPTY_NOTIFICATIONS_STATS: NotificationStats = {
   topPriorityTo: null,
 }
 
-export type NotificationTabId = 'overview' | 'inbox' | 'setup'
+export type NotificationTabId = 'overview' | 'inbox' | 'outbox' | 'setup'
 
 export const TYPE_BADGE: Record<string, string> = {
   classified: CHIP_TONE.infoSubtle,

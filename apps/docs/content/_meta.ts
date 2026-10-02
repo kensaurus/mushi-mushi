@@ -52,6 +52,7 @@ export default {
   '-- Reference': { type: 'separator', title: 'Reference' },
   changelog: { title: 'Changelog', theme: { toc: false } },
   roadmap: 'Roadmap',
+  open: { title: 'Open metrics', theme: { toc: false } },
   // Conversion surface — same sidebar-off treatment as the landing (see `index`).
   pricing: { title: 'Pricing', theme: { sidebar: false } },
   legal: 'Legal',

@@ -1,7 +1,7 @@
 import { getServiceClient } from './db.ts'
 import { createTrace } from './observability.ts'
 import { log } from './logger.ts'
-import { resolveLlmKey } from './byok.ts'
+import { markKeyStatus, resolveLlmKey } from './byok.ts'
 
 const embLog = log.child('embeddings')
 
@@ -24,6 +24,8 @@ interface ResolvedOpenAi {
   key: string
   baseUrl: string
   source: 'byok' | 'env'
+  /** byok_keys row id; undefined for the legacy project_settings ref and env. */
+  keyId?: string
 }
 
 /**
@@ -115,12 +117,17 @@ async function resolveOpenAi(projectId?: string): Promise<ResolvedOpenAi | null>
           key: r.key,
           baseUrl: normalizeOpenAiBaseUrl(r.baseUrl),
           source: r.source,
+          keyId: r.keyId,
         }
       }
     } catch (err) {
       embLog.warn('BYOK OpenAI resolve failed; falling back to env', { projectId, err: String(err).slice(0, 120) })
     }
   }
+  return resolveEnvOpenAi()
+}
+
+function resolveEnvOpenAi(): ResolvedOpenAi | null {
   const envKey = Deno.env.get('OPENAI_API_KEY')
   if (!envKey) return null
   return {
@@ -128,6 +135,41 @@ async function resolveOpenAi(projectId?: string): Promise<ResolvedOpenAi | null>
     baseUrl: normalizeOpenAiBaseUrl(Deno.env.get('OPENAI_BASE_URL') ?? 'https://api.openai.com'),
     source: 'env',
   }
+}
+
+/**
+ * A project key the provider rejects (401/403) is retired the way
+ * withLlmFailover retires LLM keys, and the call fails over to the platform
+ * key once. Without this a revoked BYOK key broke every RAG lookup until a
+ * health probe happened to re-test it (MUSHI-MUSHI-SERVER-1N, glot.it).
+ * Returns the fallback credential, or null when there is none.
+ */
+async function failOverRejectedKey(
+  projectId: string | undefined,
+  resolved: ResolvedOpenAi,
+  status: number,
+  body: string,
+): Promise<ResolvedOpenAi | null> {
+  if (resolved.source !== 'byok' || !projectId || (status !== 401 && status !== 403)) return null
+  const reason = `Embedding API ${status} from ${hostOf(resolved.baseUrl)}: ${body.slice(0, 200)}`
+  const db = getServiceClient()
+  if (resolved.keyId) {
+    await markKeyStatus(db, resolved.keyId, 'auth_failed', reason)
+  } else {
+    const { error } = await db
+      .from('project_settings')
+      .update({ byok_openai_test_status: 'error_auth' })
+      .eq('project_id', projectId)
+    if (error) embLog.warn('Failed to retire legacy BYOK OpenAI key', { projectId, error: error.message })
+  }
+  const fallback = await resolveOpenAi(projectId)
+  if (!fallback || fallback.key === resolved.key) return null
+  embLog.warn('BYOK OpenAI key rejected; retired it and failed over', {
+    projectId,
+    status,
+    fallbackSource: fallback.source,
+  })
+  return fallback
 }
 
 /**
@@ -236,8 +278,9 @@ export async function createEmbedding(
     ? { model: modelOrOpts, ...(legacyOpts ?? {}) }
     : { ...(modelOrOpts ?? {}) }
   const embeddingModel = opts.model ?? DEFAULT_MODEL
-  const resolved = await resolveOpenAi(opts.projectId)
+  let resolved = await resolveOpenAi(opts.projectId)
   if (!resolved) throw new Error('OPENAI_API_KEY not set (and no BYOK key configured)')
+  let failedOver = false
 
   // Retry loop: 429 (rate-limited) and 5xx (transient upstream) get retried
   // with backoff; everything else (4xx auth/quota, 200-OK soft-failures)
@@ -266,6 +309,15 @@ export async function createEmbedding(
 
     const body = await response.text()
     lastError = `${response.status}: ${body.slice(0, 200)}`
+    if (!failedOver) {
+      const fallback = await failOverRejectedKey(opts.projectId, resolved, response.status, body)
+      if (fallback) {
+        resolved = fallback
+        failedOver = true
+        attempt--
+        continue
+      }
+    }
     const retryable = response.status === 429 || (response.status >= 500 && response.status < 600)
     if (!retryable || attempt === MAX_RETRIES) {
       throw new Error(
@@ -337,8 +389,9 @@ export async function createEmbeddingBatch(
     ? { model: modelOrOpts, ...(legacyOpts ?? {}) }
     : { ...(modelOrOpts ?? {}) }
   const embeddingModel = opts.model ?? DEFAULT_MODEL
-  const resolved = await resolveOpenAi(opts.projectId)
+  let resolved = await resolveOpenAi(opts.projectId)
   if (!resolved) throw new Error('OPENAI_API_KEY not set (and no BYOK key configured)')
+  let failedOver = false
 
   let lastError = ''
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -362,10 +415,11 @@ export async function createEmbeddingBatch(
       const ordered = rows.every((r) => typeof r.index === 'number')
         ? [...rows].sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
         : rows
+      const host = hostOf(resolved.baseUrl)
       const embeddings = ordered.map((r, i) => {
         if (!r.embedding) {
           throw new Error(
-            `No embedding for batch index ${i} from ${hostOf(resolved.baseUrl)} ` +
+            `No embedding for batch index ${i} from ${host} ` +
             `for model ${embeddingModel}`,
           )
         }
@@ -376,6 +430,15 @@ export async function createEmbeddingBatch(
 
     const body = await response.text()
     lastError = `${response.status}: ${body.slice(0, 200)}`
+    if (!failedOver) {
+      const fallback = await failOverRejectedKey(opts.projectId, resolved, response.status, body)
+      if (fallback) {
+        resolved = fallback
+        failedOver = true
+        attempt--
+        continue
+      }
+    }
     const retryable = response.status === 429 || (response.status >= 500 && response.status < 600)
     if (!retryable || attempt === MAX_RETRIES) {
       throw new Error(

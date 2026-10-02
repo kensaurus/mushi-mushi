@@ -43,7 +43,7 @@ import { ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
 import { SdkInstallCard } from '../SdkInstallCard'
 import { ClientConnectButton } from '../ClientConnectButton'
 import { startFirstRunTour } from '../FirstRunTour'
-import { reportDiagnosisViewed } from './diagnosisViewed'
+import { recordDiagnosisViewed, type DiagnosisSurface } from '../../lib/diagnosisViewed'
 
 const CURSOR_SETUP_COMMAND = 'npx mushi-mushi setup --ide cursor'
 
@@ -51,11 +51,13 @@ const CURSOR_SETUP_COMMAND = 'npx mushi-mushi setup --ide cursor'
 
 interface UseFirstDiagnosisOptions {
   projectId: string
+  /** Where this machine renders — the `surface` of `diagnosis_viewed`. */
+  surface: DiagnosisSurface
   /** Fires once per diagnosed report — callers refetch setup / lists. */
   onDiagnosed?: (reportId: string) => void
 }
 
-function useFirstDiagnosis({ projectId, onDiagnosed }: UseFirstDiagnosisOptions) {
+function useFirstDiagnosis({ projectId, surface, onDiagnosed }: UseFirstDiagnosisOptions) {
   const [state, dispatch] = useReducer(reduceFirstDiagnosis, FIRST_DIAGNOSIS_INITIAL)
   const { online } = useOnlineStatus()
   const trackedRef = useRef<string | null>(null)
@@ -120,19 +122,19 @@ function useFirstDiagnosis({ projectId, onDiagnosed }: UseFirstDiagnosisOptions)
   }, [state])
 
   // The inline diagnosis IS the report being opened — count it as the
-  // Habit event, record the activation step `diagnosis_viewed` (once per
-  // project, server-deduped) and let the page refetch (setup steps, report
-  // lists).
+  // Habit event, record `diagnosis_viewed` (the report is always the sample
+  // test report here; lib/diagnosisViewed.ts owns the dedup) and let the page
+  // refetch (setup steps, report lists).
   useEffect(() => {
     if (state.phase !== 'diagnosed') return
     if (trackedRef.current === state.reportId) return
     trackedRef.current = state.reportId
     trackSelf('report_opened', { report_id: state.reportId, project_id: projectId, via: 'first_diagnosis' })
-    reportDiagnosisViewed(projectId, state.reportId)
+    recordDiagnosisViewed({ projectId, reportId: state.reportId, surface, sample: true })
     invalidateApiCache('/v1/admin/reports')
     invalidateApiCache('/v1/admin/setup')
     onDiagnosedRef.current?.(state.reportId)
-  }, [state, projectId])
+  }, [state, projectId, surface])
 
   const keepWaiting = useCallback(() => dispatch({ type: 'keep_waiting', at: Date.now() }), [])
   const retryConnection = useCallback(() => dispatch({ type: 'back_online', at: Date.now() }), [])
@@ -301,7 +303,11 @@ export function FirstDiagnosisScreen({
   apiKey,
   onDiagnosed,
 }: FirstDiagnosisScreenProps) {
-  const { state, send, keepWaiting, retryConnection } = useFirstDiagnosis({ projectId, onDiagnosed })
+  const { state, send, keepWaiting, retryConnection } = useFirstDiagnosis({
+    projectId,
+    surface: 'onboarding',
+    onDiagnosed,
+  })
   const [showInstall, setShowInstall] = useState(false)
   const diagnosed = state.phase === 'diagnosed'
   const busy = state.phase === 'sending' || isPolling(state)
@@ -423,13 +429,21 @@ export function FirstDiagnosisScreen({
 interface FirstDiagnosisInlineProps {
   projectId: string
   projectName: string
+  /** The page embedding the card — reported as `diagnosis_viewed.surface`. */
+  surface: Extract<DiagnosisSurface, 'overview' | 'reports'>
   /** Called once the diagnosis renders — refetch the surrounding list. */
   onDiagnosed?: (reportId: string) => void
   className?: string
 }
 
-export function FirstDiagnosisInline({ projectId, projectName, onDiagnosed, className = '' }: FirstDiagnosisInlineProps) {
-  const { state, send, keepWaiting, retryConnection } = useFirstDiagnosis({ projectId, onDiagnosed })
+export function FirstDiagnosisInline({
+  projectId,
+  projectName,
+  surface,
+  onDiagnosed,
+  className = '',
+}: FirstDiagnosisInlineProps) {
+  const { state, send, keepWaiting, retryConnection } = useFirstDiagnosis({ projectId, surface, onDiagnosed })
   const diagnosed = state.phase === 'diagnosed'
   const busy = state.phase === 'sending' || isPolling(state)
 

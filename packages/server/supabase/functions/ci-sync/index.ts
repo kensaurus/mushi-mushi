@@ -13,6 +13,11 @@
  *             (20 rows per tick) to keep the function well under the 150 s
  *             runtime limit and avoid GitHub rate-limit spikes.
  *
+ *          Both paths also read the PR itself: merged → finalizeFixMerge,
+ *          closed unmerged → finalizeFixClosedUnmerged (attempt pr_state
+ *          'closed', report back out of 'fixing', timeline event). Attempts
+ *          whose PR already ended drop out of the sweep.
+ *
  *          Both paths go through `fetchLatestCheckRun` which collapses the
  *          matrix of check-runs into a single worst-wins conclusion, so the
  *          PDCA receipt's "Check" stage is honest (red stays red even if a
@@ -30,10 +35,14 @@ import { withSentry } from '../_shared/sentry.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import {
   fetchLatestCheckRun,
+  fetchPullRequest,
   parseGithubRepoUrl,
   resolveProjectGithubToken,
   type CheckRunSnapshot,
+  type GithubRepoRef,
 } from '../_shared/github.ts'
+import { finalizeFixClosedUnmerged, finalizeFixMerge } from '../_shared/fix-merge.ts'
+import { prLifecycleFrom, type PrLifecycle } from '../_shared/fix-loop-status.ts'
 
 const log = rootLog.child('ci-sync')
 const app = new Hono()
@@ -41,17 +50,56 @@ const app = new Hono()
 interface FixAttemptRow {
   id: string
   project_id: string
+  report_id: string
+  agent: string | null
+  branch: string | null
   commit_sha: string | null
   pr_number: number | null
   pr_url: string | null
+  pr_state: PrLifecycle | null
+  merged_at: string | null
   repo_id: string | null
+}
+
+const ATTEMPT_COLUMNS =
+  'id, project_id, report_id, agent, branch, commit_sha, pr_number, pr_url, pr_state, merged_at, repo_id'
+
+/**
+ * The webhook is the fast path for PR lifecycle, but it drops (App not
+ * subscribed, URL unregistered). Without this poll a PR closed unmerged left
+ * the attempt "awaiting merge" and the report in 'fixing' forever.
+ */
+async function syncPrLifecycle(
+  db: ReturnType<typeof getServiceClient>,
+  token: string,
+  ref: GithubRepoRef,
+  attempt: FixAttemptRow,
+): Promise<PrLifecycle | null> {
+  const prNumber = attempt.pr_number ?? Number(attempt.pr_url?.match(/\/pull\/(\d+)/)?.[1] ?? NaN)
+  if (!Number.isFinite(prNumber)) return null
+  const pr = await fetchPullRequest(token, ref, prNumber)
+  if (!pr) return null
+  const state = prLifecycleFrom(pr)
+  if (state === 'merged') {
+    if (!attempt.merged_at) {
+      await finalizeFixMerge(db, attempt, {
+        prUrl: attempt.pr_url!,
+        prNumber,
+        repository: `${ref.owner}/${ref.repo}`,
+      })
+    }
+  } else if (state === 'closed') {
+    await finalizeFixClosedUnmerged(db, attempt, { prNumber, closedAt: pr.closedAt ?? null, source: 'ci_sync' })
+  } else if (attempt.pr_state !== state) {
+    await db.from('fix_attempts').update({ pr_state: state }).eq('id', attempt.id)
+  }
+  return state
 }
 
 async function syncOne(
   db: ReturnType<typeof getServiceClient>,
   attempt: FixAttemptRow,
-): Promise<{ ok: boolean; reason?: string; snapshot?: CheckRunSnapshot }> {
-  if (!attempt.commit_sha) return { ok: false, reason: 'no_commit_sha' }
+): Promise<{ ok: boolean; reason?: string; snapshot?: CheckRunSnapshot; prState?: PrLifecycle | null }> {
   if (!attempt.pr_url) return { ok: false, reason: 'no_pr_url' }
 
   const ref = parseGithubRepoUrl(attempt.pr_url.split('/pull/')[0])
@@ -70,19 +118,32 @@ async function syncOne(
   const token = await resolveProjectGithubToken(db, attempt.project_id, installationId)
   if (!token) return { ok: false, reason: 'no_github_token' }
 
+  // Separate try: a failed PR read (403 / 5xx) must not also skip the
+  // check-run backfill below, which predates the lifecycle sync.
+  let prState: PrLifecycle | null = null
   try {
+    prState = await syncPrLifecycle(db, token, ref, attempt)
+  } catch (err) {
+    log.warn('pull request fetch failed', {
+      attemptId: attempt.id,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+
+  try {
+    if (!attempt.commit_sha) return { ok: prState != null, reason: 'no_commit_sha', prState }
     const snapshot = await fetchLatestCheckRun(token, ref, attempt.commit_sha)
-    if (!snapshot) return { ok: false, reason: 'check_runs_404' }
+    if (!snapshot) return { ok: prState != null, reason: 'check_runs_404', prState }
     await db.from('fix_attempts').update({
       check_run_status: snapshot.status,
       check_run_conclusion: snapshot.conclusion,
       check_run_updated_at: new Date().toISOString(),
     }).eq('id', attempt.id)
-    return { ok: true, snapshot }
+    return { ok: true, snapshot, prState }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     log.warn('check-runs fetch failed', { attemptId: attempt.id, error: msg })
-    return { ok: false, reason: msg }
+    return { ok: false, reason: msg, prState }
   }
 }
 
@@ -103,7 +164,7 @@ app.post('/ci-sync', async (c) => {
   if (body.fix_attempt_id) {
     const { data: attempt, error } = await db
       .from('fix_attempts')
-      .select('id, project_id, commit_sha, pr_number, pr_url, repo_id')
+      .select(ATTEMPT_COLUMNS)
       .eq('id', body.fix_attempt_id)
       .maybeSingle()
     if (error) {
@@ -122,9 +183,11 @@ app.post('/ci-sync', async (c) => {
   // hourly refreshes of already-tracked PRs.
   const { data: neverSynced } = await db
     .from('fix_attempts')
-    .select('id, project_id, commit_sha, pr_number, pr_url, repo_id')
+    .select(ATTEMPT_COLUMNS)
     .eq('status', 'completed')
     .not('pr_number', 'is', null)
+    .is('merged_at', null)
+    .or('pr_state.is.null,pr_state.in.(open,draft)')
     .is('check_run_updated_at', null)
     .limit(batchLimit)
 
@@ -133,16 +196,18 @@ app.post('/ci-sync', async (c) => {
     const remaining = batchLimit - rows.length
     const { data: stale } = await db
       .from('fix_attempts')
-      .select('id, project_id, commit_sha, pr_number, pr_url, repo_id')
+      .select(ATTEMPT_COLUMNS)
       .eq('status', 'completed')
       .not('pr_number', 'is', null)
+      .is('merged_at', null)
+      .or('pr_state.is.null,pr_state.in.(open,draft)')
       .lt('check_run_updated_at', cutoff)
       .order('check_run_updated_at', { ascending: true, nullsFirst: true })
       .limit(remaining)
     rows = rows.concat((stale ?? []) as FixAttemptRow[])
   }
 
-  const results: Array<{ id: string; ok: boolean; reason?: string; conclusion?: string | null }> = []
+  const results: Array<{ id: string; ok: boolean; reason?: string; conclusion?: string | null; prState?: PrLifecycle | null }> = []
   for (const attempt of rows) {
     const r = await syncOne(db, attempt)
     results.push({
@@ -150,6 +215,7 @@ app.post('/ci-sync', async (c) => {
       ok: r.ok,
       reason: r.reason,
       conclusion: r.snapshot?.conclusion ?? null,
+      prState: r.prState ?? null,
     })
   }
   log.info('ci-sync sweep complete', { processed: results.length, succeeded: results.filter((r) => r.ok).length })

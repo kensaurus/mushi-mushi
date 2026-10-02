@@ -3,7 +3,6 @@
  * PURPOSE: Knowledge graph posture — ingest, empty, fragile, regressions, clear.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
@@ -39,9 +38,7 @@ export function GraphStatusBanner({
             : 'Create a project and ingest reports before the map can populate.'
         }
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
-          </Link>
+          <Btn to="/onboarding" size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
         }
       />
     )
@@ -61,9 +58,7 @@ export function GraphStatusBanner({
             : 'The graph seeds automatically as the classifier links reports to components and pages.')
         }
         action={
-          <Link to={stats.topPriorityTo ?? '/onboarding?tab=verify'}>
-            <Btn size="sm" variant="ghost">{actions.verify ?? 'Send test report'}</Btn>
-          </Link>
+          <Btn to={stats.topPriorityTo ?? '/onboarding?tab=verify'} size="sm" variant="ghost">{actions.verify ?? 'Send test report'}</Btn>
         }
       />
     )
@@ -77,9 +72,7 @@ export function GraphStatusBanner({
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.reports ?? 'Open Reports'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.reports ?? 'Open Reports'}</Btn>
           ) : null
         }
       />
@@ -98,9 +91,7 @@ export function GraphStatusBanner({
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.explore ?? 'Open map'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.explore ?? 'Open map'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('explore')}>
               {actions.explore ?? 'Open map'}
@@ -123,9 +114,7 @@ export function GraphStatusBanner({
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.regressions ?? 'View regressions'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.regressions ?? 'View regressions'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('explore')}>
               {actions.regressions ?? 'View regressions'}
@@ -159,9 +148,7 @@ export function GraphStatusBanner({
             {actions.refresh ?? 'Refresh'}
           </Btn>
         ) : stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">{actions.explore ?? 'Explore map'}</Btn>
-          </Link>
+          <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.explore ?? 'Explore map'}</Btn>
         ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('explore')}>
             {actions.explore ?? 'Explore map'}

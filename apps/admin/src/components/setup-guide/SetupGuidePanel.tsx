@@ -228,7 +228,9 @@ function SetupGuideRow({ step, onNavigate }: { step: SetupGuideStep; onNavigate?
               <span className={`rounded-full px-1.5 py-px text-3xs font-medium ${style.chip}`}>
                 {step.stateLabel}
               </span>
-              {!step.required && step.state !== 'done' && (
+              {/* Skip when the state chip already says it, or the row's
+                  accessible name reads "Optional optional". */}
+              {!step.required && step.state !== 'done' && step.stateLabel !== 'Optional' && (
                 <span className="text-3xs text-fg-faint">optional</span>
               )}
             </span>

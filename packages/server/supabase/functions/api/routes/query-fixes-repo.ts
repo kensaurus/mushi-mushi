@@ -40,8 +40,16 @@ import {
   type MergeMethod,
 } from '../../_shared/fix-merge.ts';
 import {
+  mergeStoredFixTimeline,
+  synthesizeFixTimeline,
+  type FixTimelineEvent,
+} from '../../_shared/fix-timeline.ts';
+import { fixFailureBucket, isFixCountedFailed } from '../../_shared/fix-loop-status.ts';
+import {
+  parseGithubRepoUrl,
   resolveProjectGithubToken,
 } from '../../_shared/github.ts';
+import { resolveBranchForConnect } from '../../_shared/github-branch.ts';
 import { dbError, ownedProjectIds, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds, callerCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
@@ -483,7 +491,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
 
     const [attemptsRes, integrationRes, codebaseRes, inflightRes] = await Promise.all([
       db.from('fix_attempts')
-        .select('id, status, pr_url, check_run_conclusion, failure_category, spec_validation_warnings')
+        .select('id, status, pr_url, pr_state, merged_at, check_run_conclusion, failure_category, spec_validation_warnings')
         .eq('project_id', pid)
         .gte('created_at', since.toISOString())
         .limit(500),
@@ -504,10 +512,14 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     ])
 
     const attempts = attemptsRes.data ?? []
-    const failed = attempts.filter((a) => a.status === 'failed').length
+    // `failed` matches the console's "Failed / skipped" bucket: failed or
+    // skipped attempts plus PRs that went red on CI or closed unmerged.
+    const failed = attempts.filter((a) => isFixCountedFailed(a)).length
     const inProgress = attempts.filter((a) => ['queued', 'running', 'pending'].includes(a.status)).length
-    const completed = attempts.filter((a) => a.status === 'completed').length
-    const prsOpen = attempts.filter((a) => a.pr_url && a.status === 'completed').length
+    const completed = attempts.filter((a) => a.status === 'completed' && !isFixCountedFailed(a)).length
+    const prsOpen = attempts.filter(
+      (a) => a.pr_url && a.status === 'completed' && !a.merged_at && a.pr_state !== 'merged' && !isFixCountedFailed(a),
+    ).length
     const prsCiPassing = attempts.filter((a) => a.check_run_conclusion === 'success').length
     const specWarnings = attempts.filter((a) => {
       const w = a.spec_validation_warnings as unknown
@@ -516,8 +528,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
 
     const failureBuckets = new Map<string, number>()
     for (const a of attempts) {
-      if (a.status !== 'failed') continue
-      const cat = typeof a.failure_category === 'string' && a.failure_category ? a.failure_category : 'unknown'
+      if (!isFixCountedFailed(a)) continue
+      const cat = fixFailureBucket(a)
       failureBuckets.set(cat, (failureBuckets.get(cat) ?? 0) + 1)
     }
     const topEntry = [...failureBuckets.entries()].sort((a, b) => b[1] - a[1])[0]
@@ -694,7 +706,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const { data: rows } = await db
       .from('fix_attempts')
       .select(
-        'id, status, pr_url, pr_number, check_run_conclusion, started_at, completed_at, created_at, spec_validation_warnings, failure_category',
+        'id, status, pr_url, pr_number, pr_state, merged_at, check_run_conclusion, started_at, completed_at, created_at, spec_validation_warnings, failure_category',
       )
       .in('project_id', projectIds)
       .gte('created_at', since.toISOString())
@@ -702,8 +714,10 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       .limit(500);
 
     const list = rows ?? [];
-    const completed = list.filter((r) => r.status === 'completed').length;
-    const failed = list.filter((r) => r.status === 'failed').length;
+    // Same "failed" rule as /fixes/stats and the console's Failed / skipped
+    // filter (isFixCountedFailed): a red-CI or closed-unmerged PR is a failure.
+    const completed = list.filter((r) => r.status === 'completed' && !isFixCountedFailed(r)).length;
+    const failed = list.filter((r) => isFixCountedFailed(r)).length;
     const inProgress = list.filter(
       (r) => r.status === 'queued' || r.status === 'running' || r.status === 'pending',
     ).length;
@@ -711,7 +725,9 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // cancelled | skipped | timed_out | action_required | stale — there is no
     // `merged` value, so the old `!== 'merged'` filter was a no-op. Use the
     // attempt's own status as the "open" gate; merge state lives elsewhere.
-    const prsOpen = list.filter((r) => r.pr_url && r.status === 'completed').length;
+    const prsOpen = list.filter(
+      (r) => r.pr_url && r.status === 'completed' && !r.merged_at && r.pr_state !== 'merged' && !isFixCountedFailed(r),
+    ).length;
     const prsCiPassing = list.filter((r) => r.check_run_conclusion === 'success').length;
     // Loop-closure: count fix_attempts whose validateAgainstSpec gate raised
     // at least one soft warning over the trailing 30d. Surfaced as a tile
@@ -729,11 +745,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // Sorted desc by count so the dominant cause is always first.
     const failureBucketMap = new Map<string, number>();
     for (const r of list) {
-      if (r.status !== 'failed') continue;
-      const cat =
-        typeof r.failure_category === 'string' && r.failure_category.length > 0
-          ? r.failure_category
-          : 'unknown';
+      if (!isFixCountedFailed(r)) continue;
+      const cat = fixFailureBucket(r);
       failureBucketMap.set(cat, (failureBucketMap.get(cat) ?? 0) + 1);
     }
     const failureBreakdown = [...failureBucketMap.entries()]
@@ -752,8 +765,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       const bucket = byDay.get(k);
       if (!bucket) continue;
       bucket.total++;
-      if (r.status === 'completed') bucket.completed++;
-      if (r.status === 'failed') bucket.failed++;
+      if (isFixCountedFailed(r)) bucket.failed++;
+      else if (r.status === 'completed') bucket.completed++;
     }
 
     return c.json({
@@ -848,7 +861,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
 
       const { data: refreshed } = await db
         .from('fix_attempts')
-        .select('check_run_status, check_run_conclusion, check_run_updated_at')
+        .select('check_run_status, check_run_conclusion, check_run_updated_at, pr_state, merged_at')
         .eq('id', fixId)
         .maybeSingle();
 
@@ -1019,7 +1032,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
 
     const FIX_ATTEMPT_COLUMNS =
-      'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, lines_changed, files_changed, llm_model, started_at, completed_at, created_at, check_run_status, check_run_conclusion, check_run_updated_at, error';
+      'id, report_id, project_id, repo_id, agent, branch, pr_url, pr_number, pr_state, merged_at, commit_sha, status, lines_changed, files_changed, llm_model, started_at, completed_at, created_at, check_run_status, check_run_conclusion, check_run_updated_at, error';
     let { data: fix } = await db
       .from('fix_attempts')
       .select(FIX_ATTEMPT_COLUMNS)
@@ -1077,178 +1090,42 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           .eq('fix_attempt_id', fix.id)
           .maybeSingle();
 
-    type EventKind =
-      | 'dispatched'
-      | 'started'
-      | 'branch'
-      | 'commit'
-      | 'pr_opened'
-      | 'ci_started'
-      | 'ci_resolved'
-      | 'pr_state_changed'
-      | 'completed'
-      | 'failed';
-    interface TimelineEvent {
-      kind: EventKind;
-      at: string;
-      label: string;
-      detail?: string | null;
-      status?: 'ok' | 'fail' | 'pending' | null;
-    }
-
     // Preferred source: the append-only `fix_events` stream written by the
-    // GitHub webhook handler (push / pull_request / check_run). When we have
-    // any rows for this attempt we use them verbatim so multi-commit /
-    // multi-CI timelines render faithfully. Falls back to the synthesised
-    // stream below for pre-`fix_events` attempts.
+    // GitHub webhook handler (push / pull_request / check_run) and ci-sync.
+    // Stored rows win per kind; stages they lack are filled from the attempt
+    // columns (see _shared/fix-timeline.ts).
     const { data: storedEvents } = await db
       .from('fix_events')
       .select('kind, status, label, detail, at')
-      .eq('fix_attempt_id', fixId)
+      .eq('fix_attempt_id', fix.id)
       .order('at', { ascending: true })
       .limit(200);
 
+    // The graph's base lane: the repo the attempt targeted, else the
+    // project's primary repo. Never a hard-coded 'main' — this repo is 'master'.
+    const repoQuery = db.from('project_repos').select('default_branch');
+    const { data: repoRow } = fix.repo_id
+      ? await repoQuery.eq('id', fix.repo_id).maybeSingle()
+      : await repoQuery.eq('project_id', fix.project_id).eq('is_primary', true).limit(1).maybeSingle();
+    const baseBranch = (repoRow?.default_branch as string | null | undefined) ?? null;
+
     if (storedEvents && storedEvents.length > 0) {
-      const events = storedEvents.map((e) => ({
-        kind: e.kind as EventKind,
-        at: e.at,
-        label: e.label,
-        detail: e.detail ?? undefined,
-        status: (e.status ?? undefined) as 'ok' | 'fail' | 'pending' | undefined,
-      }));
-      // Always prepend the dispatch/start events so the graph's top always
-      // shows the "how we got here" context even if the webhook stream starts
-      // mid-way through (e.g. feature was enabled after the fix ran).
-      const leading: TimelineEvent[] = [];
-      if (dispatch) {
-        leading.push({
-          kind: 'dispatched',
-          at: dispatch.created_at,
-          label: 'Dispatch requested',
-          status: 'pending',
-        });
-        if (dispatch.started_at) {
-          leading.push({
-            kind: 'started',
-            at: dispatch.started_at,
-            label: 'Worker started',
-            status: 'pending',
-          });
-        }
-      } else if (fix.created_at) {
-        leading.push({
-          kind: 'dispatched',
-          at: fix.created_at,
-          label: 'Fix attempt created',
-          status: 'pending',
-        });
-      }
-      const combined = [...leading, ...events].sort(
-        (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime(),
+      const events = mergeStoredFixTimeline(
+        dispatch ?? null,
+        fix,
+        storedEvents.map((e) => ({
+          kind: e.kind as FixTimelineEvent['kind'],
+          at: e.at,
+          label: e.label,
+          detail: e.detail ?? undefined,
+          status: (e.status ?? undefined) as FixTimelineEvent['status'],
+        })),
       );
-      return c.json({ ok: true, data: { fix, dispatch, events: combined, source: 'fix_events' } });
+      return c.json({ ok: true, data: { fix, dispatch, events, base_branch: baseBranch, source: 'fix_events' } });
     }
 
-    const events: TimelineEvent[] = [];
-
-    if (dispatch) {
-      events.push({
-        kind: 'dispatched',
-        at: dispatch.created_at,
-        label: 'Dispatch requested',
-        status: 'pending',
-      });
-      if (dispatch.started_at) {
-        events.push({
-          kind: 'started',
-          at: dispatch.started_at,
-          label: 'Worker started',
-          status: 'pending',
-        });
-      }
-    } else if (fix.created_at) {
-      events.push({
-        kind: 'dispatched',
-        at: fix.created_at,
-        label: 'Fix attempt created',
-        status: 'pending',
-      });
-    }
-
-    if (fix.started_at) {
-      events.push({
-        kind: 'started',
-        at: fix.started_at,
-        label: 'Agent started',
-        detail: fix.llm_model,
-        status: 'pending',
-      });
-    }
-    if (fix.branch) {
-      events.push({
-        kind: 'branch',
-        at: fix.started_at ?? fix.created_at,
-        label: 'Branch created',
-        detail: fix.branch,
-        status: 'ok',
-      });
-    }
-    if (fix.commit_sha) {
-      events.push({
-        kind: 'commit',
-        at: fix.completed_at ?? fix.started_at ?? fix.created_at,
-        label: `Commit ${fix.commit_sha.slice(0, 7)}`,
-        detail: `${fix.files_changed?.length ?? 0} files · ${fix.lines_changed ?? 0} lines`,
-        status: 'ok',
-      });
-    }
-    if (fix.pr_url) {
-      events.push({
-        kind: 'pr_opened',
-        at: fix.completed_at ?? fix.started_at ?? fix.created_at,
-        label: `PR opened${fix.pr_number ? ` #${fix.pr_number}` : ''}`,
-        detail: fix.pr_url,
-        status: 'ok',
-      });
-    }
-    if (fix.check_run_status || fix.check_run_conclusion) {
-      const conclusion = (fix.check_run_conclusion ?? '').toLowerCase();
-      const ciStatus: 'ok' | 'fail' | 'pending' =
-        conclusion === 'success'
-          ? 'ok'
-          : conclusion === 'failure' || conclusion === 'cancelled'
-            ? 'fail'
-            : 'pending';
-      events.push({
-        kind: ciStatus === 'pending' ? 'ci_started' : 'ci_resolved',
-        at: fix.check_run_updated_at ?? fix.completed_at ?? fix.started_at ?? fix.created_at,
-        label:
-          ciStatus === 'pending'
-            ? `CI ${fix.check_run_status?.replace(/_/g, ' ') ?? 'running'}`
-            : `CI ${conclusion}`,
-        status: ciStatus,
-      });
-    }
-    if (fix.status === 'completed') {
-      events.push({
-        kind: 'completed',
-        at: fix.completed_at ?? new Date().toISOString(),
-        label: 'Fix completed',
-        status: 'ok',
-      });
-    } else if (fix.status === 'failed') {
-      events.push({
-        kind: 'failed',
-        at: fix.completed_at ?? new Date().toISOString(),
-        label: 'Fix failed',
-        detail: fix.error,
-        status: 'fail',
-      });
-    }
-
-    events.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
-
-    return c.json({ ok: true, data: { fix, dispatch, events, source: 'synthesized' } });
+    const events = synthesizeFixTimeline(dispatch ?? null, fix);
+    return c.json({ ok: true, data: { fix, dispatch, events, base_branch: baseBranch, source: 'synthesized' } });
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1839,6 +1716,16 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const repoUrl = body.repoUrl.trim().replace(/\.git$/, '').replace(/\/$/, '');
     const validRoles = ['frontend', 'backend', 'monorepo', 'library', 'docs', 'other'];
     const role = validRoles.includes(body.role ?? '') ? body.role : 'monorepo';
+    // The repo form pre-fills "main"; store the branch GitHub really has.
+    const parsedRepo = parseGithubRepoUrl(repoUrl);
+    const { branch: defaultBranch } = parsedRepo
+      ? await resolveBranchForConnect({
+          token: await resolveProjectGithubToken(db, body.projectId),
+          owner: parsedRepo.owner,
+          repo: parsedRepo.repo,
+          requested: body.defaultBranch,
+        })
+      : { branch: body.defaultBranch?.trim() || 'main' };
     const { data, error } = await db
       .from('project_repos')
       .insert({
@@ -1846,7 +1733,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         repo_url: repoUrl,
         role,
         path_globs: body.pathGlobs ?? null,
-        default_branch: body.defaultBranch ?? 'main',
+        default_branch: defaultBranch,
         is_primary: body.isPrimary ?? false,
         indexing_enabled: true,
       })

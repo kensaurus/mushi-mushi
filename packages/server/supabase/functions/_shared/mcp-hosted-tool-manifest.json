@@ -78,6 +78,14 @@
     "path": "/v1/admin/fixes/{fixId}/refresh-ci",
     "required": ["fixId"]
   },
+  "import_sentry_issues": {
+    "scope": "mcp:write",
+    "description": "Import existing Sentry issues into the report queue.",
+    "method": "POST",
+    "path": "/v1/admin/projects/{projectId}/sentry/import",
+    "body": { "issueIds": "{issueIds}", "query": "{query}", "limit": "{limit}" },
+    "hints": { "destructive": false, "idempotent": true }
+  },
   "reopen_report": {
     "scope": "mcp:write",
     "description": "Reopen a report for regression triage.",
@@ -182,6 +190,21 @@
     "path": "/v1/admin/reports/{reportId}/reply",
     "required": ["reportId", "message"],
     "body": { "message": "{message}", "author_name": "{authorName}" }
+  },
+  "request_reporter_info": {
+    "scope": "mcp:write",
+    "description": "Ask the reporter a question; marks the report Waiting on you.",
+    "method": "POST",
+    "path": "/v1/admin/reports/{reportId}/request-info",
+    "required": ["reportId", "question"],
+    "body": { "question": "{question}", "author_name": "{authorName}" },
+    "hints": { "destructive": false, "idempotent": false }
+  },
+  "list_reporter_outbox": {
+    "scope": "mcp:read",
+    "description": "Held reporter updates waiting for review.",
+    "method": "GET",
+    "path": "/v1/admin/reporter-outbox?project_id={projectId}"
   },
   "get_two_way_comms_health": {
     "scope": "mcp:read",

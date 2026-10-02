@@ -143,6 +143,12 @@
       "limit": "105 KB"
     },
     {
+      "name": "On-demand chunks: screenshot markup + tab share (gzipped)",
+      "path": "dist/chunks/*.js",
+      "limit": "2.5 KB",
+      "gzip": true
+    },
+    {
       "name": "Headless capture bundle (no widget, gzipped)",
       "path": "dist/headless.js",
       "limit": "35 KB",
