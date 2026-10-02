@@ -1,5 +1,12 @@
 # @mushi-mushi/plugin-cursor-cloud
 
+## 0.6.2
+
+### Patch Changes
+
+- Updated dependencies [f48d15b]
+  - @mushi-mushi/plugin-sdk@0.9.0
+
 ## 0.6.1
 
 ### Patch Changes
