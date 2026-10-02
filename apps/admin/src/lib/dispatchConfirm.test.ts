@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dispatchConfirmBody, shortRepoName } from './dispatchConfirm'
+import { dispatchConfirmBody } from './dispatchConfirm'
 
 describe('dispatchConfirmBody', () => {
   it('names the target repo, the base branch and the draft PR', () => {
@@ -18,11 +18,13 @@ describe('dispatchConfirmBody', () => {
     expect(body).toContain('the connected repo')
     expect(body).toContain('its default branch')
   })
-})
 
-describe('shortRepoName', () => {
-  it('reduces GitHub URLs to owner/repo', () => {
-    expect(shortRepoName('https://github.com/acme/shop.git')).toBe('acme/shop')
-    expect(shortRepoName('https://gitlab.example.com/acme/shop')).toBe('gitlab.example.com/acme/shop')
+  it('reduces repo URLs to a short name', () => {
+    expect(dispatchConfirmBody({ repoUrl: 'https://github.com/acme/shop.git', baseBranch: 'main' })).toContain(
+      'on acme/shop against',
+    )
+    expect(dispatchConfirmBody({ repoUrl: 'https://gitlab.example.com/acme/shop', baseBranch: 'main' })).toContain(
+      'on gitlab.example.com/acme/shop against',
+    )
   })
 })

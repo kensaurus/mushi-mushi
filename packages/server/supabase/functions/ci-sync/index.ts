@@ -118,8 +118,19 @@ async function syncOne(
   const token = await resolveProjectGithubToken(db, attempt.project_id, installationId)
   if (!token) return { ok: false, reason: 'no_github_token' }
 
+  // Separate try: a failed PR read (403 / 5xx) must not also skip the
+  // check-run backfill below, which predates the lifecycle sync.
+  let prState: PrLifecycle | null = null
   try {
-    const prState = await syncPrLifecycle(db, token, ref, attempt)
+    prState = await syncPrLifecycle(db, token, ref, attempt)
+  } catch (err) {
+    log.warn('pull request fetch failed', {
+      attemptId: attempt.id,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+
+  try {
     if (!attempt.commit_sha) return { ok: prState != null, reason: 'no_commit_sha', prState }
     const snapshot = await fetchLatestCheckRun(token, ref, attempt.commit_sha)
     if (!snapshot) return { ok: prState != null, reason: 'check_runs_404', prState }
@@ -132,7 +143,7 @@ async function syncOne(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     log.warn('check-runs fetch failed', { attemptId: attempt.id, error: msg })
-    return { ok: false, reason: msg }
+    return { ok: false, reason: msg, prState }
   }
 }
 

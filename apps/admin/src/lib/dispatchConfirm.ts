@@ -5,7 +5,7 @@
  */
 
 /** `owner/repo` from a GitHub URL, else the URL without its scheme. */
-export function shortRepoName(repoUrl: string): string {
+function shortRepoName(repoUrl: string): string {
   const match = repoUrl.match(/github\.com[/:]([^/]+\/[^/.]+)/i)
   return match?.[1] ?? repoUrl.replace(/^https?:\/\//, '').replace(/\.git$/, '')
 }

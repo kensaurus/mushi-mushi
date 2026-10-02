@@ -5,9 +5,9 @@
  */
 
 /** Server-side cap fast-filter applied to `reports.summary` before 2026-10-02 (a hard `.slice(0, 200)`). */
-export const LEGACY_SUMMARY_CAP = 200
+const LEGACY_SUMMARY_CAP = 200
 
-export function clipAtWord(text: string, max: number): string {
+function clipAtWord(text: string, max: number): string {
   const clean = text.replace(/\s+/g, ' ').trim()
   if (clean.length <= max) return clean
   const budget = Math.max(1, max - 1)
@@ -41,6 +41,11 @@ export function reportHeading(report: {
   const summary = report.summary?.trim()
   const description = report.description?.trim() || ''
   if (summary) {
+    // fast-filter now clips with "…" on a word; older rows were hard-sliced.
+    const serverClipped = summary.endsWith('…')
+    if (serverClipped) {
+      return { text: summary, full: description || summary, truncated: Boolean(description) }
+    }
     const legacyCut = summary.length >= LEGACY_SUMMARY_CAP && !/[.!?…]$/.test(summary)
     if (legacyCut) {
       return {
