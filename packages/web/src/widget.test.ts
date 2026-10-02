@@ -20,7 +20,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { MushiWidget, type WidgetCallbacks } from './widget';
-import { charCounterText, formatReceiptTime, shouldShowSdkFreshness, submitShortcutKey } from './widget-helpers';
+import { formatReceiptTime, shouldShowSdkFreshness, submitShortcutKey } from './widget-helpers';
 
 const DEFAULT_TRIGGER = '\uD83D\uDC1B'; // 🐛
 
@@ -70,9 +70,9 @@ describe('MushiWidget constructor — triggerText defaults', () => {
   });
 });
 
-// ── Feature-request deep-link ────────────────────────────────────────────────
+// ── One-screen report: open() entry points ───────────────────────────────────
 
-describe('MushiWidget.open — feature-request deep-link', () => {
+describe('MushiWidget.open — one-screen report', () => {
   /** jsdom doesn't provide window.matchMedia — stub it out so render() doesn't throw. */
   beforeEach(() => {
     Object.defineProperty(window, 'matchMedia', {
@@ -90,32 +90,38 @@ describe('MushiWidget.open — feature-request deep-link', () => {
     });
   });
 
-  /** Read the current step from the widget's private state. */
   function readStep(w: MushiWidget): string {
     return (w as unknown as { step: string }).step;
   }
+  const chipChecked = (w: MushiWidget, id: string) =>
+    (w as unknown as { shadow: ShadowRoot }).shadow.querySelector(`[data-category="${id}"]`)?.getAttribute('aria-checked');
 
-  function readViaFeatureRequest(w: MushiWidget): boolean {
-    return (w as unknown as { viaFeatureRequest: boolean }).viaFeatureRequest;
-  }
-
-  it('opens to category step by default', () => {
+  it('opens on the report screen with no type picked', () => {
     const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
     w.open();
-    expect(readStep(w)).toBe('category');
+    expect(readStep(w)).toBe('report');
+    expect(chipChecked(w, 'bug')).toBe('false');
+    expect(chipChecked(w, 'idea')).toBe('false');
+    w.destroy();
   });
 
-  it('opens to intent step when category is provided', () => {
+  it('preselects the type chip when a category is provided', () => {
     const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
     w.open({ category: 'bug' });
-    expect(readStep(w)).toBe('intent');
+    expect(readStep(w)).toBe('report');
+    expect(chipChecked(w, 'bug')).toBe('true');
+    w.destroy();
   });
 
-  it('opens to details step when featureRequest=true', () => {
+  it('preselects the Idea chip when featureRequest=true', () => {
     const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
     w.open({ featureRequest: true });
-    expect(readStep(w)).toBe('details');
-    expect(readViaFeatureRequest(w)).toBe(true);
+    expect(readStep(w)).toBe('report');
+    expect(chipChecked(w, 'idea')).toBe('true');
+    w.destroy();
   });
 
   it('calls onOpen callback when opened', () => {
@@ -549,9 +555,9 @@ describe('MushiWidget banner body-nudge cleanup', () => {
   });
 });
 
-// ── progressive disclosure — reset on back to category ────────────────────────
+// ── progressive disclosure — host categories behind "More…" ─────────────────
 
-describe('MushiWidget progressive disclosure — back navigation', () => {
+describe('MushiWidget progressive disclosure — host categories', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
@@ -570,27 +576,21 @@ describe('MushiWidget progressive disclosure — back navigation', () => {
 
   const getShadow = (w: MushiWidget): ShadowRoot =>
     (w as unknown as { shadow: ShadowRoot }).shadow;
-  const readStep = (w: MushiWidget): string => (w as unknown as { step: string }).step;
-  const readShowAll = (w: MushiWidget): boolean =>
-    (w as unknown as { showAllCategories: boolean }).showAllCategories;
-  const setShowAll = (w: MushiWidget, v: boolean): void => {
-    (w as unknown as { showAllCategories: boolean }).showAllCategories = v;
-  };
 
-  it('collapses an expanded category list when navigating back to the category step', () => {
-    // Regression (Sentry 14751132/1): expanding "More issue types", drilling
-    // into a sub-step, then pressing Back left the category list expanded.
-    const w = new MushiWidget({}, noopCallbacks);
+  it('keeps host categories behind More… and collapses them again on the next open', () => {
+    // Regression (Sentry 14751132/1): an expanded list used to stay expanded
+    // across navigation.
+    const w = new MushiWidget({ categories: [{ id: 'billing', label: 'Billing' }] }, noopCallbacks);
     w.mount();
-    w.open({ category: 'bug' }); // → intent step, renders a Back control
-    setShowAll(w, true); // simulate the list having been expanded beforehand
+    w.open();
+    expect(getShadow(w).querySelector('[data-category="billing"]')).toBeNull();
+    (getShadow(w).querySelector('[data-action="show-all-categories"]') as HTMLElement).click();
+    expect(getShadow(w).querySelector('[data-category="billing"]')).not.toBeNull();
+    expect(getShadow(w).querySelector('[data-action="show-all-categories"]')).toBeNull();
 
-    const back = getShadow(w).querySelector('[data-action="back"]') as HTMLElement | null;
-    expect(back).not.toBeNull();
-    back!.click();
-
-    expect(readStep(w)).toBe('category');
-    expect(readShowAll(w)).toBe(false);
+    w.close();
+    w.open();
+    expect(getShadow(w).querySelector('[data-category="billing"]')).toBeNull();
     w.destroy();
   });
 });
@@ -717,7 +717,7 @@ describe('MushiWidget — description draft survives background render', () => {
     w.destroy();
   });
 
-  it('refreshReporterInboxQuiet updates badge without rebuilding the details step', async () => {
+  it('refreshReporterInboxQuiet updates the badge without touching the textarea', async () => {
     const w = new MushiWidget({}, noopCallbacks);
     w.mount();
     w.open({ featureRequest: true });
@@ -825,7 +825,7 @@ describe('MushiWidget — element selector error feedback', () => {
   });
 });
 
-// ── Live-QA polish (2026-10-02, Windows Chrome) ──────────────────────────────
+// ── Live-QA polish (2026-10-02, Windows Chrome), ported to the one-screen report ─
 
 describe('MushiWidget — live-QA polish', () => {
   beforeEach(() => {
@@ -856,7 +856,7 @@ describe('MushiWidget — live-QA polish', () => {
   function typeDescription(w: MushiWidget, text: string): void {
     const ta = q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!;
     ta.value = text;
-    ta.dispatchEvent(new Event('input'));
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   function submit(w: MushiWidget): void {
@@ -864,35 +864,31 @@ describe('MushiWidget — live-QA polish', () => {
   }
 
   // Item 1
-  it('the built-in trigger opens on the type step, not a preselected category', () => {
+  it('the built-in trigger opens the report screen with no type preselected', () => {
     const w = new MushiWidget({}, noopCallbacks);
     w.mount();
     q<HTMLButtonElement>(w, '.mushi-trigger')!.click();
-    expect(readStep(w)).toBe('category');
+    expect(readStep(w)).toBe('report');
     expect(q(w, '[data-category="bug"]')?.getAttribute('aria-checked')).toBe('false');
     w.destroy();
   });
 
-  it('the banner bug action also opens on the type step', () => {
+  it('the banner bug action also opens the report screen', () => {
     const w = new MushiWidget({ trigger: 'banner' }, noopCallbacks);
     w.mount();
     q<HTMLButtonElement>(w, '.mushi-banner-btn')!.click();
-    expect(readStep(w)).toBe('category');
+    expect(readStep(w)).toBe('report');
     w.destroy();
   });
 
   // Items 2 + 9
-  it('feature-request mode swaps the placeholder and chips, and submits user_category=feature', () => {
+  it('the Idea chip swaps the placeholder and submits user_category=feature', () => {
     const onSubmit = vi.fn();
     const w = new MushiWidget({}, { ...noopCallbacks, onSubmit });
     w.mount();
-    w.open({ featureRequest: true });
-
-    const ta = q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!;
-    expect(ta.placeholder).toBe('Describe your idea…');
-    const chips = Array.from(getShadow(w).querySelectorAll('.mushi-example-chip')).map((c) => c.textContent);
-    expect(chips).toEqual(['Add a dark mode', 'Export my data', 'Keyboard shortcuts']);
-
+    w.open();
+    q<HTMLButtonElement>(w, '[data-category="idea"]')!.click();
+    expect(q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!.placeholder).toBe('Describe your idea…');
     typeDescription(w, 'Please add a CSV export for my invoices');
     submit(w);
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
@@ -903,13 +899,13 @@ describe('MushiWidget — live-QA polish', () => {
     w.destroy();
   });
 
-  it('Other → the localized "Feature request" intent is feature mode too (ja)', () => {
+  it('the Idea chip is feature mode in Japanese too', () => {
     const onSubmit = vi.fn();
     const w = new MushiWidget({ locale: 'ja' }, { ...noopCallbacks, onSubmit });
     w.mount();
-    w.open({ category: 'other' });
-    q<HTMLButtonElement>(w, '[data-intent="機能要望"]')!.click();
-
+    w.open();
+    q<HTMLButtonElement>(w, '[data-category="idea"]')!.click();
+    expect(q(w, '[data-category="idea"]')!.textContent).toBe('アイデア');
     expect(q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!.placeholder).toBe('アイデアを教えてください…');
     typeDescription(w, 'ダークモードを追加してほしいです');
     submit(w);
@@ -917,7 +913,7 @@ describe('MushiWidget — live-QA polish', () => {
     w.destroy();
   });
 
-  it('a host custom category id stays the userCategory even with a "Feature request" intent', () => {
+  it('a host custom category id stays the userCategory, with its own intent chips', () => {
     const onSubmit = vi.fn();
     const w = new MushiWidget({
       categories: [{ id: 'ideas', label: 'Ideas', baseCategory: 'other', intents: ['Feature request', 'Other'] }],
@@ -925,32 +921,34 @@ describe('MushiWidget — live-QA polish', () => {
     w.mount();
     w.open({ category: 'ideas' });
     q<HTMLButtonElement>(w, '[data-intent="Feature request"]')!.click();
-    expect(q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!.placeholder).toBe('Describe your idea…');
     typeDescription(w, 'Please add a CSV export for my invoices');
     submit(w);
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ category: 'other', userCategory: 'ideas' }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ category: 'other', userCategory: 'ideas', intent: 'Feature request' }));
     w.destroy();
   });
 
-  it('bug mode keeps bug copy and sends no userCategory; Other keeps neutral copy and no chips', () => {
+  it('a built-in chip sends its category and no userCategory; no chip sends "other"', () => {
     const onSubmit = vi.fn();
     const w = new MushiWidget({}, { ...noopCallbacks, onSubmit });
     w.mount();
-    w.open({ category: 'bug' });
+    w.open();
+    q<HTMLButtonElement>(w, '[data-category="bug"]')!.click();
+    // Optional sub-chips appear once a type is picked.
     q<HTMLButtonElement>(w, '[data-intent="Crash"]')!.click();
-    expect(q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!.placeholder).toBe('Describe what happened…');
-    expect(getShadow(w).querySelectorAll('.mushi-example-chip').length).toBe(3);
+    expect(q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!.placeholder).toBe('What went wrong?');
     typeDescription(w, LONG);
     submit(w);
-    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('userCategory');
+    expect(onSubmit.mock.calls[0][0]).toEqual({ category: 'bug', description: LONG, intent: 'Crash' });
     w.destroy();
 
-    const w2 = new MushiWidget({}, noopCallbacks);
+    const onSubmit2 = vi.fn();
+    const w2 = new MushiWidget({}, { ...noopCallbacks, onSubmit: onSubmit2 });
     w2.mount();
-    w2.open({ category: 'other' });
-    q<HTMLButtonElement>(w2, '[data-intent="Typo"]')!.click();
-    expect(q<HTMLTextAreaElement>(w2, 'textarea.mushi-textarea')!.placeholder).toBe("What's on your mind?");
-    expect(q(w2, '.mushi-example-chips')).toBeNull();
+    w2.open();
+    expect(q(w2, '[data-intent]')).toBeNull();
+    typeDescription(w2, LONG);
+    submit(w2);
+    expect(onSubmit2.mock.calls[0][0]).toEqual({ category: 'other', description: LONG });
     w2.destroy();
   });
 
@@ -964,30 +962,70 @@ describe('MushiWidget — live-QA polish', () => {
     expect(submitShortcutKey('Linux x86_64')).toBe('Ctrl');
   });
 
-  it('renders "Ctrl + Enter" on Windows instead of "⌘ + ENTER"', () => {
+  it('the footer says why Send is disabled, then shows "Ctrl + Enter to send" on Windows', () => {
     const spy = vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
     const w = new MushiWidget({}, noopCallbacks);
     w.mount();
-    w.open({ featureRequest: true });
+    w.open();
+    expect(q(w, '.mushi-footer-hint')!.textContent).toBe('Add a few words');
+    typeDescription(w, LONG);
     expect(q(w, '.mushi-footer-hint')!.textContent).toBe('Ctrl + Enter to send');
     spy.mockRestore();
     w.destroy();
   });
 
-  // Item 4
-  it('counter shows characters still needed, then length/max — never length/min', () => {
-    expect(charCounterText('', 20, '{n} more characters')).toBe('20 more characters');
-    expect(charCounterText('  abc  ', 20, '{n} more characters')).toBe('17 more characters');
-    expect(charCounterText('x'.repeat(397), 12, '{n} more characters')).toBe('397/4000');
-
-    const w = new MushiWidget({ minDescriptionLength: 12 }, noopCallbacks);
+  // Item 4 (Plan 018 §1.1: 8 characters, or an attachment the reporter chose)
+  it('Send needs 8 characters or a deliberate attachment — an auto-capture is not enough', () => {
+    const onSubmit = vi.fn();
+    const w = new MushiWidget({}, { ...noopCallbacks, onSubmit });
     w.mount();
-    w.open({ featureRequest: true });
-    const counter = q(w, '[data-role="char-counter"]')!;
-    expect(counter.textContent).toBe('12 more characters');
-    typeDescription(w, 'x'.repeat(397));
-    expect(counter.textContent).toBe('397/4000');
+    w.open();
+    const send = () => q<HTMLButtonElement>(w, '[data-action="submit"]')!;
+    typeDescription(w, 'broken');
+    expect(send().getAttribute('aria-disabled')).toBe('true');
+    submit(w);
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    // Screenshot captured on open (no click): still disabled.
+    w.setScreenshotAttached(true);
+    expect(send().getAttribute('aria-disabled')).toBe('true');
+
+    // Pointing at an element is a deliberate attachment.
+    w.setElementSelected(true);
+    expect(send().getAttribute('aria-disabled')).toBe('false');
+    w.setElementSelected(false);
+    expect(send().getAttribute('aria-disabled')).toBe('true');
+
+    typeDescription(w, 'broken!!');
+    expect(send().getAttribute('aria-disabled')).toBe('false');
     w.destroy();
+  });
+
+  it('a screenshot the reporter asked for enables Send without text', () => {
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    w.open();
+    w.setScreenshotAttached(false);
+    q<HTMLButtonElement>(w, '[data-action="screenshot"]')!.click();
+    w.setScreenshotAttached(true);
+    expect(q(w, '[data-action="submit"]')!.getAttribute('aria-disabled')).toBe('false');
+    w.destroy();
+  });
+
+  it('CJK locales halve the minimum, and the host can override it', () => {
+    const ja = new MushiWidget({ locale: 'ja' }, noopCallbacks);
+    ja.mount();
+    ja.open();
+    typeDescription(ja, '保存できない');
+    expect(q(ja, '[data-action="submit"]')!.getAttribute('aria-disabled')).toBe('false');
+    ja.destroy();
+
+    const strict = new MushiWidget({ minDescriptionLength: 20 }, noopCallbacks);
+    strict.mount();
+    strict.open();
+    typeDescription(strict, 'Save does nothing');
+    expect(q(strict, '[data-action="submit"]')!.getAttribute('aria-disabled')).toBe('true');
+    strict.destroy();
   });
 
   // Item 5
@@ -1017,7 +1055,7 @@ describe('MushiWidget — live-QA polish', () => {
   });
 
   // Items 6 + 7
-  it('success step: proper title, receipt, zoned date-time, Done, no Back, no auto-close', async () => {
+  it('receipt: proper title, id, zoned date-time, Done, no Back, no auto-close', async () => {
     vi.useFakeTimers();
     const onClose = vi.fn();
     const w = new MushiWidget({}, {
@@ -1032,9 +1070,10 @@ describe('MushiWidget — live-QA polish', () => {
     await vi.advanceTimersByTimeAsync(500);
 
     expect(readStep(w)).toBe('success');
-    expect(q(w, '.mushi-header h3')!.textContent).toBe('Thanks — report received');
+    expect(q(w, '#mushi-title')!.textContent).toBe('Sent');
     expect(q(w, '[data-action="back"]')).toBeNull();
     expect(q(w, '.mushi-success-receipt-id')!.textContent).toContain('#abcdef12');
+    expect(q(w, '.mushi-success-sla')!.textContent).toBe("We'll let you know here when there's news.");
     const time = q(w, 'time.mushi-success-meta')!;
     expect(time.getAttribute('datetime')).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(time.textContent).not.toMatch(/^\d{2}:\d{2}:\d{2}$/);
@@ -1062,7 +1101,7 @@ describe('MushiWidget — live-QA polish', () => {
     submit(w);
     await vi.advanceTimersByTimeAsync(500);
 
-    expect(q(w, '.mushi-header h3')!.textContent).toBe('Queued — retrying');
+    expect(q(w, '#mushi-title')!.textContent).toBe('Queued — retrying');
     expect(q(w, '[data-action="track-report"]')).toBeNull();
     w.destroy();
   });
@@ -1075,7 +1114,7 @@ describe('MushiWidget — live-QA polish', () => {
   });
 
   // Item 8
-  it('"Track this report" opens that report\'s thread in My Reports', async () => {
+  it('"Track it" opens that report\'s thread', async () => {
     vi.useFakeTimers();
     const onReporterCommentsRequest = vi.fn().mockResolvedValue([]);
     const w = new MushiWidget({}, {
@@ -1098,7 +1137,8 @@ describe('MushiWidget — live-QA polish', () => {
     expect(readStep(w)).toBe('report-detail');
     expect(w.getIsOpen()).toBe(true);
     expect(onReporterCommentsRequest).toHaveBeenCalledWith(REPORT_ID);
-    expect(q(w, '.mushi-thread-summary p')!.textContent).toBe('Save does nothing');
+    expect(q(w, '.mushi-summary-text')!.textContent).toBe('Save does nothing');
+    expect(q(w, '.mushi-thread-summary .mushi-pill')!.textContent).toBe('Received');
     w.destroy();
   });
 
@@ -1123,7 +1163,7 @@ describe('MushiWidget — live-QA polish', () => {
     vi.useFakeTimers();
     const comments = vi.fn()
       .mockReturnValueOnce(new Promise(() => {}))
-      .mockResolvedValueOnce([{ id: 'c1', author_kind: 'developer', author_name: 'Kenji', body: 'Fixed in 1.2', created_at: '' }]);
+      .mockResolvedValueOnce([{ id: 'c1', author_kind: 'admin', author_name: 'Kenji', body: 'Fixed in 1.2', created_at: '' }]);
     const w = new MushiWidget({}, {
       ...noopCallbacks,
       onReporterReportsRequest: () => Promise.resolve([
@@ -1133,18 +1173,16 @@ describe('MushiWidget — live-QA polish', () => {
     });
     w.mount();
     w.open();
-    q<HTMLButtonElement>(w, '[data-action="toggle-more-nav"]')!.click();
     q<HTMLButtonElement>(w, '[data-action="reports"]')!.click();
     await vi.advanceTimersByTimeAsync(0);
     q<HTMLButtonElement>(w, `[data-report-id="${REPORT_ID}"]`)!.click();
-    // The summary paints from the in-memory report at once; only the
-    // comment list is a skeleton while it loads.
-    expect(q(w, '.mushi-thread-summary p')!.textContent).toBe('Save does nothing');
-    expect(q(w, '.mushi-thread-skeleton')?.getAttribute('aria-label')).toBe('Loading thread…');
+    // The card paints from the list row at once; only the timeline is a skeleton.
+    expect(q(w, '.mushi-summary-text')!.textContent).toBe('Save does nothing');
+    expect(q(w, '.mushi-skeleton')?.getAttribute('aria-label')).toBe('Loading updates…');
 
     await vi.advanceTimersByTimeAsync(15_000);
-    expect(q(w, '.mushi-thread-skeleton')).toBeNull();
-    expect(q(w, '.mushi-thread [role="alert"]')!.textContent).toBe("Couldn't load this thread.");
+    expect(q(w, '.mushi-skeleton')).toBeNull();
+    expect(q(w, '.mushi-thread [role="alert"]')!.textContent).toContain("Couldn't load updates");
 
     q<HTMLButtonElement>(w, '[data-action="retry-thread"]')!.click();
     await vi.advanceTimersByTimeAsync(0);
@@ -1160,43 +1198,43 @@ describe('MushiWidget — live-QA polish', () => {
     });
     w.mount();
     w.open();
-    await (w as unknown as { loadReporterComments(id: string): Promise<void> }).loadReporterComments(REPORT_ID);
+    await (w as unknown as { openThread(id: string): Promise<void> }).openThread(REPORT_ID);
     expect(q(w, '[data-action="retry-thread"]')).not.toBeNull();
     expect(q(w, '.mushi-thread')!.textContent).not.toContain('No developer replies');
     w.destroy();
   });
 
-  it('keeps the reply composer in a footer outside the scrolling body', async () => {
+  it('keeps the reply composer in the sticky footer outside the scroll area', async () => {
     const w = new MushiWidget({}, { ...noopCallbacks, onReporterCommentsRequest: () => Promise.resolve([]) });
     w.mount();
     w.open();
-    await (w as unknown as { loadReporterComments(id: string): Promise<void> }).loadReporterComments(REPORT_ID);
+    await (w as unknown as { openThread(id: string): Promise<void> }).openThread(REPORT_ID);
     const reply = q(w, '[data-action="reporter-reply"]')!;
-    expect(reply.closest('.mushi-body')).toBeNull();
-    expect(reply.closest('.mushi-footer.mushi-thread-composer')).not.toBeNull();
+    expect(reply.closest('.mushi-scroll')).toBeNull();
+    expect(reply.closest('.mushi-footer .mushi-thread-composer')).not.toBeNull();
     expect(q<HTMLTextAreaElement>(w, 'textarea[data-role="reporter-reply"]')!.placeholder).toBe('Reply to the developer…');
     w.destroy();
   });
 
-  it('a reply keeps the conversation on screen, and a failed reply never replaces it', async () => {
-    const existing = [{ id: 'c1', author_kind: 'developer', author_name: 'Kenji', body: 'Can you retry?', created_at: '' }];
+  it('replies are optimistic: the thread never blanks, a failure offers Retry', async () => {
+    const existing = [{ id: 'c1', author_kind: 'admin', author_name: 'Kenji', body: 'Can you retry?', created_at: '2026-10-02T01:00:00Z' }];
     let finishReply: (() => void) | undefined;
-    let failReply: ((e: Error) => void) | undefined;
     const onReporterReply = vi.fn()
       .mockImplementationOnce(() => new Promise<void>((resolve) => { finishReply = resolve; }))
-      .mockImplementationOnce(() => new Promise<void>((_r, reject) => { failReply = reject; }));
+      .mockImplementationOnce(() => Promise.reject(new Error('HTTP 500')))
+      .mockImplementationOnce(() => Promise.resolve());
     const onReporterCommentsRequest = vi.fn().mockResolvedValue(existing);
     const w = new MushiWidget({}, {
       ...noopCallbacks,
       onReporterReportsRequest: () => Promise.resolve([
-        { id: REPORT_ID, status: 'fixing', summary: 'Save does nothing', created_at: '' },
+        { id: REPORT_ID, status: 'fixing', summary: 'Save does nothing', created_at: '2026-10-02T00:00:00Z' },
       ] as never),
       onReporterCommentsRequest,
       onReporterReply,
     });
     w.mount();
     w.open();
-    await (w as unknown as { loadReporterComments(id: string): Promise<void> }).loadReporterComments(REPORT_ID);
+    await (w as unknown as { openThread(id: string): Promise<void> }).openThread(REPORT_ID);
     const reply = (text: string) => {
       const ta = q<HTMLTextAreaElement>(w, 'textarea[data-role="reporter-reply"]')!;
       ta.value = text;
@@ -1204,24 +1242,24 @@ describe('MushiWidget — live-QA polish', () => {
     };
 
     reply('Tried again, still broken');
-    await Promise.resolve();
-    // In flight: comments still shown (no skeleton), Send disabled.
+    // In flight: the conversation stays, the bubble says Sending…, the box is free again.
     expect(q(w, '.mushi-thread')!.textContent).toContain('Can you retry?');
-    expect(q(w, '.mushi-thread-skeleton')).toBeNull();
-    expect(q<HTMLButtonElement>(w, '[data-action="reporter-reply"]')!.disabled).toBe(true);
-    finishReply!();
-    await vi.waitFor(() => expect(q<HTMLButtonElement>(w, '[data-action="reporter-reply"]')!.disabled).toBe(false));
-    expect(onReporterReply).toHaveBeenCalledWith(REPORT_ID, 'Tried again, still broken');
+    expect(q(w, '.mushi-bubble.mine')!.textContent).toContain('Tried again, still broken');
+    expect(q(w, '.mushi-bubble.mine')!.textContent).toContain('Sending…');
+    expect(q(w, '.mushi-skeleton')).toBeNull();
     expect(q<HTMLTextAreaElement>(w, 'textarea[data-role="reporter-reply"]')!.value).toBe('');
-    expect((w as unknown as { step: string }).step).toBe('report-detail');
+    finishReply!();
+    await vi.waitFor(() => expect(q(w, '.mushi-bubble-state')).toBeNull());
+    expect(onReporterReply).toHaveBeenCalledWith(REPORT_ID, 'Tried again, still broken');
+    expect(readStep(w)).toBe('report-detail');
 
     reply('second try');
-    await Promise.resolve();
-    failReply!(new Error('HTTP 500'));
-    await vi.waitFor(() => expect(q(w, '.mushi-thread-action-error')?.textContent).toBe('HTTP 500'));
+    await vi.waitFor(() => expect(q(w, '[data-action="retry-reply"]')).not.toBeNull());
     expect(q(w, '.mushi-thread')!.textContent).toContain('Can you retry?');
-    // The unsent text survives the failure so it can be resent.
-    expect(q<HTMLTextAreaElement>(w, 'textarea[data-role="reporter-reply"]')!.value).toBe('second try');
+    expect(q(w, '.mushi-thread')!.textContent).toContain('second try');
+    q<HTMLButtonElement>(w, '[data-action="retry-reply"]')!.click();
+    await vi.waitFor(() => expect(q(w, '[data-action="retry-reply"]')).toBeNull());
+    expect(onReporterReply).toHaveBeenLastCalledWith(REPORT_ID, 'second try');
     w.destroy();
   });
 
@@ -1238,11 +1276,12 @@ describe('MushiWidget — live-QA polish', () => {
     w.mount();
     w.open();
     await w.refreshReporterInboxQuiet();
-    await (w as unknown as { loadReporterComments(id: string): Promise<void> }).loadReporterComments(REPORT_ID);
+    await (w as unknown as { openThread(id: string): Promise<void> }).openThread(REPORT_ID);
+    expect(q(w, '.mushi-thread-summary .mushi-pill')!.textContent).toBe('Fixed — coming in the next update');
     q<HTMLButtonElement>(w, '[data-action="reporter-confirms"]')!.click();
     await vi.waitFor(() => expect(onReporterFeedback).toHaveBeenCalledWith(REPORT_ID, 'confirms'));
     await vi.waitFor(() => expect(q<HTMLButtonElement>(w, '[data-action="reporter-confirms"]')!.disabled).toBe(false));
-    expect((w as unknown as { step: string }).step).toBe('report-detail');
+    expect(readStep(w)).toBe('report-detail');
     w.destroy();
   });
 
@@ -1266,7 +1305,7 @@ describe('MushiWidget — live-QA polish', () => {
   });
 
   // Item 12 (re-render swallowing the first Submit click)
-  it('defers a background re-render while a pointer is down in the panel', async () => {
+  it('defers a background patch while a pointer is down in the panel', async () => {
     vi.useFakeTimers();
     const onSubmit = vi.fn();
     const w = new MushiWidget({}, { ...noopCallbacks, onSubmit });
@@ -1276,8 +1315,8 @@ describe('MushiWidget — live-QA polish', () => {
 
     const submitBtn = q<HTMLButtonElement>(w, '[data-action="submit"]')!;
     submitBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    // e.g. a runtime-config / rewards update landing mid-press:
-    w.setRewardsState({ tier: null, nextTier: null, totalPoints: 10, pointsForReport: 50 });
+    // A runtime-config update that WOULD patch the footer (the Send label) lands mid-press:
+    w.updateConfig({ locale: 'ja' });
     expect(submitBtn.isConnected).toBe(true);
 
     window.dispatchEvent(new Event('pointerup'));
@@ -1286,7 +1325,7 @@ describe('MushiWidget — live-QA polish', () => {
     w.destroy();
   });
 
-  it('omits "Track this report" when there is no reporter inbox to open', async () => {
+  it('omits "Track it" when there is no reporter inbox to open', async () => {
     vi.useFakeTimers();
     const w = new MushiWidget({}, {
       ...noopCallbacks,
@@ -1300,6 +1339,310 @@ describe('MushiWidget — live-QA polish', () => {
 
     expect(readStep(w)).toBe('success');
     expect(q(w, '[data-action="track-report"]')).toBeNull();
+    w.destroy();
+  });
+});
+
+// ── Plan 018 Phase 1: regions, Your reports, keyboard, toast, opt-ins ────────
+
+describe('MushiWidget — reporter loop v2 (Phase 1)', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: false }),
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    document.querySelectorAll('[data-mushi-test-suppress]').forEach((el) => el.remove());
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: undefined,
+    });
+  });
+
+  const getShadow = (w: MushiWidget): ShadowRoot => (w as unknown as { shadow: ShadowRoot }).shadow;
+  const q = <T extends Element = HTMLElement>(w: MushiWidget, sel: string): T | null =>
+    getShadow(w).querySelector(sel) as T | null;
+  const qa = (w: MushiWidget, sel: string) => Array.from(getShadow(w).querySelectorAll<HTMLElement>(sel));
+  const readStep = (w: MushiWidget): string => (w as unknown as { step: string }).step;
+  const key = (target: Element, k: string, init: KeyboardEventInit = {}) =>
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, ...init }));
+  const ROWS = [
+    { id: 'r-old', status: 'classified', category: 'bug', severity: 'high', title: 'Old one', user_category: 'bug', page: '/settings', created_at: '2026-09-01T00:00:00Z' },
+    { id: 'r-new', status: 'fixing', title: 'Newest', created_at: '2026-10-01T00:00:00Z' },
+    { id: 'r-wait', status: 'classified', title: 'Needs me', awaiting_reporter: true, unread_count: 2, last_event_preview: 'Which browser?', created_at: '2026-08-01T00:00:00Z' },
+    { id: 'r-spam', status: 'dismissed', closed_reason: 'spam', title: 'Hidden', created_at: '2026-10-02T00:00:00Z' },
+  ];
+
+  it('a background refresh patches only the header: the textarea, its text and focus survive', async () => {
+    const w = new MushiWidget({}, { ...noopCallbacks, onReporterReportsRequest: () => Promise.resolve(ROWS as never) });
+    w.mount();
+    w.open();
+    const ta = q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!;
+    ta.value = 'Still typing…';
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    ta.focus();
+    const body = q(w, '[data-region="body"]')!.innerHTML;
+
+    await w.refreshReporterInboxQuiet();
+
+    expect(q(w, 'textarea.mushi-textarea')).toBe(ta);
+    expect(ta.value).toBe('Still typing…');
+    expect(getShadow(w).activeElement).toBe(ta);
+    expect(q(w, '[data-region="body"]')!.innerHTML).toBe(body);
+    expect(q(w, '[data-action="reports"] .mushi-badge')!.textContent).toBe('2 new');
+    w.destroy();
+  });
+
+  it('lists reports with end-user labels, unread first, never internal category or severity', async () => {
+    const w = new MushiWidget({}, { ...noopCallbacks, onReporterReportsRequest: () => Promise.resolve(ROWS as never) });
+    w.mount();
+    w.open();
+    q<HTMLButtonElement>(w, '[data-action="reports"]')!.click();
+    await vi.waitFor(() => expect(qa(w, '.mushi-report-row').length).toBe(3));
+    const rows = qa(w, '.mushi-report-row');
+    // Unread first, then newest activity; spam stays hidden.
+    expect(rows.map((r) => r.dataset.reportId)).toEqual(['r-wait', 'r-new', 'r-old']);
+    expect(rows[0]!.textContent).toContain('Waiting on you');
+    expect(rows[0]!.classList.contains('unread')).toBe(true);
+    expect(rows[1]!.textContent).toContain('Fix in progress');
+    expect(rows[2]!.textContent).toContain('Looking into it');
+    expect(rows[2]!.textContent).toContain('Bug · /settings');
+    const text = q(w, '.mushi-report-list')!.textContent!;
+    expect(text).not.toMatch(/high|classified|fixing|dismissed/);
+    w.destroy();
+  });
+
+  it('renders server text as text: titles, previews and comments never become markup', async () => {
+    const evil = '<img src=x onerror="window.__pwned=1">"><b>x</b>';
+    const w = new MushiWidget({}, {
+      ...noopCallbacks,
+      onReporterReportsRequest: () => Promise.resolve([{ id: 'r"x', status: 'classified', title: evil, page: evil, last_event_preview: evil, unread_count: 1, created_at: '2026-10-01T00:00:00Z' }] as never),
+      onReporterCommentsRequest: () => Promise.resolve([{ id: 1, author_kind: 'admin', author_name: evil, body: evil, created_at: '2026-10-01T01:00:00Z' }]),
+    });
+    w.mount();
+    w.open();
+    q<HTMLButtonElement>(w, '[data-action="reports"]')!.click();
+    await vi.waitFor(() => expect(qa(w, '.mushi-report-row').length).toBe(1));
+    expect(q(w, '.mushi-report-list img, .mushi-report-list b')).toBeNull();
+    expect(q(w, '.mushi-row-title')!.textContent).toBe(evil);
+    qa(w, '.mushi-report-row')[0]!.click();
+    await vi.waitFor(() => expect(q(w, '.mushi-bubble.dev')).not.toBeNull());
+    expect(q(w, '[data-region] img:not(.mushi-header-host-icon):not(.mushi-card-thumb), [data-region] b')).toBeNull();
+    expect(q(w, '.mushi-bubble.dev p')!.textContent).toBe(evil);
+    expect((window as unknown as { __pwned?: number }).__pwned).toBeUndefined();
+    w.destroy();
+  });
+
+  it('shows the empty state, and a failed list load offers Retry', async () => {
+    const list = vi.fn().mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('HTTP 503')).mockResolvedValueOnce([]);
+    const w = new MushiWidget({}, { ...noopCallbacks, onReporterReportsRequest: list });
+    w.mount();
+    w.openReporter();
+    await vi.waitFor(() => expect(q(w, '.mushi-empty')?.textContent).toBe('Nothing yet — your reports will show up here with updates.'));
+    q<HTMLButtonElement>(w, '[data-action="back"]')!.click();
+    q<HTMLButtonElement>(w, '[data-action="reports"]')!.click();
+    await vi.waitFor(() => expect(q(w, '[data-action="retry-list"]')).not.toBeNull());
+    q<HTMLButtonElement>(w, '[data-action="retry-list"]')!.click();
+    await vi.waitFor(() => expect(list).toHaveBeenCalledTimes(3));
+    w.destroy();
+  });
+
+  it('opening a thread marks it read and the badge goes down', async () => {
+    const onReporterMarkRead = vi.fn().mockResolvedValue(0);
+    const w = new MushiWidget({}, {
+      ...noopCallbacks,
+      onReporterReportsRequest: () => Promise.resolve(structuredClone(ROWS) as never),
+      onReporterCommentsRequest: () => Promise.resolve([]),
+      onReporterMarkRead,
+    });
+    w.mount();
+    w.open();
+    q<HTMLButtonElement>(w, '[data-action="reports"]')!.click();
+    await vi.waitFor(() => expect(q(w, '[data-report-id="r-wait"]')).not.toBeNull());
+    q<HTMLButtonElement>(w, '[data-report-id="r-wait"]')!.click();
+    expect(onReporterMarkRead).toHaveBeenCalledWith('r-wait');
+    key(q(w, '[data-report-id]') ?? q(w, '.mushi-panel')!, 'Escape');
+    expect(readStep(w)).toBe('reports');
+    expect(q(w, '[data-report-id="r-wait"]')!.classList.contains('unread')).toBe(false);
+    // Opening an already-read thread doesn't call the server again.
+    q<HTMLButtonElement>(w, '[data-report-id="r-new"]')!.click();
+    expect(onReporterMarkRead).toHaveBeenCalledTimes(1);
+    w.destroy();
+  });
+
+  it('renders a server timeline from templates, never stored notification text', async () => {
+    const w = new MushiWidget({}, {
+      ...noopCallbacks,
+      onReporterReportsRequest: () => Promise.resolve([{ id: 'r1', status: 'resolved', fixed_in_version: '1.4.0', title: 'Crash on save', created_at: '2026-09-30T00:00:00Z' }] as never),
+      onReporterReportRequest: () => Promise.resolve({
+        timeline: [
+          { kind: 'received', at: '2026-09-30T00:00:00Z' },
+          { kind: 'reviewing', at: '2026-09-30T01:00:00Z', text: 'classified as bug/high' },
+          { kind: 'comment', at: '2026-09-30T02:00:00Z', text: 'Thanks, found it.', custom: true },
+          { kind: 'released', at: '2026-10-01T00:00:00Z', version: '1.4.0' },
+        ],
+      }),
+    });
+    w.mount();
+    w.open();
+    q<HTMLButtonElement>(w, '[data-action="reports"]')!.click();
+    await vi.waitFor(() => expect(q(w, '[data-report-id="r1"]')).not.toBeNull());
+    q<HTMLButtonElement>(w, '[data-report-id="r1"]')!.click();
+    await vi.waitFor(() => expect(q(w, '.mushi-timeline')).not.toBeNull());
+    const thread = q(w, '.mushi-thread')!.textContent!;
+    expect(thread).toContain('The developer is looking into it');
+    expect(thread).not.toContain('bug/high');
+    expect(thread).toContain('Thanks, found it.');
+    expect(thread).toContain('Shipped in v1.4.0 — update to get it');
+    expect(q(w, '.mushi-thread-summary .mushi-pill')!.textContent).toBe('Fixed in v1.4.0');
+    expect(q(w, '[data-action="reporter-confirms"]')!.textContent).toBe('Yes');
+    expect(q(w, '[data-action="reporter-not-fixed"]')!.textContent).toBe('Not yet');
+    w.destroy();
+  });
+
+  it('Escape closes and returns focus to the trigger; Ctrl+Enter sends', () => {
+    const onSubmit = vi.fn();
+    const w = new MushiWidget({}, { ...noopCallbacks, onSubmit });
+    w.mount();
+    const trigger = q<HTMLButtonElement>(w, '.mushi-trigger')!;
+    trigger.focus();
+    trigger.click();
+    const ta = q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!;
+    expect(getShadow(w).activeElement).toBe(ta);
+    ta.value = 'Checkout button is greyed out';
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    key(ta, 'Enter', { ctrlKey: true });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    w.destroy();
+
+    const w2 = new MushiWidget({}, noopCallbacks);
+    w2.mount();
+    const t2 = q<HTMLButtonElement>(w2, '.mushi-trigger')!;
+    t2.focus();
+    t2.click();
+    key(q(w2, 'textarea.mushi-textarea')!, 'Escape');
+    expect(w2.getIsOpen()).toBe(false);
+    expect(getShadow(w2).activeElement).toBe(q(w2, '.mushi-trigger'));
+    w2.destroy();
+  });
+
+  it('type chips are a roving radiogroup: one Tab stop, arrows move the selection', () => {
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    w.open();
+    const chips = qa(w, '[role="radio"][data-category]');
+    expect(chips.filter((c) => c.tabIndex === 0).length).toBe(1);
+    chips[0]!.focus();
+    key(chips[0]!, 'ArrowRight');
+    expect(q(w, '[data-category="slow"]')!.getAttribute('aria-checked')).toBe('true');
+    expect(getShadow(w).activeElement).toBe(q(w, '[data-category="slow"]'));
+    // A second tap on the picked chip clears it: the type is optional.
+    q<HTMLButtonElement>(w, '[data-category="slow"]')!.click();
+    expect(q(w, '[data-category="slow"]')!.getAttribute('aria-checked')).toBe('false');
+    w.destroy();
+  });
+
+  it('Tab stays inside the open dialog', () => {
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    w.open();
+    const items = qa(w, '.mushi-panel button:not([disabled]), .mushi-panel textarea');
+    const last = items[items.length - 1]!;
+    last.focus();
+    key(last, 'Tab');
+    expect(getShadow(w).activeElement).toBe(items[0]);
+    key(items[0]!, 'Tab', { shiftKey: true });
+    expect(getShadow(w).activeElement).toBe(last);
+    w.destroy();
+  });
+
+  it('the overflow menu appears only for enabled destinations', () => {
+    const bare = new MushiWidget({}, noopCallbacks);
+    bare.mount();
+    bare.open();
+    expect(q(bare, '[data-action="toggle-more-nav"]')).toBeNull();
+    bare.destroy();
+
+    const w = new MushiWidget({}, { ...noopCallbacks, assistantEnabled: true, onFeatureBoardRequest: () => Promise.resolve([]) });
+    w.mount();
+    w.open();
+    q<HTMLButtonElement>(w, '[data-action="toggle-more-nav"]')!.click();
+    expect(qa(w, '[role="menuitem"]').map((m) => m.dataset.action)).toEqual(['assistant', 'roadmap']);
+    key(q(w, '[role="menuitem"]')!, 'Escape');
+    expect(q(w, '[role="menu"]')).toBeNull();
+    expect(w.getIsOpen()).toBe(true);
+    w.destroy();
+  });
+
+  it('a toast near the launcher opens the thread, and is suppressed with the launcher', async () => {
+    const onReporterCommentsRequest = vi.fn().mockResolvedValue([]);
+    const w = new MushiWidget({}, {
+      ...noopCallbacks,
+      onReporterReportsRequest: () => Promise.resolve(ROWS as never),
+      onReporterCommentsRequest,
+    });
+    w.mount();
+    expect(w.showUpdateToast({ text: 'The developer replied to your report', reportId: 'r-wait' })).toBe(true);
+    const toast = q(w, '.mushi-toast')!;
+    expect(toast.getAttribute('role')).toBe('status');
+    expect(toast.textContent).toContain('The developer replied to your report');
+    (toast.querySelector('.mushi-btn') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(onReporterCommentsRequest).toHaveBeenCalledWith('r-wait'));
+    expect(q(w, '.mushi-toast')).toBeNull();
+    w.destroy();
+
+    const el = document.createElement('div');
+    el.setAttribute('data-mushi-test-suppress', '');
+    document.body.appendChild(el);
+    const hidden = new MushiWidget({ hideOnSelector: '[data-mushi-test-suppress]' }, noopCallbacks);
+    hidden.mount();
+    expect(hidden.showUpdateToast({ text: 'x' })).toBe(false);
+    expect(q(hidden, '.mushi-toast')).toBeNull();
+    hidden.destroy();
+  });
+
+  it('no toast where smartHide hides the launcher', () => {
+    (window.matchMedia as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ matches: true });
+    const w = new MushiWidget({ smartHide: { onMobile: 'hide' } }, noopCallbacks);
+    w.mount();
+    expect(w.showUpdateToast({ text: 'The developer replied to your report' })).toBe(false);
+    expect(q(w, '.mushi-toast')).toBeNull();
+    w.destroy();
+  });
+
+  it('opt-ins appear only for configured channels and are never pre-ticked', async () => {
+    vi.useFakeTimers();
+    const onReporterEmailOptIn = vi.fn().mockResolvedValue(undefined);
+    const w = new MushiWidget({}, {
+      ...noopCallbacks,
+      onSubmit: () => Promise.resolve({ reportId: 'abc', queuedOffline: false }),
+      onReporterEmailOptIn,
+      onReporterPushSubscribe: () => Promise.resolve(),
+    });
+    w.mount();
+    w.open();
+    const ta = q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!;
+    ta.value = 'The export button does nothing';
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    q<HTMLButtonElement>(w, '[data-action="submit"]')!.click();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(q(w, '[data-action="email-optin"]')).toBeNull();
+    expect(q(w, '[data-action="notify-me"]')).toBeNull();
+
+    w.setReporterChannels({ email: true, push: true, emailPrefill: 'ana@example.com' });
+    const box = q<HTMLInputElement>(w, '[data-action="email-optin"]')!;
+    expect(box.checked).toBe(false);
+    box.click();
+    expect(q<HTMLInputElement>(w, '[data-role="optin-email"]')!.value).toBe('ana@example.com');
+    q<HTMLButtonElement>(w, '[data-action="save-email"]')!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onReporterEmailOptIn).toHaveBeenCalledWith('ana@example.com');
+    expect(q(w, '.mushi-optins')!.textContent).toContain('Check your inbox and tap the link to confirm.');
     w.destroy();
   });
 });
