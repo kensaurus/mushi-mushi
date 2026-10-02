@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-02 · **572** routes.
+> Generated: 2026-10-02 · **575** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -12,7 +12,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | `apiKeyAuth` | 51 |
 | `jwtAuth` | 342 |
 | `jwtOrApiKey` | 3 |
-| `unknown` | 67 |
+| `unknown` | 70 |
 
 ## Routes by path
 
@@ -99,6 +99,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/dashboard` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/dashboard.ts` |
 | GET | `/v1/admin/dashboard/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/dashboard.ts` |
 | GET | `/v1/admin/doctor` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/doctor.ts` |
+| GET | `/v1/admin/drift/stats` | `unknown` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.test.ts` |
 | GET | `/v1/admin/entitlements` | `jwtAuth` | `packages/server/supabase/functions/api/routes/modernization-health-super.ts` |
 | GET | `/v1/admin/events/funnel` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/events-admin.ts` |
 | GET | `/v1/admin/events/paths` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/events-admin.ts` |
@@ -129,6 +130,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/fixes/dispatches` | `jwtAuth` | `packages/server/supabase/functions/api/routes/fix-dispatch.ts` |
 | POST | `/v1/admin/fixes/dispatches/:id/cancel` | `jwtAuth` | `packages/server/supabase/functions/api/routes/fix-dispatch.ts` |
 | GET | `/v1/admin/fixes/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
+| GET | `/v1/admin/fixes/stats` | `unknown` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.test.ts` |
 | GET | `/v1/admin/fixes/summary` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | POST | `/v1/admin/graph-backend/snapshot` | `jwtAuth` | `packages/server/supabase/functions/api/routes/intelligence-synthetic.ts` |
 | GET | `/v1/admin/graph-backend/status` | `jwtAuth` | `packages/server/supabase/functions/api/routes/intelligence-synthetic.ts` |
@@ -147,6 +149,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/health/integration/:kind` | `jwtAuth` | `packages/server/supabase/functions/api/routes/modernization-health-super.ts` |
 | GET | `/v1/admin/health/llm` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |
 | GET | `/v1/admin/health/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/health.ts` |
+| GET | `/v1/admin/health/stats` | `unknown` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.test.ts` |
 | GET | `/v1/admin/inbox/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/dashboard.ts` |
 | GET | `/v1/admin/integrations` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | POST | `/v1/admin/integrations` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
@@ -243,6 +246,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | PUT | `/v1/admin/projects/:id/assistant` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sdk-assistant.ts` |
 | GET | `/v1/admin/projects/:id/assistant/logs` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sdk-assistant.ts` |
 | GET | `/v1/admin/projects/:id/autofix` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
+| PUT | `/v1/admin/projects/:id/autofix/caps` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
 | POST | `/v1/admin/projects/:id/autofix/toggle` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
 | POST | `/v1/admin/projects/:id/codebase/analyze` | `unknown` | `packages/server/supabase/functions/api/routes/codebase-understand.ts` |
 | GET | `/v1/admin/projects/:id/codebase/analyze/:jobId` | `unknown` | `packages/server/supabase/functions/api/routes/codebase-understand.ts` |
@@ -448,7 +452,6 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/tester-submissions/:id/spam` | `jwtAuth` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | GET | `/v1/admin/two-way-health` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | GET | `/v1/admin/verifications` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
-| GET | `/v1/admin/workspace/nav-meta` | `jwtAuth` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.ts` |
 | GET | `/v1/agent-card` | `unknown` | `packages/server/supabase/functions/api/routes/discovery.ts` |
 | POST | `/v1/cli/auth/device/approve` | `jwtAuth` | `packages/server/supabase/functions/api/routes/cli-auth.ts` |
 | POST | `/v1/cli/auth/device/reject` | `jwtAuth` | `packages/server/supabase/functions/api/routes/cli-auth.ts` |
