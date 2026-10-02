@@ -51,6 +51,7 @@ const REVIEWED = new Map<string, 'keyed' | 'stored' | 'sentinel'>([
   ['_shared/notifications.ts reporter_token_hash', 'stored'], // callers pass a row value
   ['_shared/reporter-optin.ts reporter_token_hash', 'stored'], // auth.tokenHash from resolveReporterAuth
   ['_shared/reporter-digest.ts reporter_token_hash', 'stored'], // deferred ledger row read back
+  ['_shared/slack-reporter-reply.ts reporter_token_hash', 'stored'], // reads the reports row; the reply comment carries no key
   ['_shared/reputation.ts reporter_token_hash', 'stored'], // caller passes the key
   ['_shared/telemetry.ts reporter_token_hash', 'stored'], // caller passes the key
   ['_shared/anti-gaming.ts reporter_tokens', 'stored'], // caller passes the key, or 'tester:<id>'

@@ -371,6 +371,17 @@ export function buildReportBlocks(payload: SlackReportPayload): unknown[] {
       })
     }
 
+    // Answer the person who reported it, from the channel (Plan 018 §3).
+    // Only for reports filed through the SDK widget: nobody else can read it.
+    if (/^rk1_[0-9a-f]{64}$/.test(payload.reporterToken ?? '')) {
+      actionElements.push({
+        type: 'button',
+        text: { type: 'plain_text', text: 'Reply to reporter', emoji: true },
+        action_id: `reply_reporter:${payload.reportId}`,
+        value: payload.reportId,
+      })
+    }
+
     // Routine calls straight from the channel — no console round-trip.
     // Handled by the slack-interactions edge function via the shared
     // report-transition contract (same side effects as the console PATCH).
@@ -653,25 +664,32 @@ export interface BotMessageResult {
  *   2. Per-project vaulted token via `opts.db` + `opts.projectId`
  *   3. Global `SLACK_BOT_TOKEN` env var
  */
-export async function sendBotMessage(opts: BotMessageOptions): Promise<BotMessageResult> {
-  let token = opts.token ?? null
-  // Resolve per-project vaulted token if db + projectId are provided
-  if (!token && opts.db && opts.projectId) {
+/**
+ * The project's Slack bot token: the per-project vaulted token, else the
+ * global `SLACK_BOT_TOKEN`. Null when neither exists. Never throws.
+ */
+export async function resolveSlackBotToken(db: unknown, projectId: string | null | undefined): Promise<string | null> {
+  if (db && projectId) {
     try {
-      const { data: ps } = await (opts.db as { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: unknown }> } } } })
+      const { data: ps } = await (db as { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: unknown }> } } } })
         .from('project_settings')
         .select('slack_bot_token_ref')
-        .eq('project_id', opts.projectId)
+        .eq('project_id', projectId)
         .maybeSingle()
       const ref = (ps as Record<string, unknown> | null)?.slack_bot_token_ref as string | null
       if (ref) {
-        const { data: secret } = await (opts.db as { rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown }> })
+        const { data: secret } = await (db as { rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown }> })
           .rpc('vault_get_secret', { secret_id: ref })
-        if (typeof secret === 'string') token = secret
+        if (typeof secret === 'string') return secret
       }
     } catch { /* fall through to env */ }
   }
-  if (!token) token = Deno.env.get('SLACK_BOT_TOKEN') ?? null
+  return Deno.env.get('SLACK_BOT_TOKEN') ?? null
+}
+
+export async function sendBotMessage(opts: BotMessageOptions): Promise<BotMessageResult> {
+  // Explicit token, else the per-project vaulted token, else SLACK_BOT_TOKEN.
+  const token = opts.token || (await resolveSlackBotToken(opts.db, opts.projectId))
   const channel = opts.channel ?? Deno.env.get('SLACK_CHANNEL_ID')
 
   if (!token) {
