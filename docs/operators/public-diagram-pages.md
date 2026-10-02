@@ -61,8 +61,47 @@ behavior's policy before promising a takedown time; an invalidation of
    engines don't index it. The console tells the owner.
 3. Deploy the admin site. `deploy-admin.yml` republishes the CloudFront router
    with rule 0c.
-4. The 404 fallback needs the bucket's 404 document set up (see
-   `scripts/aws-configure-docs-errors.mjs`); deploy-docs smoke-checks it.
+4. **Owner action: give missing pages a real 404.** See the next section.
+   Without it, an unpublished or not-yet-written `/r/` URL shows S3's raw
+   `NoSuchKey` page (still status 404, but unbranded and naming the key).
+
+## Owner action: a branded 404 for missing pages
+
+On 2026-10-02 `curl -sI https://kensaur.us/mushi-mushi/docs/<missing>`
+returned S3's raw `NoSuchKey` page. The bucket's website ErrorDocument is
+`index.html`, a key that does not exist. This affects every missing key in
+`kensaur.us-mushi-mushi`, not only diagram pages.
+
+The fix is already in the repo, but the deploy role cannot run it:
+
+- **Why the bucket, and not CloudFront.** A CloudFront Function cannot
+  supply it: viewer-request cannot see whether an object exists, and
+  viewer-response never runs when the origin answers 400 or above.
+  Distribution-level custom error responses are deliberately not used,
+  because the distribution serves every kensaur.us app.
+- **Same origin.** `/mushi-mushi/docs/*` was cloned from the `/mushi-mushi/*`
+  behavior (`scripts/cloudfront-create-docs-behavior.sh`), so both use the
+  same S3 website origin. One per-bucket ErrorDocument covers docs paths and
+  `/r/` paths alike.
+- **Status stays 404.** S3 serves the error document with status 404, never
+  a 200 soft-404. For `/r/<owner>/<repo>` the docs `not-found` page then
+  renders the diagram client-side, best-effort.
+
+Steps, with AWS credentials that have `s3:GetBucketWebsite`,
+`s3:PutBucketWebsite` on the bucket plus `cloudfront:ListResponseHeadersPolicies`,
+`GetResponseHeadersPolicy`, `CreateResponseHeadersPolicy`,
+`UpdateResponseHeadersPolicy`, `GetDistributionConfig` and `UpdateDistribution`
+(an account admin; the GitHub deploy role has only the last two):
+
+1. `node scripts/aws-configure-docs-errors.mjs --dry-run` and read the planned changes.
+2. `node scripts/aws-configure-docs-errors.mjs` (idempotent).
+3. Set the repository variable `DOCS_ERROR_PAGES_CONFIGURED=true`
+   (`gh variable set DOCS_ERROR_PAGES_CONFIGURED --body true`) so every docs
+   deploy smoke-checks it from then on.
+4. Check: `curl -sI https://kensaur.us/mushi-mushi/docs/__missing` returns
+   `404` with the docs page, no `NoSuchKey`, and a `strict-transport-security`
+   header. `curl -sI https://kensaur.us/mushi-mushi/r/nobody/nothing` returns
+   `404` (after the admin deploy ships router rule 0c).
 
 Verify: publish a diagram of a repo the project token can push to, then run:
 

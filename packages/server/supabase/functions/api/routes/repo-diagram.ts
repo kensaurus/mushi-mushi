@@ -628,8 +628,10 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     if (error) return dbError(c, error)
 
     // The crawlable static page + `.md` twin. A failure does not undo the
-    // publication (the docs 404 fallback still renders it, unindexed); the
-    // console says so and the owner can publish again to retry.
+    // publication: static_page_at stays NULL, so the page URL and badge point
+    // at the interactive docs view (unindexed); the console says so and the
+    // owner can publish again to retry. On a republish whose write fails, the
+    // previous file (content the owner already approved) stays until then.
     let staticPage: StaticPageStatus
     try {
       staticPage = await writePublicPage(storeConfig(), payload)
