@@ -10,6 +10,8 @@ import { describe, expect, it } from 'vitest'
 import {
   authConfigDivergent,
   billingConsistency,
+  crossPromoChecks,
+  crossPromoLinksFrom,
   ciCostConcentration,
   completenessChecklist,
   deriveResourceUses,
@@ -256,5 +258,33 @@ describe('keySharedAcrossApps', () => {
     expect(out).toHaveLength(1)
     expect(out[0]).toMatchObject({ ruleId: 'key_shared_across_apps', severity: 'info', projectIds: ['glot', 'yen'] })
     expect(out[0].message).toContain('glot.it, yen-yen')
+  })
+})
+
+describe('crossPromoChecks', () => {
+  const projects = [
+    { id: 'glot', name: 'glot.it', kind: 'app' as const, manifest: { links: { crossPromo: [
+      { url: 'https://apps.apple.com/app/id1?ct=from-glot', toProject: 'yen-yen' },
+      { url: 'https://play.google.com/store/apps/details?id=com.gone', toProject: 'hhtp' },
+      { url: 'http://example.com/more' },
+      { url: 'https://site.example/apps' },
+      42,
+    ] } } },
+    { id: 'yen', name: 'yen-yen', kind: 'app' as const, manifest: null },
+  ]
+
+  it('reads the links, flags a 404, an http link and a missing campaign tag, and never calls a throttled store broken', () => {
+    const links = crossPromoLinksFrom(projects)
+    expect(links).toHaveLength(4)
+    expect(links[0]).toMatchObject({ fromProjectId: 'glot', toProjectId: 'yen' })
+    const { findings, unknown } = crossPromoChecks(links, {
+      'https://apps.apple.com/app/id1?ct=from-glot': { status: 429 },
+      'https://play.google.com/store/apps/details?id=com.gone': { status: 404 },
+      'https://site.example/apps': { status: null, error: 'timeout' },
+    }, projects)
+    const by = (id: string) => findings.filter((f) => f.ruleId === id).map((f) => String(f.evidence.url))
+    expect(by('cross_promo_link_broken').sort()).toEqual(['http://example.com/more', 'https://play.google.com/store/apps/details?id=com.gone'])
+    expect(by('cross_promo_untracked').sort()).toEqual(['https://play.google.com/store/apps/details?id=com.gone', 'https://site.example/apps'])
+    expect(unknown.map((u) => u.resourceKey).sort()).toEqual(['cross_promo_link:https://apps.apple.com/app/id1?ct=from-glot', 'cross_promo_link:https://site.example/apps'])
   })
 })

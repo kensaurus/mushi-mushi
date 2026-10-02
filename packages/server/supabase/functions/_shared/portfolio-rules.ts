@@ -473,6 +473,103 @@ function deepLinkFinding(projectIds: string[], rk: string, message: string, evid
   }
 }
 
+// ── cross-promotion ──────────────────────────────────────────────────────────
+
+export interface CrossPromoLink {
+  fromProjectId: string
+  url: string
+  /** The sibling app the link promotes, when the manifest names it. */
+  toProjectId: string | null
+}
+
+/** One fetch of a cross-promo URL. `status: null` = the fetch itself failed. */
+export interface CrossPromoProbe {
+  status: number | null
+  error?: string
+}
+
+/** Manifest `links.crossPromo[]` entries: `{ url, toProject? }`, read defensively. */
+export function crossPromoLinksFrom(projects: readonly PortfolioProject[]): CrossPromoLink[] {
+  const out: CrossPromoLink[] = []
+  for (const p of projects) {
+    const list = obj(obj(p.manifest).links).crossPromo
+    if (!Array.isArray(list)) continue
+    for (const raw of list.slice(0, 20)) {
+      const e = obj(raw)
+      const url = str(e.url, 2000)
+      if (!url) continue
+      const to = str(e.toProject)
+      const target = to ? projects.find((x) => x.id === to || x.name === to) : undefined
+      out.push({ fromProjectId: p.id, url, toProjectId: target?.id ?? null })
+    }
+  }
+  return out
+}
+
+/** Does this link carry a campaign tag the store or analytics can attribute? */
+export function hasCampaignTag(url: URL): boolean {
+  const host = url.hostname.toLowerCase()
+  if (host === 'apps.apple.com' || host === 'itunes.apple.com') return url.searchParams.has('ct')
+  if (host === 'play.google.com') return /utm_source=/.test(url.searchParams.get('referrer') ?? '')
+  return url.searchParams.has('utm_source') && url.searchParams.has('utm_campaign')
+}
+
+/**
+ * Plan 020 §8: every "more apps" link must open, and should carry a campaign
+ * tag so installs from it can be told apart. A fetch that failed, or a store
+ * that answered 403/429/5xx (they throttle bots), is `unknown` — only a 404
+ * or 410 is a broken link.
+ */
+export function crossPromoChecks(
+  links: readonly CrossPromoLink[],
+  probes: Readonly<Record<string, CrossPromoProbe | undefined>>,
+  projects: readonly { id: string; name: string }[] = [],
+): { findings: PortfolioRuleFinding[]; unknown: PortfolioRuleUnknown[] } {
+  const findings: PortfolioRuleFinding[] = []
+  const unknown: PortfolioRuleUnknown[] = []
+  for (const l of links) {
+    const ids = l.toProjectId ? [l.fromProjectId, l.toProjectId] : [l.fromProjectId]
+    const rk = `cross_promo_link:${l.url}`
+    const label = l.toProjectId ? `its link to ${names(projects, [l.toProjectId])}` : `its link ${l.url}`
+    let parsed: URL | null = null
+    try {
+      parsed = new URL(l.url)
+    } catch {
+      parsed = null
+    }
+    if (!parsed || parsed.protocol !== 'https:') {
+      findings.push({ ruleId: 'cross_promo_link_broken', severity: 'warn', projectIds: ids, resourceKey: rk, message: `${names(projects, [l.fromProjectId])}: ${label} is not an https link.`, evidence: { url: l.url }, suggestedFix: 'Use the https store or site URL in `links.crossPromo`.' })
+      continue
+    }
+    if (!hasCampaignTag(parsed)) {
+      findings.push({
+        ruleId: 'cross_promo_untracked',
+        severity: 'info',
+        projectIds: ids,
+        resourceKey: rk,
+        message: `${names(projects, [l.fromProjectId])}: ${label} has no campaign tag, so installs from it cannot be told apart from the rest.`,
+        evidence: { url: l.url },
+        suggestedFix: parsed.hostname.endsWith('apple.com')
+          ? 'Add a campaign token, for example `?ct=from-glot` (App Store Connect → App Analytics → Campaigns).'
+          : parsed.hostname === 'play.google.com'
+            ? 'Add `&referrer=utm_source%3Dglot%26utm_campaign%3Dmore-apps` so Play Console attributes the install.'
+            : 'Add `utm_source` and `utm_campaign` to the link.',
+      })
+    }
+    const probe = probes[l.url]
+    if (!probe || probe.status === null) {
+      unknown.push({ ruleId: 'cross_promo_link_broken', projectIds: ids, resourceKey: rk, reason: `Could not open ${l.url}${probe?.error ? `: ${probe.error}` : ''}.` })
+      continue
+    }
+    if (probe.status === 404 || probe.status === 410) {
+      findings.push({ ruleId: 'cross_promo_link_broken', severity: 'error', projectIds: ids, resourceKey: rk, message: `${names(projects, [l.fromProjectId])}: ${label} does not open (${probe.status}). Users who tap it land on an error page.`, evidence: { url: l.url, status: probe.status }, suggestedFix: 'Point the link at the live store listing or site, or remove it from the app.' })
+    } else if (probe.status < 200 || probe.status >= 300) {
+      unknown.push({ ruleId: 'cross_promo_link_broken', projectIds: ids, resourceKey: rk, reason: `${l.url} answered ${probe.status}; that does not tell whether it works.` })
+    }
+  }
+  return { findings, unknown }
+}
+
 // ── shared channels ──────────────────────────────────────────────────────────
 
 export interface ChannelSettings {

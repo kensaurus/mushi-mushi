@@ -15,6 +15,7 @@ export default {
   rewards: 'Rewards & contributor identity',
   'inventory-and-gates': 'Inventory & gates',
   'app-recipe': 'App recipe & design system',
+  'shared-login': 'One login across your apps',
   'orchestrator-interop': 'Connecting your orchestrator',
   'closed-loop': 'Closed-loop evolution — the thesis',
   'evolution-loop': 'The evolution loop — five stages',

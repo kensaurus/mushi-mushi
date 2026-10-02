@@ -35,7 +35,8 @@ Below the cards:
 
 | Section | What it means |
 |---------|---------------|
-| **Across your apps** | Problems only visible across apps: a deep link to a sibling app that no longer resolves, many apps posting to one channel, CI cost in two repos. |
+| **Across your apps** | Problems only visible across apps: a deep link or "more apps" link that no longer opens, a shared login that does not allow one app's domain, apps sharing purchases on different Stripe accounts, many apps posting to one channel, CI cost in two repos. See [One login across your apps](../concepts/shared-login). |
+| **Funnel across apps** | One funnel run on every app: the same event names, in the same order, within the same window. Owners and admins pick the steps. An app with product events off, or with no events yet, says so instead of 0%. |
 | **Releases** | For each app: what is live and at what rollout, native changes waiting for a store build, and JS-only changes that can ship as an over-the-air update. It suggests one store release per app to save CI minutes. Your own CI builds and submits. |
 | **Daily digest** | One message a day across all apps. Off until an owner picks Slack, email or push. |
 | **Shared between apps** | Domains, store apps, Supabase projects and channels two or more apps use. |
