@@ -40,8 +40,8 @@ export async function loadDispatchReadiness(
       .eq('project_id', projectId)
       .maybeSingle(),
     db.from('project_repos').select('repo_url').eq('project_id', projectId).limit(1),
-    resolveLlmKey(db, projectId, 'anthropic'),
-    resolveLlmKey(db, projectId, 'openai'),
+    resolveLlmKey(db, projectId, 'anthropic', { purpose: 'probe' }),
+    resolveLlmKey(db, projectId, 'openai', { purpose: 'probe' }),
   ]);
 
   const settings = settingsRes.data;
@@ -116,7 +116,7 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
         .eq('project_id', projectId)
         .order('is_primary', { ascending: false })
         .limit(1),
-      resolveLlmKey(db, projectId, 'anthropic'),
+      resolveLlmKey(db, projectId, 'anthropic', { purpose: 'probe' }),
     ]);
 
     const settings = settingsRes.data;

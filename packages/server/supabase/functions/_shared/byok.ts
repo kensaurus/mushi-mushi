@@ -19,6 +19,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { log as rootLog } from './logger.ts';
 import { isRunnableByokPoolState, validateOpenAiBaseUrl } from './byok-validation.ts';
+import { assertLlmBudget, isBudgetedProvider, LlmBudgetUnavailableError } from './llm-budget.ts';
 
 const log = rootLog.child('byok');
 
@@ -89,10 +90,45 @@ export async function resolveLlmKey(
   db: SupabaseClient,
   projectId: string,
   provider: LlmProvider,
+  opts: {
+    /**
+     * 'generation' (default): an LLM call follows, so the monthly budget is
+     * enforced (throws LlmBudgetExceededError). 'probe' / 'embedding': a key
+     * check or an embedding, which the budget does not cover.
+     */
+    purpose?: 'generation' | 'probe' | 'embedding';
+  } = {},
 ): Promise<ResolvedKey | null> {
+  if ((opts.purpose ?? 'generation') === 'generation') {
+    await enforceLlmBudget(db, projectId, provider);
+  }
   const candidates = await resolveLlmKeys(db, projectId, provider);
   return candidates[0] ?? null;
 }
+
+/**
+ * Enforce the project's monthly LLM budget before any provider call
+ * (_shared/llm-budget.ts). Over budget throws LlmBudgetExceededError. A
+ * failed budget read is logged to Sentry and the call proceeds: one failed
+ * read must not stop triage, and it must not pass unnoticed either.
+ */
+export async function enforceLlmBudget(
+  db: SupabaseClient,
+  projectId: string,
+  provider: LlmProvider,
+): Promise<void> {
+  if (!isBudgetedProvider(provider)) return;
+  try {
+    await assertLlmBudget(db, projectId);
+  } catch (err) {
+    if (err instanceof LlmBudgetUnavailableError) {
+      log.error('LLM budget check failed; call proceeds unchecked', { projectId, provider, err: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
 
 /**
  * Resolve ALL active candidate keys for a provider, ordered by priority ASC.

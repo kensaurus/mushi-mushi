@@ -1,4 +1,5 @@
 import type { Hono } from 'npm:hono@4';
+import { isSpendLimitField, SPEND_LIMIT_FIELDS, validateSpendLimit } from '../../_shared/autofix-budget.ts';
 import type { Variables } from '../types.ts';
 
 import { getServiceClient } from '../../_shared/db.ts';
@@ -418,6 +419,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'voice_languages',
       'telegram_bot_token_ref',
       'github_user_token_ref',
+      // Spend limits (Settings → General → Spend limits). Validated below.
+      ...SPEND_LIMIT_FIELDS,
     ];
     // Secrets submitted raw are written to Supabase Vault and persisted as
     // `vault://<name>` — same auto-vault contract as
@@ -449,6 +452,17 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           );
         }
         updates[key] = value;
+        continue;
+      }
+      if (isSpendLimitField(key)) {
+        // Limits bound what the project spends: project admins only.
+        const forbidden = requireProjectAdmin(c, project);
+        if (forbidden) return forbidden;
+        const verdict = validateSpendLimit(key, value);
+        if (!verdict.ok) {
+          return c.json({ error: { code: 'VALIDATION_ERROR', message: verdict.message } }, 400);
+        }
+        updates[key] = verdict.value;
         continue;
       }
       if (key === 'voice_intake_enabled') {

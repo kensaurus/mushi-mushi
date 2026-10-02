@@ -69,4 +69,6 @@ export interface IndexedFileRow {
   language: string | null
   content_preview: string | null
   content_hash?: string | null
+  /** Relative imports of the whole file, extracted at index time. */
+  imports?: string[] | null
 }

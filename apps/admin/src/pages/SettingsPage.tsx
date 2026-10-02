@@ -21,6 +21,7 @@ import { PageHeaderBar } from '../components/PageHeaderBar';
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture';
 import { SettingsCompactSnapshot } from '../components/settings/SettingsCompactSnapshot';
 import { GeneralPanel } from '../components/settings/GeneralPanel';
+import { SpendLimitsPanel } from '../components/settings/SpendLimitsPanel';
 import { SettingsTabIntro } from '../components/settings/SettingsTabIntro';
 import { SETTINGS_TAB_DESCRIPTIONS, SETTINGS_TAB_LABELS } from '../lib/settingsTabExplainer';
 import { ByokPanel } from '../components/settings/ByokPanel';
@@ -403,7 +404,12 @@ export function SettingsPage() {
         className="min-w-0 space-y-3"
       >
         <PanelSectionLabel>{settingsTabGroup(active)}</PanelSectionLabel>
-        {active === 'general' && <GeneralPanel />}
+        {active === 'general' && (
+          <>
+            <GeneralPanel />
+            <SpendLimitsPanel />
+          </>
+        )}
         {active === 'byok' && <ByokPanel />}
         {active === 'firecrawl' && <FirecrawlPanel />}
         {active === 'browserbase' && <BrowserbasePanel />}

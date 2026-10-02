@@ -35,6 +35,10 @@ export const PUBLIC_FAQ_MCP: readonly PublicFaqItem[] = [
     q: 'Cursor says it cannot reach the Mushi server',
     a: 'Check the MCP endpoint URL and that your API key is active. Run npx mushi-mushi setup --ide cursor again to rewrite the config.',
   },
+  {
+    q: 'Claude Code says "HTTP 404 dialing" the Mushi server',
+    a: 'Your editor saved an old sign-in for the server and keeps reusing it. Clear it: in Claude Code run /mcp, pick mushi, and choose to clear authentication (or remove the server and add it again). Then sign in once more.',
+  },
 ] as const
 
 /** Plain-English definition — no model names (those belong in depth sections). */

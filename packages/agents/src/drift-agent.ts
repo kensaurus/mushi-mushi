@@ -163,9 +163,11 @@ export function walkContractDrift(
     }
   }
 
-  // Dead handler check — paths in inventory without an identifiable handler
+  // Dead handler check — inventory routes that name an empty handler. A node
+  // with no handler field at all (an inventory API dependency) says nothing
+  // about its handler, so it is not flagged.
   for (const node of inventoryNodes) {
-    if (!node.handler || node.handler.trim() === '') {
+    if (node.handler !== undefined && node.handler.trim() === '') {
       findings.push({
         finding_type: 'dead_handler',
         severity: 'warn',
