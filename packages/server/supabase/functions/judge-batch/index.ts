@@ -15,6 +15,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { mapWithConcurrency } from '../_shared/concurrency.ts'
 import { JUDGE_MODEL, JUDGE_FALLBACK } from '../_shared/models.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
+import { JUDGE_ELIGIBLE_STATUSES, judgeEmptyResult } from '../_shared/judge-eligibility.ts'
 
 /**
  * OpenRouter / Together / Fireworks expect `vendor/model` slugs. Operators
@@ -111,11 +112,19 @@ Deno.serve(withSentry('judge-batch', async (req) => {
 
     const { data: projects } = await projectFilter
     if (!projects?.length) {
-      await cronRun.finish({ rowsAffected: 0, metadata: { reason: 'no projects' } })
-      return new Response(JSON.stringify({ ok: true, message: 'No projects' }), { status: 200 })
+      const empty = judgeEmptyResult({ projectsChecked: 0, judgeEnabledProjects: 0, eligibleReports: 0 })
+      await cronRun.finish({ rowsAffected: 0, metadata: { reason: empty?.reason ?? 'no_projects' } })
+      return new Response(JSON.stringify({ ok: true, data: { totalEvaluated: 0, driftAlerts: [], ...empty } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
     }
 
     let totalEvaluated = 0
+    // Counted so a 0-eval run can say WHY (judge off vs nothing new to grade)
+    // instead of returning a bare 200 the console renders as success.
+    let judgeEnabledProjects = 0
+    let eligibleReports = 0
     const driftAlerts: string[] = []
     // Capture per-report failures so the operator can see WHY rows_affected=0
     // without fishing through edge-function stdout. Surfaced on cron_runs.metadata.
@@ -154,6 +163,7 @@ Deno.serve(withSentry('judge-batch', async (req) => {
       const settings = settingsByProject.get(project.id)
 
       if (!settings?.judge_enabled) continue
+      judgeEnabledProjects++
 
       const sampleSize = settings.judge_sample_size ?? 50
       // Wave R (audit 2026-04-22): judge upgraded from claude-sonnet-4-6 to
@@ -171,12 +181,13 @@ Deno.serve(withSentry('judge-batch', async (req) => {
         .from('reports')
         .select('id, description, user_category, category, severity, summary, component, confidence, stage1_classification, stage2_analysis, reproduction_steps, environment, console_logs, stage1_prompt_version, stage2_prompt_version')
         .eq('project_id', project.id)
-        .in('status', ['classified', 'grouped', 'fixing', 'fixed'])
+        .in('status', [...JUDGE_ELIGIBLE_STATUSES])
         .is('judge_evaluated_at', null)
         .order('created_at', { ascending: false })
         .limit(sampleSize)
 
       if (!reports?.length) continue
+      eligibleReports += reports.length
 
       const trace = createTrace('judge-batch', { projectId: project.id, reportCount: reports.length })
 
@@ -507,9 +518,14 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
       trace.end()
     }
 
+    const empty = totalEvaluated === 0
+      ? judgeEmptyResult({ projectsChecked: projects.length, judgeEnabledProjects, eligibleReports })
+      : null
+
     await cronRun.finish({
       rowsAffected: totalEvaluated,
       metadata: {
+        ...(empty ? { reason: empty.reason } : {}),
         driftAlerts,
         projectsChecked: projects.length,
         // Trim to first few — we only need a fingerprint, not 50 copies of the
@@ -521,7 +537,7 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
 
     return new Response(JSON.stringify({
       ok: true,
-      data: { totalEvaluated, driftAlerts },
+      data: { totalEvaluated, driftAlerts, ...(empty ? empty : {}) },
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })
   } catch (err) {
     rootLog.child('judge-batch').fatal('Unhandled error', { err: String(err) })
