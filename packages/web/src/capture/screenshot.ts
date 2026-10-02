@@ -8,8 +8,18 @@ export interface ScreenshotCapture {
 export interface ScreenshotCaptureOptions {
   privacy?: MushiPrivacyConfig;
   /** Callback invoked when capture fails (taint, security policy, etc.). */
-  onFailed?: (reason: 'taint' | 'error') => void;
+  onFailed?: (reason: ScreenshotFailureReason) => void;
 }
+
+/**
+ * Why a capture produced no image. Also the `detail.reason` of the
+ * `mushi:screenshot_failed` document event.
+ * - taint: cross-origin content made the canvas unreadable
+ * - timeout: the SVG never loaded or errored within 5 s
+ * - unsupported: no 2D canvas, or the engine rasterised nothing (WebKit)
+ * - error: anything else
+ */
+export type ScreenshotFailureReason = 'taint' | 'timeout' | 'unsupported' | 'error';
 
 export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}): ScreenshotCapture {
   let activeOptions = options;
@@ -20,7 +30,11 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
 
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      if (!ctx) return null;
+      if (!ctx) {
+        activeOptions.onFailed?.('unsupported');
+        emitScreenshotFailed('unsupported');
+        return null;
+      }
 
       const width = window.innerWidth;
       const height = window.innerHeight;
@@ -49,7 +63,7 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
 
       return new Promise((resolve) => {
         let settled = false;
-        const settle = (value: string | null, reason?: 'taint' | 'error') => {
+        const settle = (value: string | null, reason?: ScreenshotFailureReason) => {
           if (settled) return;
           settled = true;
           clearTimeout(timer);
@@ -62,7 +76,7 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
         };
         // WebKit can leave the SVG image in limbo (neither load nor error) for
         // pathological documents — never let the report submit hang on it.
-        const timer = setTimeout(() => settle(null, 'error'), 5000);
+        const timer = setTimeout(() => settle(null, 'timeout'), 5000);
 
         img.onload = () => {
           try {
@@ -71,7 +85,7 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
             // nothing. A fully transparent canvas would export as a solid black
             // JPEG — report failure instead of attaching a useless image.
             if (isCanvasBlank(ctx, width, height)) {
-              settle(null, 'error');
+              settle(null, 'unsupported');
               return;
             }
             settle(canvas.toDataURL('image/jpeg', 0.7));
@@ -100,7 +114,7 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
 }
 
 /** Dispatch a CustomEvent on document so host apps can react to capture failures. */
-function emitScreenshotFailed(reason: 'taint' | 'error'): void {
+function emitScreenshotFailed(reason: ScreenshotFailureReason): void {
   try {
     document.dispatchEvent(new CustomEvent('mushi:screenshot_failed', { detail: { reason }, bubbles: false }));
   } catch {

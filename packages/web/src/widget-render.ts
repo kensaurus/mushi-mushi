@@ -38,17 +38,22 @@ import type { MushiLocale } from './i18n';
 import {
   buildBrandFooterHref,
   CATEGORY_ICONS,
+  charCounterText,
+  DESCRIPTION_MAX_LENGTH,
   escapeHtml,
+  formatReceiptTime,
   formatRelativeTime,
   pad2,
+  readPlatform,
   renderAppIconHtml,
   reporterStatusLabel,
   reporterStatusShort,
   reporterStatusTone,
   STEP_NUMBER,
+  submitShortcutKey,
   TOTAL_STEPS,
 } from './widget-helpers';
-import type { AssistantTurn, WidgetCallbacks, WidgetRewardsState, WidgetStep, WidgetSubmitOutcome } from './widget-helpers';
+import type { AssistantTurn, DetailMode, ScreenshotErrorReason, WidgetCallbacks, WidgetRewardsState, WidgetStep, WidgetSubmitOutcome } from './widget-helpers';
 
 export interface WidgetRenderCtx {
   config: Required<MushiWidgetConfig>;
@@ -80,6 +85,10 @@ export interface WidgetRenderCtx {
   submitting: boolean;
   sdkFreshness: { latest: string | null; current: string; deprecated: boolean; message?: string | null } | null;
   screenshotError: boolean;
+  /** Why the last capture failed (null when it didn't). */
+  screenshotErrorReason: ScreenshotErrorReason | null;
+  /** Placeholder + starter-chip set for the details step. */
+  detailMode: DetailMode;
   reporterReports: MushiReporterReport[];
   magicLinkSending: boolean;
   magicLinkEmail: string;
@@ -765,7 +774,8 @@ export function renderCrossAppReportsStep(ctx: WidgetRenderCtx): string {
 export function renderReportDetailStep(ctx: WidgetRenderCtx): string {
     const f = ctx.locale.flows;
     const report = ctx.reporterReports.find((r) => r.id === ctx.selectedReportId);
-    const status = report?.status ?? 'unknown';
+    // Opened via "Track this report" before the list caught up → it's new.
+    const status = report?.status ?? 'new';
     const tone = reporterStatusTone(status);
     const when = report?.created_at ? formatRelativeTime(report.created_at) : '';
     const comments = ctx.reporterComments.map((comment) => `
@@ -782,7 +792,7 @@ export function renderReportDetailStep(ctx: WidgetRenderCtx): string {
             <span class="mushi-report-status mushi-status-${tone}">${escapeHtml(reporterStatusLabel(status))}</span>
             ${when ? `<span class="mushi-report-when">Reported ${escapeHtml(when)}</span>` : ''}
           </div>
-          <p>${escapeHtml(report?.summary ?? report?.description ?? 'Report details')}</p>
+          <p>${escapeHtml(report?.summary ?? report?.description ?? `#${(ctx.selectedReportId ?? '').slice(0, 8)}`)}</p>
         </div>
         <div class="mushi-thread">
           ${ctx.reporterLoading ? `<p class="mushi-muted">${escapeHtml(f.thread.loading)}</p>` : comments || `<p class="mushi-muted">${escapeHtml(f.thread.empty)}</p>`}
@@ -840,7 +850,7 @@ export function renderDetailsStep(ctx: WidgetRenderCtx): string {
     const screenshotLabel = ctx.screenshotCapturing
       ? t.step3.screenshotCapturing
       : ctx.screenshotError
-        ? t.step3.screenshotFailed
+        ? t.step3.screenshotRetry
         : ctx.screenshotAttached
           ? t.step3.screenshotAttached
           : t.step3.screenshotButton;
@@ -867,26 +877,32 @@ export function renderDetailsStep(ctx: WidgetRenderCtx): string {
       ctx.elementCapturing ? 'loading' : '',
     ].filter(Boolean).join(' ');
 
-    const exampleChips = t.step3.examplePrompts
+    const mode = ctx.detailMode;
+    const placeholder = mode === 'feature'
+      ? t.step3.featurePlaceholder
+      : mode === 'other' ? t.step3.otherPlaceholder : t.step3.descriptionPlaceholder;
+    const examples = mode === 'feature' ? t.step3.featureExamples : mode === 'other' ? [] : t.step3.examplePrompts;
+    const exampleChips = examples
       .map((p) => `<button type="button" class="mushi-example-chip" data-example="${escapeHtml(p)}">${escapeHtml(p)}</button>`)
       .join('');
+    const screenshotReason = ctx.screenshotError && ctx.screenshotErrorReason
+      ? `<p class="mushi-error-inline" role="status" data-role="screenshot-reason">${escapeHtml(t.step3.screenshotErrors[ctx.screenshotErrorReason])}</p>`
+      : '';
 
     return `
       ${renderHeader(ctx, { title: t.step3.heading, showBack: true, step: STEP_NUMBER.details })}
       <div class="mushi-body">
-        <div class="mushi-example-chips" aria-label="Example prompts">${exampleChips}</div>
+        ${exampleChips ? `<div class="mushi-example-chips" aria-label="Example prompts">${exampleChips}</div>` : ''}
         <div class="mushi-textarea-wrap">
           <textarea
             class="mushi-textarea"
-            placeholder="${escapeHtml(t.step3.descriptionPlaceholder)}"
+            placeholder="${escapeHtml(placeholder)}"
             rows="4"
-            maxlength="4000"
+            maxlength="${DESCRIPTION_MAX_LENGTH}"
             aria-label="${escapeHtml(t.step3.heading)}"
             autofocus
           ></textarea>
-          <div class="mushi-char-counter" data-role="char-counter" aria-hidden="true">
-            <span data-role="char-current">0</span>/<span data-role="char-min">${minLen}</span>
-          </div>
+          <div class="mushi-char-counter" data-role="char-counter" aria-hidden="true">${escapeHtml(charCounterText('', minLen, t.step3.charsNeeded))}</div>
         </div>
         <div class="mushi-attachments">
           ${ctx.screenshotAvailable
@@ -916,6 +932,7 @@ export function renderDetailsStep(ctx: WidgetRenderCtx): string {
           </button>`
             : ''}
         </div>
+        ${screenshotReason}
         ${ctx.screenshotAttached && ctx.screenshotPreview
           ? `<figure class="mushi-screenshot-preview">
               <img src="${escapeHtml(ctx.screenshotPreview)}" alt="${escapeHtml(t.step3.screenshotPreviewAlt)}" />
@@ -930,7 +947,7 @@ export function renderDetailsStep(ctx: WidgetRenderCtx): string {
           : ''}
       </div>
       <div class="mushi-footer">
-        <span class="mushi-footer-hint" aria-hidden="true">\u2318 + ENTER \u2192 send</span>
+        <span class="mushi-footer-hint" aria-hidden="true">${escapeHtml(t.step3.submitHint.replace('{key}', submitShortcutKey(readPlatform())))}</span>
         <button type="button" class="mushi-submit" data-action="submit"${ctx.submitting ? ' disabled' : ''}>
           <span>${ctx.submitting ? t.widget.submitting : t.widget.submit}</span>
           <span class="mushi-submit-arrow" aria-hidden="true">\u2192</span>
@@ -939,36 +956,56 @@ export function renderDetailsStep(ctx: WidgetRenderCtx): string {
     `;
   }
 
+  /** Failure label for the success step's title, or null when the report is accepted / delivering. */
+function submitFailureLabel(ctx: WidgetRenderCtx): string | null {
+    const s = ctx.locale.flows.success;
+    switch (ctx.lastSubmitFailureKind) {
+      case 'rate_limited': return s.rateLimited;
+      case 'quota': return s.quotaBlocked;
+      case 'permanent': return s.permanentFailed;
+      case 'retrying': return s.retrying;
+    }
+    return ctx.lastSubmitQueuedOffline ? s.queuedOffline : null;
+  }
+
   /**
    * Editorial success state: 朱印-style red stamp ring with the kanji
-   * 受 ("received") at its centre, the localised "thank you" string
-   * in serif below, and a mono ledger receipt ("REPORT · HH:MM:SS").
-   * The ring + label animations are defined in styles.ts so this stays
-   * pure markup and `prefers-reduced-motion` flips them to the final
-   * frame instantly.
+   * 受 ("received") at its centre, a locale-aware timestamp, and the receipt.
+   * The title follows the outcome, so a rate-limited or queued send never
+   * reads "report received". There is no Back (it led into the submitted
+   * form); Done closes. The ring + label animations are defined in styles.ts
+   * so this stays pure markup and `prefers-reduced-motion` flips them to the
+   * final frame instantly.
    */
 export function renderSuccessStep(ctx: WidgetRenderCtx): string {
     const t = ctx.locale;
+    const s = t.flows.success;
     const stamp = ctx.submittedAt ?? new Date();
-    const time = stamp.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    const locale = ctx.config.locale === 'auto' ? undefined : ctx.config.locale;
+    const failure = submitFailureLabel(ctx);
+    // In-widget tracking needs a server id and the reporter inbox. With
+    // neither, the control is omitted rather than left dead; a host
+    // dashboardUrl still renders "Track on Mushi" inside the receipt.
+    const canTrack = !failure && ctx.lastReportId && ctx.callbacks.onReporterReportsRequest;
 
     return `
-      ${renderHeader(ctx, { title: t.widget.title, showBack: true, eyebrow: 'Mushi \u00B7 Receipt' })}
+      ${renderHeader(ctx, { title: escapeHtml(failure ?? s.title), eyebrow: t.flows.eyebrows.receipt })}
       <div class="mushi-body">
         <div class="mushi-success">
           <div class="mushi-success-stamp" aria-hidden="true">
             <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"><circle cx="50" cy="50" r="44"/></svg>
             <span class="mushi-success-stamp-label">\u53D7</span>
           </div>
-          <div class="mushi-success-headline">${t.widget.submitted}</div>
-          <div class="mushi-success-meta">REPORT \u00B7 ${time}</div>
+          <time class="mushi-success-meta" datetime="${stamp.toISOString()}">${escapeHtml(formatReceiptTime(stamp, locale))}</time>
           ${renderSuccessReceipt(ctx)}
           ${ctx.rewardsState ? renderSuccessRewards(ctx) : ''}
           ${ctx.config.betaMode?.enabled ? renderBetaSuccessFooter(ctx) : ''}
-          <button type="button" class="mushi-link-btn mushi-success-my-reports" data-action="view-my-reports">
-            ${escapeHtml(ctx.locale.flows.success.trackReport)}
-          </button>
+          ${canTrack ? `<button type="button" class="mushi-link-btn mushi-success-my-reports" data-action="track-report">${escapeHtml(s.trackReport)}</button>` : ''}
         </div>
+      </div>
+      <div class="mushi-footer">
+        <span></span>
+        <button type="button" class="mushi-submit" data-action="done"><span>${escapeHtml(s.done)}</span></button>
       </div>
     `;
   }
@@ -987,13 +1024,7 @@ export function renderSuccessStep(ctx: WidgetRenderCtx): string {
 export function renderSuccessReceipt(ctx: WidgetRenderCtx): string {
     const s = ctx.locale.flows.success;
     const failureKind = ctx.lastSubmitFailureKind;
-    if (failureKind === 'rate_limited' || failureKind === 'quota' || failureKind === 'permanent' || failureKind === 'retrying' || ctx.lastSubmitQueuedOffline) {
-      const label =
-        failureKind === 'rate_limited' ? s.rateLimited
-        : failureKind === 'quota' ? s.quotaBlocked
-        : failureKind === 'permanent' ? s.permanentFailed
-        : failureKind === 'retrying' ? s.retrying
-        : s.queuedOffline;
+    if (submitFailureLabel(ctx)) {
       const hint =
         failureKind === 'rate_limited' ? s.rateLimitedHint
         : failureKind === 'quota' ? s.quotaBlockedHint
@@ -1003,7 +1034,6 @@ export function renderSuccessReceipt(ctx: WidgetRenderCtx): string {
       return `
         <div class="mushi-success-receipt" role="status">
           <div class="mushi-success-receipt-row mushi-success-receipt-warn">
-            <span class="mushi-success-receipt-label">${escapeHtml(label)}</span>
             <span class="mushi-success-receipt-hint">${escapeHtml(hint)}</span>
           </div>
         </div>

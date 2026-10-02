@@ -1,0 +1,13 @@
+---
+"@mushi-mushi/web": patch
+---
+
+Widget polish from live QA on Windows Chrome:
+
+- Feature requests now send `userCategory: 'feature'`, so they land as `reports.user_category = 'feature'` instead of a generic `other`, whether they come from the ✨ card or from Other → Feature request. The details step's placeholder and starter chips follow the mode: feature, bug or other.
+- The shortcut hint reads "Ctrl + Enter" outside Apple platforms and is localized.
+- The description counter shows "N more characters" until the minimum is met, then `length/4000`. It used to show length over the minimum, such as "397/12".
+- A failed screenshot shows why: permission blocked, browser unsupported, blocked by another site's content, timed out, or generic. The button becomes "Try again". The `mushi:screenshot_failed` document event can now carry `timeout` and `unsupported`; both used to arrive as `error`.
+- The success step is titled "Thanks — report received". A rate-limited, queued or failed send gets its own title instead. The step shows the receipt id and a localized date-time with time zone, has a Done button and no Back button, and no longer closes itself after 2.8 s.
+- "Track this report" opens that report's thread in My Reports. It is hidden when there is no reporter inbox, or no report id yet.
+- The stylesheet's documentation comments are stripped at build time. They used to ship inside the CSS string, about 2 kB gzipped.

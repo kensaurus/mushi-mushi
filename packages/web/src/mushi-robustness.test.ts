@@ -103,4 +103,20 @@ describe('Mushi public API error isolation', () => {
     expect(result).toBeTypeOf('object');
     expect(result).not.toBeNull();
   });
+
+  it('a screenshotProvider refused permission surfaces the permission reason in the widget', async () => {
+    const denied = Object.assign(new Error('Permission denied by user'), { name: 'NotAllowedError' });
+    const sdk = Mushi.init({
+      ...CONFIG,
+      capture: { screenshot: 'on-report', screenshotProvider: () => Promise.reject(denied) },
+    });
+    sdk.report({ featureRequest: true });
+    const shadow = document.getElementById('mushi-mushi-widget')!.shadowRoot!;
+    (shadow.querySelector('[data-action="screenshot"]') as HTMLButtonElement).click();
+
+    await vi.waitFor(() => {
+      expect(shadow.querySelector('[data-role="screenshot-reason"]')?.textContent).toContain('Allow it');
+    });
+    expect(shadow.querySelector('[data-action="screenshot"]')?.textContent).toContain('Try again');
+  });
 });

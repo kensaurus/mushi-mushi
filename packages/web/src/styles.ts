@@ -1116,13 +1116,6 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       opacity: 0;
       animation: mushi-stamp-press 360ms ${easeStamp} 600ms forwards;
     }
-    .mushi-success-headline {
-      font-family: ${fontDisplay};
-      font-size: 18px;
-      font-weight: 500;
-      color: ${ink};
-      margin-bottom: 4px;
-    }
     .mushi-success-meta {
       font-family: ${fontMono};
       font-size: 11px;
