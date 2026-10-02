@@ -282,7 +282,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
             autofix_approval_cost_threshold_usd:
               (capSettings?.autofix_approval_cost_threshold_usd as number | null) ?? null,
           },
-          { trigger: 'manual' },
+          { trigger: 'manual', excludeDispatchId: job.id },
         );
         budget = {
           spendUsd30d: Math.round(check.spendUsd30d * 10_000) / 10_000,

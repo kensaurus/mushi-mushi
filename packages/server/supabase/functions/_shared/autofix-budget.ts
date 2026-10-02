@@ -43,7 +43,7 @@ export interface AutofixBudgetCheck {
   trigger: DispatchTrigger
   /** fix-worker LLM spend over the last 30 days (always computed). */
   spendUsd30d: number
-  /** Dispatches created today (UTC), excluding skipped ones (always computed). */
+  /** Prior automatic dispatches today (UTC), not counting skipped ones or the one being checked. */
   dispatchesToday: number
   maxSpendUsd: number | null
   maxDispatchesPerDay: number | null
@@ -63,7 +63,16 @@ export async function checkAutofixBudget(
   db: SupabaseClient,
   projectId: string,
   settings: AutofixBudgetSettings,
-  opts: { severity?: string | null; estimatedCostUsd?: number; trigger: DispatchTrigger },
+  opts: {
+    severity?: string | null
+    estimatedCostUsd?: number
+    trigger: DispatchTrigger
+    /**
+     * The dispatch being checked. It is already a row in fix_dispatch_jobs,
+     * so it is left out of the count: a cap of 3 allows 3 dispatches.
+     */
+    excludeDispatchId?: string
+  },
 ): Promise<AutofixBudgetCheck> {
   const maxSpend = settings.autofix_max_spend_usd
   const maxDaily = settings.autofix_max_dispatches_per_day
@@ -82,10 +91,10 @@ export async function checkAutofixBudget(
       .eq('function_name', 'fix-worker'),
     db
       .from('fix_dispatch_jobs')
-      .select('id', { count: 'exact', head: true })
+      .select('id, status, dispatch_metadata')
       .eq('project_id', projectId)
       .gte('created_at', dayStart.toISOString())
-      .neq('status', 'skipped'),
+      .limit(1000),
   ])
   // A failed read used to count as $0 / 0 dispatches, which let every
   // dispatch through behind a cap the owner believed was on.
@@ -96,7 +105,16 @@ export async function checkAutofixBudget(
     (s: number, r: { cost_usd: unknown }) => s + (Number(r.cost_usd) || 0),
     0,
   )
-  const dispatchesToday = countRes.count ?? 0
+  // Prior AUTOMATIC dispatches today (UTC). Skipped ones never ran, a
+  // person's manual dispatches are not what the cap bounds, and the dispatch
+  // being checked is not "prior". Sibling fan-out jobs are automatic rows of
+  // the same project, so they count against the parent project's cap.
+  const dispatchesToday = ((countRes.data ?? []) as Array<{ id: string; status: string; dispatch_metadata: unknown }>)
+    .filter((r) =>
+      r.id !== opts.excludeDispatchId &&
+      r.status !== 'skipped' &&
+      dispatchTrigger(r.dispatch_metadata) === 'automatic')
+    .length
 
   const spendReached = maxSpend != null && spendUsd30d >= maxSpend
   const dailyReached = maxDaily != null && dispatchesToday >= maxDaily

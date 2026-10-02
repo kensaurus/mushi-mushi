@@ -404,6 +404,7 @@ Deno.serve(
         severity: report.severity as string | null,
         estimatedCostUsd: 0.25,
         trigger: dispatchTrigger(dispatch.dispatch_metadata),
+        excludeDispatchId: dispatch.id,
       });
       {
         const { error: snapErr } = await db
