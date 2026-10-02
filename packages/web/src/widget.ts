@@ -28,6 +28,7 @@ import type {
 // Re-exported so existing `from './widget'` import sites and the package barrel
 // keep resolving these public contracts unchanged after the helper split.
 export type { WidgetCallbacks, WidgetRewardsState, WidgetSubmitOutcome } from './widget-helpers';
+import { pickUpdateToast } from './reporter-inbox';
 import { renderBrandFooter, renderOutdatedBanner, renderView, resolveReporterCopy } from './widget-render';
 import type { WidgetRenderCtx } from './widget-render';
 
@@ -2135,6 +2136,11 @@ export class MushiWidget {
    * "Fixed in v1.4", "3 updates on your reports". Suppressed wherever the
    * launcher is (hidden routes, hideOnSelector, hide()). View opens the thread.
    */
+  showUpdatesToast(reports: MushiReporterReport[]): boolean {
+    const toast = pickUpdateToast(reports, this.lang, this.locale.panel.toastReplied);
+    return toast ? this.showUpdateToast(toast) : false;
+  }
+
   showUpdateToast(update: { text: string; reportId?: string | null }): boolean {
     if (this.isOpen || !this.triggerVisible || this.isRouteHidden() || this.isSuppressedByHost()) return false;
     this.removeToast();

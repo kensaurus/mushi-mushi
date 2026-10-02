@@ -44,6 +44,7 @@ import {
 } from '@mushi-mushi/core';
 
 import { MushiWidget } from './widget';
+import { deviceHasReports, markDeviceHasReports, recordToastShown, toastAllowed } from './reporter-inbox';
 import { mergeRuntimeConfig } from './runtime-merge';
 import { exposeMarketingRecorder } from './marketing-recorder';
 import {
@@ -584,22 +585,64 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     reporterPollVisibleHandler = null;
   }
 
+  /**
+   * Plan 018 §4.4: every 5 minutes while the page is visible, plus once when
+   * it becomes visible — and never from a device that has not filed a report.
+   */
   function startReporterInboxPolling(): void {
     stopReporterInboxPolling();
     if (!reporterNotificationsEnabled) return;
-    const POLL_MS = 60_000;
+    const POLL_MS = 5 * 60_000;
     const tick = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (!deviceHasReports(projectId)) return;
       syncReporterInboxQuiet();
     };
     reporterPollTimer = setInterval(tick, POLL_MS);
     if (typeof document !== 'undefined') {
       reporterPollVisibleHandler = () => {
-        if (document.visibilityState === 'visible') syncReporterInboxQuiet();
+        if (document.visibilityState === 'visible') tick();
       };
       document.addEventListener('visibilitychange', reporterPollVisibleHandler);
     }
-    syncReporterInboxQuiet();
+    tick();
+  }
+
+  /** Latest "Your reports" rows, for the next-visit toast. */
+  let lastReporterReports: MushiReporterReport[] = [];
+
+  /**
+   * Plan 018 §4.2: once, at first idle after init, a toast near the launcher
+   * when this device's reports have unread updates. At most one per session
+   * and one per 24 hours; hosts turn it off with `notifications.toast: false`.
+   */
+  function scheduleUpdateToast(): void {
+    const notifications = (bootstrapConfig as { notifications?: { toast?: boolean } }).notifications;
+    if (notifications?.toast === false || !deviceHasReports(projectId) || !toastAllowed(projectId)) return;
+    const run = async () => {
+      await widget.refreshReporterInboxQuiet();
+      if (widget.showUpdatesToast(lastReporterReports)) recordToastShown(projectId);
+    };
+    const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+    if (idle) idle(() => void run(), { timeout: 5000 });
+    else setTimeout(() => void run(), 2000);
+  }
+
+  /**
+   * Mark a report's notifications read (§2.3). Until the server's
+   * POST /v1/reporter/reports/:id/read ships, match the in-app rows on
+   * `payload.reportId` and mark each one read.
+   */
+  async function markReporterReportRead(reportId: string): Promise<null> {
+    const token = getReporterToken(projectId);
+    const list = await apiClient.listNotifications(token, { limit: 50 });
+    if (!list.ok) return null;
+    const rows = (list.data?.notifications ?? []).filter((n) => {
+      const payload = (n.payload ?? {}) as Record<string, unknown>;
+      return !n.read_at && (payload.reportId === reportId || n.report_id === reportId);
+    });
+    await Promise.all(rows.map((n) => apiClient.markNotificationRead(String(n.id), token)));
+    return null;
   }
 
   function wireRewardsForIdentifiedUser(
@@ -934,8 +977,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     async onReporterReportsRequest() {
       const result = await apiClient.listReporterReports(getReporterToken(projectId));
       if (!result.ok) throw new Error(result.error?.message ?? 'Could not load reports');
-      return result.data?.reports ?? [];
+      lastReporterReports = result.data?.reports ?? [];
+      if (lastReporterReports.length) markDeviceHasReports(projectId);
+      return lastReporterReports;
     },
+    onReporterMarkRead: (reportId) => markReporterReportRead(reportId),
     async onReporterCommentsRequest(reportId) {
       const result = await apiClient.listReporterComments(reportId, getReporterToken(projectId));
       if (!result.ok) throw new Error(result.error?.message ?? 'Could not load thread');
@@ -1175,6 +1221,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
   void checkSdkFreshness();
   startReporterInboxPolling();
+  scheduleUpdateToast();
 
   log.info('Initialized', { projectId: config.projectId });
 
@@ -1446,6 +1493,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     if (result.ok) {
       log.info('Report sent', { reportId: result.data?.reportId });
       emit('report:sent', { reportId: result.data?.reportId });
+      markDeviceHasReports(projectId);
       syncReporterInboxQuiet();
       // If the server response includes a Cursor agent dispatch (classify-report
       // triggered a cursor_cloud fix via the autofix_agent setting), emit
