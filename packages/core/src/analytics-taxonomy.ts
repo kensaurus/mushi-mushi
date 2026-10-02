@@ -77,6 +77,10 @@ export const MUSHI_EVENTS = {
   first_diagnosis_ready: { surface: 'server', required: ['project_id'] },
   fix_merged: { surface: 'server', required: ['project_id'] },
   upgrade_completed: { surface: 'server', required: ['project_id', 'plan'] },
+  repo_digest_created: { surface: 'server', required: ['project_id'] },
+  repo_diagram_generated: { surface: 'server', required: ['project_id'] },
+  repo_diagram_published: { surface: 'server', required: ['project_id'] },
+  public_diagram_viewed: { surface: 'server', required: ['project_id'] },
   // ── Growth loop (widget "Bug reports by Mushi" mark) ─────────────────────
   loop_impression: { surface: 'web', required: [] },
   loop_click: { surface: 'web', required: [] },

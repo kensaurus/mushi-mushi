@@ -377,5 +377,11 @@
     "description": "Fetch wiki/knowledge graph for indexed docs sources.",
     "method": "GET",
     "path": "/v1/admin/projects/{projectId}/codebase/knowledge/graph"
+  },
+  "get_repo_digest": {
+    "scope": "mcp:read",
+    "description": "Paste-ready repo digest (tree + files) at a pinned commit, cut to a token budget.",
+    "method": "GET",
+    "path": "/v1/admin/projects/{projectId}/codebase/digest?budget={budgetTokens}&report_id={reportId}&path={path}&include={include}&exclude={exclude}&ref={ref}"
   }
 }

@@ -1820,6 +1820,7 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'get_app_recipe',
   'get_design_tokens',
   'get_design_deviance',
+  'get_repo_digest',
 ])
 
 /**

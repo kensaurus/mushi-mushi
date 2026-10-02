@@ -453,13 +453,20 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     });
   }
 
-  async function apiCall<T = unknown>(path: string, options?: RequestInit): Promise<T> {
+  async function apiCall<T = unknown>(
+    path: string,
+    options?: RequestInit,
+    // A tool whose route legitimately runs long (get_repo_digest reads a repo
+    // from GitHub) may raise its own deadline; it can never lower the global one.
+    callOptions?: { minTimeoutMs?: number },
+  ): Promise<T> {
     const requestId = crypto.randomUUID().slice(0, 12);
     const started = Date.now();
+    const effectiveTimeoutMs = Math.max(timeoutMs, callOptions?.minTimeoutMs ?? 0);
     // Every tool body funnels through here, so this is the
     // only place a timeout has to exist. `AbortSignal.timeout` fires a
     // `TimeoutError` DOMException that fetch surfaces as the rejection reason.
-    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    const timeoutSignal = AbortSignal.timeout(effectiveTimeoutMs);
     const toolCall = toolCallContext.getStore();
     let res: Response;
     try {
@@ -509,11 +516,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       // your endpoint, DNS, proxy or VPN". A single generic failure string
       // sent people down the wrong path.
       if (timeoutSignal.aborted) {
-        apiLog.warn('api.timeout', { path, requestId, durationMs, timeoutMs });
+        apiLog.warn('api.timeout', { path, requestId, durationMs, timeoutMs: effectiveTimeoutMs });
         return new MushiApiError(
           504,
           'MUSHI_TIMEOUT',
-          `Timed out after ${timeoutMs}ms waiting for ${path}. The Mushi API accepted ` +
+          `Timed out after ${effectiveTimeoutMs}ms waiting for ${path}. The Mushi API accepted ` +
             'the connection but did not answer in time — retry, or raise the budget ' +
             'with MUSHI_MCP_TIMEOUT_MS (ms) in your MCP env block if you self-host ' +
             `and cold starts are slow. Endpoint: ${apiEndpoint}`,
@@ -4324,6 +4331,56 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       const pid = args.projectId ?? projectId;
       if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required');
       const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/knowledge/graph`);
+      return jsonText(data);
+    },
+  );
+
+  server.registerTool(
+    'get_repo_digest',
+    {
+      title: titleOf('get_repo_digest', CODEBASE_TOOL_CATALOG),
+      description: descOf('get_repo_digest', CODEBASE_TOOL_CATALOG),
+      annotations: annotationsFor('get_repo_digest', CODEBASE_TOOL_CATALOG),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        reportId: z
+          .string()
+          .optional()
+          .describe("Scope to one bug: the report's files come first, then the rest of the repo by priority"),
+        path: z.string().optional().describe('Scope to one folder, e.g. "apps/web/src"'),
+        budgetTokens: z
+          .number()
+          .int()
+          .min(2_000)
+          .max(200_000)
+          .optional()
+          .describe('Estimated token budget for the whole digest (default 50,000)'),
+        include: z
+          .array(z.string())
+          .max(50)
+          .optional()
+          .describe('Glob patterns a file must match, e.g. ["src/**/*.ts", "*.md"]'),
+        exclude: z.array(z.string()).max(50).optional().describe('Glob patterns to leave out, e.g. ["tests/"]'),
+        ref: z.string().optional().describe('Branch, tag or commit SHA (default: the repo default branch)'),
+      }),
+    },
+    async (args) => {
+      const pid = args.projectId ?? projectId;
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required');
+      const qs = new URLSearchParams();
+      if (args.budgetTokens) qs.set('budget', String(args.budgetTokens));
+      if (args.reportId) qs.set('report_id', args.reportId);
+      if (args.path) qs.set('path', args.path);
+      if (args.include?.length) qs.set('include', args.include.join(','));
+      if (args.exclude?.length) qs.set('exclude', args.exclude.join(','));
+      if (args.ref) qs.set('ref', args.ref);
+      const query = qs.toString();
+      const data = await apiCall<unknown>(
+        `/v1/admin/projects/${pid}/codebase/digest${query ? `?${query}` : ''}`,
+        undefined,
+        // The server reads up to a few hundred files from GitHub (60 s deadline).
+        { minTimeoutMs: 90_000 },
+      );
       return jsonText(data);
     },
   );

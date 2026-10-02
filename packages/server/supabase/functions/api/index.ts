@@ -14,6 +14,8 @@ import { registerDoctorRoutes } from './routes/doctor.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
 import { registerCodebaseRoutes } from './routes/codebase.ts';
 import { registerCodebaseUnderstandRoutes } from './routes/codebase-understand.ts';
+import { registerRepoDigestRoutes } from './routes/repo-digest.ts';
+import { registerRepoDiagramRoutes } from './routes/repo-diagram.ts';
 import {
   registerPreRegionDiscoveryRoutes,
   registerPostRegionDiscoveryRoutes,
@@ -563,6 +565,10 @@ registerFixDispatchRoutes(app);
 registerCodebaseRoutes(app);
 
 registerCodebaseUnderstandRoutes(app);
+
+registerRepoDigestRoutes(app);
+
+registerRepoDiagramRoutes(app);
 
 registerReportsDashboardRoutes(app);
 
