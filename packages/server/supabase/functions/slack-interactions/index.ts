@@ -7,8 +7,10 @@
  * same way the admin UI does.
  *
  * Handled `block_actions` action ids: pause_story, improve_story,
- * resolve_report, dismiss_report, dispatch_fix, and the voice-intake pair
- * voice_confirm / voice_cancel (cards posted by `api/routes/slack-events.ts`).
+ * resolve_report, dismiss_report, dispatch_fix, reply_reporter (opens a
+ * modal), and the voice-intake pair voice_confirm / voice_cancel (cards
+ * posted by `api/routes/slack-events.ts`). Handled `view_submission`:
+ * the `reply_reporter` modal (`_shared/slack-reporter-reply.ts`).
  *
  * Security:
  *   - HMAC-SHA256 signature check per Slack's `v0` signed-request spec
@@ -46,6 +48,11 @@ import { applyReportStatusTransition } from '../_shared/report-transition.ts'
 import { createWebhookMiddleware, ReplayAttackError, RateLimitError } from '../_shared/webhook-middleware.ts'
 import { verifySlackSignature } from '../_shared/slack-verify.ts'
 import { confirmVoice, cancelVoice } from '../_shared/voice-intake.ts'
+import {
+  REPLY_CALLBACK_ID,
+  openReporterReplyModal,
+  submitSlackReporterReply,
+} from '../_shared/slack-reporter-reply.ts'
 
 const log = rootLog.child('slack-interactions')
 
@@ -155,6 +162,15 @@ Deno.serve(
       return new Response('Malformed payload', { status: 400 })
     }
 
+    // ── Modal submit: "Reply to reporter" ───────────────────────────────────
+    // Answered inline (Slack waits up to 3 s for response_action): the reply
+    // is one insert, and the trigger fans email / push out asynchronously.
+    if (payload.type === 'view_submission' && payload.view?.callback_id === REPLY_CALLBACK_ID) {
+      const answer = await submitSlackReporterReply(getServiceClient(), payload)
+      await auditRow.resolve('accepted', 200, Date.now() - t0, answer.response_action === 'clear' ? undefined : 'Reply rejected')
+      return new Response(JSON.stringify(answer), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+
     if (payload.type !== 'block_actions') {
       await auditRow.resolve('accepted', 200, Date.now() - t0, 'Unsupported interaction type')
       return ephemeral('Unsupported interaction type.')
@@ -205,6 +221,19 @@ Deno.serve(
       waitUntil(bgWork)
       await auditRow.resolve('accepted', 200, Date.now() - t0)
       return ephemeral(':hourglass_flowing_sand: Queuing AI improvement…')
+    }
+
+    // ── Report: reply_reporter ───────────────────────────────────────────────
+    // views.open must run before we answer: the trigger_id expires in 3 s.
+    if (actionKind === 'reply_reporter') {
+      const targetReportId = actionValue || action.value
+      if (!targetReportId) {
+        await auditRow.resolve('accepted', 200, Date.now() - t0, 'Missing report ID')
+        return ephemeral('Missing report ID.')
+      }
+      const opened = await openReporterReplyModal(db, { reportId: targetReportId, triggerId: payload.trigger_id })
+      await auditRow.resolve('accepted', 200, Date.now() - t0, opened.ok ? undefined : 'Reply modal not opened')
+      return opened.ok ? new Response(null, { status: 200 }) : ephemeral(opened.message)
     }
 
     // ── Report: resolve_report / dismiss_report ──────────────────────────────
@@ -373,6 +402,13 @@ async function finishImproveStory(input: {
 
 interface SlackInteractionPayload {
   type?: string
+  trigger_id?: string
+  /** view_submission: the submitted modal. */
+  view?: {
+    callback_id?: string
+    private_metadata?: string
+    state?: { values?: Record<string, Record<string, { value?: string | null }>> }
+  }
   response_url?: string
   user?: { id?: string }
   actions?: Array<{ action_id?: string; value?: string }>
