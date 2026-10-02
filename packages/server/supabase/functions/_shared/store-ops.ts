@@ -284,8 +284,8 @@ export async function runStoreReview(db: Db, projectId: string, deps: StoreOpsDe
     })))
     if (fErr) {
       // A run whose findings did not land must not read as a pass.
-      await db.from('gate_runs').update({ status: 'error' }).eq('id', (run as { id: string }).id)
-      throw new Error(`could not store the store review findings: ${fErr.message}`)
+      const { error: uErr } = await db.from('gate_runs').update({ status: 'error' }).eq('id', (run as { id: string }).id)
+      throw new Error(`could not store the store review findings: ${fErr.message}${uErr ? `; the run could not be marked failed either (${uErr.message})` : ''}`)
     }
   }
   return { projectId, checkedAt: now.toISOString(), store, results, checklist, liveRead: { ios: live.iosOk, android: live.androidOk } }

@@ -58,7 +58,7 @@ function listRepoFiles(root: string, limit = MAX_FILES): { files: string[]; trun
   return { files: out, truncated, unreadable }
 }
 
-export function scanLocalRepo(root: string): LocalRadarScan {
+export function scanLocalRepo(root: string, readFile: (path: string) => string = (p) => readFileSync(p, 'utf8')): LocalRadarScan {
   const { files, truncated, unreadable: unreadableDirs } = listRepoFiles(root)
   let unreadable = unreadableDirs
   const findings: StorageScanFinding[] = []
@@ -73,12 +73,20 @@ export function scanLocalRepo(root: string): LocalRadarScan {
       unreadable++
       continue
     }
-    if (isRepoScanPath(rel) && size <= MAX_CONFIG_BYTES && Object.keys(configFiles).length < MAX_CONFIG_FILES) {
-      configFiles[rel] = readFileSync(full, 'utf8')
+    const wantConfig = isRepoScanPath(rel) && size <= MAX_CONFIG_BYTES && Object.keys(configFiles).length < MAX_CONFIG_FILES
+    const wantScan = size <= MAX_SCAN_BYTES && /\.(sql|ts|tsx|js|mjs|cjs|py)$/i.test(rel)
+    if (!wantConfig && !wantScan) continue
+    let text: string
+    try {
+      text = readFile(full)
+    } catch {
+      unreadable++
+      continue
     }
-    if (size > MAX_SCAN_BYTES || !/\.(sql|ts|tsx|js|mjs|cjs|py)$/i.test(rel)) continue
+    if (wantConfig) configFiles[rel] = text
+    if (!wantScan) continue
     scannedFiles++
-    findings.push(...scanStorageSqlDelete(rel, readFileSync(full, 'utf8')))
+    findings.push(...scanStorageSqlDelete(rel, text))
   }
   return { scannedFiles, truncated, unreadable, findings, configFiles }
 }
