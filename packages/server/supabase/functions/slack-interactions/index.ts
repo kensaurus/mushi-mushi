@@ -400,6 +400,8 @@ async function finishDispatch(input: {
     requestedBy: null,
     skipMembershipCheck: true,
     metadata: input.slackMeta,
+    // A person pressed the Dispatch button.
+    trigger: 'manual',
   })
 
   // Post a threaded Slack reply via bot if we have the thread timestamp.

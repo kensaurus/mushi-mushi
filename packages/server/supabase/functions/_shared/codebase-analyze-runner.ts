@@ -45,19 +45,23 @@ export async function runCodebaseAnalyzeJob(
     const fingerprint = await getIndexFingerprint(db, projectId)
 
     const { data: project } = await db.from('projects').select('name').eq('id', projectId).maybeSingle()
-    const { data: repo } = await db
+    // Every read below is checked: a failed read used to build an empty
+    // graph and mark the job completed.
+    const { data: repo, error: repoErr } = await db
       .from('project_repos')
       .select('commit_sha')
       .eq('project_id', projectId)
       .eq('is_primary', true)
       .maybeSingle()
+    if (repoErr) throw new Error(`project_repos read failed: ${repoErr.message}`)
 
-    const { data: rows } = await db
+    const { data: rows, error: rowsErr } = await db
       .from('project_codebase_files')
-      .select('id, file_path, symbol_name, signature, line_start, line_end, language, content_preview, content_hash')
+      .select('id, file_path, symbol_name, signature, line_start, line_end, language, content_preview, content_hash, imports')
       .eq('project_id', projectId)
       .is('tombstoned_at', null)
       .limit(10000)
+    if (rowsErr) throw new Error(`project_codebase_files read failed: ${rowsErr.message}`)
 
     const allRows = rows ?? []
     const fileRows = allRows.filter((r) => !r.symbol_name)
@@ -71,11 +75,12 @@ export async function runCodebaseAnalyzeJob(
       symbolRows,
     })
 
-    const { data: existingGraphRow } = await db
+    const { data: existingGraphRow, error: graphReadErr } = await db
       .from('project_codebase_graph')
       .select('graph')
       .eq('project_id', projectId)
       .maybeSingle()
+    if (graphReadErr) throw new Error(`project_codebase_graph read failed: ${graphReadErr.message}`)
 
     const merged = mergeGraphUpdate(
       (existingGraphRow?.graph as ReturnType<typeof buildGraphFromIndex> | null) ?? null,
@@ -83,7 +88,7 @@ export async function runCodebaseAnalyzeJob(
       changedPaths.length ? changedPaths : fileRows.map((r) => r.file_path),
     )
 
-    await db.from('project_codebase_graph').upsert(
+    const { error: graphWriteErr } = await db.from('project_codebase_graph').upsert(
       {
         project_id: projectId,
         index_fingerprint: fingerprint,
@@ -94,6 +99,7 @@ export async function runCodebaseAnalyzeJob(
       },
       { onConflict: 'project_id' },
     )
+    if (graphWriteErr) throw new Error(`project_codebase_graph write failed: ${graphWriteErr.message}`)
 
     const fpRows = fileRows.map((r) => ({
       project_id: projectId,

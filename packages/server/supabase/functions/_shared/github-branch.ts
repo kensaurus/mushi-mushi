@@ -42,6 +42,43 @@ export async function lookupGithubDefaultBranch(
     : { ok: false, status: 0 }
 }
 
+/** Head commit sha of `branch`, or null when GitHub cannot be asked. */
+export async function lookupBranchHeadSha(
+  token: string,
+  owner: string,
+  repo: string,
+  branch: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<string | null> {
+  const res = await fetchImpl(
+    `https://api.github.com/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}`,
+    ghInit(token),
+  )
+  if (!res.ok) return null
+  const body = (await res.json().catch(() => null)) as { commit?: { sha?: unknown } } | null
+  return typeof body?.commit?.sha === 'string' ? body.commit.sha : null
+}
+
+/** Default branch and last push time, for the radar's index_branch_mismatch / index_stale checks. */
+export async function lookupGithubRepoFacts(
+  token: string,
+  owner: string,
+  repo: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<{ ok: true; facts: { default_branch: string; pushed_at: string | null } } | { ok: false; status: number }> {
+  const res = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}`, ghInit(token))
+  if (!res.ok) return { ok: false, status: res.status }
+  const body = (await res.json().catch(() => null)) as { default_branch?: unknown; pushed_at?: unknown } | null
+  if (typeof body?.default_branch !== 'string' || body.default_branch.length === 0) return { ok: false, status: 0 }
+  return {
+    ok: true,
+    facts: {
+      default_branch: body.default_branch,
+      pushed_at: typeof body.pushed_at === 'string' ? body.pushed_at : null,
+    },
+  }
+}
+
 /**
  * The branch to store for a newly connected repo.
  *

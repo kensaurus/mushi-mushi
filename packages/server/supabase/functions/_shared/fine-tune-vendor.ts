@@ -26,6 +26,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import type { FineTuningJobRow, ExportSampleRow } from './fine-tune.ts'
 import { resolveLlmKey } from './byok.ts'
+import { LlmBudgetExceededError } from './llm-budget.ts'
 
 /** Production vendors. `stub` is test-only; getAdapter() refuses it unless
  *  MUSHI_ALLOW_STUB_FINE_TUNE=1 is set.  */
@@ -128,7 +129,11 @@ async function resolveOpenAIKey(db: SupabaseClient, projectId: string): Promise<
   // `resolveLlmKey` returns `{ key, source, hint, baseUrl? } | null` — we
   // care about the raw token here, but the `source` is implicit (audit log
   // happens upstream in the route that initiates the fine-tune).
-  const resolved = await resolveLlmKey(db, projectId, 'openai').catch(() => null)
+  // Over budget rethrows: the env-key fallback below would bypass it.
+  const resolved = await resolveLlmKey(db, projectId, 'openai').catch((err) => {
+    if (err instanceof LlmBudgetExceededError) throw err
+    return null
+  })
   if (resolved?.key) return resolved.key
   // Deno-only: callers are Edge Functions. The legacy `process.env` branch
   // would never resolve at runtime (no Node global) and was a latent bug.

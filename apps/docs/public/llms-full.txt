@@ -15249,6 +15249,8 @@ using public pricing at time of logging).
 | **Max iterations** | Settings → PDCA settings → Max iterations per run |
 | **Fix worker retries** | `fix-worker` retries on Zod validation failure — reduce max_retries in env |
 | **Integration health probe cadence** | Probes run on demand; avoid automating frequent polling |
+| **Monthly AI budget** | Settings → General → Spend limits (or the budget field on this page). AI calls stop for the rest of the month once spend reaches it |
+| **Auto-fix limits** | Settings → General → Spend limits: spend per 30 days, automatic fixes per day, and an approval threshold |
 
 ---
 
@@ -19778,6 +19780,22 @@ The tab you pick is saved in the URL (`?tab=`).
 
 Notifications, Sentry config, the default LLM model, and the deduplication threshold
 for report clustering.
+
+**Spend limits** (project admins) cap what the project spends. Leave a field
+empty for no limit.
+
+| Limit | What happens when it is reached |
+|---|---|
+| **Monthly AI budget** | Every AI call for the project (triage, fixes, chat) stops until the 1st of next month (UTC). New reports get a short explanation instead of a diagnosis. Calls on your own API keys count too. |
+| **Auto-fix spend limit, last 30 days** | Mushi stops starting fixes on its own. Fixes you start yourself still run, and show the 30-day spend. |
+| **Automatic fixes per day** | Same, counted per UTC day. A limit of 3 allows 3 automatic fixes. |
+| **Ask me before fixes that may cost more than** | A high or critical fix estimated above this waits for your approval, including fixes you start. |
+
+New projects start with $2 per 30 days and 3 automatic fixes a day.
+
+If Mushi cannot read this month's spend (a database error), the AI call goes
+ahead and the failure is reported to the operator's error monitoring. A
+temporary read failure never stops triage, and it never passes unnoticed.
 
 ### BYOK (API keys)
 

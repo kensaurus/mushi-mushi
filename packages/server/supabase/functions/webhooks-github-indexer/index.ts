@@ -23,7 +23,15 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { unverifiedGithubInstallsAllowed } from '../_shared/github-install-trust.ts';
 import { finalizeFixClosedUnmerged, finalizeFixMerge } from '../_shared/fix-merge.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
-import { fetchRepoTreeWithBranchFallback } from '../_shared/github-branch.ts';
+import { fetchRepoTreeWithBranchFallback, lookupBranchHeadSha } from '../_shared/github-branch.ts';
+import { extractRelativeImports } from '../_shared/codebase-graph-build.ts';
+import {
+  chunkKey,
+  planChunkWrites,
+  pushBranchDecision,
+  type PlannedChunk,
+  type StoredChunk,
+} from '../_shared/codebase-index-plan.ts';
 import { envInt } from '../_shared/env-int.ts';
 import { prioritizeSweepFiles } from '../_shared/sweep-file-priority.ts';
 import {
@@ -934,9 +942,13 @@ async function handleSweep(
             .eq('id', repo.id);
           summary.push({ repo: repo.repo_url, ok: false, error: msg });
         } else {
-          await db
+          // project_repos.commit_sha / indexed_branch feed impact-resolve and
+          // the radar's index checks. A failed write is reported, not hidden.
+          const { error: bookkeepingErr } = await db
             .from('project_repos')
             .update({
+              indexed_branch: stats.branch,
+              ...(stats.headSha ? { commit_sha: stats.headSha } : {}),
               last_indexed_at: new Date().toISOString(),
               last_index_attempt_at: new Date().toISOString(),
               last_index_error:
@@ -948,6 +960,11 @@ async function handleSweep(
               ...(stats.correctedBranch ? { default_branch: stats.correctedBranch } : {}),
             })
             .eq('id', repo.id);
+          if (bookkeepingErr) {
+            log.error('sweep: project_repos update failed', { repo: repo.repo_url, error: bookkeepingErr.message });
+            summary.push({ repo: repo.repo_url, ok: false, error: `project_repos update failed: ${bookkeepingErr.message}` });
+            continue;
+          }
           summary.push({ repo: repo.repo_url, ok: true, ...stats });
         }
       } catch (err) {
@@ -1004,6 +1021,101 @@ async function handleSweep(
  * a GitHub App installation token and a user PAT. Both authenticate the same
  * read-only `tree` + `contents` endpoints used below.
  */
+interface IndexChunk extends PlannedChunk {
+  chunk: ReturnType<typeof chunk>[number];
+  text: string;
+}
+
+/** Chunk one file, hashing each chunk and extracting the whole file's imports up front. */
+async function chunksForFile(path: string, source: string): Promise<IndexChunk[]> {
+  const imports = extractRelativeImports(source);
+  const out: IndexChunk[] = [];
+  for (const ch of chunk(path, source)) {
+    out.push({
+      path,
+      symbolName: ch.symbolName,
+      hash: await sha256Hex(ch.body),
+      imports,
+      chunk: ch,
+      text: `${path}::${ch.symbolName ?? 'whole'}\n${ch.body}`,
+    });
+  }
+  return out;
+}
+
+/**
+ * Stored chunks for `paths` that already have an embedding. A failed read
+ * throws: guessing "nothing stored" would re-embed everything, guessing
+ * "all stored" would skip changed code.
+ */
+async function loadStoredChunks(
+  db: ReturnType<typeof getDb>,
+  projectId: string,
+  paths: string[],
+): Promise<Map<string, StoredChunk>> {
+  const stored = new Map<string, StoredChunk>();
+  for (let i = 0; i < paths.length; i += 50) {
+    const { data, error } = await db
+      .from('project_codebase_files')
+      .select('file_path, symbol_name, content_hash, imports, tombstoned_at')
+      .eq('project_id', projectId)
+      .in('file_path', paths.slice(i, i + 50))
+      .not('embedding', 'is', null);
+    if (error) throw new Error(`stored chunk lookup failed: ${error.message}`);
+    for (const r of (data ?? []) as Array<StoredChunk & { file_path: string; symbol_name: string | null }>) {
+      stored.set(chunkKey(r.file_path, r.symbol_name), r);
+    }
+  }
+  return stored;
+}
+
+/** Row columns for a chunk, without the embedding. */
+function chunkRow(projectId: string, c: IndexChunk) {
+  return {
+    project_id: projectId,
+    file_path: c.path,
+    symbol_name: c.chunk.symbolName,
+    signature: c.chunk.signature,
+    line_start: c.chunk.lineStart,
+    line_end: c.chunk.lineEnd,
+    language: c.chunk.language,
+    content_hash: c.hash,
+    content_preview: c.chunk.body.slice(0, 600),
+    imports: c.imports,
+    last_modified: new Date().toISOString(),
+    tombstoned_at: null,
+  };
+}
+
+/**
+ * Re-write the metadata of chunks whose text did not change (un-tombstone,
+ * new imports, moved lines). The embedding column is not in the payload, so
+ * the stored embedding is kept and nothing is paid for.
+ */
+async function refreshChunks(
+  db: ReturnType<typeof getDb>,
+  projectId: string,
+  chunks: IndexChunk[],
+): Promise<{ refreshed: number; failed: number; lastError?: string }> {
+  let refreshed = 0;
+  let failed = 0;
+  let lastError: string | undefined;
+  for (let i = 0; i < chunks.length; i += 200) {
+    const batch = chunks.slice(i, i + 200);
+    const { error } = await db
+      .from('project_codebase_files')
+      .upsert(batch.map((c) => chunkRow(projectId, c)), { onConflict: 'project_id,file_path,symbol_name' });
+    if (error) {
+      failed += batch.length;
+      lastError = `chunk refresh failed: ${error.message}`;
+      log.error('chunk refresh failed', { projectId, batchSize: batch.length, error: error.message });
+    } else {
+      refreshed += batch.length;
+    }
+  }
+  return { refreshed, failed, lastError };
+}
+
 /** Ceiling for a targeted (frame-path) run: an import names ≤10 issues. */
 const TARGETED_FILE_CAP = 25;
 /** Statuses whose fix site no longer needs to be in the index first. */
@@ -1083,10 +1195,19 @@ async function sweepIndexRepo(
   branch: string,
   opts: { targetFramePaths?: string[] } = {},
 ): Promise<{
+  /** Chunks embedded (new or changed text). */
   inserted: number;
+  /** Chunks whose text was unchanged but whose row was refreshed, no embedding paid. */
+  refreshed: number;
+  /** Chunks left alone: same text, same imports, already embedded. */
+  unchanged: number;
   skipped: number;
   failed: number;
   lastError?: string;
+  /** Branch the sweep actually read. */
+  branch: string;
+  /** Head commit of that branch, when GitHub returned it. */
+  headSha: string | null;
   /** Set when the sweep could not cover the whole repo (file cap / GitHub tree truncation). */
   partial?: string;
   /** Set when the configured branch 404'd and GitHub's default branch was used instead. */
@@ -1142,11 +1263,6 @@ async function sweepIndexRepo(
   // at the default 300-file cap with ~5 chunks per file × 600-char preview,
   // that's ~900 KB worst case; comfortable inside the Edge Function memory
   // budget.
-  interface PendingChunk {
-    path: string;
-    chunk: ReturnType<typeof chunk>[number];
-    text: string;
-  }
   // Which files: see _shared/sweep-file-priority.ts. Stack-frame files of
   // open Sentry-linked reports first, then application source, unindexed
   // before indexed. A targeted run embeds only the given frame files.
@@ -1167,28 +1283,29 @@ async function sweepIndexRepo(
     });
   }
 
-  const pending: PendingChunk[] = [];
+  const pending: IndexChunk[] = [];
   for (const path of selected) {
     const source = await fetchFileContents(token, owner, repo, path, branch);
     if (!source) {
       skipped++;
       continue;
     }
-    for (const ch of chunk(path, source)) {
-      pending.push({
-        path,
-        chunk: ch,
-        text: `${path}::${ch.symbolName ?? 'whole'}\n${ch.body}`,
-      });
-    }
+    pending.push(...(await chunksForFile(path, source)));
   }
 
-  // Phase 2: batched embedding + per-chunk upsert. If a whole batch fails
-  // (e.g. retries exhausted) we count every input in that batch as failed
-  // and continue with the next batch — same all-or-nothing semantics as
-  // before, just amortised across many chunks per failure.
-  for (let i = 0; i < pending.length; i += batchSize) {
-    const batch = pending.slice(i, i + batchSize);
+  // Hash before embedding: only new or changed text is embedded (Plan 020
+  // §10.2 blocker 5 — every sweep used to pay for every chunk again).
+  const stored = await loadStoredChunks(db, projectId, [...new Set(pending.map((p) => p.path))]);
+  const plan = planChunkWrites(pending, stored);
+  const refresh = await refreshChunks(db, projectId, plan.refresh);
+  failed += refresh.failed;
+  if (refresh.lastError) lastError = refresh.lastError;
+
+  // Phase 2: batched embedding + per-chunk upsert of the chunks that need
+  // one. If a whole batch fails (e.g. retries exhausted) we count every
+  // input in that batch as failed and continue with the next batch.
+  for (let i = 0; i < plan.embed.length; i += batchSize) {
+    const batch = plan.embed.slice(i, i + batchSize);
     let embeddings: number[][];
     try {
       embeddings = await createEmbeddingBatch(
@@ -1207,24 +1324,11 @@ async function sweepIndexRepo(
       continue;
     }
     for (let j = 0; j < batch.length; j++) {
-      const { path, chunk: ch } = batch[j];
-      const embedding = embeddings[j];
-      const contentHash = await sha256Hex(ch.body);
       const { error } = await db.from('project_codebase_files').upsert(
         {
-          project_id: projectId,
-          file_path: path,
-          symbol_name: ch.symbolName,
-          signature: ch.signature,
-          line_start: ch.lineStart,
-          line_end: ch.lineEnd,
-          language: ch.language,
-          content_hash: contentHash,
-          content_preview: ch.body.slice(0, 600),
-          embedding,
+          ...chunkRow(projectId, batch[j]),
+          embedding: embeddings[j],
           embedding_model: 'text-embedding-3-small',
-          last_modified: new Date().toISOString(),
-          tombstoned_at: null,
         },
         { onConflict: 'project_id,file_path,symbol_name' },
       );
@@ -1246,12 +1350,17 @@ async function sweepIndexRepo(
   } else if (!targeted && files.length > cap) {
     partial = `partial: indexed ${cap} of ${files.length} eligible files (MUSHI_REPO_INDEX_SWEEP_FILE_CAP=${cap})`;
   }
+  const headSha = targeted ? null : await lookupBranchHeadSha(token, owner, repo, branch).catch(() => null);
   return {
     inserted,
+    refreshed: refresh.refreshed,
+    unchanged: plan.unchanged,
     skipped,
     failed,
     lastError,
     partial,
+    branch,
+    headSha,
     ...(resolved.correctedFrom ? { correctedBranch: resolved.branch } : {}),
   };
 }
@@ -1370,8 +1479,10 @@ app.post('/webhooks-github-indexer', async (c) => {
   }
 
   const payload = JSON.parse(raw) as {
-    repository?: { full_name?: string; owner?: { login?: string }; name?: string };
+    repository?: { full_name?: string; owner?: { login?: string }; name?: string; default_branch?: string };
     installation?: { id?: number };
+    ref?: string;
+    deleted?: boolean;
     after?: string;
     commits?: Array<{ added?: string[]; modified?: string[]; removed?: string[] }>;
   };
@@ -1391,7 +1502,7 @@ app.post('/webhooks-github-indexer', async (c) => {
   // could set to someone else's "owner/repo" and receive its indexed source.
   const { data: project } = await db
     .from('project_repos')
-    .select('project_id')
+    .select('id, project_id, default_branch')
     .eq('repo_url', `https://github.com/${repoFullName}`)
     .eq('github_app_installation_id', installationId)
     .eq('indexing_enabled', true)
@@ -1402,8 +1513,10 @@ app.post('/webhooks-github-indexer', async (c) => {
     return c.json({ ok: true, ignored: 'no_project_for_repo', repoFullName }, 202);
   }
 
-  const token = await mintInstallationToken(installationId);
   const projectId = project.project_id as string;
+  // Lets the radar count accepted deliveries per project (webhook_never_delivered).
+  await auditRow.setProject(projectId);
+  const token = await mintInstallationToken(installationId);
   const { getProjectCodebaseScope } = await import('../_shared/codebase-understand.ts')
   const indexScope = await getProjectCodebaseScope(db, projectId)
 
@@ -1420,6 +1533,14 @@ app.post('/webhooks-github-indexer', async (c) => {
     log.warn('emitCommitEventsForPush failed (non-fatal)', {
       err: err instanceof Error ? err.message : String(err),
     });
+  }
+
+  // One index per project, built from the default branch. A push to any
+  // other branch used to overwrite default-branch code in the index.
+  const branchDecision = pushBranchDecision(payload, (project.default_branch as string | null) ?? null);
+  if (!branchDecision.index) {
+    log.info('push not indexed', { projectId, repoFullName, branch: branchDecision.branch, reason: branchDecision.reason });
+    return c.json({ ok: true, ignored: branchDecision.reason, branch: branchDecision.branch }, 202);
   }
 
   const added = new Set<string>();
@@ -1453,29 +1574,25 @@ app.post('/webhooks-github-indexer', async (c) => {
   // Same batching strategy as the sweep path (MUSHI-MUSHI-INDEXER-429): a
   // large `git rebase --force-push` can deliver dozens of files in one
   // webhook payload, and per-chunk embeddings will eat through the TPM
-  // budget. We collect all chunks first, then embed in batches of 96.
-  interface PendingPushChunk {
-    path: string;
-    chunk: ReturnType<typeof chunk>[number];
-    text: string;
-  }
-  const pendingChunks: PendingPushChunk[] = [];
+  // budget. Chunks are hashed first; only new or changed text is embedded,
+  // in batches of 96.
+  const pendingChunks: IndexChunk[] = [];
   for (const path of added) {
     if (!shouldIndex(path, indexScope)) continue;
     const source = await fetchFileContents(token, owner, repo, path, ref);
     if (!source) continue;
-    for (const ch of chunk(path, source)) {
-      pendingChunks.push({
-        path,
-        chunk: ch,
-        text: `${path}::${ch.symbolName ?? 'whole'}\n${ch.body}`,
-      });
-    }
+    pendingChunks.push(...(await chunksForFile(path, source)));
   }
 
+  const storedChunks = await loadStoredChunks(db, projectId, [...new Set(pendingChunks.map((p) => p.path))]);
+  const pushPlan = planChunkWrites(pendingChunks, storedChunks);
+  const pushRefresh = await refreshChunks(db, projectId, pushPlan.refresh);
+  upsertFailures += pushRefresh.failed;
+  inserted += pushRefresh.refreshed;
+
   const pushBatchSize = envInt('MUSHI_REPO_INDEX_BATCH_SIZE', 96, { min: 1, max: 2048 });
-  for (let i = 0; i < pendingChunks.length; i += pushBatchSize) {
-    const batch = pendingChunks.slice(i, i + pushBatchSize);
+  for (let i = 0; i < pushPlan.embed.length; i += pushBatchSize) {
+    const batch = pushPlan.embed.slice(i, i + pushBatchSize);
     let embeddings: number[][];
     try {
       embeddings = await createEmbeddingBatch(
@@ -1495,26 +1612,14 @@ app.post('/webhooks-github-indexer', async (c) => {
       continue;
     }
     for (let j = 0; j < batch.length; j++) {
-      const { path, chunk: ch } = batch[j];
-      const embedding = embeddings[j];
-      const contentHash = await sha256Hex(ch.body);
+      const c = batch[j];
       // onConflict matches uq_codebase_chunks (project_id, file_path, symbol_name)
       // NULLS NOT DISTINCT — see migration 20260418000300_codebase_indexer.sql.
       const { error } = await db.from('project_codebase_files').upsert(
         {
-          project_id: projectId,
-          file_path: path,
-          symbol_name: ch.symbolName,
-          signature: ch.signature,
-          line_start: ch.lineStart,
-          line_end: ch.lineEnd,
-          language: ch.language,
-          content_hash: contentHash,
-          content_preview: ch.body.slice(0, 600),
-          embedding,
+          ...chunkRow(projectId, c),
+          embedding: embeddings[j],
           embedding_model: 'text-embedding-3-small',
-          last_modified: new Date().toISOString(),
-          tombstoned_at: null,
         },
         { onConflict: 'project_id,file_path,symbol_name' },
       );
@@ -1522,14 +1627,14 @@ app.post('/webhooks-github-indexer', async (c) => {
         upsertFailures++;
         log.error('chunk upsert failed', {
           projectId,
-          path,
-          symbolName: ch.symbolName,
+          path: c.path,
+          symbolName: c.symbolName,
           error: error.message,
         });
         continue;
       }
       inserted++;
-      languageCounts[ch.language] = (languageCounts[ch.language] ?? 0) + 1;
+      languageCounts[c.chunk.language] = (languageCounts[c.chunk.language] ?? 0) + 1;
     }
   }
 
@@ -1537,18 +1642,22 @@ app.post('/webhooks-github-indexer', async (c) => {
     projectId,
     repoFullName,
     ref,
+    branch: branchDecision.branch,
+    unchanged: pushPlan.unchanged,
     inserted,
     tombstoned,
     upsertFailures,
     tombstoneFailures,
   });
 
-  // Keep primary repo HEAD in sync for last-push diff impact + analyze jobs.
-  await db
+  // Keep this repo's indexed HEAD in sync for last-push diff impact, analyze
+  // jobs and the radar. The column did not exist until 20261002140100 and the
+  // write was never checked; a failure is now logged as an error.
+  const { error: headErr } = await db
     .from('project_repos')
-    .update({ commit_sha: ref, updated_at: new Date().toISOString() })
-    .eq('project_id', projectId)
-    .eq('is_primary', true)
+    .update({ commit_sha: ref, indexed_branch: branchDecision.branch, updated_at: new Date().toISOString() })
+    .eq('id', project.id);
+  if (headErr) log.error('push: project_repos head update failed', { projectId, error: headErr.message });
 
   try {
     const { invalidateCodebaseUnderstandCaches } = await import('../_shared/codebase-impact-resolve.ts')

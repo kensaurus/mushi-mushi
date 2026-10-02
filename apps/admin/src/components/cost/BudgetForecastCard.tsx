@@ -1,6 +1,8 @@
 /**
  * FILE: apps/admin/src/components/cost/BudgetForecastCard.tsx
- * PURPOSE: Month-end spend forecast + optional budget alert.
+ * PURPOSE: Month-end spend forecast + optional monthly LLM budget. The budget
+ *          is enforced server-side (_shared/llm-budget.ts): at 100% of this
+ *          month's spend, LLM calls stop until the 1st (UTC).
  *
  * Takes the 14-day daily spend series and computes two forward projections:
  *   (1) Linear — total14d / 14 * daysInMonth
@@ -158,7 +160,8 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
           <span>
             Projected to {isOverBudget100 ? 'exceed' : 'reach ≥80% of'} your{' '}
             {fmtSpend(budget!)} budget — forecast is{' '}
-            <strong>{fmtSpend(linearForecast)}</strong> ({Math.round(pctOfBudget!)}%).
+            <strong>{fmtSpend(linearForecast)}</strong> ({Math.round(pctOfBudget!)}%). When this
+            month&apos;s spend reaches the budget, Mushi stops AI calls until next month.
           </span>
         </div>
       )}

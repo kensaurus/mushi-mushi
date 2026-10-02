@@ -7,6 +7,8 @@ import type { NavStatSlices } from './extendedNavMeta'
 export interface WorkspaceNavMetaResponse {
   generatedAt: string
   slices: NavStatSlices
+  /** Stats routes that failed in this round trip — their slice is null for a reason, not "zero". */
+  failedSlices?: Array<{ path: string; error: string }>
   projects: {
     projectCount: number
     neverIngestedCount: number

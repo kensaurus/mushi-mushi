@@ -218,6 +218,9 @@ Deno.serve(async (req: Request) => {
     }
 
     verifiedProjects++
+    // One audit row per delivery: stamp the first project it authenticated
+    // for, so the radar can count accepted deliveries per project.
+    if (verifiedProjects === 1) await auditRow.setProject(projectId)
     try {
       await handleEvent(dbAny, projectId, eventType ?? '', payload, deliveryId)
     } catch (err) {
@@ -226,6 +229,9 @@ Deno.serve(async (req: Request) => {
   }
 
   if (verifiedProjects === 0) {
+    // With a single candidate project the failure is attributable: the
+    // radar reports a secret mismatch instead of "never delivered".
+    if (projectRows.length === 1) await auditRow.setProject(projectRows[0].project_id)
     await auditRow.resolve('rejected_signature', 200, Date.now() - t0, 'No project matched the signature')
   } else {
     await auditRow.resolve('accepted', 200, Date.now() - t0)

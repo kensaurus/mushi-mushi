@@ -1,12 +1,18 @@
 /**
  * GET /v1/admin/workspace/nav-meta
  *
- * Consolidates sidebar stat slices into one round trip. Internally fans out
- * to the existing /stats handlers in parallel (same auth + project headers)
- * so badge logic stays single-sourced on each route.
+ * Consolidates sidebar stat slices into one round trip. Fans out to the
+ * existing /stats handlers in parallel (same auth + project headers) so badge
+ * logic stays single-sourced on each route.
+ *
+ * The slices are dispatched IN-PROCESS through `app.fetch`, never over HTTP.
+ * Each HTTP self-call used to re-enter the Edge Runtime as a function-to-
+ * function request, and the runtime caps those per execution trace: ~37
+ * slices in one trace tripped "Rate limit exceeded for trace <id>" and the
+ * last ~7 slices came back null on every console page load.
  */
 
-import type { Hono } from 'npm:hono@4'
+import type { Hono, MiddlewareHandler } from 'npm:hono@4'
 import { jwtAuth } from '../../_shared/auth.ts'
 import { log } from '../../_shared/logger.ts'
 import type { Variables } from '../types.ts'
@@ -15,26 +21,52 @@ const nlog = log.child('workspace-nav-meta')
 
 type JsonRecord = Record<string, unknown>
 
-async function fetchStatsSlice(
-  baseUrl: string,
+const NAV_META_PATH = '/v1/admin/workspace/nav-meta'
+
+/** Runs one stats route and returns the Response — no network hop. */
+export type SliceDispatcher = (path: string, headers: Headers) => Promise<Response>
+
+/** Outcome of one slice; `error` names why a slice is missing so it is never silent. */
+export interface SliceResult {
+  data: JsonRecord | null
+  error: string | null
+}
+
+export async function fetchStatsSlice(
+  dispatch: SliceDispatcher,
   path: string,
-  headers: HeadersInit,
-): Promise<JsonRecord | null> {
+  headers: Headers,
+): Promise<SliceResult> {
   try {
-    const res = await fetch(`${baseUrl}${path}`, { headers })
+    const res = await dispatch(path, headers)
     if (!res.ok) {
       nlog.warn('nav_meta_slice_failed', { path, status: res.status })
-      return null
+      return { data: null, error: `HTTP ${res.status}` }
     }
     const body = (await res.json()) as { ok?: boolean; data?: JsonRecord }
-    return body.ok ? (body.data ?? null) : null
+    if (!body.ok) return { data: null, error: 'not ok' }
+    return { data: body.data ?? null, error: null }
   } catch (err) {
-    nlog.warn('nav_meta_slice_error', {
-      path,
-      err: err instanceof Error ? err.message : String(err),
-    })
-    return null
+    const message = err instanceof Error ? err.message : String(err)
+    nlog.warn('nav_meta_slice_error', { path, err: message })
+    return { data: null, error: message.slice(0, 200) }
   }
+}
+
+/**
+ * Dispatcher that hands each slice to the same Hono app in-process. The
+ * route prefix (Supabase mounts the api function under `/api`) is read off
+ * the incoming URL so it matches whatever basePath the app was built with.
+ */
+export function inProcessDispatcher(
+  app: { fetch: (req: Request) => Response | Promise<Response> },
+  requestUrl: string,
+): SliceDispatcher {
+  const url = new URL(requestUrl)
+  const prefix = url.pathname.endsWith(NAV_META_PATH)
+    ? url.pathname.slice(0, -NAV_META_PATH.length)
+    : ''
+  return (path, headers) => Promise.resolve(app.fetch(new Request(`${url.origin}${prefix}${path}`, { headers })))
 }
 
 function pick<T extends JsonRecord>(
@@ -49,23 +81,19 @@ function pick<T extends JsonRecord>(
   return out
 }
 
-export function registerWorkspaceNavMetaRoutes(app: Hono<{ Variables: Variables }>): void {
-  app.get('/v1/admin/workspace/nav-meta', jwtAuth, async (c) => {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')
-    if (!supabaseUrl) {
-      return c.json(
-        { ok: false, error: { code: 'CONFIG', message: 'SUPABASE_URL not configured' } },
-        500,
-      )
-    }
-
-    const baseUrl = `${supabaseUrl}/functions/v1/api`
-    const auth = c.req.header('Authorization') ?? ''
+export function registerWorkspaceNavMetaRoutes(
+  app: Hono<{ Variables: Variables }>,
+  // Injectable so the fan-out can be tested without a real Supabase session.
+  auth: MiddlewareHandler = jwtAuth,
+): void {
+  app.get(NAV_META_PATH, auth, async (c) => {
+    const dispatch = inProcessDispatcher(app, c.req.url)
+    const authHeader = c.req.header('Authorization') ?? ''
     const projectId = c.req.header('X-Mushi-Project-Id') ?? c.req.header('x-mushi-project-id')
     const orgId = c.req.header('X-Mushi-Org-Id') ?? c.req.header('x-mushi-org-id')
 
-    const headers: HeadersInit = {
-      Authorization: auth,
+    const headerInit: Record<string, string> = {
+      Authorization: authHeader,
       'Content-Type': 'application/json',
       ...(projectId ? { 'X-Mushi-Project-Id': projectId } : {}),
       ...(orgId ? { 'X-Mushi-Org-Id': orgId } : {}),
@@ -112,10 +140,14 @@ export function registerWorkspaceNavMetaRoutes(app: Hono<{ Variables: Variables 
     ] as const
 
     const results = await Promise.all(
-      paths.map((path) => fetchStatsSlice(baseUrl, path, headers)),
+      paths.map((path) => fetchStatsSlice(dispatch, path, new Headers(headerInit))),
     )
 
-    const byPath = Object.fromEntries(paths.map((path, i) => [path, results[i]]))
+    const byPath = Object.fromEntries(paths.map((path, i) => [path, results[i].data]))
+    // A missing badge must be explainable: name every slice that failed.
+    const failedSlices = paths
+      .map((path, i) => (results[i].error ? { path, error: results[i].error } : null))
+      .filter((x): x is { path: string; error: string } => x !== null)
 
     const slices = {
       contentQuality: pick(byPath['/v1/admin/content-quality/stats'], [
@@ -352,6 +384,7 @@ export function registerWorkspaceNavMetaRoutes(app: Hono<{ Variables: Variables 
       data: {
         generatedAt: new Date().toISOString(),
         slices,
+        failedSlices,
         projects: projectsStats
           ? {
               projectCount: Number(projectsStats.projectCount ?? 0),

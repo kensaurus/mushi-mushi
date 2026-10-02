@@ -26,6 +26,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { NoObjectGeneratedError } from 'npm:ai@4';
 import { isClaudeRefusal } from './claude-request.ts';
 import {
+  enforceLlmBudget,
   resolveLlmKeys,
   markKeyStatus,
   markKeyUsed,
@@ -39,12 +40,14 @@ import {
   scheduleHostedLlmCharge,
   WalletDeniedError,
 } from './hosted-llm-billing.ts';
+import { LlmBudgetExceededError } from './llm-budget.ts';
 
 const log = rootLog.child('llm-failover');
 
 // Re-exported so call sites that must let a wallet refusal escape their retry
 // loop can `instanceof`-check it without importing the billing module.
 export { WalletDeniedError };
+export { LlmBudgetExceededError };
 
 const LLM_API_KEY_RX = /\bsk-[A-Za-z0-9_*=-]{8,}/gi;
 const BEARER_TOKEN_RX = /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi;
@@ -96,6 +99,8 @@ export class LlmFailoverError extends Error {
  */
 export function isStage1LlmUnavailable(err: unknown): boolean {
   if (err instanceof WalletDeniedError) return true;
+  // Over budget: Stage 1 falls back to heuristic triage instead of going dark.
+  if (err instanceof LlmBudgetExceededError) return true;
   if (err instanceof LlmFailoverError) return true;
   return classifyLlmError(err) === 'auth';
 }
@@ -300,6 +305,7 @@ export async function withLlmFailover<T>(
   fn: (key: ResolvedKey) => Promise<T>,
   meter?: LlmFailoverMeterOptions<T>,
 ): Promise<T> {
+  await enforceLlmBudget(db, projectId, provider);
   const candidates = await resolveLlmKeys(db, projectId, provider);
 
   if (candidates.length === 0) {
@@ -420,6 +426,9 @@ export async function withAnthropicOrOpenAi<T>(
     const result = await withLlmFailover(db, projectId, 'anthropic', anthropicFn);
     return { result, usedProvider: 'anthropic' };
   } catch (err) {
+    // Over budget is a project state, not an Anthropic problem: OpenAI is
+    // under the same budget, so never fall through to it.
+    if (err instanceof LlmBudgetExceededError) throw err;
     if (
       err instanceof LlmFailoverError &&
       (err.code === 'NO_KEYS_CONFIGURED' || err.code === 'ALL_KEYS_EXHAUSTED')

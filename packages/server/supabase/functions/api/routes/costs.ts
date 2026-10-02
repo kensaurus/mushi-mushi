@@ -14,8 +14,9 @@ import { Hono } from 'npm:hono@4'
 import { requireAuth } from '../middleware/auth.ts'
 import { requireProjectAccess } from '../middleware/project.ts'
 import { getServiceClient } from '../../_shared/db.ts'
-import { estimateCallCostUsd } from '../../_shared/pricing.ts'
 import { accessibleProjectIds } from '../../_shared/project-access.ts'
+// One cost rule for the Costs page and the budget the LLM path enforces.
+import { resolveCostUsd } from '../../_shared/llm-budget.ts'
 import type { Variables } from '../types.ts'
 
 function db() { return getServiceClient() }
@@ -43,15 +44,6 @@ const SORT_COLUMNS: Record<string, string> = {
   occurred_at: 'created_at',
 }
 
-function resolveCostUsd(
-  model: string | null | undefined,
-  inputTokens: number | null | undefined,
-  outputTokens: number | null | undefined,
-  persisted: number | null | undefined,
-): number {
-  if (persisted != null) return Number(persisted)
-  return estimateCallCostUsd(model, inputTokens ?? 0, outputTokens ?? 0)
-}
 
 function invocationToRow(row: {
   id: string
