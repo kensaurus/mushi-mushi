@@ -6,6 +6,7 @@ export type {
   MushiPreset,
   MushiSentryConfig,
   MushiWidgetConfig,
+  MushiNotificationsConfig,
   MushiWidgetAnchor,
   MushiCaptureConfig,
   MushiDiscoverInventoryConfig,

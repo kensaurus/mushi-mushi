@@ -51,12 +51,8 @@ export interface MushiConfig {
 
   sentry?: MushiSentryConfig;
   widget?: MushiWidgetConfig;
-  /**
-   * Opt-in reporter channels beyond the in-app badge (Plan 018 §4.1).
-   * `webPush.serviceWorkerPath` — a service worker on YOUR origin that shows
-   * push messages; required for `subscribeReporterPush()`. Off by default.
-   */
-  notifications?: { webPush?: false | { serviceWorkerPath: string } };
+  /** Reporter updates beyond the in-app badge (Plan 018 §4). */
+  notifications?: MushiNotificationsConfig;
   capture?: MushiCaptureConfig;
   privacy?: MushiPrivacyConfig;
   proactive?: MushiProactiveConfig;
@@ -301,7 +297,10 @@ export interface MushiWidgetConfig {
   featureRequestLabel?: string;
   /** Override the helper text shown under the feature-request card. */
   featureRequestDescription?: string;
-  /** Minimum description character count before the submit button enables. */
+  /**
+   * Minimum description character count before Send enables. Default 8
+   * (Plan 018 §1.1); an attached screenshot or element lowers it to 0.
+   */
   minDescriptionLength?: number;
   /**
    * CSS selectors of host-app elements that the widget trigger and panel must
@@ -713,6 +712,29 @@ export interface MushiCooldownConfig {
    * governs instead, so this never blocks a legitimate second trigger.
    */
   reshowCooldownMinutes?: number;
+}
+
+/**
+ * How a reporter hears back outside the widget (Plan 018 §4). Email and push
+ * are opt-in by the reporter AND need the project switch in the console;
+ * `/v1/sdk/config` → `reporter` says what the project offers.
+ */
+export interface MushiNotificationsConfig {
+  /** Show one "the developer replied" / "fixed in vX" toast on the next visit. Default true. */
+  toast?: boolean;
+  /** Offer "Get updates by email" on the receipt and report detail. Default true (when the project offers email). */
+  email?: boolean;
+  /**
+   * Prefill the email box from `identify({ email })`. Default false. The box
+   * is never pre-ticked either way.
+   */
+  emailFromIdentity?: boolean;
+  /**
+   * Browser push: a service worker on YOUR origin that shows the push
+   * payload `{ title, body, tag, url? }`; required for
+   * `subscribeReporterPush()`. Off by default.
+   */
+  webPush?: false | { serviceWorkerPath: string };
 }
 
 export interface MushiPreFilterConfig {
