@@ -192,8 +192,8 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     label: 'Classification model',
     summary: 'Which LLM writes the plain-English read on each report after noise is filtered out.',
     howItWorks:
-      'Stage 2 is the deep classifier — it labels severity, category, intent, dedup hints, and reproduction steps. The choice trades cost vs depth: Sonnet 4.6 is the recommended default; Opus is slow but catches subtle cases; Haiku is cheap but rougher. The selected model is read on every report, so changes apply immediately to new traffic.',
-    default: { value: 'claude-sonnet-4-6' },
+      'Stage 2 is the deep classifier — it labels severity, category, intent, dedup hints, and reproduction steps. The choice trades cost vs depth: Sonnet 5.5 is the recommended default; Opus is slow but catches subtle cases; Haiku is cheap but rougher. The selected model is read on every report, so changes apply immediately to new traffic.',
+    default: { value: 'claude-sonnet-5-5' },
     backend: {
       table: 'project_settings',
       column: 'stage2_model',

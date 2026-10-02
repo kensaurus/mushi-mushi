@@ -94,7 +94,7 @@ export function GeneralPanel() {
         { current: settings.sentry_dsn ?? '', saved: saved.sentry_dsn ?? '' },
         { current: settings.sentry_webhook_secret ?? '', saved: saved.sentry_webhook_secret ?? '' },
         { current: settings.sentry_consume_user_feedback ?? true, saved: saved.sentry_consume_user_feedback ?? true },
-        { current: settings.stage2_model ?? 'claude-sonnet-4-6', saved: saved.stage2_model ?? 'claude-sonnet-4-6' },
+        { current: settings.stage2_model ?? 'claude-sonnet-5-5', saved: saved.stage2_model ?? 'claude-sonnet-5-5' },
         { current: settings.stage1_confidence_threshold ?? 0.85, saved: saved.stage1_confidence_threshold ?? 0.85 },
         { current: settings.dedup_threshold ?? 0.82, saved: saved.dedup_threshold ?? 0.82 },
         { current: settings.crawl_max_pages_per_day ?? 150, saved: saved.crawl_max_pages_per_day ?? 150 },
@@ -281,12 +281,13 @@ export function GeneralPanel() {
           <SelectField
             label="Stage 2 Model"
             helpId="settings.general.stage2_model"
-            value={settings.stage2_model ?? 'claude-sonnet-4-6'}
+            value={settings.stage2_model ?? 'claude-sonnet-5-5'}
             onChange={(e) => update({ stage2_model: e.target.value })}
           >
             <optgroup label="Anthropic (current generation)">
+              <option value="claude-sonnet-5-5">Claude Sonnet 5.5 — recommended default</option>
               <option value="claude-opus-4-7">Claude Opus 4.7 — frontier reasoning (2026-Q2)</option>
-              <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — recommended default</option>
+              <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — previous default</option>
               <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fast / cheap</option>
             </optgroup>
             <optgroup label="OpenAI fallback">
@@ -299,8 +300,8 @@ export function GeneralPanel() {
             </optgroup>
           </SelectField>
           <SettingsChangeHint
-            current={settings.stage2_model ?? 'claude-sonnet-4-6'}
-            saved={saved.stage2_model ?? 'claude-sonnet-4-6'}
+            current={settings.stage2_model ?? 'claude-sonnet-5-5'}
+            saved={saved.stage2_model ?? 'claude-sonnet-5-5'}
           />
         </div>
         <div>

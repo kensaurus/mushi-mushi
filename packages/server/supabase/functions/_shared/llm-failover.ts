@@ -18,13 +18,13 @@
  *
  * Usage:
  *   const result = await withLlmFailover(db, projectId, 'anthropic', async (key) => {
- *     const anthropic = createAnthropic({ apiKey: key.key })
- *     return generateObject({ model: anthropic('claude-sonnet-4-6'), … })
+ *     return claudeGenerateObject({ apiKey: key.key, model: STAGE2_MODEL, … })
  *   })
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { NoObjectGeneratedError } from 'npm:ai@4';
+import { isClaudeRefusal } from './claude-request.ts';
 import {
   resolveLlmKeys,
   markKeyStatus,
@@ -431,6 +431,12 @@ export async function withAnthropicOrOpenAi<T>(
       // OpenAI often handles complex structured-output schemas more reliably —
       // try it as a fallback before giving up.
       log.warn('Anthropic NoObjectGeneratedError; falling back to OpenAI', { projectId });
+    } else if (isClaudeRefusal(err)) {
+      // Claude (and its server-side fallback chain, which only covers the
+      // cyber / frontier_llm categories) declined. Not the key's fault and not
+      // transient — `withLlmFailover` re-threw it as fatal without marking the
+      // key. OpenAI runs different safety policies, so hand it over.
+      log.warn('Claude refusal; falling back to OpenAI', { projectId, category: err.category });
     } else {
       throw err;
     }
