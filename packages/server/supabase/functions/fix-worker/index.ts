@@ -101,6 +101,7 @@ import { claudeGenerateObject } from '../_shared/claude-messages.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import { budgetSnapshot, checkAutofixBudget, dispatchTrigger, isSiblingDispatch } from '../_shared/autofix-budget.ts';
 import { logLlmInvocation } from '../_shared/telemetry.ts';
+import { siblingDispatchRow } from '../_shared/sibling-dispatch.ts';
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
 import { notifyTeamFixEvent } from '../_shared/team-notify.ts';
 import { notifyReportStatusTransition } from '../_shared/report-status-notify.ts';
@@ -1638,20 +1639,16 @@ async function markCrossRepoSpan(
   // carry no 'manual' trigger and stay under the auto-fix caps.
   const siblingFailures: string[] = [];
   for (const sib of siblings) {
-    const { error: dispatchErr } = await db.from('fix_dispatch_jobs').insert({
-      project_id: projectId,
-      report_id: reportId,
-      coordination_id: coord.id,
-      skill: 'dispatch_fix',
-      status: 'queued',
-      dispatch_metadata: {
-        trigger: 'automatic',
-        target_repo_id: sib.id,
-        target_repo_url: sib.repo_url,
-        coordinated_with_pr: prUrl,
-        sibling_count: siblings.length,
-      },
-    });
+    const { error: dispatchErr } = await db.from('fix_dispatch_jobs').insert(
+      siblingDispatchRow({
+        projectId,
+        reportId,
+        coordinationId: coord.id,
+        sibling: sib,
+        prUrl,
+        siblingCount: siblings.length,
+      }),
+    );
     if (dispatchErr) {
       siblingFailures.push(`${sib.repo_url}: ${dispatchErr.message}`);
       log.error('sibling dispatch insert failed', {
