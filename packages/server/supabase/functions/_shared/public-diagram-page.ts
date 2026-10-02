@@ -287,7 +287,7 @@ export function renderPublicDiagramMarkdown(d: PublicDiagramPayload): string {
     '| --- | --- | --- | --- |',
     ...d.nodes.map(
       (n) =>
-        `| ${escapeMd(n.label)} | ${escapeMd(groupLabel.get(n.group) ?? n.group)} | ${n.path ? `[\`${n.path.replace(/`/g, '')}\`](${treeUrl(d.owner, d.repo, d.sha, n.path)})` : ''} | ${escapeMd(n.description)} |`,
+        `| ${escapeMd(n.label)} | ${escapeMd(groupLabel.get(n.group) ?? n.group)} | ${n.path ? `[\`${n.path.replace(/`/g, '').replace(/\|/g, '\\|')}\`](${treeUrl(d.owner, d.repo, d.sha, n.path)})` : ''} | ${escapeMd(n.description)} |`,
     ),
   ]
   if (d.edges.length > 0) {

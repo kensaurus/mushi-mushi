@@ -127,8 +127,10 @@ reached:
 
 **Do not remove the `MUSHI_PUBLIC_PAGES_*` secrets while pages are live.**
 Unpublish and project delete can then no longer delete the files, and the
-pages stay up until someone removes them by hand. Deleting a project removes
-its page first (best-effort, logged on failure).
+pages stay up until someone removes them by hand. Every path that drops or
+rewrites the publication row removes the files first and stops if it cannot:
+unpublish, a republish under a renamed repo (the old page goes first), and
+project delete (answers 503 rather than leave a page nobody can find).
 
 ## Who can publish, and what becomes public
 

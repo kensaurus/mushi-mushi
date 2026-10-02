@@ -1220,13 +1220,26 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
     }
 
     // A published diagram page lives in S3, outside the cascade: remove it
-    // while the publication row still names it. Best-effort, logged.
-    await removeProjectPublicPage(
+    // while the publication row still names it. If that fails, stop: deleting
+    // the project would drop the only record of a page that stays public.
+    const pageRemoval = await removeProjectPublicPage(
       db,
       projectId,
       readPublicPageStoreConfig((name) => Deno.env.get(name)),
       (err) => log.error('project delete: public diagram page removal failed', { project_id: projectId, error: String(err) }),
     );
+    if (pageRemoval === 'failed') {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'PUBLIC_PAGE_REMOVAL_FAILED',
+            message: "Could not remove this project's public diagram page. Try again in a minute, or unpublish it first.",
+          },
+        },
+        503,
+      );
+    }
 
     const { error: deleteErr } = await db.from('projects').delete().eq('id', projectId);
     if (deleteErr) return dbError(c, deleteErr);
