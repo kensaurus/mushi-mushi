@@ -12,3 +12,5 @@ The report sheet reaches web parity:
 - **Receipt.** After sending, the form becomes a receipt with "Track it" and "Done".
 - **Email opt-in.** When the app offers email updates, the receipt asks for an address. It is never pre-ticked, and a confirmation email goes out first.
 - **Return toast.** A short "The developer replied" / "Your bug is fixed" toast appears when the app returns to the foreground: once per session, once a day, and only on devices that sent a report. Turn it off with `notifications: { toast: false }`.
+
+Bundle budget: the RN size limit moves from 22 kB to 23.5 kB brotli (measured 22.95 kB) for this parity work. It is one-time weight inside a Metro app bundle; the shared rules live in `@mushi-mushi/core/reporter-ui`.
