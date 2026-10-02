@@ -2788,11 +2788,36 @@ The public checks read a `store` block in `mushi.recipe.json`:
     "ios": { "bundleId": "com.example.app", "appleId": "1234567890" },
     "android": { "package": "com.example.app" },
     "locales": ["en-US", "ja"],
-    "privacyUrl": "https://example.com/privacy"
+    "privacyUrl": "https://example.com/privacy",
+    "listingDir": "fastlane/metadata"
   },
   "links": { "domains": ["example.com"] }
 }
 ```
+
+## Store review
+
+Keep the store listing in the repo, in fastlane's `metadata` layout under
+`store.listingDir`. To copy what is live today into the repo once, run
+`mushi store pull` on your machine with your own store keys. From then on you
+change the listing in a pull request, and your own CI publishes it with
+`fastlane deliver`, `fastlane supply` or EAS. Mushi never holds a key that can
+publish a listing.
+
+**Run store review** on the Recipe page then checks:
+
+| Check | What it catches |
+|-------|-----------------|
+| Listing matches live | The text in the repo is not what the store shows. |
+| Same languages | A language is in the repo but not live, or live but not in the repo. |
+| Store length limits | A name, subtitle, keyword list or description is longer than the store allows. |
+| Claims match the code | The listing says something the code does not back up, such as "photos never leave your phone" while the app uploads them, or "open source" for a private repo. |
+| Privacy labels | The SDKs that collect data, read from `package.json`, so you can check them against your privacy labels. |
+| iOS screenshots | Screenshots that are Android-shaped, or older than your last few releases. |
+
+It ends with a short pre-submission checklist, each item marked high, medium
+or low risk. Reading the claims uses your own AI key; without one, that check
+says **Not checked**. This is a check against your code, not legal advice.
 
 ## Connected sources
 
@@ -2843,6 +2868,7 @@ including Jenkins or a cron on a server.
 | `get_app_recipe` | Every element with its state and reason |
 | `get_design_tokens` | The normalized tokens and a CSS-variable / TS-name map, so a fix uses tokens instead of literals |
 | `get_design_deviance` | The score, the per-rule breakdown, the trend and the top findings |
+| `get_store_status` | The latest store review: listing vs live, claims vs code, screenshots and the checklist |
 | `get_fix_context` | Now includes a `recipe` block (at most 4 KB) with the tokens to use |
 
 ---
@@ -4279,7 +4305,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP<br/>91 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>92 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
@@ -4327,7 +4353,7 @@ your client:
 }
 ```
 
-The full tool catalog (91 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (92 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -4503,7 +4529,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 91 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 92 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -6090,6 +6116,24 @@ mushi radar show                     # every hole check for this project and wha
 
 ---
 
+## Store listings
+
+Copy the live App Store and Google Play listings into the repo once, so the
+listing lives as code. It runs with your own keys and sends nothing to Mushi.
+Your own CI publishes listing changes after that.
+
+```bash
+mushi store pull --asc-key-id <id> --asc-issuer-id <id> --asc-key-path AuthKey.p8 \
+  --play-key-path play-service-account.json
+```
+
+It reads `store.listingDir`, `store.ios.appleId` and `store.android.package`
+from `mushi.recipe.json`. The keys can also come from `MUSHI_ASC_KEY_ID`,
+`MUSHI_ASC_ISSUER_ID`, `MUSHI_ASC_KEY_PATH` and
+`GOOGLE_APPLICATION_CREDENTIALS`. Review the files before you commit them.
+
+---
+
 ## Skill pipelines
 
 ```bash
@@ -6147,6 +6191,7 @@ mushi test                           # synthetic report end-to-end
 | `MUSHI_CONSOLE_URL` | Admin console base for CLI hints + browser opens |
 | `MUSHI_BYOK_KEY` | BYOK key value for `mushi keys add` (keeps key out of shell history) |
 | `MUSHI_NO_UPDATE_CHECK=1` | Skip npm registry version nudge in `mushi init` |
+| `MUSHI_ASC_KEY_ID`, `MUSHI_ASC_ISSUER_ID`, `MUSHI_ASC_KEY_PATH` | Your App Store Connect key for `mushi store pull` (read on your machine, never sent to Mushi) |
 
 ### Config file
 
@@ -6973,7 +7018,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **91-tool** catalog and
+on npm for the full **92-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 
@@ -7073,7 +7118,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 
   Auto-generated from `packages/mcp/src/catalog.ts`. Do not edit by hand — run `pnpm gen:mcp-tools-doc`.
 
-**91 tools** · **8 resources** · **4 prompts**
+**92 tools** · **8 resources** · **4 prompts**
 
 ## Read tools (`mcp:read`)
 
@@ -7099,6 +7144,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `list_portfolio_findings` | Portfolio findings — fix once | Return what to fix across the apps of one organization: groups of the same finding rule open in two or more projects (rule, gate, highest severity, affected projectIds, a sample message and one paste-ready fix prompt), the Mushi SDK version per project and package (current \| behind \| unknown), and integrations most sibling projects have but one lacks. Open means the latest completed gate run per project and gate, not allowlisted; info findings are left out. Optional organizationId as for get_portfolio. Needs an account-level key. Returns \{ organizationId, groups, sdkSkew, holes }. Read-only. Fix a group repo by repo with list_gate_findings in each project. |
 | `get_recipe_drift` | Recipe drift | Return what drifted from the app recipe, with a fix for each: CI workflows (no concurrency or timeout, macOS on every run, long artifact retention, crons more than daily, the default branch red), deploys (a merged fix not live yet, a failed version probe, web and mobile on different versions), env names declared but missing in CI, migrations in the repo but not applied, and off-token design values. For each gate it says when it last ran (never_run means not checked, never healthy). Returns \{ projectId, gates: \{ \: \{ status, checkedAt, commitSha } }, findings: [\{ gate, ruleId, severity, message, filePath, line, suggestedFix }] }. Read-only. Mushi never runs DDL or edits workflows: apply schema and CI fixes from your editor. |
 | `list_connectors` | Connectors | List the sources connected to an organization: each connector instance with its kind, status (connected \| not_connected \| blocked \| error; blocked means an outside party refuses, for example an App Store agreement not accepted), the scopes it was granted, enabled capabilities and the projects it is bound to, plus the kinds that can be added and those still planned. Never returns credentials. Optional organizationId; account-level key needed. Returns \{ organizationId, available, planned, instances, legacy }. Read-only. |
+| `get_store_status` | Store review status | Return the latest store review of an app: listing text in the repo vs what is live on the App Store and Google Play (listing_drift, a language out of sync, store length limits), listing claims checked against the code (listing_claim_contradicts_code: for example "never leaves your phone" while the code uploads, or "open source" for a private repo), privacy labels vs data-collecting SDKs, iOS screenshots that look Android-shaped or older than recent releases, and a pre-submission checklist with a risk per item. Each result is ok \| finding \| unknown (not checked, never healthy). This is a check against the code, not legal advice. status never_run means it has not run yet; it runs from the console. Returns \{ projectId, checkedAt, status, results, checklist, findings }. Read-only. |
 | `get_radar` | Hole checks (radar) | Return the hole checks that catch a problem before a user hits it: store names that differ between the App Store and Google Play, a store listing missing a language, a domain or HTTPS certificate about to expire, missing security headers, a broken privacy link, storage rows deleted with SQL (files left behind and billed), and an Android target SDK or iOS build that the stores will refuse. scope "project" (default; projectId optional) returns every check with state ok \| finding \| unknown \| error, a plain-English reason, and each finding with its fix; unknown means not checked and never means healthy. scope "organization" (organizationId optional, account-level key) returns the open findings of every app. Read-only. To run the checks again, use the console Recipe page. |
 | `get_graph_neighborhood` | Graph neighborhood | Return the BFS neighborhood around one graph node by id or label: \{ nodes: [\{ id, label, node_type }], edges: [\{ source_node_id, target_node_id, edge_type }] } within a depth budget (default 2, max 4). Read-only. Tuned for "what touches this action?"; use get_knowledge_graph to traverse from a component seed, or get_graph_node for a single node's row. |
 | `get_graph_node` | Graph node detail | Fetch one knowledge-graph node row by id. Returns \{ node: \{ id, node_type, label, metadata } } including the v2 derived status on Action nodes (ok \| stale \| broken). Read-only. Use to inspect a single node's status; use get_graph_neighborhood to see what connects to it. |
@@ -17851,7 +17897,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**91 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**92 tools**, 8 resources, 4 prompts).
 
 ---
 
@@ -18384,6 +18430,7 @@ Below the cards:
 | Section | What it means |
 |---------|---------------|
 | **Across your apps** | Problems only visible across apps: a deep link to a sibling app that no longer resolves, many apps posting to one channel, CI cost in two repos. |
+| **Releases** | For each app: what is live and at what rollout, native changes waiting for a store build, and JS-only changes that can ship as an over-the-air update. It suggests one store release per app to save CI minutes. Your own CI builds and submits. |
 | **Daily digest** | One message a day across all apps. Off until an owner picks Slack, email or push. |
 | **Shared between apps** | Domains, store apps, Supabase projects and channels two or more apps use. |
 | **Connected sources** | App Store Connect, Google Play, AI spend, RevenueCat or your own endpoint. Read-only by default. |

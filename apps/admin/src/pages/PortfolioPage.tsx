@@ -9,6 +9,7 @@
  *
  * Data: GET /v1/admin/orgs/:orgId/portfolio → PortfolioResponse
  *       GET /v1/admin/orgs/:orgId/portfolio/findings → PortfolioFindingsResponse
+ *       GET /v1/admin/orgs/:orgId/releases (ReleasesCard)
  * Empty, loading, error and "not checked yet" states are explicit; nothing
  * that was never checked renders as healthy.
  */
@@ -31,6 +32,7 @@ import { formatUsd, kindLabel, radarLabel, sdkLabel, sortPortfolioCards } from '
 import { DigestCard } from '../components/portfolio/DigestCard'
 import { ConnectorsCard } from '../components/portfolio/ConnectorsCard'
 import { SharedResourcesCard } from '../components/portfolio/SharedResourcesCard'
+import { ReleasesCard } from '../components/portfolio/ReleasesCard'
 
 export function PortfolioPage() {
   const orgId = useActiveOrgId()
@@ -119,6 +121,11 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
       {page.data && page.data.cards.length > 0 && (
         <PanelErrorBoundary label="Daily digest">
           <DigestCard orgId={orgId} projects={page.data.cards.map((c) => ({ projectId: c.projectId, name: c.name }))} />
+        </PanelErrorBoundary>
+      )}
+      {page.data && page.data.cards.length > 0 && (
+        <PanelErrorBoundary label="Releases">
+          <ReleasesCard orgId={orgId} />
         </PanelErrorBoundary>
       )}
       {page.data && page.data.cards.length > 0 && (

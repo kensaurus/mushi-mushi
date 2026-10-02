@@ -607,6 +607,14 @@ const BASE_TOOLS: Record<string, HostedTool> = {
       return apiCall(`/v1/admin/orgs/${encodeURIComponent(org)}/connector-actions`, { method: 'POST', headers: ctx.authHeaders, body: JSON.stringify(body) })
     },
   },
+  get_store_status: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for get_store_status')
+      return apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/store`, { headers: ctx.authHeaders })
+    },
+  },
   get_radar: {
     scope: 'mcp:read',
     handler: async (args, ctx) => {
@@ -1885,6 +1893,7 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'list_connectors',
   'propose_recipe_change',
   'propose_portfolio_change',
+  'get_store_status',
 ])
 
 /**

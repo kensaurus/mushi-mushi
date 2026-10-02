@@ -85,6 +85,7 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   propose_recipe_change: 'inventory',
   propose_portfolio_change: 'inventory',
   request_connector_action: 'inventory',
+  get_store_status: 'inventory',
   get_design_deviance: 'inventory',
 
   // setup

@@ -2243,6 +2243,27 @@
         ]
       }
     },
+    "get_store_status": {
+      "title": "Store review status",
+      "description": "Return the latest store review of an app: listing text in the repo vs what is live on the App Store and Google Play (listing_drift, a language out of sync, store length limits), listing claims checked against the code (listing_claim_contradicts_code: for example \"never leaves your phone\" while the code uploads, or \"open source\" for a private repo), privacy labels vs data-collecting SDKs, iOS screenshots that look Android-shaped or older than recent releases, and a pre-submission checklist with a risk per item. Each result is ok | finding | unknown (not checked, never healthy). This is a check against the code, not legal advice. status never_run means it has not run yet; it runs from the console. Returns { projectId, checkedAt, status, results, checklist, findings }. Read-only.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Store review status",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        }
+      },
+      "returnsUntrusted": true
+    },
     "get_two_way_comms_health": {
       "title": "Two-way communication health",
       "description": "Summarize SDK ↔ admin two-way reporter health for a host app: last SDK heartbeat, app version/platform last seen, unread reporter messages, recent reporter replies, and pending QA/TDD follow-ups. Use after wiring @mushi-mushi/web in a Vite/Capacitor app to confirm reports land in the console and admin/MCP replies reach the in-app widget.",

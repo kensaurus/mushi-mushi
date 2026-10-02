@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-02 · **609** routes.
+> Generated: 2026-10-02 · **611** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 135 |
+| `adminOrApiKey` | 137 |
 | `apiKeyAuth` | 54 |
 | `jwtAuth` | 349 |
 | `jwtOrApiKey` | 3 |
@@ -241,7 +241,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/orgs/:orgId/portfolio/findings` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/portfolio.ts` |
 | GET | `/v1/admin/orgs/:orgId/portfolio/resources` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe-ingest.ts` |
 | GET | `/v1/admin/orgs/:orgId/radar` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/radar.ts` |
-| POST | `/v1/admin/orgs/:orgId/releases/proposal` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe-changes.ts` |
+| GET | `/v1/admin/orgs/:orgId/releases` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe-changes.ts` |
 | GET | `/v1/admin/plugins` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | POST | `/v1/admin/plugins` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | DELETE | `/v1/admin/plugins/:slug` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
@@ -315,6 +315,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:id/sdk-diagnostics` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-ci-secrets.ts` |
 | POST | `/v1/admin/projects/:id/sentry/import` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/sentry-import.ts` |
 | POST | `/v1/admin/projects/:id/setup-funnel/diagnosis-viewed` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
+| GET | `/v1/admin/projects/:id/store` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/store-ops.ts` |
+| POST | `/v1/admin/projects/:id/store/review` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/store-ops.ts` |
 | POST | `/v1/admin/projects/:id/sync-ci-secrets` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-ci-secrets.ts` |
 | POST | `/v1/admin/projects/:id/test-report` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
 | GET | `/v1/admin/projects/:pid/integrations` | `unknown` | `packages/server/supabase/functions/api/routes/settings-research.ts` |

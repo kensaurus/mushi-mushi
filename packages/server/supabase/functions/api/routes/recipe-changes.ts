@@ -5,7 +5,7 @@
  *   POST /v1/admin/projects/:id/recipe/changes            adminOrApiKey(mcp:write)  dry run by default; dryRun:false opens ONE draft PR
  *   GET  /v1/admin/projects/:id/recipe/changes/:jobId     adminOrApiKey(mcp:read)
  *   POST /v1/admin/orgs/:orgId/portfolio/changes          adminOrApiKey(mcp:write)  "fix once": one draft PR per repo (≤ 10), shared batch_id
- *   POST /v1/admin/orgs/:orgId/releases/proposal          adminOrApiKey(mcp:read)   the batch to release now vs next (read-only)
+ *   GET  /v1/admin/orgs/:orgId/releases                   adminOrApiKey(mcp:read)   release calendar + the batch to release now vs next (read-only)
  *   GET  /v1/admin/orgs/:orgId/connector-actions          adminOrApiKey(mcp:read)
  *   POST /v1/admin/orgs/:orgId/connector-actions          adminOrApiKey(mcp:write)  REQUEST an action; nothing runs
  *   POST /v1/admin/orgs/:orgId/connector-actions/:id/approve   console JWT only, owner/admin
@@ -25,7 +25,7 @@ import { createPrFromFiles, findOpenPrByHeadPrefix } from '../../_shared/github-
 import { getDefaultHead, readRepoFile, resolveRecipeRepo } from '../../_shared/recipe-github.ts'
 import { MAX_BATCH_REPOS, planRecipeChange, RECIPE_CHANGE_ELEMENTS, runRecipeChange, type ChangeDeps } from '../../_shared/recipe-change.ts'
 import { approveConnectorAction, executeConnectorAction, rejectConnectorAction, requestConnectorAction, type ExecuteDeps } from '../../_shared/connector-actions.ts'
-import { releaseCalendar, type CalendarApp } from '../../_shared/store-review.ts'
+import { calendarAppsFrom, releaseCalendar } from '../../_shared/store-review.ts'
 import { callerCanAccessProject, jsonError } from '../shared.ts'
 import type { Variables } from '../types.ts'
 import { portfolioAccess } from './portfolio.ts'
@@ -158,7 +158,7 @@ export function registerRecipeChangeRoutes(app: Hono<{ Variables: Variables }>, 
     return c.json({ ok: true, data: { batchId, opened: results.filter((r) => r.status === 'pr_opened').length, results } })
   })
 
-  app.post('/v1/admin/orgs/:orgId/releases/proposal', deps.adminOrApiKeyRead, async (c) => {
+  app.get('/v1/admin/orgs/:orgId/releases', deps.adminOrApiKeyRead, async (c) => {
     const db = deps.getServiceClient()
     const access = await portfolioAccess(c, db, c.req.param('orgId') ?? '')
     if (!access.ok) return access.response
@@ -167,27 +167,16 @@ export function registerRecipeChangeRoutes(app: Hono<{ Variables: Variables }>, 
     const [{ data: projects }, { data: obs }, { data: fixes }, { data: runs }, { data: snaps }] = await Promise.all([
       db.from('projects').select('id, name').in('id', ids),
       db.from('deploy_observations').select('project_id, observed_version, observed_at, ok').in('project_id', ids).order('observed_at', { ascending: false }).limit(500),
-      db.from('fix_attempts').select('project_id, merged_at, files_changed').in('project_id', ids).not('merged_at', 'is', null).order('merged_at', { ascending: false }).limit(500),
+      db.from('fix_attempts').select('project_id, merged_at, files_changed').in('project_id', ids).order('merged_at', { ascending: false, nullsFirst: false }).limit(500),
       db.from('ci_workflow_runs').select('project_id, est_billable_minutes').in('project_id', ids).limit(5000),
       db.from('connector_snapshots').select('project_id, kind, snapshot').in('project_id', ids).in('kind', ['app_store_connect', 'play_console']).eq('is_current', true).eq('ok', true),
     ])
-    const apps: CalendarApp[] = ((projects ?? []) as Array<{ id: string; name: string | null }>).map((p) => {
-      const lastDeploy = ((obs ?? []) as Array<{ project_id: string; observed_version: string | null; observed_at: string; ok: boolean }>).find((o) => o.project_id === p.id && o.ok)
-      const merged = ((fixes ?? []) as Array<{ project_id: string; merged_at: string; files_changed?: unknown }>).filter((f) => f.project_id === p.id && (!lastDeploy || f.merged_at > lastDeploy.observed_at))
-      const native = merged.filter((f) => Array.isArray(f.files_changed) && (f.files_changed as string[]).some((x) => /^(android|ios)\//.test(String(x)) || /(capacitor\.config|app\.json|eas\.json|Podfile|build\.gradle)/.test(String(x))))
-      const asc = ((snaps ?? []) as Array<{ project_id: string; kind: string; snapshot: { elements?: { deploy?: { summary?: Record<string, unknown> } } } }>).find((s) => s.project_id === p.id && s.kind === 'app_store_connect')
-      const play = ((snaps ?? []) as Array<{ project_id: string; kind: string; snapshot: { elements?: { deploy?: { summary?: Record<string, unknown> } } } }>).find((s) => s.project_id === p.id && s.kind === 'play_console')
-      const rollout = play?.snapshot?.elements?.deploy?.summary?.rolloutPct
-      return {
-        projectId: p.id,
-        name: p.name ?? p.id.slice(0, 8),
-        mergedNotBuilt: merged.length,
-        builtNotSubmitted: 0,
-        inReview: typeof asc?.snapshot?.elements?.deploy?.summary?.iosInReview === 'boolean' ? (asc.snapshot.elements.deploy.summary.iosInReview as boolean) : null,
-        live: lastDeploy ? { version: lastDeploy.observed_version ?? 'unknown', rolloutPct: typeof rollout === 'number' ? rollout : null } : null,
-        otaPending: merged.length - native.length,
-      } as CalendarApp
-    })
+    const apps = calendarAppsFrom(
+      (projects ?? []) as Array<{ id: string; name: string | null }>,
+      (obs ?? []) as Array<{ project_id: string; observed_version: string | null; observed_at: string; ok: boolean }>,
+      (fixes ?? []) as Array<{ project_id: string; merged_at: string | null; files_changed?: unknown }>,
+      (snaps ?? []) as unknown as Parameters<typeof calendarAppsFrom>[3],
+    )
     const minutes: Record<string, number> = {}
     for (const id of ids) {
       const rs = ((runs ?? []) as Array<{ project_id: string; est_billable_minutes: number | null }>).filter((r) => r.project_id === id && r.est_billable_minutes != null)

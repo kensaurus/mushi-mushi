@@ -295,6 +295,16 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Ask to raise the Play rollout to 20%, for a person to approve.',
   },
   {
+    name: 'get_store_status',
+    title: 'Store review status',
+    description:
+      'Return the latest store review of an app: listing text in the repo vs what is live on the App Store and Google Play (listing_drift, a language out of sync, store length limits), listing claims checked against the code (listing_claim_contradicts_code: for example "never leaves your phone" while the code uploads, or "open source" for a private repo), privacy labels vs data-collecting SDKs, iOS screenshots that look Android-shaped or older than recent releases, and a pre-submission checklist with a risk per item. Each result is ok | finding | unknown (not checked, never healthy). This is a check against the code, not legal advice. status never_run means it has not run yet; it runs from the console. Returns { projectId, checkedAt, status, results, checklist, findings }. Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Will this release pass store review, and does the listing tell the truth?',
+  },
+  {
     name: 'get_radar',
     title: 'Hole checks (radar)',
     description:

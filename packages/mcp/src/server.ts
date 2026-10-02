@@ -1509,6 +1509,22 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
+    'get_store_status',
+    {
+      title: titleOf('get_store_status'),
+      description: descOf('get_store_status'),
+      annotations: annotationsFor('get_store_status'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/store`));
+    },
+  );
+
+  server.registerTool(
     'get_radar',
     {
       title: titleOf('get_radar'),
