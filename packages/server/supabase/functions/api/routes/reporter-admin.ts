@@ -34,7 +34,11 @@ import {
   reporterTitle,
   type ReporterNotificationRow,
 } from '../../_shared/reporter-copy.ts';
+import { stampDeliveredReleaseCredits } from '../../_shared/release-reporters.ts';
+import { log } from '../../_shared/logger.ts';
 import { callerProjectIds, canAccessReportProject, dbError, jsonError, parseUuidParam } from '../shared.ts';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Db = ReturnType<typeof getServiceClient>;
 
@@ -271,6 +275,12 @@ export function registerReporterAdminRoutes(app: Hono<{ Variables: Variables }>)
     });
     if (outcome.ok) {
       await logAudit(db, projectId, userId, 'settings.updated', 'reporter_outbox', idParsed.value, { action: 'release' });
+      // A held "shipped in vX" message now went out: its release credit can be
+      // stamped (publish skipped it because nothing had been delivered yet).
+      if (outcome.type === 'released' && outcome.dedupeKey && UUID_RE.test(outcome.dedupeKey)) {
+        const stamped = await stampDeliveredReleaseCredits(db, outcome.dedupeKey);
+        if (!stamped.ok) log.error('release_credit_stamp_failed', { messageId: idParsed.value, error: stamped.error });
+      }
     }
     return heldResponse(c, outcome);
   });
