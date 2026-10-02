@@ -5,7 +5,7 @@
  */
 import Link from 'next/link'
 import { motion } from 'motion/react'
-import { LANDING_OPERATOR } from '@/lib/landing-copy'
+import { LANDING_COMMUNITY, LANDING_OPERATOR } from '@/lib/landing-copy'
 import {
   LandingStagger,
   LandingStaggerItem,
@@ -74,6 +74,20 @@ export function ClosingCta() {
               rel="noopener noreferrer"
             >
               {LANDING_OPERATOR.teamCta}
+            </a>
+          </p>
+        </LandingStaggerItem>
+        <LandingStaggerItem>
+          <p className="landing-section-lead landing-closing-team">
+            {LANDING_COMMUNITY.lead}{' '}
+            <a
+              href={LANDING_COMMUNITY.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-mushi-cta="landing-discussions"
+              data-mushi-location="closing"
+            >
+              {LANDING_COMMUNITY.label}
             </a>
           </p>
         </LandingStaggerItem>
