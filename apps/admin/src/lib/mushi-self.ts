@@ -108,6 +108,12 @@ export async function initMushiSelf(options?: {
             contactEmail: 'kensaurus@gmail.com',
           },
           minDescriptionLength: 12,
+          // Console feature requests have ONE home: the Feature board, which
+          // reads support_tickets (category 'feature') written by
+          // FeedbackModal. The widget's feature card files a *report*
+          // (category 'other') that the board never shows, so the self widget
+          // takes bugs only and BetaBanner / Support send ideas to the modal.
+          featureRequestCard: false,
         },
 
         proactive: {
