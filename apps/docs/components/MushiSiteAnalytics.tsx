@@ -84,6 +84,23 @@ const SITE_ANALYTICS_CONSENT_COPY =
  */
 let trackerPromise: Promise<Tracker | null> | null = null
 
+/** What the docs pages may do with the SDK once consent has loaded it. */
+export interface LoadedMushi {
+  setMetadata: (key: string, value: unknown) => void
+  report: (options?: { category?: string }) => void
+}
+
+/** Set only after the visitor consented and `Mushi.init` ran. */
+let loadedMushi: LoadedMushi | null = null
+
+/**
+ * The Mushi SDK instance, or null when it is not loaded (no consent yet, no
+ * config, or init failed). Never triggers a load: callers fall back instead.
+ */
+export function getLoadedMushi(): LoadedMushi | null {
+  return loadedMushi
+}
+
 function loadTracker(config: SiteAnalyticsConfig): Promise<Tracker | null> {
   if (trackerPromise) return trackerPromise
   trackerPromise = (async () => {
@@ -118,6 +135,7 @@ function loadTracker(config: SiteAnalyticsConfig): Promise<Tracker | null> {
         },
         analytics: { consent: 'required', surface: 'docs' },
       })
+      loadedMushi = Mushi.getInstance()
       return {
         track: (name, props, reserved) => {
           core.trackEvent(name, props, reserved ? { reserved } : undefined)

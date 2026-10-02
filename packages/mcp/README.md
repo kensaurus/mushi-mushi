@@ -237,6 +237,7 @@ When codebase indexing is enabled on a project, these tools ground on `project_c
 | `get_codebase_domains` | read | Business domain / flow map |
 | `analyze_codebase_impact` | read | Diff impact (paths, last push, compare, fix PR) |
 | `analyze_wiki_knowledge` | read | Wiki/docs knowledge graph |
+| `get_repo_digest` | read | Paste-ready repo digest (tree + files) at a pinned commit, scoped to a folder or a bug; default feature set, no index needed |
 
 > Need a tool that isn't here? Open an issue at [github.com/kensaurus/mushi-mushi/issues](https://github.com/kensaurus/mushi-mushi/issues) and tag it `mcp`.
 
