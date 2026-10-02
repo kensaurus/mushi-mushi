@@ -236,9 +236,6 @@ export const REPORTER_READ_DEADLINE_MS = 15_000;
 /** Mirrors the description textarea's maxlength. */
 export const DESCRIPTION_MAX_LENGTH = 4000;
 
-/** Which copy + starter chips the details step shows. */
-export type DetailMode = 'bug' | 'feature' | 'other';
-
 /** Capture failure reasons plus 'permission' (a host screenshotProvider was denied). */
 export type ScreenshotErrorReason = ScreenshotFailureReason | 'permission';
 
