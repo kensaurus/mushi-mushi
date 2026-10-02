@@ -106,7 +106,7 @@ export const fixSchema = z.object({
   needsHumanReview: z
     .boolean()
     .describe(
-      'Set true when confidence is low or the fix touches security-sensitive code. Forces draft PR.',
+      'Set true when confidence is low or the fix touches security-sensitive code. No PR is opened; the proposal is kept for a human to review.',
     ),
 })
 

@@ -40,8 +40,10 @@ import {
   type MergeMethod,
 } from '../../_shared/fix-merge.ts';
 import {
+  parseGithubRepoUrl,
   resolveProjectGithubToken,
 } from '../../_shared/github.ts';
+import { resolveBranchForConnect } from '../../_shared/github-branch.ts';
 import { dbError, ownedProjectIds, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds, callerCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
@@ -1839,6 +1841,16 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const repoUrl = body.repoUrl.trim().replace(/\.git$/, '').replace(/\/$/, '');
     const validRoles = ['frontend', 'backend', 'monorepo', 'library', 'docs', 'other'];
     const role = validRoles.includes(body.role ?? '') ? body.role : 'monorepo';
+    // The repo form pre-fills "main"; store the branch GitHub really has.
+    const parsedRepo = parseGithubRepoUrl(repoUrl);
+    const { branch: defaultBranch } = parsedRepo
+      ? await resolveBranchForConnect({
+          token: await resolveProjectGithubToken(db, body.projectId),
+          owner: parsedRepo.owner,
+          repo: parsedRepo.repo,
+          requested: body.defaultBranch,
+        })
+      : { branch: body.defaultBranch?.trim() || 'main' };
     const { data, error } = await db
       .from('project_repos')
       .insert({
@@ -1846,7 +1858,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         repo_url: repoUrl,
         role,
         path_globs: body.pathGlobs ?? null,
-        default_branch: body.defaultBranch ?? 'main',
+        default_branch: defaultBranch,
         is_primary: body.isPrimary ?? false,
         indexing_enabled: true,
       })

@@ -7,6 +7,8 @@ import { dbError, callerProjectIds, resolveOwnedProject, callerCanAccessProject 
 import { buildImportEdges, detectExploreLayer, getProjectCodebaseScope } from '../../_shared/codebase-understand.ts';
 import { pathMatchesScope } from '../../_shared/codebase-scope.ts';
 import { unverifiedGithubInstallsAllowed } from '../../_shared/github-install-trust.ts';
+import { resolveProjectGithubToken } from '../../_shared/github.ts';
+import { resolveBranchForConnect } from '../../_shared/github-branch.ts';
 import type { KnowledgeGraph } from '../../_shared/codebase-graph-build.ts';
 
 export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -148,7 +150,6 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
       );
     }
     const repoUrl = `https://github.com/${parsed.owner}/${parsed.repo}`;
-    const defaultBranch = (body.default_branch ?? 'main').trim() || 'main';
     let installationId =
       body.installation_id != null && String(body.installation_id).trim() !== ''
         ? Number(body.installation_id)
@@ -267,6 +268,15 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
         }
       }
     }
+
+    // The console pre-fills "main"; ask GitHub which branch really exists
+    // (kensaurus/mushi-mushi is 'master' and indexed nothing for 3 months).
+    const { branch: defaultBranch } = await resolveBranchForConnect({
+      token: await resolveProjectGithubToken(db, projectId, installationId),
+      owner: parsed.owner,
+      repo: parsed.repo,
+      requested: body.default_branch,
+    });
 
     const { data: existingRepo } = await db
       .from('project_repos')
