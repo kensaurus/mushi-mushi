@@ -51,7 +51,7 @@ export function ExploreUnderstandEmpty({ error, onRetry }: Props) {
           </>
         )}
         {isKey && (
-          <Link to="/settings#byok">
+          <Link to="/settings?tab=byok">
             <Btn size="sm" variant="primary">
               Settings → API Keys
             </Btn>
