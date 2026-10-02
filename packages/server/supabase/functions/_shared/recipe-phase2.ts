@@ -246,10 +246,11 @@ function toConnectorFinding(d: RecipeDriftFinding): DriftFinding {
 
 /**
  * Shared-auth inputs: every project naming the same `links.auth` provider +
- * ref, with the login settings its repo declares in supabase/config.toml (the
- * GitHub connector's snapshot). A project whose file was not read is left out
- * of the settings comparison; a group where nobody declares settings is
- * `unknown`. The live dashboard config is never read (ADR 0017: the Supabase
+ * ref. A repo's supabase/config.toml (the GitHub connector's snapshot)
+ * describes the repo's OWN Supabase project, so it counts as the shared login
+ * settings only when that project is the login project (`data.projectRef`
+ * equals `links.auth.ref`). A satellite app's file describes another project
+ * and is ignored. A group where no repo owns the ref is `unknown`. The live dashboard config is never read (ADR 0017: the Supabase
  * connector stays read-only MCP, and that endpoint returns secrets).
  */
 export function authInputsFrom(
@@ -263,7 +264,9 @@ export function authInputsFrom(
     const provider = str(m.links?.auth?.provider)
     const ref = str(m.links?.auth?.ref)
     if (!provider || !ref) continue
-    const declared = declaredOf.get(p.id)
+    // Only the repo that owns the login project declares its settings.
+    const ownsRef = str(m.data?.projectRef) === ref
+    const declared = ownsRef ? declaredOf.get(p.id) : undefined
     const origins = [
       ...(Array.isArray(m.links?.domains) ? m.links.domains : []),
       ...(Array.isArray(m.links?.deepLinks?.schemes) ? m.links.deepLinks.schemes.map((x: unknown) => (typeof x === 'string' ? `${x}://` : null)) : []),
@@ -284,7 +287,7 @@ export function authInputsFrom(
   for (const [key, group] of groups) {
     if (group.length < 2 || group.some((g) => g.settingsKnown)) continue
     for (const ruleId of ['auth_config_divergent', 'auth_redirect_missing']) {
-      unknown.push({ ruleId, projectIds: group.map((g) => g.projectId), resourceKey: `auth_provider:${key}`, reason: 'No repo in this group declares its login settings in supabase/config.toml.' })
+      unknown.push({ ruleId, projectIds: group.map((g) => g.projectId), resourceKey: `auth_provider:${key}`, reason: 'No repo in this group owns the login project (data.projectRef equal to links.auth.ref) and declares its settings in supabase/config.toml.' })
     }
   }
   return { inputs, unknown }

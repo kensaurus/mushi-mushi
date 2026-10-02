@@ -86,10 +86,14 @@ export function registerPortfolioFunnelRoutes(app: Hono<{ Variables: Variables }
     if (!definition) return c.json({ ok: true, data: { state: 'not_set_up', definition: null, rows: [] } })
 
     const ids = access.projectIds.slice(0, MAX_APPS)
-    const [{ data: projects }, { data: settings }] = await Promise.all([
+    const [projectsRes, settingsRes] = await Promise.all([
       db.from('projects').select('id, name').in('id', ids),
       db.from('project_settings').select('project_id, product_events_enabled').in('project_id', ids),
     ])
+    // Without these, an app with events off would be run as if they were on.
+    if (projectsRes.error || settingsRes.error) return jsonError(c, 'DB_ERROR', 'The funnel could not be read. Try again in a minute.', 500)
+    const projects = projectsRes.data
+    const settings = settingsRes.data
     const enabled = new Map(((settings ?? []) as Array<{ project_id: string; product_events_enabled: boolean | null }>).map((s) => [s.project_id, s.product_events_enabled ?? true]))
     const to = deps.now()
     const from = new Date(to.getTime() - definition.lookback_days * 86400_000)

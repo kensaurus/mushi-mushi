@@ -4972,10 +4972,12 @@ Pick one of these. Each keeps a single list of users that every app trusts.
 | **Clerk with satellite domains** | One Clerk application. The main domain hosts sign-in; the other apps run on satellite domains and share the session. | Satellite domains are set per app. A new app needs one added before it can share the session. |
 | **Auth0, one tenant** | Every app is an application inside one Auth0 tenant, so users and sign-in rules are shared. | Each application has its own callback list. A missing callback shows up as a login error only in that app. |
 
-Tell Mushi which apps share a login in each app's `mushi.recipe.json`:
+Tell Mushi which apps share a login in each app's `mushi.recipe.json`. In the
+app that owns the login project, `data.projectRef` is the same ref:
 
 ```json
 {
+  "data": { "projectRef": "abcdefghijklmnopqrst" },
   "links": {
     "auth": { "provider": "supabase", "ref": "abcdefghijklmnopqrst" },
     "domains": ["glot.it"],
@@ -4988,13 +4990,16 @@ Tell Mushi which apps share a login in each app's `mushi.recipe.json`:
 
 - **Redirects.** Every domain and deep-link scheme an app declares must be on
   the shared redirect list. Mushi reads the list from `supabase/config.toml` in
-  your repos. That file is what `supabase config push` sends; a change made only
-  in the dashboard is not in it, so the finding says where the list came from.
+  the repo that owns the login project: the one whose `data.projectRef` equals
+  `links.auth.ref`. Another app's config file describes its own project, so it
+  is not used. That file is what `supabase config push` sends; a change made
+  only in the dashboard is not in it, so the finding says where the list came
+  from.
 - **Same settings.** When two repos declare the same login project, they must
   agree on sign-in methods, email confirmation and two-factor sign-in. Whichever
   pushes last wins, so a disagreement changes login for every app.
-- **Not checked** means no repo in the group has a `supabase/config.toml` with
-  an `[auth]` section. It is never shown as passing.
+- **Not checked** means no repo in the group owns the login project and has a
+  `supabase/config.toml` with an `[auth]` section. It is never shown as passing.
 
 Mushi never reads the live login settings from Supabase. That response holds
 provider secrets, and the Supabase connection stays read-only SQL.

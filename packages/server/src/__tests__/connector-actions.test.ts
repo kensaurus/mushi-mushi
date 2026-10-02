@@ -214,3 +214,29 @@ describe('recipe changes as draft PRs', () => {
     expect((await app.call('POST', `/v1/admin/orgs/${ORG}/portfolio/changes`, { body: { element: 'design', dryRun: false, changes: [{ projectId: P1, edits: [{ path: 'tokens/a.json', content: 'x' }] }] }, vars: { userId: 'member' } })).status).toBe(403)
   })
 })
+
+/** A table whose every read fails, to prove a route does not turn a failed read into "all clear". */
+function failingTable(db: FakeDb, table: string): FakeDb {
+  const failed = { data: null, error: { message: 'statement timeout' } }
+  const chain: any = new Proxy({}, { get: (_t, prop) => (prop === 'then' ? (ok: (v: unknown) => unknown) => Promise.resolve(failed).then(ok) : () => chain) })
+  return new Proxy(db, { get: (t, prop, r) => (prop === 'from' ? (name: string) => (name === table ? chain : t.from(name)) : Reflect.get(t, prop, r)) })
+}
+
+describe('release calendar', () => {
+  it('shows each app and the batch, and answers 500 instead of "nothing waiting" when a read fails', async () => {
+    const db = seed({
+      deploy_observations: [{ project_id: P1, observed_version: '1.2.0', observed_at: '2026-09-20T00:00:00Z', ok: true }],
+      fix_attempts: [{ project_id: P1, merged_at: '2026-09-22T00:00:00Z', files_changed: ['ios/App/Podfile'] }],
+      ci_workflow_runs: [],
+      connector_snapshots: [],
+    })
+    const { app } = harness(db)
+    const ok = await app.call('GET', `/v1/admin/orgs/${ORG}/releases`)
+    expect(ok.status).toBe(200)
+    expect(ok.body.data.rows.find((r: { projectId: string }) => r.projectId === P1)).toMatchObject({ mergedNotBuilt: 1, builtNotSubmitted: null })
+    const { app: broken } = harness(failingTable(db, 'fix_attempts'))
+    const r = await broken.call('GET', `/v1/admin/orgs/${ORG}/releases`)
+    expect(r.status).toBe(500)
+    expect(r.body.error.code).toBe('DB_ERROR')
+  })
+})
