@@ -1,5 +1,12 @@
 # @mushi-mushi/plugin-linear
 
+## 0.3.3
+
+### Patch Changes
+
+- Updated dependencies [f48d15b]
+  - @mushi-mushi/plugin-sdk@0.9.0
+
 ## 0.3.2
 
 ### Patch Changes
