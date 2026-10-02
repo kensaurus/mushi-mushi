@@ -118,6 +118,7 @@ import {
 // ----------------------------------------------------------------------------
 
 import { fixSchema, type FixOutput } from '../_shared/fix-schema.ts';
+import { sentryFixesTrailers, sentryShortIdsForReport } from '../_shared/sentry-resolve-back.ts';
 import { validateEdgeSpec, renderSpecContextEdge } from '../_shared/spec-validation.ts';
 
 const SYSTEM_PROMPT = `You are a senior staff engineer fixing one specific bug report.
@@ -1063,6 +1064,10 @@ ${
           body: buildPrBody({ ...fix, files: prFiles }, dispatch.report_id),
           files: prFiles,
           labels: ['mushi-autofix'],
+          // `Fixes <SHORT-ID>` for Sentry-linked reports (sentry-resolve-back.ts).
+          commitTrailers: sentryFixesTrailers(
+            await sentryShortIdsForReport(db, dispatch.project_id, dispatch.report_id),
+          ),
         },
         {
           info: (msg, ctx) => log.info(msg, ctx as Record<string, unknown>),

@@ -17,6 +17,7 @@ import { notifyTeamFixEvent } from './team-notify.ts';
 import { notifyReportStatusTransition } from './report-status-notify.ts';
 import { resolveExternalIssue } from './integrations.ts';
 import { emitProductEvent } from './product-events.ts';
+import { resolveLinkedSentryIssues } from './sentry-resolve-back.ts';
 
 type Db = ReturnType<typeof getServiceClient>;
 
@@ -135,6 +136,22 @@ export async function finalizeFixMerge(
 
   let reportStatus: string | null = report?.status ?? null;
   const previousStatus = report?.status ?? null;
+
+  // A report that came from Sentry: resolve its linked issues through the
+  // Sentry API, awaited and before resolveExternalIssue below, so a link is
+  // only marked resolved once Sentry accepted it. Outcomes land as fix_events.
+  if (report) {
+    try {
+      await resolveLinkedSentryIssues(db as never, {
+        projectId: attempt.project_id,
+        reportId: attempt.report_id,
+        fixAttemptId: attempt.id,
+        prUrl: meta.prUrl,
+      });
+    } catch (e) {
+      log.error('Sentry resolve-back crashed', { reportId: attempt.report_id, err: String(e) });
+    }
+  }
 
   if (report && report.status !== 'fixed' && report.status !== 'dismissed') {
     const { error } = await db
