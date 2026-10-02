@@ -20,7 +20,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { MushiWidget, type WidgetCallbacks } from './widget';
-import { charCounterText, formatReceiptTime, submitShortcutKey } from './widget-helpers';
+import { charCounterText, formatReceiptTime, shouldShowSdkFreshness, submitShortcutKey } from './widget-helpers';
 
 const DEFAULT_TRIGGER = '\uD83D\uDC1B'; // 🐛
 
@@ -1099,6 +1099,100 @@ describe('MushiWidget — live-QA polish', () => {
     expect(w.getIsOpen()).toBe(true);
     expect(onReporterCommentsRequest).toHaveBeenCalledWith(REPORT_ID);
     expect(q(w, '.mushi-thread-summary p')!.textContent).toBe('Save does nothing');
+    w.destroy();
+  });
+
+  // Item 10
+  it('never shows the SDK-update notice to end users under the default mode', () => {
+    const prod = { hostname: 'kensaur.us', protocol: 'https:' };
+    expect(shouldShowSdkFreshness(undefined, false, prod)).toBe(false);
+    expect(shouldShowSdkFreshness('auto', false, prod)).toBe(false);
+    expect(shouldShowSdkFreshness('auto', true, prod)).toBe(true); // debug: true
+    expect(shouldShowSdkFreshness('banner', false, prod)).toBe(true); // explicit opt-in
+    expect(shouldShowSdkFreshness('console-only', true, { hostname: 'localhost', protocol: 'http:' })).toBe(false);
+    expect(shouldShowSdkFreshness('off', true, { hostname: 'localhost', protocol: 'http:' })).toBe(false);
+    for (const hostname of ['localhost', '127.0.0.1', '[::1]', 'app.localhost', 'mac.local']) {
+      expect(shouldShowSdkFreshness('auto', false, { hostname, protocol: 'http:' })).toBe(true);
+    }
+    expect(shouldShowSdkFreshness('auto', false, { hostname: '', protocol: 'file:' })).toBe(true);
+    expect(shouldShowSdkFreshness('auto', false, undefined)).toBe(false);
+  });
+
+  // Item 11
+  it('a thread read that never settles becomes a retryable error, not an endless spinner', async () => {
+    vi.useFakeTimers();
+    const comments = vi.fn()
+      .mockReturnValueOnce(new Promise(() => {}))
+      .mockResolvedValueOnce([{ id: 'c1', author_kind: 'developer', author_name: 'Kenji', body: 'Fixed in 1.2', created_at: '' }]);
+    const w = new MushiWidget({}, {
+      ...noopCallbacks,
+      onReporterReportsRequest: () => Promise.resolve([
+        { id: REPORT_ID, status: 'fixing', summary: 'Save does nothing', created_at: new Date().toISOString() },
+      ] as never),
+      onReporterCommentsRequest: comments,
+    });
+    w.mount();
+    w.open();
+    q<HTMLButtonElement>(w, '[data-action="toggle-more-nav"]')!.click();
+    q<HTMLButtonElement>(w, '[data-action="reports"]')!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    q<HTMLButtonElement>(w, `[data-report-id="${REPORT_ID}"]`)!.click();
+    expect(q(w, '.mushi-thread')!.textContent).toContain('Loading thread');
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(q(w, '.mushi-thread')!.textContent).not.toContain('Loading thread');
+    expect(q(w, '.mushi-thread [role="alert"]')!.textContent).toBe("Couldn't load this thread.");
+
+    q<HTMLButtonElement>(w, '[data-action="retry-thread"]')!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(comments).toHaveBeenCalledTimes(2);
+    expect(q(w, '.mushi-thread')!.textContent).toContain('Fixed in 1.2');
+    w.destroy();
+  });
+
+  it('a rejected thread read shows the error and retry instead of "No developer replies"', async () => {
+    const w = new MushiWidget({}, {
+      ...noopCallbacks,
+      onReporterCommentsRequest: () => Promise.reject(new Error('HTTP 401')),
+    });
+    w.mount();
+    w.open();
+    await (w as unknown as { loadReporterComments(id: string): Promise<void> }).loadReporterComments(REPORT_ID);
+    expect(q(w, '[data-action="retry-thread"]')).not.toBeNull();
+    expect(q(w, '.mushi-thread')!.textContent).not.toContain('No developer replies');
+    w.destroy();
+  });
+
+  it('keeps the reply composer in a footer outside the scrolling body', async () => {
+    const w = new MushiWidget({}, { ...noopCallbacks, onReporterCommentsRequest: () => Promise.resolve([]) });
+    w.mount();
+    w.open();
+    await (w as unknown as { loadReporterComments(id: string): Promise<void> }).loadReporterComments(REPORT_ID);
+    const reply = q(w, '[data-action="reporter-reply"]')!;
+    expect(reply.closest('.mushi-body')).toBeNull();
+    expect(reply.closest('.mushi-footer.mushi-thread-composer')).not.toBeNull();
+    expect(q<HTMLTextAreaElement>(w, 'textarea[data-role="reporter-reply"]')!.placeholder).toBe('Reply to the developer…');
+    w.destroy();
+  });
+
+  // Item 12 (re-render swallowing the first Submit click)
+  it('defers a background re-render while a pointer is down in the panel', async () => {
+    vi.useFakeTimers();
+    const onSubmit = vi.fn();
+    const w = new MushiWidget({}, { ...noopCallbacks, onSubmit });
+    w.mount();
+    w.open({ featureRequest: true });
+    typeDescription(w, LONG);
+
+    const submitBtn = q<HTMLButtonElement>(w, '[data-action="submit"]')!;
+    submitBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    // e.g. a runtime-config / rewards update landing mid-press:
+    w.setRewardsState({ tier: null, nextTier: null, totalPoints: 10, pointsForReport: 50 });
+    expect(submitBtn.isConnected).toBe(true);
+
+    window.dispatchEvent(new Event('pointerup'));
+    submitBtn.click();
+    expect(onSubmit).toHaveBeenCalledTimes(1);
     w.destroy();
   });
 

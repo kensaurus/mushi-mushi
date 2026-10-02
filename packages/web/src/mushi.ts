@@ -1,5 +1,6 @@
 import { compressScreenshotDataUrl } from './capture/compress-screenshot';
 import type { WidgetSubmitOutcome } from './widget-helpers';
+import { shouldShowSdkFreshness } from './widget-helpers';
 import {
   type MushiConfig,
   type MushiReport,
@@ -1151,7 +1152,13 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       deprecated: info.deprecated,
       message,
     });
-    if (activeConfig.widget?.outdatedBanner !== 'console-only') {
+    // A developer instruction: never shown to an app's end users (see
+    // shouldShowSdkFreshness). The console warning above always fires.
+    if (shouldShowSdkFreshness(
+      activeConfig.widget?.outdatedBanner,
+      Boolean(activeConfig.debug),
+      typeof location === 'undefined' ? undefined : location,
+    )) {
       widget.setSdkFreshness({
         latest,
         current: MUSHI_SDK_VERSION,

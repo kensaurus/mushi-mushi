@@ -70,6 +70,7 @@ export const ja: MushiLocale = {
       unsupported: 'このブラウザでは取得できません。文字で教えてください。',
       taint: '外部サイトの内容のため取得できません。文字で教えてください。',
       timeout: '取得がタイムアウトしました。',
+      csp: 'このサイトのセキュリティ設定によりスクリーンショットを取得できません。',
       error: '取得に失敗しました。',
     },
     screenshotPreviewAlt: '送信されるスクリーンショットのプレビュー',
@@ -167,6 +168,8 @@ export const ja: MushiLocale = {
       notFixed: 'まだ直っていません',
       replyPlaceholder: '開発者に返信…',
       send: '送信',
+      loadFailed: 'スレッドを読み込めませんでした。',
+      retry: '再試行',
     },
     success: {
       title: 'ありがとうございます — 受け付けました',

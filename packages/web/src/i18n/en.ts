@@ -70,6 +70,7 @@ export const en: MushiLocale = {
       unsupported: 'This browser can\'t capture the page. Describe it instead.',
       taint: 'Content from another site blocked the capture. Describe it instead.',
       timeout: 'Capture timed out.',
+      csp: 'This site\'s security policy blocks screenshots.',
       error: 'Capture failed.',
     },
     screenshotPreviewAlt: 'Preview of the screenshot that will be sent',
@@ -167,6 +168,8 @@ export const en: MushiLocale = {
       notFixed: 'Not fixed yet',
       replyPlaceholder: 'Reply to the developer…',
       send: 'Send',
+      loadFailed: 'Couldn\'t load this thread.',
+      retry: 'Try again',
     },
     success: {
       title: 'Thanks — report received',

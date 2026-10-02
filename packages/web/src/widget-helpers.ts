@@ -299,6 +299,42 @@ export function readPlatform(): string {
   return uaData?.platform || navigator.platform || navigator.userAgent || '';
 }
 
+/**
+ * Whether the "Mushi SDK x · latest is y" notice may render in the widget.
+ * It is a developer instruction ("update @mushi-mushi/web"), so under the
+ * default 'auto' it only shows on a dev host or with `debug: true` — never to
+ * an app's end users. 'banner' is an explicit host opt-in; 'console-only' and
+ * 'off' never render it.
+ */
+export function shouldShowSdkFreshness(
+  mode: 'auto' | 'banner' | 'console-only' | 'off' | undefined,
+  debug: boolean,
+  loc: Pick<Location, 'hostname' | 'protocol'> | undefined,
+): boolean {
+  if (mode === 'banner') return true;
+  if (mode === 'console-only' || mode === 'off') return false;
+  if (debug) return true;
+  if (!loc) return false;
+  const host = loc.hostname.replace(/^\[|\]$/g, '');
+  return loc.protocol === 'file:'
+    || host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0'
+    || host.endsWith('.localhost') || host.endsWith('.local');
+}
+
+/** Rejects with a "timed out" error when `promise` hasn't settled within `ms`. */
+export function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Timed out')), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e: unknown) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
+/** Reporter inbox reads that never settle must not leave a spinner up forever. */
+export const REPORTER_READ_DEADLINE_MS = 15_000;
+
 /** Mirrors the description textarea's maxlength. */
 export const DESCRIPTION_MAX_LENGTH = 4000;
 

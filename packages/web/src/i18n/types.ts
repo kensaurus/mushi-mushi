@@ -63,6 +63,7 @@ export interface MushiLocale {
       unsupported: string;
       taint: string;
       timeout: string;
+      csp: string;
       error: string;
     };
     /** Alt text for the attached-screenshot preview image. */
@@ -162,6 +163,9 @@ export interface MushiLocale {
       notFixed: string;
       replyPlaceholder: string;
       send: string;
+      /** Thread fetch failed or timed out; shown with a retry button. */
+      loadFailed: string;
+      retry: string;
     };
     success: {
       /** Panel title once the report is accepted or delivering. */

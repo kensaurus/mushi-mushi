@@ -70,6 +70,7 @@ export const th: MushiLocale = {
       unsupported: 'เบราว์เซอร์นี้จับภาพหน้าไม่ได้ โปรดอธิบายแทน',
       taint: 'เนื้อหาจากเว็บอื่นบล็อกการจับภาพ โปรดอธิบายแทน',
       timeout: 'การจับภาพหมดเวลา',
+      csp: 'นโยบายความปลอดภัยของเว็บนี้บล็อกการจับภาพ',
       error: 'จับภาพไม่สำเร็จ',
     },
     screenshotPreviewAlt: 'ตัวอย่างสกรีนช็อตที่จะถูกส่ง',
@@ -167,6 +168,8 @@ export const th: MushiLocale = {
       notFixed: 'ยังไม่แก้',
       replyPlaceholder: 'ตอบนักพัฒนา…',
       send: 'ส่ง',
+      loadFailed: 'โหลดเธรดไม่สำเร็จ',
+      retry: 'ลองอีกครั้ง',
     },
     success: {
       title: 'ขอบคุณ — ได้รับรายงานแล้ว',

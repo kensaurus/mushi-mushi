@@ -12,7 +12,7 @@ import { getLocale, type MushiLocale } from './i18n';
 import { getWidgetStyles } from './styles';
 import { MUSHI_SDK_VERSION } from './version';
 import { readPageFaviconHref, MUSHI_TIER_COLORS } from '@mushi-mushi/core';
-import { CATEGORY_ICONS, FEATURE_REQUEST_INTENT, bindFaviconFallbacks, charCounterText, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession } from './widget-helpers';
+import { CATEGORY_ICONS, FEATURE_REQUEST_INTENT, REPORTER_READ_DEADLINE_MS, bindFaviconFallbacks, charCounterText, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession, withDeadline } from './widget-helpers';
 import type {
   AssistantTurn,
   DetailMode,
@@ -132,6 +132,22 @@ export class MushiWidget {
    *  otherwise a host that unmounts mid-submit leaks this MushiWidget
    *  reference (and re-renders into a detached shadow root). */
   private successTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Set on pointerdown inside the panel. A background re-render (runtime
+   * config, rewards, inbox poll…) that lands between pointerdown and click
+   * replaces the button under the pointer, and the browser then drops the
+   * click — the first Submit "did nothing". render() defers while this is set
+   * (bounded, so a lost pointerup can't freeze the panel).
+   */
+  private pointerDownAt: number | null = null;
+  private renderDeferred = false;
+  private readonly onPointerRelease = (): void => {
+    this.pointerDownAt = null;
+    if (!this.renderDeferred) return;
+    this.renderDeferred = false;
+    // After the click dispatches (it follows pointerup in the same task).
+    setTimeout(() => this.render(), 0);
+  };
   private rewardsState: WidgetRewardsState | null = null;
   private leaderboardEntries: Array<{
     display_name: string;
@@ -254,6 +270,8 @@ export class MushiWidget {
     if (this.host.isConnected) return;
     this.syncHostChromeState();
     document.body.appendChild(this.host);
+    window.addEventListener('pointerup', this.onPointerRelease, true);
+    window.addEventListener('pointercancel', this.onPointerRelease, true);
     this.syncAttachedLaunchers();
     this.syncSmartHide();
     this.bindColorSchemeListener();
@@ -827,6 +845,8 @@ export class MushiWidget {
   }
 
   destroy(): void {
+    window.removeEventListener('pointerup', this.onPointerRelease, true);
+    window.removeEventListener('pointercancel', this.onPointerRelease, true);
     if (this.successTimer !== null) {
       clearTimeout(this.successTimer);
       this.successTimer = null;
@@ -1369,6 +1389,13 @@ export class MushiWidget {
   }
 
   private render(): void {
+    if (this.isOpen && this.pointerDownAt !== null && Date.now() - this.pointerDownAt < 2000) {
+      // A pointerup released outside the window may never arrive — flush anyway.
+      if (!this.renderDeferred) setTimeout(() => { if (this.renderDeferred) this.render(); }, 2000);
+      this.renderDeferred = true;
+      return;
+    }
+    this.renderDeferred = false;
     const theme = this.getTheme();
     const pos = this.config.position;
     const t = this.locale;
@@ -1468,6 +1495,7 @@ export class MushiWidget {
       const ctx = this.renderCtx();
       panel.innerHTML = `${renderOutdatedBanner(ctx)}${renderStep(ctx)}${renderBrandFooter(ctx)}`;
       this.shadow.appendChild(panel);
+      panel.addEventListener('pointerdown', () => { this.pointerDownAt = Date.now(); });
       this.attachHandlers(panel);
       // First render with the mark visible → one impression per instance.
       if (!this.brandImpressionSent && this.config.brandFooter === true) {
@@ -2073,6 +2101,10 @@ export class MushiWidget {
       this.render();
     });
 
+    panel.querySelector('[data-action="retry-thread"]')?.addEventListener('click', () => {
+      if (this.selectedReportId) void this.loadReporterComments(this.selectedReportId);
+    });
+
     panel.querySelector('[data-action="reporter-reply"]')?.addEventListener('click', () => {
       void this.submitReporterReply(panel);
     });
@@ -2392,7 +2424,8 @@ export class MushiWidget {
     this.reporterError = null;
     this.render();
     try {
-      this.reporterReports = await this.callbacks.onReporterReportsRequest?.() ?? [];
+      const req = this.callbacks.onReporterReportsRequest?.();
+      this.reporterReports = req ? await withDeadline(req, REPORTER_READ_DEADLINE_MS) : [];
     } catch (err) {
       this.reporterError = err instanceof Error ? err.message : 'Could not load reports.';
     } finally {
@@ -2416,6 +2449,7 @@ export class MushiWidget {
     // a no-op on that path.
     if (this.selectedReportId !== reportId) {
       this.draftReply = '';
+      this.reporterComments = [];
     }
     this.selectedReportId = reportId;
     this.step = 'report-detail';
@@ -2423,9 +2457,14 @@ export class MushiWidget {
     this.reporterError = null;
     this.render();
     try {
-      this.reporterComments = await this.callbacks.onReporterCommentsRequest?.(reportId) ?? [];
-    } catch (err) {
-      this.reporterError = err instanceof Error ? err.message : 'Could not load thread.';
+      // A read that never settles used to leave "Loading thread…" up forever
+      // (live, 2026-10-02); the deadline turns it into a retryable error.
+      const req = this.callbacks.onReporterCommentsRequest?.(reportId);
+      const comments = req ? await withDeadline(req, REPORTER_READ_DEADLINE_MS) : [];
+      // The reporter may have opened a different thread meanwhile.
+      if (this.selectedReportId === reportId) this.reporterComments = comments;
+    } catch {
+      if (this.selectedReportId === reportId) this.reporterError = this.locale.flows.thread.loadFailed;
     } finally {
       this.reporterLoading = false;
       this.render();

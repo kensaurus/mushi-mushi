@@ -7,17 +7,22 @@ const pkg = require('./package.json') as { version: string };
 
 /**
  * styles.ts documents its CSS with comments INSIDE the stylesheet template
- * string. No JS minifier touches string contents, so they shipped to every
- * end user (~4 kB gzipped). Strip them at build time; the source keeps them.
- * Every `/*` in that file is a comment (CSS or JS), so the regex is safe there.
+ * string, indented for reading. No JS minifier touches string contents, so
+ * both shipped to every end user. Strip comments and leading indentation at
+ * build time; the source keeps them. Every `/*` in that file is a comment (CSS
+ * or JS), and leading whitespace is insignificant in both CSS and JS.
  */
-const stripWidgetCssComments: NonNullable<Options['esbuildPlugins']>[number] = {
-  name: 'strip-widget-css-comments',
+export const stripShippedTemplateWhitespace: NonNullable<Options['esbuildPlugins']>[number] = {
+  name: 'strip-shipped-template-whitespace',
   setup(build) {
-    build.onLoad({ filter: /[\\/]src[\\/]styles\.ts$/ }, async (args) => ({
-      contents: (await readFile(args.path, 'utf8')).replace(/\/\*[\s\S]*?\*\//g, ''),
-      loader: 'ts',
-    }));
+    // widget-render.ts: its HTML templates ship their indentation too. HTML
+    // collapses whitespace runs and none of these templates holds <pre> or
+    // non-empty <textarea> text, so only the indentation is dropped there.
+    build.onLoad({ filter: /[\\/]src[\\/](styles|widget-render)\.ts$/ }, async (args) => {
+      let src = await readFile(args.path, 'utf8');
+      if (/styles\.ts$/.test(args.path)) src = src.replace(/\/\*[\s\S]*?\*\//g, '');
+      return { contents: src.replace(/\n[ \t]+/g, '\n').replace(/\n{2,}/g, '\n'), loader: 'ts' };
+    });
   },
 };
 
@@ -34,7 +39,7 @@ export default defineConfig([
     define: {
       __MUSHI_SDK_VERSION__: JSON.stringify(pkg.version),
     },
-    esbuildPlugins: [stripWidgetCssComments],
+    esbuildPlugins: [stripShippedTemplateWhitespace],
     external: ['@mushi-mushi/core', '@sentry/browser', '@sentry/react'],
   },
   // Universal loader: a self-initializing IIFE for the "no build step"
@@ -55,7 +60,7 @@ export default defineConfig([
     define: {
       __MUSHI_SDK_VERSION__: JSON.stringify(pkg.version),
     },
-    esbuildPlugins: [stripWidgetCssComments],
+    esbuildPlugins: [stripShippedTemplateWhitespace],
     external: ['@sentry/browser', '@sentry/react'],
   },
 ]);
