@@ -1,6 +1,15 @@
 # 0016. Mushi as the app recipe control plane
 
-Status: Proposed — owner decision 2026-10-02, pending owner signature            Date: 2026-10-02
+Status: Accepted — owner-delegated decision, 2026-10-02            Date: 2026-10-02
+
+**Accepted scope (2026-10-02).** The owner delegated the pending decisions to
+the lead ("decide for me based on your professional advice"). Accepted:
+
+- Phase 1, Phase 1b and the P1 portfolio rollup (no migrations) proceed now.
+- Phases 2, P2 and 3 (connectors, cross-project rules, pushing changes and any
+  `act` capability) stay behind the sequencing gate below: at least 3
+  activated external projects, or an owner-dated review.
+- Migration-file and workflow-file PRs stay suggest-only in v1.
 
 Amends: [0004](0004-lead-with-the-bug-mediator-category.md) (scope, not
 category). Supersedes: none. Plan: [Plan 019](../execplans/app-recipe-control-plane.md).
@@ -122,7 +131,7 @@ The conditions are:
 
 Today's north-star count is 0 activated external projects.
 
-## Proposed VISION.md / AGENTS.md diff (for owner approval — not applied)
+## VISION.md / AGENTS.md diff (applied 2026-10-02 with the acceptance)
 
 This diff touches none of the strings that
 `scripts/check-positioning-consistency.mjs` guards: `northStar`, `category`,

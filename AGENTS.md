@@ -20,6 +20,10 @@ can execute without additional context.
 
 **Category we own.** The bug mediator for AI-built apps — one queue between your users, your monitoring (Sentry/Crashlytics/Rollbar), your tracker (Linear/Jira/GitHub), your chat (Slack/Discord/Teams), and your coding agents, where every bug gets a plain-English diagnosis and a ready fix. (Not "error monitoring", not "observability" — those are someone else's ops-coded words.)
 
+**The app recipe** (ADR 0016) is diagnosis context, not a new category: every
+recipe element is optional, renders "not connected" when empty, and changes
+ship only as reviewed draft PRs. It never leads a public surface.
+
 **Primary buyer.** The solo / indie **vibe coder** who builds fast with AI (Cursor, Claude Code, Lovable, Bolt), ships to real users, then loses afternoons when something breaks because they don't fully grasp the generated code. Small teams and agencies are secondary; the enterprise SRE running Sentry + Datadog + Firebase is explicitly *not* who we lead with.
 
 **The three things we will not do** (drift tripwires):
@@ -95,6 +99,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `invitation-reminders` | Pending invite reminder cron |
 | `recompute-tester-reputation` | Tester marketplace reputation recompute |
 | `reward-payout-aggregator` | Aggregates reward payout batches |
+| `recipe-collector` | Daily (03:35 UTC) refresh of each project's `mushi.recipe.json` + DTCG tokens into `app_recipe_snapshots`, then the `design_drift` deviance scan (Plan 019 Phase 1b) |
 | `healthz` | Unauthenticated liveness + cheap DB probe (`{status, db, version}`); `verify_jwt = false` |
 | `linear-oauth-callback` | Completes Linear OAuth; vaults tokens; registers inbound webhook |
 | `webhooks-linear` | Linear issue push webhooks (HMAC); resolves linked reports on completed/cancelled |
