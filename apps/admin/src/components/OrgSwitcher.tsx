@@ -40,12 +40,14 @@ export interface OrganizationSummary {
 
 /**
  * Render the right-hand chip on each org row. Complimentary orgs get a
- * distinct "admin" label that overrides the raw `plan_id` so a comp Pro org
- * never reads as "Pro" in the header. Returned as a plain string so the
- * caller stays in control of layout / wrapping.
+ * distinct "comp" label that overrides the raw `plan_id` so a comp Pro org
+ * never reads as "Pro" in the header. It used to say "admin", which next to
+ * the team name read as the user's role and made the team switcher look like
+ * a user menu. Returned as a plain string so the caller stays in control of
+ * layout / wrapping.
  */
 function orgPillLabel(org: OrganizationSummary): string {
-  return org.billing_mode === 'complimentary' ? 'admin' : org.plan_id
+  return org.billing_mode === 'complimentary' ? 'comp' : org.plan_id
 }
 
 export function OrgSwitcher() {
@@ -216,8 +218,23 @@ export function OrgSwitcher() {
         badgeTone={active.billing_mode === 'complimentary' ? 'brand' : 'neutral'}
         title={
           active.billing_mode === 'complimentary'
-            ? `Admin / complimentary org — feature set tracks the ${active.plan_id} tier`
-            : undefined
+            ? `Team: ${active.name} (complimentary, feature set tracks the ${active.plan_id} tier)`
+            : `Team: ${active.name}`
+        }
+        aria-label={`Team: ${active.name} — switch team`}
+        trailing={
+          <svg
+            width="9"
+            height="9"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+            className="shrink-0"
+          >
+            <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         }
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
