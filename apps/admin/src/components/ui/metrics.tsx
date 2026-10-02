@@ -678,8 +678,10 @@ export function StatCard({ label, value, accent, delta, trend, detail, hint, too
       <div className="flex items-baseline gap-2">
         <div
           className={`text-xl font-semibold stat-value stat-card-value ${accent ?? 'text-fg'} ${
+            // Sans + plain tabular figures for numbers too: a monospace or
+            // slashed-zero 0 reads as "∅ / null" at display size.
             typeof value === 'string' && /^[\d.,]+/.test(value.trim())
-              ? 'font-mono tabular-nums'
+              ? 'font-sans tabular-nums'
               : 'font-sans tracking-tight'
           }`}
         >
