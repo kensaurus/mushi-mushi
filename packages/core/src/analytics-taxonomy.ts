@@ -69,6 +69,10 @@ export const MUSHI_EVENTS = {
   invite_sent: { surface: 'console', required: [] },
   upgrade_clicked: { surface: 'console', required: ['plan'] },
   test_report_sent: { surface: 'console', required: ['project_id'] },
+  // A diagnosis became visible: once per report per browser session, `surface`
+  // names where (onboarding / overview / reports / report_detail), `sample` is
+  // true for the console test report. Not a habit event.
+  diagnosis_viewed: { surface: 'console', required: ['report_id', 'project_id', 'surface'] },
   // ── Server-emitted (edge functions) ──────────────────────────────────────
   project_created: { surface: 'server', required: ['project_id'] },
   key_minted: { surface: 'server', required: ['project_id'] },

@@ -850,6 +850,7 @@ export function ReportsPage() {
           <div className="space-y-4">
             {!hasFilters && (
               <FirstDiagnosisInline
+                surface="reports"
                 projectId={setup.activeProject.project_id}
                 projectName={setup.activeProject.project_name}
                 onDiagnosed={() => {
