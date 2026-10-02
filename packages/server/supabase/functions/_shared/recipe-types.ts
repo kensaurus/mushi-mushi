@@ -16,6 +16,8 @@
  *   POST /v1/admin/projects/:id/design/deviance/run       → DesignDevianceRunResult (202; run.status 'running', poll GET …/deviance)
  *   POST /v1/admin/projects/:id/design/changes            → DesignChangeResult
  *   GET  /v1/admin/projects/:id/design/excerpt[?files=]   → DesignExcerpt
+ *   GET  /v1/admin/projects/:id/design/directions         → DesignDirectionsResponse
+ *   GET  /v1/design-assets/:projectId?path=&exp=&sig=      → the asset bytes (HMAC-signed URL, no auth header)
  *
  * Every route answers `{ ok: true, data: <type> }`.
  */
@@ -371,6 +373,10 @@ export type DesignChangeRequest =
       dryRun?: boolean
       title?: string
     }
+  /** Point mushi.recipe.json's source token files at another directions/<name>/ folder. */
+  | { kind: 'activate'; direction: string; dryRun?: boolean; title?: string }
+  /** Copy a direction's token files into directions/<name>/, optionally with token edits applied to the copy. */
+  | { kind: 'duplicate'; from: string; name: string; displayName?: string; edits?: Array<Omit<TokenEdit, 'set'>>; dryRun?: boolean; title?: string }
 
 export interface DesignFileChange {
   path: string
@@ -400,4 +406,57 @@ export interface DesignExcerpt {
   score: number | null
   note: string
   truncated: boolean
+}
+
+// ── Directions board ─────────────────────────────────────────────────────────
+
+export interface DirectionAsset {
+  path: string
+  kind: 'icon' | 'illustration' | 'image' | 'font' | 'lottie' | string
+  /** Short-lived signed URL (relative to the api base, e.g. `/v1/design-assets/…`); null when it cannot be signed or is not an image. */
+  url: string | null
+  size: number | null
+}
+
+export interface DirectionFont {
+  /** Token path, e.g. `font.family.display`. */
+  path: string
+  role: string
+  families: string[]
+}
+
+export interface DesignDirection {
+  /** Folder name under directions/. */
+  name: string
+  displayName: string
+  /** Native-script name when the token file gives one, e.g. ผ้าคราม. */
+  nativeName: string | null
+  concept: string | null
+  active: boolean
+  files: Array<{ path: string; role: 'source' | 'export'; generator: string | null }>
+  tokenCount: number
+  /** Every normalized token of the direction (the board picks roles from these). */
+  tokens: DesignToken[]
+  issues: RecipeIssue[]
+  /** Declared contrast pairs (mushi.recipe.json design.contrast) computed against this direction. */
+  contrast: ContrastPairResult[]
+  fonts: DirectionFont[]
+  /** motion.* tokens (durations, easings) as display strings. */
+  motion: Array<{ path: string; display: string }>
+  /** Line and shape tokens: border.*, radius.*, line colours. */
+  line: Array<{ path: string; display: string }>
+  assets: DirectionAsset[]
+  /** Latest deviance run; only the active direction is ever scanned. */
+  deviance: { score: number | null; status: DevianceRunStatus; at: string } | null
+}
+
+export interface DesignDirectionsResponse {
+  projectId: string
+  activeDirection: string | null
+  directions: DesignDirection[]
+  /** One Google Fonts css2 stylesheet URL per declared non-generic family; a family Google does not serve simply fails to load. */
+  fontStylesheets: string[]
+  /** Specimen text in the project's script, detected from the declared font families (Thai for glot). */
+  specimen: { script: 'thai' | 'japanese' | 'korean' | 'chinese' | 'arabic' | 'devanagari' | 'latin'; sample: string; word: string; latin: string }
+  editable: { enabled: boolean; reason: string | null }
 }

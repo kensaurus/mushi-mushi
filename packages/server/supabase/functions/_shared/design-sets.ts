@@ -103,9 +103,110 @@ export function planTokenSets(declared: readonly ManifestTokenFile[], treePaths:
   return { sets: capped, issues }
 }
 
+export interface DirectionMeta {
+  displayName: string
+  nativeName: string | null
+  concept: string | null
+}
+
+export interface StoredAsset {
+  path: string
+  kind: string
+  size: number | null
+}
+
 export interface StoredTokenSet extends PlannedSet {
   tokens: DesignToken[]
   issues: RecipeIssue[]
+  /** Directions only (absent on snapshots written before the board existed). */
+  meta?: DirectionMeta
+  assets?: StoredAsset[]
+}
+
+function titleCase(slug: string): string {
+  return slug.split(/[-_]/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ')
+}
+
+/**
+ * Name and concept for a direction, from its token files' root metadata:
+ * `$extensions["us.kensaur.mushi"].direction = {name, nativeName, concept}`
+ * wins; otherwise a root `$description` of the form
+ * "… art direction Name (ชื่อ)[, tagline]: …" is read; otherwise the folder name.
+ */
+export function readDirectionMeta(folder: string, fileTexts: readonly string[]): DirectionMeta {
+  let displayName: string | null = null
+  let nativeName: string | null = null
+  let concept: string | null = null
+  for (const text of fileTexts) {
+    let doc: Record<string, unknown>
+    try {
+      doc = JSON.parse(text)
+    } catch {
+      continue
+    }
+    const ext = (doc.$extensions as Record<string, unknown> | undefined)?.['us.kensaur.mushi'] as Record<string, unknown> | undefined
+    const dir = ext?.direction as Record<string, unknown> | undefined
+    if (dir) {
+      if (typeof dir.name === 'string' && !displayName) displayName = dir.name.slice(0, 80)
+      if (typeof dir.nativeName === 'string' && !nativeName) nativeName = dir.nativeName.slice(0, 80)
+      if (typeof dir.concept === 'string' && !concept) concept = dir.concept.slice(0, 500)
+    }
+    const desc = typeof doc.$description === 'string' ? doc.$description : null
+    if (desc) {
+      const m = /art direction\s+([^(:,]+?)\s*(?:\(([^)]+)\))?\s*(?:,\s*([^:]+))?:/i.exec(desc)
+      if (m) {
+        displayName ??= m[1].trim().slice(0, 80)
+        nativeName ??= m[2]?.trim().slice(0, 80) ?? null
+        if (m[3] && !concept) concept = m[3].trim().slice(0, 500)
+      }
+    }
+  }
+  return { displayName: displayName ?? titleCase(folder), nativeName, concept }
+}
+
+export const IMAGE_EXT_RE = /\.(png|jpe?g|webp|avif|gif|svg)$/i
+export const MAX_ASSETS_PER_SET = 8
+export const MAX_ASSET_BYTES = 5 * 1024 * 1024
+
+function assetKind(path: string): string {
+  const p = path.toLowerCase()
+  if (/icon|logo|favicon/.test(p)) return 'icon'
+  if (/sprite|motif|illustration|art/.test(p)) return 'illustration'
+  return 'image'
+}
+
+/**
+ * A set's assets: manifest `design.assets[]` entries naming this direction
+ * (or carrying no direction, for the active set), then images found in the
+ * repo under `directions/<name>/`. Capped, de-duplicated, images only.
+ */
+export function collectSetAssets(
+  set: Pick<PlannedSet, 'name' | 'kind' | 'active' | 'files'>,
+  declared: ReadonlyArray<{ path: string; kind?: string; direction?: string }>,
+  tree: ReadonlyArray<{ path: string; size: number }>,
+): StoredAsset[] {
+  const sizes = new Map(tree.map((e) => [e.path, e.size]))
+  const out: StoredAsset[] = []
+  const seen = new Set<string>()
+  const add = (path: string, kind: string) => {
+    const safe = normalizeRepoPath(path)
+    if (!safe || seen.has(safe) || out.length >= MAX_ASSETS_PER_SET) return
+    seen.add(safe)
+    out.push({ path: safe, kind, size: sizes.get(safe) ?? null })
+  }
+  for (const a of declared) {
+    if (a.direction ? a.direction === set.name : set.active) add(a.path, a.kind ?? assetKind(a.path))
+  }
+  const dir = set.files.map((f) => directionOf(f.path)).find(Boolean)
+  if (set.kind === 'direction' && dir) {
+    const prefix = `${dir.base}${set.name}/`
+    tree
+      .filter((e) => e.path.startsWith(prefix) && IMAGE_EXT_RE.test(e.path) && e.size <= MAX_ASSET_BYTES)
+      .map((e) => e.path)
+      .sort()
+      .forEach((p) => add(p, assetKind(p)))
+  }
+  return out
 }
 
 /** The `app_recipe_snapshots.tokens` document. */

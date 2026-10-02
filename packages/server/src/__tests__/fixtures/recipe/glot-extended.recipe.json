@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "x-fixture-note": "glot.it's own mushi.recipe.json at glot commit 42a793c20, plus two keys Mushi adds in Plan 019 Phase 1b (design.contrast, design.rules). The additions are Mushi's test declarations, not glot's; the CTA-fill-on-raised pair is the 2.73:1 limit glot documents in its own token description.",
+  "x-fixture-note": "glot.it's own mushi.recipe.json at glot commit 42a793c20, with two Mushi changes: (1) Soi Signpaint is the active direction, the owner's 2026-10-02 choice that glot's manifest is being updated to (Pha Khram and Nang Lamp stay inactive); (2) the two keys Plan 019 Phase 1b adds, design.contrast and design.rules, declared by Mushi for the tests, not by glot.",
   "app": {
     "name": "glot.it",
     "kind": "app",
@@ -35,17 +35,17 @@
   "design": {
     "tokens": [
       {
-        "path": "packages/design-tokens/tokens/directions/pha-khram/primitive.tokens.json",
+        "path": "packages/design-tokens/tokens/directions/soi-signpaint/primitive.tokens.json",
         "role": "source",
         "format": "dtcg-2025.10"
       },
       {
-        "path": "packages/design-tokens/tokens/directions/pha-khram/semantic.tokens.json",
+        "path": "packages/design-tokens/tokens/directions/soi-signpaint/semantic.tokens.json",
         "role": "source",
         "format": "dtcg-2025.10"
       },
       {
-        "path": "packages/design-tokens/tokens/directions/pha-khram/component.tokens.json",
+        "path": "packages/design-tokens/tokens/directions/soi-signpaint/component.tokens.json",
         "role": "source",
         "format": "dtcg-2025.10"
       },
@@ -57,10 +57,6 @@
       }
     ],
     "css": [
-      {
-        "path": "app/styles/globals/theme-pha-khram.css",
-        "role": "export"
-      },
       {
         "path": "packages/design-tokens/src/cross-platform-tokens.css",
         "role": "export"
@@ -115,19 +111,9 @@
         "use": "secondary text on the page"
       },
       {
-        "fg": "color.text.tertiary",
-        "bg": "color.surface.base",
-        "use": "tertiary text on the page"
-      },
-      {
-        "fg": "color.text.onAction",
+        "fg": "color.action.onPrimary",
         "bg": "color.action.primary",
         "use": "CTA label"
-      },
-      {
-        "fg": "color.text.signal",
-        "bg": "color.surface.base",
-        "use": "lac-red text"
       },
       {
         "fg": "color.tone.mid",
@@ -138,6 +124,12 @@
         "fg": "color.tone.high",
         "bg": "color.surface.base",
         "use": "tone colours on the page"
+      },
+      {
+        "fg": "color.feedback.reward",
+        "bg": "color.surface.base",
+        "large": true,
+        "use": "reward accent, large only"
       },
       {
         "fg": "color.action.primary",

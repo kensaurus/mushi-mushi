@@ -21,16 +21,18 @@ import { fetchLatestWorkflowRunForSha } from '../../_shared/github.ts'
 import {
   getDefaultHead,
   listActionsNames,
+  readRepoBytes,
   readRepoFile,
   resolveRecipeRepo,
   type RecipeRepo,
 } from '../../_shared/recipe-github.ts'
+import { assetMime, signAssetUrl, verifyAssetSignature } from '../../_shared/design-assets.ts'
 import { loadCurrentSnapshot, refreshRecipeSnapshot, startDesignDeviance, type SnapshotRow } from '../../_shared/design-plane.ts'
 import { runInBackground } from '../../_shared/background.ts'
 import { judgingSet, type StoredTokens } from '../../_shared/design-sets.ts'
-import { applyRulesEdit, applyTokenEdits, unifiedDiff, type TokenFileEdit } from '../../_shared/design-change.ts'
+import { applyActivateDirection, applyRulesEdit, applyTokenEdits, buildDuplicateDirection, DIRECTION_NAME_RE, unifiedDiff, type TokenFileEdit } from '../../_shared/design-change.ts'
 import { effectiveDesignRules, isWritablePath, RECIPE_MANIFEST_MAX_BYTES, RECIPE_MANIFEST_PATH } from '../../_shared/recipe-schema.ts'
-import { MAX_TOKEN_FILE_BYTES } from '../../_shared/design-sets.ts'
+import { directionOf, MAX_ASSET_BYTES, MAX_TOKEN_FILE_BYTES } from '../../_shared/design-sets.ts'
 import { DESIGN_RULE_IDS, RECIPE_ELEMENT_KEYS, type DesignChangeResult, type DesignDevianceRunResult, type DesignTokensResponse, type DevianceRun, type RecipeElementKey, type RecipeHistoryResponse } from '../../_shared/recipe-types.ts'
 import { inferStack, requiredCiVarNames } from './project-ci-secrets.ts'
 import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
@@ -38,6 +40,7 @@ import type { Variables } from '../types.ts'
 import {
   buildDesignExcerpt,
   composeDesignPlane,
+  composeDirections,
   composeRecipe,
   isScanRun,
   loadDesignRuns,
@@ -61,7 +64,10 @@ export interface RecipeRouteDeps extends ComposeDeps {
   runInBackground: typeof runInBackground
   loadSnapshot: typeof loadCurrentSnapshot
   readRepoFile: typeof readRepoFile
+  readRepoBytes: typeof readRepoBytes
   createPr: typeof createPrFromFiles
+  /** Key material for signed asset URLs; null disables previews (never a default key). */
+  assetSecret: () => string | null
 }
 
 export const defaultRecipeDeps: RecipeRouteDeps = {
@@ -73,7 +79,15 @@ export const defaultRecipeDeps: RecipeRouteDeps = {
   runInBackground,
   loadSnapshot: loadCurrentSnapshot,
   readRepoFile,
+  readRepoBytes,
   createPr: createPrFromFiles,
+  assetSecret: () => {
+    try {
+      return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? null
+    } catch {
+      return null
+    }
+  },
   resolveRepo: resolveRecipeRepo,
   getDefaultHead,
   fetchWorkflowRun: (repo: RecipeRepo, branch: string, sha: string) => fetchLatestWorkflowRunForSha(repo.token, repo.ref, branch, sha),
@@ -110,9 +124,28 @@ const rulePatchSchema = z.object({
   primitives: z.record(z.string().max(40), z.string().max(80)).optional(),
 }).strict()
 
+function defaultChangeTitle(req: z.infer<typeof changeSchema>): string {
+  switch (req.kind) {
+    case 'tokens': return 'chore(design): update design tokens'
+    case 'rules': return 'chore(design): update design rules'
+    case 'activate': return `chore(design): make ${req.direction} the active direction`
+    case 'duplicate': return `chore(design): add the ${req.name} direction`
+  }
+}
+
 const changeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('tokens'), edits: z.array(tokenEditSchema).min(1).max(50), dryRun: z.boolean().optional(), title: z.string().max(120).optional() }),
   z.object({ kind: z.literal('rules'), rules: z.record(z.enum(DESIGN_RULE_IDS), rulePatchSchema), dryRun: z.boolean().optional(), title: z.string().max(120).optional() }),
+  z.object({ kind: z.literal('activate'), direction: z.string().min(1).max(80), dryRun: z.boolean().optional(), title: z.string().max(120).optional() }),
+  z.object({
+    kind: z.literal('duplicate'),
+    from: z.string().min(1).max(80),
+    name: z.string().regex(DIRECTION_NAME_RE),
+    displayName: z.string().max(80).optional(),
+    edits: z.array(tokenEditSchema.omit({ set: true })).max(50).optional(),
+    dryRun: z.boolean().optional(),
+    title: z.string().max(120).optional(),
+  }),
 ])
 
 export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: RecipeRouteDeps = defaultRecipeDeps): void {
@@ -302,6 +335,61 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
     return c.json({ ok: true, data: buildDesignExcerpt(plane, files, fileFindings) })
   })
 
+  // ── GET /v1/admin/projects/:id/design/directions ───────────────────────────
+  app.get('/v1/admin/projects/:id/design/directions', deps.adminOrApiKeyRead, async (c) => {
+    const db = deps.getServiceClient()
+    const access = await projectAccess(c, db)
+    if (!access.ok) return access.response
+    try {
+      const [snapshot, repo] = await Promise.all([deps.loadSnapshot(db, access.projectId), deps.resolveRepo(db, access.projectId)])
+      const secret = deps.assetSecret()
+      const now = deps.now()
+      const sign = secret ? (path: string) => signAssetUrl(secret, access.projectId, path, now.getTime()) : null
+      const data = await composeDirections(db, access.projectId, snapshot, repo, now, sign)
+      return c.json({ ok: true, data })
+    } catch (err) {
+      rlog.error('design directions failed', { projectId: access.projectId, err: String(err) })
+      return jsonError(c, 'DESIGN_FAILED', 'Could not load the design directions.', 500)
+    }
+  })
+
+  // ── GET /v1/design-assets/:projectId (signed URL, no auth header) ─────────
+  // An <img> cannot send the console's bearer token. The URL carries an HMAC
+  // over (project, path, expiry) minted by the adminOrApiKey route above, and
+  // the path must still be an asset the current snapshot lists.
+  app.get('/v1/design-assets/:projectId', async (c) => {
+    const projectId = c.req.param('projectId') ?? ''
+    const path = c.req.query('path') ?? ''
+    const secret = deps.assetSecret()
+    if (!UUID_RE.test(projectId) || !path || !secret) return new Response('Not found', { status: 404 })
+    const check = await verifyAssetSignature(secret, projectId, path, c.req.query('exp'), c.req.query('sig'), deps.now().getTime())
+    if (!check.ok) return new Response(check.reason === 'expired' ? 'Link expired' : 'Forbidden', { status: 403 })
+    const mime = assetMime(path)
+    const db = deps.getServiceClient()
+    const snapshot = await deps.loadSnapshot(db, projectId)
+    const listed = ((snapshot?.tokens ?? null) as StoredTokens | null)?.sets.some((s) => (s.assets ?? []).some((a) => a.path === path))
+    if (!mime || !snapshot || !listed) return new Response('Not found', { status: 404 })
+    const repo = await deps.resolveRepo(db, projectId)
+    if (!repo.ok) return new Response('Not found', { status: 404 })
+    try {
+      const file = await deps.readRepoBytes(repo.repo, snapshot.commit_sha ?? repo.repo.defaultBranchHint, path, MAX_ASSET_BYTES)
+      if (file.kind === 'too_large') return new Response('Too large', { status: 413 })
+      if (file.kind === 'absent') return new Response('Not found', { status: 404 })
+      return new Response(file.bytes, {
+        status: 200,
+        headers: {
+          'Content-Type': mime,
+          'Cache-Control': 'private, max-age=300',
+          'X-Content-Type-Options': 'nosniff',
+          'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        },
+      })
+    } catch (err) {
+      rlog.warn('design asset read failed', { projectId, path, err: String(err) })
+      return new Response('Upstream error', { status: 502 })
+    }
+  })
+
   // ── POST /v1/admin/projects/:id/design/changes ─────────────────────────────
   app.post('/v1/admin/projects/:id/design/changes', deps.adminOrApiKeyWrite, async (c) => {
     const db = deps.getServiceClient()
@@ -369,6 +457,55 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
         if (!applied.ok) return jsonError(c, 'EDIT_REJECTED', applied.reason, 400)
         changes.push({ path, before, after: applied.text, reason: `update design tokens ${edits.map((e) => e.path).join(', ')}`.slice(0, 200) })
       }
+    } else if (req.kind === 'activate') {
+      const target = stored?.sets.find((s) => s.kind === 'direction' && s.name === req.direction)
+      if (!target) return jsonError(c, 'UNKNOWN_DIRECTION', `${req.direction} is not a direction in the last refresh.`, 400)
+      if (target.active) return jsonError(c, 'NO_CHANGE', `${req.direction} is already the active direction.`, 400)
+      const check = isWritablePath(RECIPE_MANIFEST_PATH, manifest, scope)
+      if (!check.ok) {
+        denied.push({ path: RECIPE_MANIFEST_PATH, reason: check.reason })
+      } else {
+        const before = await readLive(RECIPE_MANIFEST_PATH, RECIPE_MANIFEST_MAX_BYTES)
+        if (typeof before !== 'string') return before
+        const applied = applyActivateDirection(before, target.files.filter((f) => f.role === 'source').map((f) => f.path))
+        if (!applied.ok) return jsonError(c, 'EDIT_REJECTED', applied.reason, 400)
+        changes.push({ path: RECIPE_MANIFEST_PATH, before, after: applied.text, reason: `make ${req.direction} the active design direction` })
+      }
+    } else if (req.kind === 'duplicate') {
+      const from = stored?.sets.find((s) => s.kind === 'direction' && s.name === req.from)
+      if (!from) return jsonError(c, 'UNKNOWN_DIRECTION', `${req.from} is not a direction in the last refresh.`, 400)
+      if (stored?.sets.some((s) => s.name === req.name)) return jsonError(c, 'DIRECTION_EXISTS', `A direction named ${req.name} already exists.`, 409)
+      const sources = from.files.filter((f) => f.role === 'source' && directionOf(f.path))
+      const newPaths = sources.map((f) => f.path.replace(`/directions/${req.from}/`, `/directions/${req.name}/`))
+      for (const p of newPaths) {
+        const check = isWritablePath(p, manifest, newPaths)
+        if (!check.ok) denied.push({ path: p, reason: check.reason })
+      }
+      if (denied.length === 0) {
+        const texts: Array<{ path: string; text: string }> = []
+        for (const f of sources) {
+          const t = await readLive(f.path, MAX_TOKEN_FILE_BYTES)
+          if (typeof t !== 'string') return t
+          texts.push({ path: f.path, text: t })
+        }
+        for (const p of newPaths) {
+          try {
+            const existing = await deps.readRepoFile(repo.repo, head.sha, p, MAX_TOKEN_FILE_BYTES)
+            if (existing.kind !== 'absent') return jsonError(c, 'DIRECTION_EXISTS', `${p} already exists on ${head.branch}.`, 409)
+          } catch (err) {
+            return jsonError(c, 'GITHUB_FAILED', (err as Error).message, 502)
+          }
+        }
+        const typeOf = new Map(from.tokens.map((t) => [t.path, t.type]))
+        const edits: TokenFileEdit[] = []
+        for (const e of req.edits ?? []) {
+          if (!typeOf.has(e.path)) return jsonError(c, 'UNKNOWN_TOKEN', `${e.path} is not a token in ${req.from}.`, 400)
+          edits.push({ path: e.path, type: typeOf.get(e.path) ?? null, value: e.value })
+        }
+        const built = buildDuplicateDirection(texts, req.from, req.name, req.displayName ?? null, edits)
+        if (!built.ok) return jsonError(c, 'EDIT_REJECTED', built.reason, 400)
+        for (const f of built.files) changes.push({ path: f.path, before: '', after: f.text, reason: `add design direction ${req.name} (copied from ${req.from})` })
+      }
     } else {
       const check = isWritablePath(RECIPE_MANIFEST_PATH, manifest, scope)
       if (!check.ok) {
@@ -396,7 +533,7 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
     if (files.length === 0) return jsonError(c, 'NO_CHANGE', 'Nothing would change; the values already match.', 400)
 
     const userId = c.get('userId') as string
-    const title = req.title?.trim() || (req.kind === 'tokens' ? 'chore(design): update design tokens' : 'chore(design): update design rules')
+    const title = req.title?.trim() || defaultChangeTitle(req)
     const prBody = [
       'Proposed from the Mushi console design plane (Plan 019).',
       '',

@@ -233,3 +233,78 @@ export function unifiedDiff(path: string, before: string, after: string, context
   }
   return { diff: lines.join('\n'), additions, deletions }
 }
+
+// ── Directions ───────────────────────────────────────────────────────────────
+
+export const DIRECTION_NAME_RE = /^[a-z0-9][a-z0-9-]{1,40}$/
+
+/**
+ * Point mushi.recipe.json's `role: "source"` token entries at another
+ * direction's files. The new entries take the place of the first old one, so
+ * the export entries and everything else keep their order.
+ */
+export function applyActivateDirection(manifestText: string, targetFiles: readonly string[]): ApplyResult {
+  let doc: unknown
+  try {
+    doc = JSON.parse(manifestText)
+  } catch {
+    return { ok: false, reason: 'mushi.recipe.json on the default branch is not valid JSON' }
+  }
+  if (!isPlainObject(doc) || !isPlainObject(doc.design) || !Array.isArray(doc.design.tokens)) {
+    return { ok: false, reason: 'mushi.recipe.json has no design.tokens list' }
+  }
+  if (targetFiles.length === 0) return { ok: false, reason: 'the target direction has no token files' }
+  const tokens = doc.design.tokens as unknown[]
+  const first = tokens.findIndex((t) => isPlainObject(t) && t.role === 'source')
+  const kept = tokens.filter((t) => !(isPlainObject(t) && t.role === 'source'))
+  const fresh = targetFiles.map((path) => ({ path, role: 'source', format: 'dtcg-2025.10' }))
+  const at = first < 0 ? 0 : tokens.slice(0, first).filter((t) => !(isPlainObject(t) && t.role === 'source')).length
+  doc.design.tokens = [...kept.slice(0, at), ...fresh, ...kept.slice(at)]
+  return { ok: true, text: serialize(doc, manifestText) }
+}
+
+export type DuplicateResult = { ok: true; files: Array<{ path: string; text: string }> } | { ok: false; reason: string }
+
+/**
+ * Copy one direction's token files to `directions/<name>/`, stamp the new
+ * name in the root `$extensions["us.kensaur.mushi"].direction`, and apply any
+ * token edits to the copy (each edit lands in whichever file holds the token).
+ */
+export function buildDuplicateDirection(
+  source: ReadonlyArray<{ path: string; text: string }>,
+  from: string,
+  name: string,
+  displayName: string | null,
+  edits: readonly TokenFileEdit[],
+): DuplicateResult {
+  if (!DIRECTION_NAME_RE.test(name)) return { ok: false, reason: 'a direction name is 2–41 lowercase letters, digits or dashes' }
+  if (name === from) return { ok: false, reason: 'the copy needs a new name' }
+  const marker = `/directions/${from}/`
+  const out: Array<{ path: string; text: string }> = []
+  const pending = new Set(edits.map((e) => e.path))
+  for (const file of source) {
+    const idx = file.path.lastIndexOf(marker)
+    if (idx < 0) return { ok: false, reason: `${file.path} is not inside directions/${from}/` }
+    let doc: unknown
+    try {
+      doc = JSON.parse(file.text)
+    } catch {
+      return { ok: false, reason: `${file.path} is not valid JSON` }
+    }
+    if (!isPlainObject(doc)) return { ok: false, reason: `${file.path} is not a JSON object` }
+    const ext = isPlainObject(doc.$extensions) ? doc.$extensions : (doc.$extensions = {}) as Record<string, unknown>
+    const mine = isPlainObject(ext['us.kensaur.mushi']) ? ext['us.kensaur.mushi'] as Record<string, unknown> : (ext['us.kensaur.mushi'] = {}) as Record<string, unknown>
+    mine.direction = { name: (displayName ?? '').trim().slice(0, 80) || name, duplicatedFrom: from }
+    let text = serialize(doc, file.text)
+    const here = edits.filter((e) => pending.has(e.path) && findTokenNode(doc as Record<string, unknown>, e.path))
+    if (here.length > 0) {
+      const applied = applyTokenEdits(text, here)
+      if (!applied.ok) return applied
+      text = applied.text
+      here.forEach((e) => pending.delete(e.path))
+    }
+    out.push({ path: `${file.path.slice(0, idx)}/directions/${name}/${file.path.slice(idx + marker.length)}`, text })
+  }
+  if (pending.size > 0) return { ok: false, reason: `not in ${from}: ${[...pending].join(', ')}` }
+  return { ok: true, files: out }
+}
