@@ -32,7 +32,7 @@ describe('sending a report', () => {
   it('chips are optional; Idea files a feature request', () => {
     expect(reporterChipToReport(null)).toEqual({ category: 'other' });
     expect(reporterChipToReport('bug')).toEqual({ category: 'bug' });
-    expect(reporterChipToReport('idea')).toEqual({ category: 'other', userCategory: 'Feature request' });
+    expect(reporterChipToReport('idea')).toEqual({ category: 'other', userCategory: 'feature' });
   });
 });
 
@@ -89,5 +89,16 @@ describe('email opt-in', () => {
     expect(isPlausibleReporterEmail(' reporter@example.com ')).toBe(true);
     expect(isPlausibleReporterEmail('nope')).toBe(false);
     expect(isPlausibleReporterEmail('a@b')).toBe(false);
+  });
+});
+
+describe('ideas', () => {
+  it('reads every spelling of a feature request as an idea (web and ingest send "feature")', async () => {
+    const { isReporterIdea, reporterStatus } = await import('./reporter-ui');
+    for (const user_category of ['feature', 'Feature request', 'feature_request', 'idea', 'Feature-Request']) {
+      expect(isReporterIdea({ user_category })).toBe(true);
+    }
+    expect(isReporterIdea({ user_category: 'bug' })).toBe(false);
+    expect(reporterStatus({ status: 'new', user_category: 'feature' }).label).toBe('Thanks for the idea');
   });
 });
