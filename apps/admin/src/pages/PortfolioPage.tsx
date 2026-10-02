@@ -28,6 +28,7 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { setActiveProjectIdSnapshot } from '../lib/activeProject'
 import type { PortfolioCard, PortfolioFindingsResponse, PortfolioResponse } from '../lib/portfolioTypes'
 import { formatUsd, kindLabel, radarLabel, sdkLabel, sortPortfolioCards } from '../components/portfolio/portfolioView'
+import { DigestCard } from '../components/portfolio/DigestCard'
 
 export function PortfolioPage() {
   const orgId = useActiveOrgId()
@@ -111,6 +112,11 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
       {page.data && page.data.cards.length > 0 && (
         <PanelErrorBoundary label="Fix once">
           <FindingsSections findings={findings} names={names} />
+        </PanelErrorBoundary>
+      )}
+      {page.data && page.data.cards.length > 0 && (
+        <PanelErrorBoundary label="Daily digest">
+          <DigestCard orgId={orgId} projects={page.data.cards.map((c) => ({ projectId: c.projectId, name: c.name }))} />
         </PanelErrorBoundary>
       )}
     </div>

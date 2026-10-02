@@ -1,0 +1,16 @@
+{
+  "resultCount": 1,
+  "results": [
+    {
+      "trackId": 6761582648,
+      "trackName": "glot.it",
+      "bundleId": "com.glotit.app",
+      "sellerName": "Kensaurus Studio",
+      "artistName": "Kensaurus Studio",
+      "artworkUrl512": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/ab/cd/ef/AppIcon.png/512x512bb.jpg",
+      "description": "短い毎日のレッスンでタイ語の読み書きと会話を学びましょう。",
+      "version": "1.102.0",
+      "primaryGenreName": "Education"
+    }
+  ]
+}

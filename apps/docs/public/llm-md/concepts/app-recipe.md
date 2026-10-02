@@ -166,6 +166,39 @@ If nothing could be judged, the score is **not scored**, never 0. The
 severity, shrinking its allowlist) raises the score at first. Fixing the findings
 it reveals brings the score back down, against a stricter system each time.
 
+## Hole checks
+
+Some problems never throw an error, so no user report or crash log will show
+them. Mushi checks for them once a day and shows the result under **Hole
+checks** on the Recipe page:
+
+| Check | What it catches |
+|-------|-----------------|
+| Store names match | The App Store and Google Play show different names for the same app. Google Play's title is treated as the right one. |
+| Store listing in every language | A language you list has no store page in that language. |
+| Domain and HTTPS certificate | The domain or its certificate expires within a few weeks. The certificate date is estimated from public certificate logs. |
+| Security headers | A site is missing HSTS, clickjacking protection, `nosniff` or a referrer policy. |
+| Privacy link | The privacy URL you give the stores does not load a real policy page. |
+| Store build rules | Your Android target SDK or iOS build is older than Google Play or the App Store accepts. |
+| Storage deletes in SQL | Rows of `storage.objects` deleted with SQL. The files stay in the bucket and keep costing money. This one runs in your own CI: `mushi radar scan --push`. |
+
+A check with nothing to look at says **Not checked**. It is never shown as passing.
+
+The public checks read a `store` block in `mushi.recipe.json`:
+
+```json
+{
+  "store": {
+    "brandName": "glot.it – Learn Thai",
+    "ios": { "bundleId": "com.example.app", "appleId": "1234567890" },
+    "android": { "package": "com.example.app" },
+    "locales": ["en-US", "ja"],
+    "privacyUrl": "https://example.com/privacy"
+  },
+  "links": { "domains": ["example.com"] }
+}
+```
+
 ## In your editor
 
 | MCP tool | Returns |

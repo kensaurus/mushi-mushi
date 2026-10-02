@@ -559,6 +559,18 @@ const BASE_TOOLS: Record<string, HostedTool> = {
       return apiCall(`/v1/admin/orgs/${encodeURIComponent(org)}/portfolio/findings`, { headers: ctx.authHeaders })
     },
   },
+  get_radar: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      if (args.scope === 'organization') {
+        const org = typeof args.organizationId === 'string' && args.organizationId ? args.organizationId : 'current'
+        return apiCall(`/v1/admin/orgs/${encodeURIComponent(org)}/radar`, { headers: ctx.authHeaders })
+      }
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for get_radar')
+      return apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/radar`, { headers: ctx.authHeaders })
+    },
+  },
   get_graph_node: {
     scope: 'mcp:read',
     handler: async (args, ctx) => {
@@ -1820,6 +1832,7 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'get_design_deviance',
   'get_portfolio',
   'list_portfolio_findings',
+  'get_radar',
 ])
 
 /**

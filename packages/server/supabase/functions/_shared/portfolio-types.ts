@@ -60,7 +60,8 @@ export interface PortfolioCard {
  */
 export interface PortfolioRadarColumn {
   checkedAt: string | null
-  status: 'never_run' | 'pass' | 'warn' | 'fail' | 'error'
+  /** `nothing_to_check`: the radar ran but nothing was declared for it to look at. */
+  status: 'never_run' | 'nothing_to_check' | 'pass' | 'warn' | 'fail' | 'error'
   open: { error: number; warn: number; info: number }
   /** Detectors with no result for this project (no data to check, or never run). */
   unchecked: number

@@ -7,12 +7,12 @@
 
 import type { ElementState, RecipeElementKey } from './recipeTypes'
 
-export type ProjectKind = 'app' | 'site' | 'service' | 'library' | 'other'
+type ProjectKind = 'app' | 'site' | 'service' | 'library' | 'other'
 
 /** Where a project's kind came from. `inferred` is labelled as such in the console. */
-export type KindSource = 'declared' | 'inferred' | 'unknown'
+type KindSource = 'declared' | 'inferred' | 'unknown'
 
-export type SdkSkewStatus = 'current' | 'behind' | 'unknown'
+type SdkSkewStatus = 'current' | 'behind' | 'unknown'
 
 export interface SdkSkewEntry {
   projectId: string
@@ -50,7 +50,8 @@ export interface PortfolioCard {
  */
 export interface PortfolioRadarColumn {
   checkedAt: string | null
-  status: 'never_run' | 'pass' | 'warn' | 'fail' | 'error'
+  /** `nothing_to_check`: the radar ran but nothing was declared for it to look at. */
+  status: 'never_run' | 'nothing_to_check' | 'pass' | 'warn' | 'fail' | 'error'
   open: { error: number; warn: number; info: number }
   /** Detectors with no result for this project (no data to check, or never run). */
   unchecked: number
@@ -61,14 +62,14 @@ export interface PortfolioRadarColumn {
  * LLM spend for the project over 30 days and whether caps are set. Facts, not
  * findings: missing caps are reported by the Phase 0 detector, not here.
  */
-export interface PortfolioSpendColumn {
+interface PortfolioSpendColumn {
   llmUsd30d: number
   llmCalls30d: number
   autofixCapUsd: number | null
   monthlyLlmBudgetUsd: number | null
 }
 
-export interface FindingGroup {
+interface FindingGroup {
   ruleId: string
   gate: string
   /** The highest severity among the grouped findings. */
@@ -81,7 +82,7 @@ export interface FindingGroup {
   suggestedFix: string
 }
 
-export interface IntegrationHole {
+interface IntegrationHole {
   projectId: string
   integration: 'sentry' | 'slack' | 'linear' | 'supabase' | 'github'
   /** How many sibling projects already have it. */

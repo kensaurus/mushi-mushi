@@ -200,6 +200,19 @@ mushi audit                        # full-stack project health audit
 
 ---
 
+## Hole checks (radar)
+
+Checks that catch a problem before a user hits it. `scan` runs in your own CI
+job; Mushi never clones your repo.
+
+```bash
+mushi radar scan                     # storage deletes done in SQL; lists the build files the store rules read
+mushi radar scan --push              # send results to Mushi (one extra step in your existing CI job)
+mushi radar show                     # every hole check for this project and what it found
+```
+
+---
+
 ## Skill pipelines
 
 ```bash

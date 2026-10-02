@@ -7,6 +7,7 @@
 
 import type { BadgeTone } from '../ui'
 import type { PortfolioCard, PortfolioRadarColumn, SdkSkewEntry } from '../../lib/portfolioTypes'
+import type { DetectorState } from '../../lib/radarTypes'
 
 const WORST_RANK: Record<string, number> = { error: 0, drift: 1, unknown: 2, not_connected: 3, ok: 4 }
 
@@ -23,6 +24,9 @@ export function sortPortfolioCards(cards: readonly PortfolioCard[]): PortfolioCa
 export function radarLabel(r: PortfolioRadarColumn): { text: string; tone: BadgeTone; hint: string } {
   if (r.status === 'never_run' || !r.checkedAt) {
     return { text: 'Not checked yet', tone: 'neutral', hint: 'The hole checks have not run for this project yet. This is not a pass.' }
+  }
+  if (r.status === 'nothing_to_check') {
+    return { text: 'Nothing to check yet', tone: 'neutral', hint: 'The hole checks ran, but this app declares no store ids, domains or privacy link to check. Add a store block to mushi.recipe.json.' }
   }
   if (r.status === 'error') return { text: 'Check failed', tone: 'danger', hint: 'The last hole check could not finish.' }
   const total = r.open.error + r.open.warn
@@ -52,4 +56,15 @@ export function kindLabel(card: Pick<PortfolioCard, 'kind' | 'kindSource'>): str
 
 export function formatUsd(n: number): string {
   return `$${n.toFixed(n >= 100 ? 0 : 2)}`
+}
+
+const STATE_META: Record<DetectorState, { label: string; tone: BadgeTone }> = {
+  ok: { label: 'Nothing found', tone: 'okSubtle' },
+  finding: { label: 'Found', tone: 'warnSubtle' },
+  unknown: { label: 'Not checked', tone: 'neutral' },
+  error: { label: 'Check failed', tone: 'dangerSubtle' },
+}
+
+export function radarStateMeta(state: string): { label: string; tone: BadgeTone } {
+  return STATE_META[state as DetectorState] ?? STATE_META.unknown
 }

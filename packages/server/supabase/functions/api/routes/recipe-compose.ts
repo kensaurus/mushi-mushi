@@ -48,6 +48,9 @@ export interface ComposeDeps {
   now: () => Date
 }
 
+/** Plan 020 hole-check gates; shown in the radar, never counted in the recipe's gates card. */
+export const RADAR_GATES = ['radar', 'radar_ci', 'store_review']
+
 const INVENTORY_GATES = ['dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim', 'spec_drift', 'orphan_endpoint', 'unknown_call']
 
 interface GateRunRow {
@@ -234,7 +237,8 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
     .order('started_at', { ascending: false })
     .limit(300)
   const allRuns = (gateRows ?? []) as GateRunRow[]
-  const latest = latestPerGate(allRuns.filter((r) => r.gate !== DESIGN_GATE || isScanRun(r)))
+  // The radar gates (Plan 020) are hole checks with their own column, not recipe gates.
+  const latest = latestPerGate(allRuns.filter((r) => (r.gate !== DESIGN_GATE || isScanRun(r)) && !RADAR_GATES.includes(r.gate)))
   const findingCounts = await openFindingCounts(db, latest.map((r) => r.id))
 
   // ── schema
