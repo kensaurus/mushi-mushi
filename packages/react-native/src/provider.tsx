@@ -218,7 +218,7 @@ export interface MushiRNInstance {
   submitReport(data: {
     description: string
     category: string
-    /** Host / chip sub-label, e.g. 'Feature request' for the Idea chip. */
+    /** Host / chip sub-label, e.g. 'feature' for the Idea chip. */
     userCategory?: string
     screenshotDataUrl?: string
   }): Promise<{

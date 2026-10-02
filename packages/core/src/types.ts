@@ -262,8 +262,8 @@ export interface MushiWidgetConfig {
   screenshotSensitiveHint?: boolean | string;
   /**
    * Beta mode: injects discreet "early access" messaging into the widget panel.
-   * Shows a beta strip on the category step and a contact footer on the success
-   * step. Designed to reduce user frustration with in-progress apps while
+   * Shows a beta strip on the report screen and a contact footer on the
+   * receipt. Designed to reduce user frustration with in-progress apps while
    * actively inviting feedback.
    */
   betaMode?: MushiBetaModeConfig;
@@ -286,20 +286,23 @@ export interface MushiWidgetConfig {
    */
   responseSlaLabel?: string;
   /**
-   * Show a first-class "Feature request" card at the top of the category
-   * step. Defaults to true. Set to false for production-only deployments
-   * where you don't want to invite feature ideas through the widget.
-   * Internally this maps to `category='other'` with
-   * `user_category='Feature request'` so no DB migration is needed.
+   * Show the "Idea" chip on the report screen. Defaults to true. Set to false
+   * for production-only deployments where you don't want to invite feature
+   * ideas through the widget. An idea is sent as `category='other'` with
+   * `user_category='feature'`, so triage never files it as a defect.
    */
   featureRequestCard?: boolean;
-  /** Override the localised label for the feature-request card. */
+  /** Override the localised label of the Idea chip. */
   featureRequestLabel?: string;
-  /** Override the helper text shown under the feature-request card. */
+  /**
+   * @deprecated The one-screen report (Plan 018) has no helper text under the
+   * Idea chip; the web widget ignores this.
+   */
   featureRequestDescription?: string;
   /**
    * Minimum description character count before Send enables. Default 8
-   * (Plan 018 §1.1); an attached screenshot or element lowers it to 0.
+   * (Plan 018 §1.1), halved for CJK text on web; an attached screenshot or
+   * element lowers it to 0.
    */
   minDescriptionLength?: number;
   /**
@@ -315,9 +318,9 @@ export interface MushiWidgetConfig {
    */
   avoidSelectors?: string[];
   /**
-   * Override the default five-category picker with a custom category list.
-   * When set, the widget renders these categories instead of the built-in
-   * `bug / slow / visual / confusing / other` set.
+   * Add host-specific categories. The report screen shows them under the
+   * "More…" chip, after the built-in Bug / Slow / Looks wrong / Confusing /
+   * Idea chips.
    *
    * Each custom category maps onto one of the five built-in `MushiReportCategory`
    * values via `baseCategory` (defaults to `'other'`). The custom id is
@@ -339,14 +342,13 @@ export interface MushiWidgetConfig {
 export interface MushiCustomCategory {
   /** Unique identifier used in `openWith(id)` / `report({ category: id })`. */
   id: string;
-  /** Human-readable label shown in the category picker step. */
+  /** Human-readable label shown under the "More…" chip. */
   label: string;
   /** Optional helper text shown beneath the label. */
   description?: string;
   /**
-   * Localised intent options displayed on the second step ("What happened?").
-   * When omitted, the widget skips the intent step and goes straight to
-   * the description.
+   * Optional sub-chips shown after this category is picked (e.g. "Crash",
+   * "Wrong result"). Picking one is never required.
    */
   intents?: string[];
   /**
@@ -386,7 +388,7 @@ export interface MushiBannerLink {
  * `subtle` — near-invisible hairline with muted text (least disruptive).
  */
 export interface MushiBannerConfig {
-  /** Visual style of the banner strip. Defaults to `'brand'`. */
+  /** Visual style of the banner strip. Defaults to `'subtle'` (Plan 018 §1.4); `neon` is opt-in. */
   variant?: 'neon' | 'brand' | 'subtle';
   /** 'top' pins the banner below any existing sticky headers; 'bottom' pins above bottom navs. Defaults to 'top'. */
   position?: 'top' | 'bottom';
