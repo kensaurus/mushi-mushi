@@ -120,7 +120,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_fix_context',
     title: 'Fix context bundle',
     description:
-      'Bundle everything an agent needs to fix one bug in a single call: a paste-ready fixPrompt (plain-English diagnosis + reproduction + suggested fix + relevant code + blast radius), plus report detail, repro steps, component, root cause, ontology tags, and the inventory action (with its expected_outcome contract) the report is filed against. Returns { report, fixPrompt, reproductionSteps, component, rootCause, bugOntologyTags, inventoryAction }. Read-only; no second LLM key needed. Use before writing a fix; use triage_issue for a multi-report review packet, or suggest_fix for just the Stage-2 hint.',
+      'Bundle everything an agent needs to fix one bug in a single call: a paste-ready fixPrompt (plain-English diagnosis + reproduction + suggested fix + relevant code + blast radius), plus report detail, repro steps, component, root cause, ontology tags, and the inventory action (with its expected_outcome contract) the report is filed against, plus recipe: a ≤4 KB design excerpt (the app\'s tokens with their CSS var / TS names, the design deviance score, and deviance findings in the files this fix touches) so the fix uses the app\'s tokens instead of literals. Returns { report, fixPrompt, reproductionSteps, component, rootCause, bugOntologyTags, inventoryAction, recipe }; recipe is always { state, note, … } with state ok | drift | unknown | not_connected | error, never null. Read-only; no second LLM key needed. Use before writing a fix; use triage_issue for a multi-report review packet, or suggest_fix for just the Stage-2 hint.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
@@ -189,10 +189,41 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'list_gate_findings',
     title: 'Gate findings',
     description:
-      'List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead_handler | mock_leak | api_contract | crawl | status_claim | spec_drift | orphan_endpoint | unknown_call | schema_drift | code_health) or finding severity (info | warn | error). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.',
+      'List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead_handler | mock_leak | api_contract | crawl | status_claim | spec_drift | orphan_endpoint | unknown_call | schema_drift | code_health | design_drift | ci_drift | deploy_drift | env_drift) or finding severity (info | warn | error). The *_drift gates are the App Recipe checks: design_drift is code that drifts off the design tokens, ci_drift / deploy_drift / env_drift are CI, deploy and env vars that drift from the recipe. Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Show me what CI gates failed on the last run.',
+  },
+  // --- App Recipe + design plane (Plan 019) ---------------------------------
+  {
+    name: 'get_app_recipe',
+    title: 'App recipe',
+    description:
+      'Return the App Recipe for a project: one card per element (schema, design, routes, gates, ci, deploy, env, integrations), each with a state, a plain-English reason, key facts, a findings count and console links, plus the worst state overall and the mushi.recipe.json manifest status. Every element is exactly one of ok | drift | unknown | not_connected | error. unknown means configured but not observed recently and never means healthy; not_connected means nothing is configured. Returns { projectId, worst, elements: { <element>: { state, reason, facts, findingsCount, lastCheckedAt, links } }, manifest, snapshotHash }. Read-only. Use to see how the app is put together and which part is drifting; use get_design_tokens for the token values, get_design_deviance for code that drifts off them, or list_gate_findings for gate detail.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'How is this app put together, and which part is drifting?',
+  },
+  {
+    name: 'get_design_tokens',
+    title: 'Design tokens',
+    description:
+      'Return the app\'s normalized design tokens (DTCG: path, type, resolved value, hex / px, alias, CSS var, TS and RN names, description, defining file) for the active token set, plus nameMap (CSS var or TS name → token path). This is the tool that makes a fix use the app\'s tokens instead of hard-coded literals: look up the token for a colour, spacing, radius or font before writing one. Optional filters: group (first path segment, e.g. color, space), type (color | dimension | fontFamily | …), direction (a named token set instead of the active one). Returns { projectId, set, tokens, nameMap, total }; at most 500 tokens. Read-only. Use get_design_deviance to see where code drifts off these tokens, or get_app_recipe for the overall state.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Which token should this fix use instead of a hard-coded colour?',
+  },
+  {
+    name: 'get_design_deviance',
+    title: 'Design deviance',
+    description:
+      'Return how far the code drifts off the design system: the latest 0–100 deviance score (lower is better; null means not scored yet), its per-rule breakdown, the score trend, a scan still running if any, the top findings (file, line, literal value, rule, and the nearest token to use instead), and the active rules (off_token_color, off_token_font, off_scale_spacing, off_scale_radius, contrast_below_aa, raw_interactive_element). Optional limit: findings to return (1–200, default 25). Returns { projectId, latest, running, trend, findings, rules }. Read-only. Use to find and fix off-token code; use get_design_tokens for the full token list.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Where does the code drift off the design tokens?',
   },
   {
     name: 'get_graph_neighborhood',
@@ -1084,6 +1115,11 @@ export const USE_MUSHI_INTENTS: Record<string, UseMushiIntent> = {
     label: 'Audit / health check',
     tools: ['run_fullstack_audit', 'get_backend_health', 'get_account_overview', 'get_usage'],
     hint: 'Call run_fullstack_audit for a full-stack health scorecard.',
+  },
+  design: {
+    label: 'Use the design system',
+    tools: ['get_design_tokens', 'get_design_deviance', 'get_app_recipe', 'list_gate_findings'],
+    hint: 'Call get_design_tokens before writing a colour, spacing or font, so the fix uses the design tokens instead of literals.',
   },
 };
 

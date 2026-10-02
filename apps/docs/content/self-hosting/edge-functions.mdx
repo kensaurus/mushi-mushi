@@ -65,6 +65,7 @@ npx supabase functions deploy test-gen-from-report --no-verify-jwt
 npx supabase functions deploy telegram-webhook --no-verify-jwt
 npx supabase functions deploy cursor-webhook --no-verify-jwt
 npx supabase functions deploy agent-status-poll --no-verify-jwt
+npx supabase functions deploy recipe-collector --no-verify-jwt
 ```
 
 For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `release-builder`, `experiment-analyzer`, `anomaly-detector`, …) and cron setup, follow [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md).

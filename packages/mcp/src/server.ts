@@ -41,10 +41,14 @@ import { wrapUntrustedJson, type UntrustedContentRole } from './wrap-untrusted.j
 import { installStdoutGuard } from './stdout-guard.js';
 import { normalizeArgAliases, snakeAliasOf } from './arg-aliases.js';
 import {
+  RECIPE_STATES,
+  designExcerptFilesOf,
   fixContextOf,
   inventoryActionNodeIdOf,
   projectReportDetail,
   projectReportListRow,
+  recipeError,
+  recipeFromExcerpt,
   reportEvidenceOf,
   similarityQueryOf,
   triageRecommendedActions,
@@ -244,7 +248,7 @@ const REPORT_STATUSES = [
 const REPORT_CATEGORIES = ['bug', 'slow', 'visual', 'confusing', 'other'] as const;
 const REPORT_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 
-/** gate_runs.gate CHECK constraint (migration 20260612061520). */
+/** gate_runs.gate CHECK constraint (migrations 20260612061520 and 20261002130100_recipe_gate_types). */
 const GATE_IDS = [
   'dead_handler',
   'mock_leak',
@@ -256,6 +260,10 @@ const GATE_IDS = [
   'unknown_call',
   'schema_drift',
   'code_health',
+  'design_drift',
+  'ci_drift',
+  'deploy_drift',
+  'env_drift',
 ] as const;
 /** gate_findings.severity CHECK constraint (migration 20260504000000). */
 const GATE_FINDING_SEVERITIES = ['info', 'warn', 'error'] as const;
@@ -333,6 +341,33 @@ const FIX_CONTEXT_SHAPE = {
   rootCause: z.unknown().describe('Stage-2 root cause, or null before Stage 2 runs'),
   bugOntologyTags: z.unknown().describe('Bug ontology tags, or null'),
 };
+
+/** get_fix_context's `recipe` (recipeFromExcerpt / recipeError in report-shapes.ts). */
+const RECIPE_EXCERPT_OUTPUT = z
+  .looseObject({
+    state: z
+      .enum(RECIPE_STATES)
+      .describe('ok | drift | unknown | not_connected | error; unknown never means healthy'),
+    note: z.string().describe('Why this state, in plain English'),
+    set: z.string().nullable().optional().describe('The token set the excerpt was taken from'),
+    tokens: z
+      .array(z.unknown())
+      .optional()
+      .describe('Most useful tokens first: { path, value, cssVar, ts }. Use these names, not literals.'),
+    findings: z
+      .array(z.unknown())
+      .optional()
+      .describe('Open design deviance findings in the files this fix touches'),
+    score: z
+      .number()
+      .nullable()
+      .optional()
+      .describe('Design deviance score 0–100, lower is better; null = not scored'),
+    truncated: z.boolean().optional().describe('True when the excerpt was cut to stay under 4 KB'),
+  })
+  .describe(
+    "Design excerpt (≤ 4 KB) for the report's project: tokens with CSS var / TS names, the deviance score, and findings in the files this fix touches. Never null; when it could not be read, { state: 'error', note }.",
+  );
 
 /** True when a text block was already wrapped by a handler (wrappedJson*). */
 function isWrappedUntrusted(text: string): boolean {
@@ -699,6 +734,34 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     };
   }
 
+  /**
+   * get_fix_context's `recipe`: the design excerpt for the report's project,
+   * scoped to the files its fix attempts and fix packet name. Never throws and
+   * never returns null — a failed read is { state: 'error', note }, so the fix
+   * context itself still succeeds.
+   */
+  async function designRecipeFor(
+    report: Record<string, unknown>,
+    fallbackProjectId: string,
+    headers: Record<string, string>,
+  ): Promise<Record<string, unknown>> {
+    const pid =
+      typeof report.project_id === 'string' && report.project_id
+        ? report.project_id
+        : fallbackProjectId;
+    const files = designExcerptFilesOf(report);
+    const query = files.length > 0 ? `?${new URLSearchParams({ files: files.join(',') })}` : '';
+    try {
+      return recipeFromExcerpt(
+        await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/excerpt${query}`, {
+          headers,
+        }),
+      );
+    } catch (err) {
+      return recipeError(`Could not read the design excerpt: ${bareMessage(err)}`);
+    }
+  }
+
   const server = new McpServer(
     {
       name: MUSHI_SERVER_METADATA.name,
@@ -978,13 +1041,15 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         inventoryAction: z
           .unknown()
           .describe('The inventory action (with its expected_outcome contract) the report is filed against, or null'),
+        recipe: RECIPE_EXCERPT_OUTPUT,
       }),
     },
     async (args) => {
-      const { headers } = await projectScopeHeaders(args.projectId);
+      const { projectId: scopedProjectId, headers } = await projectScopeHeaders(args.projectId);
       const report = await apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.reportId}`, {
         headers,
       });
+      const recipe = await designRecipeFor(report, scopedProjectId, headers);
       // fix_packet, report body, and rootCause are user-authored or LLM-generated
       // free text — wrap with anti-injection delimiters.
       return wrappedJsonResult(
@@ -992,6 +1057,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           report: projectReportDetail(report, false),
           ...fixContextOf(report),
           inventoryAction: report.inventory_action ?? null,
+          recipe,
         },
         'fix context',
       );
@@ -1196,6 +1262,101 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         `/v1/admin/inventory/${pid}/findings${suffix}`,
       );
       return jsonResult(data);
+    },
+  );
+
+  // --- App Recipe + design plane (Plan 019) --------------------------------
+  // Results carry repo content (manifest strings, token descriptions, file
+  // paths); the catalog flags them returnsUntrusted, so the central wrapper
+  // below puts them in data delimiters.
+
+  server.registerTool(
+    'get_app_recipe',
+    {
+      title: titleOf('get_app_recipe'),
+      description: descOf('get_app_recipe'),
+      annotations: annotationsFor('get_app_recipe'),
+      inputSchema: z.object({
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — defaults to the server-configured project when omitted'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe`));
+    },
+  );
+
+  server.registerTool(
+    'get_design_tokens',
+    {
+      title: titleOf('get_design_tokens'),
+      description: descOf('get_design_tokens'),
+      annotations: annotationsFor('get_design_tokens'),
+      inputSchema: z.object({
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — defaults to the server-configured project when omitted'),
+        group: z
+          .string()
+          .max(80)
+          .optional()
+          .describe('Only tokens in this group (first path segment, e.g. color, space, radius).'),
+        type: z
+          .string()
+          .max(40)
+          .optional()
+          .describe('Only tokens of this DTCG $type (color, dimension, fontFamily, …).'),
+        direction: z
+          .string()
+          .max(80)
+          .optional()
+          .describe('A named token set (directions/<name>/) instead of the active one.'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const q = new URLSearchParams();
+      if (args.group) q.set('group', args.group);
+      if (args.type) q.set('type', args.type);
+      if (args.direction) q.set('direction', args.direction);
+      const suffix = q.toString() ? `?${q}` : '';
+      return jsonText(
+        await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/tokens${suffix}`),
+      );
+    },
+  );
+
+  server.registerTool(
+    'get_design_deviance',
+    {
+      title: titleOf('get_design_deviance'),
+      description: descOf('get_design_deviance'),
+      annotations: annotationsFor('get_design_deviance'),
+      inputSchema: z.object({
+        projectId: z
+          .string()
+          .optional()
+          .describe('Project UUID — defaults to the server-configured project when omitted'),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe('Findings to return, 1–200 (default 25).'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const suffix =
+        args.limit !== undefined ? `?${new URLSearchParams({ limit: String(args.limit) })}` : '';
+      return jsonText(
+        await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/deviance${suffix}`),
+      );
     },
   );
 
