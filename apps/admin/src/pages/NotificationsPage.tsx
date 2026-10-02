@@ -610,9 +610,7 @@ export function NotificationsPage() {
                 </li>
               </ul>
               <div className="flex flex-wrap gap-2 pt-1">
-                <Link to="/settings">
-                  <Btn size="sm">Open Settings</Btn>
-                </Link>
+                <Btn to="/settings" size="sm">Open Settings</Btn>
                 <Btn variant="ghost" size="sm" onClick={() => navigate('/reports')}>
                   View bug queue
                 </Btn>

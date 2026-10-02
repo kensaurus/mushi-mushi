@@ -74,6 +74,8 @@ export function deriveDashboardInsight(s: DashboardInsightInput): DashboardInsig
   }
   return {
     tone: 'ok',
-    sentence: `Loop clear${s.reports14d > 0 ? ` — ${s.reports14d} report${s.reports14d === 1 ? '' : 's'} processed in the last 14 days` : ''}.`,
+    // Scoped to triage on purpose: openBacklog counts untriaged reports only,
+    // so triaged reports still awaiting a fix can exist here.
+    sentence: `Nothing waiting to triage${s.reports14d > 0 ? ` — ${s.reports14d} report${s.reports14d === 1 ? '' : 's'} received in the last 14 days` : ''}.`,
   }
 }

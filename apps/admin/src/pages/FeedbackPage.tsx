@@ -26,10 +26,7 @@ import { FeedbackModal } from '../components/FeedbackModal'
 import { SupportTicketDetailModal } from '../components/support/SupportTicketDetailModal'
 import { FeedbackStatusBanner } from '../components/feedback/FeedbackStatusBanner'
 import { FeedbackSnapshotStrip } from '../components/feedback/FeedbackSnapshotStrip'
-import { FeedbackReadout } from '../components/feedback/FeedbackReadout'
 import {
-  ActionPill,
-  ActionPillRow,
   ContainedBlock,
   SignalChip,
   InlineProof,
@@ -285,8 +282,6 @@ export function FeedbackPage() {
               <FeedbackStatusBanner
                 stats={stats}
                 onTab={setActiveTab}
-                onSubmitBug={() => openFeedback('bug')}
-                onSubmitFeature={() => openFeedback('feature')}
                 onRefresh={reloadAll}
                 refreshing={statsValidating || ticketsQuery.isValidating}
               />
@@ -319,12 +314,6 @@ export function FeedbackPage() {
 
       {activeTab === 'overview' && (
         <>
-          <FeedbackReadout
-            stats={stats}
-            fetchedAt={statsFetchedAt}
-            isValidating={statsValidating}
-          />
-
           <Card className="border-dashed border-edge-subtle bg-surface-raised/20 p-3">
             <p className="text-2xs leading-relaxed text-fg-muted">
               End-user bug reports from your app appear under{' '}
@@ -387,19 +376,9 @@ export function FeedbackPage() {
                 hint={
                   activeTab === 'shipped'
                     ? 'When we credit your idea in a release, it appears here with a version chip.'
-                    : 'Found something broken or have an idea? We read every ticket.'
+                    : 'Found something broken or have an idea? Use Report a bug or Request feature at the top. We read every ticket.'
                 }
               />
-              {activeTab !== 'shipped' && (
-                <ActionPillRow className="justify-center">
-                  <ActionPill tone="brand" onClick={() => openFeedback('bug')}>
-                    Report a bug
-                  </ActionPill>
-                  <ActionPill tone="neutral" onClick={() => openFeedback('feature')}>
-                    Request a feature
-                  </ActionPill>
-                </ActionPillRow>
-              )}
             </div>
           )}
 

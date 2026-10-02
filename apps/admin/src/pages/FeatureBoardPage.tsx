@@ -6,7 +6,6 @@
  */
 
 import { useCallback, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -19,7 +18,6 @@ import { ContainedBlock, InlineProof } from '../components/report-detail/ReportS
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 import { Modal } from '../components/Modal'
-import { FeatureBoardReadout } from '../components/feature-board/FeatureBoardReadout'
 import { FeatureBoardSnapshotStrip } from '../components/feature-board/FeatureBoardSnapshotStrip'
 import { type FeatureBoardClientStats } from '../components/feature-board/FeatureBoardStatsTypes'
 import {
@@ -488,11 +486,9 @@ export function FeatureBoardPage() {
         <Btn size="sm" variant="ghost" onClick={reload} loading={isValidating}>
           Refresh
         </Btn>
-        <Link to="/feedback">
-          <Btn size="sm" variant="ghost">
+        <Btn to="/feedback" size="sm" variant="ghost">
             My feedback
           </Btn>
-        </Link>
       </PageHeaderBar>
 
       <PagePosture
@@ -501,16 +497,6 @@ export function FeatureBoardPage() {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
             children: (
               <FeatureBoardSnapshotStrip
-                stats={clientStats}
-                fetchedAt={lastFetchedAt}
-                isValidating={isValidating}
-              />
-            ),
-          },
-          {
-            priority: POSTURE_PRIORITY.guide,
-            children: (
-              <FeatureBoardReadout
                 stats={clientStats}
                 fetchedAt={lastFetchedAt}
                 isValidating={isValidating}
@@ -594,9 +580,7 @@ export function FeatureBoardPage() {
                     'Mark shipped when the idea lands in a release',
                   ]}
                   action={
-                    <Link to="/feedback">
-                      <Btn size="sm">Open My feedback</Btn>
-                    </Link>
+                    <Btn to="/feedback" size="sm">Open My feedback</Btn>
                   }
                 />
               )}

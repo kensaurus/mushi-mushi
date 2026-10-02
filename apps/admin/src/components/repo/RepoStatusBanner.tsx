@@ -3,7 +3,6 @@
  * PURPOSE: Repo / branch pipeline posture — no repo, CI failing, stuck, healthy.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
@@ -39,9 +38,7 @@ export function RepoStatusBanner({
             : 'Create a project and connect GitHub before branches appear here.'
         }
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
-          </Link>
+          <Btn to="/onboarding" size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
         }
       />
     )
@@ -55,9 +52,7 @@ export function RepoStatusBanner({
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.connect ?? 'Connect repo'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.connect ?? 'Connect repo'}</Btn>
           ) : null
         }
       />
@@ -72,9 +67,7 @@ export function RepoStatusBanner({
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.install ?? 'Install app'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.install ?? 'Install app'}</Btn>
           ) : null
         }
       />
@@ -93,9 +86,7 @@ export function RepoStatusBanner({
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.stuck ?? 'Review stuck'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.stuck ?? 'Review stuck'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('branches')}>
               {actions.stuck ?? 'Review stuck'}
@@ -118,9 +109,7 @@ export function RepoStatusBanner({
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.ci ?? 'Open failing CI'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.ci ?? 'Open failing CI'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('branches')}>
               {actions.ci ?? 'Open failing CI'}
@@ -138,9 +127,7 @@ export function RepoStatusBanner({
         title="No fix branches yet"
         subtitle={stats.topPriorityLabel}
         action={
-          <Link to="/reports">
-            <Btn size="sm" variant="ghost">{actions.reports ?? 'Open Reports'}</Btn>
-          </Link>
+          <Btn to="/reports" size="sm" variant="ghost">{actions.reports ?? 'Open Reports'}</Btn>
         }
       />
     )
@@ -157,9 +144,7 @@ export function RepoStatusBanner({
             {actions.refresh ?? 'Refresh'}
           </Btn>
         ) : stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">{actions.branches ?? 'View branches'}</Btn>
-          </Link>
+          <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.branches ?? 'View branches'}</Btn>
         ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('branches')}>
             {actions.branches ?? 'View branches'}

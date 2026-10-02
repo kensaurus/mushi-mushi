@@ -136,7 +136,9 @@ export const COPY: CopyRegistry = {
       actionLabels: {
         setup: 'Finish setup',
         queue: 'See queue',
-        takeAction: 'Fix now',
+        // Not "Fix now": the top action is often a quality check or setup
+        // step, and the label must not promise a fix it won't start.
+        takeAction: 'Start now',
         stages: 'See stages',
         refresh: 'Refresh',
       },

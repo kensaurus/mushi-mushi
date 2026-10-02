@@ -242,7 +242,9 @@ export function ConfigHelp({ helpId, ariaLabel }: ConfigHelpProps) {
   const summary = doc.summary
 
   return (
-    <span className="relative inline-flex">
+    // z-[1] + shrink-0: next to a scrollable SegmentedControl the trigger was
+    // covered and could not be clicked (/connect "Framework" help).
+    <span className="relative z-[1] inline-flex shrink-0">
       <button
         ref={triggerRef}
         type="button"
@@ -264,9 +266,16 @@ export function ConfigHelp({ helpId, ariaLabel }: ConfigHelpProps) {
           e.stopPropagation()
           setOpen((v) => !v)
         }}
-        className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-edge text-2xs text-fg-faint hover:text-fg-muted hover:border-fg-faint focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 cursor-help"
+        // 24px target (was 12px) around the same 12px glyph; -m-1.5 keeps
+        // the 12px layout footprint beside dense field labels.
+        className="group/help -m-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 cursor-help"
       >
-        <span aria-hidden="true" className="leading-none italic font-serif">i</span>
+        <span
+          aria-hidden="true"
+          className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-edge text-2xs leading-none italic font-serif text-fg-faint group-hover/help:text-fg-muted group-hover/help:border-fg-faint"
+        >
+          i
+        </span>
       </button>
       {open && typeof document !== 'undefined' && createPortal(
         <div

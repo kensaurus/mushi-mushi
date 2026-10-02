@@ -3,7 +3,6 @@
  * PURPOSE: User-story inventory posture — ingest, regressions, findings, clear.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
@@ -33,9 +32,7 @@ export function InventoryStatusBanner({ stats, onTab, onRefresh, refreshing, pla
             : 'Create a project on Setup before mapping user stories.'
         }
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
-          </Link>
+          <Btn to="/onboarding" size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
         }
       />
     )
@@ -55,11 +52,9 @@ export function InventoryStatusBanner({ stats, onTab, onRefresh, refreshing, pla
         }
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">
                 {stats.draftProposals > 0 ? (actions.proposal ?? 'Review proposal') : (actions.discovery ?? 'Open Discovery')}
               </Btn>
-            </Link>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('discovery')}>
               {actions.discovery ?? 'Open Discovery'}
@@ -82,9 +77,7 @@ export function InventoryStatusBanner({ stats, onTab, onRefresh, refreshing, pla
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.stories ?? 'View stories'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.stories ?? 'View stories'}</Btn>
           ) : null
         }
       />
@@ -103,9 +96,7 @@ export function InventoryStatusBanner({ stats, onTab, onRefresh, refreshing, pla
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.gates ?? 'Open Gates'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.gates ?? 'Open Gates'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('gates')}>
               {actions.gates ?? 'Open Gates'}

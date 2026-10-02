@@ -16,6 +16,14 @@ import {
 } from '../report-detail/ReportSurface'
 import { AgeChip } from '../ui'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { scopedHref } from '../../lib/humanPageHints'
+import { useActiveProjectId } from '../ProjectSwitcher'
+
+/** In-app links carry the active project, so they open on the right one. */
+function useProjectHref(): (to: string) => string {
+  const projectId = useActiveProjectId()
+  return (to) => (to.startsWith('/') ? scopedHref(to, projectId) : to)
+}
 
 export const GROUP_LABEL: Record<InboxCardGroup, string> = {
   plan: 'Plan',
@@ -51,11 +59,12 @@ export const TONE_RING: Record<PageAction['tone'], string> = {
 
 export function ClearChip({ card }: { card: InboxCard }) {
   const groupTone = GROUP_TONE[card.group]
+  const href = useProjectHref()
   return (
     <Link
       data-inbox-card={card.id}
       data-inbox-state="clear"
-      to={card.pageTo}
+      to={href(card.pageTo)}
       className="group inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-overlay px-2 py-1 text-2xs font-medium text-fg-muted hover:border-ok/30 hover:bg-ok-muted hover:text-fg motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
       title={`${card.pageLabel} — all clear. Click to open.`}
     >
@@ -82,6 +91,7 @@ export function OpenInboxCard({
   activityAt?: string
 }) {
   const action = card.action
+  const href = useProjectHref()
   if (!action) return null
   const groupTone = GROUP_TONE[card.group]
   return (
@@ -98,7 +108,6 @@ export function OpenInboxCard({
           {GROUP_LABEL[card.group]}
         </span>
         <MetaChip label="Page">{card.pageLabel}</MetaChip>
-        {isFirst && !activityAt ? <SignalChip tone="brand">Start here ↑</SignalChip> : null}
         {activityAt ? <AgeChip at={activityAt} title="Last activity in this stage" /> : null}
       </header>
       <ContainedBlock tone="info" label="Action">
@@ -111,7 +120,7 @@ export function OpenInboxCard({
       ) : null}
       <ActionPillRow className="mt-3">
         {action.primary && action.primary.kind === 'link' ? (
-          <ActionPill to={action.primary.to} tone="brand" className="px-3 py-1.5 text-xs">
+          <ActionPill to={href(action.primary.to)} tone="brand" className="px-3 py-1.5 text-xs">
             {action.primary.label} →
           </ActionPill>
         ) : null}
@@ -122,7 +131,7 @@ export function OpenInboxCard({
         ) : null}
         {action.secondary?.slice(0, 1).map((s, i) =>
           s.kind === 'link' ? (
-            <ActionPill key={i} to={s.to} tone="neutral">
+            <ActionPill key={i} to={href(s.to)} tone="neutral">
               {s.label}
             </ActionPill>
           ) : null,

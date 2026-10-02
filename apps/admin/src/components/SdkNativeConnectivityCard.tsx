@@ -21,7 +21,6 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { Card, Btn, Tooltip, CopyButton } from './ui'
 import { IconAlertTriangle, IconCheck, IconGit, IconKey, IconRefresh } from './icons'
 import { apiFetch } from '../lib/supabase'
@@ -376,11 +375,9 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
         {/* CTAs */}
         <div className="flex flex-wrap items-center gap-2 pt-1">
           {status === 'banner-disabled' ? (
-            <Link to="/projects">
-              <Btn size="sm" variant="primary">
+            <Btn to="/projects" size="sm" variant="primary">
                 {meta.cta}
               </Btn>
-            </Link>
           ) : (
             <Tooltip
               content={

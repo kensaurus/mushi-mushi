@@ -386,7 +386,7 @@ export function ExploreChatPanel({
             </p>
             <p className="text-2xs text-fg-muted">
               Requires an Anthropic or OpenAI key in{' '}
-              <Link to="/settings#byok" className="text-accent underline hover:no-underline">
+              <Link to="/settings?tab=byok" className="text-accent underline hover:no-underline">
                 Settings → API Keys
               </Link>
               . Usage (model · tokens · cost) appears under each answer.
@@ -424,7 +424,7 @@ export function ExploreChatPanel({
             Thread total: {threadTotals.input.toLocaleString()} → {threadTotals.output.toLocaleString()} tok
             {threadTotals.cost > 0 ? ` · ${formatLlmCost(threadTotals.cost)}` : ''}
             {' · '}
-            <Link to="/settings#byok" className="text-info hover:underline">
+            <Link to="/settings?tab=byok" className="text-info hover:underline">
               BYOK usage
             </Link>
           </p>
@@ -574,7 +574,7 @@ function MessageTelemetryStrip({ turn }: { turn: ChatTurn }) {
       {turn.model ? <CodeChip maxWidthClass="max-w-56">{turn.model}</CodeChip> : null}
       {meta.length > 0 ? <span>{meta.join(' · ')}</span> : null}
       <Link
-        to="/settings#byok"
+        to="/settings?tab=byok"
         className="text-info hover:underline font-sans normal-case tracking-normal"
         title="Manage API keys and BYOK usage"
       >

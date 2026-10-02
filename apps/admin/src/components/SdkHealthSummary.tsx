@@ -50,8 +50,7 @@ import { Link } from 'react-router-dom'
 import { Card, Btn, Badge, DetailRows } from './ui'
 import { ContainedBlock, SignalChip } from './report-detail/ReportSurface'
 import { IconHealth, IconNetwork, IconGlobe, IconKey } from './icons'
-import { apiFetch } from '../lib/supabase'
-import { useToast } from '../lib/toast'
+import { useSendTestReport } from '../lib/useSendTestReport'
 import type { SetupStep } from '../lib/useSetupStatus'
 import {
   formatEnvVarPair,
@@ -630,7 +629,7 @@ export function SdkHealthSummary({
   compact = false,
   onTestReportSent,
 }: SdkHealthSummaryProps) {
-  const toast = useToast()
+  const postTestReport = useSendTestReport()
   const [sending, setSending] = useState(false)
   // Diagnostic accordion auto-opens when the status is anything OTHER than
   // healthy — i.e. we expand it precisely when the user has come here to
@@ -663,18 +662,10 @@ export function SdkHealthSummary({
   async function sendTestReport() {
     setSending(true)
     try {
-      const res = await apiFetch<{ reportId: string; projectName: string }>(
-        `/v1/admin/projects/${projectId}/test-report`,
-        { method: 'POST' },
-      )
-      if (!res.ok) throw new Error(res.error?.message ?? 'Send failed')
-      toast.success(
-        'Test report sent',
-        'Ingest path verified — appears in /reports within seconds. SDK installed still needs a heartbeat from your app build.',
-      )
-      onTestReportSent?.()
-    } catch (err) {
-      toast.error('Test report failed', err instanceof Error ? err.message : String(err))
+      // Verifies the ingest path only; "SDK installed" still needs a
+      // heartbeat from the app build itself.
+      const res = await postTestReport(projectId)
+      if (res.ok) onTestReportSent?.()
     } finally {
       setSending(false)
     }

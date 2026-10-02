@@ -3,7 +3,6 @@
  * PURPOSE: LLM spend health — telemetry gaps, spikes, BYOK, failed calls.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { OperationChip } from '../OperationChip'
@@ -52,9 +51,7 @@ export function CostStatusBanner({ stats, onTab, plainBanner = false }: Props) {
             : 'Ingest a report or run classify/fix — each edge function writes to llm_invocations with token counts and cost_usd.'
         }
         action={
-          <Link to="/health">
-            <Btn size="sm" variant="ghost">{actions.health ?? 'Run Health test'}</Btn>
-          </Link>
+          <Btn to="/health" size="sm" variant="ghost">{actions.health ?? 'Run Health test'}</Btn>
         }
       />
     )
@@ -125,9 +122,7 @@ export function CostStatusBanner({ stats, onTab, plainBanner = false }: Props) {
         }
         subtitle={`${fmtUsd(stats.spend24hUsd)} in 24h on platform keys — add your own Anthropic key in Settings to control billing.`}
         action={
-          <Link to="/settings?tab=byok">
-            <Btn size="sm" variant="ghost">{actions.byok ?? 'Add BYOK'}</Btn>
-          </Link>
+          <Btn to="/settings?tab=byok" size="sm" variant="ghost">{actions.byok ?? 'Add BYOK'}</Btn>
         }
       />
     )
