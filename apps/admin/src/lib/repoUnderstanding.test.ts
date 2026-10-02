@@ -85,6 +85,19 @@ describe('diagramToFlow', () => {
     expect(edges).toEqual([{ id: 'ui->api', source: 'ui', target: 'api', label: 'calls', animated: false }])
   })
 
+  it('carries open bug and finding counts onto each part', () => {
+    const overlay = {
+      diagram_id: 'd1',
+      nodes: { ui: { report_count: 2, finding_count: 1, reports: [], findings: [] } },
+      unplaced: { reports: 0, findings: 0 },
+      frames_matched: true,
+      considered: { reports: 2, findings: 1, findings_days: 30 },
+    }
+    const { nodes } = diagramToFlow(graph, null, overlay)
+    expect(nodes.find((n) => n.id === 'ui')?.data).toMatchObject({ reportCount: 2, findingCount: 1 })
+    expect(nodes.find((n) => n.id === 'api')?.data).toMatchObject({ reportCount: 0, findingCount: 0 })
+  })
+
   it('highlights the selected component and its edges', () => {
     const { nodes, edges } = diagramToFlow(graph, 'ui')
     expect(nodes.find((n) => n.id === 'ui')?.data.selected).toBe(true)

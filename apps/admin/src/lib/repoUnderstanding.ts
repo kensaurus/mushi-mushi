@@ -142,6 +142,23 @@ export interface DiagramPublishPreview {
   publish_blocked_reason: string | null
 }
 
+export interface DiagramNodeOverlay {
+  report_count: number
+  finding_count: number
+  reports: Array<{ id: string; summary: string | null; severity: string | null; status: string | null }>
+  findings: Array<{ id: string; rule_id: string; severity: string | null; message: string; file_path: string; line: number | null }>
+}
+
+/** GET …/codebase/diagram/overlay — open reports and code findings per part. */
+export interface DiagramOverlayResponse {
+  diagram_id: string
+  nodes: Record<string, DiagramNodeOverlay>
+  unplaced: { reports: number; findings: number }
+  /** False when GitHub could not be read, so stack frames were not placed. */
+  frames_matched: boolean
+  considered: { reports: number; findings: number; findings_days: number }
+}
+
 /** Must match DIAGRAM_NODE_W / _H in _shared/repo-diagram.ts. */
 const DIAGRAM_NODE_W = 220
 const DIAGRAM_NODE_H = 64
@@ -153,12 +170,17 @@ export interface DiagramFlowData extends Record<string, unknown> {
   path?: string | null
   pathInvalid?: boolean
   selected?: boolean
+  /** Open bug reports on this part. */
+  reportCount?: number
+  /** Code findings on this part. */
+  findingCount?: number
 }
 
 /** React Flow nodes and edges from the server's laid-out graph. Groups render behind their components. */
 export function diagramToFlow(
   graph: DiagramGraph,
   selectedId: string | null,
+  overlay: DiagramOverlayResponse | null = null,
 ): { nodes: Node<DiagramFlowData>[]; edges: Edge[] } {
   const groupNodes: Node<DiagramFlowData>[] = graph.groups.map((g) => ({
     id: `group:${g.id}`,
@@ -181,6 +203,8 @@ export function diagramToFlow(
       path: n.path,
       pathInvalid: n.path_invalid === true,
       selected: n.id === selectedId,
+      reportCount: overlay?.nodes[n.id]?.report_count ?? 0,
+      findingCount: overlay?.nodes[n.id]?.finding_count ?? 0,
     },
     style: { width: DIAGRAM_NODE_W, height: DIAGRAM_NODE_H },
     draggable: false,

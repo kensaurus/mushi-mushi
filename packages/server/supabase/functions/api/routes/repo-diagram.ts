@@ -8,6 +8,7 @@
  *   GET    /v1/admin/projects/:id/codebase/diagram/publish-preview  exactly what would be public
  *   POST   /v1/admin/projects/:id/codebase/diagram/publish          publish (owner/admin, console only)
  *   DELETE /v1/admin/projects/:id/codebase/diagram/publish          unpublish
+ *   GET    /v1/admin/projects/:id/codebase/diagram/overlay          open reports + findings per node
  *   GET    /v1/public/diagrams/:owner/:repo                         the public page's data
  *
  * Cost rule: a diagram is one LLM call per (project, SHA), made only when a
@@ -61,6 +62,14 @@ import {
 } from '../../_shared/repo-diagram.ts'
 import { callerCanAccessProject, dbError } from '../shared.ts'
 import { resolveConnectedRepo } from './repo-digest.ts'
+import {
+  buildDiagramOverlay,
+  DONE_REPORT_STATUSES,
+  type OverlayFinding,
+  type OverlayReport,
+} from '../../_shared/diagram-overlay.ts'
+import { reportFramePaths } from '../../_shared/report-seeds.ts'
+import { matchFramePathsToTree } from '../../_shared/sentry-frames.ts'
 import { claimIpRateLimit, extractClientIp } from './cli-auth.ts'
 
 const routeLog = log.child('repo-diagram')
@@ -110,6 +119,11 @@ interface DiagramRow {
 }
 
 const DIAGRAM_COLUMNS = 'id, project_id, commit_sha, repo_owner, repo_name, graph, stats, model, created_at, updated_at'
+
+/** Open reports and recent findings the overlay considers. */
+const OVERLAY_MAX_REPORTS = 300
+const OVERLAY_MAX_FINDINGS = 1000
+const OVERLAY_FINDINGS_DAYS = 30
 
 export function publicDiagramUrl(owner: string, repo: string): string {
   return `${PUBLIC_PAGE_BASE}/${owner}/${repo}`
@@ -195,6 +209,103 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     const row = data as DiagramRow | null
     const pub = await loadPublication(db, projectId)
     return c.json({ ok: true, data: { diagram: row, publication: await publicationView(pub, row) } })
+  })
+
+  // Open bug reports and code findings on the parts of the latest diagram.
+  // A report's files: its stack frames (matched to the tree at the diagram's
+  // commit) and the files its fix attempts changed. A finding's file is
+  // already a repo path. Read-only; no LLM, one GitHub tree read.
+  app.get('/v1/admin/projects/:id/codebase/diagram/overlay', readAuth, async (c) => {
+    const projectId = c.req.param('id')!
+    const db = getServiceClient()
+    const access = await callerCanAccessProject(c, db, c.get('userId') as string, projectId)
+    if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
+
+    const { data } = await db
+      .from('project_codebase_diagrams')
+      .select(DIAGRAM_COLUMNS)
+      .eq('project_id', projectId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const row = data as DiagramRow | null
+    if (!row) return c.json({ ok: false, error: { code: 'NO_DIAGRAM', message: 'Generate a diagram first.' } }, 404)
+
+    const { data: reportRows, error: reportErr } = await db
+      .from('reports')
+      .select('id, summary, severity, status, custom_metadata, console_logs')
+      .eq('project_id', projectId)
+      .not('status', 'in', `(${DONE_REPORT_STATUSES.join(',')})`)
+      .order('created_at', { ascending: false })
+      .limit(OVERLAY_MAX_REPORTS)
+    if (reportErr) return dbError(c, reportErr)
+    const reportIds = (reportRows ?? []).map((r) => r.id as string)
+
+    const fixFilesByReport = new Map<string, string[]>()
+    if (reportIds.length > 0) {
+      const { data: fixes, error: fixErr } = await db
+        .from('fix_attempts')
+        .select('report_id, files_changed')
+        .eq('project_id', projectId)
+        .in('report_id', reportIds)
+      if (fixErr) return dbError(c, fixErr)
+      for (const f of fixes ?? []) {
+        const list = fixFilesByReport.get(f.report_id as string) ?? []
+        list.push(...(((f.files_changed ?? []) as string[]).filter(Boolean)))
+        fixFilesByReport.set(f.report_id as string, list)
+      }
+    }
+
+    // Frames need the real tree to become repo paths. Without GitHub (token
+    // revoked, rate limited) the overlay still places fix files and findings.
+    let treePaths: string[] = []
+    let framesMatched = true
+    const resolved = await resolveConnectedRepo(db, projectId)
+    if (resolved.ok) {
+      try {
+        const tree = await fetchTreeAtSha({ token: resolved.repo.token, owner: row.repo_owner, repo: row.repo_name, sha: row.commit_sha })
+        treePaths = tree.entries.map((e) => e.path)
+      } catch (err) {
+        framesMatched = false
+        routeLog.warn('overlay tree read failed', { projectId, error: String(err) })
+      }
+    } else {
+      framesMatched = false
+    }
+
+    const reports: OverlayReport[] = (reportRows ?? []).map((r) => {
+      const frames = treePaths.length > 0 ? matchFramePathsToTree(reportFramePaths(r), treePaths) : []
+      return {
+        id: r.id as string,
+        summary: (r.summary as string | null) ?? null,
+        severity: (r.severity as string | null) ?? null,
+        status: (r.status as string | null) ?? null,
+        paths: [...frames, ...(fixFilesByReport.get(r.id as string) ?? [])],
+      }
+    })
+
+    const since = new Date(Date.now() - OVERLAY_FINDINGS_DAYS * 24 * 60 * 60 * 1000).toISOString()
+    const { data: findingRows, error: findingErr } = await db
+      .from('gate_findings')
+      .select('id, rule_id, severity, message, file_path, line')
+      .eq('project_id', projectId)
+      .eq('allowlisted', false)
+      .not('file_path', 'is', null)
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(OVERLAY_MAX_FINDINGS)
+    if (findingErr) return dbError(c, findingErr)
+
+    const overlay = buildDiagramOverlay(row.graph.nodes, reports, (findingRows ?? []) as OverlayFinding[])
+    return c.json({
+      ok: true,
+      data: {
+        diagram_id: row.id,
+        ...overlay,
+        frames_matched: framesMatched,
+        considered: { reports: reports.length, findings: (findingRows ?? []).length, findings_days: OVERLAY_FINDINGS_DAYS },
+      },
+    })
   })
 
   app.post('/v1/admin/projects/:id/codebase/diagram', writeAuth, async (c) => {
