@@ -1,3 +1,9 @@
+import type {
+  MushiReporterNotificationPrefs,
+  MushiReporterPrefsUpdate,
+  MushiReporterUpdates,
+} from './reporter-channels';
+
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
@@ -45,6 +51,12 @@ export interface MushiConfig {
 
   sentry?: MushiSentryConfig;
   widget?: MushiWidgetConfig;
+  /**
+   * Opt-in reporter channels beyond the in-app badge (Plan 018 §4.1).
+   * `webPush.serviceWorkerPath` — a service worker on YOUR origin that shows
+   * push messages; required for `subscribeReporterPush()`. Off by default.
+   */
+  notifications?: { webPush?: false | { serviceWorkerPath: string } };
   capture?: MushiCaptureConfig;
   privacy?: MushiPrivacyConfig;
   proactive?: MushiProactiveConfig;
@@ -1599,6 +1611,38 @@ export interface MushiSDKInstance {
    */
   openMyReports(): void;
 
+  /** Unread count and the newest unread updates on this device's reports (null on failure). */
+  getReporterUpdates(): Promise<MushiReporterUpdates | null>;
+
+  /** Mark one report's updates read; resolves the new unread total (null on failure). */
+  markReportRead(reportId: string): Promise<number | null>;
+
+  /**
+   * Fires with the unread count and newest updates whenever the SDK checks
+   * for updates (on load, every minute while visible, on tab focus), so a
+   * host can draw its own badge. Returns an unsubscribe function.
+   */
+  onReporterUpdate(cb: (updates: MushiReporterUpdates) => void): () => void;
+
+  /** This reporter's email / push choices; the address comes back masked. */
+  getNotificationPrefs(): Promise<MushiReporterNotificationPrefs | null>;
+
+  /**
+   * Ask for email updates (`{ email }` sends a confirmation email first —
+   * nothing else is mailed until it is clicked) or change channels. Show this
+   * only when the reporter asked: never pre-tick an opt-in. Resolves the
+   * server's answer, including `EMAIL_NOT_AVAILABLE` when this app does not
+   * offer email.
+   */
+  setNotificationPrefs(update: MushiReporterPrefsUpdate): Promise<MushiApiResponse<MushiReporterNotificationPrefs>>;
+
+  /**
+   * Turn on browser push for this reporter. Call it from a click ("Notify
+   * me"): it asks the browser for permission. Needs
+   * `notifications.webPush.serviceWorkerPath` and the project's push switch.
+   */
+  subscribeReporterPush(): Promise<{ ok: true } | { ok: false; reason: string }>;
+
   /**
    * Returns the global contributor hall-of-fame ranked by total points.
    * Safe to call without an authenticated user; uses public endpoint.
@@ -1671,6 +1715,11 @@ export interface MushiApiClient {
   /** POST /v1/sdk/events — batched product-analytics events (Mushi.track()). */
   postProductEvents(payload: MushiProductEventPayload): Promise<MushiApiResponse<{ accepted: number; dropped: number }>>;
   listReporterReports(reporterToken: string): Promise<MushiApiResponse<{ reports: MushiReporterReport[] }>>;
+  /**
+   * A signed reporter call (digest headers, timeout, one retry; never rejects).
+   * The typed reporter-loop v2 calls are in `@mushi-mushi/core/reporter-channels`.
+   */
+  reporterRequest<T>(method: string, path: string, reporterToken: string, body?: unknown): Promise<MushiApiResponse<T>>;
   listReporterComments(
     reportId: string,
     reporterToken: string,
@@ -1885,6 +1934,11 @@ export interface MushiRuntimeSdkConfig {
   };
   /** When false, the widget skips background reporter-inbox polling. Default true. */
   reporterNotificationsEnabled?: boolean;
+  /**
+   * Opt-in reporter channels this project offers (Plan 018 §4.1). Each is
+   * true only when the project turned it on AND the server can send it.
+   */
+  reporter?: { emailEnabled: boolean; pushEnabled: boolean; vapidPublicKey: string | null };
 }
 
 export interface MushiSdkVersionInfo {
