@@ -45,6 +45,17 @@ export interface RadarFinding {
 /** The radar writes at most one run per project in this window. */
 export const RADAR_RUN_INTERVAL_MS = 20 * 60 * 60 * 1000
 export const WEBHOOK_GRACE_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * Linear and GitHub-indexer audit rows carry a project id only from this
+ * release on (fix/failopen-2026-10). Earlier accepted deliveries cannot be
+ * attributed, so "configured since" for those sources starts no earlier than
+ * this — otherwise every older setup reads as never delivered on day one.
+ */
+export const PROJECT_STAMPING_SINCE: Partial<Record<InboundWebhookState['source'], string>> = {
+  linear: '2026-10-03T00:00:00Z',
+  github: '2026-10-03T00:00:00Z',
+}
 export const INDEX_STALE_MS = 14 * 24 * 60 * 60 * 1000
 
 export function radarRunDue(lastStartedAt: string | null | undefined, nowMs: number): boolean {
@@ -136,7 +147,9 @@ export function detectWebhookNeverDelivered(states: InboundWebhookState[], nowMs
   for (const s of states) {
     // No health history yet: we cannot say how long it has been configured.
     if (!s.configuredSince) continue
-    if (nowMs - new Date(s.configuredSince).getTime() < WEBHOOK_GRACE_MS) continue
+    const floor = PROJECT_STAMPING_SINCE[s.source]
+    const since = floor && floor > s.configuredSince ? floor : s.configuredSince
+    if (nowMs - new Date(since).getTime() < WEBHOOK_GRACE_MS) continue
     if (s.accepted > 0) continue
     const label = INBOUND_LABEL[s.source]
     out.push(
@@ -266,4 +279,27 @@ export async function recordRadarRun(
     if (findErr) throw new RadarWriteError('gate_findings', findErr.message)
   }
   return { runId: run.id as string, findings: findings.length }
+}
+
+/**
+ * A project whose checks could not run gets an `error` run. That keeps the
+ * once-a-day interval (no retry every 15 minutes, no Sentry event per tick)
+ * and shows the failure where the findings would have been.
+ */
+export async function recordRadarFailure(
+  db: SupabaseClient,
+  projectId: string,
+  message: string,
+  opts: { triggeredBy: string },
+): Promise<void> {
+  const { error } = await db.from('gate_runs').insert({
+    project_id: projectId,
+    gate: 'radar',
+    status: 'error',
+    triggered_by: opts.triggeredBy,
+    findings_count: 0,
+    summary: { error: message.slice(0, 500) },
+    completed_at: new Date().toISOString(),
+  })
+  if (error) throw new RadarWriteError('gate_runs error run', error.message)
 }

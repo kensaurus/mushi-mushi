@@ -90,15 +90,30 @@ export function registerFullstackAuditRoutes(parent: Hono<{ Variables: Variables
     const projectName = (project.name as string | null) ?? null
 
     const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
-    const { data: recentRuns } = await db
-      .from('gate_runs')
-      .select('id, status')
-      .eq('project_id', projectId)
-      .gte('completed_at', since)
-      .neq('gate', 'code_health')
+    const [{ data: gateRuns }, { data: latestRadar }] = await Promise.all([
+      db
+        .from('gate_runs')
+        .select('id, status')
+        .eq('project_id', projectId)
+        .gte('completed_at', since)
+        .neq('gate', 'code_health')
+        .neq('gate', 'radar'),
+      // The radar runs daily and each run restates the current state, so only
+      // the newest one counts — otherwise one problem is counted 14 times.
+      db
+        .from('gate_runs')
+        .select('id, status')
+        .eq('project_id', projectId)
+        .eq('gate', 'radar')
+        .gte('completed_at', since)
+        .order('completed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
+    const recentRuns = [...(gateRuns ?? []), ...(latestRadar ? [latestRadar] : [])]
 
-    const runIds = (recentRuns ?? []).map((r) => r.id as string)
-    const failedGateCount = (recentRuns ?? []).filter((r) => r.status === 'fail').length
+    const runIds = recentRuns.map((r) => r.id as string)
+    const failedGateCount = recentRuns.filter((r) => r.status === 'fail').length
 
     let errorCount = 0
     let warnCount = 0

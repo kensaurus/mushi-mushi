@@ -109,10 +109,19 @@ export async function checkAutofixBudget(
     capExceeded: spendReached || dailyReached,
   }
 
-  // A human asked for this fix: the caps and the approval gate are for
+  // The approval threshold is the owner's own guard on expensive
+  // high-severity fixes and applies to every dispatch, manual or not.
+  const est = opts.estimatedCostUsd ?? 0
+  const sev = (opts.severity ?? '').toLowerCase()
+  const requiresApproval =
+    approvalThreshold != null &&
+    est >= approvalThreshold &&
+    (sev === 'high' || sev === 'critical')
+
+  // A human asked for this fix: the spend and daily caps bound only the
   // dispatches Mushi starts on its own.
   if (opts.trigger === 'manual') {
-    return { ...base, allowed: true, requiresApproval: false }
+    return { ...base, allowed: true, requiresApproval }
   }
 
   if (spendReached) {
@@ -129,13 +138,6 @@ export async function checkAutofixBudget(
       reason: `Daily auto-fix dispatch quota reached (${dispatchesToday}/${maxDaily}).`,
     }
   }
-
-  const est = opts.estimatedCostUsd ?? 0
-  const sev = (opts.severity ?? '').toLowerCase()
-  const requiresApproval =
-    approvalThreshold != null &&
-    est >= approvalThreshold &&
-    (sev === 'high' || sev === 'critical')
 
   return { ...base, allowed: true, requiresApproval }
 }

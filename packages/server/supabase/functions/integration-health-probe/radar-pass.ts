@@ -14,6 +14,7 @@ import {
   detectSpendCapUnset,
   detectWebhookNeverDelivered,
   radarRunDue,
+  recordRadarFailure,
   recordRadarRun,
   type GithubRepoFacts,
   type InboundWebhookState,
@@ -188,7 +189,12 @@ export async function runRadarPass(db: SupabaseClient, deps: RadarPassDeps): Pro
       result.ran++
       result.findings += findings.length
     } catch (err) {
-      result.failed.push({ projectId: s.project_id, error: err instanceof Error ? err.message : String(err) })
+      const message = err instanceof Error ? err.message : String(err)
+      // Record the failed run so the next tick does not retry it at once.
+      const recorded = await recordRadarFailure(db, s.project_id, message, { triggeredBy: 'integration-health-probe' })
+        .then(() => '')
+        .catch((e: unknown) => `; error run not recorded: ${e instanceof Error ? e.message : String(e)}`)
+      result.failed.push({ projectId: s.project_id, error: message + recorded })
     }
   }
   return result

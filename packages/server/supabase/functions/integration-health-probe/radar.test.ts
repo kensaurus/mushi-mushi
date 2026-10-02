@@ -95,8 +95,8 @@ Deno.test('webhook_never_delivered: configured 7+ days, nothing accepted', () =>
   const f = detectWebhookNeverDelivered(
     [
       { source: 'sentry', configuredSince: old, accepted: 0, rejectedSignature: 0 },
-      { source: 'linear', configuredSince: old, accepted: 0, rejectedSignature: 4 },
-      { source: 'slack', configuredSince: recent, accepted: 0, rejectedSignature: 0 },
+      { source: 'slack', configuredSince: old, accepted: 0, rejectedSignature: 4 },
+      { source: 'sentry', configuredSince: recent, accepted: 0, rejectedSignature: 0 },
       { source: 'github', configuredSince: old, accepted: 9, rejectedSignature: 1 },
       { source: 'github', configuredSince: null, accepted: 0, rejectedSignature: 0 },
     ],
@@ -107,6 +107,20 @@ Deno.test('webhook_never_delivered: configured 7+ days, nothing accepted', () =>
   assert(f[0].message.startsWith('Sentry'))
   assertEquals(f[1].severity, 'error')
   assert(f[1].message.includes('signature'))
+})
+
+Deno.test('webhook_never_delivered: Linear/GitHub count only from when deliveries carry a project id', () => {
+  const longAgo = '2026-06-01T00:00:00Z'
+  const states = [{ source: 'linear' as const, configuredSince: longAgo, accepted: 0, rejectedSignature: 0 }]
+  // Two days after stamping starts: still inside the grace period.
+  assertEquals(detectWebhookNeverDelivered(states, new Date('2026-10-05T00:00:00Z').getTime()), [])
+  // Eight days after: a real finding.
+  assertEquals(detectWebhookNeverDelivered(states, new Date('2026-10-11T00:00:00Z').getTime()).length, 1)
+  // Sentry has stamped project ids all along: its own history counts.
+  assertEquals(
+    detectWebhookNeverDelivered([{ source: 'sentry', configuredSince: longAgo, accepted: 0, rejectedSignature: 0 }], new Date('2026-10-05T00:00:00Z').getTime()).length,
+    1,
+  )
 })
 
 Deno.test('index_branch_mismatch and index_stale', () => {
@@ -197,6 +211,11 @@ Deno.test('runRadarPass: a failed read is reported per project, never as "no fin
   assertEquals(res.failed.length, 1)
   assertEquals(res.failed[0].projectId, 'broken')
   assert(res.failed[0].error.includes('indexed_branch'))
+  // The failure is written as an `error` run, so the next tick skips it.
+  const errorRun = ops.find((o) => o.table === 'gate_runs' && o.kind === 'insert' && (o.payload as { status?: string }).status === 'error')
+  assert(errorRun, 'an error run is recorded for the failed project')
+  assertEquals((errorRun!.payload as { project_id: string }).project_id, 'broken')
+  assert(String((errorRun!.payload as { summary: { error: string } }).summary.error).includes('indexed_branch'))
   // spend_cap_unset + webhook_never_delivered (sentry configured 30 days, 0 accepted)
   assertEquals(res.findings, 2)
   const written = ops.filter((o) => o.table === 'gate_findings').flatMap((o) => o.payload as Array<{ rule_id: string }>)

@@ -17,6 +17,7 @@ import { logLlmInvocation } from '../_shared/telemetry.ts';
 import { withSentry, tagLangfuseTrace, reportError } from '../_shared/sentry.ts';
 import { GENERIC_ERROR_MESSAGE } from '../_shared/safe-error.ts';
 import { resolveLlmKey } from '../_shared/byok.ts';
+import { LlmBudgetExceededError } from '../_shared/llm-budget.ts';
 import { awardPointsForEndUser } from '../_shared/reputation.ts';
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
 import { createExternalIssue } from '../_shared/integrations.ts';
@@ -549,8 +550,20 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
       // if the cache-hit ratio falls below the expected ~90%.
       let cacheCreationInputTokens: number | null = null;
       let cacheReadInputTokens: number | null = null;
-      // C9: per-project BYOK; falls back to env automatically.
-      const anthropicResolved = await resolveLlmKey(db, projectId, 'anthropic');
+      // C9: per-project BYOK; falls back to env automatically. Over the
+      // project's monthly LLM budget, Stage 2 stops here: the report says why,
+      // and an expected owner state sends no Sentry event and burns no retry.
+      let anthropicResolved: Awaited<ReturnType<typeof resolveLlmKey>>;
+      try {
+        anthropicResolved = await resolveLlmKey(db, projectId, 'anthropic');
+      } catch (budgetErr) {
+        if (!(budgetErr instanceof LlmBudgetExceededError)) throw budgetErr;
+        await stampLlmBudgetStop(db, reportId, budgetErr);
+        return new Response(
+          JSON.stringify({ ok: false, error: { code: budgetErr.code, message: budgetErr.message } }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
       let keySource: 'byok' | 'env' = anthropicResolved?.source ?? 'env';
       try {
         // Wave S5: stream the Stage 2 object so the admin UI can progressively
@@ -1391,6 +1404,10 @@ CRITICAL SECURITY RULES (immutable):
             .catch(async (err) => {
               _otlpSpanCtx?.setStatus('error', String(err));
               await _otlpSpanCtx?.end();
+              if (err instanceof LlmBudgetExceededError) {
+                await stampLlmBudgetStop(db, reportId, err);
+                return;
+              }
               log.error('Stage 2 background crashed', { reportId, err: String(err) });
               reportError(err, {
                 tags: { function: 'classify-report', phase: 'background' },
@@ -1423,6 +1440,14 @@ CRITICAL SECURITY RULES (immutable):
     } catch (err) {
       _otlpSpanCtx?.setStatus('error', String(err));
       await _otlpSpanCtx?.end();
+      if (err instanceof LlmBudgetExceededError) {
+        const body = (await new Response(req.body).json().catch(() => ({}))) as Record<string, unknown>;
+        if (typeof body.reportId === 'string') await stampLlmBudgetStop(getServiceClient(), body.reportId, err);
+        return new Response(
+          JSON.stringify({ ok: false, error: { code: err.code, message: err.message } }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
       rootLog.child('classify-report').error('Unhandled error', { err: String(err) });
 
       try {
@@ -1456,6 +1481,32 @@ CRITICAL SECURITY RULES (immutable):
     }
   }),
 );
+
+/**
+ * Over the monthly LLM budget (_shared/llm-budget.ts): record why on the
+ * report and stop. A warn, not an error: it is a state the owner set, so it
+ * must not page Sentry once per report, and it must not count as a failed
+ * attempt the recovery cron retries.
+ */
+async function stampLlmBudgetStop(
+  db: ReturnType<typeof getServiceClient>,
+  reportId: string,
+  err: LlmBudgetExceededError,
+): Promise<void> {
+  rootLog.child('classify-report').warn('Stage 2 skipped: monthly LLM budget reached', {
+    reportId,
+    projectId: err.projectId,
+    spendUsd: err.spendUsd,
+    budgetUsd: err.budgetUsd,
+  });
+  const { error } = await db
+    .from('reports')
+    .update({ processing_error: err.message.slice(0, 500), stage2_partial: null })
+    .eq('id', reportId);
+  if (error) {
+    rootLog.child('classify-report').error('budget stop stamp failed', { reportId, err: error.message });
+  }
+}
 
 // ── Skill recommendation ──────────────────────────────────────────────────────
 /**
