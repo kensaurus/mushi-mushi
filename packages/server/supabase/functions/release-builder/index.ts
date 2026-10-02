@@ -55,12 +55,15 @@ Deno.serve(
       ? new Date(window_start)
       : new Date(windowEnd.getTime() - 30 * 24 * 60 * 60 * 1000) // default: last 30 days
 
-    // Find resolved reports in the window
+    // Find resolved reports in the window. A report an earlier published
+    // release already shipped (fixed_release_id set) is not listed again, so
+    // its reporter is not told "shipped" twice.
     const { data: resolvedReports } = await db
       .from('reports')
       .select('id, summary, description, severity, category, reporter_token_hash, end_user_id')
       .eq('project_id', project_id)
       .eq('status', 'fixed')
+      .is('fixed_release_id', null)
       .gte('updated_at', windowStart.toISOString())
       .lte('updated_at', windowEnd.toISOString())
       .limit(50)

@@ -46,6 +46,7 @@ import { NotificationsStatusBanner } from '../components/notifications/Notificat
 import { NotificationsSnapshotStrip } from '../components/notifications/NotificationsSnapshotStrip'
 import { NotificationsReadout } from '../components/notifications/NotificationsReadout'
 import { ReporterOutboxPanel } from '../components/notifications/ReporterOutboxPanel'
+import { ReporterChannelsCard } from '../components/notifications/ReporterChannelsCard'
 import {
   EMPTY_NOTIFICATIONS_STATS,
   TYPE_BADGE,
@@ -71,7 +72,7 @@ const TABS: Array<{ id: NotificationTabId; label: string; description: string }>
   {
     id: 'outbox',
     label: 'Outbox',
-    description: 'Pipeline updates to reporters waiting for review, and whether they wait at all.',
+    description: 'How reporters hear back: email and push switches, message wording, and updates waiting for review.',
   },
   {
     id: 'setup',
@@ -571,7 +572,10 @@ export function NotificationsPage() {
 
       {activeTab === 'outbox' && activeProjectId && (
         <Section title="Outbox">
-          <ReporterOutboxPanel projectId={activeProjectId} />
+          <div className="space-y-3">
+            <ReporterChannelsCard projectId={activeProjectId} />
+            <ReporterOutboxPanel projectId={activeProjectId} />
+          </div>
         </Section>
       )}
 

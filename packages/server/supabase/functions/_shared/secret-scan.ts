@@ -1,10 +1,9 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/secret-scan.ts
- * PURPOSE: One secret-pattern scan for untrusted repo text that Mushi stores
- *          or feeds to an LLM (mushi.recipe.json, DTCG token files). The set
- *          is the union of the sdk-assistant and skill-sync guards; those two
- *          callers still carry their own copies (Plan 019 lists the
- *          extraction as a follow-up so their behaviour does not change here).
+ * PURPOSE: One secret-pattern scan for text Mushi stores, shows to end users
+ *          or feeds to an LLM: untrusted repo text (mushi.recipe.json, DTCG
+ *          token files) and operator-authored text (the SDK assistant's
+ *          knowledge corpus, reporter message templates). Pure, no I/O.
  */
 
 const SECRET_PATTERNS: ReadonlyArray<{ re: RegExp; label: string }> = [

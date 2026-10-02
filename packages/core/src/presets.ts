@@ -45,6 +45,7 @@ const KNOWN_CONFIG_KEYS: readonly string[] = [
   'trackSessions',
   'sentry',
   'widget',
+  'notifications',
   'capture',
   'privacy',
   'proactive',

@@ -105,6 +105,14 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     this.filters.push((r) => String(readPath(r, key)) > String(value))
     return this
   }
+  /** `lt(col, v)`: a NULL / absent column never matches, as in Postgres. */
+  lt(key: string, value: unknown): this {
+    this.filters.push((r) => {
+      const v = readPath(r, key)
+      return v !== null && v !== undefined && String(v) < String(value)
+    })
+    return this
+  }
   gte(key: string, value: unknown): this {
     this.filters.push((r) => String(readPath(r, key)) >= String(value))
     return this

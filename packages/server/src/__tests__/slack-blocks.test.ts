@@ -161,3 +161,21 @@ describe('buildReportFallbackText', () => {
     expect(text).not.toContain('ReferenceError')
   })
 })
+
+describe('buildReportBlocks — Reply to reporter (Plan 018 §3)', () => {
+  const actionIds = (blocks: unknown[]) =>
+    ((blocks.find((b) => (b as { type: string }).type === 'actions') as { elements: Array<{ action_id: string }> }).elements).map(
+      (e) => e.action_id,
+    )
+
+  it('offers the button for a report filed through the SDK widget', () => {
+    const blocks = slack.buildReportBlocks({ ...SAMPLE, reporterToken: `rk1_${'a'.repeat(64)}` })
+    expect(actionIds(blocks)).toContain(`reply_reporter:${SAMPLE.reportId}`)
+  })
+
+  it('hides it when nobody could read a reply (Sentry, cron, voice sentinels)', () => {
+    for (const reporterToken of ['sentry-webhook', 'cron:library-modernizer', 'voice-intake', 'reporter-hash-token']) {
+      expect(actionIds(slack.buildReportBlocks({ ...SAMPLE, reporterToken }))).not.toContain(`reply_reporter:${SAMPLE.reportId}`)
+    }
+  })
+})

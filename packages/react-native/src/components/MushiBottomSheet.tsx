@@ -4,7 +4,9 @@
  *
  * OVERVIEW:
  * - Slide-up modal built entirely on RN built-ins (Modal, Animated, PanResponder)
- * - Conversational flow: category → description → submit → confirmation
+ * - One screen, free text first: optional type chips, Send once there are a
+ *   few words (8 by default) or a screenshot, then a receipt in place with
+ *   Track it / Done and an optional, never pre-ticked email opt-in
  * - Drag-to-dismiss via PanResponder on the handle area
  * - Host-adaptive theme (`widget.theme`, see ../theme.ts) over light/dark
  * - "Your reports": statuses come from the shared core table
@@ -21,13 +23,17 @@
  * TECHNICAL DETAILS:
  * - PanResponder threshold: 80 px downward drag dismisses
  * - Animated.spring for slide-up, Animated.timing for backdrop
- * - Success confirmation auto-closes after 1.4 s
- * - Thread loads show a skeleton, then Retry on failure; a failed reply keeps
- *   its text and offers Retry. Opening a thread marks it read.
+ * - Reduce Motion (AccessibilityInfo) makes open / close instant
+ * - The thread is the report's v2 timeline (GET /v1/reporter/reports/:id):
+ *   pipeline events render from the shared core templates in the reporter's
+ *   locale, replies as bubbles. Loads show a skeleton, then Retry on failure;
+ *   a failed reply keeps its text and offers Retry. Opening a thread marks it
+ *   read. An older server without the route falls back to the comment list.
  *
  * NOTES:
  * - KeyboardAvoidingView wraps the sheet so the text input stays visible
- * - Categories match the web SDK: bug, slow, visual, confusing, other
+ * - Chips come from core's REPORTER_CATEGORIES (bug, slow, visual, confusing,
+ *   idea); "Idea" files a feature request
  * - accessibilityViewIsModal is iOS-only; RN's Modal is its own window on
  *   Android, which keeps TalkBack focus inside the sheet there.
  */
@@ -53,6 +59,7 @@ import {
   Platform,
   KeyboardAvoidingView,
   ScrollView,
+  AccessibilityInfo,
   useColorScheme,
   type ViewStyle,
   type TextStyle,
@@ -67,7 +74,20 @@ import {
   type MushiReporterComment,
   type MushiReporterReport,
 } from '@mushi-mushi/core'
-import { reporterCopy, reporterStatus, resolveReporterLocale } from '@mushi-mushi/core/reporter-ui'
+import {
+  REPORTER_CATEGORIES,
+  isPlausibleReporterEmail,
+  isReporterConversation,
+  reporterCanSend,
+  reporterCategoryLabel,
+  reporterChipToReport,
+  reporterCopy,
+  reporterStatus,
+  reporterTimelineEntryText,
+  resolveReporterLocale,
+  type ReporterCategory,
+} from '@mushi-mushi/core/reporter-ui'
+import type { MushiReporterTimelineItem } from '@mushi-mushi/core/reporter-channels'
 import { getLocale } from '@mushi-mushi/web/i18n'
 import { useMushiContext } from '../provider'
 import { resolveRNTheme, type MushiRNTheme } from '../theme'
@@ -76,15 +96,26 @@ import { loadReporterThread, settleWithin, THREAD_LOAD_TIMEOUT_MS } from '../rep
 const { height: SCREEN_HEIGHT } = Dimensions.get('window')
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.55
 const DISMISS_THRESHOLD = 80
-const MIN_DESCRIPTION = 20
 
-const CATEGORY_KEYS = ['bug', 'slow', 'visual', 'confusing', 'other'] as const
-const CATEGORY_EMOJI: Record<(typeof CATEGORY_KEYS)[number], string> = {
+const CATEGORY_EMOJI: Record<ReporterCategory, string> = {
   bug: '🐛',
   slow: '🐢',
   visual: '🎨',
   confusing: '😕',
-  other: '💬',
+  idea: '💡',
+}
+
+type EmailOptInState = 'hidden' | 'offer' | 'sending' | 'sent' | 'invalid' | 'failed'
+
+/** Comments from the legacy route, as timeline items (older servers). */
+function commentsToTimeline(comments: MushiReporterComment[]): MushiReporterTimelineItem[] {
+  return comments.map((c) => ({
+    kind: c.author_kind === 'reporter' ? 'reporter_comment' : 'comment',
+    at: c.created_at,
+    text: c.body,
+    body: c.body,
+    comment_id: c.id,
+  }))
 }
 
 type ThreadStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -113,6 +144,10 @@ export interface MushiBottomSheetProps {
   inboxPollIntervalMs?: number
   /** Theme tokens (`widget.theme`); unset tokens use the neutral defaults. */
   theme?: Partial<MushiRNTheme>
+  /** Characters needed before Send enables (`widget.minDescriptionLength`, default 8). */
+  minDescriptionLength?: number
+  /** Offer "Get updates by email" on the receipt when the project offers email (`notifications.email`). */
+  emailOptIn?: boolean
 }
 
 export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
@@ -128,6 +163,8 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   assistantSuggestions = [],
   inboxPollIntervalMs = 0,
   theme,
+  minDescriptionLength,
+  emailOptIn = true,
 }) => {
   const mushi = useMushiContext()
   const t = getLocale()
@@ -142,7 +179,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   const translateY = useRef(new Animated.Value(SHEET_HEIGHT)).current
   const backdropOpacity = useRef(new Animated.Value(0)).current
 
-  const [category, setCategory] = useState<string | null>(null)
+  const [category, setCategory] = useState<ReporterCategory | null>(null)
   const [description, setDescription] = useState('')
   const [phase, setPhase] = useState<'form' | 'sending' | 'sent' | 'error'>('form')
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -152,7 +189,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   const [inboxLoading, setInboxLoading] = useState(false)
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
   const selectedRef = useRef<string | null>(null)
-  const [threadComments, setThreadComments] = useState<MushiReporterComment[]>([])
+  const [threadItems, setThreadItems] = useState<MushiReporterTimelineItem[]>([])
   const [threadStatus, setThreadStatus] = useState<ThreadStatus>('idle')
   const [replyText, setReplyText] = useState('')
   const [replyState, setReplyState] = useState<ReplyState>('idle')
@@ -165,6 +202,21 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   const [assistantTurns, setAssistantTurns] = useState<Array<{ role: 'user' | 'bot'; text: string; options?: string[] }>>([])
   // Local shadow of the screenshot so we can clear it from inside the sheet
   const [screenshotAttached, setScreenshotAttached] = useState(true)
+  const [emailState, setEmailState] = useState<EmailOptInState>('hidden')
+  const [emailInput, setEmailInput] = useState('')
+  const [reduceMotion, setReduceMotion] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    AccessibilityInfo?.isReduceMotionEnabled?.()
+      .then((on) => alive && setReduceMotion(Boolean(on)))
+      .catch(() => undefined)
+    const sub = AccessibilityInfo?.addEventListener?.('reduceMotionChanged', (on: boolean) => setReduceMotion(Boolean(on)))
+    return () => {
+      alive = false
+      sub?.remove?.()
+    }
+  }, [])
 
   /** Load the list. `silent` (polls, refreshes) never blanks what is on screen. */
   const loadInbox = useCallback(
@@ -205,21 +257,31 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
       selectedRef.current = reportId
       setSelectedReportId(reportId)
       if (!opts.silent) {
-        setThreadComments([])
+        setThreadItems([])
         setThreadStatus('loading')
         setReplyState('idle')
         setFeedbackError(false)
       }
-      const load = mushi?.loadMyThread ?? mushi?.listMyComments
-      const comments = load ? await loadReporterThread(load, reportId) : null
+      let items: MushiReporterTimelineItem[] | null = null
+      const detail = mushi?.loadMyReportDetail
+        ? await settleWithin(mushi.loadMyReportDetail(reportId), THREAD_LOAD_TIMEOUT_MS)
+        : 'unsupported'
+      if (detail && detail !== 'unsupported') {
+        items = detail.timeline
+      } else if (detail === 'unsupported') {
+        // Older server: the comment list is all there is.
+        const load = mushi?.loadMyThread ?? mushi?.listMyComments
+        const comments = load ? await loadReporterThread(load, reportId) : null
+        items = comments ? commentsToTimeline(comments) : null
+      }
       // The reporter may have gone back or opened another thread meanwhile.
       if (selectedRef.current !== reportId) return
-      if (comments === null) {
+      if (items === null) {
         // A failed background refresh keeps the thread that is already shown.
         setThreadStatus((prev) => (opts.silent && prev === 'ready' ? 'ready' : 'error'))
         return
       }
-      setThreadComments(comments)
+      setThreadItems(items)
       setThreadStatus('ready')
       if (!opts.silent && mushi?.markReportRead) {
         mushi
@@ -255,7 +317,10 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
       setReplyText('')
       setReplyState('idle')
       if (selectedRef.current === reportId) {
-        setThreadComments((prev) => [...prev, comment])
+        setThreadItems((prev) => [
+          ...prev,
+          { kind: 'reporter_comment', at: comment.created_at, text: comment.body, body: comment.body, comment_id: comment.id },
+        ])
         void openThread(reportId, { silent: true })
       }
     } catch {
@@ -316,9 +381,16 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
     setCategory(null)
     setDescription('')
     setPhase('form')
+    setEmailState('hidden')
+    setEmailInput('')
   }, [])
 
   const animateIn = useCallback(() => {
+    if (reduceMotion) {
+      translateY.setValue(0)
+      backdropOpacity.setValue(1)
+      return
+    }
     Animated.parallel([
       Animated.spring(translateY, {
         toValue: 0,
@@ -332,19 +404,19 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
         useNativeDriver: true,
       }),
     ]).start()
-  }, [translateY, backdropOpacity])
+  }, [translateY, backdropOpacity, reduceMotion])
 
   const animateOut = useCallback(
     (cb?: () => void) => {
       Animated.parallel([
         Animated.timing(translateY, {
           toValue: SHEET_HEIGHT,
-          duration: 220,
+          duration: reduceMotion ? 0 : 220,
           useNativeDriver: true,
         }),
         Animated.timing(backdropOpacity, {
           toValue: 0,
-          duration: 200,
+          duration: reduceMotion ? 0 : 200,
           useNativeDriver: true,
         }),
       ]).start(() => {
@@ -352,7 +424,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
         cb?.()
       })
     },
-    [translateY, backdropOpacity, resetForm],
+    [translateY, backdropOpacity, resetForm, reduceMotion],
   )
 
   useEffect(() => {
@@ -385,20 +457,47 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
     }),
   ).current
 
-  const handleSubmit = async () => {
-    if (!category || !description.trim() || !mushi) return
-    const trimmed = description.trim()
-    if (trimmed.length < MIN_DESCRIPTION) {
-      setSubmitError('Please write at least 20 characters so we can understand the issue.')
+  /** Offer email updates on the receipt only when the server says this app sends them. */
+  const offerEmail = useCallback(async () => {
+    if (!emailOptIn || !mushi?.getNotificationPrefs) return
+    try {
+      const prefs = await mushi.getNotificationPrefs()
+      if (prefs?.available.email && !prefs.email_verified && !prefs.email_pending) {
+        setEmailInput(mushi.emailPrefill?.() ?? '')
+        setEmailState('offer')
+      }
+    } catch {
+      /* no offer */
+    }
+  }, [emailOptIn, mushi])
+
+  const submitEmail = useCallback(async () => {
+    const email = emailInput.trim()
+    if (!isPlausibleReporterEmail(email)) {
+      setEmailState('invalid')
       return
     }
+    if (!mushi?.setNotificationPrefs) return
+    setEmailState('sending')
+    try {
+      const res = await mushi.setNotificationPrefs({ email })
+      setEmailState(res.ok ? 'sent' : res.error?.status === 422 ? 'invalid' : 'failed')
+    } catch {
+      setEmailState('failed')
+    }
+  }, [emailInput, mushi])
+
+  const handleSubmit = async () => {
+    const hasAttachment = Boolean(screenshotDataUrl && screenshotAttached)
+    if (!mushi || !reporterCanSend(description, hasAttachment, minDescriptionLength)) return
+    const trimmed = description.trim()
     setSubmitError(null)
     setPhase('sending')
     try {
       const outcome = await mushi.submitReport({
-        category,
+        ...reporterChipToReport(category),
         description: trimmed,
-        screenshotDataUrl: screenshotDataUrl && screenshotAttached ? screenshotDataUrl : undefined,
+        screenshotDataUrl: hasAttachment ? screenshotDataUrl : undefined,
       })
       if (!outcome.ok) {
         if (outcome.failureKind === 'credentials' || outcome.failureKind === 'quota') {
@@ -416,8 +515,9 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
         setPhase('error')
         return
       }
+      // The receipt replaces the form in place; nothing auto-closes.
       setPhase('sent')
-      setTimeout(handleClose, 1400)
+      void offerEmail()
     } catch {
       setSubmitError('Something went wrong. Please try again.')
       setPhase('error')
@@ -434,12 +534,9 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
     ['report', 'inbox', ...(assistantEnabled ? (['assistant'] as const) : [])] as const
   )
 
-  const canSubmit = !!category && description.trim().length >= MIN_DESCRIPTION && (phase === 'form' || phase === 'error')
-  const submitHint = canSubmit || phase === 'sending'
-    ? undefined
-    : !category
-      ? t.step1.heading
-      : rc.ui.addWords
+  const canSubmit =
+    reporterCanSend(description, Boolean(activeScreenshot), minDescriptionLength) && (phase === 'form' || phase === 'error')
+  const submitHint = canSubmit || phase === 'sending' ? undefined : rc.ui.addWords
 
   const selectedReport = selectedReportId ? inboxReports.find((r) => r.id === selectedReportId) ?? null : null
   const selectedView = selectedReport ? reporterStatus(selectedReport, locale) : null
@@ -487,26 +584,38 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
             <Text style={[{ color: colors.fg, fontWeight: '600' }, font]}>{rc.ui.retry}</Text>
           </TouchableOpacity>
         </View>
-      ) : threadComments.length === 0 ? (
-        <Text style={[{ color: colors.muted, marginBottom: 8 }, font]}>{rc.ui.noReplies}</Text>
       ) : (
-        threadComments.map((c) => (
-          <View
-            key={c.id}
-            style={[
-              s.threadBubble,
-              {
-                backgroundColor: colors.surface,
-                alignSelf: c.author_kind === 'reporter' ? 'flex-end' : 'flex-start',
-              },
-            ]}
-          >
-            <Text style={[{ color: colors.muted, fontSize: 11 }, font]}>
-              {c.author_kind === 'reporter' ? rc.ui.you : rc.ui.developer}
-            </Text>
-            <Text style={[{ color: colors.fg }, font]}>{c.body}</Text>
-          </View>
-        ))
+        <>
+          {threadItems.map((item, idx) =>
+            isReporterConversation(item) ? (
+              <View
+                key={`${item.kind}-${item.comment_id ?? idx}`}
+                style={[
+                  s.threadBubble,
+                  {
+                    backgroundColor: colors.surface,
+                    alignSelf: item.kind === 'reporter_comment' ? 'flex-end' : 'flex-start',
+                  },
+                ]}
+              >
+                <Text style={[{ color: colors.muted, fontSize: 11 }, font]}>
+                  {item.kind === 'reporter_comment' ? rc.ui.you : rc.ui.developer}
+                </Text>
+                <Text style={[{ color: colors.fg }, font]}>{reporterTimelineEntryText(item, locale)}</Text>
+              </View>
+            ) : (
+              <Text
+                key={`${item.kind}-${item.at}-${idx}`}
+                style={[{ color: colors.muted, fontSize: 12, textAlign: 'center', marginVertical: 6 }, font]}
+              >
+                {reporterTimelineEntryText(item, locale)}
+              </Text>
+            ),
+          )}
+          {!threadItems.some(isReporterConversation) ? (
+            <Text style={[{ color: colors.muted, marginBottom: 8 }, font]}>{rc.ui.noReplies}</Text>
+          ) : null}
+        </>
       )}
 
       {replyState === 'sending' ? (
@@ -787,54 +896,88 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
               {selectedReportId ? renderThread() : renderInboxList()}
             </ScrollView>
           ) : phase === 'sent' ? (
-            <View style={s.sentWrap} accessibilityLiveRegion="polite">
-              <Text style={[s.sentEmoji]}>✅</Text>
-              <Text style={[s.sentText, { color: colors.fg }, font]}>{t.widget.submitted}</Text>
-            </View>
+            <ScrollView style={s.body} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+              <View style={s.sentWrap} accessibilityLiveRegion="polite">
+                <Text style={[s.sentEmoji]} importantForAccessibility="no">✅</Text>
+                <Text style={[s.sentText, { color: colors.fg }, font]}>{rc.ui.receipt}</Text>
+              </View>
+              <View style={s.verifyRow}>
+                <TouchableOpacity
+                  style={[s.verifyBtn, { backgroundColor: colors.accent, borderRadius: radius }]}
+                  onPress={() => {
+                    resetForm()
+                    setSheetTab('inbox')
+                    void loadInbox()
+                  }}
+                  accessibilityRole="button"
+                >
+                  <Text style={[s.submitText, { color: colors.accentFg }, font]}>{rc.ui.trackIt}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.verifyBtn, { backgroundColor: colors.border, borderRadius: radius }]}
+                  onPress={handleClose}
+                  accessibilityRole="button"
+                >
+                  <Text style={[s.submitText, { color: colors.fg }, font]}>{rc.ui.done}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Email opt-in: offered only when the app sends email. Nothing is
+                  subscribed until the reporter types an address and taps Send,
+                  and the server then sends a confirmation email first. */}
+              {emailState === 'sent' ? (
+                <Text style={[{ color: colors.fg, marginTop: 12 }, font]} accessibilityLiveRegion="polite">
+                  {rc.ui.emailCheckInbox}
+                </Text>
+              ) : emailState !== 'hidden' ? (
+                <View style={{ marginTop: 12 }}>
+                  <Text style={[{ color: colors.fg, marginBottom: 6 }, font]}>{rc.ui.emailOptIn}</Text>
+                  <View style={s.composer}>
+                    <TextInput
+                      style={[
+                        s.input,
+                        s.composerInput,
+                        { backgroundColor: colors.surface, color: colors.fg, borderColor: colors.border, borderRadius: radius },
+                        font,
+                      ]}
+                      value={emailInput}
+                      onChangeText={(v) => {
+                        setEmailInput(v.slice(0, 254))
+                        if (emailState === 'invalid' || emailState === 'failed') setEmailState('offer')
+                      }}
+                      placeholder={rc.ui.emailPlaceholder}
+                      placeholderTextColor={colors.muted}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoComplete="email"
+                      textContentType="emailAddress"
+                      editable={emailState !== 'sending'}
+                      accessibilityLabel={rc.ui.emailOptIn}
+                    />
+                    <TouchableOpacity
+                      style={[s.sendBtn, { backgroundColor: emailInput.trim() ? colors.accent : colors.disabled, borderRadius: radius }]}
+                      onPress={() => void submitEmail()}
+                      disabled={!emailInput.trim() || emailState === 'sending'}
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: !emailInput.trim() || emailState === 'sending', busy: emailState === 'sending' }}
+                    >
+                      <Text style={[s.submitText, { color: emailInput.trim() ? colors.accentFg : colors.disabledFg }, font]}>
+                        {emailState === 'sending' ? rc.ui.sending : rc.ui.emailSubmit}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  {emailState === 'invalid' || emailState === 'failed' ? (
+                    <Text style={[{ color: colors.error, marginTop: 6, fontSize: 12 }, font]} accessibilityRole="alert">
+                      {emailState === 'invalid' ? rc.ui.emailInvalid : rc.ui.emailFailed}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+            </ScrollView>
           ) : (
             <ScrollView style={s.body} keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ paddingBottom: 24 }}>
-              <Text style={[s.stepLabel, { color: colors.muted }, font]}>{t.step1.heading}</Text>
-
-              {/* Categories: wrapping chips sized to their label, never squeezed. */}
-              <View style={s.catRow} accessibilityRole="radiogroup">
-                {CATEGORY_KEYS.map((key) => {
-                  const active = category === key
-                  return (
-                    <TouchableOpacity
-                      key={key}
-                      onPress={() => setCategory(key)}
-                      activeOpacity={0.7}
-                      accessibilityRole="radio"
-                      accessibilityState={{ selected: active, checked: active }}
-                      accessibilityLabel={t.step1.categories[key]}
-                      style={[
-                        s.catBtn,
-                        {
-                          backgroundColor: active ? colors.accent : colors.surface,
-                          borderColor: active ? colors.accent : colors.border,
-                        },
-                      ]}
-                    >
-                      <Text style={s.catEmoji} importantForAccessibility="no">
-                        {CATEGORY_EMOJI[key]}
-                      </Text>
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          s.catLabel,
-                          { color: active ? colors.accentFg : colors.fg } as TextStyle,
-                          font,
-                        ]}
-                      >
-                        {t.step1.categories[key]}
-                      </Text>
-                    </TouchableOpacity>
-                  )
-                })}
-              </View>
-
-              {/* Description */}
+              {/* Free text first (Plan 018 §1.1). */}
               <TextInput
                 style={[
                   s.input,
@@ -865,6 +1008,45 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                   {submitError}
                 </Text>
               ) : null}
+
+              {/* Optional type chips: wrap at their label width, never squeezed. Tap again to clear. */}
+              <View style={[s.catRow, { marginTop: 12 }]} accessibilityRole="radiogroup">
+                {REPORTER_CATEGORIES.map((key) => {
+                  const active = category === key
+                  const label = reporterCategoryLabel(key, locale)
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      onPress={() => setCategory(active ? null : key)}
+                      activeOpacity={0.7}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: active, checked: active }}
+                      accessibilityLabel={label}
+                      style={[
+                        s.catBtn,
+                        {
+                          backgroundColor: active ? colors.accent : colors.surface,
+                          borderColor: active ? colors.accent : colors.border,
+                        },
+                      ]}
+                    >
+                      <Text style={s.catEmoji} importantForAccessibility="no">
+                        {CATEGORY_EMOJI[key]}
+                      </Text>
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          s.catLabel,
+                          { color: active ? colors.accentFg : colors.fg } as TextStyle,
+                          font,
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
 
               {/* Screenshot thumbnail — shown if a screenshot was captured */}
               {activeScreenshot ? (

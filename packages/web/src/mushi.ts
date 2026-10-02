@@ -44,6 +44,7 @@ import {
 } from '@mushi-mushi/core';
 
 import { MushiWidget } from './widget';
+import { reporterChannels, subscribeBrowserPush, type MushiReporterUpdates } from '@mushi-mushi/core/reporter-channels';
 import { mergeRuntimeConfig } from './runtime-merge';
 import { exposeMarketingRecorder } from './marketing-recorder';
 import {
@@ -571,8 +572,19 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   /** Set when the host screenshotProvider was refused permission this attempt. */
   let screenshotProviderDenied = false;
 
+  // onReporterUpdate: the v2 feed on the inbox-refresh cadence; no listener, no request.
+  const reporterUpdateListeners = new Set<(u: MushiReporterUpdates) => void>();
+  const rc = reporterChannels(apiClient);
+  async function emitReporterUpdates(): Promise<MushiReporterUpdates | null> {
+    const res = await rc.getUpdates(reporterTokenForProject());
+    const updates = res.ok ? res.data ?? null : null;
+    if (updates) for (const cb of reporterUpdateListeners) try { cb(updates); } catch { /* host bug */ }
+    return updates;
+  }
+
   function syncReporterInboxQuiet(): void {
     void widget.refreshReporterInboxQuiet();
+    if (reporterUpdateListeners.size) void emitReporterUpdates();
   }
 
   function stopReporterInboxPolling(): void {
@@ -2016,6 +2028,32 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       widget.recorderOpenMyReports();
     },
 
+    getReporterUpdates: emitReporterUpdates,
+
+    async markReportRead(reportId: string) {
+      const res = await rc.markReportRead(reportId, reporterTokenForProject());
+      return res.ok ? res.data?.unread_total ?? 0 : null;
+    },
+
+    onReporterUpdate(cb) {
+      reporterUpdateListeners.add(cb);
+      void emitReporterUpdates();
+      return () => void reporterUpdateListeners.delete(cb);
+    },
+
+    async getNotificationPrefs() {
+      const res = await rc.getPrefs(reporterTokenForProject());
+      return res.ok ? res.data ?? null : null;
+    },
+
+    setNotificationPrefs: (update) => rc.setPrefs(reporterTokenForProject(), update),
+
+    async subscribeReporterPush() {
+      const sw = activeConfig.notifications?.webPush;
+      const cfg = sw ? await apiClient.getSdkConfig() : null;
+      return subscribeBrowserPush(rc, reporterTokenForProject(), sw ? sw.serviceWorkerPath : null, cfg?.ok ? cfg.data?.reporter?.vapidPublicKey : null);
+    },
+
     async getHallOfFame(limit = 20): Promise<MushiHallOfFameEntry[]> {
       const result = await apiClient.getHallOfFame(limit);
       if (!result.ok) return [];
@@ -2080,8 +2118,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   // is logged + breadcrumbed and swallowed, returning a type-safe fallback.
   // Non-void methods need a real fallback so the host doesn't choke on
   // `undefined` (e.g. `.map` over a list); everything else returns void.
+  // The reporter-channel calls never reject (they resolve { ok: false } / null).
   const PUBLIC_API_FALLBACKS: Record<string, unknown> = {
     on: () => {}, // returns a no-op unsubscribe
+    // mushi-mushi-allowlist: no-op unsubscribe
+    onReporterUpdate: () => {},
     isOpen: false,
     getBreadcrumbs: [],
     captureEvent: null,
@@ -2354,6 +2395,12 @@ function createNoopInstance(): MushiSDKInstance {
     reopenReport: async () => null,
     openMyReports: () => {},
     getHallOfFame: async () => [],
+    getReporterUpdates: async () => null,
+    markReportRead: async () => null,
+    onReporterUpdate: () => () => {},
+    getNotificationPrefs: async () => null,
+    setNotificationPrefs: async () => ({ ok: false }),
+    subscribeReporterPush: async () => ({ ok: false, reason: 'off' }),
   };
 }
 

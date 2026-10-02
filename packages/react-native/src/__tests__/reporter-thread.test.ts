@@ -21,7 +21,7 @@ vi.mock('@mushi-mushi/core', () => ({
   MUSHI_RADIUS: { card: 12 },
 }))
 
-import { loadReporterThread, markReporterReportRead, settleWithin, THREAD_LOAD_TIMEOUT_MS } from '../reporter-thread'
+import { createReporterUpdateHub, loadReporterThread, markReporterReportRead, settleWithin, THREAD_LOAD_TIMEOUT_MS } from '../reporter-thread'
 import { resolveRNTheme } from '../theme'
 
 const comment = { id: 1, author_kind: 'admin' as const, body: 'Which page?', created_at: '2026-10-02T00:00:00Z' }
@@ -66,9 +66,30 @@ describe('loadReporterThread', () => {
 })
 
 describe('markReporterReportRead', () => {
-  it('marks only unread rows for that report', async () => {
+  /** A server without the v2 mark-read route. */
+  const noV2 = vi.fn().mockResolvedValue({ ok: false, error: { code: 'NOT_FOUND', message: 'nope', status: 404 } })
+
+  it('uses the one-call v2 route when the server has it', async () => {
+    const reporterRequest = vi.fn().mockResolvedValue({ ok: true, data: { marked_read: 3, unread_total: 0 } })
+    const listNotifications = vi.fn()
+    const client = { reporterRequest, listNotifications, markNotificationRead: vi.fn() }
+    await expect(markReporterReportRead(client as never, 'tok', 'r1')).resolves.toBe(3)
+    expect(reporterRequest).toHaveBeenCalledWith('POST', '/v1/reporter/reports/r1/read', 'tok', {})
+    expect(listNotifications).not.toHaveBeenCalled()
+  })
+
+  it('does not fall back on a non-404 failure (no N+1 storm against a struggling server)', async () => {
+    const reporterRequest = vi.fn().mockResolvedValue({ ok: false, error: { code: 'HTTP_503', message: 'down', status: 503 } })
+    const listNotifications = vi.fn()
+    const client = { reporterRequest, listNotifications, markNotificationRead: vi.fn() }
+    await expect(markReporterReportRead(client as never, 'tok', 'r1')).resolves.toBe(0)
+    expect(listNotifications).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the per-notification routes on an older server, marking only unread rows for that report', async () => {
     const markNotificationRead = vi.fn().mockResolvedValue({ ok: true })
     const client = {
+      reporterRequest: noV2,
       listNotifications: vi.fn().mockResolvedValue({
         ok: true,
         data: {
@@ -88,10 +109,45 @@ describe('markReporterReportRead', () => {
   })
 
   it('never throws and reports 0 on failure', async () => {
-    const failing = { listNotifications: vi.fn().mockRejectedValue(new Error('down')), markNotificationRead: vi.fn() }
+    const failing = { reporterRequest: noV2, listNotifications: vi.fn().mockRejectedValue(new Error('down')), markNotificationRead: vi.fn() }
     await expect(markReporterReportRead(failing as never, 'tok', 'r1')).resolves.toBe(0)
-    const notOk = { listNotifications: vi.fn().mockResolvedValue({ ok: false }), markNotificationRead: vi.fn() }
+    const throwing = { reporterRequest: vi.fn().mockRejectedValue(new Error('boom')), listNotifications: vi.fn(), markNotificationRead: vi.fn() }
+    await expect(markReporterReportRead(throwing as never, 'tok', 'r1')).resolves.toBe(0)
+    const notOk = { reporterRequest: noV2, listNotifications: vi.fn().mockResolvedValue({ ok: false }), markNotificationRead: vi.fn() }
     await expect(markReporterReportRead(notOk as never, 'tok', 'r1')).resolves.toBe(0)
+  })
+})
+
+describe('createReporterUpdateHub (onReporterUpdate)', () => {
+  const updates = { unread_total: 2, latest: [], server_time: 'x' }
+
+  it('hands a new listener the current updates, then each emit; unsubscribe stops it', async () => {
+    const fetchUpdates = vi.fn().mockResolvedValue(updates)
+    const hub = createReporterUpdateHub(fetchUpdates)
+    const cb = vi.fn()
+    const off = hub.subscribe(cb)
+    await vi.waitFor(() => expect(cb).toHaveBeenCalledWith(updates))
+    await hub.emit()
+    expect(cb).toHaveBeenCalledTimes(2)
+    off()
+    expect(hub.listenerCount()).toBe(0)
+    await hub.emit()
+    expect(cb).toHaveBeenCalledTimes(2)
+  })
+
+  it('a throwing listener does not stop the others, and a failed fetch resolves null', async () => {
+    const hub = createReporterUpdateHub(vi.fn().mockResolvedValue(updates))
+    const good = vi.fn()
+    hub.subscribe(() => { throw new Error('host bug') })
+    hub.subscribe(good)
+    await expect(hub.emit()).resolves.toEqual(updates)
+    expect(good).toHaveBeenCalled()
+
+    const down = createReporterUpdateHub(vi.fn().mockRejectedValue(new Error('offline')))
+    const cb = vi.fn()
+    down.subscribe(cb)
+    await expect(down.emit()).resolves.toBeNull()
+    expect(cb).not.toHaveBeenCalled()
   })
 })
 
