@@ -1,6 +1,11 @@
 {
   "$schema": "https://design-tokens.github.io/community-group/format/2025.10/schema.json",
   "$description": "Pha Khram semantic roles. us.kensaur.mushi.cssVar is the glot CSS variable each role sets; us.kensaur.glot.alsoSets lists legacy variables the scoped layer also points at the role; us.kensaur.glot.contrast records WCAG 2.x ratios, recomputed and asserted by `npm run tokens:direction -- --check` and __tests__/pha-khram-tokens.test.ts.",
+  "$extensions": {
+    "us.kensaur.glot": {
+      "colorScheme": "dark"
+    }
+  },
   "color": {
     "$type": "color",
     "surface": {
@@ -709,11 +714,11 @@
       },
       "ui": {
         "$value": [
-          "IBM Plex Sans",
           "IBM Plex Sans Thai Looped",
+          "IBM Plex Sans",
           "sans-serif"
         ],
-        "$description": "UI and Latin text.",
+        "$description": "UI and Latin text. The Latin glyphs of Plex Sans Thai Looped are IBM Plex Sans, so one font file serves UI and Thai.",
         "$extensions": {
           "us.kensaur.mushi": {
             "cssVar": "--loom-font-ui",
@@ -723,7 +728,7 @@
             ]
           },
           "us.kensaur.glot": {
-            "nextFontVar": "--font-plex-sans"
+            "nextFontVar": "--font-plex-thai-looped"
           }
         }
       },
@@ -977,12 +982,28 @@
         "value": 2,
         "unit": "px"
       },
+      "$description": "Rectangles and stepped diamonds only; the legacy radius scale collapses to this inside the scope.",
       "$extensions": {
         "us.kensaur.mushi": {
           "cssVar": "--loom-radius",
           "platforms": [
             "web",
             "capacitor"
+          ]
+        },
+        "us.kensaur.glot": {
+          "alsoSets": [
+            "--radius-xs",
+            "--radius-sm",
+            "--radius-md",
+            "--radius-lg",
+            "--radius-xl",
+            "--radius-2xl",
+            "--radius-hero",
+            "--radius-sheet",
+            "--radius-card",
+            "--radius-pill",
+            "--radius-nav-pill"
           ]
         }
       }

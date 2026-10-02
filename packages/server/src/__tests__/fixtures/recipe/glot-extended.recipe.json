@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "x-fixture-note": "glot.it's own mushi.recipe.json at glot commit 42a793c20, with two Mushi changes: (1) Soi Signpaint is the active direction, the owner's 2026-10-02 choice that glot's manifest is being updated to (Pha Khram and Nang Lamp stay inactive); (2) the two keys Plan 019 Phase 1b adds, design.contrast and design.rules, declared by Mushi for the tests, not by glot.",
+  "x-fixture-note": "glot.it's own mushi.recipe.json at glot commit 13f5130a6 (Soi Signpaint active; Pha Khram and Nang Lamp inactive), plus the two keys Plan 019 Phase 1b adds, design.contrast and design.rules, declared by Mushi for the tests, not by glot.",
   "app": {
     "name": "glot.it",
     "kind": "app",
@@ -58,14 +58,21 @@
     ],
     "css": [
       {
+        "path": "app/styles/globals/theme-soi-signpaint.css",
+        "role": "export",
+        "scopes": [
+          "html:root[data-direction=\"soi-signpaint\"]",
+          "html.dark:root[data-direction=\"soi-signpaint\"]"
+        ]
+      },
+      {
         "path": "packages/design-tokens/src/cross-platform-tokens.css",
         "role": "export"
       }
     ],
     "components": {
       "globs": [
-        "design-system/primitives/**/*.tsx",
-        "design-system/loom/**/*.tsx"
+        "design-system/primitives/**/*.tsx"
       ]
     },
     "assets": [
@@ -84,6 +91,18 @@
       {
         "path": "app/icon.svg",
         "kind": "icon"
+      },
+      {
+        "path": "public/images/soi/signs",
+        "kind": "illustration"
+      },
+      {
+        "path": "public/images/soi/mae-muang",
+        "kind": "illustration"
+      },
+      {
+        "path": "store-assets/soi-signpaint",
+        "kind": "image"
       }
     ],
     "literalScan": {
@@ -91,7 +110,7 @@
         "app/**/*.{ts,tsx,css}",
         "components/**/*.tsx",
         "features/**/*.tsx",
-        "design-system/loom/**/*.tsx"
+        "design-system/primitives/street/**/*.tsx"
       ],
       "ignore": [
         "**/*.test.*",
@@ -99,6 +118,36 @@
         "design-system/directions/**"
       ]
     },
+    "directions": [
+      {
+        "name": "soi-signpaint",
+        "status": "active",
+        "tokens": [
+          "packages/design-tokens/tokens/directions/soi-signpaint/primitive.tokens.json",
+          "packages/design-tokens/tokens/directions/soi-signpaint/semantic.tokens.json",
+          "packages/design-tokens/tokens/directions/soi-signpaint/component.tokens.json"
+        ],
+        "note": "Soi Signpaint look with the Pha Khram earned-progress mechanic (ADR 0010, owner 2026-10-02)"
+      },
+      {
+        "name": "pha-khram",
+        "status": "inactive",
+        "tokens": [
+          "packages/design-tokens/tokens/directions/pha-khram/primitive.tokens.json",
+          "packages/design-tokens/tokens/directions/pha-khram/semantic.tokens.json",
+          "packages/design-tokens/tokens/directions/pha-khram/component.tokens.json"
+        ]
+      },
+      {
+        "name": "nang-lamp",
+        "status": "inactive",
+        "tokens": [
+          "packages/design-tokens/tokens/directions/nang-lamp/primitive.tokens.json",
+          "packages/design-tokens/tokens/directions/nang-lamp/semantic.tokens.json",
+          "packages/design-tokens/tokens/directions/nang-lamp/component.tokens.json"
+        ]
+      }
+    ],
     "contrast": [
       {
         "fg": "color.text.primary",
@@ -111,7 +160,7 @@
         "use": "secondary text on the page"
       },
       {
-        "fg": "color.action.onPrimary",
+        "fg": "color.text.onAction",
         "bg": "color.action.primary",
         "use": "CTA label"
       },

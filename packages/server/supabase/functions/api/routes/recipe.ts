@@ -30,7 +30,7 @@ import { assetMime, signAssetUrl, verifyAssetSignature } from '../../_shared/des
 import { loadCurrentSnapshot, refreshRecipeSnapshot, startDesignDeviance, type SnapshotRow } from '../../_shared/design-plane.ts'
 import { runInBackground } from '../../_shared/background.ts'
 import { judgingSet, type StoredTokens } from '../../_shared/design-sets.ts'
-import { applyActivateDirection, applyRulesEdit, applyTokenEdits, buildDuplicateDirection, DIRECTION_NAME_RE, unifiedDiff, type TokenFileEdit } from '../../_shared/design-change.ts'
+import { applyActivateDirection, applyDeclareDirection, applyRulesEdit, applyTokenEdits, buildDuplicateDirection, DIRECTION_NAME_RE, unifiedDiff, type TokenFileEdit } from '../../_shared/design-change.ts'
 import { effectiveDesignRules, isWritablePath, RECIPE_MANIFEST_MAX_BYTES, RECIPE_MANIFEST_PATH } from '../../_shared/recipe-schema.ts'
 import { directionOf, MAX_ASSET_BYTES, MAX_TOKEN_FILE_BYTES } from '../../_shared/design-sets.ts'
 import { DESIGN_RULE_IDS, RECIPE_ELEMENT_KEYS, type DesignChangeResult, type DesignDevianceRunResult, type DesignTokensResponse, type DevianceRun, type RecipeElementKey, type RecipeHistoryResponse } from '../../_shared/recipe-types.ts'
@@ -437,6 +437,11 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
         const set = (e.set ? stored?.sets.find((s) => s.name === e.set) : null) ?? judgingSet(stored)
         const token = set?.tokens.find((t) => t.path === e.path)
         if (!token) return jsonError(c, 'UNKNOWN_TOKEN', `${e.path} is not a token in ${set?.name ?? 'the active set'}.`, 400)
+        // Inactive directions are read-only comparison sets (Plan 019 §2): a recipe
+        // PR never edits their files. Set the direction active first.
+        if (set && set.kind === 'direction' && !set.active) {
+          return jsonError(c, 'READ_ONLY_DIRECTION', `${set.name} is an inactive direction and is read-only. Set it active, or duplicate it, to edit.`, 400)
+        }
         if (token.role !== 'source') {
           denied.push({ path: token.file, reason: 'this token file is a generated export; edit its source instead' })
           continue
@@ -467,7 +472,7 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
       } else {
         const before = await readLive(RECIPE_MANIFEST_PATH, RECIPE_MANIFEST_MAX_BYTES)
         if (typeof before !== 'string') return before
-        const applied = applyActivateDirection(before, target.files.filter((f) => f.role === 'source').map((f) => f.path))
+        const applied = applyActivateDirection(before, target.files.filter((f) => f.role === 'source').map((f) => f.path), req.direction)
         if (!applied.ok) return jsonError(c, 'EDIT_REJECTED', applied.reason, 400)
         changes.push({ path: RECIPE_MANIFEST_PATH, before, after: applied.text, reason: `make ${req.direction} the active design direction` })
       }
@@ -505,6 +510,20 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
         const built = buildDuplicateDirection(texts, req.from, req.name, req.displayName ?? null, edits)
         if (!built.ok) return jsonError(c, 'EDIT_REJECTED', built.reason, 400)
         for (const f of built.files) changes.push({ path: f.path, before: '', after: f.text, reason: `add design direction ${req.name} (copied from ${req.from})` })
+        // A manifest that declares directions[] gets the copy as an inactive entry,
+        // so the active-direction rule still holds after the PR merges.
+        if ((manifest.design?.directions ?? []).length > 0) {
+          const check = isWritablePath(RECIPE_MANIFEST_PATH, manifest, [RECIPE_MANIFEST_PATH])
+          if (!check.ok) {
+            denied.push({ path: RECIPE_MANIFEST_PATH, reason: check.reason })
+          } else {
+            const before = await readLive(RECIPE_MANIFEST_PATH, RECIPE_MANIFEST_MAX_BYTES)
+            if (typeof before !== 'string') return before
+            const listed = applyDeclareDirection(before, req.name, built.files.map((f) => f.path), `copied from ${req.from}`)
+            if (!listed.ok) return jsonError(c, 'EDIT_REJECTED', listed.reason, 400)
+            changes.push({ path: RECIPE_MANIFEST_PATH, before, after: listed.text, reason: `declare the ${req.name} direction (inactive)` })
+          }
+        }
       }
     } else {
       const check = isWritablePath(RECIPE_MANIFEST_PATH, manifest, scope)

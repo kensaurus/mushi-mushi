@@ -8,6 +8,7 @@
  */
 
 import { normalizeRepoPath } from './recipe-glob.ts'
+import type { CssScope } from './css-scopes.ts'
 import type { DesignToken, DesignTokenSet, RecipeIssue } from './recipe-types.ts'
 
 export const MAX_TOKEN_FILES = 40
@@ -24,6 +25,15 @@ export interface PlannedSet {
   kind: DesignTokenSet['kind']
   active: boolean
   files: Array<{ path: string; role: 'source' | 'export'; generator: string | null }>
+  /** design.directions[].note, when the manifest declares directions. */
+  note?: string | null
+}
+
+export interface DeclaredDirection {
+  name: string
+  status: 'active' | 'inactive'
+  tokens: string[]
+  note?: string
 }
 
 const DIRECTION_RE = /^(.*?(?:^|\/)directions\/)([^/]+)\/([^/]+\.json)$/
@@ -34,10 +44,17 @@ export function directionOf(path: string): { base: string; name: string; file: s
 }
 
 /**
- * Plan the sets. `treePaths` is the repo's blob list (used only to find
- * sibling directions; pass [] when it is unavailable).
+ * Plan the sets. When the manifest declares `design.directions[]`, those are
+ * the directions (Plan 019 §2): the active one is the `source` files, the
+ * inactive ones are read-only comparison sets. Without it, sibling folders
+ * under the same `directions/` parent are found in `treePaths` (pass [] when
+ * the tree is unavailable).
  */
-export function planTokenSets(declared: readonly ManifestTokenFile[], treePaths: readonly string[]): { sets: PlannedSet[]; issues: RecipeIssue[] } {
+export function planTokenSets(
+  declared: readonly ManifestTokenFile[],
+  treePaths: readonly string[],
+  directions: readonly DeclaredDirection[] = [],
+): { sets: PlannedSet[]; issues: RecipeIssue[] } {
   const issues: RecipeIssue[] = []
   const safe = declared
     .map((t) => ({ ...t, path: normalizeRepoPath(t.path) }))
@@ -48,17 +65,25 @@ export function planTokenSets(declared: readonly ManifestTokenFile[], treePaths:
   const sets: PlannedSet[] = []
   const dirs = sources.map((t) => directionOf(t.path))
   const sameDirection = sources.length > 0 && dirs.every((d) => d && d.base === dirs[0]!.base && d.name === dirs[0]!.name)
-  const activeName = sameDirection ? dirs[0]!.name : 'default'
+  const declaredActive = directions.find((d) => d.status === 'active')
+  const activeName = declaredActive?.name ?? (sameDirection ? dirs[0]!.name : 'default')
   if (sources.length > 0) {
     sets.push({
       name: activeName,
-      kind: sameDirection ? 'direction' : 'default',
+      kind: sameDirection || declaredActive ? 'direction' : 'default',
       active: true,
       files: sources.map((t) => ({ path: t.path, role: 'source' as const, generator: t.generator ?? null })),
+      note: declaredActive?.note ?? null,
     })
   }
 
-  if (sameDirection) {
+  if (directions.length > 0) {
+    for (const d of directions) {
+      if (d.status !== 'inactive' || d.name === activeName) continue
+      const files = d.tokens.map((p) => normalizeRepoPath(p)).filter((p): p is string => p !== null)
+      sets.push({ name: d.name, kind: 'direction', active: false, files: files.map((path) => ({ path, role: 'source' as const, generator: null })), note: d.note ?? null })
+    }
+  } else if (sameDirection) {
     const base = dirs[0]!.base
     const siblings = new Map<string, string[]>()
     for (const p of treePaths) {
@@ -195,7 +220,13 @@ export function collectSetAssets(
     out.push({ path: safe, kind, size: sizes.get(safe) ?? null })
   }
   for (const a of declared) {
-    if (a.direction ? a.direction === set.name : set.active) add(a.path, a.kind ?? assetKind(a.path))
+    if (!(a.direction ? a.direction === set.name : set.active)) continue
+    const safe = normalizeRepoPath(a.path.replace(/\/+$/, ''))
+    if (!safe) continue
+    // A declared folder lists the images inside it.
+    const inside = tree.filter((e) => e.path.startsWith(`${safe}/`) && IMAGE_EXT_RE.test(e.path) && e.size <= MAX_ASSET_BYTES).map((e) => e.path).sort()
+    if (inside.length > 0 && !sizes.has(safe)) inside.forEach((p) => add(p, a.kind ?? assetKind(p)))
+    else add(safe, a.kind ?? assetKind(safe))
   }
   const dir = set.files.map((f) => directionOf(f.path)).find(Boolean)
   if (set.kind === 'direction' && dir) {
@@ -209,11 +240,19 @@ export function collectSetAssets(
   return out
 }
 
+export interface StoredCss {
+  path: string
+  role: string
+  scopes: CssScope[]
+}
+
 /** The `app_recipe_snapshots.tokens` document. */
 export interface StoredTokens {
   version: 1
   active: string | null
   sets: StoredTokenSet[]
+  /** design.css[] read per scope (light/dark modes are scopes). */
+  css?: StoredCss[]
 }
 
 /** The set deviance and edits use: the active set, else the export set. */
@@ -223,5 +262,5 @@ export function judgingSet(stored: StoredTokens | null): StoredTokenSet | null {
 }
 
 export function toSetSummary(s: StoredTokenSet): DesignTokenSet {
-  return { name: s.name, active: s.active, kind: s.kind, files: s.files, tokenCount: s.tokens.length }
+  return { name: s.name, active: s.active, kind: s.kind, files: s.files, tokenCount: s.tokens.length, note: s.note ?? null }
 }

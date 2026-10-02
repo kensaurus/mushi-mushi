@@ -15,6 +15,7 @@ import {
 import { matchGlob, normalizeRepoPath } from '../../supabase/functions/_shared/recipe-glob.ts'
 import { applyRulesEdit, applyTokenEdits, buildTokenValue, findTokenNode, unifiedDiff } from '../../supabase/functions/_shared/design-change.ts'
 import { directionOf, judgingSet, planTokenSets } from '../../supabase/functions/_shared/design-sets.ts'
+import { parseCssScopes } from '../../supabase/functions/_shared/css-scopes.ts'
 
 const GLOT = resolve(__dirname, 'fixtures/recipe/glot')
 const glotText = readFileSync(resolve(GLOT, 'mushi.recipe.json'), 'utf8')
@@ -48,6 +49,60 @@ describe('parseRecipeManifest', () => {
     const r = parseRecipeManifest(JSON.stringify({ version: 1, design: { tokens: [{ path: '../secrets.json', role: 'source' }], rules: { made_up: { enabled: true } } } }))
     expect(r.ok).toBe(true)
     expect(r.issues.map((i) => i.code).sort()).toEqual(['UNKNOWN_RULE', 'UNSAFE_PATH'])
+  })
+})
+
+describe('design.directions[] (Plan 019 §2)', () => {
+  const withDirs = (dirs: unknown[]) => JSON.stringify({ ...JSON.parse(glotText), design: { ...JSON.parse(glotText).design, directions: dirs } })
+  const soi = ['primitive', 'semantic', 'component'].map((n) => `packages/design-tokens/tokens/directions/soi-signpaint/${n}.tokens.json`)
+  const pha = soi.map((p) => p.replace('soi-signpaint', 'pha-khram'))
+
+  it("accepts glot's manifest: one active direction equal to the source token paths", () => {
+    expect(parseRecipeManifest(glotText)).toMatchObject({ ok: true, issues: [] })
+    expect(parseRecipeManifest(withDirs([{ name: 'soi', status: 'active', tokens: [...soi].reverse() }])).ok).toBe(true)
+  })
+  it('rejects an active direction whose tokens differ from the source paths (directions_active_mismatch)', () => {
+    const r = parseRecipeManifest(withDirs([{ name: 'pha', status: 'active', tokens: pha }, { name: 'soi', status: 'inactive', tokens: soi }]))
+    expect(r.ok).toBe(false)
+    expect(r.issues.map((i) => i.code)).toEqual(['directions_active_mismatch'])
+    const partial = parseRecipeManifest(withDirs([{ name: 'soi', status: 'active', tokens: soi.slice(0, 2) }]))
+    expect(partial.ok ? null : partial.issues[0].code).toBe('directions_active_mismatch')
+  })
+  it('rejects two active directions, and a duplicate name', () => {
+    const two = parseRecipeManifest(withDirs([{ name: 'soi', status: 'active', tokens: soi }, { name: 'pha', status: 'active', tokens: pha }]))
+    expect(two.ok ? null : two.issues[0].code).toBe('directions_active_mismatch')
+    const dup = parseRecipeManifest(withDirs([{ name: 'soi', status: 'active', tokens: soi }, { name: 'soi', status: 'inactive', tokens: pha }]))
+    expect(dup.ok ? null : dup.issues.map((i) => i.code)).toContain('directions_duplicate_name')
+  })
+  it('allows no active direction (all inactive, comparison only)', () => {
+    expect(parseRecipeManifest(withDirs([{ name: 'pha', status: 'inactive', tokens: pha }])).ok).toBe(true)
+  })
+})
+
+describe('parseCssScopes (light/dark modes are scopes)', () => {
+  const css = readFileSync(resolve(GLOT, 'app/styles/globals/theme-soi-signpaint.css'), 'utf8')
+  const declared = ['html:root[data-direction="soi-signpaint"]', 'html.dark:root[data-direction="soi-signpaint"]']
+
+  it("reads glot's two declared scopes (light and dark) with no undeclared vars", () => {
+    const r = parseCssScopes('theme-soi-signpaint.css', css, declared)
+    expect(r.scopes.map((s) => [s.selector, s.kind])).toEqual([
+      ['html:root[data-direction="soi-signpaint"]', 'declared'],
+      ['html.dark:root[data-direction="soi-signpaint"]', 'declared'],
+    ])
+    expect(r.scopes[0].vars.find((v) => v.name === '--color-cta')).toMatchObject({ value: '#C42A22', hex: '#C42A22' })
+    expect(r.issues.filter((i) => i.code === 'css_vars_in_undeclared_scope')).toEqual([])
+  })
+  it('vars under an undeclared selector are an info issue, never silence', () => {
+    const r = parseCssScopes('theme-soi-signpaint.css', css, [declared[0]])
+    expect(r.scopes).toHaveLength(1)
+    expect(r.undeclared[0]).toMatchObject({ selector: declared[1] })
+    expect(r.issues.find((i) => i.code === 'css_vars_in_undeclared_scope')).toMatchObject({ severity: 'info', file: 'theme-soi-signpaint.css' })
+  })
+  it(':root and @theme always count; a declared scope with no vars is a warning; comments are ignored', () => {
+    const r = parseCssScopes('a.css', ':root { --a: #fff; }\n@theme inline { --color-b: oklch(1 0 0); }\n/* .x { --c: 1px } */\n@media (min-width: 1px) { .card { --d: 2px; } }', ['.missing'])
+    expect(r.scopes.map((s) => s.kind)).toEqual(['root', 'theme'])
+    expect(r.undeclared).toEqual([{ selector: '.card', count: 1 }])
+    expect(r.issues.map((i) => i.code).sort()).toEqual(['css_scope_empty', 'css_vars_in_undeclared_scope'])
   })
 })
 
@@ -142,12 +197,24 @@ describe('design-sets', () => {
       'packages/design-tokens/tokens/directions/nang-lamp/semantic.tokens.json',
       'packages/design-tokens/tokens/directions/nang-lamp/README.md',
     ]
+    // Without design.directions[], siblings come from the tree.
     const { sets } = planTokenSets(glot.design!.tokens! as never, tree)
     expect(sets.map((s) => [s.name, s.kind, s.active, s.files.length])).toEqual([
-      ['pha-khram', 'direction', true, 3],
+      ['soi-signpaint', 'direction', true, 3],
       ['nang-lamp', 'direction', false, 2],
+      ['pha-khram', 'direction', false, 1],
       ['export', 'export', false, 1],
     ])
+  })
+  it('with design.directions[] the declared directions win, in manifest order, with their notes', () => {
+    const { sets } = planTokenSets(glot.design!.tokens! as never, [], glot.design!.directions as never)
+    expect(sets.map((s) => [s.name, s.active, s.files.length])).toEqual([
+      ['soi-signpaint', true, 3],
+      ['pha-khram', false, 3],
+      ['nang-lamp', false, 3],
+      ['export', false, 1],
+    ])
+    expect(sets[0].note).toMatch(/Soi Signpaint look/)
   })
   it('an export-only manifest makes the export set the judging set', () => {
     const { sets } = planTokenSets([{ path: 'dtcg/tokens.json', role: 'export' }], [])

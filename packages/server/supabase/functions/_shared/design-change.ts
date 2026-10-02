@@ -243,7 +243,7 @@ export const DIRECTION_NAME_RE = /^[a-z0-9][a-z0-9-]{1,40}$/
  * direction's files. The new entries take the place of the first old one, so
  * the export entries and everything else keep their order.
  */
-export function applyActivateDirection(manifestText: string, targetFiles: readonly string[]): ApplyResult {
+export function applyActivateDirection(manifestText: string, targetFiles: readonly string[], targetName?: string): ApplyResult {
   let doc: unknown
   try {
     doc = JSON.parse(manifestText)
@@ -260,6 +260,40 @@ export function applyActivateDirection(manifestText: string, targetFiles: readon
   const fresh = targetFiles.map((path) => ({ path, role: 'source', format: 'dtcg-2025.10' }))
   const at = first < 0 ? 0 : tokens.slice(0, first).filter((t) => !(isPlainObject(t) && t.role === 'source')).length
   doc.design.tokens = [...kept.slice(0, at), ...fresh, ...kept.slice(at)]
+  // Keep design.directions[] consistent: exactly the target is active, and its
+  // tokens equal the new source paths (the directions_active_mismatch rule).
+  if (Array.isArray(doc.design.directions) && targetName) {
+    const dirs = doc.design.directions as unknown[]
+    if (!dirs.some((d) => isPlainObject(d) && d.name === targetName)) {
+      return { ok: false, reason: `${targetName} is not listed in design.directions` }
+    }
+    for (const d of dirs) {
+      if (!isPlainObject(d)) continue
+      if (d.name === targetName) {
+        d.status = 'active'
+        d.tokens = [...targetFiles]
+      } else if (d.status === 'active') {
+        d.status = 'inactive'
+      }
+    }
+  }
+  return { ok: true, text: serialize(doc, manifestText) }
+}
+
+/** Add an inactive `design.directions[]` entry (used by Duplicate). */
+export function applyDeclareDirection(manifestText: string, name: string, files: readonly string[], note: string): ApplyResult {
+  let doc: unknown
+  try {
+    doc = JSON.parse(manifestText)
+  } catch {
+    return { ok: false, reason: 'mushi.recipe.json on the default branch is not valid JSON' }
+  }
+  if (!isPlainObject(doc) || !isPlainObject(doc.design) || !Array.isArray(doc.design.directions)) {
+    return { ok: false, reason: 'mushi.recipe.json has no design.directions list' }
+  }
+  const dirs = doc.design.directions as unknown[]
+  if (dirs.some((d) => isPlainObject(d) && d.name === name)) return { ok: false, reason: `design.directions already lists ${name}` }
+  dirs.push({ name, status: 'inactive', tokens: [...files], note })
   return { ok: true, text: serialize(doc, manifestText) }
 }
 

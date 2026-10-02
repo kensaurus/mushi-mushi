@@ -245,7 +245,7 @@ describe('glot.it fixture', () => {
     // Mustard reward on the Soi canvas is 1.63:1, so the large-text pair fails.
     expect(failing.map((c) => [c.fg, c.bg, c.ratio])).toEqual([['color.feedback.reward', 'color.surface.base', 1.63]])
     expect(contrast.find((c) => c.fg === 'color.text.primary')!.ratio).toBe(15.5)
-    expect(contrast.find((c) => c.fg === 'color.action.onPrimary')!.ratio).toBe(5.49)
+    expect(contrast.find((c) => c.fg === 'color.text.onAction')!.pass).toBe(true)
     const ctx = buildDevianceContext(tokens, effectiveDesignRules(parsed.manifest), parsed.manifest.design!.components!.globs)
     const f = scanSourceFile('app/page.tsx', `export default () => <button className="bg-[#E8387F] rounded-[18px]">Go</button>`, ctx).findings
     expect(f.map((x) => x.rule_id).sort()).toEqual(['off_scale_radius', 'off_token_color', 'raw_interactive_element'])

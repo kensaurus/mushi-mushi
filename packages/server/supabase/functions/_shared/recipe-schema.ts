@@ -30,6 +30,15 @@ const tokenFileSchema = z
   })
   .passthrough()
 
+const directionSchema = z
+  .object({
+    name: z.string().min(1).max(80),
+    status: z.enum(['active', 'inactive']),
+    tokens: z.array(repoPath).min(1).max(20),
+    note: z.string().max(500).optional(),
+  })
+  .passthrough()
+
 const contrastPairSchema = z
   .object({
     fg: z.string().min(1).max(200),
@@ -54,7 +63,21 @@ const ruleSchema = z
 const designSchema = z
   .object({
     tokens: z.array(tokenFileSchema).max(40).optional(),
-    css: z.array(z.object({ path: repoPath, role: z.string().optional() }).passthrough()).max(20).optional(),
+    css: z
+      .array(
+        z
+          .object({
+            path: repoPath,
+            role: z.string().optional(),
+            /** Selectors whose custom properties count, besides :root and @theme. */
+            scopes: z.array(z.string().min(1).max(300)).max(20).optional(),
+          })
+          .passthrough(),
+      )
+      .max(20)
+      .optional(),
+    /** Candidate directions for comparison; tokens[] stays the only drift source. */
+    directions: z.array(directionSchema).max(20).optional(),
     components: z.object({ globs: z.array(z.string().max(300)).max(40) }).passthrough().optional(),
     literalScan: z
       .object({
@@ -88,6 +111,45 @@ export const recipeManifestSchema = z
 
 export type RecipeManifest = z.infer<typeof recipeManifestSchema>
 export type ContrastPairDecl = z.infer<typeof contrastPairSchema>
+export type DirectionDecl = z.infer<typeof directionSchema>
+
+/**
+ * `design.directions[]` rules (Plan 019 §2): at most one direction is active,
+ * and its `tokens` must equal the `role: "source"` paths of `design.tokens[]`
+ * exactly, so the board can never disagree with what drift checks.
+ */
+export function checkDirections(manifest: RecipeManifest): RecipeIssue[] {
+  const dirs = (manifest.design?.directions ?? []) as DirectionDecl[]
+  if (dirs.length === 0) return []
+  const issues: RecipeIssue[] = []
+  const active = dirs.filter((d) => d.status === 'active')
+  const names = new Set<string>()
+  for (const d of dirs) {
+    if (names.has(d.name)) issues.push({ severity: 'error', code: 'directions_duplicate_name', message: `design.directions has two entries named "${d.name}".`, file: RECIPE_MANIFEST_PATH })
+    names.add(d.name)
+    for (const t of d.tokens) {
+      if (!normalizeRepoPath(t)) issues.push({ severity: 'error', code: 'UNSAFE_PATH', message: `design.directions "${d.name}" lists "${t}", which is not a safe repo path.`, file: RECIPE_MANIFEST_PATH })
+    }
+  }
+  if (active.length > 1) {
+    issues.push({ severity: 'error', code: 'directions_active_mismatch', message: `design.directions marks ${active.length} directions active (${active.map((d) => d.name).join(', ')}); at most one may be.`, file: RECIPE_MANIFEST_PATH })
+    return issues
+  }
+  if (active.length === 1) {
+    const want = new Set((manifest.design?.tokens ?? []).filter((t) => t.role === 'source').map((t) => normalizeRepoPath(t.path) ?? t.path))
+    const got = new Set(active[0].tokens.map((t) => normalizeRepoPath(t) ?? t))
+    const same = want.size === got.size && [...want].every((p) => got.has(p))
+    if (!same) {
+      issues.push({
+        severity: 'error',
+        code: 'directions_active_mismatch',
+        message: `The active direction "${active[0].name}" lists different files from the role: "source" entries in design.tokens. They must be the same set.`,
+        file: RECIPE_MANIFEST_PATH,
+      })
+    }
+  }
+  return issues
+}
 
 export type ManifestParse =
   | { ok: true; manifest: RecipeManifest; issues: RecipeIssue[] }
@@ -131,6 +193,8 @@ export function parseRecipeManifest(text: string): ManifestParse {
       })),
     }
   }
+  const directionIssues = checkDirections(parsed.data)
+  if (directionIssues.some((i) => i.severity === 'error')) return { ok: false, issues: directionIssues }
   const issues: RecipeIssue[] = []
   for (const tf of parsed.data.design?.tokens ?? []) {
     if (!normalizeRepoPath(tf.path)) {
