@@ -630,7 +630,7 @@ export async function notifyFollowers(
 }
 
 export type HeldActionResult =
-  | { ok: true; result: NotificationResult }
+  | { ok: true; result: NotificationResult; type?: NotificationType; dedupeKey?: string | null }
   | { ok: false; code: 'NOT_FOUND' | 'NOT_HELD' | 'DB_ERROR'; message: string }
 
 /**
@@ -679,7 +679,7 @@ export async function releaseHeldNotification(
     message,
     dedupeKey: row.dedupe_key,
   })
-  return { ok: true, result }
+  return { ok: true, result, type: row.notification_type, dedupeKey: row.dedupe_key }
 }
 
 /** Discard a held Outbox message; the reporter never sees it. */

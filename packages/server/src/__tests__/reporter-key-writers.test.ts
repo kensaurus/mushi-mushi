@@ -45,7 +45,7 @@ const REVIEWED = new Map<string, 'keyed' | 'stored' | 'sentinel'>([
   // which are the writers. Its only textual match is a zod field.
   ['api/routes/tester-marketplace.ts reporter_token_hash', 'keyed'], // reporterKey(`roadmap:${visitor}`)
   ['api/routes/reporter-feature-board.ts reporter_token_hash', 'stored'], // auth.tokenHash
-  ['api/routes/releases.ts reporter_token_hash', 'stored'], // reports row → createNotification('released')
+  ['_shared/release-reporters.ts reporter_token_hash', 'stored'], // reports row → createNotification('released')
   ['api/routes/reporter-admin.ts reporter_token_hash', 'stored'], // reporter-view reads the reports row
   ['_shared/reporter-reply-signals.ts reporter_token_hash', 'stored'], // reopen reads the row back
   ['_shared/notifications.ts reporter_token_hash', 'stored'], // callers pass a row value
