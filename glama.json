@@ -4,7 +4,7 @@
     "kensaurus"
   ],
   "name": "mushi-mushi",
-  "description": "MCP server for Cursor, Claude Code and Copilot. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor. 88 tools to triage user-reported bugs, pull a fix packet with evidence and blast radius, and dispatch a fix PR. Run it with npx @mushi-mushi/mcp. SDKs MIT · server AGPLv3 · enterprise edition commercial.",
+  "description": "MCP server for Cursor, Claude Code and Copilot. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor. 91 tools to triage user-reported bugs, pull a fix packet with evidence and blast radius, and dispatch a fix PR. Run it with npx @mushi-mushi/mcp. SDKs MIT · server AGPLv3 · enterprise edition commercial.",
   "license": "MIT",
   "tools": [
     {
@@ -86,6 +86,18 @@
     {
       "name": "list_connectors",
       "description": "List the sources connected to an organization: each connector instance with its kind, status (connected | not_connected | blocked | error; blocked means an outside party refuses, for example an App Store agreement not accepted), the scopes it was granted, enabled capabilities and the projects it is bound to, plus the kinds that can be added and those still planned. Never returns credentials. Optional organizationId; account-level key needed. Returns { organizationId, available, planned, instances, legacy }. Read-only."
+    },
+    {
+      "name": "propose_recipe_change",
+      "description": "Propose edits to files the app recipe allows (design tokens, budgets in mushi.recipe.json, .env.example declarations, store listing text under store.listingDir) as ONE draft pull request. Dry run by default: returns the diff of each file and any path that is not writable (workflows, env files, lockfiles, generated exports and migrations never are). confirm: true opens the draft PR; it stays a draft so the repo CI does not run until the owner marks it ready, and nothing is merged or published. Confirm with the user before confirm: true. Returns { dryRun, files, denied } or { jobId, status, prUrl }. Write."
+    },
+    {
+      "name": "propose_portfolio_change",
+      "description": "Propose the same kind of recipe edit in up to 10 repos of one organization, one draft PR per repo with a shared batch id. Dry run by default (the diff and denied paths of each repo); confirm: true opens the drafts. One repo failing never rolls back the others; each result says what happened. Needs an account-level key. Confirm with the user before confirm: true. Returns { dryRun, plans } or { batchId, opened, results }. Write."
+    },
+    {
+      "name": "request_connector_action",
+      "description": "Ask for one connector action, for example set_rollout or promote_track on a Google Play connector. This only creates a request: nothing runs until a team owner or admin approves it in the console and then runs it there. An API key or this tool can never approve or run it. The approval binds the exact payload and expires after an hour. Confirm with the user first. Returns { id, status: \"pending_approval\", payloadSha256 }. Write."
     },
     {
       "name": "get_radar",

@@ -3080,6 +3080,179 @@
         "additionalProperties": false
       }
     },
+    "propose_portfolio_change": {
+      "title": "Fix once across apps (draft PRs)",
+      "description": "Propose the same kind of recipe edit in up to 10 repos of one organization, one draft PR per repo with a shared batch id. Dry run by default (the diff and denied paths of each repo); confirm: true opens the drafts. One repo failing never rolls back the others; each result says what happened. Needs an account-level key. Confirm with the user before confirm: true. Returns { dryRun, plans } or { batchId, opened, results }. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Fix once across apps (draft PRs)",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "element": {
+            "type": "string",
+            "enum": [
+              "design",
+              "gates",
+              "env",
+              "routes",
+              "store",
+              "release"
+            ],
+            "description": "Which part of the recipe the edit belongs to"
+          },
+          "changes": {
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "projectId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "edits": {
+                  "minItems": 1,
+                  "maxItems": 30,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 400,
+                        "description": "Repo-relative path the recipe allows"
+                      },
+                      "content": {
+                        "type": "string",
+                        "maxLength": 524288,
+                        "description": "The full new file content"
+                      },
+                      "reason": {
+                        "type": "string",
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "content"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "projectId",
+                "edits"
+              ]
+            }
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "confirm": {
+            "description": "true opens one draft PR per repo; omitted or false is a dry run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "element",
+          "changes"
+        ]
+      },
+      "returnsUntrusted": true
+    },
+    "propose_recipe_change": {
+      "title": "Propose a recipe change (draft PR)",
+      "description": "Propose edits to files the app recipe allows (design tokens, budgets in mushi.recipe.json, .env.example declarations, store listing text under store.listingDir) as ONE draft pull request. Dry run by default: returns the diff of each file and any path that is not writable (workflows, env files, lockfiles, generated exports and migrations never are). confirm: true opens the draft PR; it stays a draft so the repo CI does not run until the owner marks it ready, and nothing is merged or published. Confirm with the user before confirm: true. Returns { dryRun, files, denied } or { jobId, status, prUrl }. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Propose a recipe change (draft PR)",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "element": {
+            "type": "string",
+            "enum": [
+              "design",
+              "gates",
+              "env",
+              "routes",
+              "store",
+              "release"
+            ],
+            "description": "Which part of the recipe the edit belongs to"
+          },
+          "edits": {
+            "minItems": 1,
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 400,
+                  "description": "Repo-relative path the recipe allows"
+                },
+                "content": {
+                  "type": "string",
+                  "maxLength": 524288,
+                  "description": "The full new file content"
+                },
+                "reason": {
+                  "type": "string",
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ]
+            }
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "confirm": {
+            "description": "true opens the draft PR; omitted or false is a dry run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "element",
+          "edits"
+        ]
+      },
+      "returnsUntrusted": true
+    },
     "query_funnel": {
       "title": "Ordered funnel over product events",
       "description": "Where do users drop off? Ordered funnel over Mushi.track() events for this project. Pass 2–8 step event names in order (e.g. [\"landing_view\", \"signup_completed\", \"first_report_received\"]); each step counts distinct users who did the previous step then this one within stepWindow (default 7d), over the trailing windowDays (default 30). Optional breakdown property (e.g. \"utm_source\", \"$surface\") splits every step. Returns { steps: [{ name, entered, converted, pct, median_secs }], breakdown: [{ value, entered, steps }] } (pct is conversion from step 1; breakdown is empty unless requested). Read-only. Use to find the biggest drop-off before changing onboarding; use get_product_events_summary to discover event names, or get_user_paths to see what users did after a step.",
@@ -3378,6 +3551,65 @@
         "required": [
           "reportId",
           "message"
+        ]
+      }
+    },
+    "request_connector_action": {
+      "title": "Request a store action (needs approval)",
+      "description": "Ask for one connector action, for example set_rollout or promote_track on a Google Play connector. This only creates a request: nothing runs until a team owner or admin approves it in the console and then runs it there. An API key or this tool can never approve or run it. The approval binds the exact payload and expires after an hour. Confirm with the user first. Returns { id, status: \"pending_approval\", payloadSha256 }. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Request a store action (needs approval)",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "connectorId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "Connector instance id (list_connectors)"
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "description": "For example set_rollout or promote_track"
+          },
+          "payload": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "The exact action input; the approval binds its hash"
+          },
+          "projectId": {
+            "description": "(`project_id` is accepted too.)",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "reason": {
+            "description": "Why, shown to the approver",
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "connectorId",
+          "action",
+          "payload"
         ]
       }
     },

@@ -219,6 +219,21 @@ account whose agreement nobody accepted, shows **Blocked** with the step to
 take. Releasing (a Play rollout %, promoting a track) needs a separate write
 key and a person's approval for each action.
 
+## Changes and store actions
+
+A recipe change is always a **draft pull request** to files the recipe allows
+in `change.allowPaths`: token files, budgets in `mushi.recipe.json`,
+`.env.example`, and store listing text under `store.listingDir`. Workflows,
+env files, lockfiles, generated exports and migrations are never written. The
+draft stays a draft, so your CI does not run until you mark it ready. A
+listing change is published by your own CI after you merge.
+
+A store action, such as raising a Google Play rollout to 20%, is different: it
+calls the store directly. It needs a separate write key, and every single
+action needs a team owner or admin to approve it in the console and then run
+it there. The approval covers the exact payload, expires after an hour and
+runs once. An editor agent can ask for an action but can never approve it.
+
 ## Push from CI instead
 
 For a repo Mushi has no token for, push the recipe from your existing CI job:
