@@ -301,7 +301,24 @@ export function computeDeviance(snapshot: Pick<SnapshotRow, 'manifest' | 'tokens
   return { findings: sortFindings(findings), counts, score, breakdown, scannedLines }
 }
 
+/** A `running` scan older than this never finished (the isolate died); it reads as `error`. */
+export const STUCK_SCAN_MS = 15 * 60 * 1000
+
+export type DevianceStart =
+  | { ok: true; runId: string; startedAt: string; commitSha: string | null; execute: () => Promise<{ ok: true; run: DevianceRun } | { ok: false; error: string }> }
+  | { ok: false; error: string }
+
+/** Scan synchronously (the collector). The api route uses startDesignDeviance. */
 export async function runDesignDeviance(db: Db, projectId: string, triggeredBy = 'manual'): Promise<{ ok: true; run: DevianceRun } | { ok: false; error: string }> {
+  const started = await startDesignDeviance(db, projectId, triggeredBy)
+  return started.ok ? started.execute() : started
+}
+
+/**
+ * Insert the `running` gate run and return the work as `execute`, so a
+ * request can answer 202 at once and finish the scan in the background.
+ */
+export async function startDesignDeviance(db: Db, projectId: string, triggeredBy = 'manual'): Promise<DevianceStart> {
   const snapshot = await loadCurrentSnapshot(db, projectId)
   if (!snapshot?.manifest || !judgingSet(snapshot.tokens)) {
     return { ok: false, error: 'No design tokens to judge against. Add mushi.recipe.json with DTCG token files and refresh.' }
@@ -317,7 +334,10 @@ export async function runDesignDeviance(db: Db, projectId: string, triggeredBy =
     .single()
   if (runErr) throw new Error(`gate_runs insert failed: ${runErr.message}`)
   const runId = (runRow as { id: string }).id
+  return { ok: true, runId, startedAt, commitSha: snapshot.commit_sha, execute: () => executeScan(db, projectId, snapshot, repo, runId, startedAt) }
+}
 
+async function executeScan(db: Db, projectId: string, snapshot: SnapshotRow, repo: RecipeRepo, runId: string, startedAt: string): Promise<{ ok: true; run: DevianceRun } | { ok: false; error: string }> {
   try {
     const sha = snapshot.commit_sha ?? (await getDefaultHead(repo)).sha
     const tree = await listTree(repo, sha)
