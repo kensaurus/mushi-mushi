@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-01T06:08:40.157Z",
+  "generatedAt": "2026-10-02T06:00:03.191Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -298,6 +298,24 @@
       "route_path": "/code-health",
       "kind": "page",
       "content_hash": "72172d799e506bc1b12aa42c238f789ddbacbfb3d389d575ad0f7bab1805afbe"
+    },
+    {
+      "doc_path": "pages/recipe.md",
+      "section": "main",
+      "title": "Recipe",
+      "body": "# Recipe\n\nWhat this app is made of — schema, design system, routes, gates, CI, deploy, env and integrations — and where each drifted.\n\nRoute: /recipe\nSection: Check\n\nKeywords: recipe, app recipe, schema, design system, tokens, gates, ci, deploy, env, integrations, drift, manifest, mushi.recipe.json\n\nUse this page when the user asks about: recipe, app recipe, schema, design system, tokens, gates",
+      "route_path": "/recipe",
+      "kind": "page",
+      "content_hash": "16c3ff43fd5efb5d32c6af2bcb19e49659b3351e56d9c6a7583b725b7dbbca73"
+    },
+    {
+      "doc_path": "pages/design.md",
+      "section": "main",
+      "title": "Design system",
+      "body": "# Design system\n\nDesign tokens, contrast pairs, type scale and the deviance score for off-token code; token and rule edits open a draft PR.\n\nRoute: /design\nSection: Check\n\nKeywords: design, design system, tokens, dtcg, colors, contrast, typography, spacing, radius, deviance, off-token, rules\n\nUse this page when the user asks about: design, design system, tokens, dtcg, colors, contrast",
+      "route_path": "/design",
+      "kind": "page",
+      "content_hash": "c51900efe324b6ef74d3ac48aa482e50d30e246b13bc17573046ec018511512f"
     },
     {
       "doc_path": "pages/drift.md",
