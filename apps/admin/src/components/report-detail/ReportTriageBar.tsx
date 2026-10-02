@@ -25,6 +25,20 @@ function selectableStatus(status: string): string {
 }
 const SEV_OPTS = ['critical', 'high', 'medium', 'low']
 
+/**
+ * Why a report is closed. The reporter sees matching copy ("We couldn't
+ * reproduce it. Reply if it happens again."); spam closes silently. Values are
+ * `reports_closed_reason_check`. Missing info is not a close — use "Ask for
+ * more info" in the Reporter view instead.
+ */
+const CLOSE_REASONS: Array<{ value: string; label: string; needsGroup?: boolean }> = [
+  { value: 'not_reproducible', label: "Couldn't reproduce it" },
+  { value: 'wont_fix', label: "Won't fix" },
+  { value: 'working_as_intended', label: 'Works as intended' },
+  { value: 'duplicate', label: 'Same as another report', needsGroup: true },
+  { value: 'spam', label: 'Spam (reporter is not told)' },
+]
+
 interface RoutingIntegration {
   id: string
   integration_type: string
@@ -62,6 +76,8 @@ export function ReportTriageBar({
   const [showSaved, setShowSaved] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [confirmDispatch, setConfirmDispatch] = useState(false)
+  const [closing, setClosing] = useState(false)
+  const [closeReason, setCloseReason] = useState('')
   const toast = useToast()
   const { data: integrationsData } = usePageData<{ integrations: RoutingIntegration[] }>('/v1/admin/integrations')
   const activeRoutes = (integrationsData?.integrations ?? []).filter((r) => r.is_active)
@@ -138,12 +154,54 @@ export function ReportTriageBar({
       <SelectField
         label="Status"
         value={selectableStatus(report.status)}
-        onChange={(e) => onTriage({ status: e.currentTarget.value })}
+        onChange={(e) => {
+          const next = e.currentTarget.value
+          // Closing asks why first: the reason decides what the reporter is told.
+          if (next === 'dismissed' && report.status !== 'dismissed') {
+            setCloseReason('')
+            setClosing(true)
+            return
+          }
+          void onTriage({ status: next })
+        }}
         disabled={saving}
         className="!w-auto"
       >
         {STATUS_OPTS.map((s) => <option key={s} value={s}>{STATUS_LABELS[s] ?? s}</option>)}
       </SelectField>
+
+      {closing && (
+        <div className="flex flex-wrap items-end gap-2" role="group" aria-label="Close this report">
+          <SelectField
+            label="Why close it?"
+            value={closeReason}
+            onChange={(e) => setCloseReason(e.currentTarget.value)}
+            disabled={saving}
+            className="!w-auto"
+          >
+            <option value="">No reason</option>
+            {CLOSE_REASONS.map((r) => (
+              <option key={r.value} value={r.value} disabled={r.needsGroup && !report.report_group_id}>
+                {r.label}
+                {r.needsGroup && !report.report_group_id ? ' (group it first)' : ''}
+              </option>
+            ))}
+          </SelectField>
+          <Btn
+            size="sm"
+            onClick={() => {
+              setClosing(false)
+              void onTriage(closeReason ? { status: 'dismissed', closed_reason: closeReason } : { status: 'dismissed' })
+            }}
+            disabled={saving}
+          >
+            Close report
+          </Btn>
+          <Btn size="sm" variant="ghost" onClick={() => setClosing(false)} disabled={saving}>
+            Cancel
+          </Btn>
+        </div>
+      )}
 
       <SelectField
         label="Severity"

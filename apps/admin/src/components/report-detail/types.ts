@@ -189,6 +189,10 @@ export interface ReportDetail {
   confidence: number | null
   status: string
   reporter_token_hash: string
+  /** Set when grouped under a canonical report; required to close as a duplicate. */
+  report_group_id?: string | null
+  /** Why a dismissed report was closed; the reporter sees matching copy (Plan 018 §2.1). */
+  closed_reason?: string | null
   /** Parent report when this row is a regression reopen. */
   parent_report_id?: string | null
   verified_at?: string | null
