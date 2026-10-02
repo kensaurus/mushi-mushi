@@ -20,6 +20,15 @@ export async function grabMaskedTabFrame(
   maskSelectors: readonly string[],
 ): Promise<string> {
   const stream = await pendingStream;
+  // Masking only reaches this page: refuse a window or the whole screen rather
+  // than capture it unmasked. (A different browser tab also reports 'browser'
+  // and can't be told apart here; preferCurrentTab makes this tab the default
+  // choice, and the reporter reviews the preview before sending.)
+  const surface = stream.getVideoTracks?.()[0]?.getSettings?.().displaySurface;
+  if (surface && surface !== 'browser') {
+    stream.getTracks().forEach((track) => track.stop());
+    throw Object.assign(new Error('Only this tab can be captured'), { name: 'NotAllowedError' });
+  }
   const selectors = maskSelectors.join(',');
   const mask = document.createElement('style');
   mask.setAttribute('data-mushi-capture-mask', '');

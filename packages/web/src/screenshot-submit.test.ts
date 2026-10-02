@@ -8,6 +8,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Mushi } from './mushi';
 import type { MushiConfig } from '@mushi-mushi/core';
 
+// In a browser the tab-share chunk arrives over the network, after an instant
+// getDisplayMedia rejection; reproduce that gap.
+vi.mock('./capture/display-capture', async (importOriginal) => {
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  return importOriginal();
+});
+
 const CONFIG: MushiConfig = {
   projectId: '00000000-0000-0000-0000-000000000001',
   apiKey: 'mushi_test_key_abcdefghijklmnop',
@@ -111,5 +118,34 @@ describe('screenshot submission', () => {
     expect(getDisplayMedia).toHaveBeenCalledTimes(1);
     expect(getDisplayMedia.mock.calls[0][0]).toMatchObject({ video: { displaySurface: 'browser' }, audio: false });
     delete (navigator as { mediaDevices?: unknown }).mediaDevices;
+  });
+
+  it('a share refused at once shows the permission reason, with no unhandled rejection', async () => {
+    const denied = Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
+    // A plain function, not vi.fn: vitest's spy subscribes to returned
+    // promises (settledResults), which would mark the rejection as handled.
+    const getDisplayMedia = () => Promise.reject(denied);
+    Object.defineProperty(navigator, 'mediaDevices', { value: { getDisplayMedia }, configurable: true });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      const sdk = Mushi.init(CONFIG);
+      sdk.report({ featureRequest: true });
+      (shadow().querySelector('[data-action="screenshot"]') as HTMLButtonElement).click();
+      await vi.waitFor(() => expect(shadow().querySelector('[data-action="screenshot-share-tab"]')).not.toBeNull());
+      (shadow().querySelector('[data-action="screenshot-share-tab"]') as HTMLButtonElement).click();
+
+      await vi.waitFor(() => {
+        expect(shadow().querySelector('[data-role="screenshot-reason"]')?.textContent).toContain('Allow it');
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(unhandled).not.toHaveBeenCalled();
+      // The panel comes back after the attempt.
+      expect(document.getElementById('mushi-mushi-widget')!.style.visibility).toBe('');
+    } finally {
+      process.off('unhandledRejection', unhandled);
+      delete (navigator as { mediaDevices?: unknown }).mediaDevices;
+    }
   });
 });
