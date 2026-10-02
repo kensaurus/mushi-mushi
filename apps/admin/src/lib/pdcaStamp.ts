@@ -1,7 +1,7 @@
 /**
  * FILE: apps/admin/src/lib/pdcaStamp.ts
  * PURPOSE: Single source of truth for the visual language of a PDCA stage
- *          status stamp ("Closed", "In flight", "Failed", "Not yet").
+ *          status stamp ("Done", "In flight", "Blocked", "Failed", "Not yet").
  *
  *          Three surfaces consume these tokens — PdcaReceipt (fix row strip),
  *          PdcaReceiptStrip (report-detail compact grid), and ReportPdcaStory
@@ -23,7 +23,12 @@
  *              to signal live activity.
  */
 
-export type StageStamp = 'done' | 'pending' | 'failed' | 'idle'
+/**
+ * `blocked` = nothing is running and nothing failed outright, but a human has
+ * to act before the stage can move (CI red on the PR, agent flagged the fix
+ * for review). It must not read "In flight", which promises progress.
+ */
+export type StageStamp = 'done' | 'pending' | 'blocked' | 'failed' | 'idle'
 
 interface StampVisual {
   /** Full card shell — border, optional tint fill, optional glow. */
@@ -32,7 +37,7 @@ interface StampVisual {
   dot: string
   /** Ring used when the dot is rendered as a decorated circle. */
   ring: string
-  /** Text colour for the stamp label ("Closed", "In flight"…). */
+  /** Text colour for the stamp label ("Done", "In flight"…). */
   copy: string
   /** Human-readable stamp label. */
   label: string
@@ -48,7 +53,9 @@ export const STAMP_VISUAL: Record<StageStamp, StampVisual> = {
     dot: 'bg-ok',
     ring: 'ring-ok/40',
     copy: 'text-ok',
-    label: 'Closed',
+    // "Closed" read as "closed without merging" on the Plan stage; a finished
+    // stage is simply done.
+    label: 'Done',
     glyph: '✓',
     pulse: false,
   },
@@ -60,6 +67,15 @@ export const STAMP_VISUAL: Record<StageStamp, StampVisual> = {
     label: 'In flight',
     glyph: '⧗',
     pulse: true,
+  },
+  blocked: {
+    shell: 'border-warn/45 bg-warn/5',
+    dot: 'bg-warn',
+    ring: 'ring-warn/40',
+    copy: 'text-warn',
+    label: 'Blocked',
+    glyph: '!',
+    pulse: false,
   },
   failed: {
     shell: 'border-danger/45 bg-danger/5 mushi-glow-danger',

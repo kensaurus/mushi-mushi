@@ -615,6 +615,9 @@ export async function ingestReport(
           .select('owner_id')
           .eq('id', projectId)
           .maybeSingle();
+        // Company funnel row: product_events.project_id is the self project
+        // (no projectId on purpose); the host project is properties.project_id.
+        // See ProductEventPayload.projectId.
         await emitProductEvent(db, {
           userId: ((proj as { owner_id?: string | null } | null)?.owner_id) ?? null,
           eventName: 'first_report_received',

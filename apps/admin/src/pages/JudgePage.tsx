@@ -46,6 +46,7 @@ import {
 } from '../components/charts'
 import { SCORE_COLORS } from '../lib/tokens'
 import { useToast } from '../lib/toast'
+import { describeJudgeRun, useJudgeRunPrefill, type JudgeRunResponse } from '../lib/judgeRun'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
@@ -270,6 +271,8 @@ function ScorePill({ value }: { value: number | null }) {
   )
 }
 
+const JUDGE_RUN_BUTTON_ID = 'judge-run-now'
+
 export function JudgePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
@@ -386,14 +389,21 @@ export function JudgePage() {
   async function runNow() {
     setRunning(true)
     setRunResult({ tone: 'running', message: 'Dispatching judge batch…', at: null })
-    const res = await apiFetch<{ dispatched: number }>('/v1/admin/judge/run', { method: 'POST' })
+    const res = await apiFetch<JudgeRunResponse>('/v1/admin/judge/run', { method: 'POST' })
     setRunning(false)
     const at = new Date().toISOString()
     if (res.ok) {
-      const count = res.data?.dispatched ?? 0
-      const message = `Dispatched ${count} project${count === 1 ? '' : 's'} — refreshing in ~30s`
-      toast.success('Judge batch dispatched', `${count} project(s). Refreshing in ~30s.`)
-      setRunResult({ tone: 'success', message, at })
+      const outcome = describeJudgeRun(res.data)
+      if (outcome.kind === 'nothing') {
+        // Nothing eligible: the server skipped the paid batch. Say so instead
+        // of a green "dispatched" that silently grades 0 reports.
+        toast.info(outcome.title, outcome.description)
+        setRunResult({ tone: 'info', message: outcome.receipt, at })
+        reloadStats()
+        return
+      }
+      toast.success(outcome.title, outcome.description)
+      setRunResult({ tone: 'success', message: outcome.receipt, at })
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
       refreshTimerRef.current = setTimeout(loadAll, 30_000)
     } else {
@@ -403,18 +413,9 @@ export function JudgePage() {
     }
   }
 
-  const runAction = searchParams.get('action')
-  // Ref guard, not `running` state: setRunning(true) hasn't committed when
-  // StrictMode re-invokes the effect, so state alone double-dispatches.
-  const autoRunFiredRef = useRef(false)
-  useEffect(() => {
-    if (runAction !== 'run' || autoRunFiredRef.current) return
-    autoRunFiredRef.current = true
-    void runNow()
-    const next = new URLSearchParams(searchParams)
-    next.delete('action')
-    setSearchParams(next, { replace: true })
-  }, [runAction, searchParams, setSearchParams])
+  // `/judge?action=run` (inbox, banners, Prompt Lab) used to POST the paid
+  // judge batch on page load. It now only points at the Run button.
+  const runPrefilled = useJudgeRunPrefill(JUDGE_RUN_BUTTON_ID)
 
   // Publish page context so the browser tab reflects the latest judge
   // week score (e.g. "Judge · 65% this week — Mushi Mushi") and the
@@ -444,7 +445,9 @@ export function JudgePage() {
   const disagreementRate = evalsRaw.length > 0
     ? evalsRaw.filter((e) => e.classification_agreed === false).length / evalsRaw.length
     : null
-  const staleHoursAgo = evalsRaw[0]?.created_at
+  // Age only matters while something is waiting to be graded; otherwise the
+  // "re-check" nudge asks for a run that evaluates nothing.
+  const staleHoursAgo = stats.ungradedReports > 0 && evalsRaw[0]?.created_at
     ? Math.floor((Date.now() - new Date(evalsRaw[0].created_at).getTime()) / 3_600_000)
     : null
   const heroAction = useNextBestAction({
@@ -723,11 +726,13 @@ export function JudgePage() {
         <Btn
           size="sm"
           variant="primary"
+          id={JUDGE_RUN_BUTTON_ID}
           onClick={runNow}
           disabled={running}
           loading={running}
           leadingIcon={<PlayIcon />}
           data-dav-anchor="judge:act"
+          className={runPrefilled ? 'ring-2 ring-brand ring-offset-2 ring-offset-surface' : ''}
         >
           Run judge now
         </Btn>

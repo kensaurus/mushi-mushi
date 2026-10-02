@@ -26,6 +26,7 @@
 
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
 import { STAMP_VISUAL, type StageStamp } from '../../lib/pdcaStamp'
+import { ACT_BLOCKER_COPY, ACT_BLOCKER_LINK_LABEL, ACT_BLOCKER_STAMP, actBlocker } from '../../lib/pdcaAct'
 import { RelativeTime } from '../ui'
 import { ActionPill, InlineProof } from './ReportSurface'
 import type { DispatchState } from '../../lib/dispatchFix'
@@ -235,7 +236,7 @@ function buildStoryNodes(
     if (inFlight) return 'Auto-fix agent is drafting the PR right now'
     if (fixStatus === 'failed') return `Last attempt failed — ${fix?.error ?? 'see fixes page'}`
     if (dispatched) return 'Fix attempt recorded'
-    return 'No fix dispatched yet — click "Send to auto-fix" to start'
+    return 'No fix dispatched yet — click "Dispatch fix" to start'
   })()
   const doLink = fix?.pr_url
     ? { href: fix.pr_url, label: `PR${fix.pr_number ? ` #${fix.pr_number}` : ''}` }
@@ -285,20 +286,24 @@ function buildStoryNodes(
     thumbnail: report.screenshot_url ?? null,
   }
 
-  // ACT — merge + close
+  // ACT — merge + close. A closed PR, red CI or an agent review flag blocks
+  // the loop instead of "Awaiting merge" (see lib/pdcaAct.ts).
+  const blocker = actBlocker(fix)
   let actState: StoryState = 'idle'
   if (status === 'fixed') actState = 'done'
   else if (fixStatus === 'failed' || status === 'dismissed') actState = 'failed'
+  else if (blocker) actState = ACT_BLOCKER_STAMP[blocker]
   else if (fix?.pr_url || ciConclusion === 'success') actState = 'pending'
   const actHeadline = (() => {
     if (status === 'fixed') return 'Loop closed — report marked fixed and routed back upstream'
     if (status === 'dismissed') return 'Loop closed — report dismissed (no fix needed)'
-    if (actState === 'pending') return 'Awaiting merge — review the PR and click Open PR to ship'
     if (fixStatus === 'failed') return `Loop blocked — ${fix?.error ?? 'fix attempt failed'}`
+    if (blocker) return ACT_BLOCKER_COPY[blocker]
+    if (actState === 'pending') return 'Awaiting merge — review the PR and click Open PR to ship'
     return 'Not yet — needs Plan + Do + Check first'
   })()
   const actLink = fix?.pr_url && actState !== 'done'
-    ? { href: fix.pr_url, label: 'Review & merge' }
+    ? { href: fix.pr_url, label: blocker ? ACT_BLOCKER_LINK_LABEL[blocker] : 'Review & merge' }
     : status === 'fixed'
       ? { href: '/integrations/config', label: 'See routing' }
       : undefined

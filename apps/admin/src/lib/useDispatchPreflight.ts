@@ -37,12 +37,15 @@ export interface PreflightState {
   reload: () => void
   /** GitHub repo URL the fix worker will target — sourced from the preflight endpoint. */
   repoUrl: string | null
+  /** project_repos.default_branch of that repo — the fix PR's base. */
+  baseBranch?: string | null
 }
 
 interface PreflightResponse {
   ready: boolean
   checks: PreflightCheck[]
   repoUrl?: string | null
+  baseBranch?: string | null
 }
 
 export function useDispatchPreflight(projectId: string | null | undefined): PreflightState {
@@ -52,14 +55,15 @@ export function useDispatchPreflight(projectId: string | null | undefined): Pref
     checks: PreflightCheck[]
     error: string | null
     repoUrl: string | null
-  }>({ loading: true, ready: false, checks: [], error: null, repoUrl: null })
+    baseBranch: string | null
+  }>({ loading: true, ready: false, checks: [], error: null, repoUrl: null, baseBranch: null })
   const aliveRef = useRef(true)
   const realtimeHealthy = useRef(false)
   const pollTimerRef = useRef<number | null>(null)
 
   const fetchOnce = useCallback(async () => {
     if (!projectId) {
-      setState({ loading: false, ready: false, checks: [], error: null, repoUrl: null })
+      setState({ loading: false, ready: false, checks: [], error: null, repoUrl: null, baseBranch: null })
       return
     }
     const res = await apiFetch<PreflightResponse>(`/v1/admin/projects/${projectId}/preflight`)
@@ -71,6 +75,7 @@ export function useDispatchPreflight(projectId: string | null | undefined): Pref
         checks: [],
         error: res.error?.message ?? 'Preflight check failed',
         repoUrl: null,
+        baseBranch: null,
       })
       return
     }
@@ -80,6 +85,7 @@ export function useDispatchPreflight(projectId: string | null | undefined): Pref
       checks: res.data.checks,
       error: null,
       repoUrl: res.data.repoUrl ?? null,
+      baseBranch: res.data.baseBranch ?? null,
     })
   }, [projectId])
 
@@ -158,5 +164,6 @@ export function useDispatchPreflight(projectId: string | null | undefined): Pref
     error: state.error,
     reload: () => { void fetchOnce() },
     repoUrl: state.repoUrl,
+    baseBranch: state.baseBranch,
   }
 }

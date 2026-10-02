@@ -108,12 +108,20 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
         )
         .eq('project_id', projectId)
         .maybeSingle(),
-      db.from('project_repos').select('repo_url').eq('project_id', projectId).limit(1),
+      // Primary repo first: its default_branch is the base the fix PR targets,
+      // shown in the console's dispatch confirm.
+      db
+        .from('project_repos')
+        .select('repo_url, default_branch')
+        .eq('project_id', projectId)
+        .order('is_primary', { ascending: false })
+        .limit(1),
       resolveLlmKey(db, projectId, 'anthropic'),
     ]);
 
     const settings = settingsRes.data;
     const repos = reposRes.data ?? [];
+    const baseBranch = (repos[0] as { default_branch?: string | null } | undefined)?.default_branch ?? null;
 
     const repoUrl =
       settings?.github_repo_url ??
@@ -173,7 +181,7 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
 
     const ready = checks.every((c) => c.ready);
 
-    return c.json({ ok: true, data: { ready, checks, repoUrl } });
+    return c.json({ ok: true, data: { ready, checks, repoUrl, baseBranch } });
   });
 
   // ---------------------------------------------------------------------------

@@ -25,6 +25,8 @@ import { summarizeReplayEvents } from '../_shared/replay-evidence.ts'
 import { STAGE1_MODEL, STAGE1_FALLBACK } from '../_shared/models.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { isEarlyRealReport, type OldestReportRow } from '../_shared/first-report.ts'
+import { clipAtWord } from '../_shared/text-clip.ts'
+import { isFeatureRequest, reporterCategoryHint, respectReporterCategory } from '../_shared/report-category.ts'
 
 const stage1Schema = z.object({
   symptom: z.string().describe('What the user observed'),
@@ -205,6 +207,7 @@ Deno.serve(withSentry('fast-filter', async (req) => {
 
     const userPrompt = `## User Report
 - Category: ${scrubbedReport.user_category}
+${reporterCategoryHint(scrubbedReport, { trusted: false })}
 - Description: ${scrubbedReport.description}
 ${scrubbedReport.user_intent ? `- Intent: ${scrubbedReport.user_intent}` : ''}
 
@@ -312,6 +315,9 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
         langfuseTraceId: trace.id,
       })
     }
+
+    // The reporter's explicit "Feature request" outranks the model's guess.
+    classification = respectReporterCategory(classification, scrubbedReport)
 
     const latencyMs = Date.now() - startTime
     llmSpan.end({ model: usedModel, latencyMs, inputTokens: tokenUsage.promptTokens, outputTokens: tokenUsage.completionTokens })
@@ -432,7 +438,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     }
 
     if ((classification.confidence > confidenceThreshold && !forceStage2) || usedHeuristic) {
-      const summary = `${classification.symptom} — ${classification.actual}`.slice(0, 200)
+      const summary = clipAtWord(`${classification.symptom} — ${classification.actual}`, 200)
       await db.from('reports').update({
         status: 'classified',
         summary,
@@ -495,7 +501,8 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
               sdkPackage: report.sdk_package ?? null,
               sdkVersion: report.sdk_version ?? null,
               githubAppInstalled: hasGithubApp,
-              autofixEnabled: psRes.data?.autofix_enabled ?? false,
+              // No Dispatch button on a feature request (featureRequestDispatchBlock).
+              autofixEnabled: (psRes.data?.autofix_enabled ?? false) && !isFeatureRequest(report),
             },
             {
               channelId: settings?.slack_channel_id ?? undefined,

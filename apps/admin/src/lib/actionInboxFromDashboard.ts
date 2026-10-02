@@ -25,7 +25,10 @@ export interface InboxCard {
 }
 
 function resolveJudgeAction(ctx: InboxCardBuildContext): PageAction | null {
-  const staleHoursAgo = ctx?.judgeStaleHours ?? null
+  // The server only sets judgeStale when old scores AND ungraded reports
+  // coexist. Age alone (judgeStale=false, judgeStaleHours=335) means a re-run
+  // would grade nothing, so don't ask for one.
+  const staleHoursAgo = ctx?.judgeStale === false ? null : (ctx?.judgeStaleHours ?? null)
   const fromRules = computeNextBestAction({
     scope: 'judge',
     disagreementRate: null,

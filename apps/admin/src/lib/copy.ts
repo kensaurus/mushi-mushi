@@ -170,7 +170,7 @@ export const COPY: CopyRegistry = {
           'See real screenshots and reproduction steps before deciding',
           'Mute or close noisy reports so the model learns',
         ],
-        howToUse: 'Click any bug to open the full proof. Click "Send to auto-fix" to draft a pull request.',
+        howToUse: 'Click any bug to open the full proof. Click "Dispatch fix" to draft a pull request.',
       },
     },
     '/fixes': {

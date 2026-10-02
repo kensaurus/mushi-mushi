@@ -64,7 +64,9 @@ interface FixGitGraphProps {
   /** GitHub PR lifecycle state. Renders a colored badge next to the pr_opened row. */
   prState?: PrState | null
   branchName?: string | null
-  baseBranch?: string
+  /** The repo's real default branch (timeline `base_branch`). Unknown → a
+   *  neutral label; never a guessed 'main' (kensaurus/mushi-mushi is 'master'). */
+  baseBranch?: string | null
   /** When provided, the commit node links out to GitHub and opens the diff dialog. */
   commitSha?: string | null
   /** Agent model (e.g. "claude-sonnet-4-6") — surfaces in node tooltips. */
@@ -182,7 +184,7 @@ export function FixGitGraph({
   prNumber,
   prState,
   branchName,
-  baseBranch = 'main',
+  baseBranch,
   commitSha,
   agentModel,
   filesChanged,
@@ -369,7 +371,7 @@ export function FixGitGraph({
 
       <ul className="space-y-0 text-xs">
         <li className="mb-1 flex h-auto min-h-5 flex-wrap items-center gap-1.5 rounded-sm border border-edge-subtle/50 bg-surface-overlay/35 px-2 py-1 text-3xs uppercase tracking-wider text-fg-faint">
-          <span className="font-mono normal-case text-fg-secondary">{baseBranch}</span>
+          <span className="font-mono normal-case text-fg-secondary">{baseBranch || 'default branch'}</span>
           <span className="text-fg-faint">→</span>
           {branchUrl && branchName ? (
             <a

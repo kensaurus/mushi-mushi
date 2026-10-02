@@ -21,7 +21,7 @@ import { log as rootLog } from '../_shared/logger.ts';
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { unverifiedGithubInstallsAllowed } from '../_shared/github-install-trust.ts';
-import { finalizeFixMerge } from '../_shared/fix-merge.ts';
+import { finalizeFixClosedUnmerged, finalizeFixMerge } from '../_shared/fix-merge.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
 import { fetchRepoTreeWithBranchFallback } from '../_shared/github-branch.ts';
 import { envInt } from '../_shared/env-int.ts';
@@ -285,6 +285,7 @@ async function handlePullRequestState(
       number?: number;
       draft?: boolean;
       state?: string;
+      closed_at?: string | null;
       delivery_id?: string;
       head?: { ref?: string };
     };
@@ -299,7 +300,7 @@ async function handlePullRequestState(
   const db = getDb();
   let { data: attempt } = await db
     .from('fix_attempts')
-    .select('id, project_id, pr_state')
+    .select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, pr_state')
     .eq('pr_url', prUrl)
     .maybeSingle();
   if (!attempt) {
@@ -339,7 +340,7 @@ async function handlePullRequestState(
     // that now owns this PR (ours, or the one that won the race).
     const reread = await db
       .from('fix_attempts')
-      .select('id, project_id, pr_state')
+      .select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, pr_state')
       .eq('pr_url', prUrl)
       .maybeSingle();
     attempt = reread.data;
@@ -358,6 +359,21 @@ async function handlePullRequestState(
   else if (payload.pull_request?.draft) newState = 'draft';
   else newState = 'open';
 
+  // Closed without merge: shared bookkeeping (pr_state, one "PR closed
+  // without merge" event, report back out of 'fixing') so ci-sync and this
+  // webhook agree and never double-emit.
+  if (newState === 'closed') {
+    const closed = await finalizeFixClosedUnmerged(db, attempt, {
+      prNumber: payload.pull_request?.number ?? null,
+      closedAt: payload.pull_request?.closed_at ?? null,
+      source: 'webhook',
+    });
+    return new Response(
+      JSON.stringify({ ok: true, fix_attempt_id: attempt.id, pr_state: newState, report_status: closed.reportStatus }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
+
   if (attempt.pr_state !== newState) {
     await db.from('fix_attempts').update({ pr_state: newState }).eq('id', attempt.id);
   }
@@ -366,7 +382,7 @@ async function handlePullRequestState(
     fix_attempt_id: attempt.id,
     project_id: attempt.project_id,
     kind: 'pr_state_changed',
-    status: newState === 'closed' ? 'fail' : newState === 'merged' ? 'ok' : 'pending',
+    status: newState === 'merged' ? 'ok' : 'pending',
     label: `PR ${newState}`,
     detail: `#${payload.pull_request?.number ?? '—'}`,
     dedupe_key: `pr:${deliveryId}`,

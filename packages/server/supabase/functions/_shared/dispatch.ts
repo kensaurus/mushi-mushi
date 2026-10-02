@@ -18,13 +18,14 @@
 import { getServiceClient } from './db.ts'
 import { log } from './logger.ts'
 import { notifyTeamFixEvent } from './team-notify.ts'
+import { featureRequestDispatchBlock } from './report-category.ts'
 
 export interface DispatchResult {
   ok: boolean
   dispatchId?: string
   status?: string
   createdAt?: string
-  code?: 'AUTOFIX_DISABLED' | 'ALREADY_DISPATCHED' | 'DISPATCH_FAILED' | 'FORBIDDEN'
+  code?: 'AUTOFIX_DISABLED' | 'ALREADY_DISPATCHED' | 'DISPATCH_FAILED' | 'FORBIDDEN' | 'FEATURE_REQUEST'
   message?: string
 }
 
@@ -96,6 +97,19 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
       code: 'AUTOFIX_DISABLED',
       message: 'Enable Autofix in project settings first',
     }
+  }
+
+  // A reporter's feature request is not a defect to auto-fix until a human
+  // re-categorizes it (Slack card, Linear agent, modernizer all land here).
+  const { data: report } = await db
+    .from('reports')
+    .select('user_category, user_intent, category, stage1_classification, stage2_analysis')
+    .eq('id', input.reportId)
+    .eq('project_id', input.projectId)
+    .maybeSingle()
+  const featureBlock = report ? featureRequestDispatchBlock(report) : null
+  if (featureBlock) {
+    return { ok: false, code: 'FEATURE_REQUEST', message: featureBlock }
   }
 
   const { data: existing } = await db
