@@ -175,7 +175,7 @@ function quoteFamily(f: string): string {
 }
 
 /** A safe CSS `font-family` list from a token value (string, list, or display). */
-function cssFontFamily(value: unknown, fallback = ''): string {
+export function cssFontFamily(value: unknown, fallback = ''): string {
   if (Array.isArray(value)) {
     const parts = value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
     if (parts.length > 0) return parts.map(quoteFamily).join(', ')
@@ -187,7 +187,7 @@ function cssFontFamily(value: unknown, fallback = ''): string {
 }
 
 /** px from a number, `"16px"`, `"1rem"`, or a DTCG 2025.10 `{ value, unit }`. */
-function dimensionPx(v: unknown): number | null {
+export function dimensionPx(v: unknown): number | null {
   if (typeof v === 'number' && Number.isFinite(v)) return v
   if (typeof v === 'string') {
     const m = /^(-?\d+(?:\.\d+)?)(px|rem|em)?$/.exec(v.trim())
