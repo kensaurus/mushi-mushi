@@ -148,8 +148,8 @@ function harness(db: FakeDb, over: Partial<RecipeModule['defaultRecipeDeps']> = 
   const deps = {
     ...recipe.defaultRecipeDeps,
     getServiceClient: () => db as never,
-    readAuth: pass,
-    writeAuth: pass,
+    adminOrApiKeyRead: pass,
+    adminOrApiKeyWrite: pass,
     now: () => NOW,
     loadSnapshot: (async (_db: unknown, pid: string) => (db.table('app_recipe_snapshots').find((r) => r.project_id === pid && r.is_current) ?? null)) as never,
     resolveRepo: vi.fn(async () => ({ ok: true as const, repo })),

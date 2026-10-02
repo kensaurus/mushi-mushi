@@ -112,10 +112,13 @@ import { buildManifestTools } from './manifest-tools.ts'
 import { HOSTED_RESOURCE_URIS, hostedResourceTarget } from './hosted-resources.ts'
 import { normalizeArgAliases } from './arg-aliases.ts'
 import {
+  designExcerptFilesOf,
   fixContextOf,
   inventoryActionNodeIdOf,
   projectReportDetail,
   projectReportListRow,
+  recipeError,
+  recipeFromExcerpt,
   reportEvidenceOf,
   similarityQueryOf,
   triageRecommendedActions,
@@ -339,6 +342,42 @@ function clampWindowDays(raw: unknown): number {
   return Math.min(Math.max(Math.trunc(n), 1), 365)
 }
 
+/** get_fix_context waits at most this long for the design excerpt. */
+const DESIGN_EXCERPT_TIMEOUT_MS = 8000
+
+/**
+ * get_fix_context's `recipe`: the design excerpt for the report's project,
+ * scoped to the files its fix attempts and fix packet name (report-shapes.ts,
+ * shared with stdio). Never throws and never returns null — a failed or slow
+ * read is { state: 'error', note }, so the fix context itself still succeeds.
+ */
+async function designRecipeFor(
+  report: Record<string, unknown>,
+  fallbackProjectId: unknown,
+  ctx: { authHeaders: Record<string, string> },
+): Promise<Record<string, unknown>> {
+  const pid =
+    typeof report.project_id === 'string' && report.project_id
+      ? report.project_id
+      : typeof fallbackProjectId === 'string' && fallbackProjectId
+        ? fallbackProjectId
+        : null
+  if (!pid) return recipeError('The report has no project id, so the design excerpt was not read.')
+  const files = designExcerptFilesOf(report)
+  const query = files.length > 0 ? `?${new URLSearchParams({ files: files.join(',') })}` : ''
+  try {
+    return recipeFromExcerpt(
+      await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/excerpt${query}`, {
+        headers: projectHeaders(ctx, pid),
+        signal: AbortSignal.timeout(DESIGN_EXCERPT_TIMEOUT_MS),
+      }),
+    )
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err)
+    return recipeError(`Could not read the design excerpt: ${why}`)
+  }
+}
+
 const BASE_TOOLS: Record<string, HostedTool> = {
   get_recent_reports: {
     scope: 'mcp:read',
@@ -430,6 +469,7 @@ const BASE_TOOLS: Record<string, HostedTool> = {
         // available — surface it at the top so callers can branch on the
         // contract without re-walking the JSON.
         inventoryAction: (report as { inventory_action?: unknown }).inventory_action ?? null,
+        recipe: await designRecipeFor(report, args.projectId ?? ctx.projectIdHint, ctx),
       }
     },
   },
@@ -460,6 +500,45 @@ const BASE_TOOLS: Record<string, HostedTool> = {
       if (typeof args.severity === 'string') q.set('severity', args.severity)
       const suffix = q.toString() ? `?${q}` : ''
       return apiCall(`/v1/admin/inventory/${encodeURIComponent(pid)}/findings${suffix}`, {
+        headers: ctx.authHeaders,
+      })
+    },
+  },
+  // App Recipe + design plane (Plan 019). Results carry repo content, so all
+  // three are in UNTRUSTED_TOOLS (catalog returnsUntrusted).
+  get_app_recipe: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for get_app_recipe')
+      return apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe`, { headers: ctx.authHeaders })
+    },
+  },
+  get_design_tokens: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for get_design_tokens')
+      const q = new URLSearchParams()
+      if (typeof args.group === 'string' && args.group) q.set('group', args.group)
+      if (typeof args.type === 'string' && args.type) q.set('type', args.type)
+      if (typeof args.direction === 'string' && args.direction) q.set('direction', args.direction)
+      const suffix = q.toString() ? `?${q}` : ''
+      return apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/tokens${suffix}`, {
+        headers: ctx.authHeaders,
+      })
+    },
+  },
+  get_design_deviance: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for get_design_deviance')
+      const limit = Number(args.limit)
+      const suffix = Number.isFinite(limit)
+        ? `?${new URLSearchParams({ limit: String(Math.min(Math.max(Math.trunc(limit), 1), 200)) })}`
+        : ''
+      return apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/deviance${suffix}`, {
         headers: ctx.authHeaders,
       })
     },
@@ -1214,6 +1293,11 @@ const BASE_TOOLS: Record<string, HostedTool> = {
           tools: ['run_fullstack_audit', 'get_backend_health', 'get_account_overview', 'get_usage'],
           hint: 'Call run_fullstack_audit for a full-stack health scorecard.',
         },
+        design: {
+          label: 'Use the design system',
+          tools: ['get_design_tokens', 'get_design_deviance', 'get_app_recipe', 'list_gate_findings'],
+          hint: 'Call get_design_tokens before writing a colour, spacing or font, so the fix uses the design tokens instead of literals.',
+        },
       }
 
       const matched = Object.entries(INTENTS).find(([key]) => intent.includes(key))
@@ -1715,6 +1799,9 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'get_product_events_summary',
   'get_user_paths',
   'list_reporter_outbox',
+  'get_app_recipe',
+  'get_design_tokens',
+  'get_design_deviance',
 ])
 
 /**
