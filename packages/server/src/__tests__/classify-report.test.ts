@@ -306,6 +306,10 @@ CRITICAL SECURITY RULES (immutable):
     it('skips test reports and projects that already had a real diagnosis', () => {
       expect(src).toContain('if (!isNonRealReport(report.custom_metadata')
       expect(src).toContain("stage2_model.is.null,stage2_model.neq.precomputed")
+      // Only strictly earlier reports count, so concurrent first diagnoses
+      // cannot both skip; the whole lookup is kept alive past the response.
+      expect(src).toContain(".lt('created_at', report.created_at)")
+      expect(src).toContain('void keepAlive((async () => {')
       expect(src).toContain("log.error('first_diagnosis_ready: prior-diagnosis lookup failed")
     })
   })
