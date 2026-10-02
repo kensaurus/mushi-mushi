@@ -80,15 +80,27 @@ async function load(db: Db, id: string, organizationId: string): Promise<ActionR
   return (data as ActionRow | null) ?? null
 }
 
-export async function approveConnectorAction(db: Db, id: string, organizationId: string, approverId: string, now: Date): Promise<ActionOutcome<{ expiresAt: string }>> {
+/**
+ * Approve one action. `seenSha256` is the hash of the payload the approver
+ * was shown; it must equal a fresh hash of the stored payload, so an approval
+ * always covers exactly what the person read.
+ */
+export async function approveConnectorAction(db: Db, id: string, organizationId: string, approverId: string, now: Date, seenSha256: unknown): Promise<ActionOutcome<{ expiresAt: string }>> {
+  if (typeof seenSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(seenSha256)) {
+    return { ok: false, code: 'VALIDATION_ERROR', message: 'Send the payloadSha256 of the payload you are approving.', status: 400 }
+  }
   const row = await load(db, id, organizationId)
   if (!row) return { ok: false, code: 'NOT_FOUND', message: 'Action not found.', status: 404 }
   if (row.status !== 'pending_approval') return { ok: false, code: 'NOT_PENDING', message: `This action is ${row.status}, not waiting for approval.`, status: 409 }
   if (now.getTime() - Date.parse(row.requested_at) > REQUEST_TTL_MS) return { ok: false, code: 'EXPIRED', message: 'This request is older than a week. Ask for it again.', status: 410 }
+  const fresh = await payloadHash(row.payload)
+  if (fresh !== row.payload_sha256 || fresh !== seenSha256) {
+    return { ok: false, code: 'HASH_MISMATCH', message: 'The payload is not the one you were shown. Reload, read it again, then approve.', status: 409 }
+  }
   const expiresAt = new Date(now.getTime() + APPROVAL_TTL_MS).toISOString()
   const { data } = await db.from('connector_actions')
     .update({ status: 'approved', approved_by: approverId, approved_at: now.toISOString(), expires_at: expiresAt })
-    .eq('id', id).eq('status', 'pending_approval')
+    .eq('id', id).eq('status', 'pending_approval').eq('payload_sha256', seenSha256)
     .select('id')
   if (!Array.isArray(data) || data.length !== 1) return { ok: false, code: 'NOT_PENDING', message: 'Someone else acted on this first.', status: 409 }
   await audit(db, row, approverId, 'approved', { expiresAt })

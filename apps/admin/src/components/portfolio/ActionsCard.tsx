@@ -92,7 +92,7 @@ export function ActionsCard({ orgId, connectors }: { orgId: string; connectors: 
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-medium text-fg">{a.action} <Badge tone={st.tone} className="ml-1">{st.label}</Badge></span>
                   <div className="flex gap-2">
-                    {a.status === 'pending_approval' && <Btn size="sm" disabled={busy} onClick={() => run(`${path}/${a.id}/approve`, {}, 'Approved for one hour. Run it when ready.')}>Approve</Btn>}
+                    {a.status === 'pending_approval' && <Btn size="sm" disabled={busy} onClick={() => run(`${path}/${a.id}/approve`, { payloadSha256: a.payload_sha256 }, 'Approved for one hour. Run it when ready.')}>Approve</Btn>}
                     {a.status === 'approved' && <Btn size="sm" disabled={busy} onClick={() => run(`${path}/${a.id}/execute`, {}, 'Ran once.')}>Run now</Btn>}
                     {(a.status === 'pending_approval' || a.status === 'approved') && <Btn size="sm" variant="ghost" disabled={busy} onClick={() => run(`${path}/${a.id}/reject`, {}, 'Rejected.')}>Reject</Btn>}
                   </div>
