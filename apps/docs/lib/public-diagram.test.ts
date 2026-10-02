@@ -12,7 +12,6 @@ import {
   NODE_H,
   NODE_W,
   parseRepoFromLocation,
-  diagramReportMailto,
   reportWrongDiagram,
   type PublicDiagramNode,
 } from './public-diagram'
@@ -99,6 +98,7 @@ describe('reportWrongDiagram', () => {
   })
 
   it('leaves the part line out when no part is selected', () => {
-    expect(decodeURIComponent(diagramReportMailto({ owner: 'a', repo: 'b', sha: 'c'.repeat(40) }))).not.toContain('Part:')
+    const out = reportWrongDiagram({ owner: 'a', repo: 'b', sha: 'c'.repeat(40) }, null)
+    expect(out.via === 'email' && decodeURIComponent(out.href)).not.toContain('Part:')
   })
 })

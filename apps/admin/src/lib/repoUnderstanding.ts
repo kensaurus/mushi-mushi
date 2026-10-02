@@ -146,7 +146,7 @@ export interface DiagramPublishPreview {
   publish_blocked_reason: string | null
 }
 
-export interface DiagramNodeOverlay {
+interface DiagramNodeOverlay {
   report_count: number
   finding_count: number
   reports: Array<{ id: string; summary: string | null; severity: string | null; status: string | null }>
