@@ -437,6 +437,11 @@ export interface WidgetCallbacks {
   onBrandFooterImpression?(): void;
   onBrandFooterClick?(): void;
   onScreenshotRequest(): void;
+  /**
+   * Present only when the browser supports getDisplayMedia. Must start the
+   * capture synchronously (the picker needs the click's user activation).
+   */
+  onScreenshotShareTabRequest?(): void;
   onScreenshotRemove?(): void;
   /** Optional markup pass (highlight / blur / arrow) before submit. */
   onScreenshotAnnotateRequest?(container: HTMLElement): void | Promise<void>;

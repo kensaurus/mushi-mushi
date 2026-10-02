@@ -183,7 +183,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
       ...extraHeaders,
     };
     const serialized = body ? JSON.stringify(body) : undefined;
-    if (serialized && method !== 'GET') {
+    if (serialized && method !== 'GET' && internalKind !== 'reporter-poll') {
       lastOutbound = { url, headers, body: serialized, path };
     }
 
@@ -304,47 +304,30 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
     }
   }
 
+  /**
+   * Reporter-inbox calls ride request() — its timeout, retries and circuit
+   * breaker — adding only the signed digest headers. The hand-rolled fetch this
+   * replaces had no timeout and could reject, which left the widget on
+   * "Loading thread…" forever. Never rejects: crypto failures (e.g. no
+   * SubtleCrypto on an insecure origin) resolve as a NETWORK_ERROR result.
+   */
   async function requestForReporter<T>(
     method: string,
     path: string,
     reporterToken: string,
     body?: unknown,
   ): Promise<MushiApiResponse<T>> {
-    const tokenHash = await sha256Hex(reporterToken);
-    const ts = String(Date.now());
-    const hmac = await hmacSha256Hex(apiKey, `${projectId}.${ts}.${tokenHash}`);
-    const url = `${baseUrl}${path}`;
-    const response = await fetch(url, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Mushi-Api-Key': apiKey,
-        'X-Mushi-Project': projectId,
-        ...(sdkPackage ? { [MUSHI_SDK_PACKAGE_HEADER]: sdkPackage } : {}),
-        ...(sdkVersion ? { [MUSHI_SDK_VERSION_HEADER]: sdkVersion } : {}),
-        [MUSHI_INTERNAL_HEADER]: 'reporter-poll',
+    try {
+      const tokenHash = await sha256Hex(reporterToken);
+      const ts = String(Date.now());
+      return await request<T>(method, path, body, maxRetries, 'reporter-poll', {
         'X-Reporter-Token-Hash': tokenHash,
         'X-Reporter-Ts': ts,
-        'X-Reporter-Hmac': hmac,
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      keepalive: isPageUnloading(),
-      [MUSHI_INTERNAL_INIT_MARKER]: 'reporter-poll',
-    } as RequestInit & { [MUSHI_INTERNAL_INIT_MARKER]?: MushiInternalRequestKind });
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({}));
-      return {
-        ok: false,
-        error: {
-          code: `HTTP_${response.status}`,
-          message: (errorBody as { error?: { message?: string }; message?: string }).error?.message
-            ?? (errorBody as { message?: string }).message
-            ?? `HTTP ${response.status} error`,
-        },
-      };
+        'X-Reporter-Hmac': await hmacSha256Hex(apiKey, `${projectId}.${ts}.${tokenHash}`),
+      });
+    } catch (error) {
+      return { ok: false, error: { code: 'NETWORK_ERROR', message: error instanceof Error ? error.message : 'Unknown error' } };
     }
-    const payload = await response.json();
-    return { ok: true, data: (payload as { data: T }).data ?? (payload as T) };
   }
 
   return {

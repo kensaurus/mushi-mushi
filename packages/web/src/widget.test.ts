@@ -1137,10 +1137,13 @@ describe('MushiWidget — live-QA polish', () => {
     q<HTMLButtonElement>(w, '[data-action="reports"]')!.click();
     await vi.advanceTimersByTimeAsync(0);
     q<HTMLButtonElement>(w, `[data-report-id="${REPORT_ID}"]`)!.click();
-    expect(q(w, '.mushi-thread')!.textContent).toContain('Loading thread');
+    // The summary paints from the in-memory report at once; only the
+    // comment list is a skeleton while it loads.
+    expect(q(w, '.mushi-thread-summary p')!.textContent).toBe('Save does nothing');
+    expect(q(w, '.mushi-thread-skeleton')?.getAttribute('aria-label')).toBe('Loading thread…');
 
     await vi.advanceTimersByTimeAsync(15_000);
-    expect(q(w, '.mushi-thread')!.textContent).not.toContain('Loading thread');
+    expect(q(w, '.mushi-thread-skeleton')).toBeNull();
     expect(q(w, '.mushi-thread [role="alert"]')!.textContent).toBe("Couldn't load this thread.");
 
     q<HTMLButtonElement>(w, '[data-action="retry-thread"]')!.click();
@@ -1173,6 +1176,93 @@ describe('MushiWidget — live-QA polish', () => {
     expect(reply.closest('.mushi-footer.mushi-thread-composer')).not.toBeNull();
     expect(q<HTMLTextAreaElement>(w, 'textarea[data-role="reporter-reply"]')!.placeholder).toBe('Reply to the developer…');
     w.destroy();
+  });
+
+  it('a reply keeps the conversation on screen, and a failed reply never replaces it', async () => {
+    const existing = [{ id: 'c1', author_kind: 'developer', author_name: 'Kenji', body: 'Can you retry?', created_at: '' }];
+    let finishReply: (() => void) | undefined;
+    let failReply: ((e: Error) => void) | undefined;
+    const onReporterReply = vi.fn()
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { finishReply = resolve; }))
+      .mockImplementationOnce(() => new Promise<void>((_r, reject) => { failReply = reject; }));
+    const onReporterCommentsRequest = vi.fn().mockResolvedValue(existing);
+    const w = new MushiWidget({}, {
+      ...noopCallbacks,
+      onReporterReportsRequest: () => Promise.resolve([
+        { id: REPORT_ID, status: 'fixing', summary: 'Save does nothing', created_at: '' },
+      ] as never),
+      onReporterCommentsRequest,
+      onReporterReply,
+    });
+    w.mount();
+    w.open();
+    await (w as unknown as { loadReporterComments(id: string): Promise<void> }).loadReporterComments(REPORT_ID);
+    const reply = (text: string) => {
+      const ta = q<HTMLTextAreaElement>(w, 'textarea[data-role="reporter-reply"]')!;
+      ta.value = text;
+      q<HTMLButtonElement>(w, '[data-action="reporter-reply"]')!.click();
+    };
+
+    reply('Tried again, still broken');
+    await Promise.resolve();
+    // In flight: comments still shown (no skeleton), Send disabled.
+    expect(q(w, '.mushi-thread')!.textContent).toContain('Can you retry?');
+    expect(q(w, '.mushi-thread-skeleton')).toBeNull();
+    expect(q<HTMLButtonElement>(w, '[data-action="reporter-reply"]')!.disabled).toBe(true);
+    finishReply!();
+    await vi.waitFor(() => expect(q<HTMLButtonElement>(w, '[data-action="reporter-reply"]')!.disabled).toBe(false));
+    expect(onReporterReply).toHaveBeenCalledWith(REPORT_ID, 'Tried again, still broken');
+    expect(q<HTMLTextAreaElement>(w, 'textarea[data-role="reporter-reply"]')!.value).toBe('');
+    expect((w as unknown as { step: string }).step).toBe('report-detail');
+
+    reply('second try');
+    await Promise.resolve();
+    failReply!(new Error('HTTP 500'));
+    await vi.waitFor(() => expect(q(w, '.mushi-thread-action-error')?.textContent).toBe('HTTP 500'));
+    expect(q(w, '.mushi-thread')!.textContent).toContain('Can you retry?');
+    // The unsent text survives the failure so it can be resent.
+    expect(q<HTMLTextAreaElement>(w, 'textarea[data-role="reporter-reply"]')!.value).toBe('second try');
+    w.destroy();
+  });
+
+  it('confirming a fix stays on the thread instead of jumping to the list', async () => {
+    const onReporterFeedback = vi.fn().mockResolvedValue(null);
+    const w = new MushiWidget({}, {
+      ...noopCallbacks,
+      onReporterReportsRequest: () => Promise.resolve([
+        { id: REPORT_ID, status: 'fixed', summary: 'Save does nothing', created_at: '' },
+      ] as never),
+      onReporterCommentsRequest: () => Promise.resolve([]),
+      onReporterFeedback,
+    });
+    w.mount();
+    w.open();
+    await w.refreshReporterInboxQuiet();
+    await (w as unknown as { loadReporterComments(id: string): Promise<void> }).loadReporterComments(REPORT_ID);
+    q<HTMLButtonElement>(w, '[data-action="reporter-confirms"]')!.click();
+    await vi.waitFor(() => expect(onReporterFeedback).toHaveBeenCalledWith(REPORT_ID, 'confirms'));
+    await vi.waitFor(() => expect(q<HTMLButtonElement>(w, '[data-action="reporter-confirms"]')!.disabled).toBe(false));
+    expect((w as unknown as { step: string }).step).toBe('report-detail');
+    w.destroy();
+  });
+
+  // Item 12: user-consented tab share fallback
+  it('offers "Share this tab instead" after a failed capture when the host supports it', () => {
+    const onScreenshotShareTabRequest = vi.fn();
+    const w = new MushiWidget({}, { ...noopCallbacks, onScreenshotShareTabRequest });
+    w.mount();
+    w.open({ featureRequest: true });
+    w.setScreenshotError(true, 'taint');
+    q<HTMLButtonElement>(w, '[data-action="screenshot-share-tab"]')!.click();
+    expect(onScreenshotShareTabRequest).toHaveBeenCalledTimes(1);
+    w.destroy();
+
+    const plain = new MushiWidget({}, noopCallbacks);
+    plain.mount();
+    plain.open({ featureRequest: true });
+    plain.setScreenshotError(true, 'taint');
+    expect(q(plain, '[data-action="screenshot-share-tab"]')).toBeNull();
+    plain.destroy();
   });
 
   // Item 12 (re-render swallowing the first Submit click)

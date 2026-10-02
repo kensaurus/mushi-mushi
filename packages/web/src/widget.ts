@@ -119,8 +119,20 @@ export class MushiWidget {
   private featureBoard: Array<Record<string, unknown>> = [];
   private reporterComments: MushiReporterComment[] = [];
   private selectedReportId: string | null = null;
-  private reporterLoading = false;
+  /**
+   * One flag per surface. A single shared flag used to let a reply (or vote,
+   * or reopen) blank the thread it was posted from, and a failed reply
+   * replaced the conversation with its error.
+   */
+  private listLoading = false;
+  private threadLoading = false;
+  private actionPending = false;
+  /** List / roadmap load error. */
   private reporterError: string | null = null;
+  /** Thread (comments) load error — rendered with Try again. */
+  private threadError: string | null = null;
+  /** Reply / feedback / reopen / vote error — rendered beside the composer. */
+  private actionError: string | null = null;
   private attachedLaunchers: Array<() => void> = [];
   private smartHideCleanup: (() => void) | null = null;
   private smartHideTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1857,7 +1869,11 @@ export class MushiWidget {
       config: this.config,
       rewardsState: this.rewardsState,
       lastReportId: this.lastReportId,
-      reporterLoading: this.reporterLoading,
+      listLoading: this.listLoading,
+      threadLoading: this.threadLoading,
+      actionPending: this.actionPending,
+      threadError: this.threadError,
+      actionError: this.actionError,
       locale: this.locale,
       identifiedUser: this.identifiedUser,
       testerReputation: this.testerReputation,
@@ -2197,6 +2213,9 @@ export class MushiWidget {
     panel.querySelector('[data-action="screenshot"]')?.addEventListener('click', () => {
       this.callbacks.onScreenshotRequest();
     });
+    panel.querySelector('[data-action="screenshot-share-tab"]')?.addEventListener('click', () => {
+      this.callbacks.onScreenshotShareTabRequest?.();
+    });
     panel.querySelector('[data-action="remove-screenshot"]')?.addEventListener('click', () => {
       this.callbacks.onScreenshotRemove?.();
     });
@@ -2342,7 +2361,7 @@ export class MushiWidget {
 
   private async loadFeatureBoard(): Promise<void> {
     this.step = 'roadmap';
-    this.reporterLoading = true;
+    this.listLoading = true;
     this.reporterError = null;
     this.render();
     try {
@@ -2350,14 +2369,14 @@ export class MushiWidget {
     } catch (err) {
       this.reporterError = err instanceof Error ? err.message : 'Could not load community ideas.';
     } finally {
-      this.reporterLoading = false;
+      this.listLoading = false;
       this.render();
     }
   }
 
   private async voteFeatureBoard(requestId: string): Promise<void> {
-    if (!this.callbacks.onFeatureBoardVote || this.reporterLoading) return;
-    this.reporterLoading = true;
+    if (!this.callbacks.onFeatureBoardVote || this.actionPending) return;
+    this.actionPending = true;
     this.render();
     try {
       await this.callbacks.onFeatureBoardVote(requestId);
@@ -2365,35 +2384,51 @@ export class MushiWidget {
     } catch (err) {
       this.reporterError = err instanceof Error ? err.message : 'Could not update vote.';
     } finally {
-      this.reporterLoading = false;
+      this.actionPending = false;
+      this.render();
+    }
+  }
+
+  /**
+   * Run a thread action (reply / feedback / reopen) without leaving or
+   * blanking the thread: the conversation stays painted, the action button
+   * disables, and afterwards the status + comments refresh in place.
+   */
+  private async runThreadAction(fallbackError: string, action: (reportId: string) => Promise<unknown>): Promise<boolean> {
+    const reportId = this.selectedReportId;
+    if (!reportId || this.actionPending) return false;
+    this.actionPending = true;
+    this.actionError = null;
+    this.render();
+    try {
+      await action(reportId);
+      await this.refreshReporterInboxQuiet();
+      await this.loadReporterComments(reportId, true);
+      return true;
+    } catch (err) {
+      this.actionError = err instanceof Error ? err.message : fallbackError;
+      return false;
+    } finally {
+      this.actionPending = false;
       this.render();
     }
   }
 
   private async submitReporterReopen(): Promise<void> {
-    const reportId = this.selectedReportId;
-    if (!reportId || this.reporterLoading) return;
-    this.reporterLoading = true;
-    this.render();
-    try {
+    await this.runThreadAction('Could not reopen report.', async (reportId) => {
       if (this.callbacks.onReporterReopen) {
         await this.callbacks.onReporterReopen(reportId, 'Not fixed for me');
       } else {
         await this.callbacks.onReporterFeedback?.(reportId, 'not_fixed', 'Not fixed for me');
       }
-      await this.loadReporterReports();
-    } catch (err) {
-      this.reporterError = err instanceof Error ? err.message : 'Could not reopen report.';
-    } finally {
-      this.reporterLoading = false;
-      this.render();
-    }
+    });
   }
 
   /** Refresh My Reports data for unread badges without opening the inbox panel. */
   async refreshReporterInboxQuiet(): Promise<void> {
     try {
-      this.reporterReports = await this.callbacks.onReporterReportsRequest?.() ?? [];
+      const req = this.callbacks.onReporterReportsRequest?.();
+      this.reporterReports = req ? await withDeadline(req, REPORTER_READ_DEADLINE_MS) : [];
       if (!this.isOpen) return;
       // Only the reports list actually displays this data — re-render it.
       // Every other step gets a targeted badge-text update instead of a full
@@ -2420,7 +2455,7 @@ export class MushiWidget {
 
   private async loadReporterReports(): Promise<void> {
     this.step = 'reports';
-    this.reporterLoading = true;
+    this.listLoading = true;
     this.reporterError = null;
     this.render();
     try {
@@ -2429,7 +2464,7 @@ export class MushiWidget {
     } catch (err) {
       this.reporterError = err instanceof Error ? err.message : 'Could not load reports.';
     } finally {
-      this.reporterLoading = false;
+      this.listLoading = false;
       this.render();
     }
   }
@@ -2441,21 +2476,28 @@ export class MushiWidget {
     if (this.isOpen && this.step === 'reports') await this.loadReporterComments(reportId);
   }
 
-  private async loadReporterComments(reportId: string): Promise<void> {
+  /**
+   * Open (or refresh) a thread. The header + summary paint immediately from
+   * the in-memory report; only the comment list shows a skeleton while it
+   * loads. `quiet` keeps the current comments on screen (post-action refresh).
+   */
+  private async loadReporterComments(reportId: string, quiet = false): Promise<void> {
     // Navigating to a DIFFERENT thread must drop any in-progress reply draft —
     // otherwise an unsent draft typed for report A reappears (and could be
-    // posted) under report B. `submitReporterReply` already clears the draft
-    // itself before calling back in here for the *same* reportId, so this is
-    // a no-op on that path.
+    // posted) under report B.
     if (this.selectedReportId !== reportId) {
       this.draftReply = '';
       this.reporterComments = [];
+      this.actionError = null;
+      quiet = false;
     }
     this.selectedReportId = reportId;
     this.step = 'report-detail';
-    this.reporterLoading = true;
-    this.reporterError = null;
-    this.render();
+    this.threadError = null;
+    if (!quiet) {
+      this.threadLoading = true;
+      this.render();
+    }
     try {
       // A read that never settles used to leave "Loading thread…" up forever
       // (live, 2026-10-02); the deadline turns it into a retryable error.
@@ -2464,53 +2506,34 @@ export class MushiWidget {
       // The reporter may have opened a different thread meanwhile.
       if (this.selectedReportId === reportId) this.reporterComments = comments;
     } catch {
-      if (this.selectedReportId === reportId) this.reporterError = this.locale.flows.thread.loadFailed;
+      if (this.selectedReportId === reportId) this.threadError = this.locale.flows.thread.loadFailed;
     } finally {
-      this.reporterLoading = false;
+      this.threadLoading = false;
       this.render();
     }
   }
 
   private async submitReporterFeedback(signal: string): Promise<void> {
-    const reportId = this.selectedReportId;
-    if (!reportId || this.reporterLoading) return;
-    this.reporterLoading = true;
-    this.render();
-    try {
-      await this.callbacks.onReporterFeedback?.(reportId, signal);
-      await this.loadReporterReports();
-      if (reportId) await this.loadReporterComments(reportId);
-    } catch (err) {
-      this.reporterError = err instanceof Error ? err.message : 'Could not send feedback.';
-      this.reporterLoading = false;
-      this.render();
-    }
+    await this.runThreadAction('Could not send feedback.', (reportId) =>
+      Promise.resolve(this.callbacks.onReporterFeedback?.(reportId, signal)));
   }
 
   private async submitReporterReply(panel: HTMLElement): Promise<void> {
-    const reportId = this.selectedReportId;
     const textarea = panel.querySelector('[data-role="reporter-reply"]') as HTMLTextAreaElement | null;
-    const replyButton = panel.querySelector('[data-action="reporter-reply"]') as HTMLButtonElement | null;
     const body = textarea?.value.trim() ?? '';
-    // Guard: reject empty bodies AND already-in-flight submits — both prevented
-    // double-posts in dogfood when users mashed Enter on a slow link.
-    if (!reportId || !body || this.reporterLoading) return;
-    this.reporterLoading = true;
-    if (replyButton) replyButton.disabled = true;
-    this.render();
-    try {
+    // Guard: empty bodies and in-flight submits (runThreadAction) — both
+    // prevented double-posts in dogfood when users mashed Enter on a slow link.
+    if (!body) return;
+    // Snapshot the draft now: render() re-captures it from the live textarea.
+    this.draftReply = textarea?.value ?? '';
+    await this.runThreadAction('Could not send reply.', async (reportId) => {
       await this.callbacks.onReporterReply?.(reportId, body);
-      // Clear the field AND its preserved draft on success so the next render
-      // (driven by loadReporterComments) doesn't repaint the just-sent text
-      // and tempt the user into a duplicate submit.
-      if (textarea) textarea.value = '';
+      // Clear the draft on success so the refresh doesn't repaint the
+      // just-sent text and tempt the user into a duplicate submit.
       this.draftReply = '';
-      await this.loadReporterComments(reportId);
-    } catch (err) {
-      this.reporterError = err instanceof Error ? err.message : 'Could not send reply.';
-      this.reporterLoading = false;
-      this.render();
-    }
+      const live = this.shadow.querySelector<HTMLTextAreaElement>('[data-role="reporter-reply"]');
+      if (live) live.value = '';
+    });
   }
 
   /* ── Community: magic-link sign-in ───────────────────────────────── */
