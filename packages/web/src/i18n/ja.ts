@@ -146,7 +146,6 @@ export const ja: MushiLocale = {
       replyPlaceholder: '開発者に返信…',
     },
     success: {
-      title: 'ありがとうございます — 受け付けました',
       done: '閉じる',
       trackReport: '追跡する',
       receipt: '受付',

@@ -9,9 +9,17 @@
  * error must never break the host page, so a failure reads as "no flag".
  */
 import type { MushiReporterReport } from '@mushi-mushi/core';
-import { reporterCopy, reporterStatus, fillReporterTemplate } from '@mushi-mushi/core/reporter-ui';
+import { reporterCopy, reporterStatus, fillReporterTemplate, type ReporterStatusInput, type ReporterStatusView } from '@mushi-mushi/core/reporter-ui';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Core's `reporterStatus`, with the web widget's own wire value for ideas
+ * (`user_category: 'feature'`) read as an idea so it gets "Thanks for the idea".
+ */
+export function statusView(report: ReporterStatusInput, lang: string): ReporterStatusView {
+  return reporterStatus(report.user_category === 'feature' ? { ...report, user_category: 'idea' } : report, lang);
+}
 
 function read(store: 'localStorage' | 'sessionStorage', key: string): string | null {
   try {
@@ -59,14 +67,16 @@ export function pickUpdateToast(
   reports: MushiReporterReport[],
   lang: string,
   repliedText: string,
-): { text: string; reportId: string | null } | null {
-  const unread = reports.filter((r) => (r.unread_count ?? 0) > 0 && !reporterStatus(r, lang).hidden);
+): { text: string; reportId: string | null; detail?: string } | null {
+  const unread = reports.filter((r) => (r.unread_count ?? 0) > 0 && !statusView(r, lang).hidden);
   const total = unread.reduce((n, r) => n + (r.unread_count ?? 0), 0);
   if (!total) return null;
   if (unread.length > 1) return { text: fillReporterTemplate(reporterCopy(lang).ui.updates, { n: total }), reportId: null };
   const report = unread[0]!;
-  const status = reporterStatus(report, lang);
-  // A status the reporter cares about wins; otherwise a developer reply.
-  const statusNews = status.key === 'waiting' || status.key === 'fixing' || status.canVerify;
-  return { text: statusNews || !report.last_admin_reply_at ? status.label : repliedText, reportId: report.id };
+  const status = statusView(report, lang);
+  // A fix (or work on one) is the news; a question or any other update is the
+  // developer talking. The report's own title says which report it is.
+  const statusNews = status.key === 'fixing' || status.canVerify || (!report.last_admin_reply_at && status.key !== 'waiting');
+  const detail = report.title ?? report.summary ?? undefined;
+  return { text: statusNews ? status.label : repliedText, reportId: report.id, ...(detail ? { detail } : {}) };
 }

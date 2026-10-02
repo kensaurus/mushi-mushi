@@ -1894,7 +1894,7 @@ export class MushiWidget {
       this.step = 'success';
       this.drafts = {};
       this.render();
-      this.announce(this.locale.flows.success.title);
+      this.announce(this.rc.ui.sent);
       void outcomeP.then((outcome) => {
         if (this.step !== 'success' || !outcome) return;
         this.lastReportId = outcome.reportId ?? null;
@@ -2141,7 +2141,7 @@ export class MushiWidget {
     return toast ? this.showUpdateToast(toast) : false;
   }
 
-  showUpdateToast(update: { text: string; reportId?: string | null }): boolean {
+  showUpdateToast(update: { text: string; reportId?: string | null; detail?: string }): boolean {
     if (this.isOpen || !this.triggerVisible || this.isRouteHidden() || this.isSuppressedByHost()) return false;
     this.removeToast();
     const toast = document.createElement('div');
@@ -2149,7 +2149,14 @@ export class MushiWidget {
     toast.setAttribute('role', 'status');
     toast.style.zIndex = String(this.config.zIndex + 1);
     const text = document.createElement('span');
-    text.textContent = update.text;
+    const strong = document.createElement('strong');
+    strong.textContent = update.text;
+    text.append(strong);
+    if (update.detail) {
+      const small = document.createElement('small');
+      small.textContent = update.detail;
+      text.append(small);
+    }
     const view = document.createElement('button');
     view.type = 'button';
     view.className = 'mushi-btn';

@@ -226,8 +226,8 @@ export interface MushiLocale {
       retry?: string;
     };
     success: {
-      /** Panel title once the report is accepted or delivering. */
-      title: string;
+      /** @deprecated Unused since 1.30 — the receipt title is core `ui.sent`. */
+      title?: string;
       /** Closes the panel from the success step. */
       done: string;
       trackReport: string;

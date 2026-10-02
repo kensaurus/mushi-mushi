@@ -27,9 +27,9 @@ import type {
   MushiTesterReputation,
   MushiWidgetConfig,
 } from '@mushi-mushi/core';
+import { statusView } from './reporter-inbox';
 import {
   reporterCopy,
-  reporterStatus,
   reporterTimelineText,
   type ReporterCopy,
   type ReporterTimelineKind,
@@ -267,10 +267,10 @@ function reportView(ctx: WidgetRenderCtx): ViewRegions {
   const shot = ctx.screenshotAttached && ctx.screenshotPreview
     ? `<figure class="mushi-screenshot-preview${ctx.previewOpen ? ' open' : ''}"><button type="button" class="mushi-thumb" data-action="toggle-preview" aria-expanded="${ctx.previewOpen}"><img src="${esc(ctx.screenshotPreview)}" alt="${esc(s3.screenshotPreviewAlt)}" /></button><figcaption><span class="mushi-attach-name">${esc(s3.screenshotAttached)}</span>${ctx.screenshotHint ? `<span class="mushi-screenshot-hint">${esc(ctx.screenshotHint)}</span>` : ''}<span class="mushi-attach-actions">${ctx.callbacks.onScreenshotAnnotateRequest ? btn('annotate-screenshot', esc(p.markUp), 'mushi-link-btn') : ''}${ctx.allowScreenshotRemove ? btn('remove-screenshot', esc(p.remove), 'mushi-link-btn') : ''}</span></figcaption></figure><div class="mushi-annotate-host" data-role="annotate-host"></div>`
     : ctx.screenshotAvailable
-      ? btn('screenshot', `${ctx.screenshotCapturing ? spin : ''}${esc(shotLabel)}`, `mushi-attach-btn${ctx.screenshotError ? ' error' : ''}`, `${ctx.screenshotCapturing ? ' disabled' : ''} aria-label="${esc(shotLabel)}"`)
+      ? btn('screenshot', `${ctx.screenshotCapturing ? spin : '<span aria-hidden="true">📷</span>'}${esc(shotLabel)}`, `mushi-attach-btn${ctx.screenshotError ? ' error' : ''}`, `${ctx.screenshotCapturing ? ' disabled' : ''} aria-label="${esc(shotLabel)}"`)
       : '';
   const element = ctx.elementAvailable
-    ? btn('element', `${ctx.elementCapturing ? spin : ''}${esc(elLabel)}`, `mushi-attach-btn${ctx.elementSelected ? ' active' : ''}${ctx.elementError ? ' error' : ''}`, `${ctx.elementCapturing ? ' disabled' : ''} aria-label="${esc(elLabel)}"`)
+    ? btn('element', `${ctx.elementCapturing ? spin : '<span aria-hidden="true">⌖</span>'}${esc(elLabel)}`, `mushi-attach-btn${ctx.elementSelected ? ' active' : ''}${ctx.elementError ? ' error' : ''}`, `${ctx.elementCapturing ? ' disabled' : ''} aria-label="${esc(elLabel)}"`)
     : '';
   const reason = ctx.screenshotError && ctx.screenshotErrorReason
     ? `<p class="mushi-note mushi-error-inline" role="status" data-role="screenshot-reason">${esc(s3.screenshotErrors[ctx.screenshotErrorReason])}${ctx.callbacks.onScreenshotShareTabRequest ? ` ${btn('screenshot-share-tab', esc(s3.screenshotShareTab), 'mushi-link-btn')}` : ''}</p>`
@@ -368,7 +368,7 @@ function successView(ctx: WidgetRenderCtx): ViewRegions {
   // In-widget tracking needs a server id and the reporter inbox.
   const canTrack = !failure && ctx.lastReportId && ctx.callbacks.onReporterReportsRequest;
   return {
-    header: renderHeader(ctx, failure ?? s.title),
+    header: renderHeader(ctx, failure ?? ctx.rc.ui.sent),
     lead: '',
     body: `<div class="mushi-success"><div class="mushi-success-stamp" aria-hidden="true"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44"/></svg><span class="mushi-success-stamp-label">受</span></div><time class="mushi-success-meta" datetime="${stamp.toISOString()}">${esc(formatReceiptTime(stamp, ctx.config.locale === 'auto' ? undefined : ctx.config.locale))}</time>${receipt(ctx)}${failure ? '' : renderOptIns(ctx)}${ctx.rewardsState ? renderSuccessRewards(ctx) : ''}</div>`,
     footer: `${canTrack ? btn('track-report', esc(s.trackReport), 'mushi-btn') : '<span></span>'}${btn('done', esc(s.done), 'mushi-submit')}`,
@@ -419,13 +419,15 @@ export function orderReports(reports: MushiReporterReport[]): MushiReporterRepor
 }
 
 function reportRow(ctx: WidgetRenderCtx, r: MushiReporterReport): string {
-  const st = reporterStatus(r, ctx.lang);
+  const st = statusView(r, ctx.lang);
   if (st.hidden) return '';
   const unread = (r.unread_count ?? 0) > 0;
   const meta = [typeLabel(ctx, r.user_category), r.page, st.othersNote].filter(Boolean).map((x) => esc(String(x))).join(' · ');
-  const news = st.key === 'waiting' || st.key === 'fixed_version'
-    ? st.label
-    : unread && r.last_event_preview ? r.last_event_preview : '';
+  // Line 3 is the news itself, never a repeat of the pill: the developer's
+  // words, or what to do about a fix.
+  const news = r.last_event_preview && (unread || st.key === 'waiting')
+    ? ctx.rc.ui.developerReplied.replace('{text}', r.last_event_preview)
+    : st.canVerify && st.key !== 'fixed_next' ? st.detail : '';
   const title = reportTitle(r);
   return `<button type="button" class="mushi-report-row${unread ? ' unread' : ''}" data-report-id="${esc(r.id)}" aria-label="${esc(`${st.label}: ${title}`)}"><span class="mushi-row-top">${statusPill(st.label, st.tone)}<span class="mushi-row-title">${esc(title)}</span><span class="mushi-row-when">${esc(formatRelativeTime(r.last_event_at ?? r.created_at))}</span></span>${meta ? `<span class="mushi-row-meta">${meta}</span>` : ''}${news ? `<span class="mushi-row-news">${esc(news)}</span>` : ''}</button>`;
 }
@@ -486,7 +488,7 @@ function detailView(ctx: WidgetRenderCtx): ViewRegions {
   const rc = ctx.rc;
   const report = ctx.reporterReports.find((r) => r.id === ctx.selectedReportId);
   // Opened via "Track it" before the list caught up → it's new.
-  const st = reporterStatus(report ?? { status: 'new' }, ctx.lang);
+  const st = statusView(report ?? { status: 'new' }, ctx.lang);
   const meta = [report?.page, report?.app_version ? `v${report.app_version}` : '', report ? formatRelativeTime(report.created_at) : '']
     .filter(Boolean).map((x) => esc(String(x))).join(' · ');
   const lead = `<div class="mushi-thread-summary"><p class="mushi-card-status">${statusPill(st.label, st.tone)}</p><p class="mushi-note">${esc(st.detail)}${st.othersNote ? ` ${esc(st.othersNote)}.` : ''}</p><p class="mushi-summary-text">${esc(report ? (report.description ?? reportTitle(report)) : `#${(ctx.selectedReportId ?? '').slice(0, 8)}`)}</p>${report?.screenshot_thumb_url ? `<img class="mushi-card-thumb" src="${esc(report.screenshot_thumb_url)}" alt="" />` : ''}${meta ? `<p class="mushi-note">${meta}</p>` : ''}</div>`;
@@ -611,7 +613,7 @@ function crossAppView(ctx: WidgetRenderCtx): ViewRegions {
     groups.get(key)!.reports.push(r);
   }
   const html = [...groups.entries()].map(([projectId, g]) => `<section class="mushi-xapp-group"><h3 class="mushi-xapp-app-name">${renderAppIconHtml({ projectId, appName: g.name, appSlug: g.slug, appDomain: g.domain })} ${esc(g.name)}</h3>${g.reports.map((r) => {
-    const st = reporterStatus(r, ctx.lang);
+    const st = statusView(r, ctx.lang);
     // The internal category never reaches a reporter: untitled rows show their short id.
     return `<div class="mushi-report-row"><span class="mushi-row-top">${statusPill(st.label, st.tone)}<span class="mushi-row-title">${esc(r.title ?? `#${r.short_id ?? r.id.slice(0, 8)}`)}</span><span class="mushi-row-when">${esc(formatRelativeTime(r.created_at))}</span></span></div>`;
   }).join('')}</section>`).join('');

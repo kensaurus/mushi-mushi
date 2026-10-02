@@ -146,7 +146,6 @@ export const th: MushiLocale = {
       replyPlaceholder: 'ตอบนักพัฒนา…',
     },
     success: {
-      title: 'ขอบคุณ — ได้รับรายงานแล้ว',
       done: 'เสร็จสิ้น',
       trackReport: 'ติดตาม',
       receipt: 'ใบรับ',
