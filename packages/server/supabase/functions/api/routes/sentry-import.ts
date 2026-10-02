@@ -3,8 +3,12 @@
  * PURPOSE: POST /v1/admin/projects/:id/sentry/import — pull existing Sentry
  *          issues into the report queue (the webhook only sees new ones).
  *
- * Body: { issueIds?: string[] (≤10, ids or short ids), query?: string, limit?: 1-10 }
+ * Body: { issueIds?: string[] (≤10, ids or short ids), query?: string, limit?: 1-10,
+ *         sinceDays?: 1-90, cursor?: string, sentryProject?: slug }
  * With neither issueIds nor query, imports the newest `is:unresolved` issues.
+ * A search answers `nextCursor`; send it back as `cursor` for the next ≤10.
+ * `sentryProject` picks one of the project's Sentry projects (primary
+ * `sentry_project_slug` by default, or one of `sentry_extra_project_slugs`).
  *
  * Reuses ingestSentryError, so dedupe, report_external_issues linking and
  * classification match a webhook delivery. Stack-frame files from the
@@ -19,7 +23,12 @@ import { adminOrApiKey } from '../../_shared/auth.ts';
 import { log as rootLog } from '../../_shared/logger.ts';
 import { callerCanAccessProject } from '../shared.ts';
 import { triggerClassification } from '../helpers.ts';
-import { importSentryIssues, parseSentryImportRequest } from '../../_shared/sentry-import.ts';
+import {
+  allowedSentryProjectSlugs,
+  importSentryIssues,
+  parseSentryImportRequest,
+  resolveSentrySearch,
+} from '../../_shared/sentry-import.ts';
 import { SentryApiError } from '../../_shared/sentry-api.ts';
 import { resolveAndDereferencePlatformSettings } from '../../_shared/integration-settings.ts';
 
@@ -70,19 +79,22 @@ export function registerSentryImportRoutes(app: Hono<{ Variables: Variables }>):
     const parsed = parseSentryImportRequest(await c.req.json().catch(() => ({})));
     if (!parsed.ok) return c.json({ ok: false, error: parsed.error }, 400);
 
-    const [{ settings }, { data: projectSettings }] = await Promise.all([
+    const [{ settings }, projectSettings] = await Promise.all([
       resolveAndDereferencePlatformSettings(db, projectId),
-      db.from('project_settings').select('sentry_project_slug').eq('project_id', projectId).maybeSingle(),
+      loadSentryProjectSlugs(db, projectId),
     ]);
     const orgSlug = settings.sentry_org_slug ?? null;
     const token = settings.sentry_auth_token_ref ?? null;
-    const projectSlug = (projectSettings?.sentry_project_slug as string | null | undefined) ?? null;
+    const projectSlugs = allowedSentryProjectSlugs(
+      projectSettings?.sentry_project_slug,
+      projectSettings?.sentry_extra_project_slugs,
+    );
     const missing = [
       !orgSlug ? 'org slug' : null,
-      !projectSlug ? 'project slug' : null,
+      projectSlugs.length === 0 ? 'project slug' : null,
       !token ? 'auth token' : null,
     ].filter(Boolean);
-    if (missing.length > 0 || !orgSlug || !projectSlug || !token) {
+    if (missing.length > 0 || !orgSlug || projectSlugs.length === 0 || !token) {
       return c.json(
         {
           ok: false,
@@ -95,12 +107,17 @@ export function registerSentryImportRoutes(app: Hono<{ Variables: Variables }>):
       );
     }
 
+    if (!parsed.value.issueIds) {
+      const search = resolveSentrySearch(parsed.value, projectSlugs);
+      if (!search.ok) return c.json({ ok: false, error: search.error }, 400);
+    }
+
     let result: Awaited<ReturnType<typeof importSentryIssues>>;
     try {
       result = await importSentryIssues(db, {
         projectId,
         request: parsed.value,
-        sentry: { token, orgSlug, projectSlug },
+        sentry: { token, orgSlug, projectSlugs },
         triggerClassification,
       });
     } catch (err) {
@@ -134,7 +151,29 @@ export function registerSentryImportRoutes(app: Hono<{ Variables: Variables }>):
         linked,
         failed: result.items.filter((i) => i.outcome === 'error').length,
         indexing: { queued: indexingQueued, paths: result.framePaths.length },
+        sentryProject: result.sentryProject,
+        sentryProjects: projectSlugs,
+        nextCursor: result.nextCursor,
       },
     });
   });
+}
+
+/**
+ * `sentry_extra_project_slugs` arrives with migration 20261002135500. If the
+ * api deploys first, read the single slug instead of failing every import.
+ */
+async function loadSentryProjectSlugs(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+): Promise<{ sentry_project_slug?: string | null; sentry_extra_project_slugs?: unknown } | null> {
+  const full = await db
+    .from('project_settings')
+    .select('sentry_project_slug, sentry_extra_project_slugs')
+    .eq('project_id', projectId)
+    .maybeSingle();
+  if (!full.error) return full.data;
+  log.warn('sentry_extra_project_slugs unreadable; using the single slug', { projectId, err: full.error.message });
+  const single = await db.from('project_settings').select('sentry_project_slug').eq('project_id', projectId).maybeSingle();
+  return single.data;
 }

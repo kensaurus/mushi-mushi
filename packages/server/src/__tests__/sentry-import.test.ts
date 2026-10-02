@@ -137,7 +137,7 @@ describe('restEventToWebhookEvent', () => {
 describe('importSentryIssues', () => {
   let state: { links: Row[]; inserted: { table: string; row: Row }[] }
   let classified: string[]
-  const sentry = { token: 't', orgSlug: 'sakuramoto', projectSlug: 'glot-it' }
+  const sentry = { token: 't', orgSlug: 'sakuramoto', projectSlugs: ['glot-it'] }
 
   beforeEach(() => {
     state = { links: [], inserted: [], }
@@ -231,5 +231,110 @@ describe('importSentryIssues', () => {
     expect(calls[0]).toBe('/projects/sakuramoto/glot-it/issues/?query=is%3Aunresolved&limit=3')
     // No retained event: still imports from the issue summary.
     expect(result.items[0].outcome).toBe('created')
+    expect(result).toMatchObject({ sentryProject: 'glot-it', nextCursor: null })
+  })
+
+  it('pages a backlog: sinceDays narrows the search, cursor walks it, nextCursor says what is left', async () => {
+    const next = '<https://sentry.io/api/0/projects/sakuramoto/glot-it/issues/?cursor=1727000000000:0:0>; rel="next"; results="true"; cursor="1727000000000:0:0"'
+    const { fetchImpl, calls } = fakeSentry({
+      '/projects/sakuramoto/glot-it/issues/': () =>
+        new Response(JSON.stringify([ISSUE]), { status: 200, headers: { Link: next } }),
+      '/organizations/sakuramoto/issues/4501/events/latest/': () => json(EVENT),
+    })
+    const result = await imp.importSentryIssues(makeDb(state), {
+      projectId: 'p1',
+      request: { limit: 10, sinceDays: 30, cursor: '1726000000000:0:0' },
+      sentry,
+      triggerClassification: () => {},
+      fetchImpl,
+    })
+    expect(calls[0]).toBe(
+      '/projects/sakuramoto/glot-it/issues/?query=is%3Aunresolved+lastSeen%3A-30d&limit=10&cursor=1726000000000%3A0%3A0',
+    )
+    expect(result.nextCursor).toBe('1727000000000:0:0')
+  })
+
+  it('searches and accepts an extra Sentry project, still refusing one outside the list', async () => {
+    const sbc = { token: 't', orgSlug: 'sakuramoto', projectSlugs: ['sbc-front', 'sbc-be'] }
+    const beIssue = { ...ISSUE, id: '900', shortId: 'SBC-BE-1', project: { slug: 'sbc-be' } }
+    const { fetchImpl, calls } = fakeSentry({
+      '/projects/sakuramoto/sbc-be/issues/': () => json([beIssue]),
+      '/organizations/sakuramoto/issues/900/events/latest/': () => json(EVENT),
+      '/organizations/sakuramoto/issues/777/': () => json({ ...ISSUE, id: '777', project: { slug: 'glot-it' } }),
+    })
+    const searched = await imp.importSentryIssues(makeDb(state), {
+      projectId: 'p1',
+      request: { limit: 10, sentryProject: 'sbc-be' },
+      sentry: sbc,
+      triggerClassification: () => {},
+      fetchImpl,
+    })
+    expect(calls[0]).toBe('/projects/sakuramoto/sbc-be/issues/?query=is%3Aunresolved&limit=10')
+    expect(searched.items[0]).toMatchObject({ shortId: 'SBC-BE-1', outcome: 'created' })
+    expect(searched.sentryProject).toBe('sbc-be')
+
+    const foreign = await imp.importSentryIssues(makeDb(state), {
+      projectId: 'p1',
+      request: { issueIds: ['777'], limit: 5 },
+      sentry: sbc,
+      triggerClassification: () => {},
+      fetchImpl,
+    })
+    expect(foreign.items[0].outcome).toBe('error')
+    expect(foreign.items[0].error).toBe('Issue belongs to Sentry project "glot-it", not "sbc-front" or "sbc-be".')
+  })
+
+  it('never searches a Sentry project the Mushi project is not wired to', async () => {
+    const { fetchImpl, calls } = fakeSentry({})
+    await expect(
+      imp.importSentryIssues(makeDb(state), {
+        projectId: 'p1',
+        request: { limit: 10, sentryProject: 'the-wanting-mind' },
+        sentry,
+        triggerClassification: () => {},
+        fetchImpl,
+      }),
+    ).rejects.toThrow(/glot-it/)
+    expect(calls).toHaveLength(0)
+  })
+})
+
+describe('backlog paging helpers', () => {
+  it('reads the next cursor only when Sentry says results="true"', () => {
+    const more = '<u>; rel="previous"; results="false"; cursor="0:0:1", <u>; rel="next"; results="true"; cursor="0:100:0"'
+    const done = '<u>; rel="previous"; results="true"; cursor="0:0:1", <u>; rel="next"; results="false"; cursor="0:200:0"'
+    expect(api.parseSentryNextCursor(more)).toBe('0:100:0')
+    expect(api.parseSentryNextCursor(done)).toBeNull()
+    expect(api.parseSentryNextCursor(null)).toBeNull()
+  })
+
+  it('lists the primary slug first, then valid extras, deduped', () => {
+    expect(imp.allowedSentryProjectSlugs('sbc-front', ['sbc-be', ' sbc-front ', 'Bad Slug', 7])).toEqual(['sbc-front', 'sbc-be'])
+    expect(imp.allowedSentryProjectSlugs(null, ['sbc-be'])).toEqual(['sbc-be'])
+    expect(imp.allowedSentryProjectSlugs(null, null)).toEqual([])
+  })
+
+  it('resolves which project and query a search runs', () => {
+    expect(imp.resolveSentrySearch({}, ['glot-it'])).toEqual({ ok: true, projectSlug: 'glot-it', query: 'is:unresolved' })
+    expect(imp.resolveSentrySearch({ query: 'is:unresolved level:error', sinceDays: 7, sentryProject: 'b' }, ['a', 'b'])).toEqual({
+      ok: true,
+      projectSlug: 'b',
+      query: 'is:unresolved level:error lastSeen:-7d',
+    })
+    expect(imp.resolveSentrySearch({ sentryProject: 'c' }, ['a', 'b']).ok).toBe(false)
+    expect(imp.resolveSentrySearch({}, []).ok).toBe(false)
+  })
+
+  it('validates the backlog fields and keeps them off an issueIds import', () => {
+    expect(imp.parseSentryImportRequest({ sinceDays: 30, cursor: '1727000000000:0:0', sentryProject: 'sbc-be', limit: 10 })).toEqual({
+      ok: true,
+      value: { issueIds: undefined, query: undefined, limit: 10, sinceDays: 30, cursor: '1727000000000:0:0', sentryProject: 'sbc-be' },
+    })
+    expect(imp.parseSentryImportRequest({ sinceDays: 0 }).ok).toBe(false)
+    expect(imp.parseSentryImportRequest({ sinceDays: 91 }).ok).toBe(false)
+    expect(imp.parseSentryImportRequest({ cursor: '"><script>' }).ok).toBe(false)
+    expect(imp.parseSentryImportRequest({ sentryProject: '../org' }).ok).toBe(false)
+    expect(imp.parseSentryImportRequest({ issueIds: ['A-1'], sinceDays: 7 }).ok).toBe(false)
+    expect(imp.parseSentryImportRequest({ issueIds: ['A-1'], cursor: '0:10:0' }).ok).toBe(false)
   })
 })
