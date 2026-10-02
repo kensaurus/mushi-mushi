@@ -362,6 +362,10 @@ verify_jwt = false
 [functions.backend-drift-scanner]
 verify_jwt = false
 
+# Cron-invoked daily (mushi-recipe-collector-daily, 03:35 UTC); Plan 019.
+[functions.recipe-collector]
+verify_jwt = false
+
 # Invoked by the api function or by another internal function.
 [functions.contract-graph-builder]
 verify_jwt = false
