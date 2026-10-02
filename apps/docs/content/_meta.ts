@@ -57,5 +57,12 @@ export default {
   legal: 'Legal',
   'launch-week': { title: 'Launch Week', theme: { toc: false } },
   blog: { title: 'Blog', theme: { toc: false } },
+  // Linked from the site footer only, never the nav or the hero (VISION.md:
+  // the buyer is the vibe coder; investors are not who the site leads with).
+  investors: {
+    title: 'For investors',
+    display: 'hidden',
+    theme: { sidebar: false, toc: false, timestamp: false, breadcrumb: false, pagination: false },
+  },
   github: { title: 'GitHub ↗', href: 'https://github.com/kensaurus/mushi-mushi' },
 }
