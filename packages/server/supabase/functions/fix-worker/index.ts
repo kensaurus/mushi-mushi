@@ -49,7 +49,6 @@
  */
 
 import { generateObject, NoObjectGeneratedError } from 'npm:ai@4';
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1';
 import { createOpenAI } from 'npm:@ai-sdk/openai@1';
 import { z } from 'npm:zod@3';
 import { getServiceClient } from '../_shared/db.ts';
@@ -97,7 +96,8 @@ import { firecrawlSearch, type FirecrawlSearchResult } from '../_shared/firecraw
 import { createTrace } from '../_shared/observability.ts';
 import { log as rootLog, type Logger } from '../_shared/logger.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
-import { FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts';
+import { FIX_EFFORT, FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts';
+import { claudeGenerateObject } from '../_shared/claude-messages.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import { checkAutofixBudget } from '../_shared/autofix-budget.ts';
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
@@ -816,11 +816,14 @@ ${
           dispatch.project_id,
           async (anthropicResolved) => {
             usedModel = DEFAULT_ANTHROPIC_MODEL;
-            const anthropic = createAnthropic({ apiKey: anthropicResolved.key });
-            const { object, usage } = await generateObject({
-              model: anthropic(usedModel),
+            const { object, usage } = await claudeGenerateObject({
+              apiKey: anthropicResolved.key,
+              model: usedModel,
               schema: fixSchema,
-              temperature: 0,
+              effort: FIX_EFFORT,
+              // A fix can carry whole file contents; at medium effort a long
+              // generation needs more than the default per-call timeout.
+              timeoutMs: 300_000,
               messages: [
                 {
                   role: 'system',
@@ -831,7 +834,9 @@ ${
                 },
                 { role: 'user', content: userPrompt },
               ],
-              maxTokens: 8_000,
+              // 8K of fix output plus room for adaptive thinking, which
+              // counts toward max_tokens on Sonnet 5.5.
+              maxTokens: 16_000,
             });
             inputTokens = usage?.promptTokens ?? 0;
             outputTokens = usage?.completionTokens ?? 0;

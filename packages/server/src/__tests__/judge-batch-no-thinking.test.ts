@@ -17,14 +17,15 @@
  *     Anthropic forbids in combination with thinking. Tracked upstream in
  *     vercel/ai#7220 (closed) and vercel/ai#9351 (open).
  *
- * The fix: pin JUDGE_MODEL and PROMPT_TUNE_MODEL to a model that still
- * accepts `temperature` (Sonnet 4.6) and remove the broken thinking-mode
- * branch from both Edge Functions. This regression test prevents either
- * half from silently coming back:
+ * The first fix pinned JUDGE_MODEL and PROMPT_TUNE_MODEL to Sonnet 4.6 and
+ * removed the broken thinking-mode branch. On 2026-10-02 judge-batch moved
+ * to `claude-messages.ts` (native structured outputs, no sampling knobs, no
+ * forced tool_choice), so JUDGE_MODEL may now be a no-sampling model such as
+ * Sonnet 5.5. This regression test prevents either failure from coming back:
  *
- *   1. JUDGE_MODEL and PROMPT_TUNE_MODEL must pass `acceptsSamplingKnobs`
- *      — otherwise the codepath WILL 400 because AI SDK v4 can't omit
- *      `temperature` and we just removed the (broken) thinking workaround.
+ *   1. A no-sampling judge model is allowed ONLY while judge-batch reaches
+ *      Claude exclusively through `claude-messages.ts`; PROMPT_TUNE_MODEL is
+ *      still on the AI SDK v4 path and must still accept sampling knobs.
  *   2. Neither Edge Function source may import `anthropicThinkingProviderOptions`
  *      or set `experimental_providerMetadata: { anthropic: { thinking ... } }`
  *      on a `generateObject` call — both are the exact pattern that re-fired
@@ -44,13 +45,13 @@ import {
 const FUNCTIONS_ROOT = resolve(__dirname, '../../supabase/functions')
 
 describe('MUSHI-MUSHI-SERVER-9 regression — Opus 4.7 + generateObject + thinking', () => {
-  it('JUDGE_MODEL is not a model that requires the broken thinking workaround', () => {
-    expect(acceptsSamplingKnobs(JUDGE_MODEL)).toBe(true)
-    // Belt-and-braces: catch the literal "Wave R" regression by name.
-    // If you genuinely need to revisit Opus 4.7 for judge, you must first
-    // either upgrade to AI SDK v5 (which exposes a non-forced tool_choice
-    // path) OR add the vercel/ai#7220 middleware AND a new test that proves
-    // the middleware actually shipped. Bumping the model alone is not enough.
+  it('a no-sampling JUDGE_MODEL is only used through claude-messages.ts', () => {
+    const src = readFileSync(resolve(FUNCTIONS_ROOT, 'judge-batch/index.ts'), 'utf8')
+    if (!acceptsSamplingKnobs(JUDGE_MODEL)) {
+      // AI SDK v4's Claude path sends `temperature: 0` + forced tool_choice.
+      expect(src).not.toMatch(/from 'npm:@ai-sdk\/anthropic|createAnthropic\(/)
+      expect(src).toMatch(/claudeGenerateObject\(/)
+    }
     expect(JUDGE_MODEL).not.toBe(ANTHROPIC_OPUS)
   })
 

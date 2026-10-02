@@ -35,7 +35,7 @@ The loop is not aspirational. It runs today, in production, as five Supabase edg
 | Stage | Function | What it does |
 |-------|----------|--------------|
 | Capture + Stage-1 filter | `fast-filter` | WASM-based spam pre-filter; emits structured `stage1Extraction` |
-| Classify | `classify-report` | Claude Sonnet 4.6 structured output; severity, category, component, blast radius |
+| Classify | `classify-report` | Claude Sonnet 5.5 structured output; severity, category, component, blast radius |
 | Fix | `fix-worker` | RAG-grounded diff + draft PR via GitHub REST |
 | Verify | `qa-story-runner` | Playwright / Browserbase / Firecrawl story execution |
 | Remember | `judge-batch` + `prompt-auto-tune` | Judge scores fixes; disagreement clusters promote candidate prompts |

@@ -21,7 +21,7 @@ import { log as rootLog } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withAnthropicOrOpenAi, LlmFailoverError } from '../_shared/llm-failover.ts'
-import { STAGE2_MODEL, STAGE2_FALLBACK } from '../_shared/models.ts'
+import { TEST_GEN_MODEL, STAGE2_FALLBACK } from '../_shared/models.ts'
 import { logAudit } from '../_shared/audit.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { tagLangfuseTrace } from '../_shared/sentry.ts'
@@ -259,7 +259,7 @@ Write a comprehensive Playwright TDD test for this user story.`
         project_id,
         async (anthropicKey) => {
           const { object } = await generateObject({
-            model: createAnthropic({ apiKey: anthropicKey.key })(STAGE2_MODEL),
+            model: createAnthropic({ apiKey: anthropicKey.key })(TEST_GEN_MODEL),
             system: SYSTEM_PROMPT,
             prompt,
             schema: testGenSchema,
@@ -279,10 +279,10 @@ Write a comprehensive Playwright TDD test for this user story.`
         },
       )
       output = result
-      llmSpan.end({ model: STAGE2_MODEL })
+      llmSpan.end({ model: TEST_GEN_MODEL })
       await trace.end()
     } catch (err) {
-      llmSpan.end({ model: STAGE2_MODEL, error: err instanceof Error ? err.message : String(err) })
+      llmSpan.end({ model: TEST_GEN_MODEL, error: err instanceof Error ? err.message : String(err) })
       await trace.end().catch(() => {})
       // Log the raw error server-side, but never echo err.message to the
       // client — raw messages can leak internals (CodeQL js/stack-trace-exposure).
@@ -322,7 +322,7 @@ Write a comprehensive Playwright TDD test for this user story.`
         approval_status: approvalStatus,
         automation_mode,
         origin_story_node_id: story.id,
-        generation_model: STAGE2_MODEL,
+        generation_model: TEST_GEN_MODEL,
         enabled: automation_mode === 'auto',
       })
       .select('id')
