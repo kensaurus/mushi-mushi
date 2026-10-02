@@ -270,6 +270,18 @@ describe('cloudfront-mushi-spa-router', () => {
     assert.equal(out.uri, '/mushi-mushi/testers/apps/_shell/index.html');
   });
 
+  it('serves every public diagram URL from the docs shell, dotted repo names included', () => {
+    for (const uri of ['/mushi-mushi/r/kensaurus/mushi-mushi', '/mushi-mushi/r/vercel/next.js', '/mushi-mushi/r/acme/shop/']) {
+      const out = spa(req(uri));
+      assert.equal(out.uri, '/mushi-mushi/docs/r.html', uri);
+    }
+  });
+
+  it('does not treat deeper /r/ paths as a diagram', () => {
+    const out = spa(req('/mushi-mushi/r/acme/shop/extra'));
+    assert.notEqual(out.uri, '/mushi-mushi/docs/r.html');
+  });
+
   it('does not rewrite the /apps/ listing page itself to the shell', () => {
     const out = spa(req('/mushi-mushi/testers/apps/'));
     assert.equal(out.uri, '/mushi-mushi/testers/apps/index.html');
