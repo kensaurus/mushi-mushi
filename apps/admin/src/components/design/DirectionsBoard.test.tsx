@@ -87,32 +87,58 @@ describe('DirectionsBoard', () => {
     expect(activateButtons).toHaveLength(2)
   })
 
-  it('renders the fixture facts: 7 pairs each, the failing reward pair, assets, unscanned active card', () => {
+  it('renders the fixture facts: manifest order, assets, failing and unresolved pairs, notes, read-only cards', () => {
     expect(DATA.specimen.script).toBe('thai')
     expect(DATA.specimen.word).toBe('น้ำ')
-    expect(DATA.directions.map((d) => d.name)).toEqual(['soi-signpaint', 'nang-lamp', 'pha-khram'])
+    expect(DATA.directions.map((d) => d.name)).toEqual(['soi-signpaint', 'pha-khram', 'nang-lamp'])
     render()
+    // Cards render in manifest order.
+    expect(
+      Array.from(container.querySelectorAll<HTMLElement>('[data-testid="direction-card"]')).map((c) => c.dataset.direction),
+    ).toEqual(['soi-signpaint', 'pha-khram', 'nang-lamp'])
     const card = (name: string) => container.querySelector<HTMLElement>(`[data-direction="${name}"]`)
+    const rows = (name: string, verdict: 'pass' | 'fail' | 'unknown') =>
+      Array.from(card(name)?.querySelectorAll('tbody tr') ?? []).filter((r) => r.querySelector(`[data-verdict="${verdict}"]`))
+    const ratio = (row: Element | undefined) => row?.querySelector('[data-testid="direction-contrast-ratio"]')?.textContent
 
-    for (const name of ['soi-signpaint', 'nang-lamp', 'pha-khram']) {
+    for (const name of ['soi-signpaint', 'pha-khram', 'nang-lamp']) {
       expect(card(name)?.querySelectorAll('[data-testid="direction-contrast-ratio"]')).toHaveLength(7)
       // The prompt word is drawn in every phone mock.
       expect(card(name)?.querySelector('[data-mock="word"]')?.textContent).toBe('น้ำ')
     }
 
-    // Soi's one failing pair: reward on the base surface, 1.63:1, with a Fail badge.
-    const failing = Array.from(card('soi-signpaint')?.querySelectorAll('tbody tr') ?? []).filter((r) =>
-      r.querySelector('[data-verdict="fail"]'),
-    )
-    expect(failing).toHaveLength(1)
-    expect(failing[0]?.querySelector('[data-testid="direction-contrast-ratio"]')?.textContent).toBe('1.63:1')
+    // Failing pairs: Soi 1 (reward 1.63), Pha 1 (action.primary on raised 2.73),
+    // Nang 2 (tone.mid 1.93, tone.high 2.41) plus 1 unresolved (text.onAction, not judged).
+    expect(rows('soi-signpaint', 'fail').map(ratio)).toEqual(['1.63:1'])
+    expect(rows('pha-khram', 'fail').map(ratio)).toEqual(['2.73:1'])
+    expect(rows('nang-lamp', 'fail').map(ratio).sort()).toEqual(['1.93:1', '2.41:1'])
+    expect(rows('nang-lamp', 'unknown')).toHaveLength(1)
+    expect(ratio(rows('nang-lamp', 'unknown')[0])).toBe('—')
+    expect(rows('soi-signpaint', 'unknown')).toHaveLength(0)
 
-    // Pha Khram's illustration renders as a lazy <img> from its signed URL.
-    const img = card('pha-khram')?.querySelector('img')
-    expect(img?.getAttribute('loading')).toBe('lazy')
-    expect(img?.getAttribute('src')).toContain('/v1/design-assets/')
-    expect(img?.getAttribute('alt')).toContain('illustration')
-    expect(card('nang-lamp')?.querySelector('img')).toBeNull()
+    // Assets: Soi 7 (6 shown + "+1 more"), Pha 1, Nang 0.
+    expect(DATA.directions.map((d) => d.assets.length)).toEqual([7, 1, 0])
+    expect(card('soi-signpaint')?.querySelectorAll('[data-testid="direction-asset"]')).toHaveLength(6)
+    expect(card('soi-signpaint')?.textContent).toContain('+1 more assets')
+    expect(card('pha-khram')?.querySelectorAll('[data-testid="direction-asset"]')).toHaveLength(1)
+    const phaImg = card('pha-khram')?.querySelector('img')
+    expect(phaImg?.getAttribute('loading')).toBe('lazy')
+    expect(phaImg?.getAttribute('src')).toContain('/v1/design-assets/')
+    expect(card('nang-lamp')?.querySelectorAll('[data-testid="direction-asset"]')).toHaveLength(0)
+    expect(card('nang-lamp')?.textContent).toContain('No assets declared.')
+
+    // Soi's note shows; inactive cards are labelled read-only in text.
+    expect(card('soi-signpaint')?.querySelector('[data-testid="direction-note"]')?.textContent).toContain(
+      'earned-progress mechanic',
+    )
+    expect(card('soi-signpaint')?.querySelector('[data-testid="read-only-badge"]')).toBeNull()
+    for (const name of ['pha-khram', 'nang-lamp']) {
+      expect(card(name)?.querySelector('[data-testid="read-only-badge"]')?.textContent).toBe('Read-only — inactive')
+      // Read-only still allows both PR actions.
+      const labels = Array.from(card(name)?.querySelectorAll('button') ?? []).map((b) => b.textContent?.trim())
+      expect(labels).toContain('Set active direction')
+      expect(labels).toContain('Duplicate / edit direction')
+    }
 
     // Nothing has been scanned: the active card says so; inactive cards explain why.
     expect(card('soi-signpaint')?.textContent).toContain('Not scanned yet')

@@ -133,12 +133,27 @@ export function DirectionCard({
               <span data-testid="active-badge">Active</span>
             </Badge>
           )}
+          {direction.readOnly && (
+            <Badge
+              tone="neutral"
+              className="gap-1"
+              title="A comparison set: never scanned and never edited in place. Set active or duplicate it to change it."
+            >
+              <RecipeStateGlyph glyph="ring" />
+              <span data-testid="read-only-badge">Read-only — inactive</span>
+            </Badge>
+          )}
         </div>
         <p className="font-mono text-2xs text-fg-muted">
           directions/{direction.name} · {direction.tokenCount.toLocaleString()} tokens
           {direction.issues.length > 0 ? ` · ${direction.issues.length} token issues` : ''}
         </p>
         {direction.concept && <p className="text-sm text-fg-secondary">{direction.concept}</p>}
+        {direction.note && (
+          <p className="text-xs text-fg-secondary" data-testid="direction-note">
+            <span className="font-medium text-fg">Note:</span> {direction.note}
+          </p>
+        )}
       </header>
 
       <DirectionPhoneMock label={direction.displayName} roles={roles} word={specimen.word} sample={specimen.sample} />
@@ -266,7 +281,7 @@ export function DirectionCard({
           {direction.assets.slice(0, MAX_ASSETS).map((a) => {
             const src = directionAssetUrl(a.url, RESOLVED_API_URL)
             return (
-              <li key={a.path} className="flex min-w-0 flex-col gap-1">
+              <li key={a.path} className="flex min-w-0 flex-col gap-1" data-testid="direction-asset">
                 {src ? (
                   <img
                     src={src}
@@ -299,6 +314,11 @@ export function DirectionCard({
         <p className="text-xs text-fg-muted">{editable.reason ?? 'Changes are not available for this project.'}</p>
       ) : (
         <div className="flex flex-col gap-3">
+          {direction.readOnly && !mine && (
+            <p className="text-2xs text-fg-muted">
+              Both actions open a draft PR; neither edits this direction&apos;s own files.
+            </p>
+          )}
           {!mine && (
             <div className="flex flex-wrap gap-2">
               {!direction.active && (

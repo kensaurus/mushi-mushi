@@ -45,6 +45,7 @@ import { editKey, type RuleChange } from '../components/design/designTokens'
 import { RecipeIssueList } from '../components/recipe/RecipeIssueList'
 import { ComponentInventory } from '../components/design/ComponentInventory'
 import { DirectionsBoard } from '../components/design/DirectionsBoard'
+import { CssScopeColumns } from '../components/design/CssScopeColumns'
 import { describeDevianceSettle, useDeviancePoll, type DevianceSettle } from '../components/design/useDeviancePoll'
 
 type DesignView = 'tokens' | 'directions'
@@ -291,6 +292,9 @@ function ProjectDesign({ projectId }: { projectId: string }) {
             <Section title="Contrast" action={<span className="text-2xs text-fg-faint">WCAG ratio per declared pair</span>}>
               <ContrastTiles pairs={data.contrast} />
             </Section>
+
+            {/* An older api without scoped CSS sends no cssScopes. */}
+            <CssScopeColumns scopes={data.cssScopes ?? []} />
 
             <Section title="Components" action={<span className="text-2xs text-fg-faint">{data.components.length} listed</span>}>
               <ComponentInventory components={data.components} />
