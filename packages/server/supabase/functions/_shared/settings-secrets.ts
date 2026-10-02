@@ -66,6 +66,59 @@ export async function storeSettingsSecret(
   return `${VAULT_REF_PREFIX}${name}`
 }
 
+/**
+ * What a settings response shows in place of a stored secret. It is never a
+ * substring of the secret or of its Vault ref, and a PATCH that sends it back
+ * leaves the column untouched.
+ */
+export const SECRET_MASK = '••••••••'
+
+/**
+ * Credential-bearing columns of project_settings / organization_integration_settings
+ * that the pattern below does not catch: webhook URLs carry their own token,
+ * and the two jsonb columns can hold crawler cookies or API tokens.
+ */
+const SECRET_SETTINGS_COLUMNS = new Set([
+  'slack_webhook_url',
+  'discord_webhook_url',
+  'teams_webhook_url',
+  'crawler_auth_config',
+  'integrations_config',
+])
+
+/**
+ * `*_secret`, `*_token`, `*_key`, `*_bearer`, `*_password`, each optionally
+ * followed by `_ref` or `_hash` (`slack_bot_token_ref`,
+ * `telegram_webhook_secret_hash`). A plain `*_ref` is not enough:
+ * `supabase_project_ref` is a project id, not a secret. New columns that
+ * follow the naming are masked by default.
+ */
+const SECRET_COLUMN_RE = /(_secret|_token|_key|_bearer|_password)(_ref|_hash)?$/
+
+export function isSecretSettingsColumn(column: string): boolean {
+  return SECRET_SETTINGS_COLUMNS.has(column) || SECRET_COLUMN_RE.test(column)
+}
+
+/**
+ * Copy of a settings row that is safe to return to any caller, including an
+ * `mcp:read` API key: each secret column becomes `SECRET_MASK` (or null when
+ * unset) and gains a `<column>_set` boolean. Raw values and Vault refs never
+ * leave the server.
+ */
+export function maskSettingsRow(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [column, value] of Object.entries(row)) {
+    if (!isSecretSettingsColumn(column)) {
+      out[column] = value
+      continue
+    }
+    const set = value != null && value !== ''
+    out[column] = set ? SECRET_MASK : null
+    out[`${column}_set`] = set
+  }
+  return out
+}
+
 export type SecretSettingWrite =
   | { action: 'skip' }
   | { action: 'clear' }
@@ -76,7 +129,7 @@ export type SecretSettingWrite =
  * Decide what a settings PATCH does with one secret field.
  *
  * - `null` / `''` clears the column; whitespace only is skipped.
- * - A masked hint (`…abcd`) or a value identical to the stored column is a
+ * - A mask (`SECRET_MASK`, `…abcd`) or a value identical to the stored column is a
  *   form round-trip, not an edit: skip it. The console's General panel sends
  *   the whole settings row back, stored refs included.
  * - Any other `vault://` value is refused: refs are minted by the server only
@@ -89,7 +142,7 @@ export function planSecretSettingWrite(value: unknown, stored: string | null | u
   const raw = value.trim()
   // Whitespace is an untouched input, not a request to delete the secret.
   if (!raw) return { action: 'skip' }
-  if (raw.startsWith('…') && raw.length <= 6) return { action: 'skip' }
+  if (raw === SECRET_MASK || (raw.startsWith('…') && raw.length <= 6)) return { action: 'skip' }
   if (stored != null && value === stored) return { action: 'skip' }
   if (isVaultRef(raw)) return { action: 'reject' }
   return { action: 'store', value: raw }

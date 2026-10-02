@@ -15,7 +15,13 @@ import {
   requireProjectAdmin,
   callerCanAccessProject,
 } from '../shared.ts';
-import { planSecretSettingWrite, storeSettingsSecret } from '../../_shared/settings-secrets.ts';
+import {
+  isSecretSettingsColumn,
+  maskSettingsRow,
+  planSecretSettingWrite,
+  SECRET_MASK,
+  storeSettingsSecret,
+} from '../../_shared/settings-secrets.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -213,7 +219,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       .eq('project_id', project.id)
       .single();
 
-    return c.json({ ok: true, data: data ?? {} });
+    // mcp:read keys and the MCP project://settings resource read this route:
+    // secrets come back as SECRET_MASK plus `<column>_set`, never the value
+    // or its Vault ref.
+    return c.json({ ok: true, data: data ? maskSettingsRow(data as Record<string, unknown>) : {} });
   });
 
   app.get('/v1/admin/settings/stats', jwtAuth, async (c) => {
@@ -457,6 +466,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
       if (!allowed.includes(key)) continue;
+      // The GET above returns SECRET_MASK for set secrets; a form that sends
+      // the whole row back has not changed them.
+      if (value === SECRET_MASK && isSecretSettingsColumn(key)) continue;
       if (key === 'widget_brand_footer') {
         if (value !== null && typeof value !== 'boolean') {
           return c.json(
