@@ -17,7 +17,7 @@
  * 300-file index), and are cached per (project, SHA, options + seeds).
  */
 
-import type { Hono } from 'npm:hono@4'
+import type { Context, Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
@@ -35,7 +35,12 @@ import {
   type RepoDigestOptions,
   type RepoTreeEntry,
 } from '../../_shared/repo-digest.ts'
-import { framePathsFromStackText, matchFramePathsToTree } from '../../_shared/sentry-frames.ts'
+import {
+  resolveReportSeeds,
+  type ReportForSeeds,
+  type ReportSeeds,
+  type ReportSeedSources,
+} from '../../_shared/report-seeds.ts'
 import { getRelevantCode } from '../../_shared/rag.ts'
 import { computeImportImpact, loadExploreGraph } from '../../_shared/codebase-understand.ts'
 import { emitProductEvent } from '../../_shared/product-events.ts'
@@ -47,10 +52,6 @@ type Db = ReturnType<typeof getServiceClient>
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_CACHED_DIGESTS_PER_PROJECT = 20
-/** Linked files per source, and dependents added by the import graph. */
-const MAX_FIX_FILES = 20
-const MAX_RELATED_FILES = 5
-const MAX_DEPENDENTS = 20
 
 export interface ConnectedRepo {
   owner: string
@@ -89,96 +90,27 @@ export async function resolveConnectedRepo(db: Db, projectId: string): Promise<R
   return { ok: true, repo: { owner: parsed.owner, repo: parsed.repo, token } }
 }
 
-export interface ReportForSeeds {
-  id: string
-  summary: string | null
-  component: string | null
-  custom_metadata: unknown
-  console_logs: unknown
-}
-
-export interface ReportSeeds {
-  seeds: string[]
-  sources: { stack_frames: number; fix_files: number; related_code: number; dependents: number }
-}
-
-/**
- * The repo files one report touches, in priority order, all present in the
- * tree at the pinned SHA. Every source is best-effort.
- */
-export async function resolveReportSeeds(
-  db: Db,
-  projectId: string,
-  report: ReportForSeeds,
-  treePaths: readonly string[],
-): Promise<ReportSeeds> {
-  const inTree = new Set(treePaths)
-  const seeds: string[] = []
-  const add = (paths: readonly string[], cap: number): number => {
-    let n = 0
-    for (const p of paths) {
-      const clean = p.replace(/\\/g, '/').replace(/^\.?\/+/, '')
-      if (n >= cap || !inTree.has(clean) || seeds.includes(clean)) continue
-      seeds.push(clean)
-      n++
-    }
-    return n
-  }
-
-  // 1. Stack frames (Sentry frames, else the stored stack text).
-  const meta = (report.custom_metadata ?? {}) as { sentryFrames?: unknown }
-  const stored = Array.isArray(meta.sentryFrames)
-    ? meta.sentryFrames.filter((p): p is string => typeof p === 'string')
-    : []
-  const framePaths = stored.length > 0
-    ? stored
-    : (Array.isArray(report.console_logs) ? report.console_logs : [])
-        .flatMap((l) => framePathsFromStackText((l as { stack?: string } | null)?.stack))
-  const stackFrames = add(matchFramePathsToTree(framePaths, treePaths), MAX_FIX_FILES)
-
-  // 2. Files earlier fix attempts changed.
-  let fixFiles = 0
-  const { data: fixes, error: fixErr } = await db
-    .from('fix_attempts')
-    .select('files_changed')
-    .eq('report_id', report.id)
-    .eq('project_id', projectId)
-    .order('created_at', { ascending: false })
-    .limit(5)
-  if (fixErr) routeLog.warn('fix files lookup failed', { error: fixErr.message })
-  for (const f of fixes ?? []) {
-    fixFiles += add(((f.files_changed ?? []) as string[]).filter(Boolean), MAX_FIX_FILES - fixFiles)
-  }
-
-  // 3. Related code from the index (needs codebase indexing; empty otherwise).
-  let relatedCode = 0
-  if (report.summary) {
-    try {
-      const rag = await getRelevantCode(db, projectId, {
-        symptom: report.summary,
-        component: report.component ?? undefined,
-      })
-      relatedCode = add(rag.map((r) => r.filePath), MAX_RELATED_FILES)
-    } catch (err) {
-      routeLog.warn('related code lookup failed', { error: String(err) })
-    }
-  }
-
-  // 4. Files that import the ones above (reverse import graph).
-  let dependents = 0
-  if (seeds.length > 0) {
-    try {
-      const { nodes, edges } = await loadExploreGraph(db, projectId)
-      const impact = computeImportImpact(seeds, nodes, edges)
-      dependents = add(impact.affected_file_paths.filter((p) => !seeds.includes(p)), MAX_DEPENDENTS)
-    } catch (err) {
-      routeLog.warn('import graph lookup failed', { error: String(err) })
-    }
-  }
-
+/** The report's linked files, read from this project's database and index. */
+function reportSeedSources(db: Db, projectId: string, reportId: string): ReportSeedSources {
   return {
-    seeds,
-    sources: { stack_frames: stackFrames, fix_files: fixFiles, related_code: relatedCode, dependents },
+    fixFiles: async () => {
+      const { data, error } = await db
+        .from('fix_attempts')
+        .select('files_changed')
+        .eq('report_id', reportId)
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false })
+        .limit(5)
+      if (error) throw new Error(error.message)
+      return (data ?? []).map((f) => ((f.files_changed ?? []) as string[]))
+    },
+    relatedCode: async (summary, component) =>
+      (await getRelevantCode(db, projectId, { symptom: summary, component: component ?? undefined })).map((r) => r.filePath),
+    importers: async (seeds) => {
+      const { nodes, edges } = await loadExploreGraph(db, projectId)
+      return computeImportImpact(seeds, nodes, edges).affected_file_paths
+    },
+    warn: (message, detail) => routeLog.warn(message, { projectId, ...detail }),
   }
 }
 
@@ -195,6 +127,56 @@ async function pruneDigestCache(db: Db, projectId: string): Promise<void> {
     .range(MAX_CACHED_DIGESTS_PER_PROJECT, MAX_CACHED_DIGESTS_PER_PROJECT + 100)
   const ids = (data ?? []).map((r) => r.id as string)
   if (ids.length > 0) await db.from('repo_digest_cache').delete().in('id', ids)
+}
+
+type DigestScope = {
+  kind: 'repo' | 'path' | 'report'
+  label: string
+  report_id?: string
+  sources?: ReportSeeds['sources']
+}
+
+/** What the cache stores: the digest plus the scope it was built for. */
+type CachedDigest = RepoDigest & { scope: DigestScope }
+
+/**
+ * A commit never changes, so a repo or folder digest stays valid forever. A
+ * report digest also depends on the report's linked files (new fix attempts,
+ * new stack frames), so it is rebuilt after an hour.
+ */
+const REPORT_DIGEST_FRESH_MS = 60 * 60 * 1000
+
+export function isCacheFresh(scopeKey: string, createdAt: string, now: number): boolean {
+  if (!scopeKey.startsWith('report:')) return true
+  const t = Date.parse(createdAt)
+  return Number.isFinite(t) && now - t < REPORT_DIGEST_FRESH_MS
+}
+
+/** New digests (cache misses) per user per project per hour. */
+const DIGEST_BUILDS_PER_HOUR = 30
+
+async function claimDigestBuild(db: Db, userId: string, projectId: string): Promise<'ok' | 'limited' | 'unavailable'> {
+  const { error } = await db.rpc('scoped_rate_limit_claim', {
+    p_user_id: userId,
+    p_scope: `repo-digest:${projectId}`,
+    p_max_per_window: DIGEST_BUILDS_PER_HOUR,
+    p_window: '1 hour',
+  })
+  if (!error) return 'ok'
+  if ((error.message ?? '').includes('rate_limit_exceeded')) return 'limited'
+  // Fail closed: a guard that opens on an RPC error is the silent fail-open
+  // pattern this repo has shipped before.
+  routeLog.error('digest rate limit rpc failed', { projectId, error: error.message })
+  return 'unavailable'
+}
+
+function githubFailure(c: Context, projectId: string, err: unknown): Response {
+  if (err instanceof RepoDigestError) {
+    const status = err.code === 'REF_NOT_FOUND' ? 404 : 502
+    return c.json({ ok: false, error: { code: err.code, message: err.message } }, status)
+  }
+  routeLog.warn('github read failed', { projectId, error: String(err) })
+  return c.json({ ok: false, error: { code: 'GITHUB_UNAVAILABLE', message: 'Could not read the repo from GitHub. Try again in a minute.' } }, 502)
 }
 
 export function registerRepoDigestRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -244,64 +226,81 @@ export function registerRepoDigestRoutes(app: Hono<{ Variables: Variables }>): v
     }
     const { owner, repo, token } = resolved.repo
 
+    // Order keeps a repeat click cheap: pin the commit (one GitHub call), then
+    // the cache. Only a miss reads the tree, resolves the report's files (RAG
+    // embeds the summary) and fetches contents, and only a miss is rate limited.
     let pinned: { sha: string; ref: string }
-    let tree: { entries: RepoTreeEntry[]; truncated: boolean }
     try {
       pinned = await resolveCommitSha({ token, owner, repo, ref })
-      tree = await fetchTreeAtSha({ token, owner, repo, sha: pinned.sha })
     } catch (err) {
-      if (err instanceof RepoDigestError) {
-        const status = err.code === 'REF_NOT_FOUND' ? 404 : 502
-        return c.json({ ok: false, error: { code: err.code, message: err.message } }, status)
-      }
-      routeLog.warn('github read failed', { projectId, error: String(err) })
-      return c.json({ ok: false, error: { code: 'GITHUB_UNAVAILABLE', message: 'Could not read the repo from GitHub. Try again in a minute.' } }, 502)
+      return githubFailure(c, projectId, err)
     }
 
-    let scope: { kind: 'repo' | 'path' | 'report'; label: string; report_id?: string; sources?: ReportSeeds['sources'] } =
-      pathPrefix
-        ? { kind: 'path', label: `folder ${pathPrefix}` }
-        : { kind: 'repo', label: 'whole repo' }
-    if (report) {
-      const treePaths = tree.entries.map((e) => e.path)
-      const { seeds, sources } = await resolveReportSeeds(db, projectId, report, treePaths)
-      options.seedPaths = seeds
-      scope = {
-        kind: 'report',
-        report_id: report.id,
-        sources,
-        label: seeds.length > 0
-          ? `files linked to report ${report.id.slice(0, 8)} (${seeds.length}), then the rest of the repo by priority`
-          : `report ${report.id.slice(0, 8)}: no linked files found, so this is the whole repo by priority`,
-      }
-    }
-
-    const scopeKey = scope.kind === 'report' ? `report:${scope.report_id}` : scope.kind
-    const optionsHash = await sha256HexOf(digestCacheKeyInput(options, options.seedPaths ?? [], scopeKey))
+    const scopeKey = report ? `report:${report.id}` : pathPrefix ? 'path' : 'repo'
+    const optionsHash = await sha256HexOf(digestCacheKeyInput(options, scopeKey))
     const { data: cached } = await db
       .from('repo_digest_cache')
-      .select('digest')
+      .select('digest, created_at')
       .eq('project_id', projectId)
       .eq('commit_sha', pinned.sha)
       .eq('options_hash', optionsHash)
       .maybeSingle()
 
-    let digest: RepoDigest
+    let result: CachedDigest
     let fromCache = false
-    if (cached?.digest) {
-      digest = cached.digest as RepoDigest
+    if (cached?.digest && isCacheFresh(scopeKey, cached.created_at as string, Date.now())) {
+      result = cached.digest as CachedDigest
       fromCache = true
     } else {
-      digest = await buildRepoDigestFromTree({
+      const claim = await claimDigestBuild(db, userId, projectId)
+      if (claim === 'limited') {
+        return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: `Up to ${DIGEST_BUILDS_PER_HOUR} new digests per hour per project. Copying one you already made is not limited.` } }, 429)
+      }
+      if (claim === 'unavailable') {
+        return c.json({ ok: false, error: { code: 'RATE_LIMIT_UNAVAILABLE', message: 'Digests are paused for a moment. Try again shortly.' } }, 503)
+      }
+
+      let tree: { entries: RepoTreeEntry[]; truncated: boolean }
+      try {
+        tree = await fetchTreeAtSha({ token, owner, repo, sha: pinned.sha })
+      } catch (err) {
+        return githubFailure(c, projectId, err)
+      }
+
+      let scope: DigestScope = pathPrefix
+        ? { kind: 'path', label: `folder ${pathPrefix}` }
+        : { kind: 'repo', label: 'whole repo' }
+      if (report) {
+        const { seeds, sources } = await resolveReportSeeds(
+          report,
+          tree.entries.map((e) => e.path),
+          reportSeedSources(db, projectId, report.id),
+        )
+        options.seedPaths = seeds
+        scope = {
+          kind: 'report',
+          report_id: report.id,
+          sources,
+          label: seeds.length > 0
+            ? `files linked to report ${report.id.slice(0, 8)} (${seeds.length}), then the rest of the repo by priority`
+            : `report ${report.id.slice(0, 8)}: no linked files found, so this is the whole repo by priority`,
+        }
+      }
+
+      const digest = await buildRepoDigestFromTree({
         token, owner, repo, pinned, tree, options, scopeLabel: scope.label,
       })
+      result = { ...digest, scope }
       const { error: cacheErr } = await db.from('repo_digest_cache').upsert(
-        { project_id: projectId, commit_sha: pinned.sha, options_hash: optionsHash, digest },
+        // created_at is refreshed so a rebuilt report digest starts a new freshness window.
+        { project_id: projectId, commit_sha: pinned.sha, options_hash: optionsHash, digest: result, created_at: new Date().toISOString() },
         { onConflict: 'project_id,commit_sha,options_hash' },
       )
       if (cacheErr) routeLog.warn('digest cache write failed', { projectId, error: cacheErr.message })
       else void pruneDigestCache(db, projectId)
     }
+    const digest = result
+    const scope = result.scope
 
     void emitProductEvent(db, {
       userId,
@@ -316,6 +315,6 @@ export function registerRepoDigestRoutes(app: Hono<{ Variables: Variables }>): v
       },
     })
 
-    return c.json({ ok: true, data: { ...digest, scope, cached: fromCache } })
+    return c.json({ ok: true, data: { ...digest, cached: fromCache } })
   })
 }

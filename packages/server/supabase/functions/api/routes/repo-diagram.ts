@@ -55,6 +55,7 @@ import {
   layoutDiagram,
   publicDiagramPayload,
   publicPayloadHash,
+  publicationOutdated,
   validateDiagram,
   type DiagramGraph,
 } from '../../_shared/repo-diagram.ts'
@@ -160,7 +161,7 @@ async function pruneDiagrams(db: Db, projectId: string, keepId: string): Promise
   if (ids.length > 0) await db.from('project_codebase_diagrams').delete().in('id', ids)
 }
 
-function publicationView(pub: Awaited<ReturnType<typeof loadPublication>>, currentDiagramId: string | null) {
+async function publicationView(pub: Awaited<ReturnType<typeof loadPublication>>, latest: DiagramRow | null) {
   if (!pub) return { published: false as const }
   return {
     published: true as const,
@@ -168,8 +169,8 @@ function publicationView(pub: Awaited<ReturnType<typeof loadPublication>>, curre
     commit_sha: pub.commit_sha,
     repo_private: pub.repo_private,
     published_at: pub.published_at,
-    /** The page shows an older diagram than the latest one. */
-    outdated: pub.diagram_id !== currentDiagramId,
+    /** The page shows something other than the latest diagram (a new commit or a Redraw). */
+    outdated: await publicationOutdated(pub, latest),
   }
 }
 
@@ -193,7 +194,7 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     if (error) return dbError(c, error)
     const row = data as DiagramRow | null
     const pub = await loadPublication(db, projectId)
-    return c.json({ ok: true, data: { diagram: row, publication: publicationView(pub, row?.id ?? null) } })
+    return c.json({ ok: true, data: { diagram: row, publication: await publicationView(pub, row) } })
   })
 
   app.post('/v1/admin/projects/:id/codebase/diagram', writeAuth, async (c) => {
@@ -224,7 +225,7 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
           .maybeSingle()
         if (existing) {
           const pub = await loadPublication(db, projectId)
-          return c.json({ ok: true, data: { diagram: existing, publication: publicationView(pub, (existing as DiagramRow).id), reused: true } })
+          return c.json({ ok: true, data: { diagram: existing, publication: await publicationView(pub, existing as DiagramRow), reused: true } })
         }
       }
       tree = await fetchTreeAtSha({ token, owner, repo, sha: pinned.sha })
@@ -364,7 +365,7 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     })
 
     const pub = await loadPublication(db, projectId)
-    return c.json({ ok: true, data: { diagram: saved, publication: publicationView(pub, (saved as DiagramRow).id), reused: false } })
+    return c.json({ ok: true, data: { diagram: saved, publication: await publicationView(pub, saved as DiagramRow), reused: false } })
   })
 
   // What the public page would show for the latest diagram, its hash (the

@@ -34,8 +34,13 @@
 --    WHERE tablename IN ('repo_digest_cache','project_codebase_diagrams','public_repo_diagrams');
 --   -- expect exactly: project_codebase_diagrams_member_select (authenticated, SELECT),
 --   --                 public_repo_diagrams_member_select (authenticated, SELECT)
---   SELECT has_table_privilege('anon', 'public.repo_digest_cache', 'SELECT');
---   -- expect false
+--   SELECT t, r, p, has_table_privilege(r, t, p) AS granted
+--     FROM unnest(ARRAY['public.repo_digest_cache','public.project_codebase_diagrams','public.public_repo_diagrams']) AS t,
+--          unnest(ARRAY['anon','authenticated']) AS r,
+--          unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE']) AS p
+--    ORDER BY 1, 2, 3;
+--   -- expect granted = true ONLY for authenticated + SELECT on project_codebase_diagrams
+--   -- and public_repo_diagrams; false for every other row (repo_digest_cache: all false)
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS public.repo_digest_cache (
@@ -52,7 +57,7 @@ CREATE INDEX IF NOT EXISTS idx_repo_digest_cache_project_created
   ON public.repo_digest_cache (project_id, created_at DESC);
 
 ALTER TABLE public.repo_digest_cache ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.repo_digest_cache FROM anon, authenticated;
+REVOKE ALL ON public.repo_digest_cache FROM PUBLIC, anon, authenticated;
 
 COMMENT ON TABLE public.repo_digest_cache IS
   'Repo digests (tree + file contents) per project, commit SHA and options hash. Service role only.';
@@ -82,6 +87,10 @@ CREATE POLICY project_codebase_diagrams_member_select ON public.project_codebase
   FOR SELECT TO authenticated
   USING (private.is_project_member(project_id));
 
+-- Writes are service role only; members only ever read.
+REVOKE ALL ON public.project_codebase_diagrams FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.project_codebase_diagrams TO authenticated;
+
 COMMENT ON TABLE public.project_codebase_diagrams IS
   'AI architecture diagram per project and commit SHA; node paths validated against the git tree. Service-role writes.';
 
@@ -102,12 +111,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_public_repo_diagrams_repo
   ON public.public_repo_diagrams (lower(repo_owner), lower(repo_name));
 
 ALTER TABLE public.public_repo_diagrams ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.public_repo_diagrams FROM anon;
-
 DROP POLICY IF EXISTS public_repo_diagrams_member_select ON public.public_repo_diagrams;
 CREATE POLICY public_repo_diagrams_member_select ON public.public_repo_diagrams
   FOR SELECT TO authenticated
   USING (private.is_project_member(project_id));
+
+-- Writes are service role only (the api's publish route); members only read.
+-- anon gets nothing: the public page reads through the api.
+REVOKE ALL ON public.public_repo_diagrams FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.public_repo_diagrams TO authenticated;
 
 COMMENT ON TABLE public.public_repo_diagrams IS
   'Opt-in public diagram page per project: frozen public payload (no file contents), the SHA and who published it.';

@@ -305,6 +305,26 @@ export function publicPayloadHash(payload: PublicDiagramPayload): Promise<string
   return sha256HexOf(JSON.stringify(payload))
 }
 
+/**
+ * Whether a published page shows something other than the latest diagram.
+ * Compares content, not row ids: a same-commit Redraw upserts the same row
+ * (same id, new graph), and the page must still read as out of date. The
+ * published payload keeps GitHub's spelling of the names, so the latest
+ * diagram is rendered with that spelling before hashing.
+ */
+export async function publicationOutdated(
+  published: { payload_hash: string; payload: { owner: string; repo: string } },
+  latest: { commit_sha: string; updated_at: string; graph: DiagramGraph } | null,
+): Promise<boolean> {
+  if (!latest) return false
+  const current = publicDiagramPayload({
+    ...latest,
+    repo_owner: published.payload.owner,
+    repo_name: published.payload.repo,
+  })
+  return (await publicPayloadHash(current)) !== published.payload_hash
+}
+
 export type PublishDecision =
   | { ok: true }
   | { ok: false; status: 403; code: 'REPO_WRITE_REQUIRED'; message: string }
