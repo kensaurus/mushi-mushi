@@ -3,7 +3,6 @@
  * PURPOSE: Project settings health — BYOK tests, SDK widget, routing hooks.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
@@ -36,9 +35,7 @@ export function SettingsStatusBanner({ stats, onTab, plainBanner = false }: Prop
         }
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.byok ?? 'Fix BYOK'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.byok ?? 'Fix BYOK'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('byok')}>
               {actions.byok ?? 'Fix BYOK'}
@@ -60,9 +57,7 @@ export function SettingsStatusBanner({ stats, onTab, plainBanner = false }: Prop
         }
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.byok ?? 'Add Anthropic key'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.byok ?? 'Add Anthropic key'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('byok')}>
               {actions.byok ?? 'Add Anthropic key'}
@@ -84,9 +79,7 @@ export function SettingsStatusBanner({ stats, onTab, plainBanner = false }: Prop
         }
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.health ?? 'Open Health'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.health ?? 'Open Health'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('health')}>
               {actions.health ?? 'Open Health'}
@@ -112,9 +105,7 @@ export function SettingsStatusBanner({ stats, onTab, plainBanner = false }: Prop
         }
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.test ?? 'Test keys'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.test ?? 'Test keys'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('byok')}>
               {actions.test ?? 'Test keys'}
@@ -135,9 +126,7 @@ export function SettingsStatusBanner({ stats, onTab, plainBanner = false }: Prop
           `${projectLabel}: BYOK ${stats.byokKeysPassing > 0 ? 'passing' : 'configured'} · SDK on · Slack/Sentry optional on General.`
         }
         action={
-          <Link to={stats.topPriorityTo ?? '/integrations/config'}>
-            <Btn size="sm" variant="ghost">{actions.integrations ?? 'Integrations'}</Btn>
-          </Link>
+          <Btn to={stats.topPriorityTo ?? '/integrations/config'} size="sm" variant="ghost">{actions.integrations ?? 'Integrations'}</Btn>
         }
       />
     )
@@ -153,9 +142,7 @@ export function SettingsStatusBanner({ stats, onTab, plainBanner = false }: Prop
       }
       action={
         stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">{actions.pipeline ?? 'Run pipeline test'}</Btn>
-          </Link>
+          <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.pipeline ?? 'Run pipeline test'}</Btn>
         ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('health')}>
             {actions.pipeline ?? 'Run pipeline test'}

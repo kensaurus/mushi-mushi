@@ -274,6 +274,10 @@ function ChangelogHighlightRow({
 
 export function VersionBadge({ whatsNew }: VersionBadgeProps) {
   const [open, setOpen] = useState(false)
+  // Hover opens the popover before the click lands, so a plain toggle closed
+  // it again and the chip seemed to open nothing. A click right after a
+  // hover-open keeps it open.
+  const openedByHover = useRef(false)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
@@ -288,6 +292,9 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
     closeTimer.current = setTimeout(() => setOpen(false), CLOSE_DELAY_MS)
   }, [cancelClose])
   useEffect(() => () => cancelClose(), [cancelClose])
+  useEffect(() => {
+    if (!open) openedByHover.current = false
+  }, [open])
 
   // Click-outside + Escape handlers for keyboard / touch users. Hover
   // alone wouldn't dismiss for a focus-driven open, so we mirror the
@@ -320,7 +327,11 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
     <div
       ref={containerRef}
       className="relative inline-flex"
-      onMouseEnter={() => { cancelClose(); setOpen(true) }}
+      onMouseEnter={() => {
+        cancelClose()
+        if (!open) openedByHover.current = true
+        setOpen(true)
+      }}
       onMouseLeave={scheduleClose}
       onBlurCapture={(e) => {
         // Tab out of the whole popover region → close. Focus moving from the
@@ -334,11 +345,21 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
     >
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (openedByHover.current) {
+            openedByHover.current = false
+            setOpen(true)
+            return
+          }
+          setOpen((v) => !v)
+        }}
         aria-expanded={open}
         aria-haspopup="dialog"
-        aria-label={`Versions — SDK (@mushi-mushi/web) ${__SDK_WEB_VERSION__}, Admin console ${__APP_VERSION__}${whatsNew.hasUnread ? ', new updates available' : ''}`}
-        title={`npm @mushi-mushi/web ${__SDK_WEB_VERSION__} · Admin app ${__APP_VERSION__} · ${__BUILD_SHA__}`}
+        // This is the latest published web SDK, not the active project's
+        // install (an RN project read it as its own version). The project's
+        // installed SDK lives on Connect.
+        aria-label={`Versions — latest web SDK release ${__SDK_WEB_VERSION__}, Admin console ${__APP_VERSION__}${whatsNew.hasUnread ? ', new updates available' : ''}`}
+        title={`Latest @mushi-mushi/web release ${__SDK_WEB_VERSION__} · Admin app ${__APP_VERSION__} · ${__BUILD_SHA__}. Your project's installed SDK is on Connect.`}
         className={`group relative inline-flex min-w-0 max-w-full items-center gap-1.5 h-6 px-2 rounded-full border border-edge bg-surface-raised hover:bg-surface-overlay motion-safe:transition-[transform,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
           open ? 'bg-surface-overlay border-edge-subtle' : ''
         }`}
@@ -349,15 +370,15 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
           className="lg:hidden font-mono text-2xs leading-none"
           title="@mushi-mushi/web (browser SDK on npm)"
         >
-          <span className={SDK_LABEL}>SDK </span>
+          <span className={SDK_LABEL}>Latest </span>
           <span className={SDK_VER}>{__SDK_WEB_VERSION__}</span>
         </span>
         <span
           aria-hidden
           className="hidden lg:inline text-2xs font-semibold uppercase tracking-wider leading-none"
-          title="@mushi-mushi/web — browser SDK published to npm"
+          title="Latest @mushi-mushi/web release on npm"
         >
-          <span className={SDK_LABEL}>SDK</span>
+          <span className={SDK_LABEL}>Latest SDK</span>
         </span>
         <span
           className="hidden lg:inline font-mono text-2xs leading-none"

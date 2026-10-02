@@ -677,8 +677,22 @@ export function StoragePage() {
           'Configure tab saves provider + bucket. Health check runs a write probe and shows step-by-step debug output.'
         }
       >
-        <Badge className={stats.activeProjectHealthStatus === 'healthy' ? CHIP_TONE.okSubtle : stats.activeProjectHealthStatus === 'failing' ? CHIP_TONE.dangerSubtle : CHIP_TONE.warnSubtle}>
-          {stats.activeProjectHealthStatus.toUpperCase()}
+        {/* Scoped to the active project in words: next to the team-wide
+            "Healthy buckets" count, a bare "UNKNOWN" read as a contradiction. */}
+        <Badge
+          className={
+            stats.activeProjectHealthStatus === 'healthy'
+              ? CHIP_TONE.okSubtle
+              : stats.activeProjectHealthStatus === 'failing'
+                ? CHIP_TONE.dangerSubtle
+                : stats.activeProjectHealthStatus === 'degraded'
+                  ? CHIP_TONE.warnSubtle
+                  : CHIP_TONE.neutral
+          }
+        >
+          {stats.activeProjectHealthStatus === 'unknown'
+            ? 'This project: not checked yet'
+            : `This project: ${stats.activeProjectHealthStatus}`}
         </Badge>
       </PageHeaderBar>
 

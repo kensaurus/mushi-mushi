@@ -11,8 +11,6 @@ import type { FeedbackStats, FeedbackTabId } from './types'
 interface Props {
   stats: FeedbackStats
   onTab?: (tab: FeedbackTabId) => void
-  onSubmitBug?: () => void
-  onSubmitFeature?: () => void
   onRefresh?: () => void
   refreshing?: boolean
 }
@@ -20,8 +18,6 @@ interface Props {
 export function FeedbackStatusBanner({
   stats,
   onTab,
-  onSubmitBug,
-  onSubmitFeature,
   onRefresh,
   refreshing,
 }: Props) {
@@ -32,9 +28,7 @@ export function FeedbackStatusBanner({
         title="Create a project before submitting feedback"
         subtitle="Tickets attach to a project so we know which app your bug or feature idea belongs to."
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">Go to Setup</Btn>
-          </Link>
+          <Btn to="/onboarding" size="sm" variant="ghost">Go to Setup</Btn>
         }
       />
     )
@@ -45,21 +39,7 @@ export function FeedbackStatusBanner({
       <StatusBannerShell
         tone="brand"
         title={`No submissions yet on ${stats.projectName ?? 'your project'}`}
-        subtitle="Report a console bug or request a feature about Mushi — we read every ticket and link shipped ideas to release versions. For end-user bugs from your app, see Reports."
-        action={
-          <div className="flex flex-wrap gap-2">
-            {onSubmitBug ? (
-              <Btn size="sm" variant="ghost" onClick={onSubmitBug}>
-                Report a bug
-              </Btn>
-            ) : null}
-            {onSubmitFeature ? (
-              <Btn size="sm" variant="ghost" onClick={onSubmitFeature}>
-                Request feature
-              </Btn>
-            ) : null}
-          </div>
-        }
+        subtitle="Report a console bug or request a feature about Mushi with the buttons above — we read every ticket and link shipped ideas to release versions. For end-user bugs from your app, see Reports."
       />
     )
   }

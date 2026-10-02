@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { type Edge, type Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
@@ -1069,9 +1069,7 @@ export function ExplorePage() {
               <p className="text-2xs font-semibold uppercase tracking-wider text-fg-muted">Top priority</p>
               <p className="mt-1 text-sm font-medium text-fg">{stats.topPriorityLabel}</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Link to={stats.topPriorityTo}>
-                  <Btn size="sm" variant="primary">Take action →</Btn>
-                </Link>
+                <Btn to={stats.topPriorityTo} size="sm" variant="primary">Take action →</Btn>
                 <Btn size="sm" variant="ghost" onClick={() => setActiveTab('index')}>
                   Index debug
                 </Btn>
@@ -1194,9 +1192,7 @@ export function ExplorePage() {
             <DetailRows items={buildIndexRows(stats)} />
           </Card>
           <div className="flex flex-wrap gap-2">
-            <Link to="/settings">
-              <Btn size="sm">Open indexing settings</Btn>
-            </Link>
+            <Btn to="/settings" size="sm">Open indexing settings</Btn>
             <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating}>
               Re-fetch stats
             </Btn>

@@ -3,7 +3,6 @@
  * PURPOSE: Intake integrity posture — cross-account, flagged, velocity, clean.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { AntiGamingStats, AntiGamingTabId } from './AntiGamingStatsTypes'
@@ -25,9 +24,7 @@ export function AntiGamingStatusBanner({ stats, onTab, onRefresh, refreshing }: 
         title="No projects — anti-gaming idle"
         subtitle="Create a project and ingest reports before devices appear."
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">Go to Setup</Btn>
-          </Link>
+          <Btn to="/onboarding" size="sm" variant="ghost">Go to Setup</Btn>
         }
       />
     )
@@ -40,9 +37,7 @@ export function AntiGamingStatusBanner({ stats, onTab, onRefresh, refreshing }: 
         title={`Waiting for SDK devices on ${projectLabel}`}
         subtitle={stats.topPriorityLabel}
         action={
-          <Link to="/onboarding?tab=verify">
-            <Btn size="sm" variant="ghost">Send test report</Btn>
-          </Link>
+          <Btn to="/onboarding?tab=verify" size="sm" variant="ghost">Send test report</Btn>
         }
       />
     )
@@ -56,9 +51,7 @@ export function AntiGamingStatusBanner({ stats, onTab, onRefresh, refreshing }: 
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Review devices</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">Review devices</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('devices')}>
               Review devices
@@ -77,9 +70,7 @@ export function AntiGamingStatusBanner({ stats, onTab, onRefresh, refreshing }: 
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Open flagged</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">Open flagged</Btn>
           ) : null
         }
       />
@@ -94,9 +85,7 @@ export function AntiGamingStatusBanner({ stats, onTab, onRefresh, refreshing }: 
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Open events</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">Open events</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('events')}>
               Open events
@@ -125,9 +114,7 @@ export function AntiGamingStatusBanner({ stats, onTab, onRefresh, refreshing }: 
             Refresh
           </Btn>
         ) : stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">View devices</Btn>
-          </Link>
+          <Btn to={stats.topPriorityTo} size="sm" variant="ghost">View devices</Btn>
         ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('devices')}>
             View devices

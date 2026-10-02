@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAdminMode } from '../lib/mode'
-import { shouldShowPipelineRibbonChrome } from '../lib/chromePosture'
+import { shouldShowPipelineRibbonChrome, shouldShowQuickstartMegaCta } from '../lib/chromePosture'
 import { QuickstartMegaCta } from './QuickstartMegaCta'
 import { PipelineStatusRibbon } from './PipelineStatusRibbon'
 
@@ -28,7 +28,7 @@ export function GlobalStatusStrip() {
     window.localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0')
   }, [collapsed])
 
-  const showQuickstart = isQuickstart
+  const showQuickstart = shouldShowQuickstartMegaCta(isQuickstart, pathname)
   const showPipeline = shouldShowPipelineRibbonChrome(isAdvanced, pathname)
 
   if (!showQuickstart && !showPipeline) return null

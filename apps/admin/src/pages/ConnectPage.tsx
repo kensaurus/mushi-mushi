@@ -336,13 +336,11 @@ export function ConnectPage() {
             <Section
               title="GitHub"
               action={
-                <Link to="/integrations/config">
-                  <Btn size="sm" variant="ghost" className="gap-1.5">
+                <Btn to="/integrations/config" size="sm" variant="ghost" className="gap-1.5">
                     <IconIntegrations className="h-3.5 w-3.5" aria-hidden />
                     Manage
                     <IconArrowRight className="h-3.5 w-3.5" aria-hidden />
                   </Btn>
-                </Link>
               }
             >
               <SectionDescription when={showSectionDescriptions}>

@@ -6,7 +6,6 @@
 
 import { useCallback, useEffect, useMemo } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { Link } from 'react-router-dom'
 import { useSearchParams } from 'react-router-dom'
 import { usePageCopy } from '../lib/copy'
 import { useCostUx, resolveQuickCostTab } from '../lib/costModeUx'
@@ -331,9 +330,7 @@ export function CostPage() {
                   <SignalChip tone="neutral" className="uppercase tracking-wide font-medium">
                     Daily spend
                   </SignalChip>
-                  <Link to="/billing">
-                    <Btn size="sm" variant="ghost">Compare to plan usage</Btn>
-                  </Link>
+                  <Btn to="/billing" size="sm" variant="ghost">Compare to plan usage</Btn>
                 </div>
                 <DailySpendChart
                   series={dailySeries}

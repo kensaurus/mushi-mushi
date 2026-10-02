@@ -3,7 +3,6 @@
  * PURPOSE: Weekly digest posture — locked, running, failed, stale, findings, healthy.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
@@ -43,9 +42,7 @@ export function IntelligenceStatusBanner({
             : 'Pick a project to generate weekly bug intelligence digests.'
         }
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
-          </Link>
+          <Btn to="/onboarding" size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
         }
       />
     )
@@ -58,9 +55,7 @@ export function IntelligenceStatusBanner({
         title={plainBanner ? 'Weekly summaries need a paid plan' : 'Intelligence reports locked'}
         subtitle={stats.topPriorityLabel}
         action={
-          <Link to="/billing">
-            <Btn size="sm" variant="ghost">{actions.upgrade ?? 'Upgrade plan'}</Btn>
-          </Link>
+          <Btn to="/billing" size="sm" variant="ghost">{actions.upgrade ?? 'Upgrade plan'}</Btn>
         }
       />
     )
@@ -75,9 +70,7 @@ export function IntelligenceStatusBanner({
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.pipeline ?? 'View pipeline'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.pipeline ?? 'View pipeline'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('pipeline')}>{actions.pipeline ?? 'View pipeline'}</Btn>
           ) : null
@@ -103,9 +96,7 @@ export function IntelligenceStatusBanner({
                 {actions.retry ?? 'Retry generation'}
               </Btn>
             ) : null}
-            <Link to="/settings">
-              <Btn size="sm" variant="ghost">{actions.settings ?? 'Check LLM keys'}</Btn>
-            </Link>
+            <Btn to="/settings" size="sm" variant="ghost">{actions.settings ?? 'Check LLM keys'}</Btn>
           </div>
         }
       />
@@ -162,9 +153,7 @@ export function IntelligenceStatusBanner({
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.triage ?? 'Triage findings'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.triage ?? 'Triage findings'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('pipeline')}>{actions.triage ?? 'Triage findings'}</Btn>
           ) : null
@@ -184,9 +173,7 @@ export function IntelligenceStatusBanner({
             {actions.refresh ?? 'Refresh'}
           </Btn>
         ) : stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">{actions.reports ?? 'View reports'}</Btn>
-          </Link>
+          <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.reports ?? 'View reports'}</Btn>
         ) : null
       }
     />

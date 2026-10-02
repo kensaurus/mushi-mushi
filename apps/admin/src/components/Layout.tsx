@@ -1206,7 +1206,11 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <div className="flex-1 flex min-h-0 flex-col overflow-hidden">
         {/* Mobile header */}
-        <header className={`md:hidden flex items-center gap-2 px-4 py-2.5 border-b border-edge/60 ${appChromeHeaderClass}`}>
+        {/* Phone header wraps to two rows: menu, wordmark and search, then
+            the team and project switchers. On one row at 390px the
+            switchers ran 75px off-screen and the wordmark sat on the search
+            icon. */}
+        <header className={`md:hidden flex flex-wrap items-center gap-x-2 gap-y-1.5 px-4 py-2.5 border-b border-edge/60 ${appChromeHeaderClass}`}>
           <Btn
             type="button"
             variant="ghost"
@@ -1217,14 +1221,14 @@ export function Layout({ children }: { children: ReactNode }) {
           >
             <IconMenu size={18} />
           </Btn>
-          <div className="min-w-0 flex-1">
-            <SearchButton />
-          </div>
           <span className="shrink-0 text-sm font-bold tracking-tight">
             <span className="text-brand">mushi</span>
             <span className="text-fg-secondary">mushi</span>
           </span>
-          <div className="shrink-0 flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <SearchButton />
+          </div>
+          <div className="flex w-full min-w-0 items-center gap-2 [&>*]:min-w-0">
             <OrgSwitcher />
             <ProjectSwitcher />
           </div>

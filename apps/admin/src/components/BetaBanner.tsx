@@ -97,11 +97,13 @@ export function BetaBanner() {
   }
 
   function openFeedback(type: 'bug' | 'feature') {
-    // Prefer the Mushi SDK widget when it's loaded — reports then flow through
-    // the same pipeline as customer reports, giving us first-hand QA of the
-    // full submission experience. Fall back to the FeedbackModal (which posts
-    // to /v1/support/contact) when Mushi isn't loaded yet or VITE_MUSHI_SELF_*
-    // env vars are absent.
+    // Bugs: prefer the Mushi SDK widget when it's loaded, deep-linked to the
+    // Bug category, so reports flow through the same pipeline as customer
+    // reports. Fall back to the FeedbackModal when Mushi isn't loaded or the
+    // VITE_MUSHI_SELF_* env vars are absent.
+    // Feature requests always use the FeedbackModal (POST /v1/support/contact,
+    // category 'feature'): that is what the Feature board reads. The widget's
+    // feature card is turned off in mushi-self.ts for the same reason.
     if (type === 'bug' && (getMushiSelf() || isMushiSelfEnabled())) {
       reportMushiBug({ category: 'bug' })
       return

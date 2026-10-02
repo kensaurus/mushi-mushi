@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
+import { useSendTestReport } from '../lib/useSendTestReport'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -104,6 +105,7 @@ function isOnboardingTab(value: string | null): value is OnboardingTabId {
 export function OnboardingPage() {
   const navigate = useNavigate()
   const toast = useToast()
+  const sendTestReport = useSendTestReport()
   const activeProjectId = useActiveProjectId()
   const activationEnabled = isActivationCockpitV2Enabled()
   const activation = useActivationStatus(activeProjectId)
@@ -353,21 +355,18 @@ export function OnboardingPage() {
     setError('')
     // Use the admin pipeline-test endpoint so we don't need the user to have
     // copied the key yet — we're already JWT-authenticated as the owner.
-    const res = await apiFetch(`/v1/admin/projects/${project.project_id}/test-report`, { method: 'POST' })
+    // `test_report_sent` is emitted server-side by the test-report route
+    // (dedup per report), so the console does not double-count it here.
+    const res = await sendTestReport(project.project_id)
     setTestRanAt(new Date().toISOString())
     setTestStatus(res.ok ? 'pass' : 'fail')
     if (res.ok) {
-      // `test_report_sent` is emitted server-side by the test-report route
-      // (dedup per report), so the console does not double-count it here.
-      toast.success('Test report sent', 'Look for it on the Reports page in a few seconds.')
       setup.reload()
       reloadStats()
       // In Quickstart linear flow: pipeline verified → advance to Install SDK.
       if (ux.hideOverviewTab) setActiveTab('sdk')
     } else {
-      const msg = res.error?.message ?? 'Test report submission failed'
-      setError(msg)
-      toast.error('Test report failed', msg)
+      setError(res.message)
     }
   }
 
@@ -1142,11 +1141,9 @@ export function OnboardingPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Link to={`/reports?filter=test`}>
-              <Btn size="sm" variant="primary">
+            <Btn to={`/reports?filter=test`} size="sm" variant="primary">
                 Watch the loop →
               </Btn>
-            </Link>
             <Link to="/judge" className="text-xs text-fg-muted underline hover:no-underline">
               See judge scores
             </Link>

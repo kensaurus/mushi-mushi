@@ -61,11 +61,9 @@ export function CheckVerificationHub() {
         ]}
         helpHowToUse="Choose a sub-group tab, then open the tool you need. For live LLM + cron telemetry, open System health → Health."
       >
-        <Link to="/health">
-          <Btn size="sm" variant="ghost">
+        <Btn to="/health" size="sm" variant="ghost">
             Open live health dashboard →
           </Btn>
-        </Link>
       </PageHeaderBar>
 
       <SegmentedControl

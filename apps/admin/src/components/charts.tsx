@@ -167,8 +167,12 @@ export function KpiTile({
         </div>
       </div>
       <div className="flex items-center gap-1.5 mt-1 min-w-0">
+        {/* Display numerals stay in the sans face with plain tabular figures:
+            the system monospace (Consolas, SF Mono) and the compact density's
+            `slashed-zero` both draw 0 as a struck-through glyph that reads as
+            "∅ / null" at KPI size. Mono + slashed zero is for small IDs. */}
         <div
-          className={`flex-1 min-w-0 font-semibold font-mono truncate ${
+          className={`flex-1 min-w-0 font-semibold font-sans tabular-nums truncate ${
             isPrimary ? 'text-2xl sm:text-3xl' : 'text-lg'
           } ${accent ? TONE_TEXT[accent] : 'text-fg'}`}
         >

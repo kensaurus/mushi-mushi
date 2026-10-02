@@ -3,7 +3,6 @@
  * PURPOSE: Surface Firecrawl BYOK readiness so operators know why search works or not.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn, Badge } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { FirecrawlConfig } from './types'
@@ -28,9 +27,7 @@ export function FirecrawlStatusBanner({ config, loading, projectName }: Props) {
             : 'Add a Firecrawl API key before running web research.'
         }
         action={
-          <Link to="/settings?tab=firecrawl">
-            <Btn size="sm" variant="primary">Configure Firecrawl</Btn>
-          </Link>
+          <Btn to="/settings?tab=firecrawl" size="sm" variant="primary">Configure Firecrawl</Btn>
         }
       />
     )
@@ -49,9 +46,7 @@ export function FirecrawlStatusBanner({ config, loading, projectName }: Props) {
         title={label}
         subtitle={`Key ${config.keyHint ?? 'configured'} — re-test in Settings → Firecrawl before searching.`}
         action={
-          <Link to="/settings?tab=firecrawl">
-            <Btn size="sm" variant="ghost">Fix in Settings</Btn>
-          </Link>
+          <Btn to="/settings?tab=firecrawl" size="sm" variant="ghost">Fix in Settings</Btn>
         }
       />
     )
@@ -73,9 +68,7 @@ export function FirecrawlStatusBanner({ config, loading, projectName }: Props) {
         </>
       }
       action={
-        <Link to="/settings?tab=firecrawl">
-          <Btn size="sm" variant="ghost">Settings</Btn>
-        </Link>
+        <Btn to="/settings?tab=firecrawl" size="sm" variant="ghost">Settings</Btn>
       }
     />
   )

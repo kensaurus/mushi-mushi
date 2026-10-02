@@ -88,9 +88,12 @@ export function MicroSegmentCell({
 
   return (
     <div className={cx(MICRO_SEG_CELL, className)}>
+      {/* tabIndex -1: framer-motion makes a `whileTap` element a Tab stop,
+          doubling every segment's stops (see FilterChipCell). */}
       <motion.div
         className="sidebar-micro-seg-interaction"
         whileTap={reduceMotion ? undefined : { scale: microTapScale }}
+        tabIndex={-1}
       >
         {active && trackId ? (
           <motion.div

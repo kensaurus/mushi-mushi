@@ -41,9 +41,7 @@ export function FeedbackHubStrip({ className = '' }: { className?: string }) {
             </ContainedBlock>
           </div>
           <div className="flex gap-1.5 shrink-0">
-            <Link to="/feedback">
-              <Btn size="sm">Support</Btn>
-            </Link>
+            <Btn to="/feedback" size="sm">Support</Btn>
           </div>
         </div>
       </Card>

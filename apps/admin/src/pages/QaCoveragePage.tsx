@@ -824,9 +824,7 @@ export function QaCoveragePage() {
                   : 'Write a plain-English test that runs on a schedule — optional but high leverage.'}
               </p>
             </div>
-            <Link to="/onboarding?tab=steps">
-              <Btn size="sm" variant="ghost">View setup receipt →</Btn>
-            </Link>
+            <Btn to="/onboarding?tab=steps" size="sm" variant="ghost">View setup receipt →</Btn>
           </div>
         </Card>
       ) : null}
