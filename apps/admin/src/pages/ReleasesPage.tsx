@@ -219,12 +219,17 @@ function ReleaseDrawer({ release, onClose, onPublished }: { release: Release; on
         ok: boolean
         data?: Release
         notified?: number
+        delivery?: { reporters_notified?: number; reporters_held?: number; reporters_failed?: number }
         error?: string
       }
       if (!res.ok) throw new Error(res.error ?? 'Publish failed')
-      const credited = res.notified ?? 0
+      const told = res.delivery?.reporters_notified ?? 0
+      const held = res.delivery?.reporters_held ?? 0
+      const failed = res.delivery?.reporters_failed ?? 0
       const ticketMsg = ticketCount > 0 ? ` · ${ticketCount} feedback ticket${ticketCount === 1 ? '' : 's'} marked shipped` : ''
-      toast.success(`Published! ${credited} reporter${credited === 1 ? '' : 's'} credited${ticketMsg}.`)
+      const heldMsg = held > 0 ? ` · ${held} waiting in the Outbox` : ''
+      toast.success(`Published! ${told} reporter${told === 1 ? '' : 's'} told it shipped${heldMsg}${ticketMsg}.`)
+      if (failed > 0) toast.error(`${failed} reporter message${failed === 1 ? '' : 's'} could not be delivered — see Notifications.`)
       onPublished()
       onClose()
     } catch (err) {

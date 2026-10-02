@@ -191,6 +191,21 @@
     "required": ["reportId", "message"],
     "body": { "message": "{message}", "author_name": "{authorName}" }
   },
+  "request_reporter_info": {
+    "scope": "mcp:write",
+    "description": "Ask the reporter a question; marks the report Waiting on you.",
+    "method": "POST",
+    "path": "/v1/admin/reports/{reportId}/request-info",
+    "required": ["reportId", "question"],
+    "body": { "question": "{question}", "author_name": "{authorName}" },
+    "hints": { "destructive": false, "idempotent": false }
+  },
+  "list_reporter_outbox": {
+    "scope": "mcp:read",
+    "description": "Held reporter updates waiting for review.",
+    "method": "GET",
+    "path": "/v1/admin/reporter-outbox?project_id={projectId}"
+  },
   "get_two_way_comms_health": {
     "scope": "mcp:read",
     "description": "Two-way reporter communication health.",

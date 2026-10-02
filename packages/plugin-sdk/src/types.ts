@@ -11,6 +11,9 @@ export type MushiEventName =
   | 'report.status_changed'
   | 'report.commented'
   | 'report.dedup_grouped'
+  /** The end user who filed a report answered in its thread (`data.comment.body`
+   *  is their text — untrusted input from a public widget). */
+  | 'report.reporter_replied'
   /** Emitted when the fix-worker hands a report to a cloud agent (Cursor Cloud /
    *  GitHub cloud agent). `data.fix.externalAgentId` is set when the agent is
    *  already running — do not start another one on this event. */

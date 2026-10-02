@@ -2531,12 +2531,26 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           ])
           .describe('Target status (resolved is stored as fixed)'),
         reason: z.string().optional().describe('Reason for the transition (audit trail)'),
+        closedReason: z
+          .enum(['duplicate', 'not_reproducible', 'wont_fix', 'working_as_intended', 'spam'])
+          .optional()
+          .describe('When dismissing: what the reporter is told (spam closes silently)'),
+        reporterMessage: z
+          .string()
+          .max(10_000)
+          .optional()
+          .describe('Optional note posted to the reporter verbatim'),
       }),
     },
     async (args) => {
       const data = await apiCall(`/v1/admin/reports/${args.reportId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: args.status, reason: args.reason }),
+        body: JSON.stringify({
+          status: args.status,
+          reason: args.reason,
+          closed_reason: args.closedReason,
+          reporter_message: args.reporterMessage,
+        }),
       });
       return jsonText(data);
     },
@@ -3477,6 +3491,68 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       const data = await apiCall<unknown>(`/v1/sync/reports/${reportId}/reply`, {
         method: 'POST',
         body: JSON.stringify({ message, author_name: authorName }),
+      });
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    'request_reporter_info',
+    {
+      title: titleOf('request_reporter_info', TDD_TOOL_CATALOG),
+      description: descOf('request_reporter_info', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('request_reporter_info', TDD_TOOL_CATALOG),
+      inputSchema: z.object({
+        reportId: z.string().describe('Report id to ask about'),
+        question: z.string().min(1).max(2000).describe('The question, shown to the reporter verbatim'),
+        authorName: z.string().optional().describe('Display name for the sender (default: "Developer")'),
+      }),
+    },
+    async ({ reportId, question, authorName }) => {
+      const data = await apiCall<unknown>(`/v1/admin/reports/${reportId}/request-info`, {
+        method: 'POST',
+        body: JSON.stringify({ question, author_name: authorName }),
+      });
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    'list_reporter_outbox',
+    {
+      title: titleOf('list_reporter_outbox', TDD_TOOL_CATALOG),
+      description: descOf('list_reporter_outbox', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('list_reporter_outbox', TDD_TOOL_CATALOG),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID. Defaults to configured project.'),
+      }),
+    },
+    async ({ projectId: pid }) => {
+      const scoped = pid ?? config.projectId;
+      const data = await apiCall<unknown>(
+        `/v1/admin/reporter-outbox${scoped ? `?project_id=${encodeURIComponent(scoped)}` : ''}`,
+      );
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    'release_reporter_update',
+    {
+      title: titleOf('release_reporter_update', TDD_TOOL_CATALOG),
+      description: descOf('release_reporter_update', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('release_reporter_update', TDD_TOOL_CATALOG),
+      inputSchema: z.object({
+        messageId: z.string().describe('Held message id from list_reporter_outbox'),
+        action: z.enum(['release', 'discard']).optional().describe('release (default) sends it; discard drops it'),
+        bodyOverride: z.string().min(1).max(1000).optional().describe('Replacement text to send instead'),
+      }),
+    },
+    async ({ messageId, action, bodyOverride }) => {
+      const verb = action === 'discard' ? 'discard' : 'release';
+      const data = await apiCall<unknown>(`/v1/admin/reporter-outbox/${messageId}/${verb}`, {
+        method: 'POST',
+        body: JSON.stringify(verb === 'release' && bodyOverride ? { body_override: bodyOverride } : {}),
       });
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
     },

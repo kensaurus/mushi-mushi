@@ -333,7 +333,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
         .maybeSingle(),
       db
         .from('reporter_notifications')
-        .select('notification_type, read_at, created_at')
+        .select('notification_type, read_at, created_at, status')
         .eq('project_id', project.id)
         .order('created_at', { ascending: false })
         .limit(500),
@@ -344,13 +344,17 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const list = rows ?? [];
     const byType: Record<string, number> = {};
     let unread = 0;
+    let held = 0;
     let last24h = 0;
     let fixFailedCount = 0;
     for (const row of list) {
       const t = row.notification_type as string;
       byType[t] = (byType[t] ?? 0) + 1;
       if (t === 'fix_failed') fixFailedCount += 1;
-      if (!row.read_at) unread += 1;
+      // Held Outbox rows have not reached the reporter, so they are not an
+      // unread backlog (which would wrongly suggest the SDK stopped polling).
+      if (row.status === 'held') held += 1;
+      else if (row.status !== 'discarded' && !row.read_at) unread += 1;
       if ((row.created_at as string) >= since24h) last24h += 1;
     }
 
@@ -393,6 +397,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
         projectName: (project.name as string | null) ?? null,
         total: list.length,
         unread,
+        held,
         last24h,
         lastNotificationAt,
         daysSinceLastNotification,
@@ -429,7 +434,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
         .select('id', { count: 'exact', head: true })
         .eq('project_id', project.id);
       if (type) countQuery = countQuery.eq('notification_type', type);
-      if (onlyUnread) countQuery = countQuery.is('read_at', null);
+      if (onlyUnread) countQuery = countQuery.is('read_at', null).eq('status', 'sent');
       const { count, error } = await countQuery;
       if (error) return dbError(c, error);
       return c.json({ ok: true, data: { unread_count: count ?? 0 } });

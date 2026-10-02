@@ -18,6 +18,11 @@ interface FakeDbOptions {
   rpc?: (fn: string, args: Record<string, unknown>) => unknown
   /** Mint a uuid `id` on insert when the row has none (mimics `default gen_random_uuid()`). */
   autoId?: boolean
+  /**
+   * Make `maybeSingle()` / `single()` error when more than one row matches,
+   * as PostgREST does (PGRST116). Off by default for the older suites.
+   */
+  strictSingle?: boolean
 }
 
 type Op = 'select' | 'insert' | 'update' | 'upsert' | 'delete'
@@ -88,6 +93,18 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     this.filters.push((r) => !values.includes(String(readPath(r, key))))
     return this
   }
+  /** `is(col, null)`: the column is NULL (or absent on the fake row). */
+  is(key: string, value: null | boolean): this {
+    this.filters.push((r) => {
+      const v = readPath(r, key)
+      return value === null ? v === null || v === undefined : v === value
+    })
+    return this
+  }
+  gt(key: string, value: unknown): this {
+    this.filters.push((r) => String(readPath(r, key)) > String(value))
+    return this
+  }
   gte(key: string, value: unknown): this {
     this.filters.push((r) => String(readPath(r, key)) >= String(value))
     return this
@@ -114,7 +131,7 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     return rows.filter((r) => this.filters.every((f) => f(r)))
   }
 
-  private finish(rows: Row[]): { data: unknown; error: null } {
+  private finish(rows: Row[]): { data: unknown; error: { code?: string; message: string } | null } {
     let out = rows
     if (this._order) {
       const { key, ascending } = this._order
@@ -125,6 +142,9 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
       })
     }
     if (this._limit != null) out = out.slice(0, this._limit)
+    if (this._single && this.db.options.strictSingle && out.length > 1) {
+      return { data: null, error: { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' } }
+    }
     if (this._single) return { data: out[0] ?? null, error: null }
     return { data: out, error: null }
   }
