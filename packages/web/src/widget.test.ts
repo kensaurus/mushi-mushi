@@ -917,6 +917,21 @@ describe('MushiWidget — live-QA polish', () => {
     w.destroy();
   });
 
+  it('a host custom category id stays the userCategory even with a "Feature request" intent', () => {
+    const onSubmit = vi.fn();
+    const w = new MushiWidget({
+      categories: [{ id: 'ideas', label: 'Ideas', baseCategory: 'other', intents: ['Feature request', 'Other'] }],
+    }, { ...noopCallbacks, onSubmit });
+    w.mount();
+    w.open({ category: 'ideas' });
+    q<HTMLButtonElement>(w, '[data-intent="Feature request"]')!.click();
+    expect(q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!.placeholder).toBe('Describe your idea…');
+    typeDescription(w, 'Please add a CSV export for my invoices');
+    submit(w);
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ category: 'other', userCategory: 'ideas' }));
+    w.destroy();
+  });
+
   it('bug mode keeps bug copy and sends no userCategory; Other keeps neutral copy and no chips', () => {
     const onSubmit = vi.fn();
     const w = new MushiWidget({}, { ...noopCallbacks, onSubmit });

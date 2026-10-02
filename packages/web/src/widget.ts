@@ -2213,11 +2213,13 @@ export class MushiWidget {
         try {
           const catId = this.selectedCategory!;
           const baseCategory = this.resolveBaseCategory(catId);
-          // Feature requests land as reports.user_category='feature' (the
-          // server's user vocabulary) so they never read as an "other" bug.
-          // Otherwise only set userCategory for a host custom category list.
+          // A host custom category id always wins (it is the documented
+          // reports.user_category contract). Otherwise feature requests land
+          // as user_category='feature' so they never read as an "other" bug.
           const isCustomCat = this.config.categories && this.config.categories.length > 0;
-          const userCategory = this.detailMode() === 'feature' ? 'feature' : isCustomCat ? catId : undefined;
+          const userCategory = isCustomCat && this.resolveCustomCategory(catId)
+            ? catId
+            : this.detailMode() === 'feature' ? 'feature' : isCustomCat ? catId : undefined;
           const ret = this.callbacks.onSubmit({
             category: baseCategory,
             ...(userCategory ? { userCategory } : {}),
