@@ -27,6 +27,9 @@ export function ExploreDiagramPanel({ projectId }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [overlay, setOverlay] = useState<DiagramOverlayResponse | null>(null)
   const [overlayError, setOverlayError] = useState<string | null>(null)
+  /** One part's complete lists, loaded by "Show all". */
+  const [fullNode, setFullNode] = useState<{ id: string; data: DiagramOverlayResponse['nodes'][string] } | null>(null)
+  const [loadingAll, setLoadingAll] = useState(false)
 
   const path = `/v1/admin/projects/${projectId}/codebase/diagram`
   const diagramId = data?.diagram?.id ?? null
@@ -40,6 +43,7 @@ export function ExploreDiagramPanel({ projectId }: Props) {
     }
     let cancelled = false
     setOverlayError(null)
+    setFullNode(null)
     void apiFetch<DiagramOverlayResponse>(`${path}/overlay`, { cache: 'no-store' }).then((res) => {
       if (cancelled) return
       if (res.ok && res.data) setOverlay(res.data)
@@ -106,7 +110,21 @@ export function ExploreDiagramPanel({ projectId }: Props) {
   }
 
   const selected = diagram.graph.nodes.find((n) => n.id === selectedId) ?? null
-  const selectedOverlay = selected ? overlay?.nodes[selected.id] ?? null : null
+  const selectedOverlay = selected
+    ? (fullNode?.id === selected.id ? fullNode.data : overlay?.nodes[selected.id] ?? null)
+    : null
+  const hiddenItems = selectedOverlay
+    ? selectedOverlay.report_count - selectedOverlay.reports.length + selectedOverlay.finding_count - selectedOverlay.findings.length
+    : 0
+  const showAll = async () => {
+    if (!selected) return
+    setLoadingAll(true)
+    const res = await apiFetch<DiagramOverlayResponse>(`${path}/overlay?node=${encodeURIComponent(selected.id)}`, { cache: 'no-store' })
+    setLoadingAll(false)
+    const data = res.ok ? res.data?.nodes[selected.id] : undefined
+    if (data) setFullNode({ id: selected.id, data })
+    else toast.error('Could not load the full list', res.error?.message)
+  }
   const invalid = diagram.stats.invalid_paths?.length ?? 0
 
   return (
@@ -176,6 +194,11 @@ export function ExploreDiagramPanel({ projectId }: Props) {
                 ))}
               </ul>
             </div>
+          )}
+          {hiddenItems > 0 && (
+            <Btn size="sm" variant="ghost" onClick={() => void showAll()} loading={loadingAll}>
+              Show all ({hiddenItems} more)
+            </Btn>
           )}
           {selectedOverlay && selectedOverlay.finding_count > 0 && (
             <div className="pt-2" data-testid="explore-diagram-selected-findings">

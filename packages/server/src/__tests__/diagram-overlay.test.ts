@@ -9,6 +9,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildDiagramOverlay,
+  chunk,
+  MAX_ITEMS_FULL_NODE,
   MAX_ITEMS_PER_NODE,
   nodesForPath,
   type OverlayFinding,
@@ -74,8 +76,30 @@ describe('buildDiagramOverlay', () => {
     expect(overlay.nodes.web.reports[0].id).toBe('r30')
   })
 
+  it('returns a part\'s full list when asked ("Show all")', () => {
+    const many = Array.from({ length: MAX_ITEMS_PER_NODE + 10 }, (_, i) => report(`r${i}`, ['apps/web/a.ts']))
+    const overlay = buildDiagramOverlay(NODES, many, [], MAX_ITEMS_FULL_NODE)
+    expect(overlay.nodes.web.reports).toHaveLength(MAX_ITEMS_PER_NODE + 10)
+  })
+
   it('leaves parts with nothing out of the map', () => {
     const overlay = buildDiagramOverlay(NODES, [], [])
     expect(overlay.nodes).toEqual({})
+  })
+})
+
+describe('chunk', () => {
+  it('splits 300 report ids into filters of at most 100', () => {
+    const ids = Array.from({ length: 300 }, (_, i) => `id-${i}`)
+    const parts = chunk(ids, 100)
+    expect(parts.map((p) => p.length)).toEqual([100, 100, 100])
+    expect(parts.flat()).toEqual(ids)
+    // 100 UUIDs keep a PostgREST in.() filter well under common 8 KB URL limits.
+    const uuid = '00000000-0000-0000-0000-000000000000'
+    expect(`report_id=in.(${Array(100).fill(uuid).join(',')})`.length).toBeLessThan(4000)
+  })
+  it('handles empty and ragged input', () => {
+    expect(chunk([], 100)).toEqual([])
+    expect(chunk([1, 2, 3], 2)).toEqual([[1, 2], [3]])
   })
 })

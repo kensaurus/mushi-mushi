@@ -125,11 +125,16 @@ export async function removeProjectPublicPage(
   fetchImpl: FetchLike = fetch,
 ): Promise<StaticPageStatus | 'none'> {
   try {
-    const { data } = await db
+    const { data, error } = await db
       .from('public_repo_diagrams')
       .select('payload, static_page_at')
       .eq('project_id', projectId)
       .maybeSingle()
+    // Not knowing whether a page exists is not "no page": stop the delete.
+    if (error) {
+      onError(error)
+      return 'failed'
+    }
     const row = data as { payload?: { owner?: string; repo?: string }; static_page_at?: string | null } | null
     if (!row?.payload?.owner || !row.payload.repo) return 'none'
     return await deletePublicPage(cfg, row.payload.owner, row.payload.repo, fetchImpl)

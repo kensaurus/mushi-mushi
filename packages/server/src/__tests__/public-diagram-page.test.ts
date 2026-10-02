@@ -102,6 +102,17 @@ describe('renderPublicDiagramMarkdown', () => {
     expect(md).toContain('- Checkout \\<UI\\> → Postgres (reads)')
   })
 
+  it('keeps newlines in a path or label from breaking the table', () => {
+    const md = renderPublicDiagramMarkdown({
+      ...PAYLOAD,
+      nodes: [{ ...PAYLOAD.nodes[0], label: 'Check\nout', path: 'apps/a\nb', description: 'line one\nline two' }],
+    })
+    const row = md.split('\n').find((l) => l.startsWith('| Check'))!
+    expect(row).toContain('Check out')
+    expect(row).toContain('apps/a b')
+    expect(row).toContain('line one line two')
+  })
+
   it('keeps a | in a path from splitting the table row', () => {
     const md = renderPublicDiagramMarkdown({ ...PAYLOAD, nodes: [{ ...PAYLOAD.nodes[0], path: 'apps/a|b' }] })
     const row = md.split('\n').find((l) => l.startsWith('| Checkout'))!
@@ -188,6 +199,11 @@ describe('public page store', () => {
     expect(await removeProjectPublicPage(db({ payload: { owner: 'Acme', repo: 'Shop.js' }, static_page_at: null }), 'p1', cfg, onError, ok)).toBe('deleted')
     expect(urls).toHaveLength(2)
     expect(await removeProjectPublicPage(db(null), 'p1', cfg, onError, ok)).toBe('none')
+    const unreadable = { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { message: 'db down' } }) }) }) }) }
+    // Not knowing whether a page exists must stop the project delete, not count as "no page".
+    expect(await removeProjectPublicPage(unreadable, 'p1', cfg, onError, ok)).toBe('failed')
+    expect(onError).toHaveBeenCalledTimes(1)
+    onError.mockClear()
     const broken = vi.fn(async () => new Response('denied', { status: 403 }))
     expect(await removeProjectPublicPage(db({ payload: { owner: 'Acme', repo: 'Shop.js' } }), 'p1', cfg, onError, broken)).toBe('failed')
     expect(onError).toHaveBeenCalledTimes(1)
