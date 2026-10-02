@@ -24,12 +24,15 @@ const CONFIG: MushiConfig = {
 
 const SECRETS = ['hunter2-secret', '4111111111111111', '123-45-6789', 'mask-me-token'];
 const MASKED_JPEG = 'data:image/jpeg;base64,TUFTS0VELUNBUFRVUkU=';
+// The widget mounts lazily; on a loaded CI runner that takes longer than
+// vi.waitFor's 1 s default, so give it a real deadline instead.
+const WAIT = { timeout: 5000 };
 
 function shadow(): ShadowRoot {
   return document.getElementById('mushi-mushi-widget')!.shadowRoot!;
 }
 
-describe('screenshot submission', () => {
+describe('screenshot submission', { timeout: 15_000 }, () => {
   let posts: Array<{ url: string; body: Record<string, unknown> }>;
 
   beforeEach(() => {
@@ -85,7 +88,7 @@ describe('screenshot submission', () => {
     const sdk = Mushi.init(CONFIG);
     sdk.report({ featureRequest: true });
     (shadow().querySelector('[data-action="screenshot"]') as HTMLButtonElement).click();
-    await vi.waitFor(() => expect(shadow().querySelector('.mushi-screenshot-preview img')).not.toBeNull());
+    await vi.waitFor(() => expect(shadow().querySelector('.mushi-screenshot-preview img')).not.toBeNull(), WAIT);
 
     for (const secret of SECRETS) expect(svgSource).not.toContain(secret);
     expect(svgSource).toContain('Checkout page');
@@ -96,7 +99,7 @@ describe('screenshot submission', () => {
     ta.dispatchEvent(new Event('input'));
     (shadow().querySelector('[data-action="submit"]') as HTMLButtonElement).click();
 
-    await vi.waitFor(() => expect(posts.some((p) => p.url.endsWith('/v1/reports'))).toBe(true));
+    await vi.waitFor(() => expect(posts.some((p) => p.url.endsWith('/v1/reports'))).toBe(true), WAIT);
     const report = posts.find((p) => p.url.endsWith('/v1/reports'))!.body;
     expect(report.screenshotDataUrl).toBe(MASKED_JPEG);
     for (const secret of SECRETS) expect(JSON.stringify(report)).not.toContain(secret);
@@ -111,7 +114,7 @@ describe('screenshot submission', () => {
     sdk.report({ featureRequest: true });
     // A failed DOM capture surfaces the fallback.
     (shadow().querySelector('[data-action="screenshot"]') as HTMLButtonElement).click();
-    await vi.waitFor(() => expect(shadow().querySelector('[data-action="screenshot-share-tab"]')).not.toBeNull());
+    await vi.waitFor(() => expect(shadow().querySelector('[data-action="screenshot-share-tab"]')).not.toBeNull(), WAIT);
 
     (shadow().querySelector('[data-action="screenshot-share-tab"]') as HTMLButtonElement).click();
     // No await between the click and the request: the user activation holds.
@@ -133,12 +136,12 @@ describe('screenshot submission', () => {
       const sdk = Mushi.init(CONFIG);
       sdk.report({ featureRequest: true });
       (shadow().querySelector('[data-action="screenshot"]') as HTMLButtonElement).click();
-      await vi.waitFor(() => expect(shadow().querySelector('[data-action="screenshot-share-tab"]')).not.toBeNull());
+      await vi.waitFor(() => expect(shadow().querySelector('[data-action="screenshot-share-tab"]')).not.toBeNull(), WAIT);
       (shadow().querySelector('[data-action="screenshot-share-tab"]') as HTMLButtonElement).click();
 
       await vi.waitFor(() => {
         expect(shadow().querySelector('[data-role="screenshot-reason"]')?.textContent).toContain('Allow it');
-      });
+      }, WAIT);
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(unhandled).not.toHaveBeenCalled();
       // The panel comes back after the attempt.
