@@ -28,6 +28,7 @@ import type {
   MushiReportCategory,
   MushiReporterComment,
   MushiReporterReport,
+  MushiReporterTimelineItem,
 } from '@mushi-mushi/core';
 import {
   isLikelyGenericFavicon,
@@ -35,7 +36,6 @@ import {
   projectInitials,
   resolveProjectDomain,
 } from '@mushi-mushi/core';
-import type { ReporterTimelineKind } from '@mushi-mushi/core/reporter-ui';
 import type { ScreenshotFailureReason } from './capture/screenshot';
 
 /** One rendered turn in the in-widget assistant thread. */
@@ -133,15 +133,8 @@ export type WidgetStep =
  */
 export const FEATURE_REQUEST_INTENT = 'Feature request';
 
-/** One server-rendered timeline row (GET /v1/reporter/reports/:id). */
-export interface WidgetTimelineEvent {
-  kind: ReporterTimelineKind;
-  at: string;
-  text?: string | null;
-  version?: string | null;
-  closed_reason?: string | null;
-  author_name?: string | null;
-}
+/** One timeline row from GET /v1/reporter/reports/:id (core's shape). */
+export type WidgetTimelineEvent = MushiReporterTimelineItem;
 
 /** One reply the reporter sent from this tab, shown before the server echoes it. */
 export interface PendingReply {

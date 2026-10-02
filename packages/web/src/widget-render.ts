@@ -29,10 +29,10 @@ import type {
 } from '@mushi-mushi/core';
 import { statusView } from './reporter-inbox';
 import {
+  isReporterConversation,
   reporterCopy,
-  reporterTimelineText,
+  reporterTimelineEntryText,
   type ReporterCopy,
-  type ReporterTimelineKind,
 } from '@mushi-mushi/core/reporter-ui';
 import type { MushiLocale } from './i18n';
 import {
@@ -98,7 +98,7 @@ export interface WidgetRenderCtx {
   /** Reporter channels the host enabled and the server has configured. */
   channels: { email: boolean; push: boolean; emailPrefill: string };
   emailOptInOpen: boolean;
-  emailState: 'idle' | 'saving' | 'saved' | 'error';
+  emailState: 'idle' | 'saving' | 'saved' | 'invalid' | 'error';
   pushState: 'idle' | 'asking' | 'on' | 'error';
   // ─── Your reports ──────────────────────────────────────────────
   reporterReports: MushiReporterReport[];
@@ -344,11 +344,12 @@ function renderOptIns(ctx: WidgetRenderCtx): string {
   const p = ctx.locale.panel;
   const out: string[] = [];
   if (ctx.channels.email && ctx.callbacks.onReporterEmailOptIn) {
-    if (ctx.emailState === 'saved') out.push(`<p class="mushi-note" role="status">✉ ${esc(p.emailSaved)}</p>`);
+    const ui = ctx.rc.ui;
+    if (ctx.emailState === 'saved') out.push(`<p class="mushi-note" role="status">✉ ${esc(ui.emailCheckInbox)}</p>`);
     else {
-      out.push(`<label class="mushi-check"><input type="checkbox" data-action="email-optin"${ctx.emailOptInOpen ? ' checked' : ''} /> ${esc(p.emailOptIn)}</label>`);
+      out.push(`<label class="mushi-check"><input type="checkbox" data-action="email-optin"${ctx.emailOptInOpen ? ' checked' : ''} /> ${esc(ui.emailOptIn)}</label>`);
       if (ctx.emailOptInOpen) {
-        out.push(`<div class="mushi-inline-form"><input type="email" class="mushi-input" data-role="optin-email" autocomplete="email" aria-label="${esc(p.emailLabel)}" placeholder="${esc(p.emailLabel)}" value="${esc(ctx.channels.emailPrefill)}" />${btn('save-email', esc(p.save), 'mushi-btn', ctx.emailState === 'saving' ? ' aria-busy="true"' : '')}</div>${ctx.emailState === 'error' ? `<p class="mushi-note mushi-error-inline" role="alert">${esc(ctx.rc.ui.sendFailed)}</p>` : ''}`);
+        out.push(`<div class="mushi-inline-form"><input type="email" class="mushi-input" data-role="optin-email" autocomplete="email" aria-label="${esc(ui.emailOptIn)}" placeholder="${esc(ui.emailPlaceholder)}" value="${esc(ctx.channels.emailPrefill)}" />${btn('save-email', esc(ui.emailSubmit), 'mushi-btn', ctx.emailState === 'saving' ? ' aria-busy="true"' : '')}</div>${ctx.emailState === 'invalid' || ctx.emailState === 'error' ? `<p class="mushi-note mushi-error-inline" role="alert">${esc(ctx.emailState === 'invalid' ? ui.emailInvalid : ui.emailFailed)}</p>` : ''}`);
       }
     }
   }
@@ -443,7 +444,7 @@ function reportsView(ctx: WidgetRenderCtx): ViewRegions {
 
 // ─── Report detail: card, timeline, composer (§2.3) ──────────────
 
-interface Entry { kind: ReporterTimelineKind; at: string; text: string; who?: string; pending?: PendingReply }
+interface Entry { kind: string; at: string; text: string; who?: string; mine?: boolean; talk?: boolean; pending?: PendingReply }
 
 /** Merge the server timeline (or the comments, on older servers) with replies still in flight. */
 function buildTimeline(ctx: WidgetRenderCtx, report: MushiReporterReport | undefined): Entry[] {
@@ -451,31 +452,34 @@ function buildTimeline(ctx: WidgetRenderCtx, report: MushiReporterReport | undef
   const out: Entry[] = [];
   if (ctx.timeline) {
     for (const e of ctx.timeline) {
+      const mine = e.kind === 'reporter_comment';
       out.push({
         kind: e.kind,
         at: e.at,
-        text: reporterTimelineText(e.kind, { text: e.text, version: e.version, closed_reason: e.closed_reason }, ctx.lang),
-        who: e.kind === 'comment' ? (e.author_name ?? rc.ui.developer) : e.kind === 'reporter_comment' ? rc.ui.you : undefined,
+        // Pipeline events re-render from the template in the reporter's
+        // language; developer and reporter words are shown as written.
+        text: isReporterConversation(e) ? (e.body ?? e.text) : reporterTimelineEntryText(e, ctx.lang),
+        talk: isReporterConversation(e),
+        mine,
+        who: mine ? rc.ui.you : rc.ui.developer,
       });
     }
   } else {
     if (report) out.push({ kind: 'received', at: report.created_at, text: rc.timeline.received });
     for (const c of ctx.reporterComments) {
       const mine = c.author_kind === 'reporter';
-      out.push({ kind: mine ? 'reporter_comment' : 'comment', at: c.created_at, text: c.body, who: mine ? rc.ui.you : (c.author_name ?? rc.ui.developer) });
+      out.push({ kind: mine ? 'reporter_comment' : 'comment', at: c.created_at, text: c.body, talk: true, mine, who: mine ? rc.ui.you : (c.author_name ?? rc.ui.developer) });
     }
   }
   out.sort((a, b) => (Date.parse(a.at) || 0) - (Date.parse(b.at) || 0));
-  for (const r of ctx.pendingReplies) out.push({ kind: 'reporter_comment', at: '', text: r.body, who: rc.ui.you, pending: r });
+  for (const r of ctx.pendingReplies) out.push({ kind: 'reporter_comment', at: '', text: r.body, who: rc.ui.you, talk: true, mine: true, pending: r });
   return out;
 }
 
 function entryHtml(ctx: WidgetRenderCtx, e: Entry): string {
   const when = e.at ? `<time datetime="${esc(e.at)}">${esc(formatRelativeTime(e.at))}</time>` : '';
-  if (e.kind !== 'comment' && e.kind !== 'reporter_comment') {
-    return `<li class="mushi-event"><span>${esc(e.text)}</span>${when}</li>`;
-  }
-  const mine = e.kind === 'reporter_comment';
+  if (!e.talk) return `<li class="mushi-event"><span>${esc(e.text)}</span>${when}</li>`;
+  const mine = Boolean(e.mine);
   const state = e.pending
     ? e.pending.state === 'sending'
       ? `<span class="mushi-bubble-state">${esc(ctx.rc.ui.sending)}</span>`
@@ -494,7 +498,7 @@ function detailView(ctx: WidgetRenderCtx): ViewRegions {
   const lead = `<div class="mushi-thread-summary"><p class="mushi-card-status">${statusPill(st.label, st.tone)}</p><p class="mushi-note">${esc(st.detail)}${st.othersNote ? ` ${esc(st.othersNote)}.` : ''}</p><p class="mushi-summary-text">${esc(report ? (report.description ?? reportTitle(report)) : `#${(ctx.selectedReportId ?? '').slice(0, 8)}`)}</p>${report?.screenshot_thumb_url ? `<img class="mushi-card-thumb" src="${esc(report.screenshot_thumb_url)}" alt="" />` : ''}${meta ? `<p class="mushi-note">${meta}</p>` : ''}</div>`;
 
   const entries = buildTimeline(ctx, report);
-  const hasDev = entries.some((e) => e.kind === 'comment');
+  const hasDev = entries.some((e) => e.talk && !e.mine);
   let body: string;
   if (ctx.threadLoading && entries.length <= 1 && !ctx.pendingReplies.length) {
     body = skeleton(ctx.locale.flows.thread.loading);

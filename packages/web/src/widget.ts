@@ -1,4 +1,5 @@
 import type {
+  MushiReporterUpdates,
   MushiCustomCategory,
   MushiCrossAppReport,
   MushiLeaderboardEntry,
@@ -8,7 +9,7 @@ import type {
   MushiTesterReputation,
   MushiWidgetConfig,
 } from '@mushi-mushi/core';
-import type { ReporterCopy } from '@mushi-mushi/core/reporter-ui';
+import { isPlausibleReporterEmail, reporterToastMessage, type ReporterCopy } from '@mushi-mushi/core/reporter-ui';
 import { getLocale, type MushiLocale } from './i18n';
 import { getWidgetStyles } from './styles';
 import { contrastingInk, safeCssColor } from './build-widget-theme';
@@ -139,7 +140,7 @@ export class MushiWidget {
   /** Reporter channels the host enabled and the server has configured (§4.1). */
   private channels = { email: false, push: false, emailPrefill: '' };
   private emailOptInOpen = false;
-  private emailState: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
+  private emailState: 'idle' | 'saving' | 'saved' | 'invalid' | 'error' = 'idle';
   private pushState: 'idle' | 'asking' | 'on' | 'error' = 'idle';
 
   private attachedLaunchers: Array<() => void> = [];
@@ -2035,13 +2036,14 @@ export class MushiWidget {
       // A read that never settles used to leave "Loading thread…" up forever
       // (live, 2026-10-02); the deadline turns it into a retryable error.
       const detail = this.callbacks.onReporterReportRequest?.(reportId);
-      if (detail) {
-        const res = await withDeadline(detail, REPORTER_READ_DEADLINE_MS);
-        if (this.selectedReportId === reportId && res) {
+      const res = detail ? await withDeadline(detail, REPORTER_READ_DEADLINE_MS) : null;
+      if (res) {
+        if (this.selectedReportId === reportId) {
           this.timeline = res.timeline ?? null;
           if (res.report) this.reporterReports = this.reporterReports.map((r) => (r.id === reportId ? { ...r, ...res.report } : r));
         }
       } else {
+        // Servers before the v2 detail route: the comments call.
         const req = this.callbacks.onReporterCommentsRequest?.(reportId);
         const comments = req ? await withDeadline(req, REPORTER_READ_DEADLINE_MS) : [];
         if (this.selectedReportId === reportId) this.reporterComments = comments;
@@ -2098,8 +2100,8 @@ export class MushiWidget {
 
   private async saveEmailOptIn(): Promise<void> {
     const email = (this.panel.querySelector<HTMLInputElement>('[data-role="optin-email"]')?.value ?? '').trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !this.callbacks.onReporterEmailOptIn) {
-      this.emailState = 'error';
+    if (!isPlausibleReporterEmail(email) || !this.callbacks.onReporterEmailOptIn) {
+      this.emailState = 'invalid';
       this.render();
       return;
     }
@@ -2137,8 +2139,18 @@ export class MushiWidget {
    * launcher is (hidden routes, hideOnSelector, hide()). View opens the thread.
    */
   showUpdatesToast(reports: MushiReporterReport[]): boolean {
-    const toast = pickUpdateToast(reports, this.lang, this.locale.panel.toastReplied);
+    const toast = pickUpdateToast(reports, this.lang, this.rc.ui.toastReplied);
     return toast ? this.showUpdateToast(toast) : false;
+  }
+
+  /** The toast from GET /v1/reporter/updates (core's wording), naming the report when there is one. */
+  showUpdatesFeedToast(updates: MushiReporterUpdates, reports: MushiReporterReport[]): boolean {
+    if (!updates.unread_total) return false;
+    const ids = new Set(updates.latest.map((u) => u.report_id));
+    const reportId = ids.size === 1 ? [...ids][0]! : null;
+    const row = reportId ? reports.find((r) => r.id === reportId) : undefined;
+    const detail = row?.title ?? row?.summary ?? (reportId ? updates.latest[0]?.preview : undefined);
+    return this.showUpdateToast({ text: reporterToastMessage(updates, this.lang), reportId, ...(detail ? { detail } : {}) });
   }
 
   showUpdateToast(update: { text: string; reportId?: string | null; detail?: string }): boolean {
@@ -2160,7 +2172,7 @@ export class MushiWidget {
     const view = document.createElement('button');
     view.type = 'button';
     view.className = 'mushi-btn';
-    view.textContent = this.locale.panel.view;
+    view.textContent = this.rc.ui.view;
     view.addEventListener('click', () => {
       this.removeToast();
       const id = update.reportId;

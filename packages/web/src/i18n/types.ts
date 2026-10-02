@@ -117,18 +117,9 @@ export interface MushiLocale {
     moreOptions: string;
     /** Title of the report detail view. */
     reportTitle: string;
-    /** Receipt opt-in checkbox. */
-    emailOptIn: string;
-    emailLabel: string;
-    save: string;
-    /** After saving the email: double opt-in pending. */
-    emailSaved: string;
     /** Web push opt-in button. */
     notifyMe: string;
     notifyOn: string;
-    /** Toast after the developer replied. */
-    toastReplied: string;
-    view: string;
   };
   assistant: {
     defaultLabel: string;
