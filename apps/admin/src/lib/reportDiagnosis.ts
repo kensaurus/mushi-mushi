@@ -85,8 +85,10 @@ export function reportDiagnosisView(report: DiagnosisSource): ReportDiagnosisVie
   if (isObject(report.stage2_partial)) {
     return { kind: 'streaming', diagnosis: readStage2(report.stage2_partial, report) }
   }
+  // fix-worker stamps 'autofix_blocked: …' on the same column; that is about
+  // the fix, not the diagnosis, so it must not read as "diagnosis failed".
   const error = text(report.processing_error)
-  if (error) return { kind: 'failed', message: error }
+  if (error && !error.startsWith('autofix_blocked:')) return { kind: 'failed', message: error }
   if (report.stage1_classification != null) return { kind: 'stage1_only' }
   return { kind: 'pending' }
 }

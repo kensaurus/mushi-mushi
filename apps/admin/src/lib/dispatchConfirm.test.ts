@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { dispatchConfirmBody } from './dispatchConfirm'
+import { dispatchConfirmBody, featureRequestDispatchBlock } from './dispatchConfirm'
+
+describe('featureRequestDispatchBlock (console mirror of the server gate)', () => {
+  const widgetFeature = { user_category: 'other', user_intent: 'Feature request' }
+
+  it('disables Dispatch on a feature request the classifier categorized (469f6962)', () => {
+    expect(
+      featureRequestDispatchBlock({ ...widgetFeature, category: 'visual', stage1_classification: { category: 'visual' } }),
+    ).toMatch(/Feature request/)
+    expect(featureRequestDispatchBlock({ user_category: 'feature', category: 'other' })).not.toBeNull()
+  })
+
+  it('enables it after a human re-categorization, and never blocks a bug', () => {
+    expect(
+      featureRequestDispatchBlock({ ...widgetFeature, category: 'bug', stage1_classification: { category: 'other' } }),
+    ).toBeNull()
+    expect(featureRequestDispatchBlock({ user_category: 'bug', category: 'bug' })).toBeNull()
+  })
+})
 
 describe('dispatchConfirmBody', () => {
   it('names the target repo, the base branch and the draft PR', () => {

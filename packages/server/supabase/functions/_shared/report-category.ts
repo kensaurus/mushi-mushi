@@ -66,3 +66,87 @@ export function normalizeReportCategory<T extends Record<string, unknown>>(body:
     userCategory: typeof body.userCategory === 'string' && body.userCategory ? body.userCategory : raw,
   }
 }
+
+// ---------------------------------------------------------------------------
+// Feature requests (2026-10-02)
+//
+// A reporter can say "this is a feature request" two ways: POST /v1/reports
+// with category 'feature' (→ user_category='feature'), or the web widget's
+// Feature request card, which sends category 'other' plus
+// user_intent='Feature request' (packages/web FEATURE_REQUEST_INTENT). Both
+// classifiers ignored it: QA's three feature requests (469f6962, 08d0ecde,
+// c0e99783) were classified visual / visual / confusing and 469f6962 was
+// fed to auto-fix, which opened PR 424.
+// ---------------------------------------------------------------------------
+
+/** Wire value the widget's Feature request card writes into `user_intent`. */
+const FEATURE_REQUEST_INTENT = 'feature request'
+const FEATURE_USER_CATEGORIES: ReadonlySet<string> = new Set(['feature', 'feature request', 'feature_request'])
+
+function lower(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : ''
+}
+
+export function isFeatureRequest(report: { user_category?: unknown; user_intent?: unknown }): boolean {
+  return FEATURE_USER_CATEGORIES.has(lower(report.user_category)) || lower(report.user_intent) === FEATURE_REQUEST_INTENT
+}
+
+/**
+ * The reporter's explicit choice wins over the model's guess: a feature
+ * request is never stored under a defect category. The model's guess is kept
+ * as `model_category` for the record.
+ */
+export function respectReporterCategory<T extends { category: string }>(
+  classification: T,
+  report: { user_category?: unknown; user_intent?: unknown },
+): T {
+  if (!isFeatureRequest(report) || classification.category === 'other') return classification
+  return { ...classification, category: 'other', model_category: classification.category } as T
+}
+
+/**
+ * Prompt line naming the reporter's own label. Stage 1 sees raw report text
+ * anyway; Stage 2 is the air-gapped stage, so `trusted` emits only values
+ * derived from fixed vocabularies, never the raw user_category string.
+ */
+export function reporterCategoryHint(
+  report: { user_category?: unknown; user_intent?: unknown },
+  opts: { trusted: boolean },
+): string {
+  if (isFeatureRequest(report)) {
+    return '- Reporter chose: Feature request. This is a strong signal from the person who filed it: treat it as a request for new or changed behaviour, not a defect, and use category "other".'
+  }
+  const raw = typeof report.user_category === 'string' ? report.user_category.trim() : ''
+  if (!raw) return ''
+  const label = opts.trusted ? toClassifierCategory(raw) : raw.slice(0, 128)
+  return `- Reporter chose: ${label} (strong hint; override it only when the evidence clearly says otherwise)`
+}
+
+function storedCategory(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const c = (value as { category?: unknown }).category
+  return typeof c === 'string' && c ? c : null
+}
+
+/**
+ * Why a fix must not be dispatched for this report, or null when it may be.
+ * A feature request is only eligible once a human re-categorized it: its
+ * category is a non-'other' value that differs from what the classifier
+ * stored (stage 2's category, else stage 1's). Classifiers can no longer put
+ * a feature request in a defect category, so that difference is a human edit.
+ * There is no category audit log, so this is the signal the data has.
+ */
+export function featureRequestDispatchBlock(report: {
+  user_category?: unknown
+  user_intent?: unknown
+  category?: string | null
+  stage1_classification?: unknown
+  stage2_analysis?: unknown
+}): string | null {
+  if (!isFeatureRequest(report)) return null
+  const classifierCategory = storedCategory(report.stage2_analysis) ?? storedCategory(report.stage1_classification)
+  const humanRecategorized =
+    typeof report.category === 'string' && report.category !== 'other' && report.category !== classifierCategory
+  if (humanRecategorized) return null
+  return 'The reporter filed this as a feature request, so it is not sent to auto-fix. Re-categorize it as a bug in triage to dispatch a fix.'
+}

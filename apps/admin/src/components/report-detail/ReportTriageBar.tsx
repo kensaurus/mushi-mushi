@@ -11,7 +11,7 @@ import type { PreflightState } from '../../lib/useDispatchPreflight'
 import type { ReportDetail } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { ConfirmDialog } from '../ConfirmDialog'
-import { dispatchConfirmBody } from '../../lib/dispatchConfirm'
+import { dispatchConfirmBody, featureRequestDispatchBlock } from '../../lib/dispatchConfirm'
 
 // One option per label: 'resolved' is the legacy spelling of 'fixed' (both
 // read "Fixed"), so listing both showed "Fixed" twice. A legacy row selects
@@ -73,15 +73,20 @@ export function ReportTriageBar({
     return () => clearTimeout(t)
   }, [savedAt])
 
+  // The reporter filed a feature request: the server refuses to auto-fix it
+  // until someone re-categorizes it, so say so on the button.
+  const featureBlock = featureRequestDispatchBlock(report)
   const dispatchDisabled =
     report.status === 'fixed' ||
     report.status === 'dismissed' ||
     isDispatchBusy ||
+    featureBlock != null ||
     (preflight != null && !preflight.loading && !preflight.ready)
   const dispatchBlockReason =
-    preflight != null && !preflight.loading && !preflight.ready
+    featureBlock ??
+    (preflight != null && !preflight.loading && !preflight.ready
       ? `Preflight: ${preflight.failing.map((c) => c.label).join(', ')}`
-      : undefined
+      : undefined)
   const dispatchLabel =
     dispatchState.status === 'idle' ? 'Dispatch fix' :
     dispatchState.status === 'queueing' ? 'Dispatching…' :
