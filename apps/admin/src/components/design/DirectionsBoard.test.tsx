@@ -87,6 +87,38 @@ describe('DirectionsBoard', () => {
     expect(activateButtons).toHaveLength(2)
   })
 
+  it('renders the fixture facts: 7 pairs each, the failing reward pair, assets, unscanned active card', () => {
+    expect(DATA.specimen.script).toBe('thai')
+    expect(DATA.specimen.word).toBe('น้ำ')
+    expect(DATA.directions.map((d) => d.name)).toEqual(['soi-signpaint', 'nang-lamp', 'pha-khram'])
+    render()
+    const card = (name: string) => container.querySelector<HTMLElement>(`[data-direction="${name}"]`)
+
+    for (const name of ['soi-signpaint', 'nang-lamp', 'pha-khram']) {
+      expect(card(name)?.querySelectorAll('[data-testid="direction-contrast-ratio"]')).toHaveLength(7)
+      // The prompt word is drawn in every phone mock.
+      expect(card(name)?.querySelector('[data-mock="word"]')?.textContent).toBe('น้ำ')
+    }
+
+    // Soi's one failing pair: reward on the base surface, 1.63:1, with a Fail badge.
+    const failing = Array.from(card('soi-signpaint')?.querySelectorAll('tbody tr') ?? []).filter((r) =>
+      r.querySelector('[data-verdict="fail"]'),
+    )
+    expect(failing).toHaveLength(1)
+    expect(failing[0]?.querySelector('[data-testid="direction-contrast-ratio"]')?.textContent).toBe('1.63:1')
+
+    // Pha Khram's illustration renders as a lazy <img> from its signed URL.
+    const img = card('pha-khram')?.querySelector('img')
+    expect(img?.getAttribute('loading')).toBe('lazy')
+    expect(img?.getAttribute('src')).toContain('/v1/design-assets/')
+    expect(img?.getAttribute('alt')).toContain('illustration')
+    expect(card('nang-lamp')?.querySelector('img')).toBeNull()
+
+    // Nothing has been scanned: the active card says so; inactive cards explain why.
+    expect(card('soi-signpaint')?.textContent).toContain('Not scanned yet')
+    expect(card('pha-khram')?.textContent).toContain('Not scanned — only the active direction is scanned')
+  })
+
   it('previews an activate change as a dry run', async () => {
     render()
     const card = container.querySelector('[data-direction="pha-khram"]')
