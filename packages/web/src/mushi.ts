@@ -1040,7 +1040,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       });
       return res.ok ? (res.data ?? null) : null;
     },
-  }, MUSHI_SDK_VERSION);
+  });
   void brandRefReady.then((ref) => widget.setBrandRef(ref));
   syncCaptureModules();
 

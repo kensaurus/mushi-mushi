@@ -8,25 +8,27 @@ import type {
   MushiTesterReputation,
   MushiWidgetConfig,
 } from '@mushi-mushi/core';
+import type { ReporterCopy } from '@mushi-mushi/core/reporter-ui';
 import { getLocale, type MushiLocale } from './i18n';
 import { getWidgetStyles } from './styles';
-import { MUSHI_SDK_VERSION } from './version';
+import { contrastingInk, safeCssColor } from './build-widget-theme';
 import { readPageFaviconHref, MUSHI_TIER_COLORS } from '@mushi-mushi/core';
-import { CATEGORY_ICONS, FEATURE_REQUEST_INTENT, REPORTER_READ_DEADLINE_MS, bindFaviconFallbacks, charCounterText, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession, withDeadline } from './widget-helpers';
+import { FEATURE_REQUEST_INTENT, REPORTER_READ_DEADLINE_MS, bindFaviconFallbacks, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession, withDeadline } from './widget-helpers';
 import type {
   AssistantTurn,
-  DetailMode,
+  PendingReply,
   ScreenshotErrorReason,
   WidgetCallbacks,
   WidgetRewardsState,
   WidgetStep,
   WidgetSubmitOutcome,
+  WidgetTimelineEvent,
 } from './widget-helpers';
 
 // Re-exported so existing `from './widget'` import sites and the package barrel
 // keep resolving these public contracts unchanged after the helper split.
 export type { WidgetCallbacks, WidgetRewardsState, WidgetSubmitOutcome } from './widget-helpers';
-import { renderBrandFooter, renderOutdatedBanner, renderStep } from './widget-render';
+import { renderBrandFooter, renderOutdatedBanner, renderView, resolveReporterCopy } from './widget-render';
 import type { WidgetRenderCtx } from './widget-render';
 
 /** Heuristic: hedging / capability-limit answers should offer a report escape. */
@@ -39,6 +41,15 @@ function looksUnsureAssistantAnswer(text: string): boolean {
   );
 }
 
+/** Panel regions, in DOM order. `lead` + `body` share the scroll container. */
+const REGIONS = ['notice', 'header', 'lead', 'body', 'footer', 'brand'] as const;
+type Region = (typeof REGIONS)[number];
+
+/** Form fields whose value, focus and caret survive a region patch. */
+const FIELDS = ['description', 'reporter-reply', 'magic-link-email', 'optin-email'] as const;
+const BUILTIN: readonly string[] = ['bug', 'slow', 'visual', 'confusing', 'other'];
+const FOCUSABLE = 'button:not([disabled]),textarea:not([disabled]),input:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])';
+
 export class MushiWidget {
   private host: HTMLElement;
   private shadow: ShadowRoot;
@@ -48,53 +59,50 @@ export class MushiWidget {
   private config: Required<MushiWidgetConfig>;
   private callbacks: WidgetCallbacks;
   private locale: MushiLocale;
+  private rc: ReporterCopy;
+  private lang = 'en';
   private isOpen = false;
-  private step: WidgetStep = 'category';
-  /**
-   * The selected category id. May be a built-in `MushiReportCategory` or a
-   * custom id from `config.categories`. Cast to `MushiReportCategory` only
-   * after resolving through `resolveBaseCategory()`.
-   */
-  private selectedCategory: string | null = null;
-  private selectedIntent: string | null = null;
-  /**
-   * True when the user took the "Feature request" shortcut. We track this
-   * separately from `selectedCategory='other'` so the Back button on the
-   * details step jumps straight back to the category picker instead of
-   * landing on the intent picker the user explicitly skipped.
-   */
-  private viaFeatureRequest = false;
-  /** Whether the category list is fully expanded (progressive disclosure). */
+  private step: WidgetStep = 'report';
+
+  // ─── Persistent DOM (built once; regions are patched, never rebuilt) ───
+  private readonly styleEl: HTMLStyleElement;
+  private styleKey = '';
+  private readonly panel: HTMLDivElement;
+  private readonly scroller: HTMLDivElement;
+  private readonly regionEls = {} as Record<Region, HTMLElement>;
+  private regionHtml: Partial<Record<Region, string>> = {};
+  private readonly live: HTMLDivElement;
+  private renderedStep: WidgetStep | null = null;
+  private triggerEl: HTMLButtonElement | null = null;
+  private triggerKey = '';
+  private bannerEl: HTMLElement | null = null;
+  private bannerKey = '';
+  private toastEl: HTMLElement | null = null;
+  /** Element focused before open; focus returns here on close (APG dialog). */
+  private opener: HTMLElement | null = null;
+
+  // ─── Report screen ─────────────────────────────────────────────
+  /** Selected type chip: built-in id, `idea`, a custom category id, or null (none picked). */
+  private chip: string | null = null;
+  private intent: string | null = null;
+  /** Host custom categories revealed under "More…". */
   private showAllCategories = false;
-  /** Secondary hub nav (inbox, assistant, community) collapsed under "More". */
+  /** Header overflow menu. */
   private showMoreNav = false;
   private screenshotAttached = false;
   private screenshotCapturing = false;
   private screenshotError = false;
   /** Why the last capture failed; drives the actionable hint under the tools. */
   private screenshotErrorReason: ScreenshotErrorReason | null = null;
+  /** The reporter asked for (or marked up) the screenshot — an auto-capture on open doesn't count as saying something. */
+  private screenshotByUser = false;
+  private previewOpen = false;
   private allowScreenshotRemove = true;
-  /**
-   * Whether the screenshot / element-select tools are actually usable
-   * (capture module present + not disabled by config). Unavailable tools are
-   * hidden from the details step — a rendered button whose handler silently
-   * no-ops reads as a bug to the reporter.
-   */
+  /** Unusable tools are hidden — a button whose handler no-ops reads as a bug. */
   private screenshotAvailable = true;
   private elementAvailable = true;
-  /**
-   * In-progress form input preserved across full shadow-DOM re-renders.
-   * render() rebuilds the panel with `innerHTML = ''`, which used to destroy
-   * whatever the reporter had typed whenever a background refresh (60s inbox
-   * poll, visibilitychange refetch, screenshot attach) fired mid-typing.
-   * Captured from the live DOM right before teardown, replayed right after.
-   */
-  private draftDescription = '';
-  private draftEmail = '';
-  private draftReply = '';
-  private draftFocus: 'description' | 'email' | 'reply' | null = null;
-  private draftSelStart = 0;
-  private draftSelEnd = 0;
+  /** Field values survive region patches and are the source of truth for validation. */
+  private drafts: Record<string, string> = {};
   /** Data URL of the attached screenshot, rendered as a visible preview. */
   private screenshotPreview: string | null = null;
   private elementSelected = false;
@@ -106,50 +114,45 @@ export class MushiWidget {
   private triggerVisible = true;
   private triggerShrunk = false;
   private triggerHiddenByScroll = false;
-  /** Milliseconds since mount — used for the 30s first-time nudge gate. */
-  private mountedAt: number | null = null;
-  private nudgeShown = false;
-  private nudgeEl: HTMLDivElement | null = null;
-  private nudgeTimer: ReturnType<typeof setTimeout> | null = null;
   private sdkFreshness: { latest: string | null; current: string; deprecated: boolean; message?: string | null } | null = null;
   /** Brand-footer ref (SDK sets it once hashed) + once-per-instance impression latch. */
   private brandRef: string | null = null;
   private brandImpressionSent = false;
+
+  // ─── Your reports ──────────────────────────────────────────────
   private reporterReports: MushiReporterReport[] = [];
   private featureBoard: Array<Record<string, unknown>> = [];
   private reporterComments: MushiReporterComment[] = [];
+  /** Server timeline for the open report, when the host SDK can fetch it. */
+  private timeline: WidgetTimelineEvent[] | null = null;
+  private pendingReplies: PendingReply[] = [];
+  private replySeq = 0;
   private selectedReportId: string | null = null;
-  /**
-   * One flag per surface. A single shared flag used to let a reply (or vote,
-   * or reopen) blank the thread it was posted from, and a failed reply
-   * replaced the conversation with its error.
-   */
+  /** One flag per surface: a reply never blanks the thread it was posted from. */
   private listLoading = false;
   private threadLoading = false;
   private actionPending = false;
-  /** List / roadmap load error. */
   private reporterError: string | null = null;
-  /** Thread (comments) load error — rendered with Try again. */
   private threadError: string | null = null;
-  /** Reply / feedback / reopen / vote error — rendered beside the composer. */
   private actionError: string | null = null;
+  /** Reporter channels the host enabled and the server has configured (§4.1). */
+  private channels = { email: false, push: false, emailPrefill: '' };
+  private emailOptInOpen = false;
+  private emailState: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
+  private pushState: 'idle' | 'asking' | 'on' | 'error' = 'idle';
+
   private attachedLaunchers: Array<() => void> = [];
   private smartHideCleanup: (() => void) | null = null;
   private smartHideTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Captured at the moment of submit so the success ledger metadata
-   *  ("REPORT · 14:23:07 JST") doesn't drift while the success step
-   *  is on screen. */
+  /** Captured at submit so the receipt time doesn't drift while it is on screen. */
   private submittedAt: Date | null = null;
-  /** Pending success-state timer. Tracked so destroy() can clear it —
-   *  otherwise a host that unmounts mid-submit leaks this MushiWidget
-   *  reference (and re-renders into a detached shadow root). */
+  /** Pending success-state timer, cleared by destroy(). */
   private successTimer: ReturnType<typeof setTimeout> | null = null;
   /**
-   * Set on pointerdown inside the panel. A background re-render (runtime
-   * config, rewards, inbox poll…) that lands between pointerdown and click
-   * replaces the button under the pointer, and the browser then drops the
-   * click — the first Submit "did nothing". render() defers while this is set
-   * (bounded, so a lost pointerup can't freeze the panel).
+   * Set on pointerdown inside the panel. A background patch that lands
+   * between pointerdown and click replaces the button under the pointer and
+   * the browser drops the click. render() defers while this is set (bounded,
+   * so a lost pointerup can't freeze the panel).
    */
   private pointerDownAt: number | null = null;
   private renderDeferred = false;
@@ -168,16 +171,8 @@ export class MushiWidget {
     points_30d: number;
   }> | null = null;
   private leaderboardLoading = false;
-  /** Server-confirmed id for the just-submitted report. Surfaces in
-   *  the success step as a copyable receipt + optional deep link to
-   *  the Mushi console (when `dashboardUrl` is configured). Cleared
-   *  on every new `open()` so a re-opened widget never reuses a
-   *  stale id from the previous session. */
+  /** Server-confirmed id for the just-submitted report (receipt + Track it). */
   private lastReportId: string | null = null;
-  /** True when the just-submitted report was queued offline (no
-   *  network, or the API errored and went into the retry queue).
-   *  Drives a different success copy so the user knows the report
-   *  hasn't actually reached the console yet. */
   private lastSubmitQueuedOffline = false;
   private lastSubmitFailureKind: WidgetSubmitOutcome['failureKind'];
   private lastSubmitScreenshotDropped = false;
@@ -188,50 +183,35 @@ export class MushiWidget {
   private fabPos: { x: number; y: number } | null = null;
   /** Cleanup fn for visualViewport keyboard listener. */
   private vvCleanup: (() => void) | null = null;
-  /**
-   * Host-app user identity forwarded via `Mushi.identify()` or
-   * `Mushi.identifyWithToken()`. Used to show "Reporting as <name>"
-   * in the details step so logged-in users know their report is linked.
-   * Independent of the Mushi tester magic-link session below.
-   */
+  /** Host-app user identity from `identify()` — shown as "Reporting as <name>". */
   private identifiedUser: { name?: string; email?: string } | null = null;
   /** Mushi tester session JWT — set after in-widget sign-in or by mushi.ts. */
   private testerJwt: string | null = null;
-  /** Tester identity (public_handle, display_name). */
   private testerInfo: { id: string; public_handle: string | null; display_name: string | null } | null = null;
-  /** Cross-app reports for the signed-in tester. */
   private crossAppReports: MushiCrossAppReport[] | null = null;
   private crossAppLoading = false;
-  /** Global leaderboard entries (from mushi_testers, not org-scoped). */
   private globalLeaderboard: MushiLeaderboardEntry[] | null = null;
   private globalLeaderboardLoading = false;
-  /** Reputation for the signed-in tester. */
   private testerReputation: MushiTesterReputation | null = null;
-  /** Whether an in-widget magic-link email was just sent. */
   private magicLinkSent = false;
   private magicLinkEmail = '';
   private magicLinkError = '';
-  private magicLinkSending = false; // double-submit guard
+  private magicLinkSending = false;
 
-  // ─── Assistant tab (P5) ──────────────────────────────────────────
+  // ─── Assistant ───────────────────────────────────────────────────
   private assistantTurns: AssistantTurn[] = [];
   private assistantThreadId: string | null = null;
   private assistantSending = false;
   private assistantError: string | null = null;
 
-  constructor(config: MushiWidgetConfig = {}, callbacks: WidgetCallbacks, private readonly sdkVersion = MUSHI_SDK_VERSION) {
+  constructor(config: MushiWidgetConfig = {}, callbacks: WidgetCallbacks) {
     this.config = {
       position: config.position ?? 'bottom-right',
       anchor: config.anchor ?? {},
       theme: config.theme ?? 'auto',
-      // Falsy-OR (NOT `??`) on purpose: `triggerText: ''` is semantically
-      // nonsense — it would render a labelless, glyphless trigger button
-      // that users can't see or aim at. Treat empty string the same as
-      // omitted so any caller that wires this to a cleared form input or
-      // pastes a legacy snippet that emitted `triggerText: ""` (see
-      // apps/admin/src/lib/sdkSnippets.ts widgetLines history) still gets
-      // the default 🐛 and a visible button.
-      triggerText: config.triggerText || '\uD83D\uDC1B',
+      // Falsy-OR (NOT `??`) on purpose: `triggerText: ''` would render a
+      // labelless, glyphless trigger. Treat '' like omitted.
+      triggerText: config.triggerText || '🐛',
       expandedTitle: config.expandedTitle ?? '',
       mode: config.mode ?? 'conversational',
       locale: config.locale ?? 'auto',
@@ -250,21 +230,21 @@ export class MushiWidget {
       outdatedBanner: config.outdatedBanner ?? 'auto',
       screenshotSensitiveHint: config.screenshotSensitiveHint ?? true,
       betaMode: config.betaMode ?? {},
-      minDescriptionLength: config.minDescriptionLength ?? 20,
+      minDescriptionLength: config.minDescriptionLength ?? 8,
       dashboardUrl: config.dashboardUrl ?? '',
       responseSlaLabel: config.responseSlaLabel ?? '',
       featureRequestCard: config.featureRequestCard ?? true,
-      featureRequestLabel: config.featureRequestLabel || 'Feature request',
-      featureRequestDescription: config.featureRequestDescription || 'Suggest something new — even rough ideas help us prioritise',
+      // Empty = the localized "Idea" chip label.
+      featureRequestLabel: config.featureRequestLabel ?? '',
+      featureRequestDescription: config.featureRequestDescription ?? '',
       avoidSelectors: config.avoidSelectors ?? [],
       categories: config.categories ?? [],
       accent: config.accent ?? '',
       accentText: config.accentText ?? '',
     };
     this.callbacks = callbacks;
-    // Passing undefined when locale is 'auto' lets getLocale() resolve via
-    // navigator.language automatically.
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
+    this.rc = this.resolveCopy();
 
     // Same-tab Ask transcript resume (sessionStorage only — no login gate).
     const saved = loadAssistantSession();
@@ -276,6 +256,36 @@ export class MushiWidget {
     this.host = document.createElement('div');
     this.host.id = 'mushi-mushi-widget';
     this.shadow = this.host.attachShadow({ mode: 'open' });
+    this.styleEl = document.createElement('style');
+    this.panel = document.createElement('div');
+    this.panel.setAttribute('role', 'dialog');
+    this.panel.setAttribute('aria-modal', 'true');
+    this.panel.setAttribute('aria-labelledby', 'mushi-title');
+    this.scroller = document.createElement('div');
+    this.scroller.className = 'mushi-scroll';
+    for (const r of REGIONS) {
+      const el = document.createElement('div');
+      el.className = `mushi-${r}`;
+      el.dataset.region = r;
+      this.regionEls[r] = el;
+    }
+    this.scroller.append(this.regionEls.lead, this.regionEls.body);
+    this.live = document.createElement('div');
+    this.live.className = 'mushi-sr';
+    this.live.setAttribute('role', 'status');
+    this.live.setAttribute('aria-live', 'polite');
+    this.panel.append(this.regionEls.notice, this.regionEls.header, this.scroller, this.regionEls.footer, this.regionEls.brand, this.live);
+    this.shadow.append(this.styleEl, this.panel);
+    this.bindPanelEvents();
+  }
+
+  /** Locale code for core's reporter copy; 'auto' resolves through the browser. */
+  private resolveCopy(): ReporterCopy {
+    const tag = this.config.locale === 'auto'
+      ? (typeof navigator !== 'undefined' ? navigator.language ?? '' : '')
+      : this.config.locale;
+    this.lang = (tag || 'en').split(/[-_]/)[0].toLowerCase();
+    return resolveReporterCopy(this.lang);
   }
 
   mount(): void {
@@ -288,7 +298,6 @@ export class MushiWidget {
     this.syncSmartHide();
     this.bindColorSchemeListener();
     this.render();
-    this.mountedAt = Date.now();
   }
 
   getIsMounted(): boolean {
@@ -296,61 +305,24 @@ export class MushiWidget {
   }
 
   updateConfig(config: MushiWidgetConfig = {}): void {
-    // Capture pre-merge state so we can detect a meaningful banner change from
-    // the async runtime/dashboard config. Without this, a console operator who
-    // turns the banner back on (trigger → 'banner') or pushes new banner copy
-    // would be silently ignored if the user had dismissed an earlier banner
-    // this session (bannerDismissed stays true), and renderBanner() early-exits.
+    // Detect a meaningful banner change from the async runtime/dashboard config
+    // so a banner the user dismissed earlier comes back when the operator
+    // turns it back on or pushes new copy.
     const prevTrigger = this.config.trigger;
     const prevBannerConfig = JSON.stringify(this.config.bannerConfig ?? null);
-
+    const defined = Object.fromEntries(Object.entries(config).filter(([, v]) => v !== undefined)) as MushiWidgetConfig;
     this.config = {
       ...this.config,
-      ...(config.position ? { position: config.position } : {}),
-      ...(config.anchor !== undefined ? { anchor: config.anchor } : {}),
-      ...(config.theme ? { theme: config.theme } : {}),
-      ...(config.triggerText !== undefined ? { triggerText: config.triggerText || '\uD83D\uDC1B' } : {}),
-      ...(config.expandedTitle !== undefined ? { expandedTitle: config.expandedTitle } : {}),
-      ...(config.mode ? { mode: config.mode } : {}),
-      ...(config.locale ? { locale: config.locale } : {}),
-      ...(config.zIndex !== undefined ? { zIndex: config.zIndex } : {}),
-      ...(config.trigger ? { trigger: config.trigger } : {}),
-      ...(config.attachToSelector !== undefined ? { attachToSelector: config.attachToSelector } : {}),
-      ...(config.inset !== undefined ? { inset: config.inset } : {}),
-      ...(config.respectSafeArea !== undefined ? { respectSafeArea: config.respectSafeArea } : {}),
-      ...(config.hideOnSelector !== undefined ? { hideOnSelector: config.hideOnSelector } : {}),
-      ...(config.hideOnRoutes !== undefined ? { hideOnRoutes: config.hideOnRoutes } : {}),
-      ...(config.environments !== undefined ? { environments: config.environments } : {}),
-      ...(config.smartHide !== undefined ? { smartHide: config.smartHide } : {}),
-      ...(config.draggable !== undefined ? { draggable: config.draggable } : {}),
-      ...(config.brandFooter !== undefined ? { brandFooter: config.brandFooter } : {}),
-      ...(config.outdatedBanner !== undefined ? { outdatedBanner: config.outdatedBanner } : {}),
-      ...(config.screenshotSensitiveHint !== undefined ? { screenshotSensitiveHint: config.screenshotSensitiveHint } : {}),
-      ...(config.betaMode !== undefined ? { betaMode: config.betaMode } : {}),
-      ...(config.minDescriptionLength !== undefined ? { minDescriptionLength: config.minDescriptionLength } : {}),
-      ...(config.dashboardUrl !== undefined ? { dashboardUrl: config.dashboardUrl } : {}),
-      ...(config.responseSlaLabel !== undefined ? { responseSlaLabel: config.responseSlaLabel } : {}),
-      ...(config.featureRequestCard !== undefined ? { featureRequestCard: config.featureRequestCard } : {}),
-      ...(config.featureRequestLabel !== undefined ? { featureRequestLabel: config.featureRequestLabel || 'Feature request' } : {}),
-      ...(config.featureRequestDescription !== undefined ? { featureRequestDescription: config.featureRequestDescription || 'Suggest something new — even rough ideas help us prioritise' } : {}),
-      // Runtime/dashboard config delivers bannerMessage/bannerLabel via
-      // mergeRuntimeConfig → bannerConfig. The widget is constructed before
-      // that fetch resolves, so this pass-through is what makes server-driven
-      // banner copy actually render.
-      ...(config.bannerConfig !== undefined ? { bannerConfig: config.bannerConfig } : {}),
-      ...(config.categories !== undefined ? { categories: config.categories } : {}),
-    };
+      ...defined,
+      ...(config.triggerText !== undefined ? { triggerText: config.triggerText || '🐛' } : {}),
+    } as Required<MushiWidgetConfig>;
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
-    // If the trigger was (re-)set to 'banner' from something else, or the
-    // banner copy/link actually changed, clear a stale session dismissal so the
-    // new/restored banner renders. Gated on real change so a config tick that
-    // doesn't touch the banner never resurrects a banner the user dismissed.
+    this.rc = this.resolveCopy();
     const triggerBecameBanner = this.config.trigger === 'banner' && prevTrigger !== 'banner';
     const bannerConfigChanged = JSON.stringify(this.config.bannerConfig ?? null) !== prevBannerConfig;
     if (triggerBecameBanner || bannerConfigChanged) {
       this.bannerDismissed = false;
     }
-    // Re-sync host chrome in case zIndex changed.
     if (this.host.isConnected) this.syncHostChromeState();
     this.syncAttachedLaunchers();
     this.syncSmartHide();
@@ -364,42 +336,19 @@ export class MushiWidget {
     return this.config.categories?.find((c) => c.id === id);
   }
 
-  /**
-   * Map a (possibly custom) category id to the built-in `MushiReportCategory`
-   * used for the report wire format. Falls back to `'other'`.
-   */
-  private resolveBaseCategory(id: string): MushiReportCategory {
-    const BUILTIN: MushiReportCategory[] = ['bug', 'slow', 'visual', 'confusing', 'other'];
-    if (BUILTIN.includes(id as MushiReportCategory)) return id as MushiReportCategory;
-    const custom = this.resolveCustomCategory(id);
-    return custom?.baseCategory ?? 'other';
-  }
-
-  /** Icon for the selected category — custom entry's icon or built-in emoji. */
-  private categoryIcon(id: string): string {
-    const custom = this.resolveCustomCategory(id);
-    if (custom?.icon) return custom.icon;
-    return CATEGORY_ICONS[id as MushiReportCategory] ?? '💬';
-  }
-
-  /** Label for the selected category — custom entry label or built-in i18n string. */
-  private categoryLabel(id: string): string {
-    const custom = this.resolveCustomCategory(id);
-    if (custom) return custom.label;
-    const t = this.locale;
-    return t.step1.categories[id as MushiReportCategory] ?? id;
-  }
-
   // ─── Open / close ─────────────────────────────────────────────────────────
 
   open(options?: { category?: MushiReportCategory | string; featureRequest?: boolean }): void {
     if (this.isOpen) return;
+    this.rememberOpener();
     this.isOpen = true;
     this.screenshotAttached = false;
     this.screenshotCapturing = false;
     this.screenshotError = false;
     this.screenshotErrorReason = null;
     this.screenshotPreview = null;
+    this.screenshotByUser = false;
+    this.previewOpen = false;
     this.elementSelected = false;
     this.elementCapturing = false;
     this.elementError = false;
@@ -410,38 +359,17 @@ export class MushiWidget {
     this.lastSubmitQueuedOffline = false;
     this.lastSubmitFailureKind = undefined;
     this.lastSubmitScreenshotDropped = false;
-    this.viaFeatureRequest = false;
-    // A fresh session starts with a clean slate — drafts only need to
-    // survive re-renders WITHIN a session, not across open/close cycles.
-    this.clearFormDrafts();
-
-    if (options?.featureRequest) {
-      // External callers can deep-link straight into the feature-request
-      // shortcut, e.g. a "Suggest a feature" button on the marketing page.
-      this.selectedCategory = 'other';
-      this.selectedIntent = FEATURE_REQUEST_INTENT;
-      this.viaFeatureRequest = true;
-      this.step = 'details';
-    } else if (options?.category) {
-      const custom = this.resolveCustomCategory(options.category);
-      const builtIn = ['bug', 'slow', 'visual', 'confusing', 'other'] as const;
-      const isKnown =
-        (builtIn as readonly string[]).includes(options.category) || custom !== undefined;
-      if (!isKnown) {
-        this.selectedCategory = null;
-        this.selectedIntent = null;
-        this.step = 'category';
-      } else {
-        this.selectedCategory = options.category;
-        this.selectedIntent = null;
-        this.step = (custom && (!custom.intents || custom.intents.length === 0)) ? 'details' : 'intent';
-      }
-    } else {
-      this.selectedCategory = null;
-      this.selectedIntent = null;
-      this.step = 'category';
-    }
-
+    this.emailOptInOpen = false;
+    this.emailState = 'idle';
+    // Drafts only survive patches WITHIN a session.
+    this.drafts = {};
+    this.intent = null;
+    this.step = 'report';
+    const cat = options?.category;
+    const custom = cat ? this.resolveCustomCategory(cat) : undefined;
+    this.chip = options?.featureRequest ? 'idea' : custom ? cat! : cat && cat !== 'other' && BUILTIN.includes(cat) ? cat : null;
+    this.showAllCategories = Boolean(custom);
+    this.removeToast();
     this.render();
     this.callbacks.onOpen();
   }
@@ -452,31 +380,31 @@ export class MushiWidget {
     this.showAllCategories = false;
     this.showMoreNav = false;
     this.render();
+    this.restoreOpenerFocus();
     this.callbacks.onClose();
   }
 
-  /** Open the panel directly on the assistant ("Ask") tab. */
+  /** Open the panel directly on the assistant ("Ask") view. */
   openAssistantTab(): void {
     if (!this.callbacks.assistantEnabled) {
-      // Assistant disabled — fall back to opening the normal report flow so
-      // the call is never a silent no-op.
+      // Never a silent no-op: fall back to the report screen.
       this.open();
       return;
     }
-    if (!this.isOpen) {
-      this.isOpen = true;
-      this.callbacks.onOpen();
-    }
+    this.ensureOpen();
     this.step = 'assistant';
     this.assistantError = null;
     this.render();
-    // Focus the composer after paint.
-    setTimeout(() => {
-      this.shadow.querySelector<HTMLTextAreaElement>('.mushi-assistant-input')?.focus();
-    }, 0);
   }
 
-  /** Send one assistant turn and re-render as the reply streams back. */
+  private ensureOpen(): void {
+    if (this.isOpen) return;
+    this.rememberOpener();
+    this.isOpen = true;
+    this.callbacks.onOpen();
+  }
+
+  /** Send one assistant turn and re-render as the reply arrives. */
   async sendAssistantMessage(message: string): Promise<void> {
     const text = message.trim();
     if (!text || this.assistantSending || !this.callbacks.onAssistantAsk) return;
@@ -498,11 +426,10 @@ export class MushiWidget {
           });
         } else {
           const answerText = reply.text ?? '…';
-          const unsure = looksUnsureAssistantAnswer(answerText);
           this.assistantTurns.push({
             role: 'assistant',
             text: answerText,
-            ...(unsure ? { offerReport: true } : {}),
+            ...(looksUnsureAssistantAnswer(answerText) ? { offerReport: true } : {}),
           });
         }
         this.persistAssistantSession();
@@ -514,19 +441,13 @@ export class MushiWidget {
     } finally {
       this.assistantSending = false;
       this.render();
-      setTimeout(() => {
-        const log = this.shadow.querySelector<HTMLElement>('.mushi-assistant-log');
-        if (log) log.scrollTop = log.scrollHeight;
-      }, 0);
+      this.scroller.scrollTop = this.scroller.scrollHeight;
     }
   }
 
   /** Persist Ask turns for same-tab reload survival (UX only). */
   private persistAssistantSession(): void {
-    saveAssistantSession({
-      turns: this.assistantTurns,
-      threadId: this.assistantThreadId,
-    });
+    saveAssistantSession({ turns: this.assistantTurns, threadId: this.assistantThreadId });
   }
 
   /** Clear Ask transcript (e.g. host reset). Keeps Ask login-free. */
@@ -538,39 +459,16 @@ export class MushiWidget {
     if (this.step === 'assistant') this.render();
   }
 
-  /** Escape hatch from Ask → report category picker (no login required). */
-  private openReportFromAssistant(): void {
-    this.selectedCategory = null;
-    this.selectedIntent = null;
-    this.viaFeatureRequest = false;
-    this.step = 'category';
-    if (!this.isOpen) {
-      this.isOpen = true;
-      this.callbacks.onOpen();
-    }
-    this.render();
-  }
-
   /**
-   * Briefly highlight the trigger button (a soft pulse + tooltip) without
-   * opening the full reporter panel. Use for first-session welcome nudges
-   * and other "by the way, this exists" prompts where forcing the panel
-   * open would feel aggressive. Honours `position: 'none'` (no-op when
-   * the trigger button is hidden).
+   * Briefly highlight the trigger (a soft pulse) without opening the panel.
+   * No-op when the trigger isn't rendered.
    */
   pulseTrigger(): void {
     if (this.isOpen) return;
-    const trigger = this.shadow.querySelector<HTMLButtonElement>('.mushi-trigger');
-    // No-op if the trigger element is hidden (e.g. host app uses
-    // `triggerVisible: false` for a custom launcher); the pulse only
-    // makes sense when the user can actually see what we're highlighting.
+    const trigger = this.triggerEl;
     if (!trigger) return;
     trigger.classList.add('mushi-trigger-pulse');
-    // Auto-clear after the animation finishes so a subsequent pulse can
-    // restart it cleanly. Three pulses x 800ms = 2.4s total.
-    window.setTimeout(() => {
-      trigger.classList.remove('mushi-trigger-pulse');
-    }, 2400);
+    window.setTimeout(() => trigger.classList.remove('mushi-trigger-pulse'), 2400);
   }
 
   getIsOpen(): boolean {
@@ -609,15 +507,16 @@ export class MushiWidget {
 
   setScreenshotAttached(attached: boolean): void {
     this.screenshotAttached = attached;
-    // The capture attempt is over either way; a successful attach also
-    // clears any stale error state from a previous failed attempt.
+    // The capture attempt is over either way; success clears a stale error.
     this.screenshotCapturing = false;
     if (attached) {
       this.screenshotError = false;
       this.screenshotErrorReason = null;
+    } else {
+      this.screenshotPreview = null;
+      this.screenshotByUser = false;
+      this.previewOpen = false;
     }
-    // A detached screenshot has no preview to show.
-    if (!attached) this.screenshotPreview = null;
     if (this.isOpen) this.render();
   }
 
@@ -627,12 +526,7 @@ export class MushiWidget {
     if (this.isOpen) this.render();
   }
 
-  /**
-   * Resolve the privacy caption shown beside the screenshot preview from the
-   * `screenshotSensitiveHint` widget config (kept in sync via updateConfig, so
-   * it honours console/runtime config): `false` → hidden, a non-empty string →
-   * that copy, anything else (`true`/unset) → the localized default.
-   */
+  /** Privacy caption beside the preview: `false` hides it, a string replaces it, else the localized default. */
   private resolveScreenshotHint(): string | null {
     const v = this.config.screenshotSensitiveHint;
     if (v === false) return null;
@@ -647,19 +541,14 @@ export class MushiWidget {
 
   /** Show/hide the attachment tools based on what the SDK can actually do. */
   setCaptureAvailability(availability: { screenshot?: boolean; element?: boolean }): void {
-    const nextScreenshot = availability.screenshot ?? this.screenshotAvailable;
-    const nextElement = availability.element ?? this.elementAvailable;
-    if (nextScreenshot === this.screenshotAvailable && nextElement === this.elementAvailable) return;
-    this.screenshotAvailable = nextScreenshot;
-    this.elementAvailable = nextElement;
+    this.screenshotAvailable = availability.screenshot ?? this.screenshotAvailable;
+    this.elementAvailable = availability.element ?? this.elementAvailable;
     if (this.isOpen) this.render();
   }
 
   setElementSelected(selected: boolean): void {
     this.elementSelected = selected;
     this.elementCapturing = false;
-    // A successful selection also clears any stale error from a previous
-    // failed attempt, mirroring setScreenshotAttached.
     if (selected) this.elementError = false;
     this.removeSelectorHint();
     if (this.isOpen) this.render();
@@ -682,8 +571,7 @@ export class MushiWidget {
 
   /**
    * Flag (or clear) a failed capture. A call without a reason keeps the more
-   * specific one an earlier call recorded for the same attempt (the capture
-   * module reports 'taint'/'timeout' before the caller's generic failure).
+   * specific one an earlier call recorded for the same attempt.
    */
   setScreenshotError(failed: boolean, reason?: ScreenshotErrorReason): void {
     this.screenshotError = failed;
@@ -703,17 +591,13 @@ export class MushiWidget {
     if (this.isOpen) this.render();
   }
 
-  /** Hide the widget panel (but keep the host element) during element selection
-   *  so the user can click any element on the page without the panel
-   *  intercepting the event. */
+  /** Hide the panel (keep the host) during element selection so page clicks reach the page. */
   hidePanel(): void {
-    const panel = this.shadow.querySelector('.mushi-panel') as HTMLElement | null;
-    if (panel) panel.style.display = 'none';
+    this.panel.style.display = 'none';
   }
 
   showPanel(): void {
-    const panel = this.shadow.querySelector('.mushi-panel') as HTMLElement | null;
-    if (panel) panel.style.display = '';
+    this.panel.style.display = '';
   }
 
   private showSelectorHint(): void {
@@ -722,24 +606,7 @@ export class MushiWidget {
     hint.id = 'mushi-selector-hint';
     hint.setAttribute('role', 'status');
     hint.setAttribute('aria-live', 'polite');
-    hint.style.cssText = `
-      position: fixed;
-      bottom: 24px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 2147483646;
-      background: rgba(17,17,17,0.92);
-      color: #fff;
-      font-family: ui-monospace, SFMono-Regular, monospace;
-      font-size: 12px;
-      letter-spacing: 0.04em;
-      padding: 8px 16px;
-      border-radius: 20px;
-      pointer-events: none;
-      white-space: nowrap;
-      backdrop-filter: blur(4px);
-      box-shadow: 0 2px 12px rgba(0,0,0,0.35);
-    `;
+    hint.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:2147483646;background:rgba(17,17,17,.92);color:#fff;font:12px/1.4 system-ui,sans-serif;padding:8px 16px;border-radius:20px;pointer-events:none;white-space:nowrap;box-shadow:0 2px 12px rgba(0,0,0,.35)';
     hint.textContent = this.locale.step3.elementSelectorHint;
     document.body.appendChild(hint);
     this.selectorHint = hint;
@@ -750,58 +617,6 @@ export class MushiWidget {
     this.selectorHint = null;
     // Also remove any orphaned hints from previous sessions.
     document.getElementById('mushi-selector-hint')?.remove();
-  }
-
-  private showNudge(): void {
-    if (this.nudgeShown || this.nudgeEl) return;
-    this.nudgeShown = true;
-
-    // Find the trigger position to anchor the bubble.
-    const trigger = this.shadow.querySelector('.mushi-trigger') as HTMLElement | null;
-    const rect = trigger?.getBoundingClientRect();
-
-    const nudge = document.createElement('div');
-    nudge.id = 'mushi-nudge-bubble';
-    nudge.setAttribute('role', 'tooltip');
-    const isRight = this.config.position.includes('right');
-    nudge.style.cssText = `
-      position: fixed;
-      z-index: 2147483645;
-      ${rect
-        ? `bottom: ${window.innerHeight - rect.top + 8}px; ${isRight ? `right: ${window.innerWidth - rect.right}px;` : `left: ${rect.left}px;`}`
-        : 'bottom: 80px; right: 24px;'}
-      background: rgba(17,17,17,0.92);
-      color: #fff;
-      font-family: ui-sans-serif, system-ui, sans-serif;
-      font-size: 12px;
-      line-height: 1.4;
-      padding: 8px 12px;
-      border-radius: 8px;
-      max-width: 200px;
-      pointer-events: none;
-      backdrop-filter: blur(4px);
-      box-shadow: 0 2px 12px rgba(0,0,0,0.35);
-      animation: mushi-fade-in 0.15s ease forwards;
-    `;
-    nudge.textContent = this.locale.step3.tooShort.startsWith('A bit')
-      ? "Found a bug? One sentence is enough \uD83D\uDC1B"
-      : "\u30D0\u30B0\u3092\u898B\u3064\u3051\u305F\uFF1F\u4E00\u884C\u3067\u5927\u4E08\u592B\u3067\u3059 \uD83D\uDC1B";
-    document.body.appendChild(nudge);
-    this.nudgeEl = nudge;
-
-    // Auto-remove after 5s.
-    if (this.nudgeTimer !== null) clearTimeout(this.nudgeTimer);
-    this.nudgeTimer = setTimeout(() => this.removeNudge(), 5000);
-  }
-
-  private removeNudge(): void {
-    if (this.nudgeTimer !== null) {
-      clearTimeout(this.nudgeTimer);
-      this.nudgeTimer = null;
-    }
-    this.nudgeEl?.remove();
-    this.nudgeEl = null;
-    document.getElementById('mushi-nudge-bubble')?.remove();
   }
 
   setSdkFreshness(info: { latest: string | null; current: string; deprecated: boolean; message?: string | null }): void {
@@ -823,7 +638,16 @@ export class MushiWidget {
   setLeaderboard(entries: Array<{ display_name: string; tier_name: string | null; total_points: number; points_30d: number; }> | null, loading = false): void {
     this.leaderboardEntries = entries;
     this.leaderboardLoading = loading;
-    if (this.isOpen && this.step === 'leaderboard') this.render();
+    if (this.isOpen) this.render();
+  }
+
+  /**
+   * Which opt-in channels to offer (§4.1). The SDK passes the intersection of
+   * the host's `notifications` config and the server's configured channels.
+   */
+  setReporterChannels(channels: { email?: boolean; push?: boolean; emailPrefill?: string }): void {
+    this.channels = { email: Boolean(channels.email), push: Boolean(channels.push), emailPrefill: channels.emailPrefill ?? '' };
+    if (this.isOpen) this.render();
   }
 
   // ── Community public setters (called by mushi.ts after API calls) ──────────
@@ -842,18 +666,18 @@ export class MushiWidget {
   setGlobalLeaderboard(entries: MushiLeaderboardEntry[] | null, loading = false): void {
     this.globalLeaderboard = entries;
     this.globalLeaderboardLoading = loading;
-    if (this.isOpen && (this.step === 'leaderboard' || this.step === 'account')) this.render();
+    if (this.isOpen) this.render();
   }
 
   setCrossAppReports(reports: MushiCrossAppReport[] | null, loading = false): void {
     this.crossAppReports = reports;
     this.crossAppLoading = loading;
-    if (this.isOpen && this.step === 'cross-app-reports') this.render();
+    if (this.isOpen) this.render();
   }
 
   setTesterReputation(rep: MushiTesterReputation | null): void {
     this.testerReputation = rep;
-    if (this.isOpen && (this.step === 'account' || this.step === 'leaderboard')) this.render();
+    if (this.isOpen) this.render();
   }
 
   destroy(): void {
@@ -874,7 +698,7 @@ export class MushiWidget {
     this.attachedLaunchers.forEach((cleanup) => cleanup());
     this.attachedLaunchers = [];
     this.removeSelectorHint();
-    this.removeNudge();
+    this.removeToast();
     this.removeBodyNudge();
     this.host.remove();
   }
@@ -889,10 +713,8 @@ export class MushiWidget {
     this.onColorSchemeChange = () => {
       if (this.host.isConnected) this.render();
     };
-    // Embeddable SDK: some host environments (older browsers, non-standard
-    // matchMedia polyfills) return a MediaQueryList without the modern
-    // EventTarget API. Never let live-theme wiring throw on mount — fall back
-    // to the deprecated addListener, and skip silently if neither exists.
+    // Some hosts return a MediaQueryList without the EventTarget API — never
+    // let live-theme wiring throw on mount.
     if (typeof this.colorSchemeMq.addEventListener === 'function') {
       this.colorSchemeMq.addEventListener('change', this.onColorSchemeChange);
     } else if (typeof this.colorSchemeMq.addListener === 'function') {
@@ -914,16 +736,8 @@ export class MushiWidget {
 
   /* ── Host chrome contract ────────────────────────────────────────────────
      The host element must never create an invisible full-screen touch blocker.
-     We own these inline styles — consumer CSS can only win with `!important`,
-     which is explicitly banned by the SDK contract. Calling this at mount()
-     and after every zIndex update is the only safe invariant. */
-
-  /**
-   * Apply the SDK-owned pass-through layout to the host element so it is
-   * always zero-sized and click/touch-transparent. Only the shadow-root
-   * internals (`.mushi-trigger`, `.mushi-banner`, `.mushi-panel`) opt back
-   * into pointer events.  This is idempotent and safe to call repeatedly.
-   */
+     We own these inline styles; only the shadow internals opt back into
+     pointer events. Idempotent. */
   private syncHostChromeState(): void {
     const s = this.host.style;
     s.setProperty('position', 'fixed');
@@ -940,12 +754,7 @@ export class MushiWidget {
     s.setProperty('background', 'none');
   }
 
-  /**
-   * Returns true when a DOM element matching `hideOnSelector` is currently
-   * present in the host document.  Used by both the trigger and the banner
-   * so a single selector consistently hides ALL SDK-injected launcher
-   * surfaces.  Invalid selectors are swallowed silently (non-fatal).
-   */
+  /** True when an element matching `hideOnSelector` is in the host document (invalid selectors are ignored). */
   private isSuppressedByHost(): boolean {
     if (!this.config.hideOnSelector || typeof document === 'undefined') return false;
     try {
@@ -955,11 +764,7 @@ export class MushiWidget {
     }
   }
 
-  /**
-   * Returns a snapshot of the widget's host-layer health for use in
-   * `Mushi.diagnose()`.  Callers check this to know whether the widget
-   * could ever block host-app UI without opening a browser devtools.
-   */
+  /** Host-layer health snapshot for `Mushi.diagnose()`. */
   getWidgetDiagnostics(): {
     widgetHostPointerSafe: boolean;
     widgetHostBounds: { width: number; height: number } | null;
@@ -971,21 +776,16 @@ export class MushiWidget {
       s.pointerEvents === 'none' &&
       (s.width === '0' || s.width === '0px') &&
       (s.height === '0' || s.height === '0px');
-
     const widgetHostBounds = this.host.isConnected
       ? { width: this.host.offsetWidth, height: this.host.offsetHeight }
       : null;
-
-    const widgetSuppressed =
-      this.isSuppressedByHost() || this.isRouteHidden() || !this.triggerVisible;
-
+    const widgetSuppressed = this.isSuppressedByHost() || this.isRouteHidden() || !this.triggerVisible;
     const bannerRendered =
       this.config.trigger === 'banner' &&
       !this.bannerDismissed &&
       !this.isSuppressedByHost() &&
       !this.isRouteHidden() &&
       this.triggerVisible;
-
     return { widgetHostPointerSafe, widgetHostBounds, widgetSuppressed, bannerRendered };
   }
 
@@ -1010,11 +810,8 @@ export class MushiWidget {
     if (!smart.onScroll) return;
 
     const onScroll = () => {
-      if (smart.onScroll === 'hide') {
-        this.triggerHiddenByScroll = true;
-      } else {
-        this.triggerShrunk = true;
-      }
+      if (smart.onScroll === 'hide') this.triggerHiddenByScroll = true;
+      else this.triggerShrunk = true;
       this.render();
       if (this.smartHideTimer !== null) clearTimeout(this.smartHideTimer);
       this.smartHideTimer = setTimeout(() => {
@@ -1053,11 +850,9 @@ export class MushiWidget {
 
   private applyBodyNudge(position: 'top' | 'bottom', heightPx = MushiWidget.BANNER_HEIGHT): void {
     const h = `${heightPx}px`;
-    // Always update the CSS custom property so apps reading --mushi-banner-offset get the correct value.
     document.documentElement.style.setProperty(MushiWidget.BODY_NUDGE_PROP, h);
     if (position === 'top') {
       if (document.body.dataset.mushiBannerNudged === 'top') {
-        // We already own the padding — update it to the newly measured height.
         document.body.style.paddingTop = h;
       } else if (!document.body.style.paddingTop) {
         document.body.style.paddingTop = h;
@@ -1073,12 +868,7 @@ export class MushiWidget {
     }
   }
 
-  /**
-   * Schedule a height measurement after the next paint and set up a ResizeObserver
-   * so --mushi-banner-offset always tracks the actual rendered banner height
-   * (which can exceed BANNER_HEIGHT when safe-area-inset-top is in play on iOS,
-   * or when rich-layout text wraps on narrow viewports).
-   */
+  /** Track the real banner height (safe-area insets, wrapped text) into --mushi-banner-offset. */
   private trackBannerHeight(banner: HTMLElement, position: 'top' | 'bottom'): void {
     const update = () => {
       const h = banner.getBoundingClientRect().height;
@@ -1105,25 +895,40 @@ export class MushiWidget {
     }
   }
 
+  /** Rebuild the banner only when something it shows changed. */
+  private syncBanner(): void {
+    const key = JSON.stringify([
+      this.config.trigger, this.bannerDismissed, this.triggerVisible, this.isRouteHidden(),
+      this.isSuppressedByHost(), this.config.bannerConfig, this.config.zIndex, this.lang,
+    ]);
+    if (key === this.bannerKey && (this.bannerEl?.isConnected ?? true)) return;
+    this.bannerKey = key;
+    this.bannerEl?.remove();
+    this.bannerEl = null;
+    this.bannerResizeObserver?.disconnect();
+    this.bannerResizeObserver = null;
+    this.renderBanner();
+  }
+
   private renderBanner(): void {
     if (this.config.trigger !== 'banner') return;
-    if (this.bannerDismissed) { this.removeBodyNudge(); return; }
-    // Clear nudge before early returns so sdk.hide() / route suppression don't
-    // leave the host page with permanent padding-top/bottom.
-    if (!this.triggerVisible) { this.removeBodyNudge(); return; }
-    if (this.isRouteHidden()) { this.removeBodyNudge(); return; }
-    // hideOnSelector must suppress the banner too — the trigger check already
-    // uses isSuppressedByHost(), so this keeps both surfaces in sync.
-    if (this.isSuppressedByHost()) { this.removeBodyNudge(); return; }
+    // Clear the nudge on every suppression path so hide() / route rules never
+    // leave the host page with permanent padding.
+    if (this.bannerDismissed || !this.triggerVisible || this.isRouteHidden() || this.isSuppressedByHost()) {
+      this.removeBodyNudge();
+      return;
+    }
 
     const bc = this.config.bannerConfig ?? {};
-    const variant  = bc.variant  ?? 'brand';
+    // `subtle` is the default (Plan 018 §1.4); `brand` and `neon` stay opt-in.
+    const variant  = bc.variant  ?? 'subtle';
     const position = bc.position ?? 'top';
     const message  = bc.message?.trim() ?? '';
     const richLayout = message.length > 0;
     const bugLabel = bc.bugCta   ?? '🐛 Report a bug';
     const showFeat = bc.featureCta !== false;
     const featLabel = bc.featureCtaLabel ?? 'Request feature';
+    const myReports = `📬 ${this.locale.panel.yourReports}`;
     const zIdx = bc.zIndex ?? (this.config.zIndex ?? 99999) - 1;
 
     const banner = document.createElement('div');
@@ -1144,7 +949,6 @@ export class MushiWidget {
     if (richLayout) {
       const body = document.createElement('div');
       body.className = 'mushi-banner-body';
-
       const labelText = bc.label === false ? null : (bc.label ?? 'Beta');
       if (labelText) {
         const pill = document.createElement('span');
@@ -1152,7 +956,6 @@ export class MushiWidget {
         pill.textContent = labelText;
         body.appendChild(pill);
       }
-
       const msg = document.createElement('span');
       msg.className = 'mushi-banner-message';
       msg.textContent = message;
@@ -1172,7 +975,6 @@ export class MushiWidget {
         sep.textContent = '|';
         nav.appendChild(sep);
       };
-
       const appendAction = (label: string, onClick: () => void, extra = false) => {
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -1187,12 +989,11 @@ export class MushiWidget {
         appendDivider(true);
         appendAction(featLabel, () => this.open({ featureRequest: true }), true);
       }
-
-      for (const link of bc.links ?? []) {        const linkLabel = link.label?.trim();
+      for (const link of bc.links ?? []) {
+        const linkLabel = link.label?.trim();
         if (!linkLabel) continue;
-        // Defense-in-depth: only http(s) and same-origin paths may render as
-        // anchors. If banner links ever become remotely configurable, a
-        // `javascript:` href here would be stored XSS in every embedding site.
+        // Only http(s) and same-origin paths render as anchors: a `javascript:`
+        // href here would be stored XSS in every embedding site.
         const href = link.href && (/^https?:\/\//i.test(link.href) || link.href.startsWith('/'))
           ? link.href
           : undefined;
@@ -1212,17 +1013,10 @@ export class MushiWidget {
           }, true);
         }
       }
-
-      // Always show "My reports" as the last extra action — lets reporters
-      // check their submission history and admin replies without opening a
-      // fresh report form.
       appendDivider(true);
-      appendAction('📬 My reports', () => this.openReporter(), true);
-
+      appendAction(myReports, () => this.openReporter(), true);
       banner.appendChild(nav);
-      // Dismiss lives OUTSIDE the actions <nav>: it isn't navigation, and as
-      // a direct flex child of the banner it can't be clipped off-screen when
-      // the action row overflows on narrow viewports.
+      // Dismiss sits outside the actions <nav> so overflow can't clip it.
       banner.appendChild(dismissBtn);
     } else {
       const bugBtn = document.createElement('button');
@@ -1241,20 +1035,15 @@ export class MushiWidget {
 
       const myReportsBtn = document.createElement('button');
       myReportsBtn.className = 'mushi-banner-my-reports';
-      myReportsBtn.textContent = '📬 My reports';
-      myReportsBtn.setAttribute('aria-label', 'View my submitted reports');
+      myReportsBtn.textContent = myReports;
       myReportsBtn.addEventListener('click', () => this.openReporter());
       banner.appendChild(myReportsBtn);
-
       banner.appendChild(dismissBtn);
     }
 
-    this.shadow.appendChild(banner);
-
-    // Apply body nudge immediately with the fallback height so host content
-    // shifts down on the very first paint, then re-measure after layout so
-    // --mushi-banner-offset reflects the actual rendered height (including
-    // env(safe-area-inset-top) on iOS and text-wrap on narrow viewports).
+    this.shadow.insertBefore(banner, this.panel);
+    this.bannerEl = banner;
+    // Nudge with the fallback height on the first paint, then re-measure.
     this.applyBodyNudge(position);
     this.trackBannerHeight(banner, position);
   }
@@ -1292,17 +1081,14 @@ export class MushiWidget {
     const t = this.config.theme;
     if (t === 'light' || t === 'dark') return t;
     if (t === 'inherit') {
-      // 1. Check <html> color-scheme attribute / computed style
       const root = document.documentElement;
       const colorScheme = root.getAttribute('data-color-scheme') ||
         root.getAttribute('data-theme') ||
         root.getAttribute('color-scheme') || '';
       if (/dark/i.test(colorScheme)) return 'dark';
       if (/light/i.test(colorScheme)) return 'light';
-      // 2. Check <html> class
       if (root.classList.contains('dark')) return 'dark';
       if (root.classList.contains('light')) return 'light';
-      // 3. Check computed background luminance
       try {
         const bg = getComputedStyle(root).backgroundColor;
         const m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
@@ -1311,94 +1097,129 @@ export class MushiWidget {
           return L < 128 ? 'dark' : 'light';
         }
       } catch { /* ignore */ }
-      // 4. Fallback to OS preference
     }
-    // 'auto' or unresolved 'inherit'
-    if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)')?.matches) {
       return 'dark';
     }
     return 'light';
   }
 
-  /** Snapshot in-progress form input from the live DOM before teardown. */
-  private captureFormDrafts(): void {
-    const desc = this.shadow.querySelector(
-      'textarea.mushi-textarea:not([data-role="reporter-reply"])',
-    ) as HTMLTextAreaElement | null;
-    const email = this.shadow.querySelector('[data-role="magic-link-email"]') as HTMLInputElement | null;
-    const reply = this.shadow.querySelector(
-      'textarea[data-role="reporter-reply"]',
-    ) as HTMLTextAreaElement | null;
+  /** Parse any CSS colour the browser understands into [r, g, b] (null when it can't). */
+  private probeRgb(color: string): [number, number, number] | null {
+    const s = this.host.style;
+    const prev = s.color;
+    s.color = color;
+    const m = (this.host.isConnected ? getComputedStyle(this.host).color : s.color).match(/(\d+(?:\.\d+)?)[ ,]+(\d+(?:\.\d+)?)[ ,]+(\d+(?:\.\d+)?)/);
+    s.color = prev;
+    return m ? [+m[1], +m[2], +m[3]] : null;
+  }
 
-    if (desc) this.draftDescription = desc.value;
-    if (email) this.draftEmail = email.value;
-    if (reply) this.draftReply = reply.value;
+  /**
+   * Accent resolution (Plan 018 §1.4, first match wins): `widget.accent` →
+   * the host's `--mushi-accent` on :root → `accent-color` of <html> →
+   * `<meta name="theme-color">` → the foreground ink (''). Page-sourced values
+   * must parse as a colour and keep 3:1 against the panel background, or the
+   * Send button could vanish into a page-coloured accent.
+   */
+  private resolveAccent(dark: boolean): { accent: string; accentFg: string } {
+    const config = safeCssColor(this.config.accent ?? '');
+    const candidates: string[] = [];
+    if (!config && typeof document !== 'undefined') {
+      try {
+        const rootStyle = getComputedStyle(document.documentElement);
+        candidates.push(rootStyle.getPropertyValue('--mushi-accent').trim());
+        const ac = rootStyle.getPropertyValue('accent-color').trim();
+        if (ac && ac !== 'auto') candidates.push(ac);
+      } catch { /* detached / no layout */ }
+      candidates.push(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')?.trim() ?? '');
+    }
+    const bg: [number, number, number] = dark ? [18, 18, 18] : [255, 255, 255];
+    let accent = config;
+    for (const c of candidates) {
+      if (accent) break;
+      const safe = safeCssColor(c);
+      const rgb = safe ? this.probeRgb(safe) : null;
+      if (rgb && contrastingInk(rgb, bg).ratio >= 3) accent = safe;
+    }
+    if (!accent) return { accent: '', accentFg: '' };
+    const rgb = this.probeRgb(accent);
+    return { accent, accentFg: safeCssColor(this.config.accentText ?? '') || (rgb ? contrastingInk(rgb).ink : '') };
+  }
 
-    const active = this.shadow.activeElement;
-    this.draftFocus =
-      active && active === desc
-        ? 'description'
-        : active && active === email
-          ? 'email'
-          : active && active === reply
-            ? 'reply'
-            : null;
-    if (this.draftFocus && active) {
-      const el = active as HTMLTextAreaElement | HTMLInputElement;
-      this.draftSelStart = el.selectionStart ?? el.value.length;
-      this.draftSelEnd = el.selectionEnd ?? el.value.length;
+  /** Style + banner + trigger. Each rebuilds only when its inputs changed. */
+  private syncChrome(): void {
+    const theme = this.getTheme();
+    const { accent, accentFg } = this.resolveAccent(theme === 'dark');
+    const styleKey = `${theme}|${accent}|${accentFg}`;
+    if (styleKey !== this.styleKey) {
+      this.styleKey = styleKey;
+      this.styleEl.textContent = getWidgetStyles(theme, accent, accentFg);
+    }
+    this.syncBanner();
+    this.syncTrigger();
+  }
+
+  private syncTrigger(): void {
+    const show = this.shouldRenderTrigger();
+    const pos = this.config.position;
+    const effective = show ? this.effectiveTrigger() : '';
+    const key = JSON.stringify([show, effective, pos, this.triggerShrunk, this.config.triggerText, this.config.zIndex, this.config.draggable, this.lang]);
+    if (key !== this.triggerKey || (show && !this.triggerEl?.isConnected)) {
+      this.triggerKey = key;
+      this.triggerEl?.remove();
+      this.triggerEl = show ? this.buildTrigger(effective) : null;
+    }
+    if (this.triggerEl) {
+      this.triggerEl.setAttribute('aria-expanded', String(this.isOpen));
+      this.applyInsetVars(this.triggerEl);
     }
   }
 
-  /** Replay captured drafts (value + focus + caret) into a freshly built panel. */
-  private restoreFormDrafts(panel: HTMLElement): void {
-    const fields: Array<{
-      selector: string;
-      value: string;
-      key: 'description' | 'email' | 'reply';
-    }> = [
-      {
-        selector: 'textarea.mushi-textarea:not([data-role="reporter-reply"])',
-        value: this.draftDescription,
-        key: 'description',
-      },
-      { selector: '[data-role="magic-link-email"]', value: this.draftEmail, key: 'email' },
-      { selector: 'textarea[data-role="reporter-reply"]', value: this.draftReply, key: 'reply' },
-    ];
-    for (const field of fields) {
-      const el = panel.querySelector(field.selector) as HTMLTextAreaElement | HTMLInputElement | null;
-      if (!el) continue;
-      if (field.value && el.value !== field.value) {
-        el.value = field.value;
-        // Re-fire input so dependent UI (char counter) reflects the restored text.
-        el.dispatchEvent(new Event('input'));
+  private buildTrigger(effective: string): HTMLButtonElement {
+    const trigger = document.createElement('button');
+    trigger.className = `mushi-trigger ${this.config.position}${effective === 'edge-tab' ? ' edge-tab' : ''}${this.triggerShrunk ? ' shrunk' : ''}`;
+    trigger.textContent = this.config.triggerText;
+    trigger.setAttribute('aria-label', this.locale.widget.trigger);
+    trigger.setAttribute('aria-haspopup', 'dialog');
+    trigger.style.zIndex = String(this.config.zIndex);
+    trigger.addEventListener('click', () => {
+      if (this.isOpen) this.close();
+      else this.open();
+    });
+    // Keyboard nudge for a draggable FAB.
+    trigger.addEventListener('keydown', (e) => {
+      const draggableConfig = this.config.draggable;
+      if (!draggableConfig) return;
+      const STEP = 8;
+      const axis = typeof draggableConfig === 'object' ? (draggableConfig.axis ?? 'both') : 'both';
+      let dx = 0, dy = 0;
+      if (axis !== 'y') {
+        if (e.key === 'ArrowLeft') dx = -STEP;
+        else if (e.key === 'ArrowRight') dx = STEP;
       }
-      if (this.draftFocus === field.key) {
-        // trapFocus() focuses its default target inside a rAF; schedule the
-        // restore in a later rAF (registration order is preserved) so the
-        // reporter's caret wins over the default focus target.
-        const applyFocus = () => {
-          el.focus();
-          try {
-            el.setSelectionRange(this.draftSelStart, this.draftSelEnd);
-          } catch {
-            // Some input types reject setSelectionRange — focus alone is fine.
-          }
-        };
-        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(applyFocus);
-        else applyFocus();
+      if (axis !== 'x') {
+        if (e.key === 'ArrowUp') dy = -STEP;
+        else if (e.key === 'ArrowDown') dy = STEP;
       }
+      if (dx !== 0 || dy !== 0) {
+        e.preventDefault();
+        const cur = this.fabPos ?? { x: 0, y: 0 };
+        this.moveFab(trigger, cur.x + dx, cur.y + dy, false);
+      }
+    });
+    if (this.config.draggable) this.attachDragHandlers(trigger);
+    this.shadow.insertBefore(trigger, this.panel);
+    // Apply a persisted drag position once the trigger is in the DOM, measured
+    // from its natural CSS position (moveFab re-sets fabPos, clamped).
+    if (this.fabPos && this.config.draggable) {
+      const savedPos = this.fabPos;
+      this.fabPos = { x: 0, y: 0 };
+      this.moveFab(trigger, savedPos.x, savedPos.y, false);
     }
+    return trigger;
   }
 
-  private clearFormDrafts(): void {
-    this.draftDescription = '';
-    this.draftEmail = '';
-    this.draftReply = '';
-    this.draftFocus = null;
-    this.draftSelStart = 0;
-    this.draftSelEnd = 0;
-  }
+  // ─── Rendering ─────────────────────────────────────────────────────
 
   private render(): void {
     if (this.isOpen && this.pointerDownAt !== null && Date.now() - this.pointerDownAt < 2000) {
@@ -1408,131 +1229,113 @@ export class MushiWidget {
       return;
     }
     this.renderDeferred = false;
-    const theme = this.getTheme();
-    const pos = this.config.position;
-    const t = this.locale;
+    this.syncChrome();
+    this.renderPanel();
+  }
 
-    if (this.isOpen) this.captureFormDrafts();
-    this.bannerResizeObserver?.disconnect();
-    this.bannerResizeObserver = null;
-    this.shadow.innerHTML = '';
-
-    const style = document.createElement('style');
-    style.textContent = getWidgetStyles(theme, this.config.accent ?? '', this.config.accentText ?? '');
-    this.shadow.appendChild(style);
-
-    this.renderBanner();
-
-    if (this.shouldRenderTrigger()) {
-      const effectiveTrigger = this.effectiveTrigger();
-      const trigger = document.createElement('button');
-      trigger.className = `mushi-trigger ${pos}${effectiveTrigger === 'edge-tab' ? ' edge-tab' : ''}${this.triggerShrunk ? ' shrunk' : ''}`;
-      trigger.textContent = this.config.triggerText;
-      trigger.setAttribute('aria-label', t.widget.trigger);
-      trigger.setAttribute('aria-haspopup', 'dialog');
-      trigger.setAttribute('aria-expanded', String(this.isOpen));
-      trigger.style.zIndex = String(this.config.zIndex);
-      this.applyInsetVars(trigger);
-
-      trigger.addEventListener('click', () => {
-        this.removeNudge();
-        if (this.isOpen) this.close();
-        else this.open();
-      });
-      trigger.addEventListener('mouseenter', () => {
-        const onPageMs = this.mountedAt ? Date.now() - this.mountedAt : 0;
-        if (!this.nudgeShown && !this.isOpen && onPageMs >= 30_000) {
-          this.showNudge();
-        }
-      });
-      trigger.addEventListener('mouseleave', () => {
-        // Keep for 2s after hover ends so the user can read it.
-        if (this.nudgeEl) {
-          if (this.nudgeTimer !== null) clearTimeout(this.nudgeTimer);
-          this.nudgeTimer = setTimeout(() => this.removeNudge(), 2000);
-        }
-      });
-
-      // Keyboard arrow-key nudge for a11y
-      trigger.addEventListener('keydown', (e) => {
-        const draggableConfig = this.config.draggable;
-        if (!draggableConfig) return;
-        const STEP = 8;
-        const axis = typeof draggableConfig === 'object' ? (draggableConfig.axis ?? 'both') : 'both';
-        let dx = 0, dy = 0;
-        if (axis !== 'y') {
-          if (e.key === 'ArrowLeft') dx = -STEP;
-          else if (e.key === 'ArrowRight') dx = STEP;
-        }
-        if (axis !== 'x') {
-          if (e.key === 'ArrowUp') dy = -STEP;
-          else if (e.key === 'ArrowDown') dy = STEP;
-        }
-        if (dx !== 0 || dy !== 0) {
-          e.preventDefault();
-          const cur = this.fabPos ?? { x: 0, y: 0 };
-          this.moveFab(trigger, cur.x + dx, cur.y + dy, false);
-        }
-      });
-
-      if (this.config.draggable) {
-        this.attachDragHandlers(trigger);
-      }
-
-      this.shadow.appendChild(trigger);
-      // Apply persisted drag position AFTER trigger is in the DOM so
-      // getBoundingClientRect() returns correct bounds and the position
-      // is clamped to the current viewport (stored positions from different
-      // viewport sizes are auto-corrected on first render).
-      // IMPORTANT: temporarily zero out this.fabPos so moveFab's baseLeft
-      // derivation treats the trigger as starting from its natural CSS position
-      // (no offset applied yet).  moveFab will re-set this.fabPos to the
-      // clamped value before returning.
-      if (this.fabPos && this.config.draggable) {
-        const savedPos = this.fabPos;
-        this.fabPos = { x: 0, y: 0 };
-        this.moveFab(trigger, savedPos.x, savedPos.y, false);
-      }
-    }
-
-    const panel = document.createElement('div');
-    panel.className = `mushi-panel ${pos}${this.isOpen ? ' open' : ' closed'}`;
-    panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-modal', 'true');
-    panel.setAttribute('aria-label', t.widget.title);
+  private renderPanel(): void {
+    const panel = this.panel;
+    panel.className = `mushi-panel ${this.config.position}${this.isOpen ? ' open' : ' closed'}`;
     panel.style.zIndex = String(this.config.zIndex + 1);
     this.applyInsetVars(panel);
-
-    if (this.isOpen) {
-      const ctx = this.renderCtx();
-      panel.innerHTML = `${renderOutdatedBanner(ctx)}${renderStep(ctx)}${renderBrandFooter(ctx)}`;
-      this.shadow.appendChild(panel);
-      panel.addEventListener('pointerdown', () => { this.pointerDownAt = Date.now(); });
-      this.attachHandlers(panel);
-      // First render with the mark visible → one impression per instance.
-      if (!this.brandImpressionSent && this.config.brandFooter === true) {
-        this.brandImpressionSent = true;
-        this.callbacks.onBrandFooterImpression?.();
+    if (!this.isOpen) {
+      if (this.renderedStep !== null) {
+        for (const r of REGIONS) this.regionEls[r].innerHTML = '';
+        this.regionHtml = {};
+        this.renderedStep = null;
+        this.teardownViewportHandlers();
       }
-      // After trapFocus so a preserved caret position beats the default
-      // "focus the first field" behavior.
-      this.trapFocus(panel);
-      this.restoreFormDrafts(panel);
-      this.attachViewportHandlers(panel);
-    } else {
-      this.teardownViewportHandlers();
+      return;
+    }
+    const ctx = this.renderCtx();
+    const view = renderView(ctx);
+    const next: Record<Region, string> = {
+      notice: renderOutdatedBanner(ctx),
+      header: view.header,
+      lead: view.lead,
+      body: view.body,
+      footer: view.footer,
+      brand: renderBrandFooter(ctx),
+    };
+    const viewChanged = this.renderedStep !== this.step;
+    const opening = this.renderedStep === null;
+    // Snapshot what the reporter is doing before any node goes away.
+    const active = this.shadow.activeElement as HTMLElement | null;
+    const activeKey = active ? focusKey(active) : null;
+    this.captureFormDrafts();
+    let patched = false;
+    for (const r of REGIONS) {
+      if (this.regionHtml[r] === next[r]) continue;
+      this.regionHtml[r] = next[r];
+      this.regionEls[r].innerHTML = next[r];
+      patched = true;
+    }
+    this.renderedStep = this.step;
+    if (patched) {
+      bindFaviconFallbacks(panel);
+      this.restoreFormDrafts();
+    }
+    if (viewChanged) {
+      this.scroller.scrollTop = 0;
+      if (!opening) {
+        // Cross-fade between surfaces (CSS honours reduced motion).
+        panel.classList.remove('mushi-swap');
+        void panel.offsetWidth;
+        panel.classList.add('mushi-swap');
+      }
+      this.focusView();
+    } else if (active && !active.isConnected && activeKey) {
+      // A patch replaced the focused control: put focus on its replacement.
+      (panel.querySelector<HTMLElement>(activeKey))?.focus();
+    }
+    if (opening) this.attachViewportHandlers(panel);
+    if (!this.brandImpressionSent && this.config.brandFooter === true) {
+      this.brandImpressionSent = true;
+      this.callbacks.onBrandFooterImpression?.();
     }
   }
 
-  /**
-   * Queries each `avoidSelectors` element in the host document and returns
-   * the minimum top-offset in px so that a top-anchored element clears all
-   * of them by `gap` pixels. Returns `null` when no selectors are provided
-   * or no matching elements have a non-zero bounding rect.
-   *
-   * Runs in the host document (not shadow DOM) so it can reach fixed headers,
-   * sticky nav bars, and sign-in CTAs.
-   */
+  /** On a new surface: the report textarea, else the title, so screen readers announce where they are. */
+  private focusView(): void {
+    const target = this.panel.querySelector<HTMLElement>('[data-role="description"]')
+      ?? this.panel.querySelector<HTMLElement>('#mushi-title');
+    if (!target) return;
+    if (target.id === 'mushi-title') target.tabIndex = -1;
+    target.focus({ preventScroll: true });
+  }
+
+  /** Snapshot field values + caret from the live DOM before a patch. */
+  private captureFormDrafts(): void {
+    for (const role of FIELDS) {
+      const el = this.panel.querySelector<HTMLTextAreaElement | HTMLInputElement>(`[data-role="${role}"]`);
+      if (el) this.drafts[role] = el.value;
+    }
+    const active = this.shadow.activeElement as HTMLTextAreaElement | null;
+    const role = active?.dataset?.role;
+    if (role && (FIELDS as readonly string[]).includes(role)) {
+      this.drafts._focus = role;
+      this.drafts._sel = `${active!.selectionStart ?? 0},${active!.selectionEnd ?? 0}`;
+    } else {
+      delete this.drafts._focus;
+    }
+  }
+
+  /** Replay values (and focus + caret) into fields a patch just created. */
+  private restoreFormDrafts(): void {
+    for (const role of FIELDS) {
+      const el = this.panel.querySelector<HTMLTextAreaElement | HTMLInputElement>(`[data-role="${role}"]`);
+      const value = this.drafts[role];
+      if (!el || !value || el.value === value) continue;
+      el.value = value;
+      if (this.drafts._focus === role && this.shadow.activeElement !== el) {
+        el.focus();
+        const [a, b] = (this.drafts._sel ?? '').split(',').map(Number);
+        try { el.setSelectionRange(a, b); } catch { /* some inputs reject it */ }
+      }
+    }
+  }
+
+  /** Queries `avoidSelectors` and returns a top offset clearing all of them, or null. */
   private computeAvoidTopPx(gap = 8): number | null {
     const sels = this.config.avoidSelectors;
     if (!sels?.length) return null;
@@ -1542,19 +1345,13 @@ export class MushiWidget {
         const el = document.querySelector(sel);
         if (!el) continue;
         const r = el.getBoundingClientRect();
-        // Only consider elements that are actually rendered (non-zero area)
-        if (r.bottom > maxBottom && r.width > 0 && r.height > 0) {
-          maxBottom = r.bottom;
-        }
+        if (r.bottom > maxBottom && r.width > 0 && r.height > 0) maxBottom = r.bottom;
       } catch { /* invalid selector — skip silently */ }
     }
     return maxBottom > 0 ? Math.ceil(maxBottom) + gap : null;
   }
 
-  /**
-   * Minimum bottom-offset in px so a bottom-anchored trigger clears avoided
-   * elements (tab bars, fixed CTAs). Mirrors {@link computeAvoidTopPx}.
-   */
+  /** Bottom offset so a bottom-anchored trigger clears avoided elements (tab bars, fixed CTAs). */
   private computeAvoidBottomPx(gap = 8): number | null {
     const sels = this.config.avoidSelectors;
     if (!sels?.length) return null;
@@ -1580,7 +1377,6 @@ export class MushiWidget {
         const value = anchor[edge];
         if (value !== undefined) el.style.setProperty(`--mushi-${edge}`, value);
       });
-      el.style.setProperty('--mushi-safe-area', this.config.respectSafeArea ? '1' : '0');
     } else {
       const { inset } = this.config;
       if (!this.config.respectSafeArea) {
@@ -1593,30 +1389,19 @@ export class MushiWidget {
         if (value === undefined) return;
         el.style.setProperty(`--mushi-${edge}`, value === 'auto' ? 'auto' : `${value}px`);
       });
-      el.style.setProperty('--mushi-safe-area', this.config.respectSafeArea ? '1' : '0');
     }
+    el.style.setProperty('--mushi-safe-area', this.config.respectSafeArea ? '1' : '0');
 
-    // Override --mushi-top with measured clearance when avoidSelectors is set.
-    // This runs after anchor/inset so it always wins when an avoided element is present.
-    // Only applies when the element is top-anchored (top CSS var or top-* position class).
-    const isTopAnchored =
-      anchor?.top !== undefined ||
-      this.config.position?.startsWith('top');
-    const isBottomAnchored =
-      anchor?.bottom !== undefined ||
-      this.config.position?.startsWith('bottom') ||
-      !this.config.position;
+    // Measured clearance from avoidSelectors always wins on the anchored edge.
+    const isTopAnchored = anchor?.top !== undefined || this.config.position?.startsWith('top');
+    const isBottomAnchored = anchor?.bottom !== undefined || this.config.position?.startsWith('bottom') || !this.config.position;
     if (isTopAnchored) {
       const avoidPx = this.computeAvoidTopPx();
-      if (avoidPx !== null) {
-        el.style.setProperty('--mushi-top', `${avoidPx}px`);
-      }
+      if (avoidPx !== null) el.style.setProperty('--mushi-top', `${avoidPx}px`);
     }
     if (isBottomAnchored) {
       const avoidBottomPx = this.computeAvoidBottomPx();
-      if (avoidBottomPx !== null) {
-        el.style.setProperty('--mushi-bottom', `${avoidBottomPx}px`);
-      }
+      if (avoidBottomPx !== null) el.style.setProperty('--mushi-bottom', `${avoidBottomPx}px`);
     }
   }
 
@@ -1628,59 +1413,41 @@ export class MushiWidget {
     return `mushi_fab_pos${id ? `_${id}` : ''}`;
   }
 
-  /** Move the FAB to the given translated offset (relative to the inset origin),
-   *  clamping inside viewport safe area, and optionally snap to nearest edge.
-   *
-   *  The FAB's CSS anchor can be any corner (bottom-right, bottom-left, …) so we
-   *  must derive the *base* position (CSS anchor with zero drag offset) to compute
-   *  correct clamp bounds and snap targets.  We do this by subtracting the
-   *  already-applied drag offset from the live getBoundingClientRect() value. */
+  /**
+   * Move the FAB to a translated offset (relative to its CSS anchor), clamped
+   * inside the viewport safe area, optionally snapping to the nearest edge.
+   * The base position is derived by subtracting the applied drag offset.
+   */
   private moveFab(trigger: HTMLElement, x: number, y: number, snap: boolean): void {
-    const axis = (() => {
-      const d = this.config.draggable;
-      if (!d) return 'both';
-      return typeof d === 'object' ? (d.axis ?? 'both') : 'both';
-    })();
-
+    const d = this.config.draggable;
+    const axis = d && typeof d === 'object' ? (d.axis ?? 'both') : 'both';
     const W = window.innerWidth;
     const H = window.innerHeight;
     const btnW = trigger.offsetWidth || 52;
     const btnH = trigger.offsetHeight || 52;
-    const safeL = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sai-left') || '0') || 0;
-    const safeR = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sai-right') || '0') || 0;
-    const safeT = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sai-top') || '0') || 0;
-    const safeB = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sai-bottom') || '0') || 0;
+    const rootStyle = getComputedStyle(document.documentElement);
+    const sai = (side: string) => parseInt(rootStyle.getPropertyValue(`--sai-${side}`) || '0') || 0;
+    const safeL = sai('left');
+    const safeR = sai('right');
+    const safeT = sai('top');
+    const safeB = sai('bottom');
     const margin = 8;
 
-    // Derive the CSS base position (without drag offset) so bounds / snap are
-    // correct regardless of which corner the FAB is anchored to.
     const rect = trigger.getBoundingClientRect();
-    const prevDragX = this.fabPos?.x ?? 0;
-    const prevDragY = this.fabPos?.y ?? 0;
-    const baseLeft = rect.left - prevDragX;
-    const baseTop  = rect.top  - prevDragY;
-
-    // Clamp so button stays within the viewport safe-area on all four sides.
+    const baseLeft = rect.left - (this.fabPos?.x ?? 0);
+    const baseTop = rect.top - (this.fabPos?.y ?? 0);
     const minX = (safeL + margin) - baseLeft;
     const maxX = (W - safeR - margin - btnW) - baseLeft;
     const minY = (safeT + margin) - baseTop;
     const maxY = (H - safeB - margin - btnH) - baseTop;
-
-    const newX = axis === 'y' ? 0 : Math.max(minX, Math.min(maxX, x));
     const newY = axis === 'x' ? 0 : Math.max(minY, Math.min(maxY, y));
-
-    // Optional snap: snap FAB to the nearest left or right edge
-    let finalX = newX;
+    let finalX = axis === 'y' ? 0 : Math.max(minX, Math.min(maxX, x));
     if (snap) {
-      const d = this.config.draggable;
       const shouldSnap = d === true || (typeof d === 'object' && (d.snapToEdge ?? true));
       if (shouldSnap && axis !== 'y') {
-        // Snap to nearest horizontal edge — use base position for the offset so
-        // the snap target is correct regardless of which side the FAB is anchored.
-        const center = rect.left + btnW / 2;
-        finalX = center < W / 2
-          ? (safeL + margin) - baseLeft              // snap to left edge
-          : (W - safeR - margin - btnW) - baseLeft;  // snap to right edge
+        finalX = rect.left + btnW / 2 < W / 2
+          ? (safeL + margin) - baseLeft
+          : (W - safeR - margin - btnW) - baseLeft;
       }
     }
 
@@ -1689,8 +1456,6 @@ export class MushiWidget {
     trigger.style.setProperty('--mushi-drag-y', `${newY}px`);
     trigger.style.setProperty('--mushi-drag-active', '1');
 
-    // Persist
-    const d = this.config.draggable;
     const shouldPersist = d === true || (typeof d === 'object' && (d.persist ?? true));
     if (shouldPersist) {
       try {
@@ -1709,25 +1474,21 @@ export class MushiWidget {
       const raw = localStorage.getItem(this.fabStorageKey());
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
-          this.fabPos = parsed;
-        }
+        if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') this.fabPos = parsed;
       }
     } catch { /* ignore */ }
   }
 
   /** Attach Pointer Events-based drag to the trigger element. */
   private attachDragHandlers(trigger: HTMLElement): void {
-    // Load persisted position on first mount
     if (this.fabPos === null) this.loadFabPos();
-
     let startX = 0, startY = 0;
     let originX = 0, originY = 0;
     let dragging = false;
     let moved = false;
+    const DRAG_THRESHOLD = 6;
 
-    const onPointerDown = (e: PointerEvent) => {
-      // Only handle primary pointer (not right-click / stylus hover)
+    trigger.addEventListener('pointerdown', (e: PointerEvent) => {
       if (e.button !== 0 && e.pointerType !== 'touch') return;
       trigger.setPointerCapture(e.pointerId);
       startX = e.clientX;
@@ -1737,36 +1498,27 @@ export class MushiWidget {
       originY = cur.y;
       dragging = true;
       moved = false;
-    };
-
-    const DRAG_THRESHOLD = 6; // px movement before we consider it a drag
-
-    const onPointerMove = (e: PointerEvent) => {
+    });
+    trigger.addEventListener('pointermove', (e: PointerEvent) => {
       if (!dragging) return;
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
       if (!moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
         moved = true;
         trigger.classList.add('dragging');
-        trigger.setAttribute('aria-grabbed', 'true');
       }
       if (moved) {
         e.preventDefault();
         this.moveFab(trigger, originX + dx, originY + dy, false);
       }
-    };
-
+    });
     const onPointerUp = (e: PointerEvent) => {
       if (!dragging) return;
       dragging = false;
       trigger.classList.remove('dragging');
-      trigger.removeAttribute('aria-grabbed');
       if (moved) {
-        // Snap on release
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        this.moveFab(trigger, originX + dx, originY + dy, true);
-        // Suppress the click that follows a drag
+        this.moveFab(trigger, originX + e.clientX - startX, originY + e.clientY - startY, true);
+        // Suppress the click that follows a drag.
         const suppressClick = (ev: Event) => {
           ev.stopImmediatePropagation();
           trigger.removeEventListener('click', suppressClick, { capture: true });
@@ -1775,9 +1527,6 @@ export class MushiWidget {
       }
       moved = false;
     };
-
-    trigger.addEventListener('pointerdown', onPointerDown);
-    trigger.addEventListener('pointermove', onPointerMove);
     trigger.addEventListener('pointerup', onPointerUp);
     trigger.addEventListener('pointercancel', onPointerUp);
   }
@@ -1787,30 +1536,22 @@ export class MushiWidget {
   /** Lift the panel above the software keyboard using visualViewport. */
   private attachViewportHandlers(panel: HTMLElement): void {
     this.teardownViewportHandlers();
-    const vv = window.visualViewport;
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
     if (!vv) return;
-
     const update = () => {
       const keyboardInset = window.innerHeight - vv.height - vv.offsetTop;
       if (keyboardInset > 50) {
-        // Keyboard is visible — lift panel above it
         panel.style.setProperty('--mushi-keyboard-inset', `${Math.round(keyboardInset)}px`);
         panel.classList.add('keyboard-open');
-        // Also scroll the focused textarea into view
-        const ta = panel.querySelector<HTMLElement>('textarea, input[type="text"]');
-        ta?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       } else {
         panel.style.setProperty('--mushi-keyboard-inset', '0px');
         panel.classList.remove('keyboard-open');
       }
     };
-
     vv.addEventListener('resize', update, { passive: true });
     vv.addEventListener('scroll', update, { passive: true });
-    // Also update on textarea focus/blur
     const onFocus = () => requestAnimationFrame(update);
     panel.addEventListener('focusin', onFocus);
-
     this.vvCleanup = () => {
       vv.removeEventListener('resize', update);
       vv.removeEventListener('scroll', update);
@@ -1824,540 +1565,347 @@ export class MushiWidget {
   }
 
   /**
-   * Copy mode for the details step. Feature mode covers both the ✨ shortcut
-   * and Other → "Feature request" intent (whose localized label is the first
-   * entry of step2.intents.other in every locale).
-   */
-  private detailMode(): DetailMode {
-    const id = this.selectedCategory;
-    const intent = this.selectedIntent;
-    if (this.viaFeatureRequest || intent === FEATURE_REQUEST_INTENT) return 'feature';
-    if (id === 'other' && !this.resolveCustomCategory(id) && intent === this.locale.step2.intents.other[0]) return 'feature';
-    return id && this.resolveBaseCategory(id) === 'other' ? 'other' : 'bug';
-  }
-
-  /**
-   * Minimum description length, lowered for CJK locales where each character
-   * carries more meaning. Used by both the view layer (via renderCtx) and the
-   * details-step input validation in attachHandlers.
+   * Minimum description length (default 8, Plan 018 §1.1), halved for CJK
+   * locales where each character carries more meaning.
    */
   private effectiveMinLength(): number {
-    const base = this.config.minDescriptionLength ?? 20;
-    // CJK scripts pack more meaning per character. Halve the floor for Japanese,
-    // Chinese, and Korean locales so an 8-character Japanese sentence isn't
-    // blocked by an English-calibrated minimum.
-    const lang = this.config.locale === 'auto'
-      ? (typeof navigator !== 'undefined' ? (navigator.language ?? '') : '')
-      : (this.config.locale ?? '');
-    const isCjk = /^(ja|zh|ko)/i.test(lang);
-    return isCjk ? Math.max(4, Math.floor(base / 2)) : base;
+    const base = this.config.minDescriptionLength ?? 8;
+    return /^(ja|zh|ko)$/.test(this.lang) ? Math.max(4, Math.floor(base / 2)) : base;
   }
 
-  /** Tier accent colour for the rewards UI. */
-  private tierColor(slug: string): string {
-    const colors = MUSHI_TIER_COLORS as Record<string, string>;
-    return colors[slug] ?? MUSHI_TIER_COLORS.default;
-  }
-
-  /**
-   * Build the read-only snapshot + bound helper closures the stateless view
-   * layer (widget-render.ts) renders from. Rebuilt once per render() pass so
-   * the HTML always reflects current state.
-   */
-  private renderCtx(): WidgetRenderCtx {
-    return {
-      config: this.config,
-      rewardsState: this.rewardsState,
-      lastReportId: this.lastReportId,
-      listLoading: this.listLoading,
-      threadLoading: this.threadLoading,
-      actionPending: this.actionPending,
-      threadError: this.threadError,
-      actionError: this.actionError,
-      locale: this.locale,
-      identifiedUser: this.identifiedUser,
-      testerReputation: this.testerReputation,
-      testerInfo: this.testerInfo,
-      screenshotCapturing: this.screenshotCapturing,
-      screenshotAttached: this.screenshotAttached,
-      screenshotPreview: this.screenshotPreview,
-      screenshotHint: this.resolveScreenshotHint(),
-      screenshotAvailable: this.screenshotAvailable,
-      elementAvailable: this.elementAvailable,
-      reporterError: this.reporterError,
-      magicLinkError: this.magicLinkError,
-      elementCapturing: this.elementCapturing,
-      submitting: this.submitting,
-      sdkFreshness: this.sdkFreshness,
-      screenshotError: this.screenshotError,
-      screenshotErrorReason: this.screenshotErrorReason,
-      detailMode: this.detailMode(),
-      reporterReports: this.reporterReports,
-      magicLinkSending: this.magicLinkSending,
-      magicLinkEmail: this.magicLinkEmail,
-      globalLeaderboardLoading: this.globalLeaderboardLoading,
-      globalLeaderboard: this.globalLeaderboard,
-      elementSelected: this.elementSelected,
-      elementError: this.elementError,
-      crossAppLoading: this.crossAppLoading,
-      callbacks: this.callbacks,
-      testerJwt: this.testerJwt,
-      submittedAt: this.submittedAt,
-      step: this.step,
-      selectedReportId: this.selectedReportId,
-      selectedCategory: this.selectedCategory,
-      sdkVersion: this.sdkVersion,
-      reporterComments: this.reporterComments,
-      magicLinkSent: this.magicLinkSent,
-      leaderboardLoading: this.leaderboardLoading,
-      leaderboardEntries: this.leaderboardEntries,
-      lastSubmitQueuedOffline: this.lastSubmitQueuedOffline,
-      lastSubmitFailureKind: this.lastSubmitFailureKind,
-      lastSubmitScreenshotDropped: this.lastSubmitScreenshotDropped,
-      featureBoard: this.featureBoard,
-      crossAppReports: this.crossAppReports,
-      allowScreenshotRemove: this.allowScreenshotRemove,
-      unreadCount: () => this.unreadCount(),
-      tierColor: (slug) => this.tierColor(slug),
-      resolveCustomCategory: (id) => this.resolveCustomCategory(id),
-      effectiveMinLength: () => this.effectiveMinLength(),
-      categoryLabel: (id) => this.categoryLabel(id),
-      categoryIcon: (id) => this.categoryIcon(id),
-      assistantTurns: this.assistantTurns,
-      assistantSending: this.assistantSending,
-      assistantError: this.assistantError,
-      showAllCategories: this.showAllCategories,
-      showMoreNav: this.showMoreNav,
-      pageFaviconHref: readPageFaviconHref(),
-      brandRef: this.brandRef,
-    };
-  }
-
-  private attachHandlers(panel: HTMLElement): void {
-    const t = this.locale;
-    bindFaviconFallbacks(panel);
-
-    panel.querySelector('[data-action="close"]')?.addEventListener('click', () => this.close());
-    panel.querySelector('[data-action="brand-footer"]')?.addEventListener('click', () => {
-      this.callbacks.onBrandFooterClick?.();
-    });
-    panel.querySelector('[data-action="back"]')?.addEventListener('click', () => {
-      if (this.step === 'intent') { this.step = 'category'; this.selectedCategory = null; }
-      else if (this.step === 'details') {
-        if (this.viaFeatureRequest) {
-          this.step = 'category';
-          this.selectedCategory = null;
-          this.selectedIntent = null;
-          this.viaFeatureRequest = false;
-        } else {
-          this.step = 'intent';
-          this.selectedIntent = null;
-        }
-      }
-      else if (this.step === 'reports') { this.step = 'category'; }
-      else if (this.step === 'report-detail') { this.step = 'reports'; this.selectedReportId = null; }
-      else if (this.step === 'leaderboard') { this.step = 'reports'; }
-      else if (this.step === 'roadmap') { this.step = 'category'; }
-      else if (this.step === 'assistant') { this.step = 'category'; }
-      else if (this.step === 'account') { this.step = 'category'; }
-      else if (this.step === 'cross-app-reports') { this.step = 'account'; }
-      // Progressive disclosure collapses again whenever we land back on the
-      // category step, so a previously-expanded list doesn't stay open across
-      // navigation (Sentry 14751132/1).
-      if (this.step === 'category') {
-        this.showAllCategories = false;
-        this.showMoreNav = false;
-      }
-      this.render();
-    });
-
-    // ─── Progressive disclosure: expand full category list ─────────
-    panel.querySelector('[data-action="show-all-categories"]')?.addEventListener('click', () => {
-      this.showAllCategories = true;
-      this.render();
-    });
-
-    panel.querySelector('[data-action="toggle-more-nav"]')?.addEventListener('click', () => {
-      this.showMoreNav = !this.showMoreNav;
-      this.render();
-    });
-
-    // ─── Assistant tab handlers (P5) ───────────────────────────────
-    panel.querySelector('[data-action="assistant"]')?.addEventListener('click', () => {
-      this.openAssistantTab();
-    });
-    panel.querySelectorAll('[data-action="assistant-suggest"]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const value = (btn as HTMLElement).dataset.value;
-        if (value) void this.sendAssistantMessage(value);
-      });
-    });
-    panel.querySelectorAll('[data-action="assistant-report"]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        this.openReportFromAssistant();
-      });
-    });
-    {
-      const form = panel.querySelector<HTMLFormElement>('[data-action="assistant-send"]');
-      if (form) {
-        const input = form.querySelector<HTMLTextAreaElement>('.mushi-assistant-input');
-        form.addEventListener('submit', (e) => {
-          e.preventDefault();
-          const value = input?.value ?? '';
-          if (input) input.value = '';
-          void this.sendAssistantMessage(value);
-        });
-        input?.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            form.requestSubmit();
-          }
-        });
-      }
-    }
-
-    panel.querySelector('[data-action="reports"]')?.addEventListener('click', () => {
-      void this.loadReporterReports();
-    });
-
-    panel.querySelector('[data-action="roadmap"]')?.addEventListener('click', () => {
-      void this.loadFeatureBoard();
-    });
-
-    panel.querySelectorAll('[data-vote-id]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const requestId = (btn as HTMLElement).dataset.voteId;
-        if (requestId) void this.voteFeatureBoard(requestId);
-      });
-    });
-
-    panel.querySelector('[data-action="feature-request"]')?.addEventListener('click', () => {
-      // Feature-request shortcut: pre-fill the wire format and skip the
-      // intent step. The user lands directly on the description box so
-      // there's only one screen between "I have an idea" and "submitted".
-      this.selectedCategory = 'other';
-      this.selectedIntent = FEATURE_REQUEST_INTENT;
-      this.viaFeatureRequest = true;
-      this.step = 'details';
-      this.render();
-    });
-
-    panel.querySelectorAll('[data-report-id]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const reportId = (btn as HTMLElement).dataset.reportId;
-        if (reportId) void this.loadReporterComments(reportId);
-      });
-    });
-
-    panel.querySelector('[data-action="open-leaderboard"]')?.addEventListener('click', () => {
-      this.step = 'leaderboard';
-      this.callbacks.onLeaderboardOpen?.();
-      this.callbacks.onGlobalLeaderboardOpen?.();
-      this.render();
-    });
-
-    // Community: open account step
-    panel.querySelector('[data-action="open-account"]')?.addEventListener('click', () => {
-      this.step = 'account';
-      this.render();
-    });
-
-    // Community: navigate within account step
-    panel.querySelector('[data-action="open-cross-app-reports"]')?.addEventListener('click', () => {
-      this.step = 'cross-app-reports';
-      this.crossAppLoading = true;
-      this.crossAppReports = null;
-      this.render();
-      if (this.callbacks.onCrossAppReportsOpen) {
-        this.callbacks.onCrossAppReportsOpen();
-      } else {
-        // No callback wired: clear loading so panel doesn't show a permanent spinner
-        this.crossAppLoading = false;
-        this.crossAppReports = [];
-        this.render();
-      }
-    });
-
-    panel.querySelector('[data-action="open-global-leaderboard"]')?.addEventListener('click', () => {
-      this.step = 'leaderboard';
-      this.globalLeaderboard = null;
-      this.globalLeaderboardLoading = true;
-      this.render();
-      if (this.callbacks.onGlobalLeaderboardOpen) {
-        this.callbacks.onGlobalLeaderboardOpen();
-      } else {
-        // No callback wired: clear loading so panel doesn't spin forever
-        this.globalLeaderboardLoading = false;
-        this.globalLeaderboard = [];
-        this.render();
-      }
-    });
-
-    // Community: magic-link sign-in
-    panel.querySelector('[data-action="send-magic-link"]')?.addEventListener('click', () => {
-      void this.handleMagicLinkSend(panel);
-    });
-
-    panel.querySelector('[data-action="resend-magic-link"]')?.addEventListener('click', () => {
-      this.magicLinkSent = false;
-      this.magicLinkError = '';
-      this.render();
-    });
-
-    panel.querySelector('[data-action="sign-out-tester"]')?.addEventListener('click', () => {
-      this.testerJwt = null;
-      this.testerInfo = null;
-      this.testerReputation = null;
-      this.crossAppReports = null;
-      this.magicLinkSent = false;
-      this.magicLinkEmail = '';
-      this.step = 'category';
-      // Notify host to clear persisted JWT from storage
-      this.callbacks.onTesterSignOut?.();
-      this.render();
-    });
-
-    panel.querySelector('[data-action="retry-thread"]')?.addEventListener('click', () => {
-      if (this.selectedReportId) void this.loadReporterComments(this.selectedReportId);
-    });
-
-    panel.querySelector('[data-action="reporter-reply"]')?.addEventListener('click', () => {
-      void this.submitReporterReply(panel);
-    });
-
-    panel.querySelector('[data-action="reporter-confirms"]')?.addEventListener('click', () => {
-      void this.submitReporterFeedback('confirms');
-    });
-
-    panel.querySelector('[data-action="reporter-not-fixed"]')?.addEventListener('click', () => {
-      void this.submitReporterReopen();
-    });
-
-    // Receipt-copy on the success step. We do the clipboard work
-    // inside the widget rather than emitting a callback so the
-    // optical feedback (button label flips to "Copied") is instant
-    // and the host doesn't have to wire anything to enjoy it.
-    panel.querySelector('[data-action="track-report"]')?.addEventListener('click', () => {
-      if (this.lastReportId) void this.openTrackedReport(this.lastReportId);
-    });
-    panel.querySelector('[data-action="done"]')?.addEventListener('click', () => this.close());
-
-    panel.querySelector('[data-action="copy-report-id"]')?.addEventListener('click', (e) => {
-      const btn = e.currentTarget as HTMLButtonElement;
-      const id = btn.dataset.copyId;
-      if (!id) return;
-      const restore = btn.innerHTML;
-      const done = () => {
-        btn.innerHTML = 'Copied \u2713';
-        // Hold the "Copied" state briefly then bounce back to the
-        // ledger id so a second copy still feels like an action.
-        window.setTimeout(() => {
-          if (btn.isConnected) btn.innerHTML = restore;
-        }, 1600);
-      };
-      try {
-        if (navigator.clipboard?.writeText) {
-          void navigator.clipboard.writeText(id).then(done).catch(() => done());
-        } else {
-          done();
-        }
-      } catch {
-        done();
-      }
-    });
-
-    panel.querySelectorAll('[data-category]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const catId = (btn as HTMLElement).dataset.category ?? 'other';
-        this.selectedCategory = catId;
-        // Custom categories with no declared intents go straight to the
-        // description step (intent picker would be empty).
-        const custom = this.resolveCustomCategory(catId);
-        this.step = (custom && (!custom.intents || custom.intents.length === 0)) ? 'details' : 'intent';
-        this.render();
-      });
-    });
-
-    panel.querySelectorAll('[data-intent]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        this.selectedIntent = (btn as HTMLElement).dataset.intent ?? null;
-        this.step = 'details';
-        this.render();
-      });
-    });
-
-    // Wire live char counter so users see their progress as they type.
-    const textarea = panel.querySelector('.mushi-textarea') as HTMLTextAreaElement | null;
-    const counterEl = panel.querySelector('[data-role="char-counter"]') as HTMLElement | null;
-    if (textarea && counterEl) {
-      const minLen = this.effectiveMinLength();
-      textarea.addEventListener('input', () => {
-        counterEl.textContent = charCounterText(textarea.value, minLen, t.step3.charsNeeded);
-        counterEl.style.color = textarea.value.trim().length >= minLen ? 'var(--mushi-ok, #22c55e)' : '';
-      });
-    }
-
-    // Wire example chips — clicking one pre-fills the textarea.
-    panel.querySelectorAll('[data-example]').forEach((chip) => {
-      chip.addEventListener('click', () => {
-        const example = (chip as HTMLElement).dataset.example ?? '';
-        if (textarea) {
-          textarea.value = example;
-          textarea.focus();
-          // Trigger counter update.
-          textarea.dispatchEvent(new Event('input'));
-        }
-      });
-    });
-
-    panel.querySelector('[data-action="screenshot"]')?.addEventListener('click', () => {
-      this.callbacks.onScreenshotRequest();
-    });
-    panel.querySelector('[data-action="screenshot-share-tab"]')?.addEventListener('click', () => {
-      this.callbacks.onScreenshotShareTabRequest?.();
-    });
-    panel.querySelector('[data-action="remove-screenshot"]')?.addEventListener('click', () => {
-      this.callbacks.onScreenshotRemove?.();
-    });
-    panel.querySelector('[data-action="annotate-screenshot"]')?.addEventListener('click', () => {
-      const host = panel.querySelector('[data-role="annotate-host"]') as HTMLElement | null;
-      if (host && this.callbacks.onScreenshotAnnotateRequest) {
-        void this.callbacks.onScreenshotAnnotateRequest(host);
-      }
-    });
-
-    panel.querySelector('[data-action="element"]')?.addEventListener('click', () => {
-      this.callbacks.onElementSelectorRequest?.();
-    });
-
-    const submitReport = (): void => {
-      const textarea = panel.querySelector('.mushi-textarea') as HTMLTextAreaElement | null;
-      const description = textarea?.value?.trim() ?? '';
-      const errorEl = panel.querySelector('.mushi-error') as HTMLElement | null;
-
-      const minLen = this.effectiveMinLength();
-      if (description.length < minLen) {
-        if (errorEl) {
-          const msg = `${t.step3.tooShort} (${charCounterText(description, minLen, t.step3.charsNeeded)})`;
-          errorEl.textContent = msg;
-          errorEl.style.display = 'block';
-          // Focus the textarea so the user can immediately keep typing.
-          textarea?.focus();
-        }
-        return;
-      }
-
-      this.submitting = true;
-      this.submittedAt = new Date();
-      this.lastReportId = null;
-      this.lastSubmitQueuedOffline = false;
-    this.lastSubmitFailureKind = undefined;
-      this.lastSubmitScreenshotDropped = false;
-      this.render();
-
-      // Kick off the host's submission handler. We treat both
-      // sync-void (legacy) and async-outcome (current) shapes:
-      // when the host returns an outcome we hold the success step
-      // open longer and let the user copy the report id; when the
-      // host returns void we use the historic 500 ms transition.
-      const outcomeP = (async () => {
-        try {
-          const catId = this.selectedCategory!;
-          const baseCategory = this.resolveBaseCategory(catId);
-          // A host custom category id always wins (it is the documented
-          // reports.user_category contract). Otherwise feature requests land
-          // as user_category='feature' so they never read as an "other" bug.
-          const isCustomCat = this.config.categories && this.config.categories.length > 0;
-          const userCategory = isCustomCat && this.resolveCustomCategory(catId)
-            ? catId
-            : this.detailMode() === 'feature' ? 'feature' : isCustomCat ? catId : undefined;
-          const ret = this.callbacks.onSubmit({
-            category: baseCategory,
-            ...(userCategory ? { userCategory } : {}),
-            description,
-            intent: this.selectedIntent ?? undefined,
-          });
-          if (ret && typeof (ret as Promise<WidgetSubmitOutcome | void>).then === 'function') {
-            const outcome = (await ret) as WidgetSubmitOutcome | void;
-            return outcome ?? null;
-          }
-          return null;
-        } catch {
-          // Submission errors are still surfaced as a success step in
-          // the historic SDK — the apiClient retry queue handles the
-          // delivery in the background. Mirror that so the receipt
-          // copy can degrade to the "queued offline" variant rather
-          // than blocking the user with an error wall.
-          return { reportId: null, queuedOffline: true } as WidgetSubmitOutcome;
-        }
-      })();
-
-      // Always flip to the success step quickly so the user gets a
-      // confirmation within one breath even if the network is slow.
-      // The outcome promise then patches the receipt id in-place
-      // once it resolves (success step re-renders).
-      this.successTimer = setTimeout(() => {
-        this.successTimer = null;
-        this.submitting = false;
-        this.step = 'success';
-        this.render();
-        // The report is on its way — drop the description draft so a
-        // follow-up report starts clean instead of repainting the sent text.
-        // Must run AFTER render(): render() calls captureFormDrafts() first
-        // (to snapshot whatever's still live in the about-to-be-torn-down
-        // 'details' textarea), which would otherwise re-populate
-        // draftDescription with the just-submitted text and clobber this clear.
-        this.draftDescription = '';
-        // No auto-close: the panel used to vanish 2.8 s in, under a reporter
-        // who was reading the receipt or reaching for "Track this report".
-        // It now stays until Done / ✕ / Esc. The outcome patches the
-        // receipt id in place once it lands.
-        void outcomeP.then((outcome) => {
-          if (this.step !== 'success' || !outcome) return;
-          this.lastReportId = outcome.reportId ?? null;
-          this.lastSubmitQueuedOffline = Boolean(outcome.queuedOffline);
-          this.lastSubmitFailureKind = outcome.failureKind;
-          this.lastSubmitScreenshotDropped = Boolean(outcome.screenshotDropped);
-          this.render();
-        });
-      }, 500);
-    };
-
-    panel.querySelector('[data-action="submit"]')?.addEventListener('click', submitReport);
-
-    panel.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        this.close();
-        return;
-      }
-      // Ctrl/Cmd+Enter submits from anywhere in the panel — primarily to
-      // catch the textarea where Enter alone needs to insert a newline.
-      // Only the details step has a submit action, so guard on that.
-      if (this.step === 'details' && isSubmitShortcut(e)) {
-        e.preventDefault();
-        submitReport();
-      }
-    });
-  }
-
-  private trapFocus(panel: HTMLElement): void {
-    requestAnimationFrame(() => {
-      // Prefer the textarea on the details step so users can start typing
-      // immediately without an extra Tab. Otherwise focus the first
-      // interactive element so keyboard users can navigate the list.
-      const textarea = panel.querySelector('textarea') as HTMLElement | null;
-      if (textarea) {
-        textarea.focus();
-        return;
-      }
-      const focusable = panel.querySelectorAll('button, textarea, [tabindex]');
-      if (focusable.length > 0) (focusable[0] as HTMLElement).focus();
-    });
+  /** Enough words, or something the reporter attached on purpose. */
+  private canSend(): boolean {
+    return (this.drafts.description ?? '').trim().length >= this.effectiveMinLength()
+      || this.elementSelected
+      || (this.screenshotAttached && this.screenshotByUser);
   }
 
   private unreadCount(): number {
     return this.reporterReports.reduce((sum, report) => sum + (report.unread_count ?? 0), 0);
   }
+
+  /** Read-only snapshot + helper closures for the stateless view layer. */
+  private renderCtx(): WidgetRenderCtx {
+    return {
+      config: this.config,
+      locale: this.locale,
+      rc: this.rc,
+      lang: this.lang,
+      step: this.step,
+      callbacks: this.callbacks,
+      chip: this.chip,
+      intent: this.intent,
+      showAllCategories: this.showAllCategories,
+      draftLength: (this.drafts.description ?? '').length,
+      canSend: this.canSend(),
+      submitting: this.submitting,
+      screenshotCapturing: this.screenshotCapturing,
+      screenshotAttached: this.screenshotAttached,
+      screenshotPreview: this.screenshotPreview,
+      previewOpen: this.previewOpen,
+      screenshotHint: this.resolveScreenshotHint(),
+      screenshotAvailable: this.screenshotAvailable,
+      elementAvailable: this.elementAvailable,
+      screenshotError: this.screenshotError,
+      screenshotErrorReason: this.screenshotErrorReason,
+      elementSelected: this.elementSelected,
+      elementCapturing: this.elementCapturing,
+      elementError: this.elementError,
+      allowScreenshotRemove: this.allowScreenshotRemove,
+      identifiedUser: this.identifiedUser,
+      lastReportId: this.lastReportId,
+      submittedAt: this.submittedAt,
+      lastSubmitQueuedOffline: this.lastSubmitQueuedOffline,
+      lastSubmitFailureKind: this.lastSubmitFailureKind,
+      lastSubmitScreenshotDropped: this.lastSubmitScreenshotDropped,
+      channels: this.channels,
+      emailOptInOpen: this.emailOptInOpen,
+      emailState: this.emailState,
+      pushState: this.pushState,
+      reporterReports: this.reporterReports,
+      listLoading: this.listLoading,
+      reporterError: this.reporterError,
+      selectedReportId: this.selectedReportId,
+      reporterComments: this.reporterComments,
+      timeline: this.timeline,
+      pendingReplies: this.pendingReplies,
+      threadLoading: this.threadLoading,
+      threadError: this.threadError,
+      actionPending: this.actionPending,
+      actionError: this.actionError,
+      unreadCount: this.unreadCount(),
+      showMoreNav: this.showMoreNav,
+      pageFaviconHref: readPageFaviconHref(),
+      sdkFreshness: this.sdkFreshness,
+      brandRef: this.brandRef,
+      rewardsState: this.rewardsState,
+      testerReputation: this.testerReputation,
+      testerInfo: this.testerInfo,
+      testerJwt: this.testerJwt,
+      magicLinkError: this.magicLinkError,
+      magicLinkSending: this.magicLinkSending,
+      magicLinkEmail: this.magicLinkEmail,
+      magicLinkSent: this.magicLinkSent,
+      globalLeaderboardLoading: this.globalLeaderboardLoading,
+      globalLeaderboard: this.globalLeaderboard,
+      leaderboardLoading: this.leaderboardLoading,
+      leaderboardEntries: this.leaderboardEntries,
+      crossAppLoading: this.crossAppLoading,
+      crossAppReports: this.crossAppReports,
+      featureBoard: this.featureBoard,
+      assistantTurns: this.assistantTurns,
+      assistantSending: this.assistantSending,
+      assistantError: this.assistantError,
+      tierColor: (slug) => (MUSHI_TIER_COLORS as Record<string, string>)[slug] ?? MUSHI_TIER_COLORS.default,
+      resolveCustomCategory: (id) => this.resolveCustomCategory(id),
+    };
+  }
+
+  // ─── Events: one delegated listener per type, bound once ──────────
+
+  private bindPanelEvents(): void {
+    const panel = this.panel;
+    panel.addEventListener('pointerdown', () => { this.pointerDownAt = Date.now(); });
+    panel.addEventListener('click', (e) => {
+      const target = e.target as Element;
+      // The lazily loaded markup editor owns its own controls.
+      if (target.closest('[data-role="annotate-host"]')) return;
+      const el = target.closest<HTMLElement>('[data-action],[data-report-id],[data-vote-id]');
+      if (!el || el.tagName === 'FORM') return;
+      if (el.dataset.voteId) { void this.voteFeatureBoard(el.dataset.voteId); return; }
+      const action = el.dataset.action;
+      if (!action && el.dataset.reportId) { void this.openThread(el.dataset.reportId); return; }
+      if (action) this.handleAction(action, el);
+    });
+    panel.addEventListener('input', (e) => {
+      const el = e.target as HTMLTextAreaElement;
+      const role = el.dataset?.role;
+      if (!role) return;
+      this.drafts[role] = el.value;
+      if (el.tagName === 'TEXTAREA' && role !== 'description') autoGrow(el);
+      if (role === 'description') this.render();
+    });
+    panel.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = panel.querySelector<HTMLTextAreaElement>('.mushi-assistant-input');
+      const value = input?.value ?? '';
+      if (input) input.value = '';
+      void this.sendAssistantMessage(value);
+    });
+    panel.addEventListener('keydown', (e) => this.onKeydown(e));
+  }
+
+  private onKeydown(e: KeyboardEvent): void {
+    const target = e.target as HTMLElement;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (this.showMoreNav) { this.showMoreNav = false; this.render(); return; }
+      if (this.step === 'report-detail') { this.goBack(); return; }
+      this.close();
+      return;
+    }
+    if (isSubmitShortcut(e) || (e.key === 'Enter' && !e.shiftKey && target.classList.contains('mushi-assistant-input'))) {
+      if (this.step === 'report') { e.preventDefault(); this.submitReport(); }
+      else if (this.step === 'report-detail' && target.dataset.role === 'reporter-reply') { e.preventDefault(); this.submitReporterReply(); }
+      else if (this.step === 'assistant') { e.preventDefault(); this.panel.querySelector('form')?.requestSubmit(); }
+      return;
+    }
+    if (e.key === 'Tab') { this.trapTab(e); return; }
+    // Roving radiogroup (APG): arrows move focus and the selection together.
+    if (target.getAttribute('role') === 'radio' && /^Arrow(Left|Right|Up|Down)$/.test(e.key)) {
+      const radios = Array.from(target.closest('[role="radiogroup"]')?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []);
+      const i = radios.indexOf(target);
+      const next = radios[(i + (/Right|Down/.test(e.key) ? 1 : -1) + radios.length) % radios.length];
+      if (!next) return;
+      e.preventDefault();
+      next.click();
+      this.panel.querySelector<HTMLElement>(focusKey(next) ?? '')?.focus();
+    }
+  }
+
+  /** Keep Tab inside the open dialog (APG modal pattern). */
+  private trapTab(e: KeyboardEvent): void {
+    const items = Array.from(this.panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => !el.closest('[hidden]'));
+    if (!items.length) return;
+    const first = items[0]!;
+    const last = items[items.length - 1]!;
+    const active = this.shadow.activeElement;
+    if (e.shiftKey && (active === first || !this.panel.contains(active))) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+  }
+
+  private handleAction(action: string, el: HTMLElement): void {
+    const value = el.dataset.value ?? '';
+    switch (action) {
+      case 'close': this.close(); return;
+      case 'back': this.goBack(); return;
+      case 'brand-footer': this.callbacks.onBrandFooterClick?.(); return;
+      case 'toggle-more-nav': this.showMoreNav = !this.showMoreNav; this.render(); return;
+      case 'show-all-categories': this.showAllCategories = true; this.render(); return;
+      case 'chip': {
+        const id = el.dataset.category ?? '';
+        // A second tap on the picked chip clears it: the type is optional.
+        this.chip = this.chip === id ? null : id;
+        this.intent = null;
+        this.render();
+        return;
+      }
+      case 'intent': {
+        const it = el.dataset.intent ?? null;
+        this.intent = this.intent === it ? null : it;
+        this.render();
+        return;
+      }
+      case 'screenshot': this.screenshotByUser = true; this.callbacks.onScreenshotRequest(); return;
+      case 'screenshot-share-tab': this.screenshotByUser = true; this.callbacks.onScreenshotShareTabRequest?.(); return;
+      case 'remove-screenshot': this.callbacks.onScreenshotRemove?.(); return;
+      case 'toggle-preview': this.previewOpen = !this.previewOpen; this.render(); return;
+      case 'annotate-screenshot': {
+        const host = this.panel.querySelector<HTMLElement>('[data-role="annotate-host"]');
+        this.screenshotByUser = true;
+        if (host && this.callbacks.onScreenshotAnnotateRequest) void this.callbacks.onScreenshotAnnotateRequest(host);
+        return;
+      }
+      case 'element': this.callbacks.onElementSelectorRequest?.(); return;
+      case 'submit': this.submitReport(); return;
+      case 'done': this.close(); return;
+      case 'track-report': if (this.lastReportId) void this.openTrackedReport(this.lastReportId); return;
+      case 'copy-report-id': copyId(el); return;
+      case 'reports': this.showMoreNav = false; void this.loadReporterReports(); return;
+      case 'retry-list': void this.loadReporterReports(); return;
+      case 'retry-thread': if (this.selectedReportId) void this.openThread(this.selectedReportId); return;
+      case 'reporter-reply': this.submitReporterReply(); return;
+      case 'retry-reply': void this.sendPendingReply(Number(value)); return;
+      case 'reporter-confirms': void this.submitReporterFeedback('confirms'); return;
+      case 'reporter-not-fixed': void this.submitReporterReopen(); return;
+      case 'email-optin': this.emailOptInOpen = (el as HTMLInputElement).checked; this.render(); return;
+      case 'save-email': void this.saveEmailOptIn(); return;
+      case 'notify-me': void this.subscribePush(); return;
+      case 'assistant': this.showMoreNav = false; this.openAssistantTab(); return;
+      case 'assistant-suggest': void this.sendAssistantMessage(value); return;
+      case 'assistant-report': this.step = 'report'; this.render(); return;
+      case 'roadmap': this.showMoreNav = false; void this.loadFeatureBoard(); return;
+      case 'open-leaderboard':
+        this.showMoreNav = false;
+        this.step = 'leaderboard';
+        this.callbacks.onLeaderboardOpen?.();
+        this.callbacks.onGlobalLeaderboardOpen?.();
+        this.render();
+        return;
+      case 'open-account': this.showMoreNav = false; this.step = 'account'; this.render(); return;
+      case 'open-cross-app-reports':
+        this.step = 'cross-app-reports';
+        this.crossAppReports = this.callbacks.onCrossAppReportsOpen ? null : [];
+        this.crossAppLoading = Boolean(this.callbacks.onCrossAppReportsOpen);
+        this.render();
+        this.callbacks.onCrossAppReportsOpen?.();
+        return;
+      case 'open-global-leaderboard':
+        this.step = 'leaderboard';
+        this.globalLeaderboard = this.callbacks.onGlobalLeaderboardOpen ? null : [];
+        this.globalLeaderboardLoading = Boolean(this.callbacks.onGlobalLeaderboardOpen);
+        this.render();
+        this.callbacks.onGlobalLeaderboardOpen?.();
+        return;
+      case 'send-magic-link': void this.handleMagicLinkSend(); return;
+      case 'resend-magic-link': this.magicLinkSent = false; this.magicLinkError = ''; this.render(); return;
+      case 'sign-out-tester':
+        this.testerJwt = null;
+        this.testerInfo = null;
+        this.testerReputation = null;
+        this.crossAppReports = null;
+        this.magicLinkSent = false;
+        this.magicLinkEmail = '';
+        this.step = 'report';
+        this.callbacks.onTesterSignOut?.();
+        this.render();
+        return;
+    }
+  }
+
+  private goBack(): void {
+    const parent: Partial<Record<WidgetStep, WidgetStep>> = {
+      'report-detail': 'reports',
+      'cross-app-reports': 'account',
+    };
+    this.step = parent[this.step] ?? 'report';
+    if (this.step === 'reports') this.selectedReportId = null;
+    if (this.step === 'report') this.showAllCategories = Boolean(this.chip && this.resolveCustomCategory(this.chip));
+    this.render();
+  }
+
+  // ─── Report submit ─────────────────────────────────────────────────
+
+  private submitReport(): void {
+    if (this.submitting) return;
+    const live = this.panel.querySelector<HTMLTextAreaElement>('[data-role="description"]');
+    if (live) this.drafts.description = live.value;
+    if (!this.canSend()) {
+      this.announce(this.rc.ui.addWords);
+      live?.focus();
+      return;
+    }
+    const description = (this.drafts.description ?? '').trim();
+    const chip = this.chip;
+    const custom = chip ? this.resolveCustomCategory(chip) : undefined;
+    const hostCategories = (this.config.categories?.length ?? 0) > 0;
+    const idea = chip === 'idea';
+    const category: MushiReportCategory = idea || !chip
+      ? 'other'
+      : custom ? (custom.baseCategory ?? 'other') : chip as MushiReportCategory;
+    // A host custom category id is the documented user_category contract;
+    // ideas land as 'feature' so they never read as an "other" bug.
+    const userCategory = custom ? chip! : idea ? 'feature' : hostCategories && chip ? chip : undefined;
+    const intent = idea ? FEATURE_REQUEST_INTENT : this.intent ?? undefined;
+
+    this.submitting = true;
+    this.submittedAt = new Date();
+    this.lastReportId = null;
+    this.lastSubmitQueuedOffline = false;
+    this.lastSubmitFailureKind = undefined;
+    this.lastSubmitScreenshotDropped = false;
+    this.render();
+
+    // Both sync-void (legacy) and async-outcome host handlers are supported.
+    const outcomeP = (async () => {
+      try {
+        const ret = this.callbacks.onSubmit({
+          category,
+          ...(userCategory ? { userCategory } : {}),
+          description,
+          ...(intent ? { intent } : {}),
+        });
+        if (ret && typeof (ret as Promise<WidgetSubmitOutcome | void>).then === 'function') {
+          return ((await ret) as WidgetSubmitOutcome | void) ?? null;
+        }
+        return null;
+      } catch {
+        // The retry queue handles delivery in the background; degrade the receipt instead of blocking.
+        return { reportId: null, queuedOffline: true } as WidgetSubmitOutcome;
+      }
+    })();
+
+    // The receipt appears within one breath even on a slow network; the
+    // outcome patches it in place. No auto-close: it stays until Done / ✕ / Esc.
+    this.successTimer = setTimeout(() => {
+      this.successTimer = null;
+      this.submitting = false;
+      this.step = 'success';
+      this.drafts = {};
+      this.render();
+      this.announce(this.locale.flows.success.title);
+      void outcomeP.then((outcome) => {
+        if (this.step !== 'success' || !outcome) return;
+        this.lastReportId = outcome.reportId ?? null;
+        this.lastSubmitQueuedOffline = Boolean(outcome.queuedOffline);
+        this.lastSubmitFailureKind = outcome.failureKind;
+        this.lastSubmitScreenshotDropped = Boolean(outcome.screenshotDropped);
+        this.render();
+      });
+    }, 500);
+  }
+
+  // ─── Your reports ──────────────────────────────────────────────────
 
   private async loadFeatureBoard(): Promise<void> {
     this.step = 'roadmap';
@@ -2390,9 +1938,8 @@ export class MushiWidget {
   }
 
   /**
-   * Run a thread action (reply / feedback / reopen) without leaving or
-   * blanking the thread: the conversation stays painted, the action button
-   * disables, and afterwards the status + comments refresh in place.
+   * Run a thread action (feedback / reopen) without leaving or blanking the
+   * thread: the action buttons disable, then status + timeline refresh in place.
    */
   private async runThreadAction(fallbackError: string, action: (reportId: string) => Promise<unknown>): Promise<boolean> {
     const reportId = this.selectedReportId;
@@ -2403,7 +1950,7 @@ export class MushiWidget {
     try {
       await action(reportId);
       await this.refreshReporterInboxQuiet();
-      await this.loadReporterComments(reportId, true);
+      await this.openThread(reportId, true);
       return true;
     } catch (err) {
       this.actionError = err instanceof Error ? err.message : fallbackError;
@@ -2416,44 +1963,29 @@ export class MushiWidget {
 
   private async submitReporterReopen(): Promise<void> {
     await this.runThreadAction('Could not reopen report.', async (reportId) => {
-      if (this.callbacks.onReporterReopen) {
-        await this.callbacks.onReporterReopen(reportId, 'Not fixed for me');
-      } else {
-        await this.callbacks.onReporterFeedback?.(reportId, 'not_fixed', 'Not fixed for me');
-      }
+      if (this.callbacks.onReporterReopen) await this.callbacks.onReporterReopen(reportId, 'Not fixed for me');
+      else await this.callbacks.onReporterFeedback?.(reportId, 'not_fixed', 'Not fixed for me');
     });
   }
 
-  /** Refresh My Reports data for unread badges without opening the inbox panel. */
+  private async submitReporterFeedback(signal: string): Promise<void> {
+    await this.runThreadAction('Could not send feedback.', (reportId) =>
+      Promise.resolve(this.callbacks.onReporterFeedback?.(reportId, signal)));
+  }
+
+  /** Refresh "Your reports" quietly (badge + list + open row); never disturbs what the reporter is typing. */
   async refreshReporterInboxQuiet(): Promise<void> {
     try {
       const req = this.callbacks.onReporterReportsRequest?.();
       this.reporterReports = req ? await withDeadline(req, REPORTER_READ_DEADLINE_MS) : [];
-      if (!this.isOpen) return;
-      // Only the reports list actually displays this data — re-render it.
-      // Every other step gets a targeted badge-text update instead of a full
-      // shadow-DOM rebuild: a background poll must never disturb a panel the
-      // reporter is actively typing or reading in.
-      if (this.step === 'reports') {
-        this.render();
-      } else {
-        this.updateReportsBadgeText();
-      }
+      if (this.isOpen) this.render();
     } catch {
-      // Non-fatal background poll — never surface errors outside the inbox UI.
+      // Non-fatal background poll — errors surface only inside the inbox UI.
     }
   }
 
-  /** Patch the "Your reports (N new)" nav label in place, if it is rendered. */
-  private updateReportsBadgeText(): void {
-    const label = this.shadow.querySelector('.mushi-reports-entry .mushi-option-label');
-    if (!label) return;
-    const mn = this.locale.step1.moreNav;
-    const unread = this.unreadCount();
-    label.textContent = unread ? `${mn.yourReports} (${unread} ${mn.unreadNew})` : mn.yourReports;
-  }
-
   private async loadReporterReports(): Promise<void> {
+    this.ensureOpen();
     this.step = 'reports';
     this.listLoading = true;
     this.reporterError = null;
@@ -2461,33 +1993,32 @@ export class MushiWidget {
     try {
       const req = this.callbacks.onReporterReportsRequest?.();
       this.reporterReports = req ? await withDeadline(req, REPORTER_READ_DEADLINE_MS) : [];
-    } catch (err) {
-      this.reporterError = err instanceof Error ? err.message : 'Could not load reports.';
+    } catch {
+      this.reporterError = this.rc.ui.loadError;
     } finally {
       this.listLoading = false;
       this.render();
     }
   }
 
-  /** "Track this report" on the success step → that report's thread in My Reports. */
+  /** "Track it" on the receipt → that report's thread. */
   private async openTrackedReport(reportId: string): Promise<void> {
     await this.loadReporterReports();
     // The reporter may have navigated (or closed) while the list loaded.
-    if (this.isOpen && this.step === 'reports') await this.loadReporterComments(reportId);
+    if (this.isOpen && this.step === 'reports') await this.openThread(reportId);
   }
 
   /**
-   * Open (or refresh) a thread. The header + summary paint immediately from
-   * the in-memory report; only the comment list shows a skeleton while it
-   * loads. `quiet` keeps the current comments on screen (post-action refresh).
+   * Open (or refresh) a thread. The card paints at once from the list row;
+   * only the timeline shows a skeleton. `quiet` keeps what is on screen.
    */
-  private async loadReporterComments(reportId: string, quiet = false): Promise<void> {
-    // Navigating to a DIFFERENT thread must drop any in-progress reply draft —
-    // otherwise an unsent draft typed for report A reappears (and could be
-    // posted) under report B.
+  private async openThread(reportId: string, quiet = false): Promise<void> {
     if (this.selectedReportId !== reportId) {
-      this.draftReply = '';
+      // A different thread: drop the other thread's draft, replies and errors.
+      delete this.drafts['reporter-reply'];
       this.reporterComments = [];
+      this.timeline = null;
+      this.pendingReplies = [];
       this.actionError = null;
       quiet = false;
     }
@@ -2497,51 +2028,175 @@ export class MushiWidget {
     if (!quiet) {
       this.threadLoading = true;
       this.render();
+      this.markRead(reportId);
     }
     try {
       // A read that never settles used to leave "Loading thread…" up forever
       // (live, 2026-10-02); the deadline turns it into a retryable error.
-      const req = this.callbacks.onReporterCommentsRequest?.(reportId);
-      const comments = req ? await withDeadline(req, REPORTER_READ_DEADLINE_MS) : [];
-      // The reporter may have opened a different thread meanwhile.
-      if (this.selectedReportId === reportId) this.reporterComments = comments;
+      const detail = this.callbacks.onReporterReportRequest?.(reportId);
+      if (detail) {
+        const res = await withDeadline(detail, REPORTER_READ_DEADLINE_MS);
+        if (this.selectedReportId === reportId && res) {
+          this.timeline = res.timeline ?? null;
+          if (res.report) this.reporterReports = this.reporterReports.map((r) => (r.id === reportId ? { ...r, ...res.report } : r));
+        }
+      } else {
+        const req = this.callbacks.onReporterCommentsRequest?.(reportId);
+        const comments = req ? await withDeadline(req, REPORTER_READ_DEADLINE_MS) : [];
+        if (this.selectedReportId === reportId) this.reporterComments = comments;
+      }
     } catch {
-      if (this.selectedReportId === reportId) this.threadError = this.locale.flows.thread.loadFailed;
+      if (this.selectedReportId === reportId) this.threadError = this.rc.ui.loadError;
     } finally {
       this.threadLoading = false;
       this.render();
     }
   }
 
-  private async submitReporterFeedback(signal: string): Promise<void> {
-    await this.runThreadAction('Could not send feedback.', (reportId) =>
-      Promise.resolve(this.callbacks.onReporterFeedback?.(reportId, signal)));
+  /** Opening a thread marks its updates read so the badge goes down (§2.3). */
+  private markRead(reportId: string): void {
+    const row = this.reporterReports.find((r) => r.id === reportId);
+    if (!row?.unread_count) return;
+    row.unread_count = 0;
+    void Promise.resolve(this.callbacks.onReporterMarkRead?.(reportId)).catch(() => {});
   }
 
-  private async submitReporterReply(panel: HTMLElement): Promise<void> {
-    const textarea = panel.querySelector('[data-role="reporter-reply"]') as HTMLTextAreaElement | null;
-    const body = textarea?.value.trim() ?? '';
-    // Guard: empty bodies and in-flight submits (runThreadAction) — both
-    // prevented double-posts in dogfood when users mashed Enter on a slow link.
-    if (!body) return;
-    // Snapshot the draft now: render() re-captures it from the live textarea.
-    this.draftReply = textarea?.value ?? '';
-    await this.runThreadAction('Could not send reply.', async (reportId) => {
-      await this.callbacks.onReporterReply?.(reportId, body);
-      // Clear the draft on success so the refresh doesn't repaint the
-      // just-sent text and tempt the user into a duplicate submit.
-      this.draftReply = '';
-      const live = this.shadow.querySelector<HTMLTextAreaElement>('[data-role="reporter-reply"]');
-      if (live) live.value = '';
+  /** Optimistic reply: the bubble shows at once as "Sending…", then lands or offers Retry. */
+  private submitReporterReply(): void {
+    const live = this.panel.querySelector<HTMLTextAreaElement>('[data-role="reporter-reply"]');
+    const body = (live?.value ?? '').trim();
+    if (!body || !this.selectedReportId) return;
+    const id = ++this.replySeq;
+    this.pendingReplies.push({ id, body, state: 'sending' });
+    delete this.drafts['reporter-reply'];
+    if (live) { live.value = ''; autoGrow(live); }
+    void this.sendPendingReply(id);
+  }
+
+  private async sendPendingReply(id: number): Promise<void> {
+    const pending = this.pendingReplies.find((p) => p.id === id);
+    const reportId = this.selectedReportId;
+    if (!pending || !reportId) return;
+    pending.state = 'sending';
+    this.render();
+    this.announce(this.rc.ui.sending);
+    try {
+      await withDeadline(Promise.resolve(this.callbacks.onReporterReply?.(reportId, pending.body)), REPORTER_READ_DEADLINE_MS);
+      await this.openThread(reportId, true);
+      this.pendingReplies = this.pendingReplies.filter((p) => p.id !== id);
+      this.render();
+      this.announce(this.rc.ui.sent);
+    } catch {
+      pending.state = 'failed';
+      this.render();
+      this.announce(this.rc.ui.sendFailed);
+    }
+  }
+
+  // ─── Opt-in channels (§4.1) ────────────────────────────────────────
+
+  private async saveEmailOptIn(): Promise<void> {
+    const email = (this.panel.querySelector<HTMLInputElement>('[data-role="optin-email"]')?.value ?? '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !this.callbacks.onReporterEmailOptIn) {
+      this.emailState = 'error';
+      this.render();
+      return;
+    }
+    this.emailState = 'saving';
+    this.render();
+    try {
+      await this.callbacks.onReporterEmailOptIn(email);
+      this.emailState = 'saved';
+    } catch {
+      this.emailState = 'error';
+    }
+    this.render();
+  }
+
+  private async subscribePush(): Promise<void> {
+    if (!this.callbacks.onReporterPushSubscribe || this.pushState === 'asking') return;
+    // Called synchronously from the click so the permission prompt keeps its user activation.
+    const pending = this.callbacks.onReporterPushSubscribe();
+    this.pushState = 'asking';
+    this.render();
+    try {
+      await pending;
+      this.pushState = 'on';
+    } catch {
+      this.pushState = 'error';
+    }
+    this.render();
+  }
+
+  // ─── Toast on next visit (§4.2) ────────────────────────────────────
+
+  /**
+   * One toast near the launcher: "The developer replied to your report",
+   * "Fixed in v1.4", "3 updates on your reports". Suppressed wherever the
+   * launcher is (hidden routes, hideOnSelector, hide()). View opens the thread.
+   */
+  showUpdateToast(update: { text: string; reportId?: string | null }): boolean {
+    if (this.isOpen || !this.triggerVisible || this.isRouteHidden() || this.isSuppressedByHost()) return false;
+    this.removeToast();
+    const toast = document.createElement('div');
+    toast.className = `mushi-toast ${this.config.trigger === 'banner' ? `banner-${this.config.bannerConfig?.position ?? 'top'}` : this.config.position}`;
+    toast.setAttribute('role', 'status');
+    toast.style.zIndex = String(this.config.zIndex + 1);
+    const text = document.createElement('span');
+    text.textContent = update.text;
+    const view = document.createElement('button');
+    view.type = 'button';
+    view.className = 'mushi-btn';
+    view.textContent = this.locale.panel.view;
+    view.addEventListener('click', () => {
+      this.removeToast();
+      const id = update.reportId;
+      if (id) void this.loadReporterReports().then(() => { if (this.isOpen && this.step === 'reports') void this.openThread(id); });
+      else this.openReporter();
     });
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'mushi-icon-btn';
+    dismiss.textContent = '✕';
+    dismiss.setAttribute('aria-label', this.locale.widget.close);
+    dismiss.addEventListener('click', () => this.removeToast());
+    toast.append(text, view, dismiss);
+    this.applyInsetVars(toast);
+    this.shadow.insertBefore(toast, this.panel);
+    this.toastEl = toast;
+    return true;
+  }
+
+  private removeToast(): void {
+    this.toastEl?.remove();
+    this.toastEl = null;
+  }
+
+  // ─── Focus + announcements ─────────────────────────────────────────
+
+  private rememberOpener(): void {
+    const active = document.activeElement as HTMLElement | null;
+    this.opener = active === this.host ? (this.shadow.activeElement as HTMLElement | null) : active;
+  }
+
+  /** Return focus to whatever opened the dialog; the trigger may have been rebuilt meanwhile. */
+  private restoreOpenerFocus(): void {
+    const target = this.opener?.isConnected ? this.opener : this.opener?.classList.contains('mushi-trigger') ? this.triggerEl : null;
+    this.opener = null;
+    if (target && target !== document.body) target.focus({ preventScroll: true });
+  }
+
+  /** Polite screen-reader announcement ("Sent", "Reply sent", errors). */
+  private announce(text: string): void {
+    this.live.textContent = '';
+    setTimeout(() => { this.live.textContent = text; }, 30);
   }
 
   /* ── Community: magic-link sign-in ───────────────────────────────── */
 
-  private async handleMagicLinkSend(panel: HTMLElement): Promise<void> {
-    if (this.magicLinkSending) return; // double-submit guard
-    const emailInput = panel.querySelector('[data-role="magic-link-email"]') as HTMLInputElement | null;
-    const email = (emailInput?.value ?? this.magicLinkEmail).trim();
+  private async handleMagicLinkSend(): Promise<void> {
+    if (this.magicLinkSending) return;
+    const email = (this.drafts['magic-link-email'] ?? this.magicLinkEmail).trim();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       this.magicLinkError = 'Please enter a valid email address.';
       this.render();
@@ -2562,28 +2217,32 @@ export class MushiWidget {
     }
   }
 
+  /** Open the widget on "Your reports" (`sdk.openReporter()`, the banner's link, a toast). */
+  openReporter(): void {
+    void this.loadReporterReports();
+  }
+
   /* ── Marketing / Playwright recorder (debug GIF capture) ─────────── */
 
   getRecorderStep(): WidgetStep {
     return this.step;
   }
 
-  /** QA / Playwright: category-step IA without piercing closed shadow from page JS. */
+  /** QA / Playwright: report-screen IA without piercing the shadow root. */
   getRecorderCategoryStepIA(): {
     sectionLabel: string;
     moreToggle: boolean;
     footerStepIndicators: number;
   } {
     return {
-      sectionLabel:
-        this.shadow.querySelector('.mushi-section-label')?.textContent?.trim() ?? '',
+      sectionLabel: this.shadow.querySelector('#mushi-title')?.textContent?.trim() ?? '',
       moreToggle: !!this.shadow.querySelector('[data-action="toggle-more-nav"]'),
-      footerStepIndicators: this.shadow.querySelectorAll('.mushi-step-indicator').length,
+      footerStepIndicators: 0,
     };
   }
 
   getRecorderTrigger(): Element | null {
-    return this.shadow.querySelector('.mushi-trigger');
+    return this.triggerEl;
   }
 
   getRecorderCategoryButton(category: MushiReportCategory): Element | null {
@@ -2591,11 +2250,7 @@ export class MushiWidget {
   }
 
   getRecorderIntentButton(label: string): Element | null {
-    return (
-      Array.from(this.shadow.querySelectorAll('[data-intent]')).find(
-        (el) => (el as HTMLElement).dataset.intent === label,
-      ) ?? null
-    );
+    return Array.from(this.shadow.querySelectorAll<HTMLElement>('[data-intent]')).find((el) => el.dataset.intent === label) ?? null;
   }
 
   getRecorderSubmitButton(): Element | null {
@@ -2607,51 +2262,68 @@ export class MushiWidget {
     this.open();
   }
 
-  /**
-   * Open the widget directly to the reporter's "My reports" history view.
-   * Can be called from host apps via `sdk.openReporter()` or triggered by
-   * the banner's "My reports" link button.
-   */
-  openReporter(): void {
-    if (!this.isOpen) {
-      this.isOpen = true;
-      this.render();
-    }
-    void this.loadReporterReports();
-  }
-
   recorderSelectCategory(category: MushiReportCategory): void {
     if (!this.isOpen) this.open();
-    if (this.step !== 'category') {
-      this.selectedCategory = null;
-      this.selectedIntent = null;
-      this.step = 'category';
-      this.render();
-    }
-    this.selectedCategory = category;
-    this.step = 'intent';
+    this.step = 'report';
+    this.chip = category;
+    this.intent = null;
     this.render();
   }
 
   recorderSelectIntent(label: string): void {
-    if (!this.isOpen || this.step !== 'intent') return;
-    this.selectedIntent = label;
-    this.step = 'details';
+    if (!this.isOpen || this.step !== 'report') return;
+    this.intent = label;
     this.render();
   }
 
   recorderFocusDescription(): void {
-    const textarea = this.shadow.querySelector('.mushi-textarea') as HTMLTextAreaElement | null;
-    textarea?.focus();
+    this.shadow.querySelector<HTMLTextAreaElement>('[data-role="description"]')?.focus();
   }
 
   recorderSubmit(): void {
-    const submit = this.shadow.querySelector('[data-action="submit"]') as HTMLButtonElement | null;
-    submit?.click();
+    this.submitReport();
   }
 
   recorderOpenMyReports(): void {
-    if (!this.isOpen) this.open();
     void this.loadReporterReports();
+  }
+}
+
+/** Selector that finds the replacement of a control after a patch. */
+function focusKey(el: HTMLElement): string | null {
+  const d = el.dataset;
+  if (d.role) return `[data-role="${d.role}"]`;
+  if (d.category) return `[data-category="${attr(d.category)}"]`;
+  if (d.intent) return `[data-intent="${attr(d.intent)}"]`;
+  if (d.reportId) return `[data-report-id="${attr(d.reportId)}"]`;
+  if (d.action) return `[data-action="${d.action}"]${d.value ? `[data-value="${attr(d.value)}"]` : ''}`;
+  return null;
+}
+
+/** Escape a value for a double-quoted attribute selector. */
+function attr(v: string): string {
+  return v.replace(/["\\]/g, '\\$&');
+}
+
+/** Grow a composer from one line up to four (§2.3). */
+function autoGrow(el: HTMLTextAreaElement): void {
+  el.style.height = 'auto';
+  el.style.height = `${Math.min(el.scrollHeight, 104)}px`;
+}
+
+/** Copy the receipt id, flipping the label to "Copied ✓" briefly. */
+function copyId(btn: HTMLElement): void {
+  const id = btn.dataset.copyId;
+  if (!id) return;
+  const restore = btn.textContent;
+  const done = () => {
+    btn.textContent = 'Copied ✓';
+    window.setTimeout(() => { if (btn.isConnected) btn.textContent = restore; }, 1600);
+  };
+  try {
+    if (navigator.clipboard?.writeText) void navigator.clipboard.writeText(id).then(done, done);
+    else done();
+  } catch {
+    done();
   }
 }
