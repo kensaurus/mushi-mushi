@@ -3,7 +3,6 @@
  * PURPOSE: Team roster health — plan gating, seat cap, invites, inactive seats.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { MembersStats } from './types'
@@ -24,9 +23,7 @@ export function MembersStatusBanner({ stats, teamsEnabled, onInvitesTab }: Props
         title="Teams require Pro or Enterprise"
         subtitle={`You can preview the roster on ${stats.planDisplayName ?? stats.planId ?? 'Hobby'}, but inviting teammates needs the teams entitlement.`}
         action={
-          <Link to="/billing">
-            <Btn size="sm" variant="ghost">View plans</Btn>
-          </Link>
+          <Btn to="/billing" size="sm" variant="ghost">View plans</Btn>
         }
       />
     )
@@ -39,9 +36,7 @@ export function MembersStatusBanner({ stats, teamsEnabled, onInvitesTab }: Props
         title="Seat cap reached"
         subtitle={`${stats.seatsUsed} of ${stats.seatLimit} seats used for ${orgLabel} (${stats.memberCount} members · ${stats.pendingInvites} pending). Upgrade or remove a member before inviting more.`}
         action={
-          <Link to="/billing">
-            <Btn size="sm" variant="ghost">Upgrade</Btn>
-          </Link>
+          <Btn to="/billing" size="sm" variant="ghost">Upgrade</Btn>
         }
       />
     )

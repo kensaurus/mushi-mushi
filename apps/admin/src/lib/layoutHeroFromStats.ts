@@ -610,13 +610,13 @@ function enrichByPath(pathname: string, counts: NavCounts): {
             ? {
                 tone: 'do',
                 title: `Fix ${failing} failing BYOK key${failing === 1 ? '' : 's'}`,
-                primary: { kind: 'link', to: '/settings?tab=keys', label: 'Open keys' },
+                primary: { kind: 'link', to: '/settings?tab=byok', label: 'Open keys' },
               }
             : untested > 0
               ? {
                   tone: 'plan',
                   title: `Test ${untested} saved key${untested === 1 ? '' : 's'}`,
-                  primary: { kind: 'link', to: '/settings?tab=keys', label: 'Run probe' },
+                  primary: { kind: 'link', to: '/settings?tab=byok', label: 'Run probe' },
                 }
               : null,
         actIdle: idle('Runtime configured', 'Health tab sends a test report after saves.', `${s?.byokKeysConfigured ?? 0} keys`),

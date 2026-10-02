@@ -1,4 +1,3 @@
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1';
 import { createOpenAI } from 'npm:@ai-sdk/openai@1';
 import { generateText } from 'npm:ai@4';
 import { getServiceClient } from '../_shared/db.ts';
@@ -15,7 +14,8 @@ import {
 import { withSentry } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { mapWithConcurrency } from '../_shared/concurrency.ts';
-import { INTELLIGENCE_FALLBACK, INTELLIGENCE_MODEL } from '../_shared/models.ts';
+import { INTELLIGENCE_EFFORT, INTELLIGENCE_FALLBACK, INTELLIGENCE_MODEL } from '../_shared/models.ts';
+import { claudeGenerateText } from '../_shared/claude-messages.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts';
 import {
   LlmFailoverError,
@@ -107,9 +107,10 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
             db,
             project.id,
             async (resolved) => {
-              const anthropic = createAnthropic({ apiKey: resolved.key });
-              return generateText({
-                model: anthropic(INTELLIGENCE_MODEL),
+              const { text, usage } = await claudeGenerateText({
+                apiKey: resolved.key,
+                model: INTELLIGENCE_MODEL,
+                effort: INTELLIGENCE_EFFORT,
                 messages: [
                   {
                     role: 'system',
@@ -121,17 +122,19 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
                   { role: 'user', content: statsContext },
                 ],
               });
+              return { text, usage };
             },
             async (resolved) => {
               const openai = createOpenAI({
                 apiKey: resolved.key,
                 ...(resolved.baseUrl ? { baseURL: resolved.baseUrl } : {}),
               });
-              return generateText({
+              const { text, usage } = await generateText({
                 model: openai(INTELLIGENCE_FALLBACK),
                 system: intelSystemPrompt,
                 prompt: statsContext,
               });
+              return { text, usage };
             },
           );
           digest = generation.result.text;

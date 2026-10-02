@@ -303,7 +303,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'transition_status',
     title: 'Move report between states',
     description:
-      'Move a report to a new workflow state, enforcing the same transition rules as the admin UI. Valid targets: classified, grouped, fixing, fixed, verified, reopened, dismissed. Returns { report } with the updated status. Write; idempotent (setting the current status is a no-op); rejects illegal transitions. Use to dismiss a duplicate or mark fixed; use merge_fix to mark fixed via a merged PR, or reopen_report for the reopened path.',
+      'Move a report to a new workflow state, enforcing the same transition rules as the admin UI. Valid targets: classified, grouped, fixing, fixed, verified, reopened, dismissed. When dismissing, closedReason (duplicate, not_reproducible, wont_fix, working_as_intended, spam) sets what the reporter is told — spam closes silently, and duplicate needs the report grouped under another one first; reporterMessage posts your note to the reporter verbatim. Returns { ok }. Write; idempotent (setting the current status is a no-op); rejects illegal transitions. Use to dismiss a duplicate or mark fixed; use merge_fix to mark fixed via a merged PR, or reopen_report for the reopened path.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: true, idempotent: true, openWorld: true },
     useCase: 'Dismiss this duplicate / mark it fixed.',
@@ -463,6 +463,18 @@ export const TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
     useCase: 'Analyze this bug report end-to-end and tell me what to do.',
+  },
+  {
+    name: 'import_sentry_issues',
+    title: 'Import Sentry issues',
+    description:
+      "Pull existing Sentry issues into Mushi's report queue: by issueIds (numeric ids or short ids like WEB-12, at most 10) or by a Sentry search query (default is:unresolved) within the project's configured Sentry project, limit 1-10. " +
+      'Each issue goes through the same path as a Sentry webhook delivery: deduped per issue, linked, classified. An issue already linked to a report answers linked and is never reopened. ' +
+      "Returns { items: [{ input, issueId, shortId, outcome, reportId, error? }], created, linked, failed, indexing }. Write; idempotent; spends classification budget per new report. " +
+      'Needs the Sentry org slug, project slug and an auth token (event:read, project:read) in Integrations → Sentry. Use for issues that existed before the webhook was wired; then call triage_issue on a created report.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+    useCase: 'Pull my open Sentry issues into Mushi so I can triage and fix them.',
   },
   {
     name: 'triage_next_steps',
@@ -779,6 +791,34 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: false },
     useCase: 'Reply to a reporter asking for more info or confirming a fix.',
+  },
+  {
+    name: 'request_reporter_info',
+    title: 'Ask the reporter a question',
+    description:
+      'Ask the end-user who filed a report a question: it appears in their in-app "Your reports" thread, marks the report "Waiting on you", and the waiting state clears when they answer (their reply reaches Slack and the console). Returns { comment_id, awaiting_reporter }. Write; messages a real end user and is NOT idempotent — each call posts another question, so confirm the wording with the user first. Fails with NO_REPORTER for reports that came from an integration. Use when you need reproduction details; use reply_to_reporter for a plain reply.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: false },
+    useCase: 'Ask the reporter which page or device this happened on.',
+  },
+  {
+    name: 'list_reporter_outbox',
+    title: 'List held reporter updates',
+    description:
+      'List pipeline messages waiting for review before they reach reporters (projects in review mode hold "fix in progress", "fixed", "shipped in vX" and "closed" messages). Each row has { id, report_id, report_title, notification_type, text, body_override, created_at }; text is exactly what the reporter will see. Read-only. Use before release_reporter_update; an empty list means nothing is waiting (or the project sends updates automatically).',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: false },
+    returnsUntrusted: true,
+    useCase: 'What reporter updates are waiting for my review?',
+  },
+  {
+    name: 'release_reporter_update',
+    title: 'Release or discard a held reporter update',
+    description:
+      'Send (action=release, the default) or drop (action=discard) one held reporter message from list_reporter_outbox; bodyOverride replaces its text before sending. Returns { delivered, skipped, failed }. Write; messages a real end user — confirm with the user first. Idempotent in effect: a message that is no longer held returns CONFLICT instead of sending twice.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: false },
+    useCase: 'Send the "fixed in v1.4" update to the reporter.',
   },
   {
     name: 'get_two_way_comms_health',

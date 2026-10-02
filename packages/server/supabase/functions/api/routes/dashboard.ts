@@ -10,6 +10,7 @@ import {
   OPEN_REPORT_STATUSES,
 } from '../shared.ts';
 import { attachReportTitles, bucketFailedFixPreviews } from '../../_shared/failed-fix-preview.ts';
+import { JUDGE_ELIGIBLE_STATUSES, isJudgeStale } from '../../_shared/judge-eligibility.ts';
 
 export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/stats', adminOrApiKey(), async (c) => {
@@ -142,6 +143,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       keysRes,
       heartbeatRes,
       reportCountRes,
+      ungradedRes,
     ] = await Promise.all([
       db
         .from('reports')
@@ -190,6 +192,14 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         .from('reports')
         .select('id', { count: 'exact', head: true })
         .eq('project_id', activeProject.id),
+      // What judge-batch would grade right now. Scoped like evalRes so the
+      // staleness verdict compares like with like.
+      db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds)
+        .in('status', [...JUDGE_ELIGIBLE_STATUSES])
+        .is('judge_evaluated_at', null),
     ]);
 
     const recentReports = reportsRes.data ?? [];
@@ -226,7 +236,9 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     if (lastEvalAt) {
       judgeStaleHours = (now - new Date(String(lastEvalAt)).getTime()) / (60 * 60 * 1000);
     }
-    const judgeStale = judgeStaleHours == null || judgeStaleHours > 48;
+    // Old scores alone are not actionable: with no ungraded report a re-run
+    // evaluates nothing and the "Judge scores are Nh old" card never clears.
+    const judgeStale = isJudgeStale({ judgeStaleHours, ungradedReports: ungradedRes.count ?? 0 });
 
     const openPlan = criticalReports14d > 0;
     const openDo = failedFixes14d > 0;

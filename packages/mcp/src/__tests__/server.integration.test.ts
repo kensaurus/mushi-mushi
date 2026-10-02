@@ -138,6 +138,9 @@ describe('MCP protocol handshake', () => {
       'remove_byok_key',
       'approve_qa_story',
       'reply_to_reporter',
+      // Plan 018: reporter loop
+      'request_reporter_info',
+      'release_reporter_update',
       // Phase 5: notification + full-stack audit write tools
       'test_notification_channel',
       'run_fullstack_audit',
@@ -148,6 +151,8 @@ describe('MCP protocol handshake', () => {
       'merge_fix',
       'refresh_ci',
       'reopen_report',
+      // Sentry pull-import creates reports and spends classification budget
+      'import_sentry_issues',
       // Codebase Understand: ask_codebase triggers LLM generation (mcp:write);
       // get_file_summary / get_codebase_tour are read-only.
       'ask_codebase',

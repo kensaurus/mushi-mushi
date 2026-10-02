@@ -5,6 +5,7 @@
 import { Btn } from '../ui'
 import { HumanActionAlert, type HumanActionPreviewItem } from '../HumanActionAlert'
 import { fixesFailedAction, fixesFailedHint, scopedHref } from '../../lib/humanPageHints'
+import { fixFailureBucket, isFixCountedFailed } from '../../lib/pdcaAct'
 import type { FixAttempt } from './types'
 
 interface Props {
@@ -20,11 +21,14 @@ const CATEGORY_LABELS: Record<string, string> = {
   cursor_api_error: 'Cursor API',
   sandbox_timeout: 'Sandbox timeout',
   scope_blocked: 'Scope blocked',
+  ci_failed: 'CI failed',
+  pr_closed_unmerged: 'PR closed unmerged',
   unknown: 'Unknown',
 }
 
 export function FixesFailedSummary({ fixes, projectId, onReviewCategory, compact = false }: Props) {
-  const failed = fixes.filter((f) => f.status === 'failed')
+  // Same rule as the "Failed / skipped" filter and the status banner.
+  const failed = fixes.filter((f) => isFixCountedFailed(f))
   if (failed.length === 0) return null
 
   const preview: HumanActionPreviewItem[] = failed.slice(0, 3).map((f) => ({
@@ -36,7 +40,7 @@ export function FixesFailedSummary({ fixes, projectId, onReviewCategory, compact
 
   const buckets = new Map<string, number>()
   for (const f of failed) {
-    const cat = f.failure_category ?? 'unknown'
+    const cat = fixFailureBucket(f)
     buckets.set(cat, (buckets.get(cat) ?? 0) + 1)
   }
   const sorted = [...buckets.entries()].sort((a, b) => b[1] - a[1])

@@ -32,6 +32,8 @@ interface InventoryActionSummary {
 interface Props {
   fix: FixAttempt
   timeline: FixTimelineEvent[] | undefined
+  /** `base_branch` from the timeline endpoint (project_repos.default_branch). */
+  baseBranch?: string | null
   traceUrl: string | null
   onRetry: () => Promise<void>
   onRefreshed?: () => void
@@ -42,6 +44,7 @@ interface Props {
 export function FixDetailPanel({
   fix,
   timeline,
+  baseBranch,
   traceUrl,
   onRetry,
   onRefreshed,
@@ -153,6 +156,7 @@ export function FixDetailPanel({
             prNumber={fix.pr_number}
             prState={fix.pr_state}
             branchName={fix.branch}
+            baseBranch={baseBranch}
             commitSha={fix.commit_sha}
             agentModel={fix.llm_model ?? fix.agent}
             filesChanged={fix.files_changed}

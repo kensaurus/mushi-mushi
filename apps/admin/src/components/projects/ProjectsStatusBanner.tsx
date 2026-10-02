@@ -3,7 +3,6 @@
  * PURPOSE: Workspace-level project health — ingest, SDK heartbeat, active context.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { ProjectsStats, ProjectsTabId } from './types'
@@ -44,9 +43,7 @@ export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, o
           roleHint ? undefined : onTab ? (
             <Btn size="sm" variant="primary" onClick={() => onTab('create')}>Create project</Btn>
           ) : (
-            <Link to="/projects?tab=create">
-              <Btn size="sm" variant="primary">Create project</Btn>
-            </Link>
+            <Btn to="/projects?tab=create" size="sm" variant="primary">Create project</Btn>
           )
         }
       />
@@ -63,9 +60,7 @@ export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, o
           onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('list')}>Open project list</Btn>
           ) : actionTab ? (
-            <Link to={stats.topPriorityTo ?? '/projects?tab=list'}>
-              <Btn size="sm" variant="ghost">Open project list</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo ?? '/projects?tab=list'} size="sm" variant="ghost">Open project list</Btn>
           ) : null
         }
       />
@@ -123,9 +118,7 @@ export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, o
             Refresh
           </Btn>
         ) : (
-          <Link to="/reports">
-            <Btn size="sm" variant="ghost">Open Reports</Btn>
-          </Link>
+          <Btn to="/reports" size="sm" variant="ghost">Open Reports</Btn>
         )
       }
     />

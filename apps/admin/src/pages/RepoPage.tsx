@@ -559,11 +559,9 @@ export function RepoPage() {
           : "Install the Mushi GitHub App on the repo you want auto-fix PRs opened against."
       }
       action={
-        <Link to={hasRepo ? '/reports' : '/integrations/config'}>
-          <Btn variant="primary" size="sm">
+        <Btn to={hasRepo ? '/reports' : '/integrations/config'} variant="primary" size="sm">
             {hasRepo ? 'Open Reports' : 'Connect GitHub'}
           </Btn>
-        </Link>
       }
     />
   )

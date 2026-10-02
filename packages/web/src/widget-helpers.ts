@@ -36,6 +36,7 @@ import {
   projectInitials,
   resolveProjectDomain,
 } from '@mushi-mushi/core';
+import type { ScreenshotFailureReason } from './capture/screenshot';
 
 /** One rendered turn in the in-widget assistant thread. */
 export interface AssistantTurn {
@@ -286,6 +287,93 @@ export function isSubmitShortcut(e: KeyboardEvent): boolean {
   return (e.metaKey || e.ctrlKey) && e.key === 'Enter';
 }
 
+/** Modifier shown in the shortcut hint: ⌘ on Apple platforms (iPadOS reports
+ *  "MacIntel"), Ctrl everywhere else. Pure so tests can pass the platform. */
+export function submitShortcutKey(platform: string): string {
+  return /Mac|iPhone|iPad|iPod/i.test(platform) ? '⌘' : 'Ctrl';
+}
+
+export function readPlatform(): string {
+  if (typeof navigator === 'undefined') return '';
+  const uaData = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData;
+  return uaData?.platform || navigator.platform || navigator.userAgent || '';
+}
+
+/**
+ * Whether the "Mushi SDK x · latest is y" notice may render in the widget.
+ * It is a developer instruction ("update @mushi-mushi/web"), so under the
+ * default 'auto' it only shows on a dev host or with `debug: true` — never to
+ * an app's end users. 'banner' is an explicit host opt-in; 'console-only' and
+ * 'off' never render it.
+ */
+export function shouldShowSdkFreshness(
+  mode: 'auto' | 'banner' | 'console-only' | 'off' | undefined,
+  debug: boolean,
+  loc: Pick<Location, 'hostname' | 'protocol'> | undefined,
+): boolean {
+  if (mode === 'banner') return true;
+  if (mode === 'console-only' || mode === 'off') return false;
+  if (debug) return true;
+  if (!loc) return false;
+  const host = loc.hostname.replace(/^\[|\]$/g, '');
+  return loc.protocol === 'file:'
+    || host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0'
+    || host.endsWith('.localhost') || host.endsWith('.local');
+}
+
+/** Rejects with a "timed out" error when `promise` hasn't settled within `ms`. */
+export function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Timed out')), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e: unknown) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
+/** Reporter inbox reads that never settle must not leave a spinner up forever. */
+export const REPORTER_READ_DEADLINE_MS = 15_000;
+
+/** Mirrors the description textarea's maxlength. */
+export const DESCRIPTION_MAX_LENGTH = 4000;
+
+/** Which copy + starter chips the details step shows. */
+export type DetailMode = 'bug' | 'feature' | 'other';
+
+/** Capture failure reasons plus 'permission' (a host screenshotProvider was denied). */
+export type ScreenshotErrorReason = ScreenshotFailureReason | 'permission';
+
+/**
+ * Description counter: "N more characters" until the minimum is met, then
+ * "length/max". Showing length over the *minimum* ("397/12") read as overflow.
+ * The minimum counts trimmed text (what submit validates); the max counts raw
+ * text (what maxlength enforces).
+ */
+export function charCounterText(value: string, minLen: number, neededCopy: string): string {
+  const trimmed = value.trim().length;
+  return trimmed < minLen
+    ? neededCopy.replace('{n}', String(minLen - trimmed))
+    : `${value.length}/${DESCRIPTION_MAX_LENGTH}`;
+}
+
+/** Locale-aware short date-time with zone, e.g. "Oct 2, 10:37 GMT+9". */
+export function formatReceiptTime(date: Date, locale?: string): string {
+  const opts: Intl.DateTimeFormatOptions = {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  };
+  try {
+    return date.toLocaleString(locale, opts);
+  } catch {
+    // An invalid host locale tag throws RangeError — fall back to the runtime's.
+    return date.toLocaleString(undefined, opts);
+  }
+}
+
 export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -349,6 +437,11 @@ export interface WidgetCallbacks {
   onBrandFooterImpression?(): void;
   onBrandFooterClick?(): void;
   onScreenshotRequest(): void;
+  /**
+   * Present only when the browser supports getDisplayMedia. Must start the
+   * capture synchronously (the picker needs the click's user activation).
+   */
+  onScreenshotShareTabRequest?(): void;
   onScreenshotRemove?(): void;
   /** Optional markup pass (highlight / blur / arrow) before submit. */
   onScreenshotAnnotateRequest?(container: HTMLElement): void | Promise<void>;

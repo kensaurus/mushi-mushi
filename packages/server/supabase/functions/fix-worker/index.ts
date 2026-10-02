@@ -49,7 +49,6 @@
  */
 
 import { generateObject, NoObjectGeneratedError } from 'npm:ai@4';
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1';
 import { createOpenAI } from 'npm:@ai-sdk/openai@1';
 import { z } from 'npm:zod@3';
 import { getServiceClient } from '../_shared/db.ts';
@@ -62,7 +61,20 @@ import {
   formatCodeContext,
   type RagSkipReason,
 } from '../_shared/rag.ts';
-import { createPrFromFiles, generateFixBranchName } from '../_shared/github-pr.ts';
+import {
+  createPrFromFiles,
+  fetchBaseFileState,
+  generateFixBranchName,
+  resolveBaseBranch,
+} from '../_shared/github-pr.ts';
+import {
+  assessFixFiles,
+  fixDiffLineCount,
+  fixReviewPassed,
+  reportRequestsRewrite,
+  type BaseFileState,
+} from '../_shared/fix-file-guard.ts';
+import { featureRequestDispatchBlock } from '../_shared/report-category.ts';
 
 function ragSkipReasonMessage(reason: RagSkipReason | 'ok', detail: string | undefined): string {
   switch (reason) {
@@ -84,7 +96,8 @@ import { firecrawlSearch, type FirecrawlSearchResult } from '../_shared/firecraw
 import { createTrace } from '../_shared/observability.ts';
 import { log as rootLog, type Logger } from '../_shared/logger.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
-import { FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts';
+import { FIX_EFFORT, FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts';
+import { claudeGenerateObject } from '../_shared/claude-messages.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import { checkAutofixBudget } from '../_shared/autofix-budget.ts';
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
@@ -107,6 +120,7 @@ import {
 // ----------------------------------------------------------------------------
 
 import { fixSchema, type FixOutput } from '../_shared/fix-schema.ts';
+import { sentryFixesTrailers, sentryShortIdsForReport } from '../_shared/sentry-resolve-back.ts';
 import { validateEdgeSpec, renderSpecContextEdge } from '../_shared/spec-validation.ts';
 
 const SYSTEM_PROMPT = `You are a senior staff engineer fixing one specific bug report.
@@ -340,8 +354,8 @@ Deno.serve(
         db
           .from('reports')
           .select(
-            'id, description, summary, category, severity, component, confidence, user_intent, status, reporter_token_hash, ' +
-              'stage2_analysis, reproduction_steps, environment, console_logs, network_logs, ' +
+            'id, description, summary, category, severity, component, confidence, user_intent, user_category, status, reporter_token_hash, ' +
+              'stage1_classification, stage2_analysis, reproduction_steps, environment, console_logs, network_logs, ' +
               'judge_score',
           )
           .eq('id', dispatch.report_id)
@@ -365,6 +379,14 @@ Deno.serve(
 
       if (!report) throw new Error(`Report ${dispatch.report_id} not found`);
       if (!project) throw new Error(`Project ${dispatch.project_id} not found`);
+
+      // Defence in depth for every dispatch path: a reporter's feature
+      // request never reaches the LLM or GitHub until a human re-categorizes
+      // it (report 469f6962 was a feature request and became PR 424).
+      const featureBlock = featureRequestDispatchBlock(report);
+      if (featureBlock) {
+        return await blockFixAttempt(db, trace, dispatch, fixAttemptId, featureBlock, { files_changed: [] });
+      }
 
       const budget = await checkAutofixBudget(db, dispatch.project_id, {
         autofix_max_spend_usd: (settings?.autofix_max_spend_usd as number | null) ?? null,
@@ -794,11 +816,14 @@ ${
           dispatch.project_id,
           async (anthropicResolved) => {
             usedModel = DEFAULT_ANTHROPIC_MODEL;
-            const anthropic = createAnthropic({ apiKey: anthropicResolved.key });
-            const { object, usage } = await generateObject({
-              model: anthropic(usedModel),
+            const { object, usage } = await claudeGenerateObject({
+              apiKey: anthropicResolved.key,
+              model: usedModel,
               schema: fixSchema,
-              temperature: 0,
+              effort: FIX_EFFORT,
+              // A fix can carry whole file contents; at medium effort a long
+              // generation needs more than the default per-call timeout.
+              timeoutMs: 300_000,
               messages: [
                 {
                   role: 'system',
@@ -809,7 +834,9 @@ ${
                 },
                 { role: 'user', content: userPrompt },
               ],
-              maxTokens: 8_000,
+              // 8K of fix output plus room for adaptive thinking, which
+              // counts toward max_tokens on Sonnet 5.5.
+              maxTokens: 16_000,
             });
             inputTokens = usage?.promptTokens ?? 0;
             outputTokens = usage?.completionTokens ?? 0;
@@ -930,6 +957,25 @@ ${
         }
       }
 
+      // ---- 6c. Review gate ----------------------------------------------------
+      // The model flags its own low-confidence output with needsHumanReview.
+      // That used to be stored as review_passed=false and the PR opened anyway
+      // (PR #424, a blind rewrite of apps/docs/app/layout.tsx). A flagged fix
+      // never reaches GitHub; the proposal stays on the attempt for a human.
+      if (!fixReviewPassed(fix)) {
+        const reason = `review_failed: the fix model flagged its own change for human review. ${fix.rationale}`.slice(0, 450);
+        return await blockFixAttempt(db, trace, dispatch, fixAttemptId, reason, {
+          files_changed: fix.files.map((f) => f.path),
+          lines_changed: totalLines,
+          summary: fix.summary,
+          rationale: fix.rationale,
+          llm_model: usedModel,
+          llm_input_tokens: inputTokens,
+          llm_output_tokens: outputTokens,
+          review_passed: false,
+        });
+      }
+
       // ---- 7. Get GitHub token + open draft PR ------------------------------
       const ghToken = await resolveGithubToken(db, project.owner_id ?? null, dispatch.project_id);
       if (!ghToken) {
@@ -949,7 +995,7 @@ ${
           llm_model: usedModel,
           llm_input_tokens: inputTokens,
           llm_output_tokens: outputTokens,
-          review_passed: !fix.needsHumanReview,
+          review_passed: fixReviewPassed(fix),
         });
         await db
           .from('fix_dispatch_jobs')
@@ -975,6 +1021,49 @@ ${
         });
       }
 
+      // ---- 7b. Blind-write guard ---------------------------------------------
+      // Every file is a full-content replacement, so read what the base branch
+      // holds first. A file we cannot read is never written; a "modify" that
+      // deletes most of the file is a rewrite and is dropped unless the report
+      // asked for one. New files pass only when GitHub says the path is absent.
+      const base = await resolveBaseBranch(ghToken, repo.owner, repo.repo, repo.defaultBranch, {
+        info: (msg, ctx) => log.info(msg, ctx as Record<string, unknown>),
+        warn: (msg, ctx) => log.warn(msg, ctx as Record<string, unknown>),
+      });
+      const baseStates = new Map<string, BaseFileState>();
+      for (const f of fix.files) {
+        baseStates.set(f.path, await fetchBaseFileState(ghToken, repo.owner, repo.repo, base.branch, f.path));
+      }
+      const fileAssessment = assessFixFiles(fix.files, baseStates, {
+        allowRewrite: reportRequestsRewrite([
+          report.description as string | undefined,
+          report.summary as string | undefined,
+          report.user_intent as string | undefined,
+        ]),
+      });
+      if (fileAssessment.blockReason) {
+        return await blockFixAttempt(db, trace, dispatch, fixAttemptId, fileAssessment.blockReason, {
+          files_changed: fix.files.map((f) => f.path),
+          lines_changed: totalLines,
+          summary: fix.summary,
+          rationale: fix.rationale,
+          llm_model: usedModel,
+          llm_input_tokens: inputTokens,
+          llm_output_tokens: outputTokens,
+          review_passed: fixReviewPassed(fix),
+        });
+      }
+      const prFiles = fileAssessment.kept;
+      // Real diff size (+added −deleted) against the base we just read, not the
+      // new file's length — matches the "+a −d" GitHub shows on the PR.
+      const prLines = fixDiffLineCount(prFiles, baseStates);
+      for (const d of fileAssessment.dropped) {
+        specValidationWarnings.push({
+          code: 'FILE_DROPPED',
+          message: `${d.path} was not written: ${d.reason}.`,
+        });
+      }
+
       const prSpan = trace.span('github.pr');
       const prBranch = generateFixBranchName(
         dispatch.report_id,
@@ -986,12 +1075,16 @@ ${
           token: ghToken,
           owner: repo.owner,
           repo: repo.repo,
-          defaultBranch: repo.defaultBranch,
+          defaultBranch: base.branch,
           branch: prBranch,
           title: fix.summary,
-          body: buildPrBody(fix, dispatch.report_id),
-          files: fix.files,
+          body: buildPrBody({ ...fix, files: prFiles }, dispatch.report_id),
+          files: prFiles,
           labels: ['mushi-autofix'],
+          // `Fixes <SHORT-ID>` for Sentry-linked reports (sentry-resolve-back.ts).
+          commitTrailers: sentryFixesTrailers(
+            await sentryShortIdsForReport(db, dispatch.project_id, dispatch.report_id),
+          ),
         },
         {
           info: (msg, ctx) => log.info(msg, ctx as Record<string, unknown>),
@@ -1007,14 +1100,14 @@ ${
         pr_url: prResult.url,
         pr_number: prResult.number,
         commit_sha: prResult.commitSha,
-        files_changed: fix.files.map((f) => f.path),
-        lines_changed: totalLines,
+        files_changed: prFiles.map((f) => f.path),
+        lines_changed: prLines,
         summary: fix.summary,
         rationale: fix.rationale,
         llm_model: usedModel,
         llm_input_tokens: inputTokens,
         llm_output_tokens: outputTokens,
-        review_passed: !fix.needsHumanReview,
+        review_passed: fixReviewPassed(fix),
         ...(specValidationWarnings.length > 0
           ? { spec_validation_warnings: specValidationWarnings }
           : {}),
@@ -1831,6 +1924,41 @@ async function stampReportAutofixBlocked(
   }
 }
 
+/**
+ * Stop an attempt at a pre-PR guard (review gate, blind-write guard). Same
+ * shape as the context-floor gate: the attempt keeps what the model proposed
+ * so a human can read it, the dispatch and report say why, nothing touches
+ * GitHub, and the response is a 200 because the guard did its job.
+ * `validation_rejected` is in the fix_attempts.failure_category CHECK and in
+ * EXPECTED_FAILURE_CATEGORIES, so this never pages Sentry.
+ */
+async function blockFixAttempt(
+  db: ReturnType<typeof getServiceClient>,
+  trace: { end: () => Promise<unknown> },
+  dispatch: { id: string; report_id: string },
+  fixAttemptId: string,
+  reason: string,
+  fields: Record<string, unknown>,
+): Promise<Response> {
+  rootLog.child('fix-worker').warn('Fix blocked before PR', { dispatchId: dispatch.id, reason });
+  await completeAttempt(db, fixAttemptId, {
+    ...fields,
+    status: 'failed',
+    error: reason,
+    failure_category: 'validation_rejected',
+  });
+  await db
+    .from('fix_dispatch_jobs')
+    .update({ status: 'failed', error: reason.slice(0, 500), finished_at: new Date().toISOString() })
+    .eq('id', dispatch.id);
+  await stampReportAutofixBlocked(db, dispatch.report_id, reason);
+  await trace.end();
+  return new Response(JSON.stringify({ ok: true, blocked: true, reason, fixAttemptId }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 async function completeAttempt(
   db: ReturnType<typeof getServiceClient>,
   fixAttemptId: string,
@@ -2219,6 +2347,16 @@ ${fileList}
 ---
 *This PR was generated by Mushi Mushi using your project's BYOK LLM key. The agent operates within a circuit-breaker (max lines per file) and a structured-output schema — it cannot run shell commands or call arbitrary tools. Review every line before merging.*
 
-[Open report in admin console](mushi://reports/${reportId})`;
+${reportConsoleLink(reportId)}`;
+}
+
+/**
+ * GitHub only links http(s) URLs, so the old custom-scheme report link was
+ * dead text. ADMIN_BASE_URL is the console origin (team-notify uses the same
+ * var); without it the line is left out rather than shipped broken.
+ */
+function reportConsoleLink(reportId: string): string {
+  const adminBase = Deno.env.get('ADMIN_BASE_URL')?.replace(/\/$/, '') ?? null;
+  return adminBase ? `[Open report in the Mushi console](${adminBase}/reports/${encodeURIComponent(reportId)})` : '';
 }
 

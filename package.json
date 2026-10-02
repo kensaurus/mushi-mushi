@@ -190,7 +190,7 @@
       "mermaid": ">=11.16.1 <12",
       "dompurify": ">=3.4.16 <4",
       "vitest": ">=4.1.11 <5",
-      "devalue": "5.9.2",
+      "devalue": "5.9.3",
       "@angular/core": ">=22.1.0 <23",
       "axios": ">=1.20.0 <2",
       "brace-expansion@1": ">=1.1.21 <2",

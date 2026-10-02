@@ -1,5 +1,6 @@
 import { Hono } from 'npm:hono@4';
 import { cors } from 'npm:hono@4/cors';
+import { PUBLIC_CORS_MAX_AGE_SECONDS } from '../_shared/cors.ts';
 import type { Variables } from './types.ts';
 
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
@@ -40,6 +41,7 @@ import { registerMcpOauthRoutes } from './routes/mcp-oauth.ts';
 import { registerLessonsRoutes } from './routes/lessons.ts';
 import { registerSyncRoutes } from './routes/sync.ts';
 import { registerReleasesRoutes } from './routes/releases.ts';
+import { registerReporterAdminRoutes } from './routes/reporter-admin.ts';
 import { registerPdcaRoutes } from './routes/pdca.ts';
 import { registerMcpAdminRoutes } from './routes/mcp-admin.ts';
 import { registerDriftRoutes } from './routes/drift.ts';
@@ -71,6 +73,7 @@ import { registerSlackEventsRoutes } from './routes/slack-events.ts';
 import { registerTelegramAdminRoutes } from './routes/telegram-admin.ts';
 import { registerIntakeVoiceRoutes } from './routes/intake-voice.ts';
 import { registerPushRoutes } from './routes/push.ts';
+import { registerSentryImportRoutes } from './routes/sentry-import.ts';
 
 ensureSentry('api');
 
@@ -172,6 +175,7 @@ app.use(
       'sentry-trace',
     ],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    maxAge: PUBLIC_CORS_MAX_AGE_SECONDS,
   }),
 );
 app.use(
@@ -190,6 +194,7 @@ app.use(
       'sentry-trace',
     ],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    maxAge: PUBLIC_CORS_MAX_AGE_SECONDS,
   }),
 );
 app.use(
@@ -208,6 +213,7 @@ app.use(
       'sentry-trace',
     ],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    maxAge: PUBLIC_CORS_MAX_AGE_SECONDS,
   }),
 );
 // Span ingest endpoint (OTel trace correlation). Accepts traceparent/tracestate
@@ -226,6 +232,7 @@ app.use(
       'tracestate',
     ],
     allowMethods: ['POST', 'OPTIONS'],
+    maxAge: PUBLIC_CORS_MAX_AGE_SECONDS,
   }),
 );
 app.use(
@@ -246,6 +253,7 @@ app.use(
       'sentry-trace',
     ],
     allowMethods: ['GET', 'POST', 'OPTIONS'],
+    maxAge: PUBLIC_CORS_MAX_AGE_SECONDS,
   }),
 );
 app.use(
@@ -266,6 +274,7 @@ app.use(
       'sentry-trace',
     ],
     allowMethods: ['GET', 'POST', 'OPTIONS'],
+    maxAge: PUBLIC_CORS_MAX_AGE_SECONDS,
   }),
 );
 app.use(
@@ -286,6 +295,7 @@ app.use(
       'sentry-trace',
     ],
     allowMethods: ['GET', 'POST', 'OPTIONS'],
+    maxAge: PUBLIC_CORS_MAX_AGE_SECONDS,
   }),
 );
 app.use(
@@ -596,6 +606,7 @@ registerMcpOauthRoutes(app);
 registerLessonsRoutes(app);
 registerSyncRoutes(app);
 registerReleasesRoutes(app);
+registerReporterAdminRoutes(app);
 registerPdcaRoutes(app);
 registerMcpAdminRoutes(app);
 registerDriftRoutes(app);
@@ -626,6 +637,7 @@ registerSlackEventsRoutes(app);
 registerTelegramAdminRoutes(app);
 registerIntakeVoiceRoutes(app);
 registerPushRoutes(app);
+registerSentryImportRoutes(app);
 
 registerA2ATaskRoutes(app);
 

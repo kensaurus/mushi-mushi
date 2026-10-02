@@ -1,5 +1,4 @@
-import { generateObject, streamObject } from 'npm:ai@4';
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1';
+import { generateObject } from 'npm:ai@4';
 import { createOpenAI } from 'npm:@ai-sdk/openai@1';
 import { z } from 'npm:zod@3';
 import { getServiceClient } from '../_shared/db.ts';
@@ -24,11 +23,16 @@ import { createExternalIssue } from '../_shared/integrations.ts';
 import { buildReportGraph } from '../_shared/knowledge-graph.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { parseBody, ClassifyReportBodySchema } from '../_shared/validate.ts';
-import { STAGE2_MODEL, STAGE2_FALLBACK } from '../_shared/models.ts';
+import { STAGE2_EFFORT, STAGE2_MODEL, STAGE2_FALLBACK, VISION_EFFORT } from '../_shared/models.ts';
+import { claudeGenerateObject, claudeStreamObject } from '../_shared/claude-messages.ts';
+import { resolveClaudeModel } from '../_shared/claude-request.ts';
 import { childTraceparent } from '../_shared/trace.ts';
 import { otlpSpan, setGenAiAttributes } from '../_shared/otlp-exporter.ts';
 import { estimateCallCostUsd } from '../_shared/pricing.ts';
 import { checkDiagnosisQuota, invalidateDiagnosisCache } from '../_shared/quota.ts';
+import { emitProductEvent } from '../_shared/product-events.ts';
+import { keepAlive } from '../_shared/background.ts';
+import { isNonRealReport, type OldestReportRow } from '../_shared/first-report.ts';
 import {
   findInventoryCandidates,
   formatCandidatesForPrompt,
@@ -40,6 +44,8 @@ import {
 } from '../_shared/mcp-triage-context.ts'
 import { linearSearchIssues } from '../_shared/linear-mcp-client.ts'
 import { isLinearConnected } from '../_shared/linear.ts';
+import { clipAtWord } from '../_shared/text-clip.ts';
+import { isFeatureRequest, reporterCategoryHint, respectReporterCategory } from '../_shared/report-category.ts';
 import {
   stage2Schema,
   STAGE2_AREA_MAX,
@@ -239,7 +245,8 @@ Deno.serve(
             stage2_prompt_version: groupHead.stage2_prompt_version ?? null,
             stage2_latency_ms: 0,
             stage2_partial: null,
-            category: groupHead.category,
+            // A feature request grouped under a bug head keeps 'other'.
+            category: isFeatureRequest(report) ? 'other' : groupHead.category,
             severity: groupHead.severity,
             summary: groupHead.summary,
             title: (groupHead as Record<string, unknown>).title ?? null,
@@ -511,6 +518,7 @@ Deno.serve(
 - Actual: ${extraction?.actual ?? 'unknown'}
 - Emotion: ${extraction?.emotion || 'not captured'}
 - Stage 1 Category: ${extraction?.category ?? scrubbedReport.user_category}
+${reporterCategoryHint(scrubbedReport, { trusted: true })}
 - Stage 1 Severity: ${extraction?.severity ?? 'unknown'}
 - Stage 1 Confidence: ${extraction?.confidence ?? 'unknown'}
 
@@ -524,7 +532,7 @@ ${codeContext ? `\n## Relevant Code Files\n${codeContext}` : `\n## Relevant Code
 ${ontologyContext}${inventoryContext}${mcpContextSection}`;
 
       const startTime = Date.now();
-      const modelId = settings?.stage2_model ?? STAGE2_MODEL;
+      const modelId = resolveClaudeModel(settings?.stage2_model, STAGE2_MODEL);
       const FALLBACK_MODEL = STAGE2_FALLBACK;
       let classification: z.infer<typeof stage2Schema>;
       const llmSpan = trace.span('stage2.analyze');
@@ -545,18 +553,20 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
       const anthropicResolved = await resolveLlmKey(db, projectId, 'anthropic');
       let keySource: 'byok' | 'env' = anthropicResolved?.source ?? 'env';
       try {
-        const anthropic = createAnthropic({
-          apiKey: anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY'),
-        });
         // Wave S5: stream the Stage 2 object so the admin UI can progressively
         // render category/severity/summary as tokens arrive. The stream is
         // pushed to `reports.stage2_partial` behind a 400 ms debounce — the
         // admin's existing Realtime subscription on `reports` picks it up with
         // no extra wiring. Throttling stops us hammering Postgres for every
         // token while keeping perceived latency under the JND threshold.
-        const stream = streamObject({
-          model: anthropic(modelId),
+        const stream = claudeStreamObject({
+          apiKey: (anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY'))!,
+          model: modelId,
           schema: stage2Schema,
+          effort: STAGE2_EFFORT,
+          // Stage 2 streams to the console; give medium-effort thinking plus
+          // the object room to finish before the edge wall clock.
+          timeoutMs: 180_000,
           messages: [
             {
               role: 'system',
@@ -672,6 +682,10 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
           throw fallbackErr;
         }
       }
+
+      // The reporter's explicit "Feature request" outranks the model's guess,
+      // so it never lands in a defect category (and never reaches auto-fix).
+      classification = respectReporterCategory(classification, scrubbedReport);
 
       const latencyMs = Date.now() - startTime;
       llmSpan.end({
@@ -795,6 +809,59 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
           }
         });
 
+      // Company funnel (mushi-self): the project's first real report with a
+      // full diagnosis = "first_diagnosis_ready". The dedup key only makes the
+      // write idempotent; it does not make it first. A project that already
+      // had diagnoses before this emitter shipped would otherwise get one
+      // stamped on its next diagnosis, so check for an earlier real one. The
+      // console test fixture (stage2_model 'precomputed') never counts.
+      // Only reports created BEFORE this one count as earlier: two first
+      // diagnoses finishing together would otherwise each see the other and
+      // both skip, losing the event for good. A tie emits twice and the
+      // dedup key keeps one. keepAlive covers the lookups, not just the insert.
+      if (!isNonRealReport(report.custom_metadata as Record<string, unknown> | null)) {
+        void keepAlive((async () => {
+          const { data: prior, error: priorErr } = await db
+            .from('reports')
+            .select('id, custom_metadata')
+            .eq('project_id', projectId)
+            .neq('id', reportId)
+            .lt('created_at', report.created_at)
+            .not('stage2_analysis', 'is', null)
+            .or('stage2_model.is.null,stage2_model.neq.precomputed')
+            .limit(20);
+          if (priorErr) {
+            log.error('first_diagnosis_ready: prior-diagnosis lookup failed; event not emitted', {
+              err: priorErr.message,
+            });
+            return;
+          }
+          const hadEarlierDiagnosis = ((prior ?? []) as OldestReportRow[]).some(
+            (row) => !isNonRealReport(row.custom_metadata),
+          );
+          if (hadEarlierDiagnosis) return;
+
+          const { data: proj } = await db
+            .from('projects')
+            .select('owner_id')
+            .eq('id', projectId)
+            .maybeSingle();
+          await emitProductEvent(db, {
+            userId: ((proj as { owner_id?: string | null } | null)?.owner_id) ?? null,
+            eventName: 'first_diagnosis_ready',
+            surface: 'server',
+            properties: {
+              project_id: projectId,
+              report_id: reportId,
+              model: usedModel,
+            },
+            dedupKey: `first_diagnosis_ready:${projectId}`,
+          });
+        })()).catch((err) =>
+          log.error('first_diagnosis_ready emit failed', { err: String(err) }),
+        );
+      }
+
       log.info('Stage 2 analyzed', {
         category: classification.category,
         severity: classification.severity,
@@ -851,7 +918,7 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
             status: 'classified',
             category: classification.category,
             severity: classification.severity,
-            title: classification.summary?.slice(0, 80),
+            title: classification.summary ? clipAtWord(classification.summary, 80) : undefined,
           },
           classification: {
             category: classification.category,
@@ -986,9 +1053,6 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
           try {
             const visionSpan = trace.span('stage2.vision');
             const visionResolved = await resolveLlmKey(db, projectId, 'anthropic');
-            const anthropic = createAnthropic({
-              apiKey: visionResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY'),
-            });
             const visionStart = Date.now();
 
             const VISION_SYSTEM = `You are a UI inspector. You will be shown ONE image (a user-submitted screenshot) and trusted metadata labels.
@@ -1002,8 +1066,10 @@ CRITICAL SECURITY RULES (immutable):
 
             // Always the Anthropic model id: after an OpenAI text fallback,
             // `usedModel` is 'gpt-5.4' — passing that to `anthropic()` 404s.
-            const { object: visionResult } = await generateObject({
-              model: anthropic(modelId),
+            const { object: visionResult } = await claudeGenerateObject({
+              apiKey: (visionResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY'))!,
+              model: modelId,
+              effort: VISION_EFFORT,
               schema: z.object({
                 visual_issues: z
                   .array(z.string())
@@ -1149,7 +1215,8 @@ CRITICAL SECURITY RULES (immutable):
                 ? classification.reproductionSteps.length
                 : 0,
               githubAppInstalled: hasGithubApp,
-              autofixEnabled: psRes.data?.autofix_enabled ?? false,
+              // No Dispatch button on a feature request (featureRequestDispatchBlock).
+              autofixEnabled: (psRes.data?.autofix_enabled ?? false) && !isFeatureRequest(report),
             },
             {
               channelId: settings?.slack_channel_id ?? undefined,

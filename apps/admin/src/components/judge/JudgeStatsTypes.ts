@@ -26,6 +26,8 @@ export interface JudgeStats {
   disagreementCount: number
   disagreementRatePct: number | null
   classifiedReports: number
+  /** Reports judge-batch would grade now (eligible status, never judged). */
+  ungradedReports: number
   promptVersionCount: number
   activePromptCount: number
   lastEvalAt: string | null
@@ -47,6 +49,7 @@ export const EMPTY_JUDGE_STATS: JudgeStats = {
   disagreementCount: 0,
   disagreementRatePct: null,
   classifiedReports: 0,
+  ungradedReports: 0,
   promptVersionCount: 0,
   activePromptCount: 0,
   lastEvalAt: null,

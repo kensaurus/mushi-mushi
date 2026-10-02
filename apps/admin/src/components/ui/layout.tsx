@@ -185,7 +185,13 @@ export function PanelHeader({
           )}
           <span className="truncate">{title}</span>
         </TitleTag>
-        {action != null && <div className="flex shrink-0 items-center gap-2">{action}</div>}
+        {/* Header links ("All reports →") were 16px-tall text; give a bare
+            link child a 24px target without restyling every caller. */}
+        {action != null && (
+          <div className="flex shrink-0 items-center gap-2 [&>a]:inline-flex [&>a]:min-h-6 [&>a]:items-center">
+            {action}
+          </div>
+        )}
       </div>
     </div>
   )

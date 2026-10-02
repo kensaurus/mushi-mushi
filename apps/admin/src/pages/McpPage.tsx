@@ -6,7 +6,7 @@
 
 import { useSearchParams } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Section,
   Badge,
   Btn,
@@ -113,11 +113,18 @@ export function McpPage() {
     [searchParams, setSearchParams],
   )
 
+  // Quick mode opens on the tab that fits the project's MCP state, once per
+  // visit, and only when the URL didn't ask for one. Re-running it on every
+  // change sent deep links like "Fix snippet" (/mcp?tab=setup) to Catalog
+  // and undid the user's own tab clicks.
+  const quickTabPicked = useRef(false)
   useEffect(() => {
-    if (!ux.isQuickstart || !activeProjectId || loading) return
+    if (quickTabPicked.current || !ux.isQuickstart || !activeProjectId || loading) return
+    quickTabPicked.current = true
+    if (param) return
     const quickTab = resolveQuickMcpTab(stats)
     if (activeTab !== quickTab) setTab(quickTab)
-  }, [ux.isQuickstart, activeProjectId, loading, stats, activeTab, setTab])
+  }, [ux.isQuickstart, activeProjectId, loading, stats, activeTab, setTab, param])
 
   const setCatalogTab = useCallback(
     (tab: CatalogTabId) => {
