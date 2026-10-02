@@ -16,6 +16,7 @@ import { ConfigHelp } from '../ConfigHelp'
 import { slackWebhookUrl, sentryDsn, token } from '../../lib/validators'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { SettingsChangeHint } from './SettingsChangeHint'
+import { StoredSecretStatus } from './StoredSecretStatus'
 import { SettingsFormFooter } from './SettingsFormFooter'
 import { SettingsPanelLayout } from './SettingsPanelLayout'
 import { SettingEffectCallout } from '../FeatureExplainPanel'
@@ -223,6 +224,13 @@ export function GeneralPanel() {
                 saved={saved.slack_webhook_url ?? ''}
                 kind="url"
               />
+              <StoredSecretStatus
+                column="slack_webhook_url"
+                label="Slack webhook URL"
+                isSet={saved.slack_webhook_url_set === true}
+                consequence="Bug alerts stop posting through this webhook. The Slack bot channel above is not affected."
+                onRemoved={reload}
+              />
             </div>
           </details>
         </Section>
@@ -267,6 +275,13 @@ export function GeneralPanel() {
             current={settings.sentry_webhook_secret ?? ''}
             saved={saved.sentry_webhook_secret ?? ''}
             kind="secret"
+          />
+          <StoredSecretStatus
+            column="sentry_webhook_secret"
+            label="Sentry webhook secret"
+            isSet={saved.sentry_webhook_secret_set === true}
+            consequence="Mushi rejects Sentry deliveries until you paste a new secret."
+            onRemoved={reload}
           />
         </div>
         <div>
