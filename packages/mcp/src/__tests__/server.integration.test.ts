@@ -225,6 +225,27 @@ describe('tool → REST contract', () => {
     expect(content[0].text).toMatch(/^<mushi-data role="get_recent_reports">/)
   })
 
+  it('triage_next_steps puts reporters waiting for an answer right after blocked fixes', async () => {
+    fetchStub.enqueue({
+      ok: true,
+      data: {
+        reports: [
+          // Reporter replied after the developer last looked → waiting.
+          { id: 'r-wait', status: 'classified', severity: 'low', title: 'Checkout button does nothing', last_reporter_reply_at: '2026-10-02T10:00:00Z', admin_seen_at: '2026-10-02T09:00:00Z' },
+          // Seen since the reply → not waiting.
+          { id: 'r-seen', status: 'classified', severity: 'low', title: 'Old', last_reporter_reply_at: '2026-10-02T08:00:00Z', admin_seen_at: '2026-10-02T09:00:00Z' },
+          // Never opened in the console → waiting.
+          { id: 'r-new', status: 'new', severity: 'high', title: 'Crash on save', last_reporter_reply_at: '2026-10-02T11:00:00Z' },
+        ],
+        total: 3,
+      },
+    })
+    const res = await client.callTool({ name: 'triage_next_steps', arguments: {} })
+    const out = res.structuredContent as { steps: Array<{ action: string; tool?: string; args?: Record<string, unknown> }>; summary: string }
+    expect(out.steps[0]).toMatchObject({ action: 'Answer 2 reporters waiting for a reply', tool: 'get_report_timeline', args: { reportId: 'r-wait' } })
+    expect(out.summary).toContain('Answer 2 reporters waiting for a reply')
+  })
+
   it('clamps limit at 100 even if caller asks for more', async () => {
     fetchStub.enqueue({ ok: true, data: { reports: [], total: 0 } })
     await client.callTool({
