@@ -13,10 +13,13 @@
  *
  * The edit queue and both preview states live at the top of the page: a set
  * switch re-fetches (and briefly clears) the data, and must not drop edits.
+ *
+ * Views (?view=directions): "Tokens" (the active set, deviance, rules) and
+ * "Directions" (every art direction side by side, DirectionsBoard).
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Btn, Callout, EmptyState, ErrorAlert, Loading, Section, SegmentedControl } from '../components/ui'
@@ -41,7 +44,15 @@ import { changeLocksInputs, useDesignChange } from '../components/design/useDesi
 import { editKey, type RuleChange } from '../components/design/designTokens'
 import { RecipeIssueList } from '../components/recipe/RecipeIssueList'
 import { ComponentInventory } from '../components/design/ComponentInventory'
+import { DirectionsBoard } from '../components/design/DirectionsBoard'
 import { describeDevianceSettle, useDeviancePoll, type DevianceSettle } from '../components/design/useDeviancePoll'
+
+type DesignView = 'tokens' | 'directions'
+
+const VIEW_OPTIONS = [
+  { id: 'tokens', label: 'Tokens' },
+  { id: 'directions', label: 'Directions' },
+] as const
 
 function orderSets(sets: DesignTokenSet[]): DesignTokenSet[] {
   const rank = (k: DesignTokenSet['kind']) => (k === 'direction' ? 0 : k === 'default' ? 1 : 2)
@@ -71,6 +82,21 @@ export function DesignPage() {
 }
 
 function ProjectDesign({ projectId }: { projectId: string }) {
+  const [params, setParams] = useSearchParams()
+  const view: DesignView = params.get('view') === 'directions' ? 'directions' : 'tokens'
+  const setView = useCallback(
+    (next: DesignView) =>
+      setParams(
+        (prev) => {
+          const out = new URLSearchParams(prev)
+          if (next === 'directions') out.set('view', 'directions')
+          else out.delete('view')
+          return out
+        },
+        { replace: true },
+      ),
+    [setParams],
+  )
   const [direction, setDirection] = useState<string | null>(null)
   const path = `/v1/admin/projects/${projectId}/design${direction ? `?direction=${encodeURIComponent(direction)}` : ''}`
   const { data, loading, error, reload } = usePageData<DesignPlaneResponse>(path)
@@ -205,7 +231,11 @@ function ProjectDesign({ projectId }: { projectId: string }) {
       />
 
       <div className="flex w-full min-w-0 flex-col gap-4">
-        {sets.length > 0 && (
+        <SegmentedControl<DesignView> value={view} options={VIEW_OPTIONS} onChange={setView} ariaLabel="Design view" />
+
+        {view === 'directions' && <DirectionsBoard projectId={projectId} />}
+
+        {view === 'tokens' && sets.length > 0 && (
           <div className="flex flex-col gap-1">
             <SegmentedControl<string>
               value={shownSet ?? ''}
@@ -226,26 +256,28 @@ function ProjectDesign({ projectId }: { projectId: string }) {
           </div>
         )}
 
-        {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
-        {loading && !data && <Loading text="Loading design tokens…" />}
+        {view === 'tokens' && error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
+        {view === 'tokens' && loading && !data && <Loading text="Loading design tokens…" />}
 
-        {data && !data.editable.enabled && (
+        {view === 'tokens' && data && !data.editable.enabled && (
           <Callout tone="neutral" label="Editing is off">
             <p className="text-xs text-fg-secondary">{data.editable.reason ?? 'Token edits are not available for this project.'}</p>
           </Callout>
         )}
 
-        <TokenEditQueue
-          edits={edits}
-          change={tokenChange.state}
-          onRemove={removeEdit}
-          onClear={clearEdits}
-          onPreview={previewTokens}
-          onConfirm={() => void tokenChange.confirm()}
-          onDiscard={discardTokenPreview}
-        />
+        {view === 'tokens' && (
+          <TokenEditQueue
+            edits={edits}
+            change={tokenChange.state}
+            onRemove={removeEdit}
+            onClear={clearEdits}
+            onPreview={previewTokens}
+            onConfirm={() => void tokenChange.confirm()}
+            onDiscard={discardTokenPreview}
+          />
+        )}
 
-        {data && (
+        {view === 'tokens' && data && (
           <>
             <DesignTokenSections
               tokens={data.tokens}
