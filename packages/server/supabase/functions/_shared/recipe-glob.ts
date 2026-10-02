@@ -8,6 +8,9 @@
  * run of characters inside one segment), `?` (one character inside a
  * segment) and `{a,b,c}` alternation (no nesting). Matching is case-sensitive,
  * like git on Linux. Everything else is literal.
+ *
+ * Kept byte-identical in packages/cli/src/recipe/recipe-glob.ts (`mushi recipe
+ * check`), asserted by packages/server/src/__tests__/radar-repo-scan.test.ts.
  */
 
 /**
@@ -38,7 +41,7 @@ function escapeRegex(ch: string): string {
 
 const regexCache = new Map<string, RegExp>()
 
-/** Compile a glob to an anchored RegExp. Throws on an unbalanced `{`. */
+/** Compile a glob to an anchored RegExp. Throws on an unbalanced `{`. @public (used by the CLI copy's matchGlob) */
 export function globToRegExp(glob: string): RegExp {
   const cached = regexCache.get(glob)
   if (cached) return cached
@@ -81,7 +84,7 @@ export function globToRegExp(glob: string): RegExp {
   return re
 }
 
-/** True when `path` matches `glob`. A malformed glob matches nothing. */
+/** True when `path` matches `glob`. A malformed glob matches nothing. @public (used by matchAny in the CLI copy) */
 export function matchGlob(path: string, glob: string): boolean {
   try {
     return globToRegExp(glob).test(path)

@@ -200,6 +200,17 @@ mushi audit                        # full-stack project health audit
 
 ---
 
+## App recipe
+
+```bash
+mushi recipe init                    # write a starter mushi.recipe.json from what the repo shows
+mushi recipe check                   # validate it and its token files; list colours that match no token
+mushi recipe check --push            # send the recipe and findings to Mushi from your existing CI job
+mushi recipe show                    # each part of the recipe and its state
+```
+
+---
+
 ## Hole checks (radar)
 
 Checks that catch a problem before a user hits it. `scan` runs in your own CI
