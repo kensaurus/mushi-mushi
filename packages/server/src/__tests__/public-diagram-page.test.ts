@@ -101,6 +101,14 @@ describe('renderPublicDiagramMarkdown', () => {
     expect(md).toContain('a \\| b')
     expect(md).toContain('- Checkout \\<UI\\> → Postgres (reads)')
   })
+
+  it('keeps a | in a path from splitting the table row', () => {
+    const md = renderPublicDiagramMarkdown({ ...PAYLOAD, nodes: [{ ...PAYLOAD.nodes[0], path: 'apps/a|b' }] })
+    const row = md.split('\n').find((l) => l.startsWith('| Checkout'))!
+    expect(row).toContain('apps/a\\|b')
+    // Four cells: five pipes once the escaped one is removed.
+    expect(row.replace(/\\\|/g, '').split('|')).toHaveLength(6)
+  })
 })
 
 describe('keys and badge', () => {

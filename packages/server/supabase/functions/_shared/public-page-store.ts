@@ -96,9 +96,26 @@ export async function writePublicPage(
 }
 
 /**
- * Best-effort removal of a project's static page before the project (and,
+ * The page a republish would orphan: the project's current publication names
+ * a different repo (the project switched repos, or the repo was renamed on
+ * GitHub). Its files must go before the row is overwritten, because nothing
+ * else will ever name those keys again. Case-insensitive, like the keys.
+ */
+export function staleStaticPage(
+  prior: { owner: string; repo: string } | null,
+  next: { owner: string; repo: string },
+): { owner: string; repo: string } | null {
+  if (!prior) return null
+  const same =
+    prior.owner.toLowerCase() === next.owner.toLowerCase() && prior.repo.toLowerCase() === next.repo.toLowerCase()
+  return same ? null : prior
+}
+
+/**
+ * Removal of a project's static page before the project (and,
  * by cascade, its publication row) is deleted. Without this the files would
- * outlive the only record that names them. Never throws.
+ * outlive the only record that names them, so a 'failed' result must stop
+ * the delete. Never throws.
  */
 export async function removeProjectPublicPage(
   db: { from: (t: string) => any },

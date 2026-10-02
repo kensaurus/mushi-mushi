@@ -69,7 +69,13 @@ import {
   type OverlayReport,
 } from '../../_shared/diagram-overlay.ts'
 import { reportFramePaths } from '../../_shared/report-seeds.ts'
-import { deletePublicPage, readPublicPageStoreConfig, writePublicPage, type StaticPageStatus } from '../../_shared/public-page-store.ts'
+import {
+  deletePublicPage,
+  readPublicPageStoreConfig,
+  staleStaticPage,
+  writePublicPage,
+  type StaticPageStatus,
+} from '../../_shared/public-page-store.ts'
 import { diagramBadgeMarkdown, livePublicUrl, publicPageUrls } from '../../_shared/public-diagram-page.ts'
 import { matchFramePathsToTree } from '../../_shared/sentry-frames.ts'
 import { claimIpRateLimit, extractClientIp } from './cli-auth.ts'
@@ -127,6 +133,8 @@ const OVERLAY_MAX_FINDINGS = 1000
 const OVERLAY_FINDINGS_DAYS = 30
 /** Reports without stored frames whose stack text is read. */
 const OVERLAY_MAX_STACK_TEXT = 100
+/** Ids per `in.()` filter, so the PostgREST URL stays short. */
+const OVERLAY_ID_CHUNK = 100
 
 function storeConfig() {
   return readPublicPageStoreConfig((name) => Deno.env.get(name))
@@ -268,12 +276,13 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     }
 
     const fixFilesByReport = new Map<string, string[]>()
-    if (reportIds.length > 0) {
+    // Chunked: 300 UUIDs in one `in.()` filter is an ~11 KB URL.
+    for (let i = 0; i < reportIds.length; i += OVERLAY_ID_CHUNK) {
       const { data: fixes, error: fixErr } = await db
         .from('fix_attempts')
         .select('report_id, files_changed')
         .eq('project_id', projectId)
-        .in('report_id', reportIds)
+        .in('report_id', reportIds.slice(i, i + OVERLAY_ID_CHUNK))
       if (fixErr) return dbError(c, fixErr)
       for (const f of fixes ?? []) {
         const list = fixFilesByReport.get(f.report_id as string) ?? []
@@ -605,6 +614,19 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     })
     if (!decision.ok) {
       return c.json({ ok: false, error: { code: decision.code, message: decision.message } }, decision.status)
+    }
+
+    // A republish under another repo name would overwrite the only row that
+    // names the old page's files. Remove them first; fail closed like unpublish.
+    const prior = await loadPublication(db, projectId)
+    const stale = staleStaticPage(prior ? prior.payload : null, { owner: vis.owner, repo: vis.repo })
+    if (stale) {
+      try {
+        await deletePublicPage(storeConfig(), stale.owner, stale.repo)
+      } catch (err) {
+        routeLog.error('old public page delete failed', { projectId, error: String(err) })
+        return c.json({ ok: false, error: { code: 'PUBLISH_FAILED', message: 'Could not remove the old public page for the previous repo name. Try again in a minute.' } }, 503)
+      }
     }
 
     const { error } = await db.from('public_repo_diagrams').upsert(
