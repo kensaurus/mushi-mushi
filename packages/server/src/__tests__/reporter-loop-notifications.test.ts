@@ -29,10 +29,16 @@ vi.mock('../../supabase/functions/_shared/web-push.ts', () => ({
   sendWebPushToSubscription: vi.fn(),
 }))
 
+vi.mock('../../supabase/functions/_shared/reputation.ts', () => ({
+  awardPoints: vi.fn(async () => ({})),
+}))
+
 type Notifications = typeof import('../../supabase/functions/_shared/notifications.ts')
 type Fanout = typeof import('../../supabase/functions/_shared/reporter-fanout.ts')
+type StatusNotify = typeof import('../../supabase/functions/_shared/report-status-notify.ts')
 let n: Notifications
 let fanout: Fanout
+let statusNotify: StatusNotify
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const PROJECT = 'p1'
@@ -43,6 +49,7 @@ const FOLLOWER = 'rk1_follower'
 beforeAll(async () => {
   n = await import('../../supabase/functions/_shared/notifications.ts')
   fanout = await import('../../supabase/functions/_shared/reporter-fanout.ts')
+  statusNotify = await import('../../supabase/functions/_shared/report-status-notify.ts')
 })
 
 function db(seed: Record<string, Row[]> = {}): FakeDb {
@@ -161,6 +168,68 @@ describe('followers', () => {
     const rows = fake.table('reporter_notifications')
     expect(rows.map((r) => r.reporter_token_hash).sort()).toEqual([FOLLOWER, OWNER])
     expect(rows.find((r) => r.reporter_token_hash === FOLLOWER)?.dedupe_key).toBe(n.followerDedupeKey(FOLLOWER, null))
+  })
+})
+
+describe('status transitions', () => {
+  const follow = { report_id: REPORT, project_id: PROJECT, reporter_token_hash: FOLLOWER, source_report_id: 'r2' }
+
+  it('followers get a plain fix_started, never the owner’s points', async () => {
+    const fake = db({ reporter_report_follows: [follow] })
+    await statusNotify.notifyReportStatusTransition(fake as never, {
+      projectId: PROJECT,
+      reportId: REPORT,
+      reporterTokenHash: OWNER,
+      previousStatus: 'classified',
+      newStatus: 'fixing',
+    })
+    const rows = fake.table('reporter_notifications')
+    const owner = rows.find((r) => r.reporter_token_hash === OWNER)
+    const follower = rows.find((r) => r.reporter_token_hash === FOLLOWER)
+    expect(owner).toMatchObject({ notification_type: 'confirmed' })
+    expect(follower).toMatchObject({ notification_type: 'fix_started' })
+    expect(follower?.payload).not.toHaveProperty('points')
+  })
+
+  it('a spam close sends nothing at all', async () => {
+    const fake = db({ reporter_report_follows: [follow] })
+    await statusNotify.notifyReportStatusTransition(fake as never, {
+      projectId: PROJECT,
+      reportId: REPORT,
+      reporterTokenHash: OWNER,
+      previousStatus: 'classified',
+      newStatus: 'dismissed',
+      closedReason: 'spam',
+    })
+    expect(fake.table('reporter_notifications')).toHaveLength(0)
+  })
+
+  it('a duplicate close tells only its own reporter, with the reason', async () => {
+    const fake = db({ reporter_report_follows: [follow] })
+    await statusNotify.notifyReportStatusTransition(fake as never, {
+      projectId: PROJECT,
+      reportId: REPORT,
+      reporterTokenHash: OWNER,
+      previousStatus: 'classified',
+      newStatus: 'dismissed',
+      closedReason: 'duplicate',
+    })
+    const rows = fake.table('reporter_notifications')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ reporter_token_hash: OWNER, notification_type: 'dismissed' })
+    expect(rows[0].payload).toMatchObject({ closedReason: 'duplicate' })
+  })
+
+  it('holds pipeline messages in review mode', async () => {
+    const fake = db({ project_settings: [{ project_id: PROJECT, reporter_updates_mode: 'review' }] })
+    await statusNotify.notifyReportStatusTransition(fake as never, {
+      projectId: PROJECT,
+      reportId: REPORT,
+      reporterTokenHash: OWNER,
+      previousStatus: 'fixing',
+      newStatus: 'fixed',
+    })
+    expect(fake.table('reporter_notifications')[0]).toMatchObject({ notification_type: 'fixed', status: 'held' })
   })
 })
 
