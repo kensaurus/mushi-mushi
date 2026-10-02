@@ -1606,6 +1606,15 @@ describe('MushiWidget — reporter loop v2 (Phase 1)', () => {
     hidden.destroy();
   });
 
+  it('no toast where smartHide hides the launcher', () => {
+    (window.matchMedia as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ matches: true });
+    const w = new MushiWidget({ smartHide: { onMobile: 'hide' } }, noopCallbacks);
+    w.mount();
+    expect(w.showUpdateToast({ text: 'The developer replied to your report' })).toBe(false);
+    expect(q(w, '.mushi-toast')).toBeNull();
+    w.destroy();
+  });
+
   it('opt-ins appear only for configured channels and are never pre-ticked', async () => {
     vi.useFakeTimers();
     const onReporterEmailOptIn = vi.fn().mockResolvedValue(undefined);

@@ -263,7 +263,7 @@ exports[`getWidgetStyles > matches stable CSS snapshot markers 1`] = `
     .mushi-header .mushi-icon-btn:first-child { margin-left: -10px; }
     .mushi-icon-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 44px; min-height: 44px; border: 0; border-radius: 10px; background: none; color: var(--_muted); font: inherit; font-size: 17px; cursor: pointer; }
     .mushi-icon-btn:hover { background: var(--_surface); color: var(--_fg); }
-    .mushi-pill-btn { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 36px; margin: 4px; padding: 0 12px; border: 1px solid var(--_border); border-radius: 999px; background: none; color: var(--_fg); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+    .mushi-pill-btn { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 44px; margin: 0 2px; padding: 0 12px; border: 1px solid var(--_border); border-radius: 999px; background: none; color: var(--_fg); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
     .mushi-pill-btn:hover { background: var(--_surface); }
     .mushi-badge { padding: 1px 7px; border-radius: 999px; background: var(--_fg); color: var(--_bg); font-size: 11px; font-weight: 600; }
     .mushi-menu-wrap { position: relative; }
@@ -286,13 +286,13 @@ exports[`getWidgetStyles > matches stable CSS snapshot markers 1`] = `
     .mushi-textarea::placeholder, .mushi-input::placeholder { color: var(--_muted); opacity: 1; }
     .mushi-chips { display: flex; flex-wrap: wrap; gap: 6px; }
     .mushi-chip-group { display: contents; }
-    .mushi-chip { min-height: 40px; padding: 0 14px; border: 1px solid var(--_border); border-radius: 999px; background: none; color: var(--_fg); font: inherit; font-size: 13px; cursor: pointer; }
+    .mushi-chip { min-height: 44px; padding: 0 14px; border: 1px solid var(--_border); border-radius: 999px; background: none; color: var(--_fg); font: inherit; font-size: 13px; cursor: pointer; }
     .mushi-chip:hover { background: var(--_surface); }
     .mushi-chip[aria-checked="true"] { background: var(--_fg); border-color: var(--_fg); color: var(--_bg); }
     .mushi-chip-more { border-style: dashed; color: var(--_muted); }
-    .mushi-chip-sm { min-height: 36px; padding: 0 12px; font-size: 12px; }
+    .mushi-chip-sm { padding: 0 12px; font-size: 12px; }
     .mushi-attachments { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
-    .mushi-attach-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px; border: 1px solid var(--_border); border-radius: 10px; background: var(--_surface); color: var(--_fg); font: inherit; font-size: 13px; cursor: pointer; }
+    .mushi-attach-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; border: 1px solid var(--_border); border-radius: 10px; background: var(--_surface); color: var(--_fg); font: inherit; font-size: 13px; cursor: pointer; }
     .mushi-attach-btn:hover { border-color: var(--_muted); }
     .mushi-attach-btn.active { border-color: var(--_ok); }
     .mushi-attach-btn.error { border-color: var(--_err); color: var(--_err); }
@@ -408,8 +408,7 @@ exports[`getWidgetStyles > matches stable CSS snapshot markers 1`] = `
     .mushi-toast span { display: flex; flex-direction: column; flex: 1; min-width: 0; }
     .mushi-toast strong { font-weight: 600; }
     .mushi-toast small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--_muted); }
-    .mushi-toast .mushi-btn { min-height: 36px; padding: 0 12px; }
-    .mushi-toast .mushi-icon-btn { min-height: 36px; min-width: 36px; }
+    .mushi-toast .mushi-btn { padding: 0 12px; }
     .mushi-toast.bottom-right, .mushi-toast.bottom-left { bottom: calc(var(--mushi-bottom, 24px) + 64px); }
     .mushi-toast.top-right, .mushi-toast.top-left { top: calc(var(--mushi-top, 24px) + 64px); }
     .mushi-toast.bottom-right, .mushi-toast.top-right, .mushi-toast.banner-top, .mushi-toast.banner-bottom { right: var(--mushi-right, 24px); }
