@@ -191,6 +191,19 @@ describe('PATCH /v1/admin/settings', () => {
     expect(db.table('project_settings')[0].sentry_webhook_secret).toBe(SENTRY_REF)
   })
 
+  it('removes exactly the secret the console Remove action names', async () => {
+    const res = await app.call('PATCH', '/v1/admin/settings', ctx({ sentry_webhook_secret: null }))
+    expect(res.status).toBe(200)
+    const row = db.table('project_settings')[0]
+    expect(row.sentry_webhook_secret).toBeNull()
+    expect(row.slack_webhook_url).toBe(SLACK_URL)
+    expect(row.telegram_bot_token_ref).toBe(TELEGRAM_REF)
+
+    await app.call('PATCH', '/v1/admin/settings', ctx({ slack_webhook_url: null }))
+    expect(db.table('project_settings')[0].slack_webhook_url).toBeNull()
+    expect(db.rpcCalls.filter((c) => c.fn === 'vault_store_secret')).toHaveLength(0)
+  })
+
   it('refuses a Vault ref the server did not store for this row', async () => {
     const res = await app.call(
       'PATCH',
