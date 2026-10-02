@@ -32,6 +32,8 @@ const clog = log.child('recipe-collector')
 const MAX_PROJECTS = 25
 /** Stop starting new projects after this, so one run stays inside the function's wall clock. */
 const START_BUDGET_MS = 60_000
+/** Stop starting new organization rollups after this (from the same start), for the same reason. */
+const ORG_START_BUDGET_MS = 90_000
 const SCAN_EVERY_HOURS = 20
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -125,6 +127,10 @@ async function handler(req: Request): Promise<Response> {
   // Cross-project rules once per organization touched by this run (Plan 019 P2).
   const { data: orgRows } = await db.from('projects').select('organization_id').in('id', batch.length ? batch : ['00000000-0000-0000-0000-000000000000'])
   for (const orgId of [...new Set(((orgRows ?? []) as Array<{ organization_id: string | null }>).map((r) => r.organization_id).filter((x): x is string => Boolean(x)))]) {
+    if (Date.now() - t0 > ORG_START_BUDGET_MS) {
+      clog.info('portfolio rollup budget reached; the rest run next time', { orgId })
+      break
+    }
     try {
       await collectOrgPortfolio(db, orgId)
     } catch (err) {

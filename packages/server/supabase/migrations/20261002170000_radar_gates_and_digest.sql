@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261002160000_radar_gates_and_digest
+-- 20261002170000_radar_gates_and_digest
 --
 -- Plan 020 Phase 1 (ADR 0017). ADDITIVE: apply BEFORE deploying the api,
 -- radar-scan and operator-digest functions (they write these gate names and
@@ -9,11 +9,12 @@
 --      radar         the scheduled hole checks (public probes + repo reads)
 --      radar_ci      hole-check results pushed from the host's own CI
 --      store_review  the on-demand store review checklist (Phase 2)
---    HAZARD: this re-creates the whole constraint. It keeps every live name
---    read from pg_constraint on 2026-10-02 (10 names) AND the four recipe
---    gates from 20261002130100_recipe_gate_types (not yet applied that day).
---    Apply it AFTER 20261002130100. If any other migration re-creates this
---    constraint later, it must carry these names too, or radar writes fail.
+--    The new CHECK is the UNION of the constraint's CURRENT definition (read
+--    from pg_get_constraintdef at apply time), a floor of every name known on
+--    2026-10-02 (the 10 live names, design-plane's four recipe gates from
+--    20261002130100, T1's `radar` from 20261002140100), and these three. So
+--    applying every branch in timestamp order never drops another branch's
+--    gate name, whichever branch defined the constraint last.
 -- 2. operator_digest_settings: one row per organization, delivery OFF by
 --    default. Member SELECT; writes only through the api (service role).
 -- 3. Two crons: radar-scan daily 04:05 UTC (clear of 03:05 drift scanner and
@@ -22,7 +23,8 @@
 --
 -- Verify after apply:
 --   select pg_get_constraintdef(oid) from pg_constraint where conname = 'gate_runs_gate_check';
---     -- expect 17 names incl. design_drift, radar, radar_ci, store_review
+--     -- expect at least 17 names incl. design_drift, radar, radar_ci, store_review,
+--     -- plus any name another branch added before this ran
 --   select relrowsecurity from pg_class where oid = 'public.operator_digest_settings'::regclass; -- t
 --   select policyname, roles, cmd from pg_policies where tablename = 'operator_digest_settings';
 --   select jobname, schedule from cron.job where jobname in ('mushi-radar-scan-daily','mushi-operator-digest-hourly');
@@ -33,22 +35,41 @@
 --    order by start_time desc limit 3;
 -- ============================================================================
 
-alter table public.gate_runs
-  drop constraint if exists gate_runs_gate_check;
+do $$
+declare
+  v_def   text;
+  v_names text[];
+  v_list  text;
+begin
+  select pg_get_constraintdef(oid) into v_def
+    from pg_constraint
+   where conrelid = 'public.gate_runs'::regclass and conname = 'gate_runs_gate_check';
 
-alter table public.gate_runs
-  add constraint gate_runs_gate_check
-  check (gate in (
-    'dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim',
-    'spec_drift', 'orphan_endpoint', 'unknown_call', 'schema_drift',
-    'code_health',
-    'design_drift', 'ci_drift', 'deploy_drift', 'env_drift',
-    'radar', 'radar_ci', 'store_review'
-  ));
+  -- Every quoted literal in the current definition, e.g. 'radar'::text.
+  select coalesce(array_agg(distinct m[1]), '{}') into v_names
+    from regexp_matches(coalesce(v_def, ''), '''([a-z0-9_]+)''', 'g') as m;
+
+  select string_agg(quote_literal(n), ', ' order by n) into v_list
+    from (
+      select unnest(v_names) as n
+      union
+      select unnest(array[
+        'dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim',
+        'spec_drift', 'orphan_endpoint', 'unknown_call', 'schema_drift',
+        'code_health',
+        'design_drift', 'ci_drift', 'deploy_drift', 'env_drift',
+        'radar', 'radar_ci', 'store_review'
+      ])
+    ) u;
+
+  execute 'alter table public.gate_runs drop constraint if exists gate_runs_gate_check';
+  execute format('alter table public.gate_runs add constraint gate_runs_gate_check check (gate in (%s))', v_list);
+end
+$$;
 
 comment on constraint gate_runs_gate_check on public.gate_runs is
   'Allowlist of valid gate discriminators. radar / radar_ci / store_review are the '
-  'Plan 020 hole checks (ADR 0017). Last extended: 2026-10-02 (20261002160000).';
+  'Plan 020 hole checks (ADR 0017). Last extended: 2026-10-02 (20261002170000).';
 
 -- ── operator digest settings ─────────────────────────────────────────────────
 

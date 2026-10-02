@@ -2,7 +2,7 @@
 // operator-digest — one daily message across an organization's apps
 // (Plan 020 §9, ADR 0017).
 //
-// Trigger: pg_cron hourly at :20 (migration 20261002160000), and
+// Trigger: pg_cron hourly at :20 (migration 20261002170000), and
 //          POST {"organizationId": "<uuid>", "force": true} from an
 //          internal caller (the api's "send now").
 // Auth:    requireServiceRoleAuth (internal only).

@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261002160200_ci_runs_and_deploy_observations
+-- 20261002170200_ci_runs_and_deploy_observations
 --
 -- Plan 019 §5.1 migrations 3 and 4 (Phase 2, gate struck by ADR 0017).
 -- ADDITIVE: apply BEFORE deploying the api and recipe-collector functions.

@@ -201,6 +201,18 @@ describe('Phase 2 inputs (deploy probes, ci_drift, env_drift)', () => {
     expect(deriveElementState({ key: 'ci', repoConnected: true, tokenAvailable: true, fetchError: null, run }, now).state).toBe('ok')
   })
 
+  it('each new input, present but with nothing observed, is unknown or not_connected, never ok', () => {
+    // ci: findings counted, but no run read yet / repo not connected.
+    expect(deriveElementState({ key: 'ci', repoConnected: true, tokenAvailable: true, fetchError: null, run: null, driftFindings: 0 }, now).state).toBe('unknown')
+    expect(deriveElementState({ key: 'ci', repoConnected: false, tokenAvailable: false, fetchError: null, run: null, driftFindings: 0 }, now).state).toBe('not_connected')
+    // deploy: targets declared, observations absent or empty.
+    expect(deriveElementState({ key: 'deploy', releaseCount: 0, appVersions: [], targetsDeclared: 1 }, now).state).toBe('unknown')
+    expect(deriveElementState({ key: 'deploy', releaseCount: 0, appVersions: [], targetsDeclared: 1, observations: [], driftFindings: 0 }, now).state).toBe('unknown')
+    // env: findings counted, but CI names never listed / repo not connected.
+    expect(deriveElementState({ key: 'env', repoConnected: true, tokenAvailable: true, fetchError: null, required: ['A'], missing: null, driftFindings: 0 }, now).state).toBe('unknown')
+    expect(deriveElementState({ key: 'env', repoConnected: false, tokenAvailable: false, fetchError: null, required: ['A'], missing: null, driftFindings: 0 }, now).state).toBe('not_connected')
+  })
+
   it('declared env names out of step make env drift even when the Mushi vars are present', () => {
     expect(deriveElementState({ key: 'env', repoConnected: true, tokenAvailable: true, fetchError: null, required: ['A'], missing: [], driftFindings: 1 }, now).state).toBe('drift')
   })

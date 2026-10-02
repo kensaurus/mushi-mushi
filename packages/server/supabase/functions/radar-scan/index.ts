@@ -1,7 +1,7 @@
 // ============================================================
 // radar-scan — daily hole checks across projects (Plan 020 Phase 1, ADR 0017).
 //
-// Trigger: pg_cron daily at 04:05 UTC (migration 20261002160000), and
+// Trigger: pg_cron daily at 04:05 UTC (migration 20261002170000), and
 //          POST {"projectId": "<uuid>"} from an internal caller.
 // Auth:    requireServiceRoleAuth (internal only).
 //
