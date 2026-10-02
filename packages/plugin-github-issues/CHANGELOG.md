@@ -1,5 +1,12 @@
 # @mushi-mushi/plugin-github-issues
 
+## 0.1.7
+
+### Patch Changes
+
+- Updated dependencies [f48d15b]
+  - @mushi-mushi/plugin-sdk@0.9.0
+
 ## 0.1.6
 
 ### Patch Changes

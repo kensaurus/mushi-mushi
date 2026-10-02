@@ -1,5 +1,20 @@
 # @mushi-mushi/mcp
 
+## 0.23.0
+
+### Minor Changes
+
+- f48d15b: Add the `import_sentry_issues` tool: pull existing Sentry issues into the report queue by issue id, short id or a Sentry search, at most 10 per call. Each issue is deduped, linked and classified the same way a Sentry webhook delivery is; an issue already in Mushi answers `linked`.
+- f48d15b: Three reporter-loop tools, on both the npm (stdio) and hosted transports: `request_reporter_info` asks the person who filed a report a question and marks it "Waiting on you"; `list_reporter_outbox` lists pipeline updates held for review; `release_reporter_update` sends (optionally edited) or discards one held update. `transition_status` gains `closedReason` (duplicate, not_reproducible, wont_fix, working_as_intended, spam), which sets what the reporter is told when a report is dismissed, and `reporterMessage`, a note posted to the reporter verbatim.
+
+### Patch Changes
+
+- Updated dependencies [f48d15b]
+- Updated dependencies [f48d15b]
+- Updated dependencies [f48d15b]
+- Updated dependencies [f48d15b]
+  - @mushi-mushi/core@1.30.0
+
 ## 0.22.1
 
 ### Patch Changes
