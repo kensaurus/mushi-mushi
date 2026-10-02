@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { MushiConfig, MushiReporterReport } from '@mushi-mushi/core';
 import { Mushi } from './mushi';
-import { deviceHasReports, markDeviceHasReports, pickUpdateToast, recordToastShown, toastAllowed } from './reporter-inbox';
+import { deviceHasReports, markDeviceHasReports, recordToastShown, toastAllowed } from './reporter-inbox';
+import { pickUpdateToast } from './widget-views';
 
 const PID = '00000000-0000-0000-0000-0000000000aa';
 const row = (r: Partial<MushiReporterReport>): MushiReporterReport =>

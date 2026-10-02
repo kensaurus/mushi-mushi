@@ -11,6 +11,7 @@ import type {
 } from '@mushi-mushi/core';
 import { isPlausibleReporterEmail, reporterToastMessage, type ReporterCopy } from '@mushi-mushi/core/reporter-ui';
 import { getLocale, type MushiLocale } from './i18n';
+import type * as Views from './widget-views';
 import { getWidgetStyles } from './styles';
 import { contrastingInk, safeCssColor } from './build-widget-theme';
 import { readPageFaviconHref, MUSHI_TIER_COLORS } from '@mushi-mushi/core';
@@ -29,8 +30,7 @@ import type {
 // Re-exported so existing `from './widget'` import sites and the package barrel
 // keep resolving these public contracts unchanged after the helper split.
 export type { WidgetCallbacks, WidgetRewardsState, WidgetSubmitOutcome } from './widget-helpers';
-import { pickUpdateToast } from './reporter-inbox';
-import { renderBrandFooter, renderOutdatedBanner, renderView, resolveReporterCopy } from './widget-render';
+import { LAZY_STEPS, renderBrandFooter, renderKit, renderOutdatedBanner, renderView, resolveReporterCopy } from './widget-render';
 import type { WidgetRenderCtx } from './widget-render';
 
 /** Heuristic: hedging / capability-limit answers should offer a report escape. */
@@ -41,6 +41,24 @@ function looksUnsureAssistantAnswer(text: string): boolean {
       lower
     ) || /わかりません|分かりません|不明|報告して/.test(text)
   );
+}
+
+type ViewsModule = typeof Views;
+let viewsModule: ViewsModule | null = null;
+let viewsLoading: Promise<ViewsModule> | null = null;
+
+/**
+ * Your reports, the opt-ins and the overflow views live in an on-demand chunk
+ * (dist/chunks/widget-views-*.js): loaded the first time one is needed, once
+ * per page, shared by every widget instance.
+ */
+function loadViews(): Promise<ViewsModule> {
+  viewsLoading ??= import('./widget-views').then((m) => {
+    m.initViews(renderKit);
+    viewsModule = m;
+    return m;
+  });
+  return viewsLoading;
 }
 
 /** Panel regions, in DOM order. `lead` + `body` share the scroll container. */
@@ -1250,6 +1268,9 @@ export class MushiWidget {
       return;
     }
     const ctx = this.renderCtx();
+    if (!viewsModule && (LAZY_STEPS.has(this.step) || (this.step === 'success' && (this.channels.email || this.channels.push)))) {
+      void this.preloadViews().then(() => { if (this.isOpen) this.render(); });
+    }
     const view = renderView(ctx);
     const next: Record<Region, string> = {
       notice: renderOutdatedBanner(ctx),
@@ -1593,6 +1614,7 @@ export class MushiWidget {
       locale: this.locale,
       rc: this.rc,
       lang: this.lang,
+      views: viewsModule,
       step: this.step,
       callbacks: this.callbacks,
       chip: this.chip,
@@ -2138,9 +2160,23 @@ export class MushiWidget {
    * "Fixed in v1.4", "3 updates on your reports". Suppressed wherever the
    * launcher is (hidden routes, hideOnSelector, hide()). View opens the thread.
    */
-  showUpdatesToast(reports: MushiReporterReport[]): boolean {
-    const toast = pickUpdateToast(reports, this.lang, this.rc.ui.toastReplied);
+  async showUpdatesToast(reports: MushiReporterReport[]): Promise<boolean> {
+    const toast = (await loadViews()).pickUpdateToast(reports, this.lang, this.rc.ui.toastReplied);
     return toast ? this.showUpdateToast(toast) : false;
+  }
+
+  /**
+   * Fetch the on-demand views chunk ahead of need (the SDK calls this at idle
+   * on a device that has filed a report, so Your reports opens instantly).
+   * Devices that never filed one never download it. Never rejects.
+   */
+  async preloadViews(): Promise<void> {
+    try {
+      await loadViews();
+    } catch {
+      // A failed chunk fetch (offline, CSP) is retried on the next need.
+      viewsLoading = null;
+    }
   }
 
   /** The toast from GET /v1/reporter/updates (core's wording), naming the report when there is one. */

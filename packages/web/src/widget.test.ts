@@ -18,11 +18,17 @@
  *          - Diagnostics fields surface the right health state
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { MushiWidget, type WidgetCallbacks } from './widget';
 import { formatReceiptTime, shouldShowSdkFreshness, submitShortcutKey } from './widget-helpers';
 
 const DEFAULT_TRIGGER = '\uD83D\uDC1B'; // 🐛
+
+// Your reports and the overflow views load on demand (dist/chunks); fetch the
+// chunk once up front so these tests can assert on the DOM synchronously.
+beforeAll(async () => {
+  await new MushiWidget({}, { onSubmit: () => {}, onOpen: () => {}, onClose: () => {}, onScreenshotRequest: () => {} }).preloadViews();
+});
 
 const noopCallbacks: WidgetCallbacks = {
   onSubmit: () => {},
