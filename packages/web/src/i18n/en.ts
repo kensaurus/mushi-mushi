@@ -163,7 +163,9 @@ export const en: MushiLocale = {
     },
     betaStrip: {
       defaultMessage: '{appName} is in early development',
-      contactHint: 'Reports go to {email} · reviewed by the team',
+      contactHint: 'Questions? {email}',
+      teamSees: 'The {appName} team will see this',
+      teamSeesGeneric: 'The team will see this',
       ariaLabel: 'Beta status',
     },
     changelog: {

@@ -18,11 +18,17 @@
  *          - Diagnostics fields surface the right health state
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { MushiWidget, type WidgetCallbacks } from './widget';
 import { formatReceiptTime, shouldShowSdkFreshness, submitShortcutKey } from './widget-helpers';
 
 const DEFAULT_TRIGGER = '\uD83D\uDC1B'; // 🐛
+
+// Your reports and the overflow views load on demand (dist/chunks); fetch the
+// chunk once up front so these tests can assert on the DOM synchronously.
+beforeAll(async () => {
+  await new MushiWidget({}, { onSubmit: () => {}, onOpen: () => {}, onClose: () => {}, onScreenshotRequest: () => {} }).preloadViews();
+});
 
 const noopCallbacks: WidgetCallbacks = {
   onSubmit: () => {},
@@ -873,12 +879,48 @@ describe('MushiWidget — live-QA polish', () => {
     w.destroy();
   });
 
-  it('the banner bug action also opens the report screen', () => {
+  it('the banner "Report a bug" lands on the report screen with Bug picked (both layouts)', () => {
     const w = new MushiWidget({ trigger: 'banner' }, noopCallbacks);
     w.mount();
     q<HTMLButtonElement>(w, '.mushi-banner-btn')!.click();
     expect(readStep(w)).toBe('report');
+    expect(q(w, '[data-category="bug"]')!.getAttribute('aria-checked')).toBe('true');
     w.destroy();
+
+    const rich = new MushiWidget({ trigger: 'banner', bannerConfig: { message: 'Beta' } }, noopCallbacks);
+    rich.mount();
+    q<HTMLButtonElement>(rich, '.mushi-banner-link')!.click();
+    expect(q(rich, '[data-category="bug"]')!.getAttribute('aria-checked')).toBe('true');
+    rich.destroy();
+  });
+
+  // QA (console): the beta footer said "Sent to <email>" — nothing is emailed.
+  it('beta copy says who sees the report and offers the email as a separate contact link', async () => {
+    vi.useFakeTimers();
+    const beta = { enabled: true, appName: 'Acme', contactEmail: 'dev@acme.test' };
+    const w = new MushiWidget({ betaMode: beta }, { ...noopCallbacks, onSubmit: () => Promise.resolve({ reportId: REPORT_ID, queuedOffline: false }) });
+    w.mount();
+    w.open();
+    expect(q(w, '.mushi-beta-strip')!.textContent).not.toMatch(/Reports go to|Sent to/);
+    expect(q<HTMLAnchorElement>(w, '.mushi-beta-strip a')!.getAttribute('href')).toBe('mailto:dev@acme.test');
+    typeDescription(w, LONG);
+    submit(w);
+    await vi.advanceTimersByTimeAsync(500);
+    const footer = q(w, '.mushi-beta-receipt')!;
+    expect(footer.textContent).toContain('The Acme team will see this');
+    expect(footer.textContent).toContain('Questions? dev@acme.test');
+    expect(footer.textContent).not.toContain('Sent to');
+    expect(q<HTMLAnchorElement>(w, '.mushi-beta-receipt a')!.getAttribute('href')).toBe('mailto:dev@acme.test');
+    w.destroy();
+
+    const ja = new MushiWidget({ locale: 'ja', betaMode: { enabled: true } }, { ...noopCallbacks, onSubmit: () => Promise.resolve({ reportId: REPORT_ID, queuedOffline: false }) });
+    ja.mount();
+    ja.open();
+    typeDescription(ja, '保存ボタンが反応しません');
+    submit(ja);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(q(ja, '.mushi-beta-receipt')!.textContent).toBe('チームが確認します');
+    ja.destroy();
   });
 
   // Items 2 + 9

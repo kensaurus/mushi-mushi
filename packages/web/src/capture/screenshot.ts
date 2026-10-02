@@ -30,8 +30,8 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
       if (typeof document === 'undefined') return null;
 
       const canvas = document.createElement('canvas');
-      // isCanvasBlank reads pixels back; this hint keeps Chrome from warning
-      // about (and slowing down) repeated getImageData readbacks.
+      // Read back on a grid by isCanvasBlank(); without this hint Chrome warns
+      // about repeated getImageData readbacks.
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) {
         activeOptions.onFailed?.('unsupported');
@@ -143,24 +143,6 @@ function emitScreenshotFailed(reason: ScreenshotFailureReason): void {
  * before any pixel is produced. `redactSelectors` adds to this list and can't
  * remove from it: a host passing its own list used to drop password redaction.
  */
-/**
- * CSS animations do not run inside an SVG rendered through <img>: an element
- * with an entrance animation (fade-in from opacity 0, for example) is painted
- * at its first keyframe. On pages that animate their content in, the whole
- * capture came out transparent and was reported as 'unsupported'. Appended
- * last, after the inlined page CSS, so it wins; the capture then shows the
- * settled page the reporter is looking at.
- */
-export const FREEZE_ANIMATIONS_CSS =
-  '*,*::before,*::after{animation:none!important;transition:none!important}';
-
-function freezeAnimations(clone: Element): void {
-  const styleEl = document.createElement('style');
-  styleEl.setAttribute('data-mushi-freeze', '');
-  styleEl.textContent = FREEZE_ANIMATIONS_CSS;
-  (clone.querySelector('head') ?? clone).appendChild(styleEl);
-}
-
 export const ALWAYS_REDACT_SELECTORS ='input[type="password"],input[autocomplete^="cc-"],[data-private],[data-mushi-mask]';
 const DEFAULT_REDACT_SELECTORS: readonly string[] = ['[data-mushi-redact]'];
 
@@ -172,7 +154,8 @@ function buildPrivacySafeDocument(privacy?: MushiPrivacyConfig): Element {
   clone.querySelector('#mushi-mushi-widget')?.remove();
   stripTaintSources(clone);
   inlineDocumentStyles(clone);
-  freezeAnimations(clone);
+  freezeMotion(clone);
+  fillViewport(clone);
 
   // Redact: black-out matching elements, before mask/block. The always-on
   // baseline (passwords, card fields, [data-private], [data-mushi-mask]) runs
@@ -299,6 +282,37 @@ function inlineDocumentStyles(clone: Element): void {
   if (!css) return;
   const styleEl = document.createElement('style');
   styleEl.textContent = css;
+  (clone.querySelector('head') ?? clone).appendChild(styleEl);
+}
+
+/**
+ * CSS animations never run inside an SVG drawn as an <img>, so anything with
+ * an entrance animation (fade-in keyframes starting at opacity 0) stays at its
+ * first keyframe and the whole capture comes out transparent. Freeze motion
+ * last, after every page style, so the capture shows the settled page the
+ * reporter actually sees.
+ */
+const FREEZE_MOTION_CSS = '*,*::before,*::after{animation:none!important;transition:none!important}';
+
+/**
+ * A real page paints its background across the whole viewport (the root
+ * background propagates to the canvas). Inside the SVG it stops where the
+ * content ends, and the transparent rest turns black once the capture is
+ * compressed to JPEG — short pages came out half black. Give the clone's root
+ * the page's effective background and the full height.
+ */
+function fillViewport(clone: Element): void {
+  const clear = (c: string) => !c || c === 'transparent' || /^rgba\(.*,\s*0\)$/.test(c);
+  let bg = getComputedStyle(document.documentElement).backgroundColor;
+  if (clear(bg) && document.body) bg = getComputedStyle(document.body).backgroundColor;
+  const root = clone as HTMLElement;
+  root.style.setProperty('background-color', clear(bg) ? 'Canvas' : bg);
+  root.style.setProperty('min-height', `${window.innerHeight}px`);
+}
+
+function freezeMotion(clone: Element): void {
+  const styleEl = document.createElement('style');
+  styleEl.textContent = FREEZE_MOTION_CSS;
   (clone.querySelector('head') ?? clone).appendChild(styleEl);
 }
 
