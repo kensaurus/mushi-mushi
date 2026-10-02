@@ -1,0 +1,35 @@
+[
+  {
+    "issuer_ca_id": 295815,
+    "issuer_name": "C=US, O=Let's Encrypt, CN=R11",
+    "common_name": "glot.it",
+    "name_value": "glot.it\nwww.glot.it",
+    "id": 1,
+    "entry_timestamp": "2026-08-01T00:00:00.000",
+    "not_before": "2026-08-01T00:00:00",
+    "not_after": "2026-10-30T00:00:00",
+    "serial_number": "aa"
+  },
+  {
+    "issuer_ca_id": 295815,
+    "issuer_name": "C=US, O=Let's Encrypt, CN=R11",
+    "common_name": "glot.it",
+    "name_value": "glot.it\nwww.glot.it",
+    "id": 2,
+    "entry_timestamp": "2026-06-01T00:00:00.000",
+    "not_before": "2026-06-01T00:00:00",
+    "not_after": "2026-08-30T00:00:00",
+    "serial_number": "bb"
+  },
+  {
+    "issuer_ca_id": 295815,
+    "issuer_name": "C=US, O=Let's Encrypt, CN=E6",
+    "common_name": "api.glot.it",
+    "name_value": "api.glot.it",
+    "id": 3,
+    "entry_timestamp": "2026-09-20T00:00:00.000",
+    "not_before": "2026-09-20T00:00:00",
+    "not_after": "2026-12-19T00:00:00",
+    "serial_number": "cc"
+  }
+]

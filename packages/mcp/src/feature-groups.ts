@@ -79,6 +79,7 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   get_design_tokens: 'inventory',
   get_portfolio: 'inventory',
   list_portfolio_findings: 'inventory',
+  get_radar: 'inventory',
   get_design_deviance: 'inventory',
 
   // setup

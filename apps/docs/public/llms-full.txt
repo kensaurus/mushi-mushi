@@ -4,7 +4,7 @@
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
 Generated: 2026-10-02
-Pages: 204
+Pages: 205
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -2761,6 +2761,39 @@ If nothing could be judged, the score is **not scored**, never 0. The
 severity, shrinking its allowlist) raises the score at first. Fixing the findings
 it reveals brings the score back down, against a stricter system each time.
 
+## Hole checks
+
+Some problems never throw an error, so no user report or crash log will show
+them. Mushi checks for them once a day and shows the result under **Hole
+checks** on the Recipe page:
+
+| Check | What it catches |
+|-------|-----------------|
+| Store names match | The App Store and Google Play show different names for the same app. Google Play's title is treated as the right one. |
+| Store listing in every language | A language you list has no store page in that language. |
+| Domain and HTTPS certificate | The domain or its certificate expires within a few weeks. The certificate date is estimated from public certificate logs. |
+| Security headers | A site is missing HSTS, clickjacking protection, `nosniff` or a referrer policy. |
+| Privacy link | The privacy URL you give the stores does not load a real policy page. |
+| Store build rules | Your Android target SDK or iOS build is older than Google Play or the App Store accepts. |
+| Storage deletes in SQL | Rows of `storage.objects` deleted with SQL. The files stay in the bucket and keep costing money. This one runs in your own CI: `mushi radar scan --push`. |
+
+A check with nothing to look at says **Not checked**. It is never shown as passing.
+
+The public checks read a `store` block in `mushi.recipe.json`:
+
+```json
+{
+  "store": {
+    "brandName": "glot.it – Learn Thai",
+    "ios": { "bundleId": "com.example.app", "appleId": "1234567890" },
+    "android": { "package": "com.example.app" },
+    "locales": ["en-US", "ja"],
+    "privacyUrl": "https://example.com/privacy"
+  },
+  "links": { "domains": ["example.com"] }
+}
+```
+
 ## In your editor
 
 | MCP tool | Returns |
@@ -4204,7 +4237,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP<br/>83 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>86 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
@@ -4252,7 +4285,7 @@ your client:
 }
 ```
 
-The full tool catalog (83 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (86 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -4428,7 +4461,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 83 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 86 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -5991,6 +6024,19 @@ mushi audit                        # full-stack project health audit
 
 ---
 
+## Hole checks (radar)
+
+Checks that catch a problem before a user hits it. `scan` runs in your own CI
+job; Mushi never clones your repo.
+
+```bash
+mushi radar scan                     # storage deletes done in SQL; lists the build files the store rules read
+mushi radar scan --push              # send results to Mushi (one extra step in your existing CI job)
+mushi radar show                     # every hole check for this project and what it found
+```
+
+---
+
 ## Skill pipelines
 
 ```bash
@@ -6874,7 +6920,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **83-tool** catalog and
+on npm for the full **86-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 
@@ -6974,7 +7020,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 
   Auto-generated from `packages/mcp/src/catalog.ts`. Do not edit by hand — run `pnpm gen:mcp-tools-doc`.
 
-**83 tools** · **8 resources** · **4 prompts**
+**86 tools** · **8 resources** · **4 prompts**
 
 ## Read tools (`mcp:read`)
 
@@ -6996,6 +7042,9 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `get_app_recipe` | App recipe | Return the App Recipe for a project: one card per element (schema, design, routes, gates, ci, deploy, env, integrations), each with a state, a plain-English reason, key facts, a findings count and console links, plus the worst state overall and the mushi.recipe.json manifest status. Every element is exactly one of ok \| drift \| unknown \| not_connected \| error. unknown means configured but not observed recently and never means healthy; not_connected means nothing is configured. Returns \{ projectId, worst, elements: \{ \: \{ state, reason, facts, findingsCount, lastCheckedAt, links } }, manifest, snapshotHash }. Read-only. Use to see how the app is put together and which part is drifting; use get_design_tokens for the token values, get_design_deviance for code that drifts off them, or list_gate_findings for gate detail. |
 | `get_design_tokens` | Design tokens | Return the app's normalized design tokens (DTCG: path, type, resolved value, hex / px, alias, CSS var, TS and RN names, description, defining file) for the active token set, plus nameMap (CSS var or TS name → token path). This is the tool that makes a fix use the app's tokens instead of hard-coded literals: look up the token for a colour, spacing, radius or font before writing one. Optional filters: group (first path segment, e.g. color, space), type (color \| dimension \| fontFamily \| …), direction (a named token set instead of the active one). Returns \{ projectId, set, tokens, nameMap, total }; at most 500 tokens. Read-only. Use get_design_deviance to see where code drifts off these tokens, or get_app_recipe for the overall state. |
 | `get_design_deviance` | Design deviance | Return how far the code drifts off the design system: the latest 0–100 deviance score (lower is better; null means not scored yet), its per-rule breakdown, the score trend, a scan still running if any, the top findings (file, line, literal value, rule, and the nearest token to use instead), and the active rules (off_token_color, off_token_font, off_scale_spacing, off_scale_radius, contrast_below_aa, raw_interactive_element). Optional limit: findings to return (1–200, default 25). Returns \{ projectId, latest, running, trend, findings, rules }. Read-only. Use to find and fix off-token code; use get_design_tokens for the full token list. |
+| `get_portfolio` | Portfolio — every app at once | Return every project in one organization as a card: the worst App Recipe state (ok \| drift \| unknown \| not_connected \| error; unknown and not_connected never mean healthy), open reports, the latest release, the Mushi SDK version against the latest release of the same package, the hole-check (radar) status with open findings by severity (never_run means not checked yet), and the 30-day LLM spend Mushi itself used. Optional organizationId (UUID); omitted, the only organization of the key owner is used, and a 400 ORG_REQUIRED lists the choices when there are several. Needs an account-level key; a project-bound key gets 403. Returns \{ organizationId, organizationName, cards, totalProjects, repeatedGroups, holes }. Read-only. Use list_portfolio_findings for the problems open in two or more apps. |
+| `list_portfolio_findings` | Portfolio findings — fix once | Return what to fix across the apps of one organization: groups of the same finding rule open in two or more projects (rule, gate, highest severity, affected projectIds, a sample message and one paste-ready fix prompt), the Mushi SDK version per project and package (current \| behind \| unknown), and integrations most sibling projects have but one lacks. Open means the latest completed gate run per project and gate, not allowlisted; info findings are left out. Optional organizationId as for get_portfolio. Needs an account-level key. Returns \{ organizationId, groups, sdkSkew, holes }. Read-only. Fix a group repo by repo with list_gate_findings in each project. |
+| `get_radar` | Hole checks (radar) | Return the hole checks that catch a problem before a user hits it: store names that differ between the App Store and Google Play, a store listing missing a language, a domain or HTTPS certificate about to expire, missing security headers, a broken privacy link, storage rows deleted with SQL (files left behind and billed), and an Android target SDK or iOS build that the stores will refuse. scope "project" (default; projectId optional) returns every check with state ok \| finding \| unknown \| error, a plain-English reason, and each finding with its fix; unknown means not checked and never means healthy. scope "organization" (organizationId optional, account-level key) returns the open findings of every app. Read-only. To run the checks again, use the console Recipe page. |
 | `get_graph_neighborhood` | Graph neighborhood | Return the BFS neighborhood around one graph node by id or label: \{ nodes: [\{ id, label, node_type }], edges: [\{ source_node_id, target_node_id, edge_type }] } within a depth budget (default 2, max 4). Read-only. Tuned for "what touches this action?"; use get_knowledge_graph to traverse from a component seed, or get_graph_node for a single node's row. |
 | `get_graph_node` | Graph node detail | Fetch one knowledge-graph node row by id. Returns \{ node: \{ id, node_type, label, metadata } } including the v2 derived status on Action nodes (ok \| stale \| broken). Read-only. Use to inspect a single node's status; use get_graph_neighborhood to see what connects to it. |
 | `suggest_fix` | Suggested fix (from triage) | Return the Stage-2 suggested-fix slice for one report: root cause, suggested fix, repro steps, summary, and component — faster than get_report_detail when you only need the human-readable hint. Returns \{ reportId, rootCause, suggestedFix, reproductionSteps, summary, component }. Read-only; reads the existing classification (run triage_issue first if unclassified). Use for a quick "what should we try?"; use get_fix_context for the full paste-ready bundle. |
@@ -12243,6 +12292,8 @@ npx supabase functions deploy telegram-webhook --no-verify-jwt
 npx supabase functions deploy cursor-webhook --no-verify-jwt
 npx supabase functions deploy agent-status-poll --no-verify-jwt
 npx supabase functions deploy recipe-collector --no-verify-jwt
+npx supabase functions deploy radar-scan --no-verify-jwt
+npx supabase functions deploy operator-digest --no-verify-jwt
 ```
 
 For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `release-builder`, `experiment-analyzer`, `anomaly-detector`, …) and cron setup, follow [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md).
@@ -17742,7 +17793,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**83 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**86 tools**, 8 resources, 4 prompts).
 
 ---
 
@@ -18234,6 +18285,54 @@ from [Projects](/admin/projects).
 
   Overview is org-scoped. Activity and most other console pages are project-scoped —
   use a card footer link to switch project context before drilling in.
+
+---
+
+## Portfolio
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/portfolio
+
+---
+title: Portfolio
+description: The Portfolio page shows every app in a team at once, with each app's worst recipe state, hole checks and SDK version, plus problems you can fix once across apps.
+---
+
+# Portfolio
+
+**Route:** `/portfolio` (also from the team switcher: **All this team's apps**)
+
+> **Scenario:** You run five apps. One has an old Mushi SDK, two have the same
+> oversized-file finding, and one never got Sentry set up. You want to see all
+> of that in one place and fix each problem once, not five times.
+
+This page **reads only**. It builds on each app's [Recipe](/concepts/app-recipe).
+
+---
+
+## What you see
+
+| Section | What it means |
+|---------|---------------|
+| **Cards** | One per app: the worst recipe state, open reports, the latest release, the Mushi SDK against the latest version, and the hole checks. |
+| **Hole checks** | "Not checked yet" means Mushi has not looked. It is never a pass. |
+| **Fix once** | A problem open in two or more apps. Copy the prompt into your editor to fix it in every repo. |
+| **Mushi SDK versions** | Apps behind the latest release of the same package, and apps that never reported. |
+| **Missing setups** | An integration most of your other apps have and this one does not. |
+
+In **Advanced** mode each card also shows Mushi's own AI spend for that app over 30 days and its monthly budget.
+
+---
+
+## From your editor
+
+The MCP tools `get_portfolio` and `list_portfolio_findings` return the same
+data. They need an **account-level** key (Connect → MCP); a key bound to one
+project cannot read its sibling apps.
+
+## Who can see it
+
+Members of the team see the team's apps they can reach. A member of another
+team gets a 403.
 
 ---
 

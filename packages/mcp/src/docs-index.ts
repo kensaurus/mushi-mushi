@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 204 pages, generated from llms.txt. */
+/** 205 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -376,6 +376,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "The Overview page is the organization-wide portfolio view — seven-day activity and open tickets for every connected project at a glance.",
   },
   {
+    title: "Portfolio",
+    url: docUrl("/admin/portfolio"),
+    route: "/admin/portfolio",
+    markdown: "admin/portfolio.md",
+    keywords: ["admin", "portfolio"],
+    headings: ["What you see", "From your editor", "Who can see it"],
+    excerpt: "The Portfolio page shows every app in a team at once, with each app's worst recipe state, hole checks and SDK version, plus problems you can fix once across apps.",
+  },
+  {
     title: "Projects",
     url: docUrl("/admin/projects"),
     route: "/admin/projects",
@@ -696,7 +705,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/concepts/app-recipe",
     markdown: "concepts/app-recipe.md",
     keywords: ["concepts", "app-recipe", "app", "recipe", "design", "system"],
-    headings: ["The five states", "mushi.recipe.json", "The design system page", "Directions", "The deviance check", "The deviance score", "In your editor"],
+    headings: ["The five states", "mushi.recipe.json", "The design system page", "Directions", "The deviance check", "The deviance score", "Hole checks", "In your editor"],
     excerpt: "The App Recipe records what your app is made of, so a diagnosis can say what changed and a fix can respect your design system.",
   },
   {

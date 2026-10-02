@@ -28,6 +28,7 @@ import { RecipeElementList } from '../components/recipe/RecipeElementList'
 import { RecipeSidePanel } from '../components/recipe/RecipeSidePanel'
 import { RecipeHeaderSummary } from '../components/recipe/RecipeHeaderSummary'
 import { usePrefersRecipeList } from '../components/recipe/useMediaQuery'
+import { RadarPanel } from '../components/portfolio/RadarPanel'
 
 const RecipeFlow = lazy(() =>
   import('../components/recipe/RecipeFlow').then((m) => ({ default: m.RecipeFlow })),
@@ -179,6 +180,7 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
             </div>
           </>
         )}
+        <RadarPanel projectId={projectId} />
       </div>
     </div>
   )

@@ -1401,6 +1401,32 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
+    'get_radar',
+    {
+      title: titleOf('get_radar'),
+      description: descOf('get_radar'),
+      annotations: annotationsFor('get_radar'),
+      inputSchema: z.object({
+        scope: z.enum(['project', 'organization']).optional().describe('project (default) or organization'),
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project (scope project)'),
+        organizationId: z
+          .string()
+          .uuid()
+          .optional()
+          .describe("Organization UUID — defaults to the key owner's only organization (scope organization)"),
+      }),
+    },
+    async (args) => {
+      if (args.scope === 'organization') {
+        const org = encodeURIComponent(args.organizationId ?? 'current');
+        return jsonText(await apiCall(`/v1/admin/orgs/${org}/radar`));
+      }
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/radar`));
+    },
+  );
+
+  server.registerTool(
     'suggest_fix',
     {
       title: titleOf('suggest_fix'),

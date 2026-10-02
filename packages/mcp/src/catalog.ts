@@ -246,6 +246,16 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Which problem shows up in several of my apps, so I fix it once?',
   },
   {
+    name: 'get_radar',
+    title: 'Hole checks (radar)',
+    description:
+      'Return the hole checks that catch a problem before a user hits it: store names that differ between the App Store and Google Play, a store listing missing a language, a domain or HTTPS certificate about to expire, missing security headers, a broken privacy link, storage rows deleted with SQL (files left behind and billed), and an Android target SDK or iOS build that the stores will refuse. scope "project" (default; projectId optional) returns every check with state ok | finding | unknown | error, a plain-English reason, and each finding with its fix; unknown means not checked and never means healthy. scope "organization" (organizationId optional, account-level key) returns the open findings of every app. Read-only. To run the checks again, use the console Recipe page.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Is anything about to break in my apps that no user has hit yet?',
+  },
+  {
     name: 'get_graph_neighborhood',
     title: 'Graph neighborhood',
     description:

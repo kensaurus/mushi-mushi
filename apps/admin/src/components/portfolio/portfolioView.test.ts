@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PortfolioCard } from '../../lib/portfolioTypes'
-import { kindLabel, radarLabel, sdkLabel, sortPortfolioCards } from './portfolioView'
+import { kindLabel, radarLabel, radarStateMeta, sdkLabel, sortPortfolioCards } from './portfolioView'
 
 const card = (over: Partial<PortfolioCard>): PortfolioCard => ({
   projectId: 'p',
@@ -48,5 +48,17 @@ describe('portfolioView', () => {
     expect(kindLabel({ kind: 'app', kindSource: 'inferred' })).toBe('App (inferred)')
     expect(kindLabel({ kind: 'site', kindSource: 'declared' })).toBe('Site')
     expect(kindLabel({ kind: null, kindSource: 'unknown' })).toBe('Kind unknown')
+  })
+})
+
+describe('radarStateMeta', () => {
+  it('reads an unknown or unrecognised state as not checked, never as a pass', () => {
+    expect(radarStateMeta('unknown')).toEqual({ label: 'Not checked', tone: 'neutral' })
+    expect(radarStateMeta('weird')).toEqual({ label: 'Not checked', tone: 'neutral' })
+    expect(radarStateMeta('ok').label).toBe('Nothing found')
+  })
+
+  it('labels a radar run with nothing declared as nothing to check', () => {
+    expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'nothing_to_check', open: { error: 0, warn: 0, info: 0 }, unchecked: 6 }).text).toBe('Nothing to check yet')
   })
 })

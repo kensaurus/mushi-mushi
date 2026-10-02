@@ -218,6 +218,3 @@ export async function mapBounded<T, R>(items: readonly T[], limit: number, fn: (
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
   return out
 }
-
-/** The gate the Plan 020 radar detectors write (`gate_runs.gate`). */
-export const RADAR_GATE = 'radar'

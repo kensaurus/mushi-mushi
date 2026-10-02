@@ -24,7 +24,6 @@ import {
   integrationHoles,
   latestSdkVersions,
   mapBounded,
-  RADAR_GATE,
   sdkSkew,
   type IntegrationKey,
   type OpenFindingRow,
@@ -41,6 +40,7 @@ import type {
 } from '../../_shared/portfolio-types.ts'
 import { RECIPE_ELEMENT_KEYS, type ElementState, type RecipeElementKey } from '../../_shared/recipe-types.ts'
 import { DESIGN_GATE } from '../../_shared/design-plane.ts'
+import { RADAR_CI_GATE, RADAR_GATE } from '../../_shared/radar/run.ts'
 import { jsonError, OPEN_REPORT_STATUSES } from '../shared.ts'
 import type { Variables } from '../types.ts'
 import { composeRecipe, isScanRun, latestPerGate, type ComposeDeps } from './recipe-compose.ts'
@@ -50,6 +50,7 @@ const plog = log.child('portfolio')
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export const PORTFOLIO_PAGE_SIZE = 25
 const COMPOSE_CONCURRENCY = 4
+const RADAR_COLUMN_GATES = [RADAR_GATE, RADAR_CI_GATE]
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -209,22 +210,25 @@ async function loadPresence(db: Db, projectIds: string[]): Promise<Map<string, S
   return out
 }
 
-const RADAR_STATUSES = new Set(['pass', 'warn', 'fail', 'error'])
+const STATUS_RANK: Record<string, number> = { error: 4, fail: 3, warn: 2, pass: 1, skipped: 0 }
 
-/** Radar column from the latest radar run and its open findings. Never-run is `never_run`, not green. */
-export function radarColumn(run: RunRow | null, findings: readonly OpenFindingRow[]): PortfolioRadarColumn {
-  if (!run) return { checkedAt: null, status: 'never_run', open: { error: 0, warn: 0, info: 0 }, unchecked: 0 }
+/**
+ * Radar column from the latest scheduled run and the latest host-CI run
+ * (`radar` + `radar_ci`). Never-run is `never_run`; a run that found nothing
+ * declared to check is `nothing_to_check` — neither reads as green.
+ */
+export function radarColumn(runs: readonly RunRow[], findings: readonly OpenFindingRow[]): PortfolioRadarColumn {
+  if (runs.length === 0) return { checkedAt: null, status: 'never_run', open: { error: 0, warn: 0, info: 0 }, unchecked: 0 }
   const open = { error: 0, warn: 0, info: 0 }
   for (const f of findings) {
     if (f.severity === 'error' || f.severity === 'warn' || f.severity === 'info') open[f.severity]++
   }
-  const unchecked = Number((run.summary as { unchecked?: number } | null)?.unchecked ?? 0)
-  return {
-    checkedAt: run.completed_at ?? run.started_at,
-    status: (RADAR_STATUSES.has(run.status) ? run.status : 'error') as PortfolioRadarColumn['status'],
-    open,
-    unchecked: Number.isFinite(unchecked) ? unchecked : 0,
-  }
+  const worst = runs.reduce((w, r) => ((STATUS_RANK[r.status] ?? 4) > (STATUS_RANK[w.status] ?? 4) ? r : w))
+  const status: PortfolioRadarColumn['status'] = worst.status === 'skipped' ? 'nothing_to_check'
+    : worst.status === 'pass' || worst.status === 'warn' || worst.status === 'fail' ? worst.status : 'error'
+  const unchecked = runs.reduce((n, r) => n + Number((r.summary as { unchecked?: number } | null)?.unchecked ?? 0), 0)
+  const checkedAt = runs.map((r) => r.completed_at ?? r.started_at).sort().pop() ?? null
+  return { checkedAt, status, open, unchecked: Number.isFinite(unchecked) ? unchecked : 0 }
 }
 
 async function loadSpend(db: Db, projectIds: string[], since: string): Promise<Map<string, PortfolioSpendColumn>> {
@@ -292,7 +296,7 @@ export async function buildPortfolio(db: Db, deps: PortfolioRouteDeps, orgId: st
   const cards = await mapBounded(pageProjects, COMPOSE_CONCURRENCY, async (p): Promise<PortfolioCard> => {
     const sdkEntries: SdkSkewEntry[] = skew.filter((s) => s.projectId === p.id)
     const kind = inferKind(declaredKind.get(p.id), sdk.observations.filter((o) => o.project_id === p.id).map((o) => o.sdk_package))
-    const radarRun = runs.find((r) => r.project_id === p.id && r.gate === RADAR_GATE) ?? null
+    const radarRuns = runs.filter((r) => r.project_id === p.id && RADAR_COLUMN_GATES.includes(r.gate))
     const base = {
       projectId: p.id,
       name: p.name ?? p.slug ?? p.id,
@@ -302,7 +306,7 @@ export async function buildPortfolio(db: Db, deps: PortfolioRouteDeps, orgId: st
       openReports: openReports.get(p.id) ?? 0,
       sdk: sdkEntries,
       latestRelease: latestRelease.get(p.id) ?? null,
-      radar: radarColumn(radarRun, radarRun ? findings.filter((f) => f.project_id === p.id && f.gate === RADAR_GATE) : []),
+      radar: radarColumn(radarRuns, findings.filter((f) => f.project_id === p.id && RADAR_COLUMN_GATES.includes(f.gate))),
       spend: spend.get(p.id)!,
     }
     try {

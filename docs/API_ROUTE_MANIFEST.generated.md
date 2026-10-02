@@ -2,15 +2,15 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-02 · **586** routes.
+> Generated: 2026-10-02 · **593** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 122 |
-| `apiKeyAuth` | 51 |
-| `jwtAuth` | 342 |
+| `adminOrApiKey` | 126 |
+| `apiKeyAuth` | 52 |
+| `jwtAuth` | 344 |
 | `jwtOrApiKey` | 3 |
 | `unknown` | 68 |
 
@@ -226,8 +226,12 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/ontology` | `jwtAuth` | `packages/server/supabase/functions/api/routes/graph-query.ts` |
 | GET | `/v1/admin/org/integrations/platform/:kind` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | PUT | `/v1/admin/org/integrations/platform/:kind` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
+| GET | `/v1/admin/orgs/:orgId/digest` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/digest.ts` |
+| POST | `/v1/admin/orgs/:orgId/digest/send` | `jwtAuth` | `packages/server/supabase/functions/api/routes/digest.ts` |
+| PUT | `/v1/admin/orgs/:orgId/digest/settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/digest.ts` |
 | GET | `/v1/admin/orgs/:orgId/portfolio` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/portfolio.ts` |
 | GET | `/v1/admin/orgs/:orgId/portfolio/findings` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/portfolio.ts` |
+| GET | `/v1/admin/orgs/:orgId/radar` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/radar.ts` |
 | GET | `/v1/admin/plugins` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | POST | `/v1/admin/plugins` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
 | DELETE | `/v1/admin/plugins/:slug` | `jwtAuth` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
@@ -286,6 +290,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/projects/:id/keys/rotate` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-keys.ts` |
 | GET | `/v1/admin/projects/:id/preflight` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
 | GET | `/v1/admin/projects/:id/privacy-status` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/evolution.ts` |
+| GET | `/v1/admin/projects/:id/radar` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/radar.ts` |
+| POST | `/v1/admin/projects/:id/radar/run` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/radar.ts` |
 | GET | `/v1/admin/projects/:id/recipe` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe.ts` |
 | GET | `/v1/admin/projects/:id/recipe/elements/:element` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe.ts` |
 | GET | `/v1/admin/projects/:id/recipe/history` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe.ts` |
@@ -478,6 +484,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/design-assets/:projectId` | `unknown` | `packages/server/supabase/functions/api/routes/recipe.ts` |
 | GET | `/v1/health` | `unknown` | `packages/server/supabase/functions/api/routes/discovery.ts` |
 | POST | `/v1/ingest/metrics` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
+| POST | `/v1/ingest/radar` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/radar.ts` |
 | POST | `/v1/ingest/spans` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/intake/voice` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/intake-voice.ts` |
 | GET | `/v1/intake/voice/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/intake-voice.ts` |

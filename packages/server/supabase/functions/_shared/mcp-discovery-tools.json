@@ -1701,6 +1701,41 @@
         ]
       }
     },
+    "get_radar": {
+      "title": "Hole checks (radar)",
+      "description": "Return the hole checks that catch a problem before a user hits it: store names that differ between the App Store and Google Play, a store listing missing a language, a domain or HTTPS certificate about to expire, missing security headers, a broken privacy link, storage rows deleted with SQL (files left behind and billed), and an Android target SDK or iOS build that the stores will refuse. scope \"project\" (default; projectId optional) returns every check with state ok | finding | unknown | error, a plain-English reason, and each finding with its fix; unknown means not checked and never means healthy. scope \"organization\" (organizationId optional, account-level key) returns the open findings of every app. Read-only. To run the checks again, use the console Recipe page.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Hole checks (radar)",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "description": "project (default) or organization",
+            "type": "string",
+            "enum": [
+              "project",
+              "organization"
+            ]
+          },
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project (scope project) (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "organizationId": {
+            "description": "Organization UUID — defaults to the key owner's only organization (scope organization)",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        }
+      },
+      "returnsUntrusted": true
+    },
     "get_recent_reports": {
       "title": "Recent bug reports",
       "description": "List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, component, created_at, processing_error }], total }; includeRaw=true returns every list column instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed|…), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports.",
