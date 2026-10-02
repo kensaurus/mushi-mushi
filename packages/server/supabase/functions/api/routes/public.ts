@@ -567,24 +567,19 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
 
   app.post('/v1/webhooks/sentry', async (c) => {
     const t0 = Date.now();
-    const { audit, checkReplay, checkRateLimit } = createWebhookMiddleware('sentry');
-    const signature = c.req.header('X-Sentry-Hook-Signature');
+    const { audit, hasAcceptedDuplicate, checkRateLimit } = createWebhookMiddleware('sentry');
+    const { readSentryHookHeaders, verifySentryDelivery } = await import('../../_shared/sentry-webhook-verify.ts');
+    const hookHeaders = readSentryHookHeaders((name) => c.req.header(name));
     const body = await c.req.text();
-    const deliveryId = c.req.header('Sentry-Hook-Resource-Id') ?? null;
     const sourceIp = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null;
 
-    const auditRow = await audit(c as never, body, deliveryId);
+    const auditRow = await audit(c as never, body, hookHeaders.requestId);
     try {
       checkRateLimit(sourceIp);
-      await checkReplay(auditRow.id, deliveryId);
     } catch (err) {
       if (err instanceof RateLimitError) {
         await auditRow.resolve('rejected_rate_limit', 429, Date.now() - t0, err.message);
         return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: err.message } }, 429);
-      }
-      if (err instanceof ReplayAttackError) {
-        await auditRow.resolve('rejected_replay', 409, Date.now() - t0, err.message);
-        return c.json({ ok: false, error: { code: 'DUPLICATE', message: 'Duplicate delivery' } }, 409);
       }
       throw err;
     }
@@ -622,45 +617,28 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       .eq('project_id', projectId)
       .single();
 
-    if (!settings?.sentry_webhook_secret) {
-      // Resolve the audit row before bailing — otherwise this row is stuck in
-      // 'pending' forever, polluting webhook_audit_log dashboards. The outcome
-      // is 'error' (config), not 'rejected_signature' (which implies the
-      // request was signed but the secret didn't match).
-      await auditRow.resolve('error', 403, Date.now() - t0, 'Sentry webhook secret not configured');
-      return c.json(
-        { ok: false, error: { code: 'NO_SECRET', message: 'Sentry webhook secret not configured for this project' } },
-        403,
+    // The console stores the secret in Vault and keeps a `vault://` ref in the
+    // column; read the plaintext back. An unreadable ref yields null, which
+    // rejects like a missing secret.
+    const { dereferenceMaybeVault } = await import('../../_shared/integration-probes.ts');
+    const webhookSecret = await dereferenceMaybeVault(db, settings?.sentry_webhook_secret ?? null);
+
+    let verdict: Awaited<ReturnType<typeof verifySentryDelivery>>;
+    try {
+      verdict = await verifySentryDelivery(
+        { headers: hookHeaders, body, secret: webhookSecret, nowMs: Date.now() },
+        {
+          isReplay: ({ requestId, bodyHash }) =>
+            hasAcceptedDuplicate(auditRow.id, { deliveryId: requestId, bodyHash }),
+        },
       );
+    } catch (err) {
+      await auditRow.resolve('error', 500, Date.now() - t0, String(err).slice(0, 300));
+      return c.json({ ok: false, error: { code: 'VERIFY_FAILED', message: 'Could not verify delivery' } }, 500);
     }
-
-    if (!signature) {
-      await auditRow.resolve('rejected_signature', 401, Date.now() - t0, 'Missing signature');
-      return c.json({ ok: false, error: { code: 'MISSING_SIGNATURE', message: 'Missing signature' } }, 401);
-    }
-
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      'raw',
-      encoder.encode(settings.sentry_webhook_secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign'],
-    );
-    const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(body));
-    const expected = Array.from(new Uint8Array(sig))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-
-    // SEC (Wave S1 / D-19): constant-time compare to prevent timing side-channel.
-    // Same bookkeeping pattern as verifyGithubSignature below.
-    let diff = expected.length ^ signature.length;
-    for (let i = 0, n = Math.max(expected.length, signature.length); i < n; i++) {
-      diff |= (expected.charCodeAt(i) || 0) ^ (signature.charCodeAt(i) || 0);
-    }
-    if (diff !== 0) {
-      await auditRow.resolve('rejected_signature', 401, Date.now() - t0, 'HMAC mismatch');
-      return c.json({ ok: false, error: { code: 'INVALID_SIGNATURE', message: 'Invalid signature' } }, 401);
+    if (!verdict.ok) {
+      await auditRow.resolve(verdict.auditOutcome, verdict.status, Date.now() - t0, verdict.message);
+      return c.json({ ok: false, error: { code: verdict.code, message: verdict.message } }, verdict.status);
     }
 
     const action = payload?.action;
@@ -754,30 +732,50 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   // because Sentry doesn't propagate custom headers to internal integrations.
 
   app.post('/v1/webhooks/sentry/seer', async (c) => {
-    const {
-      verifySentryHookSignature,
-      parseIssueWebhookBody,
-      parseSeerAutofixBody,
-      applySeerAnalysis,
-    } = await import('../_shared/seer.ts');
+    const t0 = Date.now();
+    const { parseIssueWebhookBody, parseSeerAutofixBody, applySeerAnalysis } = await import(
+      '../../_shared/seer.ts'
+    );
+    const { readSentryHookHeaders, verifySentryDelivery } = await import('../../_shared/sentry-webhook-verify.ts');
+    const { audit, hasAcceptedDuplicate, checkRateLimit } = createWebhookMiddleware('sentry_seer');
+    const hookHeaders = readSentryHookHeaders((name) => c.req.header(name));
+    const rawBody = await c.req.text();
+    const sourceIp = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null;
+
+    const auditRow = await audit(c as never, rawBody, hookHeaders.requestId);
+    // Every return after this point goes through `done` so the audit row is
+    // resolved (a 2xx is recorded as accepted, which feeds the replay check).
+    const done = async (res: Response, error?: string): Promise<Response> => {
+      await auditRow.resolve(res.status < 400 ? 'accepted' : 'error', res.status, Date.now() - t0, error);
+      return res;
+    };
+    try {
+      checkRateLimit(sourceIp);
+    } catch (err) {
+      if (err instanceof RateLimitError) {
+        await auditRow.resolve('rejected_rate_limit', 429, Date.now() - t0, err.message);
+        return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: err.message } }, 429);
+      }
+      throw err;
+    }
 
     const projectId = c.req.query('projectId') ?? c.req.header('X-Mushi-Project') ?? '';
     if (!projectId) {
-      return c.json(
-        {
-          ok: false,
-          error: {
-            code: 'MISSING_PROJECT',
-            message: 'projectId query param or X-Mushi-Project header is required',
+      return done(
+        c.json(
+          {
+            ok: false,
+            error: {
+              code: 'MISSING_PROJECT',
+              message: 'projectId query param or X-Mushi-Project header is required',
+            },
           },
-        },
-        400,
+          400,
+        ),
+        'Cannot determine project',
       );
     }
-
-    const rawBody = await c.req.text();
-    const signature =
-      c.req.header('Sentry-Hook-Signature') ?? c.req.header('X-Sentry-Hook-Signature');
+    void auditRow.setProject(projectId).catch(() => {});
 
     const db = getServiceClient();
     const { data: settings } = await db
@@ -786,44 +784,41 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       .eq('project_id', projectId)
       .maybeSingle();
 
-    if (!settings?.sentry_webhook_secret) {
-      return c.json(
+    // Same Vault-backed secret and the same checks as /v1/webhooks/sentry:
+    // signature, timestamp window, Request-ID + body replay.
+    const { dereferenceMaybeVault } = await import('../../_shared/integration-probes.ts');
+    const seerSecret = await dereferenceMaybeVault(db, settings?.sentry_webhook_secret ?? null);
+    let verdict: Awaited<ReturnType<typeof verifySentryDelivery>>;
+    try {
+      verdict = await verifySentryDelivery(
+        { headers: hookHeaders, body: rawBody, secret: seerSecret, nowMs: Date.now() },
         {
-          ok: false,
-          error: {
-            code: 'NO_SECRET',
-            message: 'Sentry webhook secret not configured for this project',
-          },
+          isReplay: ({ requestId, bodyHash }) =>
+            hasAcceptedDuplicate(auditRow.id, { deliveryId: requestId, bodyHash }),
         },
-        403,
       );
+    } catch (err) {
+      await auditRow.resolve('error', 500, Date.now() - t0, String(err).slice(0, 300));
+      return c.json({ ok: false, error: { code: 'VERIFY_FAILED', message: 'Could not verify delivery' } }, 500);
     }
-    if (!settings.sentry_seer_enabled) {
-      return c.json({ ok: true, data: { ignored: 'seer_disabled' } }, 202);
+    if (!verdict.ok) {
+      await auditRow.resolve(verdict.auditOutcome, verdict.status, Date.now() - t0, verdict.message);
+      return c.json({ ok: false, error: { code: verdict.code, message: verdict.message } }, verdict.status);
     }
-
-    const valid = await verifySentryHookSignature(
-      rawBody,
-      signature ?? null,
-      settings.sentry_webhook_secret,
-    );
-    if (!valid) {
-      return c.json(
-        { ok: false, error: { code: 'BAD_SIGNATURE', message: 'Invalid HMAC signature' } },
-        401,
-      );
+    if (!settings?.sentry_seer_enabled) {
+      return done(c.json({ ok: true, data: { ignored: 'seer_disabled' } }, 202));
     }
 
     let body: unknown;
     try {
       body = JSON.parse(rawBody);
     } catch {
-      return c.json({ ok: false, error: { code: 'BAD_JSON' } }, 400);
+      return done(c.json({ ok: false, error: { code: 'BAD_JSON' } }, 400), 'Invalid JSON body');
     }
 
     const issue = parseIssueWebhookBody(body);
     if (!issue) {
-      return c.json({ ok: true, data: { ignored: 'no_issue_in_payload' } }, 202);
+      return done(c.json({ ok: true, data: { ignored: 'no_issue_in_payload' } }, 202));
     }
 
     // Sentry sends two flavours of seer payload: (a) issue-event with the
@@ -858,7 +853,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
           /* best-effort */
         });
       }
-      return c.json({ ok: true, data: { issueId: issue.id, deferred: true } }, 202);
+      return done(c.json({ ok: true, data: { issueId: issue.id, deferred: true } }, 202));
     }
 
     const result = await applySeerAnalysis(db, projectId, {
@@ -872,7 +867,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       source: 'webhook',
     });
 
-    return c.json({ ok: true, data: { issueId: issue.id, ...result } });
+    return done(c.json({ ok: true, data: { issueId: issue.id, ...result } }));
   });
 
   // ============================================================

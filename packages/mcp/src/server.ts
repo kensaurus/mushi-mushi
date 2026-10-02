@@ -2454,6 +2454,57 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   );
 
   server.registerTool(
+    'import_sentry_issues',
+    {
+      title: titleOf('import_sentry_issues'),
+      description: descOf('import_sentry_issues'),
+      annotations: annotationsFor('import_sentry_issues'),
+      inputSchema: z.object({
+        issueIds: z
+          .array(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/))
+          .max(10)
+          .optional()
+          .describe('Sentry issue ids or short ids (e.g. "4501", "WEB-12"), at most 10'),
+        query: z
+          .string()
+          .max(200)
+          .optional()
+          .describe('Sentry search query within the configured Sentry project (default is:unresolved). Not with issueIds.'),
+        limit: z.number().int().min(1).max(10).optional().describe('How many issues a query imports (1-10, default 5)'),
+        projectId: z.string().optional().describe('Project UUID. Defaults to configured project.'),
+      }),
+      outputSchema: z.object({
+        items: z
+          .array(
+            z.looseObject({
+              input: z.string(),
+              issueId: z.string().nullable(),
+              shortId: z.string().nullable(),
+              outcome: z.string().describe('created | linked | deduped | ignored | error'),
+              reportId: z.string().nullable(),
+              error: z.string().optional(),
+            }),
+          )
+          .describe('One entry per requested or matched issue'),
+        created: z.array(z.string().nullable()).describe('Report ids created by this import'),
+        linked: z.array(z.string().nullable()).describe('Report ids that already existed for these issues'),
+        failed: z.number().describe('Issues that could not be imported'),
+        indexing: z
+          .looseObject({ queued: z.boolean(), paths: z.number() })
+          .describe('Whether stack-frame files were queued for codebase indexing'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const data = await apiCall<Record<string, unknown>>(`/v1/admin/projects/${pid}/sentry/import`, {
+        method: 'POST',
+        body: JSON.stringify({ issueIds: args.issueIds, query: args.query, limit: args.limit }),
+      });
+      return jsonResult(data);
+    },
+  );
+
+  server.registerTool(
     'transition_status',
     {
       title: titleOf('transition_status'),

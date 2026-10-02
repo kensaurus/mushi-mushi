@@ -19,6 +19,7 @@ import { IconPlay, IconPencil, IconExternalLink, IconAlertTriangle, IconDots } f
 import { ServiceFavicon } from './ServiceFavicon'
 import { InlineProof } from '../report-detail/ReportSurface'
 import { ClaudeCodeSetupPanel } from './ClaudeCodeSetupPanel'
+import { SentryImportPanel } from './SentryImportPanel'
 import { IntegrationSetupGuide } from './IntegrationSetupGuide'
 import { IntegrationCredentialChips } from './IntegrationCredentialChips'
 import { PLATFORM_STATUS_MAP, type FieldSource, type HealthRow, type PlatformDef } from './types'
@@ -524,6 +525,8 @@ export function PlatformIntegrationCard({
       {def.kind === 'claude_code_agent' && !isEditing && (
         <ClaudeCodeSetupPanel configured={requiredOk} />
       )}
+
+      {def.kind === 'sentry' && !isEditing && requiredOk && <SentryImportPanel />}
     </Card>
   )
 }

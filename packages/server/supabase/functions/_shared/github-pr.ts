@@ -157,6 +157,9 @@ export interface CreatePrOptions {
   reportId?: string
   /** Report category for commit type prefix mapping. */
   category?: string | null
+  /** Lines appended to the last commit's message body, e.g. `Fixes WEB-12`
+   *  so Sentry's GitHub integration resolves the issue when it lands. */
+  commitTrailers?: string[]
 }
 
 export interface PrResult {
@@ -268,6 +271,7 @@ export async function createPrFromFiles(
     labels = [],
     reportId,
     category,
+    commitTrailers = [],
   } = opts
 
   const baseHeaders = {
@@ -303,7 +307,7 @@ export async function createPrFromFiles(
   // Commit each file sequentially. Sequential is intentional: keeps the
   // git log readable and avoids racing the GitHub rate limit.
   let lastCommitSha = baseSha
-  for (const file of files) {
+  for (const [index, file] of files.entries()) {
     const existing = await ghFetchOptional(
       `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(file.path)}?ref=${encodeURIComponent(branch)}`,
       { headers: baseHeaders },
@@ -319,7 +323,12 @@ export async function createPrFromFiles(
         method: 'PUT',
         headers: baseHeaders,
         body: JSON.stringify({
-          message: formatFixCommitMessage(file.reason, reportId, category),
+          message: formatFixCommitMessage(
+            file.reason,
+            reportId,
+            category,
+            index === files.length - 1 ? commitTrailers : [],
+          ),
           content: btoa(unescape(encodeURIComponent(file.contents))),
           branch,
           ...(existingSha ? { sha: existingSha } : {}),
@@ -530,11 +539,13 @@ export function formatFixCommitMessage(
   reason: string,
   reportId?: string,
   category?: string | null,
+  trailers: readonly string[] = [],
 ): string {
   const scope = reportId ? `MUSHI-${reportId}` : 'mushi'
   const prefix = categoryToBranchPrefix(category)
   const trimmed = reason.trim().slice(0, 200)
-  return `${prefix}(${scope}): ${trimmed}`
+  const subject = `${prefix}(${scope}): ${trimmed}`
+  return trailers.length > 0 ? `${subject}\n\n${trailers.join('\n')}` : subject
 }
 
 export function formatFixPrTitle(summary: string, reportId: string): string {
