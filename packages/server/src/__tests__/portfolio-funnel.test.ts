@@ -115,3 +115,17 @@ describe('cross-app funnel', () => {
     expect(db.table('org_funnel_definitions')[0]).toMatchObject({ organization_id: ORG, steps: ['signup_completed', 'first_lesson'], conversion_window: '1d', lookback_days: 30, updated_by: 'owner' })
   })
 })
+
+describe('cross-app funnel read failures', () => {
+  it('answers 500 when it cannot tell which apps have events off', async () => {
+    const { db } = setup({ org_funnel_definitions: [{ organization_id: ORG, steps: ['a1', 'b2'], conversion_window: '7d', lookback_days: 30, updated_at: '2026-10-01T00:00:00Z' }] }, () => ({ steps: [] }))
+    const failed = { data: null, error: { message: 'statement timeout' } }
+    const chain: any = new Proxy({}, { get: (_t, prop) => (prop === 'then' ? (ok: (v: unknown) => unknown) => Promise.resolve(failed).then(ok) : () => chain) })
+    const broken = new Proxy(db, { get: (t, prop, r) => (prop === 'from' ? (name: string) => (name === 'project_settings' ? chain : t.from(name)) : Reflect.get(t, prop, r)) })
+    const app = new FakeApp()
+    const pass = (async (_c: unknown, next: () => Promise<void>) => next()) as never
+    funnel.registerPortfolioFunnelRoutes(app as never, { getServiceClient: () => broken as never, adminOrApiKeyRead: pass, jwtAuth: pass, now: () => NOW })
+    const r = await app.call('GET', `/v1/admin/orgs/${ORG}/funnel`)
+    expect(r.status).toBe(500)
+  })
+})

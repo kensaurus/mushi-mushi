@@ -151,12 +151,14 @@ describe('collectOrgPortfolio', () => {
     const auth = { provider: 'supabase', ref: 'abcdefghijklmnopqrst' }
     const db = seed({
       app_recipe_snapshots: [
-        { project_id: P1, is_current: true, manifest: { version: 1, links: { domains: ['glot.it'], auth, billing: { stripeAccount: 'acct_1', sharedCreditsWith: ['yen-yen'] } } } },
-        { project_id: P2, is_current: true, manifest: { version: 1, links: { domains: ['yenyen.app'], auth, billing: { stripeAccount: 'acct_2' } } } },
+        { project_id: P1, is_current: true, manifest: { version: 1, data: { projectRef: auth.ref }, links: { domains: ['glot.it'], auth, billing: { stripeAccount: 'acct_1', sharedCreditsWith: ['yen-yen'] } } } },
+        // A satellite: its own Supabase project for data, the shared one for login.
+        { project_id: P2, is_current: true, manifest: { version: 1, data: { projectRef: 'zzzzzzzzzzzzzzzzzzzz' }, links: { domains: ['yenyen.app'], auth, billing: { stripeAccount: 'acct_2' } } } },
       ],
       connector_snapshots: [
         { project_id: P1, kind: 'github', is_current: true, ok: true, snapshot: { facts: { supabaseAuth: { path: 'k/glot/supabase/config.toml', settings: { siteUrl: 'https://glot.it', redirectUrls: ['https://glot.it/**'], providers: ['email'] } } } } },
-        { project_id: P2, kind: 'github', is_current: true, ok: true, snapshot: { facts: { supabaseAuth: { path: 'k/yen/supabase/config.toml', settings: null } } } },
+        // Its config.toml describes its OWN project and must not widen the login allowlist.
+        { project_id: P2, kind: 'github', is_current: true, ok: true, snapshot: { facts: { supabaseAuth: { path: 'k/yen/supabase/config.toml', settings: { siteUrl: 'https://yenyen.app', redirectUrls: ['https://yenyen.app/**'], providers: ['email', 'apple'] } } } } },
       ],
     })
     await phase2.collectOrgPortfolio(db as never, ORG, { fetch: vi.fn(), now: () => NOW, probe: vi.fn() })
@@ -185,6 +187,18 @@ describe('collectOrgPortfolio cross-promotion', () => {
 })
 
 describe('authInputsFrom', () => {
+  it('uses a config.toml only from the repo that owns the login project', () => {
+    const auth = { provider: 'supabase', ref: 'abcdefghijklmnopqrst' }
+    const declared = { path: 'k/x/supabase/config.toml', settings: { redirectUrls: ['https://x/**'], providers: ['email'] } }
+    const r = phase2.authInputsFrom(
+      [{ id: P1 }, { id: P2 }],
+      new Map([[P1, { data: { projectRef: 'zzzzzzzzzzzzzzzzzzzz' }, links: { auth } }], [P2, { data: { projectRef: 'zzzzzzzzzzzzzzzzzzzz' }, links: { auth } }]]),
+      new Map([[P1, declared], [P2, declared]]),
+    )
+    expect(r.inputs.every((i) => i.settingsKnown === false)).toBe(true)
+    expect(r.unknown).toHaveLength(2)
+  })
+
   it('says unknown, not divergent, when no repo in a shared-auth group declares its settings', () => {
     const auth = { provider: 'supabase', ref: 'abcdefghijklmnopqrst' }
     const r = phase2.authInputsFrom([{ id: P1 }, { id: P2 }], new Map([[P1, { links: { auth } }], [P2, { links: { auth } }]]), new Map())

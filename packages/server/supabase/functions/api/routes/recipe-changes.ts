@@ -164,13 +164,16 @@ export function registerRecipeChangeRoutes(app: Hono<{ Variables: Variables }>, 
     if (!access.ok) return access.response
     const ids = access.projectIds.slice(0, 50)
     if (ids.length === 0) return c.json({ ok: true, data: { rows: [], batchSuggestion: null } })
-    const [{ data: projects }, { data: obs }, { data: fixes }, { data: runs }, { data: snaps }] = await Promise.all([
+    const reads = await Promise.all([
       db.from('projects').select('id, name').in('id', ids),
       db.from('deploy_observations').select('project_id, observed_version, observed_at, ok').in('project_id', ids).order('observed_at', { ascending: false }).limit(500),
       db.from('fix_attempts').select('project_id, merged_at, files_changed').in('project_id', ids).order('merged_at', { ascending: false, nullsFirst: false }).limit(500),
       db.from('ci_workflow_runs').select('project_id, est_billable_minutes').in('project_id', ids).limit(5000),
       db.from('connector_snapshots').select('project_id, kind, snapshot').in('project_id', ids).in('kind', ['app_store_connect', 'play_console']).eq('is_current', true).eq('ok', true),
     ])
+    // A failed read must not turn into "nothing is waiting to ship".
+    if (reads.some((r) => r.error)) return jsonError(c, 'DB_ERROR', 'The release calendar could not be read. Try again in a minute.', 500)
+    const [{ data: projects }, { data: obs }, { data: fixes }, { data: runs }, { data: snaps }] = reads
     const apps = calendarAppsFrom(
       (projects ?? []) as Array<{ id: string; name: string | null }>,
       (obs ?? []) as Array<{ project_id: string; observed_version: string | null; observed_at: string; ok: boolean }>,
