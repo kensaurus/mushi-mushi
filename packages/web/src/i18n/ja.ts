@@ -65,6 +65,7 @@ export const ja: MushiLocale = {
     screenshotCapturing: 'スクリーンショット撮影中…',
     screenshotFailed: '取得できませんでした — 文字で教えてください',
     screenshotRetry: 'もう一度',
+    screenshotShareTab: 'このタブを共有して撮影',
     screenshotErrors: {
       permission: '画面の取得がブロックされました。許可してから再試行してください。',
       unsupported: 'このブラウザでは取得できません。文字で教えてください。',

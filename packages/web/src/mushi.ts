@@ -65,12 +65,11 @@ import {
   type DiscoveryCapture,
 } from './capture';
 import { createReplayCapture, type ReplayCapture } from './capture/replay';
-import type { ScreenshotFailureReason } from './capture/screenshot';
-import {
-  createScreenshotAnnotation,
-  type AnnotationSession,
-  type AnnotationTool,
-} from './capture/screenshot-annotation';
+import { ALWAYS_REDACT_SELECTORS, type ScreenshotFailureReason } from './capture/screenshot';
+// Rare paths load on demand (code-split in the ESM build): markup and tab
+// share only cost bytes for reporters who use them. Compression stays static —
+// it runs at submit, where an offline chunk fetch would drop the screenshot.
+import type { AnnotationSession, AnnotationTool } from './capture/screenshot-annotation';
 import { captureSentryContext, tagSentryScope } from './sentry';
 import { setupProactiveTriggers, type ProactiveTriggerCleanup } from './proactive-triggers';
 import { createProactiveManager, type ProactiveManager } from './proactive-manager';
@@ -781,6 +780,54 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       // Keeps a reason the capture module already reported (taint, timeout…).
       if (pendingScreenshot === null) widget.setScreenshotError(true, screenshotProviderDenied ? 'permission' : undefined);
     },
+    onScreenshotShareTabRequest: typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getDisplayMedia === 'function'
+      ? () => {
+          // getDisplayMedia is called synchronously in the click — the picker
+          // needs its user activation, which awaiting the lazy module would
+          // lose. The panel hides so it isn't in the frame.
+          const stream = navigator.mediaDevices.getDisplayMedia({
+            video: { displaySurface: 'browser' },
+            audio: false,
+            preferCurrentTab: true,
+            selfBrowserSurface: 'include',
+          } as DisplayMediaStreamOptions);
+          // An instant rejection (cancel, iframe without display-capture) would
+          // otherwise surface as an unhandled rejection before the chunk loads;
+          // grabMaskedTabFrame still awaits the original and maps the reason.
+          stream.catch(() => {});
+          widget.setScreenshotCapturing(true);
+          const host = document.getElementById('mushi-mushi-widget');
+          if (host) host.style.visibility = 'hidden';
+          const p = activeConfig.privacy;
+          import('./capture/display-capture')
+            .then(
+              (m) => m.grabMaskedTabFrame(stream, [
+                ALWAYS_REDACT_SELECTORS,
+                '[data-mushi-redact]',
+                ...(p?.redactSelectors ?? []),
+                ...(p?.maskSelectors ?? []),
+                ...(p?.blockSelectors ?? []),
+              ]),
+              (err: unknown) => {
+                // Module failed to load: never leave a granted share running.
+                void stream.then((s) => s.getTracks().forEach((t) => t.stop()), () => {});
+                throw err;
+              },
+            )
+            .then((dataUrl) => {
+              pendingScreenshot = dataUrl;
+              widget.setScreenshotAttached(true);
+              widget.setScreenshotPreview(dataUrl);
+            })
+            .catch((err: unknown) => {
+              log.warn('Tab capture failed', { error: err instanceof Error ? err.name : String(err) });
+              widget.setScreenshotError(true, err instanceof Error && err.name === 'NotAllowedError' ? 'permission' : 'error');
+            })
+            .finally(() => {
+              if (host) host.style.visibility = '';
+            });
+        }
+      : undefined,
     onScreenshotRemove: () => {
       log.debug('Screenshot attachment removed');
       pendingScreenshot = null;
@@ -793,6 +840,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       if (container.childElementCount > 0) return;
       let session: AnnotationSession;
       try {
+        const { createScreenshotAnnotation } = await import('./capture/screenshot-annotation');
         session = await createScreenshotAnnotation(pendingScreenshot, container);
       } catch (err) {
         log.warn('Screenshot annotation failed', {

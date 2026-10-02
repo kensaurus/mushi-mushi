@@ -57,6 +57,8 @@ export interface MushiLocale {
     screenshotFailed: string;
     /** Screenshot button label after a failed capture. */
     screenshotRetry: string;
+    /** Offered after a failed capture: user-consented tab share (getDisplayMedia). */
+    screenshotShareTab: string;
     /** Why the last capture failed, shown under the attachment row. */
     screenshotErrors: {
       permission: string;

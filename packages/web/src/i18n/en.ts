@@ -65,6 +65,7 @@ export const en: MushiLocale = {
     screenshotCapturing: 'Taking screenshot…',
     screenshotFailed: "Couldn't capture — describe it instead",
     screenshotRetry: 'Try again',
+    screenshotShareTab: 'Share this tab instead',
     screenshotErrors: {
       permission: 'Screen capture was blocked. Allow it, then try again.',
       unsupported: 'This browser can\'t capture the page. Describe it instead.',

@@ -729,6 +729,10 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       overflow: auto;
       margin-bottom: 12px;
     }
+    /* Comment placeholders while the thread loads (summary already shown). */
+    .mushi-thread-skeleton { display: grid; gap: 8px; }
+    .mushi-thread-skeleton span { height: 34px; border: 1px solid ${rule}; background: ${rule}; opacity: 0.5; }
+    .mushi-thread-action-error { margin: 0; padding: 8px 22px 0; }
     /* Reply composer pinned below the scrolling thread. */
     .mushi-thread-composer { align-items: flex-end; }
     .mushi-thread-composer .mushi-textarea { flex: 1; min-width: 0; margin: 0; }

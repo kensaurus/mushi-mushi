@@ -136,10 +136,13 @@ function emitScreenshotFailed(reason: ScreenshotFailureReason): void {
   }
 }
 
-const DEFAULT_REDACT_SELECTORS: readonly string[] = [
-  'input[type="password"]',
-  '[data-mushi-redact]',
-];
+/**
+ * Always blacked out of every screenshot — DOM capture and tab share alike —
+ * before any pixel is produced. `redactSelectors` adds to this list and can't
+ * remove from it: a host passing its own list used to drop password redaction.
+ */
+export const ALWAYS_REDACT_SELECTORS = 'input[type="password"],input[autocomplete^="cc-"],[data-private],[data-mushi-mask]';
+const DEFAULT_REDACT_SELECTORS: readonly string[] = ['[data-mushi-redact]'];
 
 function buildPrivacySafeDocument(privacy?: MushiPrivacyConfig): Element {
   const clone = document.documentElement.cloneNode(true) as Element;
@@ -150,12 +153,13 @@ function buildPrivacySafeDocument(privacy?: MushiPrivacyConfig): Element {
   stripTaintSources(clone);
   inlineDocumentStyles(clone);
 
-  // Redact: black-out matching elements. Applied before mask/block so that
-  // password fields are always blacked out even if not explicitly listed
-  // in maskSelectors. Pass an empty array to `redactSelectors` to opt out.
-  const redactSelectors: readonly string[] = privacy?.redactSelectors !== undefined
-    ? privacy.redactSelectors
-    : DEFAULT_REDACT_SELECTORS;
+  // Redact: black-out matching elements, before mask/block. The always-on
+  // baseline (passwords, card fields, [data-private], [data-mushi-mask]) runs
+  // first; `redactSelectors` replaces only the [data-mushi-redact] default.
+  const redactSelectors: readonly string[] = [
+    ALWAYS_REDACT_SELECTORS,
+    ...(privacy?.redactSelectors ?? DEFAULT_REDACT_SELECTORS),
+  ];
 
   for (const selector of redactSelectors) {
     for (const el of safeQueryAll(clone, selector)) {

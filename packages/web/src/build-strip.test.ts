@@ -49,19 +49,27 @@ async function bundleWithPlugin<T>(entry: string): Promise<T> {
 const ws = (html: string) => html.replace(/\s+/g, ' ').replace(/> </g, '><').trim();
 
 describe('build-time template whitespace strip', () => {
-  it('ships the same stylesheet minus comments and indentation', async () => {
+  it('ships the same stylesheet minus comments and insignificant whitespace', async () => {
+    const { minifyCssText } = await import('../tsup.config');
     const built = await bundleWithPlugin<{ getWidgetStyles: typeof getWidgetStyles }>('./styles.ts');
     for (const theme of ['light', 'dark', 'auto'] as const) {
       for (const accent of ['', '#ff5500']) {
-        const src = getWidgetStyles(theme, accent, '')
-          .replace(/\/\*[\s\S]*?\*\//g, '')
-          .replace(/\n[ \t]+/g, '\n')
-          .replace(/\n{2,}/g, '\n');
+        const source = getWidgetStyles(theme, accent, '');
         const out = built.getWidgetStyles(theme, accent, '');
-        expect(out).toBe(src);
+        // Equal once both are in canonical whitespace form: the build only
+        // removes comments and whitespace, never a rule or a value.
+        expect(minifyCssText(out)).toBe(minifyCssText(source.replace(/\/\*[\s\S]*?\*\//g, '')));
         expect(out).not.toContain('/*');
+        expect(out.length).toBeLessThan(source.length * 0.85);
       }
     }
+  });
+
+  it('the template scanner leaves expressions, strings and comments alone', async () => {
+    const { mapTemplateText } = await import('../tsup.config');
+    const src = "const a = 'x  y'; // it's `odd`\nconst b = `p  q ${c ? `n  m` : '{ }'} r  s`;";
+    const out = mapTemplateText(src, (t) => t.replace(/\s+/g, ' '));
+    expect(out).toBe("const a = 'x  y'; // it's `odd`\nconst b = `p q ${c ? `n m` : '{ }'} r s`;");
   });
 
   it('ships the same panel markup, whitespace aside', async () => {

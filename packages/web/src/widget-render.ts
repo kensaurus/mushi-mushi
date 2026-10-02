@@ -59,7 +59,14 @@ export interface WidgetRenderCtx {
   config: Required<MushiWidgetConfig>;
   rewardsState: WidgetRewardsState | null;
   lastReportId: string | null;
-  reporterLoading: boolean;
+  /** Reports list / roadmap loading. */
+  listLoading: boolean;
+  /** Thread comments loading (the summary still paints). */
+  threadLoading: boolean;
+  /** A reply / feedback / reopen / vote is in flight. */
+  actionPending: boolean;
+  threadError: string | null;
+  actionError: string | null;
   locale: MushiLocale;
   /**
    * Host-app user identity from `Mushi.identify()` or `identifyWithToken()`.
@@ -545,9 +552,9 @@ export function renderReportsStep(ctx: WidgetRenderCtx): string {
     return `
       ${renderHeader(ctx, { title: f.reports.title, showBack: true, eyebrow: f.eyebrows.inbox })}
       <div class="mushi-body">
-        ${ctx.reporterLoading ? `<p class="mushi-muted">${escapeHtml(f.reports.loading)}</p>` : ''}
+        ${ctx.listLoading ? `<p class="mushi-muted">${escapeHtml(f.reports.loading)}</p>` : ''}
         ${ctx.reporterError ? `<p class="mushi-error-inline">${escapeHtml(ctx.reporterError)}</p>` : ''}
-        ${reports || (!ctx.reporterLoading ? `<p class="mushi-muted">${escapeHtml(f.reports.empty)}</p>` : '')}
+        ${reports || (!ctx.listLoading ? `<p class="mushi-muted">${escapeHtml(f.reports.empty)}</p>` : '')}
         ${leaderboardBtn}
       </div>
     `;
@@ -581,9 +588,9 @@ export function renderRoadmapStep(ctx: WidgetRenderCtx): string {
     return `
       ${renderHeader(ctx, { title: f.roadmap.title, showBack: true, eyebrow: f.eyebrows.roadmap })}
       <div class="mushi-body">
-        ${ctx.reporterLoading ? `<p class="mushi-muted">${escapeHtml(f.roadmap.loading)}</p>` : ''}
+        ${ctx.listLoading ? `<p class="mushi-muted">${escapeHtml(f.roadmap.loading)}</p>` : ''}
         ${ctx.reporterError ? `<p class="mushi-error-inline">${escapeHtml(ctx.reporterError)}</p>` : ''}
-        ${rows || (!ctx.reporterLoading ? `<p class="mushi-muted">${escapeHtml(f.roadmap.empty)}</p>` : '')}
+        ${rows || (!ctx.listLoading ? `<p class="mushi-muted">${escapeHtml(f.roadmap.empty)}</p>` : '')}
       </div>
     `;
   }
@@ -760,6 +767,7 @@ export function renderReportDetailStep(ctx: WidgetRenderCtx): string {
     const status = report?.status ?? 'new';
     const tone = reporterStatusTone(status);
     const when = report?.created_at ? formatRelativeTime(report.created_at) : '';
+    const busy = ctx.actionPending ? ' disabled aria-busy="true"' : '';
     const comments = ctx.reporterComments.map((comment) => `
       <div class="mushi-thread-comment ${comment.author_kind}">
         <strong>${escapeHtml(comment.author_kind === 'reporter' ? 'You' : (comment.author_name ?? 'Developer'))}</strong>
@@ -777,23 +785,24 @@ export function renderReportDetailStep(ctx: WidgetRenderCtx): string {
           <p>${escapeHtml(report?.summary ?? report?.description ?? `#${(ctx.selectedReportId ?? '').slice(0, 8)}`)}</p>
         </div>
         <div class="mushi-thread">
-          ${ctx.reporterLoading
-            ? `<p class="mushi-muted">${escapeHtml(f.thread.loading)}</p>`
-            : ctx.reporterError
-              ? `<p class="mushi-error-inline" role="alert">${escapeHtml(ctx.reporterError)}</p>
+          ${ctx.threadLoading
+            ? `<div class="mushi-thread-skeleton" role="status" aria-label="${escapeHtml(f.thread.loading)}"><span></span><span></span></div>`
+            : ctx.threadError
+              ? `<p class="mushi-error-inline" role="alert">${escapeHtml(ctx.threadError)}</p>
                  <button type="button" class="mushi-link-btn" data-action="retry-thread">${escapeHtml(f.thread.retry)}</button>`
               : comments || `<p class="mushi-muted">${escapeHtml(f.thread.empty)}</p>`}
         </div>
         ${['fixed', 'resolved', 'verified'].includes(status) ? `
           <div class="mushi-verify-actions" role="group" aria-label="Fix verification">
-            <button type="button" class="mushi-option-btn" data-action="reporter-confirms">${escapeHtml(f.thread.confirmFixed)}</button>
-            <button type="button" class="mushi-option-btn" data-action="reporter-not-fixed">${escapeHtml(f.thread.notFixed)}</button>
+            <button type="button" class="mushi-option-btn" data-action="reporter-confirms"${busy}>${escapeHtml(f.thread.confirmFixed)}</button>
+            <button type="button" class="mushi-option-btn" data-action="reporter-not-fixed"${busy}>${escapeHtml(f.thread.notFixed)}</button>
           </div>
         ` : ''}
       </div>
+      ${ctx.actionError ? `<p class="mushi-error-inline mushi-thread-action-error" role="alert">${escapeHtml(ctx.actionError)}</p>` : ''}
       <div class="mushi-footer mushi-thread-composer">
         <textarea class="mushi-textarea" data-role="reporter-reply" rows="2" placeholder="${escapeHtml(f.thread.replyPlaceholder)}"></textarea>
-        <button type="button" class="mushi-submit" data-action="reporter-reply">
+        <button type="button" class="mushi-submit" data-action="reporter-reply"${busy}>
           <span>${escapeHtml(f.thread.send)}</span><span class="mushi-submit-arrow" aria-hidden="true">\u2192</span>
         </button>
       </div>
@@ -875,7 +884,9 @@ export function renderDetailsStep(ctx: WidgetRenderCtx): string {
       .map((p) => `<button type="button" class="mushi-example-chip" data-example="${escapeHtml(p)}">${escapeHtml(p)}</button>`)
       .join('');
     const screenshotReason = ctx.screenshotError && ctx.screenshotErrorReason
-      ? `<p class="mushi-error-inline" role="status" data-role="screenshot-reason">${escapeHtml(t.step3.screenshotErrors[ctx.screenshotErrorReason])}</p>`
+      ? `<p class="mushi-error-inline" role="status" data-role="screenshot-reason">${escapeHtml(t.step3.screenshotErrors[ctx.screenshotErrorReason])}${ctx.callbacks.onScreenshotShareTabRequest
+          ? ` <button type="button" class="mushi-link-btn" data-action="screenshot-share-tab">${escapeHtml(t.step3.screenshotShareTab)}</button>`
+          : ''}</p>`
       : '';
 
     return `
