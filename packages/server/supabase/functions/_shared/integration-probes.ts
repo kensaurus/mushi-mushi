@@ -16,6 +16,7 @@ import { HEALTH_PROBE_ANTHROPIC_MODEL, HEALTH_PROBE_OPENAI_MODEL } from './model
 import { isOperatorProject } from './operator-gate.ts'
 import { safeFetch } from './inventory-guards.ts'
 import { isCodebaseIndexFailing } from './sweep-error-classifier.ts'
+import { dereferenceMaybeVault } from './settings-secrets.ts'
 
 // Deno global — declared only where consumed (edge functions).
 declare const Deno: { env: { get(name: string): string | undefined } }
@@ -93,22 +94,9 @@ export interface PlatformSettings {
 // Vault helper
 // ──────────────────────────────────────────────────────────────────────────
 
-/**
- * Resolve a `vault://<uuid>` reference to its plaintext secret.
- * Non-vault strings are returned as-is (raw values stored in settings).
- * Returns null if the vault lookup fails or the ref is empty.
- */
-export async function dereferenceMaybeVault(
-  db: SupabaseClient,
-  ref: string | null,
-): Promise<string | null> {
-  if (!ref) return null
-  if (!ref.startsWith('vault://')) return ref
-  const id = ref.slice('vault://'.length)
-  const { data, error } = await db.rpc('vault_get_secret', { secret_id: id })
-  if (error) return null
-  return typeof data === 'string' ? data : null
-}
+// Resolves `vault://<name>` refs (and legacy raw values); one implementation
+// shared with the webhook and settings routes.
+export { dereferenceMaybeVault }
 
 // ──────────────────────────────────────────────────────────────────────────
 // Main probe dispatcher
