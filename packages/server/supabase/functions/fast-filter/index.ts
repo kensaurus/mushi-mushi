@@ -25,6 +25,7 @@ import { summarizeReplayEvents } from '../_shared/replay-evidence.ts'
 import { STAGE1_MODEL, STAGE1_FALLBACK } from '../_shared/models.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { isEarlyRealReport, type OldestReportRow } from '../_shared/first-report.ts'
+import { clipAtWord } from '../_shared/text-clip.ts'
 
 const stage1Schema = z.object({
   symptom: z.string().describe('What the user observed'),
@@ -432,7 +433,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     }
 
     if ((classification.confidence > confidenceThreshold && !forceStage2) || usedHeuristic) {
-      const summary = `${classification.symptom} — ${classification.actual}`.slice(0, 200)
+      const summary = clipAtWord(`${classification.symptom} — ${classification.actual}`, 200)
       await db.from('reports').update({
         status: 'classified',
         summary,

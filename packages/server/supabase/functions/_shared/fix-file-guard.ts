@@ -179,3 +179,66 @@ export function assessFixFiles<F extends ProposedFile>(
   }
   return { kept, dropped, blockReason: blockReason?.slice(0, 450) ?? null }
 }
+
+function toRawLines(text: string): string[] {
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\n$/, '')
+  if (normalized.length === 0) return []
+  return normalized.split('\n')
+}
+
+/** Above this many cell comparisons the exact LCS is skipped for a multiset bound. */
+const MAX_LCS_CELLS = 16_000_000
+
+/**
+ * Lines a unified diff would show as added + deleted for one file — what
+ * GitHub reports as "+a −d". `lines_changed` used to be the line count of the
+ * NEW contents, so PR #424 (+28/−147 = 175) was stored as 41.
+ *
+ * Exact via longest-common-subsequence (rolling row, O(n·m) time, O(m)
+ * memory); a pathological pair falls back to the multiset match, which can
+ * only under-count.
+ */
+export function diffLineCount(before: string | null, after: string): number {
+  const a = before == null ? [] : toRawLines(before)
+  const b = toRawLines(after)
+  if (a.length === 0) return b.length
+  if (b.length === 0) return a.length
+  let common: number
+  if (a.length * b.length > MAX_LCS_CELLS) {
+    const remaining = new Map<string, number>()
+    for (const line of b) remaining.set(line, (remaining.get(line) ?? 0) + 1)
+    common = 0
+    for (const line of a) {
+      const n = remaining.get(line) ?? 0
+      if (n > 0) {
+        remaining.set(line, n - 1)
+        common++
+      }
+    }
+  } else {
+    const row = new Uint32Array(b.length + 1)
+    for (let i = 1; i <= a.length; i++) {
+      let diag = 0
+      for (let j = 1; j <= b.length; j++) {
+        const up = row[j]
+        row[j] = a[i - 1] === b[j - 1] ? diag + 1 : Math.max(up, row[j - 1])
+        diag = up
+      }
+    }
+    common = row[b.length]
+  }
+  return a.length - common + (b.length - common)
+}
+
+/** Sum of {@link diffLineCount} over the files a PR writes, against the base branch. */
+export function fixDiffLineCount(
+  files: ReadonlyArray<{ path: string; contents: string }>,
+  baseStates: ReadonlyMap<string, BaseFileState>,
+): number {
+  let total = 0
+  for (const f of files) {
+    const base = baseStates.get(f.path)
+    total += diffLineCount(base?.kind === 'exists' ? base.contents : null, f.contents)
+  }
+  return total
+}

@@ -15,6 +15,8 @@ import { describe, expect, it } from 'vitest'
 import {
   assessFixFiles,
   deletedLineRatio,
+  diffLineCount,
+  fixDiffLineCount,
   fixReviewPassed,
   parseContentsResponse,
   reportRequestsRewrite,
@@ -191,5 +193,49 @@ describe('fix-worker wiring', () => {
   it('blocks with a failure_category the live CHECK constraint accepts', () => {
     expect(src).toMatch(/failure_category: 'validation_rejected'/)
     expect(src).toMatch(/review_failed: /)
+  })
+})
+
+describe('diffLineCount (fix_attempts.lines_changed)', () => {
+  it('counts PR #424 as GitHub did: +28 / -147 = 175, not the 28-line new file', () => {
+    expect(diffLineCount(original147, rewrite28)).toBe(175)
+  })
+
+  it('counts a one-line edit as one added plus one deleted line', () => {
+    const before = 'a\nb\nc\nd'
+    const after = 'a\nb\nC\nd'
+    expect(diffLineCount(before, after)).toBe(2)
+  })
+
+  it('counts a new file (no base) as all added lines, and ignores a trailing newline', () => {
+    expect(diffLineCount(null, 'x\ny\nz\n')).toBe(3)
+    expect(diffLineCount('same\n', 'same')).toBe(0)
+  })
+
+  it('sums kept files against what the base branch held', () => {
+    const base = new Map<string, BaseFileState>([
+      ['app/layout.tsx', { kind: 'exists', contents: original147 }],
+      ['app/new.ts', { kind: 'absent' }],
+    ])
+    expect(
+      fixDiffLineCount([file('app/layout.tsx', rewrite28), file('app/new.ts', 'one\ntwo')], base),
+    ).toBe(177)
+  })
+})
+
+describe('fix-worker diff size and PR body', () => {
+  const src = readFileSync(
+    resolve(__dirname, '../../supabase/functions/fix-worker/index.ts'),
+    'utf8',
+  )
+
+  it('fix-worker stores the real diff size, not the new file length', () => {
+    expect(src).toMatch(/const prLines = fixDiffLineCount\(prFiles, baseStates\)/)
+    expect(src).not.toMatch(/prFiles\.reduce\(\(n, f\) => n \+ f\.contents\.split/)
+  })
+
+  it('links the PR body to the https console, not a mushi:// URL GitHub cannot open', () => {
+    expect(src).not.toMatch(/mushi:\/\/reports/)
+    expect(src).toMatch(/\$\{adminBase\}\/reports\//)
   })
 })

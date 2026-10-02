@@ -43,6 +43,7 @@ import {
 } from '../_shared/mcp-triage-context.ts'
 import { linearSearchIssues } from '../_shared/linear-mcp-client.ts'
 import { isLinearConnected } from '../_shared/linear.ts';
+import { clipAtWord } from '../_shared/text-clip.ts';
 import {
   stage2Schema,
   STAGE2_AREA_MAX,
@@ -907,7 +908,7 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
             status: 'classified',
             category: classification.category,
             severity: classification.severity,
-            title: classification.summary?.slice(0, 80),
+            title: classification.summary ? clipAtWord(classification.summary, 80) : undefined,
           },
           classification: {
             category: classification.category,
