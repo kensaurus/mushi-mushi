@@ -122,6 +122,11 @@ export function ExploreDiagramPublishCard({ projectId, publication, onChanged }:
               It will live at <span className="font-mono">{preview.url}</span> and show commit{' '}
               <span className="font-mono">{preview.payload.sha.slice(0, 7)}</span>.
             </p>
+            {preview.payload.groups.length > 0 && (
+              <p className="text-xs text-fg-secondary" data-testid="diagram-preview-groups">
+                Groups: {preview.payload.groups.map((g) => g.label).join(' · ')}
+              </p>
+            )}
             <ul className="max-h-64 overflow-auto rounded-sm border border-edge-subtle divide-y divide-edge-subtle text-xs">
               {preview.payload.nodes.map((n) => (
                 <li key={n.id} className="px-2.5 py-1.5">
@@ -131,9 +136,25 @@ export function ExploreDiagramPublishCard({ projectId, publication, onChanged }:
                 </li>
               ))}
             </ul>
+            {preview.payload.edges.some((e) => e.label) && (
+              <details className="text-xs text-fg-secondary" data-testid="diagram-preview-edges">
+                <summary className="cursor-pointer">Connection labels ({preview.payload.edges.length})</summary>
+                <ul className="mt-1 space-y-0.5">
+                  {preview.payload.edges.map((e) => {
+                    const name = (id: string) => preview.payload.nodes.find((n) => n.id === id)?.label ?? id
+                    return (
+                      <li key={`${e.from}-${e.to}`}>
+                        {name(e.from)} → {name(e.to)}
+                        {e.label && <span className="text-fg-muted"> ({e.label})</span>}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </details>
+            )}
             {preview.repo_private && (
               <Checkbox
-                label="I understand these names, descriptions and paths from a private repo become public."
+                label="I understand these names, descriptions, paths and connection labels from a private repo become public."
                 checked={confirmed}
                 onChange={setConfirmed}
               />
