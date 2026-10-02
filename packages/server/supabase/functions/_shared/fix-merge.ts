@@ -18,6 +18,7 @@ import { notifyReportStatusTransition } from './report-status-notify.ts';
 import { resolveExternalIssue } from './integrations.ts';
 import { emitProductEvent } from './product-events.ts';
 import { resolveLinkedSentryIssues } from './sentry-resolve-back.ts';
+import { keepAlive } from './background.ts';
 
 type Db = ReturnType<typeof getServiceClient>;
 
@@ -137,22 +138,7 @@ export async function finalizeFixMerge(
   let reportStatus: string | null = report?.status ?? null;
   const previousStatus = report?.status ?? null;
 
-  // A report that came from Sentry: resolve its linked issues through the
-  // Sentry API, awaited and before resolveExternalIssue below, so a link is
-  // only marked resolved once Sentry accepted it. Outcomes land as fix_events.
-  if (report) {
-    try {
-      await resolveLinkedSentryIssues(db as never, {
-        projectId: attempt.project_id,
-        reportId: attempt.report_id,
-        fixAttemptId: attempt.id,
-        prUrl: meta.prUrl,
-      });
-    } catch (e) {
-      log.error('Sentry resolve-back crashed', { reportId: attempt.report_id, err: String(e) });
-    }
-  }
-
+  let resolveExternal = false;
   if (report && report.status !== 'fixed' && report.status !== 'dismissed') {
     const { error } = await db
       .from('reports')
@@ -161,10 +147,35 @@ export async function finalizeFixMerge(
       .eq('project_id', attempt.project_id);
     if (!error) {
       reportStatus = 'fixed';
-      resolveExternalIssue(attempt.report_id, attempt.project_id, db).catch((e: unknown) =>
-        log.warn('resolveExternalIssue failed', { reportId: attempt.report_id, err: String(e) }),
-      );
+      resolveExternal = true;
     }
+  }
+
+  // External trackers, in the background so a GitHub merge webhook still
+  // answers inside its 10s budget. Sentry links go first, through the Sentry
+  // API: a link is only marked resolved once Sentry accepted it, and the
+  // outcome lands as a fix_event (sentry-resolve-back.ts). resolveExternalIssue
+  // runs after it so it never stamps a Sentry link the API pass still owns.
+  if (report) {
+    void keepAlive(
+      (async () => {
+        try {
+          await resolveLinkedSentryIssues(db as never, {
+            projectId: attempt.project_id,
+            reportId: attempt.report_id,
+            fixAttemptId: attempt.id,
+            prUrl: meta.prUrl,
+          });
+        } catch (e) {
+          log.error('Sentry resolve-back crashed', { reportId: attempt.report_id, err: String(e) });
+        }
+        if (resolveExternal) {
+          await resolveExternalIssue(attempt.report_id, attempt.project_id, db).catch((e: unknown) =>
+            log.warn('resolveExternalIssue failed', { reportId: attempt.report_id, err: String(e) }),
+          );
+        }
+      })(),
+    );
   }
 
   if (reportStatus === 'fixed' && previousStatus !== 'fixed' && report?.reporter_token_hash) {

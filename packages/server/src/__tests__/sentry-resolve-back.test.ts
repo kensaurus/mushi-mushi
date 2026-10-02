@@ -162,14 +162,22 @@ describe('resolveLinkedSentryIssues', () => {
     expect(result.resolved).toEqual([])
     expect(result.failed[0].issueId).toBe('4501')
     expect(state.stamped).toEqual([])
-    expect(state.fixEvents[0]).toMatchObject({ status: 'fail', dedupe_key: null })
+    expect(state.fixEvents[0]).toMatchObject({ status: 'fail', dedupe_key: 'sentry_resolve_fail:4501' })
     expect(String(state.fixEvents[0].detail)).toContain('event:write')
+  })
+
+  it('a redelivered failure hits the dedupe key instead of throwing or stacking', async () => {
+    state.fixEventError = { code: '23505', message: 'duplicate key value violates unique constraint' }
+    const fetchImpl = async () => json({ detail: 'nope' }, 403)
+    const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl })
+    expect(result.failed).toHaveLength(1)
+    expect(state.fixEvents[0].dedupe_key).toBe('sentry_resolve_fail:4501')
   })
 
   it('records a visible failure when the project has no Sentry credentials', async () => {
     const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: noCreds })
     expect(result.skipped).toBe('no_credentials')
-    expect(state.fixEvents[0]).toMatchObject({ status: 'fail' })
+    expect(state.fixEvents[0]).toMatchObject({ status: 'fail', dedupe_key: 'sentry_resolve_fail:4501' })
     expect(state.stamped).toEqual([])
   })
 
@@ -192,12 +200,16 @@ describe('wiring (source shape)', () => {
   const here = dirname(fileURLToPath(import.meta.url))
   const fn = (p: string) => readFileSync(resolve(here, '../../supabase/functions', p), 'utf8')
 
-  it('finalizeFixMerge resolves Sentry issues before resolveExternalIssue runs', () => {
+  it('finalizeFixMerge resolves in the background, Sentry first, then resolveExternalIssue', () => {
     const src = fn('_shared/fix-merge.ts')
+    const keepAliveAt = src.indexOf('void keepAlive(')
     const sentryAt = src.indexOf('await resolveLinkedSentryIssues(')
-    const externalAt = src.indexOf('resolveExternalIssue(attempt.report_id')
-    expect(sentryAt).toBeGreaterThan(-1)
+    const externalAt = src.indexOf('await resolveExternalIssue(attempt.report_id')
+    expect(keepAliveAt).toBeGreaterThan(-1)
+    expect(sentryAt).toBeGreaterThan(keepAliveAt)
     expect(externalAt).toBeGreaterThan(sentryAt)
+    // Nothing else may call resolveExternalIssue outside that chain.
+    expect(src.match(/resolveExternalIssue\(/g)).toHaveLength(1)
   })
 
   it('fix-worker passes the Fixes trailers into the PR commit', () => {
