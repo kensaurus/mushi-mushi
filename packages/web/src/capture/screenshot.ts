@@ -155,6 +155,7 @@ function buildPrivacySafeDocument(privacy?: MushiPrivacyConfig): Element {
   stripTaintSources(clone);
   inlineDocumentStyles(clone);
   freezeMotion(clone);
+  fillViewport(clone);
 
   // Redact: black-out matching elements, before mask/block. The always-on
   // baseline (passwords, card fields, [data-private], [data-mushi-mask]) runs
@@ -292,6 +293,22 @@ function inlineDocumentStyles(clone: Element): void {
  * reporter actually sees.
  */
 const FREEZE_MOTION_CSS = '*,*::before,*::after{animation:none!important;transition:none!important}';
+
+/**
+ * A real page paints its background across the whole viewport (the root
+ * background propagates to the canvas). Inside the SVG it stops where the
+ * content ends, and the transparent rest turns black once the capture is
+ * compressed to JPEG — short pages came out half black. Give the clone's root
+ * the page's effective background and the full height.
+ */
+function fillViewport(clone: Element): void {
+  const clear = (c: string) => !c || c === 'transparent' || /^rgba\(.*,\s*0\)$/.test(c);
+  let bg = getComputedStyle(document.documentElement).backgroundColor;
+  if (clear(bg) && document.body) bg = getComputedStyle(document.body).backgroundColor;
+  const root = clone as HTMLElement;
+  root.style.setProperty('background-color', clear(bg) ? 'Canvas' : bg);
+  root.style.setProperty('min-height', `${window.innerHeight}px`);
+}
 
 function freezeMotion(clone: Element): void {
   const styleEl = document.createElement('style');
