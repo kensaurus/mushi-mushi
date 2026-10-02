@@ -50,12 +50,18 @@ async function readVaultSecret(
   ref: string | null | undefined,
 ): Promise<string | null> {
   if (!ref) return null
-  const { data, error } = await db.rpc('vault_get_secret', { secret_id: ref })
+  // The console stores `vault://<name>`; vault_get_secret takes the bare name
+  // (or a secret uuid). A value without the prefix may be a bare ref or a
+  // token saved inline (older rows); try it as a ref, then use it as-is.
+  const isVaultUri = ref.startsWith('vault://')
+  const secretId = isVaultUri ? ref.slice('vault://'.length) : ref
+  const { data, error } = await db.rpc('vault_get_secret', { secret_id: secretId })
   if (error) {
-    log.warn('vault_get_secret failed', { ref, error: error.message })
-    return null
+    log.warn('vault_get_secret failed', { error: error.message })
+    return isVaultUri ? null : ref
   }
-  return typeof data === 'string' ? data : null
+  if (typeof data === 'string' && data) return data
+  return isVaultUri ? null : ref
 }
 
 async function pollProject(
