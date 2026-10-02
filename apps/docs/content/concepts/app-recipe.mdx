@@ -93,6 +93,34 @@ request stays a draft, so your CI does not run until you mark it ready. Mushi ne
 writes to your default branch, to workflow files, lockfiles, env files or generated
 exports.
 
+### Directions
+
+If your token files live in `directions/<name>/` folders, the **Directions** view
+shows every direction side by side. Each card has:
+
+- the direction's name and concept;
+- its palette, with the declared contrast pairs computed for that direction;
+- a type specimen in the declared fonts and in your app's script;
+- its line and motion tokens;
+- the images found in the direction's folder;
+- a phone mock of one screen, drawn only from that direction's tokens;
+- the deviance score, for the active direction only.
+
+A direction's name and concept come from the token files themselves: either
+`$extensions["us.kensaur.mushi"].direction = {name, nativeName, concept}` or a
+root `$description` such as `"… art direction Soi Signpaint (ป้ายเขียนมือ): …"`.
+
+There are two actions:
+
+- **Set active direction** opens a draft pull request that points the `source`
+  entries in `mushi.recipe.json` at another direction's files.
+- **Duplicate / edit direction** opens a draft pull request that adds a new
+  `directions/<name>/` folder, copied from an existing direction, with your
+  edits applied to the copy.
+
+Images load through short-lived signed links. Mushi serves only images that the
+latest snapshot lists.
+
 ## The deviance check
 
 The deviance check (gate `design_drift`) reads your source at the latest commit,
