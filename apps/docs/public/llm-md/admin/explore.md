@@ -35,7 +35,7 @@ MCP equivalents: `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `searc
 **Copy digest** (top of the page) copies your repo as one paste for an AI chat or coding agent: the folder tree plus the most useful files, in this order — README, manifests (`package.json`, …), entry points, source, then tests. Pick a size first; the digest stops at that many tokens (an estimate: characters ÷ 4) and says what it left out.
 
 - It reads GitHub at one commit and names the commit, so the paste matches a real version of your code.
-- `.env` files, private keys and similar files are never included. A file that looks like it holds a secret is replaced with a notice.
+- Real env files (`.env`, `.env.local`, `.env.production`), private keys and similar files are never included. Env templates such as `.env.example` are included, because they explain the setup. Any file that looks like it holds a secret, templates too, is replaced with a notice.
 - On a bug report, **Copy code for this bug** puts the bug's files first: files from its stack trace, files earlier fixes changed, related code from the index, then the files that import them.
 
 The same digest is the MCP tool `get_repo_digest`, on the default tool set.
@@ -48,9 +48,10 @@ The same digest is the MCP tool `get_repo_digest`, on the default tool set.
 
 An AI drawing of the main parts of your app and how they connect. Mushi reads the repo on GitHub at the latest commit and asks the AI for the parts, their folders or files, and the links between them. Then Mushi checks every path against the real repo: a path that does not exist is removed and the part is marked, so a made-up file never becomes a link.
 
-- **Draw diagram** costs one AI call. Diagrams are stored per commit and never redrawn on their own. **Update to latest commit** draws only when there is a new commit; **Redraw** asks the AI again.
+- **Draw diagram** costs one AI call. Diagrams are stored per commit and never redrawn on their own, not even on a push: that would spend an AI call on commits that change nothing, and a public page must only show what you previewed. **Update to latest commit** draws only when there is a new commit; **Redraw** asks the AI again.
 - Click a part to read what it does and open its folder or file on GitHub at that commit.
-- **Public page** (optional, owner or admin): share the diagram at `kensaur.us/mushi-mushi/r//`. The preview shows exactly what becomes public: part names, descriptions and paths, never file contents. A private repo needs you to tick a consent box first. The page shows the commit it was drawn from, keeps showing that drawing until you publish again, and **Unpublish** removes it.
+- Badges on each part count its open bug reports and its code findings from the last 30 days. Click the part to list them: reports open their detail page, findings open the file and line on GitHub. A report lands on a part through its stack trace or the files its fixes changed; reports and findings in files no part covers are counted under the diagram.
+- **Public page** (optional, owner or admin): share the diagram at `kensaur.us/mushi-mushi/r//`. The preview shows exactly what becomes public: part names, descriptions and paths, never file contents. A private repo needs you to tick a consent box first. The page shows the commit it was drawn from, keeps showing that drawing until you publish again, and **Unpublish** removes it. Visitors can report a wrong or unwanted diagram privately: the report goes to Mushi's own inbox, never to a public issue. Once live, the card gives you a README badge to copy and a Markdown copy of the page for AI agents. Search engines index the page.
 
 ### Graph
 

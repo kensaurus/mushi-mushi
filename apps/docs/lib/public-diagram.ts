@@ -135,7 +135,7 @@ export function diagramSignupHref(owner: string, repo: string): string {
 }
 
 /** docs/adr/0015: the product inbox (same address as the site footer). */
-export const DIAGRAM_REPORT_EMAIL = 'kensaurus@gmail.com'
+const DIAGRAM_REPORT_EMAIL = 'kensaurus@gmail.com'
 
 export interface DiagramReportTarget {
   owner: string
@@ -151,7 +151,7 @@ export interface DiagramReportTarget {
  * inbox. Never a public issue: a takedown request can itself contain what
  * someone wants removed.
  */
-export function diagramReportMailto(t: DiagramReportTarget): string {
+function diagramReportMailto(t: DiagramReportTarget): string {
   const subject = `Wrong or unwanted diagram: ${t.owner}/${t.repo}`
   const lines = [
     `Page: https://kensaur.us/mushi-mushi/r/${t.owner}/${t.repo}`,
