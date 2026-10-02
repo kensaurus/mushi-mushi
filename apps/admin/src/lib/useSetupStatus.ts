@@ -137,6 +137,27 @@ const EMPTY_SELECTORS: SetupSelectors = {
   done: false,
 }
 
+/**
+ * Step CTAs the server points at a page root whose default tab is the wrong
+ * one. "Add API key" sent people to Settings → General, not the BYOK keys.
+ * The server string (activation-setup-builder.ts) should change too; until
+ * that deploys, the console sends the step to the right tab.
+ */
+const STEP_CTA_TAB: Partial<Record<SetupStepId, { from: string; to: string }>> = {
+  byok_anthropic: { from: '/settings', to: '/settings?tab=byok' },
+}
+
+function withTabbedCtas(project: SetupProject): SetupProject {
+  if (!project.steps.some((s) => STEP_CTA_TAB[s.id]?.from === s.cta_to)) return project
+  return {
+    ...project,
+    steps: project.steps.map((s) => {
+      const fix = STEP_CTA_TAB[s.id]
+      return fix && fix.from === s.cta_to ? { ...s, cta_to: fix.to } : s
+    }),
+  }
+}
+
 const SETUP_INVALIDATE_EVENT = 'mushi:setup-invalidate'
 
 /**
@@ -169,7 +190,7 @@ export function useSetupStatus(activeProjectId?: string | null): UseSetupStatusR
   }, [reload])
 
   return useMemo(() => {
-    const projects = data?.projects ?? []
+    const projects = (data?.projects ?? []).map(withTabbedCtas)
     const explicit = activeProjectId
       ? projects.find(p => p.project_id === activeProjectId) ?? null
       : null

@@ -93,7 +93,7 @@ const DONE_DESTINATION: Record<string, { to: string; label: string }> = {
   first_report_received: { to: '/reports', label: 'View reports' },
   github_connected: { to: '/integrations/config', label: 'View repo link' },
   sentry_connected: { to: '/integrations/config', label: 'View Sentry link' },
-  byok_anthropic: { to: '/settings', label: 'View key settings' },
+  byok_anthropic: { to: '/settings?tab=byok', label: 'View key settings' },
   first_fix_dispatched: { to: '/fixes', label: 'View fixes' },
   slack_connected: { to: '/integrations/config', label: 'View Slack link' },
   first_qa_story_passing: { to: '/qa-coverage', label: 'View QA stories' },
