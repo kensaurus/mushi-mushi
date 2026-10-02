@@ -286,24 +286,6 @@ export function renderHeader(ctx: WidgetRenderCtx, opts: {
     `;
   }
 
-  /**
-   * Numeral step indicator: "01 — 02 — 03", with the active step in
-   * vermillion serif and completed steps struck through in mono.
-   * Replaces the original three-dot indicator (a generic SaaS pattern).
-   */
-export function renderStepIndicator(_ctx: WidgetRenderCtx, currentStep: number): string {
-    const segments: string[] = [];
-    for (let i = 1; i <= TOTAL_STEPS; i++) {
-      const cls =
-        i < currentStep ? 'mushi-step-num done' :
-        i === currentStep ? 'mushi-step-num active' :
-        'mushi-step-num';
-      segments.push(`<span class="${cls}">${pad2(i)}</span>`);
-      if (i < TOTAL_STEPS) segments.push('<span class="mushi-step-sep" aria-hidden="true"></span>');
-    }
-    return `<div class="mushi-step-indicator" aria-hidden="true">${segments.join('')}</div>`;
-  }
-
 /**
  * Secondary hub destinations (inbox, roadmap, assistant, account) live behind
  * a single "More" disclosure so the report path stays visually primary.
@@ -795,7 +777,12 @@ export function renderReportDetailStep(ctx: WidgetRenderCtx): string {
           <p>${escapeHtml(report?.summary ?? report?.description ?? `#${(ctx.selectedReportId ?? '').slice(0, 8)}`)}</p>
         </div>
         <div class="mushi-thread">
-          ${ctx.reporterLoading ? `<p class="mushi-muted">${escapeHtml(f.thread.loading)}</p>` : comments || `<p class="mushi-muted">${escapeHtml(f.thread.empty)}</p>`}
+          ${ctx.reporterLoading
+            ? `<p class="mushi-muted">${escapeHtml(f.thread.loading)}</p>`
+            : ctx.reporterError
+              ? `<p class="mushi-error-inline" role="alert">${escapeHtml(ctx.reporterError)}</p>
+                 <button type="button" class="mushi-link-btn" data-action="retry-thread">${escapeHtml(f.thread.retry)}</button>`
+              : comments || `<p class="mushi-muted">${escapeHtml(f.thread.empty)}</p>`}
         </div>
         ${['fixed', 'resolved', 'verified'].includes(status) ? `
           <div class="mushi-verify-actions" role="group" aria-label="Fix verification">
@@ -803,9 +790,11 @@ export function renderReportDetailStep(ctx: WidgetRenderCtx): string {
             <button type="button" class="mushi-option-btn" data-action="reporter-not-fixed">${escapeHtml(f.thread.notFixed)}</button>
           </div>
         ` : ''}
-        <textarea class="mushi-textarea" data-role="reporter-reply" rows="3" placeholder="Reply to the developer…"></textarea>
+      </div>
+      <div class="mushi-footer mushi-thread-composer">
+        <textarea class="mushi-textarea" data-role="reporter-reply" rows="2" placeholder="${escapeHtml(f.thread.replyPlaceholder)}"></textarea>
         <button type="button" class="mushi-submit" data-action="reporter-reply">
-          <span>Reply</span><span class="mushi-submit-arrow" aria-hidden="true">\u2192</span>
+          <span>${escapeHtml(f.thread.send)}</span><span class="mushi-submit-arrow" aria-hidden="true">\u2192</span>
         </button>
       </div>
     `;

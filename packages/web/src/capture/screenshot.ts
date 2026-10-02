@@ -17,9 +17,10 @@ export interface ScreenshotCaptureOptions {
  * - taint: cross-origin content made the canvas unreadable
  * - timeout: the SVG never loaded or errored within 5 s
  * - unsupported: no 2D canvas, or the engine rasterised nothing (WebKit)
+ * - csp: the host's Content-Security-Policy img-src blocks data: images
  * - error: anything else
  */
-export type ScreenshotFailureReason = 'taint' | 'timeout' | 'unsupported' | 'error';
+export type ScreenshotFailureReason = 'taint' | 'timeout' | 'unsupported' | 'csp' | 'error';
 
 export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}): ScreenshotCapture {
   let activeOptions = options;
@@ -57,9 +58,19 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
         </svg>
       `;
 
+      // data: URL, never blob:. Chrome (verified on 154) taints the canvas when
+      // a foreignObject SVG arrives via a blob: URL, so toDataURL threw on every
+      // capture; the same SVG as a data: URL exports cleanly (the approach
+      // html-to-image uses). It also passes CSPs whose img-src allows data: but
+      // not blob:. A CSP that blocks data: too is reported as 'csp'.
       const img = new Image();
-      const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
+      const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgData)}`;
+      let cspBlocked = false;
+      const onViolation = (e: Event) => {
+        const v = e as SecurityPolicyViolationEvent;
+        if (/^img-src|^default-src/.test(v.violatedDirective ?? '') && /^data/.test(v.blockedURI ?? '')) cspBlocked = true;
+      };
+      document.addEventListener('securitypolicyviolation', onViolation);
 
       return new Promise((resolve) => {
         let settled = false;
@@ -67,7 +78,7 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
           if (settled) return;
           settled = true;
           clearTimeout(timer);
-          URL.revokeObjectURL(url);
+          document.removeEventListener('securitypolicyviolation', onViolation);
           if (reason) {
             activeOptions.onFailed?.(reason);
             emitScreenshotFailed(reason);
@@ -95,7 +106,10 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
             settle(null, 'taint');
           }
         };
-        img.onerror = () => settle(null, 'error');
+        // The CSP violation event and the image error are separate queued
+        // tasks with no guaranteed order — settle one task later so a
+        // policy block is reported as 'csp', not a generic failure.
+        img.onerror = () => setTimeout(() => settle(null, cspBlocked ? 'csp' : 'error'), 0);
         img.src = url;
       });
     } catch {

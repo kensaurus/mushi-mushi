@@ -70,6 +70,7 @@ export const es: MushiLocale = {
       unsupported: 'Este navegador no puede capturar la página. Descríbelo.',
       taint: 'Contenido de otro sitio bloqueó la captura. Descríbelo.',
       timeout: 'La captura tardó demasiado.',
+      csp: 'La política de seguridad de este sitio bloquea las capturas.',
       error: 'La captura falló.',
     },
     screenshotPreviewAlt: 'Vista previa de la captura que se enviará',
@@ -167,6 +168,8 @@ export const es: MushiLocale = {
       notFixed: 'Aún no está resuelto',
       replyPlaceholder: 'Responder al desarrollador…',
       send: 'Enviar',
+      loadFailed: 'No se pudo cargar el hilo.',
+      retry: 'Reintentar',
     },
     success: {
       title: 'Gracias — reporte recibido',
