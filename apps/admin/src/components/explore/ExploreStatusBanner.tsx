@@ -3,7 +3,6 @@
  * PURPOSE: Codebase atlas posture — indexing, errors, ready, stale.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
@@ -33,9 +32,7 @@ export function ExploreStatusBanner({ stats, onTab, onRefresh, refreshing, plain
             : 'Create a project on Setup before indexing a codebase.'
         }
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
-          </Link>
+          <Btn to="/onboarding" size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
         }
       />
     )
@@ -49,9 +46,7 @@ export function ExploreStatusBanner({ stats, onTab, onRefresh, refreshing, plain
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.index ?? 'Open Index tab'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.index ?? 'Open Index tab'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('index')}>
               {actions.index ?? 'Open Index tab'}
@@ -70,9 +65,7 @@ export function ExploreStatusBanner({ stats, onTab, onRefresh, refreshing, plain
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.debug ?? 'Debug index'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.debug ?? 'Debug index'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('index')}>
               {actions.debug ?? 'Debug index'}
@@ -108,9 +101,7 @@ export function ExploreStatusBanner({ stats, onTab, onRefresh, refreshing, plain
         title={plainBanner ? 'No code indexed yet' : `No files indexed on ${projectLabel}`}
         subtitle={stats.topPriorityLabel}
         action={
-          <Link to="/settings">
-            <Btn size="sm" variant="ghost">{actions.settings ?? 'Open Settings'}</Btn>
-          </Link>
+          <Btn to="/settings" size="sm" variant="ghost">{actions.settings ?? 'Open Settings'}</Btn>
         }
       />
     )
@@ -131,9 +122,7 @@ export function ExploreStatusBanner({ stats, onTab, onRefresh, refreshing, plain
         }
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.graph ?? 'Open Graph'}</Btn>
-            </Link>
+            <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.graph ?? 'Open Graph'}</Btn>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('graph')}>
               {actions.graph ?? 'Open Graph'}
@@ -162,9 +151,7 @@ export function ExploreStatusBanner({ stats, onTab, onRefresh, refreshing, plain
             {actions.refresh ?? 'Refresh'}
           </Btn>
         ) : stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">{actions.graph ?? 'Open Graph'}</Btn>
-          </Link>
+          <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.graph ?? 'Open Graph'}</Btn>
         ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('graph')}>
             {actions.graph ?? 'Open Graph'}

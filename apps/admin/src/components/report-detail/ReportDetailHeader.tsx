@@ -1,4 +1,5 @@
-import { Badge, Breadcrumbs, RelativeTime } from '../ui'
+import { useState } from 'react'
+import { Badge, Breadcrumbs, Btn, RelativeTime } from '../ui'
 import { ContainedBlock, MetaChip } from './ReportSurface'
 import {
   STATUS,
@@ -10,12 +11,15 @@ import {
   severityGlowClass,
 } from '../../lib/tokens'
 import { useReportPresence } from '../../lib/reportPresence'
+import { reportHeading } from '../../lib/clipText'
 import type { ReportDetail } from './types'
 
 export function ReportDetailHeader({ report, reporterShort }: { report: ReportDetail; reporterShort: string }) {
   // Friendly display title: prefer the Stage-2 generated `title` (non-engineer
-  // headline), fall back to technical summary, then raw description.
-  const displayTitle = (report.title ?? report.summary ?? report.description ?? 'Untitled report').trim() || 'Untitled report'
+  // headline), fall back to technical summary, then raw description. Never
+  // cut mid-word; the full text is on hover and behind "Show full".
+  const heading = reportHeading(report)
+  const [headingExpanded, setHeadingExpanded] = useState(false)
   // Breadcrumb still uses a compact technical summary (shorter context)
   const breadcrumbLabel = (report.summary ?? report.title ?? report.description ?? 'Untitled report').trim() || 'Untitled report'
   // Provenance: page route where the bug was felt
@@ -56,9 +60,23 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
           )}
         </div>
         <ContainedBlock tone="info" className="mt-2">
-          <h2 className="text-lg font-semibold leading-snug text-balance text-fg wrap-break-word max-w-4xl">
-            {displayTitle}
+          <h2
+            className="text-lg font-semibold leading-snug text-balance text-fg wrap-break-word max-w-4xl"
+            title={heading.truncated ? heading.full : undefined}
+          >
+            {headingExpanded ? heading.full : heading.text}
           </h2>
+          {heading.truncated && (
+            <Btn
+              variant="ghost"
+              size="sm"
+              className="mt-1"
+              aria-expanded={headingExpanded}
+              onClick={() => setHeadingExpanded((v) => !v)}
+            >
+              {headingExpanded ? 'Show less' : 'Show full'}
+            </Btn>
+          )}
         </ContainedBlock>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <MetaChip label="Reported">
@@ -67,9 +85,13 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
           <MetaChip
             label="Project"
             to={`/projects?project=${encodeURIComponent(report.project_id)}`}
-            title={report.project_id}
+            title={report.project_name ? `${report.project_name} (${report.project_id})` : report.project_id}
           >
-            <span className="font-mono">{report.project_id.slice(0, 8)}</span>
+            {report.project_name ? (
+              <span>{report.project_name}</span>
+            ) : (
+              <span className="font-mono">{report.project_id.slice(0, 8)}</span>
+            )}
           </MetaChip>
           <MetaChip
             label="Reporter"

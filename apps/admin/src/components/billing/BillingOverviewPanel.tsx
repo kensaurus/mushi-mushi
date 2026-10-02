@@ -42,9 +42,7 @@ export function BillingOverviewPanel({
           title="No projects yet"
           description="Create a project from the Projects page to start tracking usage and billing."
           action={
-            <Link to="/projects">
-              <Btn size="sm">Go to Projects</Btn>
-            </Link>
+            <Btn to="/projects" size="sm">Go to Projects</Btn>
           }
         />
       ) : (

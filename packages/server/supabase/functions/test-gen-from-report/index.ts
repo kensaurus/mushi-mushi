@@ -6,7 +6,6 @@
 // (same transport pattern as fix-worker — no Octokit in Deno).
 
 import { generateObject } from 'npm:ai@4'
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { createOpenAI } from 'npm:@ai-sdk/openai@1'
 import { z } from 'npm:zod@3'
 
@@ -16,7 +15,9 @@ import { withSentry } from '../_shared/sentry.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withAnthropicOrOpenAi, LlmFailoverError } from '../_shared/llm-failover.ts'
-import { STAGE2_FALLBACK, STAGE2_MODEL } from '../_shared/models.ts'
+import { STAGE2_FALLBACK, STAGE2_MODEL, TEST_GEN_EFFORT } from '../_shared/models.ts'
+import { claudeGenerateObject } from '../_shared/claude-messages.ts'
+import { resolveClaudeModel } from '../_shared/claude-request.ts'
 import { logAudit } from '../_shared/audit.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { tagLangfuseTrace } from '../_shared/sentry.ts'
@@ -381,10 +382,12 @@ async function handler(req: Request): Promise<Response> {
     )
   }
 
-  const modelId =
-    typeof settings?.stage2_model === 'string' && settings.stage2_model.length > 0
-      ? settings.stage2_model
-      : STAGE2_MODEL
+  // Same per-project model as Stage 2, so it must use the Claude path that
+  // works on Sonnet 5.5 (AI SDK v4 would 400 on its temperature / tool_choice).
+  const modelId = resolveClaudeModel(
+    typeof settings?.stage2_model === 'string' ? settings.stage2_model : null,
+    STAGE2_MODEL,
+  )
 
   let generated: TestGenOutput
   const trace = createTrace('test-gen-from-report', { projectId, reportId })
@@ -395,13 +398,13 @@ async function handler(req: Request): Promise<Response> {
       db,
       projectId,
       async (anthropicResolved) => {
-        const anthropic = createAnthropic({ apiKey: anthropicResolved.key })
-        const { object } = await generateObject({
-          model: anthropic(modelId),
+        const { object } = await claudeGenerateObject({
+          apiKey: anthropicResolved.key,
+          model: modelId,
           schema: testGenSchema,
+          effort: TEST_GEN_EFFORT,
           system: SYSTEM_PROMPT,
           prompt: buildUserPrompt(report as unknown as Record<string, unknown>, repo),
-          maxRetries: 1,
         })
         return object
       },

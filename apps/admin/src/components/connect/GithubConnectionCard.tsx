@@ -2,7 +2,6 @@
  * GitHub repository connection status for /connect — preflight-backed.
  */
 
-import { Link } from 'react-router-dom'
 import { Card, Btn } from '../ui'
 import { JobStatusPill } from '../ui/job-status-pill'
 import { CHIP_TONE } from '../../lib/chipTone'
@@ -48,13 +47,11 @@ export function GithubConnectionCard({
             Connected
           </span>
         ) : (
-          <Link to={githubCheck?.fixHref ?? '/integrations/config'}>
-            <Btn size="sm" variant="ghost" className="gap-1.5 shrink-0">
+          <Btn to={githubCheck?.fixHref ?? '/integrations/config'} size="sm" variant="ghost" className="gap-1.5 shrink-0">
               <IconIntegrations className="h-3.5 w-3.5" aria-hidden />
               Set up in Integrations
               <IconArrowRight className="h-3.5 w-3.5" aria-hidden />
             </Btn>
-          </Link>
         )}
       </div>
     </Card>

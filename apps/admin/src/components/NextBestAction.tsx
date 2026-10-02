@@ -12,14 +12,14 @@
  *          (Dashboard, Reports, Fixes, Judge, Integrations, etc.) updates.
  */
 
-import { Link, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import { usePostureHasStatusBanner } from '../lib/postureChromeStore'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from './ProjectSwitcher'
 import { useAdminMode } from '../lib/mode'
-import { useToast } from '../lib/toast'
-import { apiFetch } from '../lib/supabase'
+import { shouldShowQuickstartMegaCta } from '../lib/chromePosture'
+import { useSendTestReport } from '../lib/useSendTestReport'
 import { CHIP_TONE } from '../lib/chipTone'
 import { Btn, ResultChip } from './ui'
 
@@ -68,7 +68,7 @@ export function NextBestAction() {
   const postureHasStatusBanner = usePostureHasStatusBanner()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
-  const toast = useToast()
+  const sendTestReport = useSendTestReport()
   const [testState, setTestState] = useState<'idle' | 'running' | 'success' | 'error'>('idle')
 
   // Compute the action even when we're going to bail — its identity drives
@@ -95,6 +95,8 @@ export function NextBestAction() {
   // users are missing there, so it renders in both Quick and Beginner.
   // Advanced stays opted out for a denser layout.
   if (!isBeginner && !isQuickstart) return null
+  // The Quickstart mega CTA already names the next step on these routes.
+  if (shouldShowQuickstartMegaCta(isQuickstart, pathname)) return null
   // Status banner on PagePosture already carries the next step for this route.
   if (postureHasStatusBanner) return null
   // Login/recovery routes are unauthenticated — never render the strip.
@@ -127,15 +129,8 @@ export function NextBestAction() {
     const projectId = setup.activeProject?.project_id
     if (!projectId) return
     setTestState('running')
-    const res = await apiFetch(`/v1/admin/projects/${projectId}/test-report`, { method: 'POST' })
-    if (res.ok) {
-      setTestState('success')
-      toast.success('Test report queued', 'Watch it land in Reports within a few seconds.')
-      setup.reload()
-    } else {
-      setTestState('error')
-      toast.error('Test report failed', res.error?.message ?? 'Check project keys and try again.')
-    }
+    const res = await sendTestReport(projectId)
+    setTestState(res.ok ? 'success' : 'error')
   }
 
   return (
@@ -175,18 +170,17 @@ function NbaCta({
   onTestReport: () => void
   testRunning: boolean
 }) {
+  // Outline, not filled: this strip rides above every page, so a filled CTA
+  // here competed with each page's own primary action for attention.
   if (cta.kind === 'link') {
     return (
-      <Link
-        to={cta.to}
-        className="inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity motion-safe:active:scale-[0.97] motion-safe:duration-150"
-      >
+      <Btn to={cta.to} size="sm" variant="ghost">
         {cta.label} <span aria-hidden="true">→</span>
-      </Link>
+      </Btn>
     )
   }
   return (
-    <Btn size="sm" variant="primary" onClick={onTestReport} loading={testRunning}>
+    <Btn size="sm" variant="ghost" onClick={onTestReport} loading={testRunning}>
       {cta.label}
     </Btn>
   )

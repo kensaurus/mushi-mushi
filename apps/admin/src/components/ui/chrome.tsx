@@ -8,7 +8,7 @@ import { CHIP_TONE } from '../../lib/chipTone'
 import type { BadgeTone } from './layout'
 
 const TRIGGER_BASE =
-  'inline-flex max-w-full items-center gap-1 rounded-sm border border-edge-subtle bg-surface-raised/60 px-1.5 py-1 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 xl:gap-1.5 xl:px-2'
+  'inline-flex min-h-6 pointer-coarse:min-h-8 max-w-full items-center gap-1 rounded-sm border border-edge-subtle bg-surface-raised/60 px-1.5 py-1 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 xl:gap-1.5 xl:px-2'
 
 export interface HeaderContextChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Uppercase kicker label, e.g. "Team" or "Project". */
@@ -90,9 +90,12 @@ export function HeaderContextChip({
       {badge != null && badge !== false ? (
         typeof badge === 'string' || typeof badge === 'number' ? (
           <span
-            className={`inline-flex h-5 max-w-[4.5rem] xl:max-w-[5.5rem] items-center truncate rounded-sm px-1 text-2xs font-medium uppercase shrink-0 ${
-              badgeHiddenBelowXl ? 'hidden xl:inline-flex' : ''
-            } ${badgeTone ? CHIP_TONE[badgeTone] : CHIP_TONE.neutral}`}
+            // One display utility only: with both `inline-flex` and `hidden`
+            // on the element, inline-flex won and the badge never hid below
+            // xl (it took header width at 390px).
+            className={`${badgeHiddenBelowXl ? 'hidden xl:inline-flex' : 'inline-flex'} h-5 max-w-[4.5rem] xl:max-w-[5.5rem] items-center truncate rounded-sm px-1 text-2xs font-medium uppercase shrink-0 ${
+              badgeTone ? CHIP_TONE[badgeTone] : CHIP_TONE.neutral
+            }`}
           >
             {badge}
           </span>

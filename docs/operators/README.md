@@ -23,6 +23,8 @@
   at [`deploy/helm/`](../../deploy/helm/README.md).
 - [BYOK validation migration gate](#byok-validation-migration-gate) — inventory
   credentials that will be quarantined until they pass a provider probe.
+- [Reporter data processing](./reporter-data-processing.md) — the DPA / 委託
+  template for host apps whose end users file reports through the widget.
 
 ## BYOK validation migration gate
 

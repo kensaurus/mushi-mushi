@@ -10,6 +10,7 @@
 
 import { markPullRequestReady } from './github.ts'
 import { log } from './logger.ts'
+import { parseContentsResponse, type BaseFileState } from './fix-file-guard.ts'
 
 const ghLog = log.child('github-pr')
 
@@ -156,6 +157,9 @@ export interface CreatePrOptions {
   reportId?: string
   /** Report category for commit type prefix mapping. */
   category?: string | null
+  /** Lines appended to the last commit's message body, e.g. `Fixes WEB-12`
+   *  so Sentry's GitHub integration resolves the issue when it lands. */
+  commitTrailers?: string[]
 }
 
 export interface PrResult {
@@ -173,6 +177,76 @@ type SimpleLogger = {
 const noopLog: SimpleLogger = {
   info: () => {},
   warn: () => {},
+}
+
+const ghHeaders = (token: string) => ({
+  Authorization: `Bearer ${token}`,
+  Accept: 'application/vnd.github+json',
+  'X-GitHub-Api-Version': '2022-11-28',
+  'Content-Type': 'application/json',
+  'User-Agent': 'mushi-mushi/1.0',
+})
+
+/**
+ * Resolve the branch a PR should be based on, and its tip SHA.
+ *
+ * If the stored defaultBranch doesn't exist (stale DB value or repo renamed
+ * from 'master' → 'main'), resolve the live default branch from the GitHub
+ * API and use that instead. This prevents silent branch-from-wrong-base errors.
+ */
+export async function resolveBaseBranch(
+  token: string,
+  owner: string,
+  repo: string,
+  defaultBranch: string,
+  log: SimpleLogger = noopLog,
+): Promise<{ branch: string; sha: string }> {
+  const baseHeaders = ghHeaders(token)
+  try {
+    const refRes = await ghFetch(
+      `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${defaultBranch}`,
+      { headers: baseHeaders },
+    )
+    return { branch: defaultBranch, sha: (refRes as { object: { sha: string } }).object.sha }
+  } catch {
+    log.warn('github-pr: stored defaultBranch not found, resolving from GitHub API', {
+      storedBranch: defaultBranch,
+    })
+    const repoInfo = await ghFetch(`https://api.github.com/repos/${owner}/${repo}`, {
+      headers: baseHeaders,
+    })
+    const resolvedBase = (repoInfo as { default_branch: string }).default_branch
+    const refRes = await ghFetch(
+      `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${resolvedBase}`,
+      { headers: baseHeaders },
+    )
+    log.info('github-pr: resolved live default branch', { resolvedBase })
+    return { branch: resolvedBase, sha: (refRes as { object: { sha: string } }).object.sha }
+  }
+}
+
+/**
+ * Read one file's current contents on `ref` so the fix-worker never writes a
+ * file it has not seen (see fix-file-guard.ts). Same contents URL form the
+ * commit loop below uses. A network failure is `unreadable`, never `absent`.
+ */
+export async function fetchBaseFileState(
+  token: string,
+  owner: string,
+  repo: string,
+  ref: string,
+  path: string,
+): Promise<BaseFileState> {
+  try {
+    const res = await fetchGhWithRetry(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`,
+      { headers: ghHeaders(token) },
+    )
+    const body = await res.json().catch(() => null)
+    return parseContentsResponse(res.status, body)
+  } catch (err) {
+    return { kind: 'unreadable', detail: `GitHub request failed: ${String(err).slice(0, 120)}` }
+  }
 }
 
 /**
@@ -197,6 +271,7 @@ export async function createPrFromFiles(
     labels = [],
     reportId,
     category,
+    commitTrailers = [],
   } = opts
 
   const baseHeaders = {
@@ -208,33 +283,13 @@ export async function createPrFromFiles(
   }
 
   // Fetch the SHA of the default branch tip so we can branch from it.
-  // If the stored defaultBranch doesn't exist (stale DB value or repo renamed
-  // from 'master' → 'main'), resolve the live default branch from the GitHub
-  // API and use that instead. This prevents silent branch-from-wrong-base errors.
-  let resolvedBase = defaultBranch
-  let baseSha: string
-  try {
-    const refRes = await ghFetch(
-      `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${defaultBranch}`,
-      { headers: baseHeaders },
-    )
-    baseSha = (refRes as { object: { sha: string } }).object.sha
-  } catch {
-    // Stored defaultBranch not found — resolve live from GitHub API.
-    log.warn('github-pr: stored defaultBranch not found, resolving from GitHub API', {
-      storedBranch: defaultBranch,
-    })
-    const repoInfo = await ghFetch(`https://api.github.com/repos/${owner}/${repo}`, {
-      headers: baseHeaders,
-    })
-    resolvedBase = (repoInfo as { default_branch: string }).default_branch
-    const refRes = await ghFetch(
-      `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${resolvedBase}`,
-      { headers: baseHeaders },
-    )
-    baseSha = (refRes as { object: { sha: string } }).object.sha
-    log.info('github-pr: resolved live default branch', { resolvedBase })
-  }
+  const { branch: resolvedBase, sha: baseSha } = await resolveBaseBranch(
+    token,
+    owner,
+    repo,
+    defaultBranch,
+    log,
+  )
 
   // Create the new branch (idempotent — retry-safe).
   try {
@@ -252,7 +307,7 @@ export async function createPrFromFiles(
   // Commit each file sequentially. Sequential is intentional: keeps the
   // git log readable and avoids racing the GitHub rate limit.
   let lastCommitSha = baseSha
-  for (const file of files) {
+  for (const [index, file] of files.entries()) {
     const existing = await ghFetchOptional(
       `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(file.path)}?ref=${encodeURIComponent(branch)}`,
       { headers: baseHeaders },
@@ -268,7 +323,12 @@ export async function createPrFromFiles(
         method: 'PUT',
         headers: baseHeaders,
         body: JSON.stringify({
-          message: formatFixCommitMessage(file.reason, reportId, category),
+          message: formatFixCommitMessage(
+            file.reason,
+            reportId,
+            category,
+            index === files.length - 1 ? commitTrailers : [],
+          ),
           content: btoa(unescape(encodeURIComponent(file.contents))),
           branch,
           ...(existingSha ? { sha: existingSha } : {}),
@@ -315,14 +375,6 @@ export async function createPrFromFiles(
     commitSha: lastCommitSha,
   }
 }
-
-const ghHeaders = (token: string) => ({
-  Authorization: `Bearer ${token}`,
-  Accept: 'application/vnd.github+json',
-  'X-GitHub-Api-Version': '2022-11-28',
-  'Content-Type': 'application/json',
-  'User-Agent': 'mushi-mushi/1.0',
-})
 
 export interface OpenPrRef {
   number: number
@@ -487,11 +539,13 @@ export function formatFixCommitMessage(
   reason: string,
   reportId?: string,
   category?: string | null,
+  trailers: readonly string[] = [],
 ): string {
   const scope = reportId ? `MUSHI-${reportId}` : 'mushi'
   const prefix = categoryToBranchPrefix(category)
   const trimmed = reason.trim().slice(0, 200)
-  return `${prefix}(${scope}): ${trimmed}`
+  const subject = `${prefix}(${scope}): ${trimmed}`
+  return trailers.length > 0 ? `${subject}\n\n${trailers.join('\n')}` : subject
 }
 
 export function formatFixPrTitle(summary: string, reportId: string): string {

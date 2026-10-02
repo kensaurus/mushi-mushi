@@ -18,22 +18,44 @@ critical Mushi reports into Sentry.
 
 No plugin needed — this is built into the hosted API:
 
-1. In the Mushi console: **Integrations → Sentry** — set a **Webhook secret**
-   and copy the **Receive URL** shown on the card
-   (`/v1/webhooks/sentry?projectId=<your-project-id>`).
-2. In Sentry: **Alerts → Create Alert Rule** (issue alert) → add a
-   **webhook** action pointed at the receive URL, and set the same secret on
-   the webhook (HMAC-SHA256, `X-Sentry-Hook-Signature`).
-3. Fire a test alert. The error lands in **Reports** with a `via Sentry` badge,
+1. In Sentry: **Settings → Developer Settings → Custom Integrations → Create
+   New Integration → Internal Integration**. Set its webhook URL to the
+   **Receive URL** shown on the Mushi Sentry card
+   (`/v1/webhooks/sentry?projectId=<your-project-id>`), subscribe to the
+   **issue** resource, enable **Alert Rule Action**, and give it **Issue &
+   Event: Read & Write**.
+2. In the Mushi console: **Integrations → Sentry** — paste the integration's
+   **Client Secret** as the **Webhook secret**, plus your org slug, project
+   slug and auth token. Sentry signs every delivery with that secret
+   (`Sentry-Hook-Signature`, HMAC-SHA256 of the body); Mushi also requires a
+   fresh `Sentry-Hook-Timestamp` and drops a `Request-ID` or body it already
+   accepted.
+3. To route alerts too: **Alerts → Create Alert Rule** (issue alert) → action
+   **Send a notification via** your internal integration.
+4. Fire a test alert. The error lands in **Reports** with a `via Sentry` badge,
    a plain-English diagnosis, and a dispatchable fix.
+
+Issues that already exist never fire again. Pull them in with **Import** on
+the Sentry card, the `import_sentry_issues` MCP tool, or
+`POST /v1/admin/projects//sentry/import` with
+`{ "issueIds": ["WEB-12"] }` (ids or short ids, at most 10) or
+`{ "query": "is:unresolved", "limit": 5 }`.
 
 Behavior:
 
-- **Deduped per Sentry issue** — repeat alerts land on the same report.
+- **Deduped per Sentry issue** — repeat alerts land on the same report;
+  re-importing a linked issue returns the existing report.
 - **Regressions reopen** — an alert for an already-fixed report flips it to
   `reopened` and bumps the regression counter instead of filing a duplicate.
-- **Resolves both ways** — `fix.applied` in Mushi resolves the Sentry issue;
-  `action: resolved` from Sentry resolves the linked Mushi report.
+- **Resolves both ways** — when a Mushi fix PR merges, Mushi resolves the
+  linked Sentry issue through the Sentry API (`resolvedInNextRelease`, else
+  `resolved`) and comments the PR link; the fix commit also carries
+  `Fixes <SHORT-ID>` for Sentry's GitHub integration. A failed resolve shows
+  on the fix timeline. `action: resolved` from Sentry resolves the linked
+  Mushi report.
+- **Fix context** — the files named in an imported issue's stack are indexed
+  right away, and codebase sweeps index stack-frame files of open
+  Sentry-linked reports first.
 - Your Sentry **alert rules are the noise filter**: only alerts you route at
   the webhook are ingested. Sentry User Feedback submissions are also ingested
   on the same endpoint.

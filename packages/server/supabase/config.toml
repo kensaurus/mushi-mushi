@@ -392,3 +392,10 @@ verify_jwt = false
 
 [functions.tremendous-redemption-worker]
 verify_jwt = false
+
+# reporter-notify-fanout is enqueued by the report_comments trigger through
+# mushi.edge_function_post (migration 20261002120200) with the internal caller
+# secret as bearer, so the gateway must not verify it as a JWT. Auth is
+# requireServiceRoleAuth inside the handler.
+[functions.reporter-notify-fanout]
+verify_jwt = false

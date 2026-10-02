@@ -3,6 +3,7 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { dbError, callerProjectIds, resolveOwnedProject } from '../shared.ts';
+import { JUDGE_ELIGIBLE_STATUSES, judgeEmptyResult } from '../../_shared/judge-eligibility.ts';
 
 export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
   // GET /v1/admin/judge/stats — posture banner + JUDGE SNAPSHOT.
@@ -22,6 +23,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       disagreementCount: 0,
       disagreementRatePct: null as number | null,
       classifiedReports: 0,
+      ungradedReports: 0,
       promptVersionCount: 0,
       activePromptCount: 0,
       lastEvalAt: null as string | null,
@@ -54,7 +56,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     const activeProject = resolvedProject.project;
     const pid = activeProject.id;
 
-    const [weekRes, evalCountRes, disagreeRes, lastEvalRes, classifiedRes, promptsRes] =
+    const [weekRes, evalCountRes, disagreeRes, lastEvalRes, classifiedRes, promptsRes, ungradedRes] =
       await Promise.all([
         db.rpc('weekly_judge_scores', { p_project_id: pid, p_weeks: 2 }),
         db
@@ -83,6 +85,14 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
           .select('id, is_active')
           .or(`project_id.is.null,project_id.eq.${pid}`)
           .limit(200),
+        // Exactly what judge-batch would pick up — the stale nudge only makes
+        // sense while this is > 0, otherwise a re-run grades nothing.
+        db
+          .from('reports')
+          .select('id', { count: 'exact', head: true })
+          .eq('project_id', pid)
+          .in('status', [...JUDGE_ELIGIBLE_STATUSES])
+          .is('judge_evaluated_at', null),
       ]);
 
     const weeks = (weekRes.data ?? []) as Array<{
@@ -97,6 +107,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     const totalEvaluations = evalCountRes.count ?? 0;
     const disagreementCount = disagreeRes.count ?? 0;
     const classifiedReports = classifiedRes.count ?? 0;
+    const ungradedReports = ungradedRes.count ?? 0;
     const prompts = promptsRes.data ?? [];
     const activePromptCount = prompts.filter((p) => p.is_active).length;
 
@@ -132,10 +143,10 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     if (totalEvaluations === 0) {
       topPriority = 'no_evals';
       topPriorityLabel =
-        classifiedReports > 0
-          ? `No judge scores yet — ${classifiedReports} classified report${classifiedReports === 1 ? '' : 's'} ready to grade.`
+        ungradedReports > 0
+          ? `No judge scores yet — ${ungradedReports} classified report${ungradedReports === 1 ? '' : 's'} ready to grade.`
           : 'Classify a few bugs in Reports first — then run the judge.';
-      topPriorityTo = classifiedReports > 0 ? scoped('/judge?action=run') : scoped('/reports?tab=queue');
+      topPriorityTo = ungradedReports > 0 ? scoped('/judge?action=run') : scoped('/reports?tab=queue');
     } else if (latestWeekScore != null && latestWeekScore < 0.6) {
       topPriority = 'low_score';
       topPriorityLabel = `Classifier scores are ${Math.round(latestWeekScore * 100)}% — triage quality may be wrong. Review recent evaluations or Prompt Lab.`;
@@ -148,9 +159,9 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       topPriority = 'disagreements';
       topPriorityLabel = `The judge disagreed with the classifier on ${disagreementRatePct}% of recent grades. Review mismatches before merging fixes.`;
       topPriorityTo = scoped('/judge?tab=evaluations&filter=disagreement');
-    } else if (staleHours != null && staleHours > 72) {
+    } else if (staleHours != null && staleHours > 72 && ungradedReports > 0) {
       topPriority = 'stale';
-      topPriorityLabel = `Last judge run was ${staleHours}h ago — run again so you know triage quality still holds.`;
+      topPriorityLabel = `Last judge run was ${staleHours}h ago and ${ungradedReports} report${ungradedReports === 1 ? ' is' : 's are'} waiting — run again so you know triage quality still holds.`;
       topPriorityTo = scoped('/judge?action=run');
     } else {
       topPriority = 'healthy';
@@ -175,6 +186,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
         disagreementCount,
         disagreementRatePct,
         classifiedReports,
+        ungradedReports,
         promptVersionCount: prompts.length,
         activePromptCount,
         lastEvalAt,
@@ -349,6 +361,43 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     if (projectIds.length === 0) {
       return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project found' } }, 404);
     }
+    // Pre-flight with judge-batch's own eligibility rule. judge-batch is
+    // fire-and-forget, so its answer never reaches the caller: without this a
+    // project with nothing ungraded got "dispatched" and a silent 0-eval run.
+    const { data: settingsRows, error: settingsErr } = await db
+      .from('project_settings')
+      .select('project_id, judge_enabled')
+      .in('project_id', projectIds);
+    if (settingsErr) return dbError(c, settingsErr);
+    const enabledIds = (settingsRows ?? [])
+      .filter((s) => s.judge_enabled)
+      .map((s) => s.project_id as string);
+
+    const runnable: string[] = [];
+    let eligibleReports = 0;
+    for (const pid of enabledIds) {
+      const { count, error: countErr } = await db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .in('status', [...JUDGE_ELIGIBLE_STATUSES])
+        .is('judge_evaluated_at', null);
+      if (countErr) return dbError(c, countErr);
+      if ((count ?? 0) > 0) {
+        runnable.push(pid);
+        eligibleReports += count ?? 0;
+      }
+    }
+
+    const empty = judgeEmptyResult({
+      projectsChecked: projectIds.length,
+      judgeEnabledProjects: enabledIds.length,
+      eligibleReports,
+    });
+    if (empty) {
+      return c.json({ ok: true, data: { dispatched: 0, ...empty } });
+    }
+
     // Fire-and-forget per project; we don't await — the page polls or uses
     // realtime to pick up new evaluations.
     const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/judge-batch`;
@@ -356,7 +405,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
       'Content-Type': 'application/json',
     };
-    for (const pid of projectIds) {
+    for (const pid of runnable) {
       fetch(url, {
         method: 'POST',
         headers,
@@ -365,7 +414,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
         /* best-effort */
       });
     }
-    return c.json({ ok: true, data: { dispatched: projectIds.length } });
+    return c.json({ ok: true, data: { dispatched: runnable.length, eligible: eligibleReports } });
   });
 
   // Prompt-version leaderboard — joins prompt_versions with eval counts.

@@ -27,7 +27,7 @@ vi.mock('../../supabase/functions/_shared/plans.ts', () => ({
   getPlan: async () => ({ id: 'hobby', retention_days: 7 }),
 }))
 
-import { deleteOldReportsBatch } from '../../supabase/functions/retention-sweep/index.ts'
+import { deleteOldReportsBatch, keepsFirstReport } from '../../supabase/functions/retention-sweep/index.ts'
 
 class QueryChain {
   calls: string[] = []
@@ -46,6 +46,11 @@ class QueryChain {
 
   lt(_column: string, _value: unknown) {
     this.calls.push('lt')
+    return this
+  }
+
+  neq(column: string, value: unknown) {
+    this.calls.push(`neq:${column}=${String(value)}`)
     return this
   }
 
@@ -169,5 +174,41 @@ describe('deleteOldReportsBatch', () => {
       deleted: 0,
       error: 'column reports.created_at does not exist',
     })
+  })
+
+  // A new free-plan user who returns after the 7-day window must still find
+  // their first diagnosed report, not an empty project.
+  it('never selects the kept first report as a deletion candidate', async () => {
+    const select = new QueryChain({ data: [{ id: 'r2' }], error: null })
+    const del = new QueryChain({ data: [{ id: 'r2' }], error: null })
+
+    await expect(
+      deleteOldReportsBatch(makeDb([select, del]) as never, 'proj_1', '2026-04-01T00:00:00Z', 2, 'r1'),
+    ).resolves.toEqual({ deleted: 1, error: null })
+
+    expect(select.calls).toEqual(['select', 'eq', 'lt', 'neq:id=r1', 'order', 'limit'])
+  })
+})
+
+describe('keepsFirstReport', () => {
+  const plans = [
+    { id: 'free_cloud', monthly_price_usd: 0 },
+    { id: 'hobby', monthly_price_usd: 0 },
+    { id: 'pro', monthly_price_usd: 49 },
+  ]
+
+  it('keeps the first report on free plans, via the plan or the fallback', () => {
+    expect(keepsFirstReport('plan', 'free_cloud', plans)).toBe(true)
+    expect(keepsFirstReport('fallback', 'hobby', plans)).toBe(true)
+  })
+
+  it('follows paid plans and explicit overrides to the letter', () => {
+    expect(keepsFirstReport('plan', 'pro', plans)).toBe(false)
+    expect(keepsFirstReport('override', 'override', plans)).toBe(false)
+    expect(keepsFirstReport('override', 'free_cloud', plans)).toBe(false)
+  })
+
+  it('treats a plan the catalog does not list as free', () => {
+    expect(keepsFirstReport('fallback', 'free_cloud', [])).toBe(true)
   })
 })

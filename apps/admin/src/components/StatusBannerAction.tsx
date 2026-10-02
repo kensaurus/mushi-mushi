@@ -4,7 +4,6 @@
  *          (action required), ghost for informational states.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn } from './ui'
 import type { StatusBannerTone } from './StatusBannerShell'
 
@@ -34,18 +33,8 @@ export function StatusBannerAction({
         : 'ghost'
       : emphasis
 
-  if (to) {
-    return (
-      <Link to={to}>
-        <Btn size="sm" variant={variant} loading={loading} disabled={disabled}>
-          {label}
-        </Btn>
-      </Link>
-    )
-  }
-
   return (
-    <Btn size="sm" variant={variant} onClick={onClick} loading={loading} disabled={disabled}>
+    <Btn size="sm" variant={variant} to={to} onClick={onClick} loading={loading} disabled={disabled}>
       {label}
     </Btn>
   )

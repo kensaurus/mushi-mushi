@@ -2,7 +2,6 @@ import type { Context, Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1';
 import { createOpenAI } from 'npm:@ai-sdk/openai@1';
 import { streamText } from 'npm:ai@4';
 import { z } from 'npm:zod@3';
@@ -12,7 +11,13 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
-import { ASSIST_MODEL, ASSIST_FALLBACK } from '../../_shared/models.ts';
+import {
+  ASSIST_EFFORT,
+  ASSIST_FALLBACK,
+  ASSIST_MODEL,
+  THINKING_HEADROOM_TOKENS,
+} from '../../_shared/models.ts';
+import { claudeGenerateObject, claudeStreamText } from '../../_shared/claude-messages.ts';
 import { logLlmInvocation, extractAnthropicCacheUsage } from '../../_shared/telemetry.ts';
 import { withAnthropicOrOpenAi } from '../../_shared/llm-failover.ts';
 import { createTrace, scoreExistingTrace } from '../../_shared/observability.ts';
@@ -423,10 +428,12 @@ async function runAskMushiLlmTurn(args: {
       const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
       if (anthropicKey) {
         try {
-          const anthropic = createAnthropic({ apiKey: anthropicKey });
           keySource = 'env';
-          const result = await generateValidatedObject(AskMushiReplyLlmSchema, {
-            model: anthropic(primaryModel),
+          const result = await claudeGenerateObject({
+            apiKey: anthropicKey,
+            model: primaryModel,
+            schema: AskMushiReplyLlmSchema,
+            effort: ASSIST_EFFORT,
             messages: [
               {
                 role: 'system',
@@ -437,7 +444,7 @@ async function runAskMushiLlmTurn(args: {
               },
               ...messages.map((m) => ({ role: m.role, content: m.content })),
             ],
-            maxTokens,
+            maxTokens: maxTokens + THINKING_HEADROOM_TOKENS,
           });
           const cache = extractAnthropicCacheUsage(result.experimental_providerMetadata);
           llmSpan.end({
@@ -506,9 +513,11 @@ async function runAskMushiLlmTurn(args: {
       effectiveProjectId,
       async (key) => {
         keySource = key.source;
-        const anthropic = createAnthropic({ apiKey: key.key });
-        return generateValidatedObject(AskMushiReplyLlmSchema, {
-          model: anthropic(primaryModel),
+        return claudeGenerateObject({
+          apiKey: key.key,
+          model: primaryModel,
+          schema: AskMushiReplyLlmSchema,
+          effort: ASSIST_EFFORT,
           messages: [
             {
               role: 'system',
@@ -519,7 +528,7 @@ async function runAskMushiLlmTurn(args: {
             },
             ...messages.map((m) => ({ role: m.role, content: m.content })),
           ],
-          maxTokens,
+          maxTokens: maxTokens + THINKING_HEADROOM_TOKENS,
         });
       },
       async (key) => {
@@ -1014,9 +1023,10 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
         let primaryFailed = false;
         if (anthropicKey) {
           try {
-            const anthropic = createAnthropic({ apiKey: anthropicKey });
-            const result = streamText({
-              model: anthropic(primaryModel),
+            const result = claudeStreamText({
+              apiKey: anthropicKey,
+              model: primaryModel,
+              effort: ASSIST_EFFORT,
               messages: [
                 {
                   role: 'system',
@@ -1027,7 +1037,7 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
                 },
                 ...messages.map((m) => ({ role: m.role, content: m.content })),
               ],
-              maxTokens,
+              maxTokens: maxTokens + THINKING_HEADROOM_TOKENS,
             });
             for await (const delta of result.textStream) {
               acc += delta;

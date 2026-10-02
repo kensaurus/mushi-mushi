@@ -27,6 +27,8 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { FixProgressStream } from '../components/FixProgressStream'
 import { useReportComments } from '../lib/reportComments'
 import { trackSelf } from '../lib/track'
+import { isSampleReport, recordDiagnosisViewed } from '../lib/diagnosisViewed'
+import { hasDiagnosis } from '../lib/firstDiagnosis'
 import {
   IconUser,
   IconIntelligence,
@@ -61,6 +63,7 @@ import {
   EnvironmentFields,
 } from '../components/report-detail/ReportEvidence'
 import { ReportComments } from '../components/report-detail/ReportComments'
+import { ReporterViewPanel } from '../components/report-detail/ReporterViewPanel'
 import { TimelineCard } from '../components/report-detail/TimelineCard'
 import { screenshotEmptyText } from '../components/report-detail/reportCaptureHints'
 import { UnifiedTimelineCard } from '../components/report-detail/UnifiedTimelineCard'
@@ -135,6 +138,21 @@ export function ReportDetailPage() {
       ...(serverReport.severity ? { severity: serverReport.severity } : {}),
     })
   }, [serverReport?.id])
+
+  // Funnel: `diagnosis_viewed` once the row has a diagnosis to read. Most
+  // "Send test report" buttons only toast and point here, so this is where
+  // the sample diagnosis is usually seen. Keyed on `diagnosed` too: a report
+  // opened while still classifying counts when a refetch brings the diagnosis.
+  const diagnosed = serverReport ? hasDiagnosis(serverReport) : false
+  useEffect(() => {
+    if (!serverReport?.id || !diagnosed) return
+    recordDiagnosisViewed({
+      projectId: serverReport.project_id,
+      reportId: serverReport.id,
+      surface: 'report_detail',
+      sample: isSampleReport(serverReport.custom_metadata),
+    })
+  }, [serverReport?.id, diagnosed])
 
   useEffect(() => {
     if (!serverReport) return
@@ -700,6 +718,10 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
 
       <div className="mt-3">
         <ReportComments reportId={report.id} projectId={report.project_id} />
+      </div>
+
+      <div className="mt-3">
+        <ReporterViewPanel reportId={report.id} />
       </div>
 
       {/* Identifiers live at the bottom: UUIDs are reference material for

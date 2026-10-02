@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react'
-import { apiFetch } from '../../lib/supabase'
+import { useSendTestReport } from '../../lib/useSendTestReport'
 import { Section, Btn, ResultChip, type ResultChipTone } from '../ui'
 import { RESOLVED_API_URL } from '../../lib/env'
 import { SdkInstallCard } from '../SdkInstallCard'
@@ -61,6 +61,7 @@ interface QuickTestSectionProps {
 }
 
 function QuickTestSection({ project }: QuickTestSectionProps) {
+  const sendTestReport = useSendTestReport()
   const [status, setStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
   const [detail, setDetail] = useState('')
   const [lastRunAt, setLastRunAt] = useState<string | null>(null)
@@ -68,16 +69,13 @@ function QuickTestSection({ project }: QuickTestSectionProps) {
   async function runTest() {
     setStatus('running')
     setDetail('')
-    const res = await apiFetch<{ reportId: string; projectName: string }>(
-      `/v1/admin/projects/${project.id}/test-report`,
-      { method: 'POST' },
-    )
-    if (res.ok && res.data) {
+    const res = await sendTestReport(project.id)
+    if (res.ok) {
       setStatus('pass')
-      setDetail(`Report ${res.data.reportId} submitted to ${res.data.projectName}`)
+      setDetail(`Report ${res.reportId} submitted to ${res.projectName}`)
     } else {
       setStatus('fail')
-      setDetail(res.error?.message ?? 'Submission failed')
+      setDetail(res.message)
     }
     setLastRunAt(new Date().toISOString())
   }

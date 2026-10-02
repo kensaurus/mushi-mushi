@@ -12,9 +12,11 @@ import { getLocale, type MushiLocale } from './i18n';
 import { getWidgetStyles } from './styles';
 import { MUSHI_SDK_VERSION } from './version';
 import { readPageFaviconHref, MUSHI_TIER_COLORS } from '@mushi-mushi/core';
-import { CATEGORY_ICONS, FEATURE_REQUEST_INTENT, bindFaviconFallbacks, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession } from './widget-helpers';
+import { CATEGORY_ICONS, FEATURE_REQUEST_INTENT, REPORTER_READ_DEADLINE_MS, bindFaviconFallbacks, charCounterText, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession, withDeadline } from './widget-helpers';
 import type {
   AssistantTurn,
+  DetailMode,
+  ScreenshotErrorReason,
   WidgetCallbacks,
   WidgetRewardsState,
   WidgetStep,
@@ -69,6 +71,8 @@ export class MushiWidget {
   private screenshotAttached = false;
   private screenshotCapturing = false;
   private screenshotError = false;
+  /** Why the last capture failed; drives the actionable hint under the tools. */
+  private screenshotErrorReason: ScreenshotErrorReason | null = null;
   private allowScreenshotRemove = true;
   /**
    * Whether the screenshot / element-select tools are actually usable
@@ -115,8 +119,20 @@ export class MushiWidget {
   private featureBoard: Array<Record<string, unknown>> = [];
   private reporterComments: MushiReporterComment[] = [];
   private selectedReportId: string | null = null;
-  private reporterLoading = false;
+  /**
+   * One flag per surface. A single shared flag used to let a reply (or vote,
+   * or reopen) blank the thread it was posted from, and a failed reply
+   * replaced the conversation with its error.
+   */
+  private listLoading = false;
+  private threadLoading = false;
+  private actionPending = false;
+  /** List / roadmap load error. */
   private reporterError: string | null = null;
+  /** Thread (comments) load error — rendered with Try again. */
+  private threadError: string | null = null;
+  /** Reply / feedback / reopen / vote error — rendered beside the composer. */
+  private actionError: string | null = null;
   private attachedLaunchers: Array<() => void> = [];
   private smartHideCleanup: (() => void) | null = null;
   private smartHideTimer: ReturnType<typeof setTimeout> | null = null;
@@ -124,12 +140,26 @@ export class MushiWidget {
    *  ("REPORT · 14:23:07 JST") doesn't drift while the success step
    *  is on screen. */
   private submittedAt: Date | null = null;
-  /** Pending success-state + auto-close timers. Tracked so destroy()
-   *  can clear them — otherwise a host that unmounts mid-submit leaks
-   *  this MushiWidget reference (and re-renders into a detached shadow
-   *  root) for up to ~3.3s after destroy. */
+  /** Pending success-state timer. Tracked so destroy() can clear it —
+   *  otherwise a host that unmounts mid-submit leaks this MushiWidget
+   *  reference (and re-renders into a detached shadow root). */
   private successTimer: ReturnType<typeof setTimeout> | null = null;
-  private autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Set on pointerdown inside the panel. A background re-render (runtime
+   * config, rewards, inbox poll…) that lands between pointerdown and click
+   * replaces the button under the pointer, and the browser then drops the
+   * click — the first Submit "did nothing". render() defers while this is set
+   * (bounded, so a lost pointerup can't freeze the panel).
+   */
+  private pointerDownAt: number | null = null;
+  private renderDeferred = false;
+  private readonly onPointerRelease = (): void => {
+    this.pointerDownAt = null;
+    if (!this.renderDeferred) return;
+    this.renderDeferred = false;
+    // After the click dispatches (it follows pointerup in the same task).
+    setTimeout(() => this.render(), 0);
+  };
   private rewardsState: WidgetRewardsState | null = null;
   private leaderboardEntries: Array<{
     display_name: string;
@@ -252,6 +282,8 @@ export class MushiWidget {
     if (this.host.isConnected) return;
     this.syncHostChromeState();
     document.body.appendChild(this.host);
+    window.addEventListener('pointerup', this.onPointerRelease, true);
+    window.addEventListener('pointercancel', this.onPointerRelease, true);
     this.syncAttachedLaunchers();
     this.syncSmartHide();
     this.bindColorSchemeListener();
@@ -366,6 +398,7 @@ export class MushiWidget {
     this.screenshotAttached = false;
     this.screenshotCapturing = false;
     this.screenshotError = false;
+    this.screenshotErrorReason = null;
     this.screenshotPreview = null;
     this.elementSelected = false;
     this.elementCapturing = false;
@@ -579,7 +612,10 @@ export class MushiWidget {
     // The capture attempt is over either way; a successful attach also
     // clears any stale error state from a previous failed attempt.
     this.screenshotCapturing = false;
-    if (attached) this.screenshotError = false;
+    if (attached) {
+      this.screenshotError = false;
+      this.screenshotErrorReason = null;
+    }
     // A detached screenshot has no preview to show.
     if (!attached) this.screenshotPreview = null;
     if (this.isOpen) this.render();
@@ -640,11 +676,18 @@ export class MushiWidget {
   setScreenshotCapturing(capturing: boolean): void {
     this.screenshotCapturing = capturing;
     this.screenshotError = false;
+    this.screenshotErrorReason = null;
     if (this.isOpen) this.render();
   }
 
-  setScreenshotError(failed: boolean): void {
+  /**
+   * Flag (or clear) a failed capture. A call without a reason keeps the more
+   * specific one an earlier call recorded for the same attempt (the capture
+   * module reports 'taint'/'timeout' before the caller's generic failure).
+   */
+  setScreenshotError(failed: boolean, reason?: ScreenshotErrorReason): void {
     this.screenshotError = failed;
+    this.screenshotErrorReason = failed ? (reason ?? this.screenshotErrorReason ?? 'error') : null;
     this.screenshotCapturing = false;
     if (this.isOpen) this.render();
   }
@@ -814,13 +857,11 @@ export class MushiWidget {
   }
 
   destroy(): void {
+    window.removeEventListener('pointerup', this.onPointerRelease, true);
+    window.removeEventListener('pointercancel', this.onPointerRelease, true);
     if (this.successTimer !== null) {
       clearTimeout(this.successTimer);
       this.successTimer = null;
-    }
-    if (this.autoCloseTimer !== null) {
-      clearTimeout(this.autoCloseTimer);
-      this.autoCloseTimer = null;
     }
     if (this.smartHideTimer !== null) {
       clearTimeout(this.smartHideTimer);
@@ -1360,6 +1401,13 @@ export class MushiWidget {
   }
 
   private render(): void {
+    if (this.isOpen && this.pointerDownAt !== null && Date.now() - this.pointerDownAt < 2000) {
+      // A pointerup released outside the window may never arrive — flush anyway.
+      if (!this.renderDeferred) setTimeout(() => { if (this.renderDeferred) this.render(); }, 2000);
+      this.renderDeferred = true;
+      return;
+    }
+    this.renderDeferred = false;
     const theme = this.getTheme();
     const pos = this.config.position;
     const t = this.locale;
@@ -1459,6 +1507,7 @@ export class MushiWidget {
       const ctx = this.renderCtx();
       panel.innerHTML = `${renderOutdatedBanner(ctx)}${renderStep(ctx)}${renderBrandFooter(ctx)}`;
       this.shadow.appendChild(panel);
+      panel.addEventListener('pointerdown', () => { this.pointerDownAt = Date.now(); });
       this.attachHandlers(panel);
       // First render with the mark visible → one impression per instance.
       if (!this.brandImpressionSent && this.config.brandFooter === true) {
@@ -1775,6 +1824,19 @@ export class MushiWidget {
   }
 
   /**
+   * Copy mode for the details step. Feature mode covers both the ✨ shortcut
+   * and Other → "Feature request" intent (whose localized label is the first
+   * entry of step2.intents.other in every locale).
+   */
+  private detailMode(): DetailMode {
+    const id = this.selectedCategory;
+    const intent = this.selectedIntent;
+    if (this.viaFeatureRequest || intent === FEATURE_REQUEST_INTENT) return 'feature';
+    if (id === 'other' && !this.resolveCustomCategory(id) && intent === this.locale.step2.intents.other[0]) return 'feature';
+    return id && this.resolveBaseCategory(id) === 'other' ? 'other' : 'bug';
+  }
+
+  /**
    * Minimum description length, lowered for CJK locales where each character
    * carries more meaning. Used by both the view layer (via renderCtx) and the
    * details-step input validation in attachHandlers.
@@ -1807,7 +1869,11 @@ export class MushiWidget {
       config: this.config,
       rewardsState: this.rewardsState,
       lastReportId: this.lastReportId,
-      reporterLoading: this.reporterLoading,
+      listLoading: this.listLoading,
+      threadLoading: this.threadLoading,
+      actionPending: this.actionPending,
+      threadError: this.threadError,
+      actionError: this.actionError,
       locale: this.locale,
       identifiedUser: this.identifiedUser,
       testerReputation: this.testerReputation,
@@ -1824,6 +1890,8 @@ export class MushiWidget {
       submitting: this.submitting,
       sdkFreshness: this.sdkFreshness,
       screenshotError: this.screenshotError,
+      screenshotErrorReason: this.screenshotErrorReason,
+      detailMode: this.detailMode(),
       reporterReports: this.reporterReports,
       magicLinkSending: this.magicLinkSending,
       magicLinkEmail: this.magicLinkEmail,
@@ -1893,12 +1961,6 @@ export class MushiWidget {
       else if (this.step === 'assistant') { this.step = 'category'; }
       else if (this.step === 'account') { this.step = 'category'; }
       else if (this.step === 'cross-app-reports') { this.step = 'account'; }
-      else if (this.step === 'success') {
-        this.step = 'category';
-        this.selectedCategory = null;
-        this.selectedIntent = null;
-        this.viaFeatureRequest = false;
-      }
       // Progressive disclosure collapses again whenever we land back on the
       // category step, so a previously-expanded list doesn't stay open across
       // navigation (Sentry 14751132/1).
@@ -2055,6 +2117,10 @@ export class MushiWidget {
       this.render();
     });
 
+    panel.querySelector('[data-action="retry-thread"]')?.addEventListener('click', () => {
+      if (this.selectedReportId) void this.loadReporterComments(this.selectedReportId);
+    });
+
     panel.querySelector('[data-action="reporter-reply"]')?.addEventListener('click', () => {
       void this.submitReporterReply(panel);
     });
@@ -2071,9 +2137,10 @@ export class MushiWidget {
     // inside the widget rather than emitting a callback so the
     // optical feedback (button label flips to "Copied") is instant
     // and the host doesn't have to wire anything to enjoy it.
-    panel.querySelector('[data-action="view-my-reports"]')?.addEventListener('click', () => {
-      void this.loadReporterReports();
+    panel.querySelector('[data-action="track-report"]')?.addEventListener('click', () => {
+      if (this.lastReportId) void this.openTrackedReport(this.lastReportId);
     });
+    panel.querySelector('[data-action="done"]')?.addEventListener('click', () => this.close());
 
     panel.querySelector('[data-action="copy-report-id"]')?.addEventListener('click', (e) => {
       const btn = e.currentTarget as HTMLButtonElement;
@@ -2121,18 +2188,13 @@ export class MushiWidget {
 
     // Wire live char counter so users see their progress as they type.
     const textarea = panel.querySelector('.mushi-textarea') as HTMLTextAreaElement | null;
-    const charCurrentEl = panel.querySelector('[data-role="char-current"]') as HTMLElement | null;
-    if (textarea && charCurrentEl) {
+    const counterEl = panel.querySelector('[data-role="char-counter"]') as HTMLElement | null;
+    if (textarea && counterEl) {
       const minLen = this.effectiveMinLength();
-      const updateCounter = () => {
-        const len = textarea.value.trim().length;
-        charCurrentEl.textContent = String(len);
-        const counterEl = panel.querySelector('[data-role="char-counter"]') as HTMLElement | null;
-        if (counterEl) {
-          counterEl.style.color = len >= minLen ? 'var(--mushi-ok, #22c55e)' : '';
-        }
-      };
-      textarea.addEventListener('input', updateCounter);
+      textarea.addEventListener('input', () => {
+        counterEl.textContent = charCounterText(textarea.value, minLen, t.step3.charsNeeded);
+        counterEl.style.color = textarea.value.trim().length >= minLen ? 'var(--mushi-ok, #22c55e)' : '';
+      });
     }
 
     // Wire example chips — clicking one pre-fills the textarea.
@@ -2150,6 +2212,9 @@ export class MushiWidget {
 
     panel.querySelector('[data-action="screenshot"]')?.addEventListener('click', () => {
       this.callbacks.onScreenshotRequest();
+    });
+    panel.querySelector('[data-action="screenshot-share-tab"]')?.addEventListener('click', () => {
+      this.callbacks.onScreenshotShareTabRequest?.();
     });
     panel.querySelector('[data-action="remove-screenshot"]')?.addEventListener('click', () => {
       this.callbacks.onScreenshotRemove?.();
@@ -2173,7 +2238,7 @@ export class MushiWidget {
       const minLen = this.effectiveMinLength();
       if (description.length < minLen) {
         if (errorEl) {
-          const msg = `${t.step3.tooShort} (${description.length}/${minLen})`;
+          const msg = `${t.step3.tooShort} (${charCounterText(description, minLen, t.step3.charsNeeded)})`;
           errorEl.textContent = msg;
           errorEl.style.display = 'block';
           // Focus the textarea so the user can immediately keep typing.
@@ -2199,12 +2264,16 @@ export class MushiWidget {
         try {
           const catId = this.selectedCategory!;
           const baseCategory = this.resolveBaseCategory(catId);
-          // Only set userCategory when the host uses a custom category list
-          // and the id differs from the resolved base (avoids redundant duplication).
+          // A host custom category id always wins (it is the documented
+          // reports.user_category contract). Otherwise feature requests land
+          // as user_category='feature' so they never read as an "other" bug.
           const isCustomCat = this.config.categories && this.config.categories.length > 0;
+          const userCategory = isCustomCat && this.resolveCustomCategory(catId)
+            ? catId
+            : this.detailMode() === 'feature' ? 'feature' : isCustomCat ? catId : undefined;
           const ret = this.callbacks.onSubmit({
             category: baseCategory,
-            ...(isCustomCat ? { userCategory: catId } : {}),
+            ...(userCategory ? { userCategory } : {}),
             description,
             intent: this.selectedIntent ?? undefined,
           });
@@ -2239,29 +2308,17 @@ export class MushiWidget {
         // 'details' textarea), which would otherwise re-populate
         // draftDescription with the just-submitted text and clobber this clear.
         this.draftDescription = '';
-        // Don't auto-close as aggressively if we're waiting on a
-        // report id — give the user a moment to copy it. Once the
-        // outcome lands we kick off a longer auto-close so the deep
-        // link stays readable.
+        // No auto-close: the panel used to vanish 2.8 s in, under a reporter
+        // who was reading the receipt or reaching for "Track this report".
+        // It now stays until Done / ✕ / Esc. The outcome patches the
+        // receipt id in place once it lands.
         void outcomeP.then((outcome) => {
-          if (this.step !== 'success') return;
-          if (outcome) {
-            this.lastReportId = outcome.reportId ?? null;
-            this.lastSubmitQueuedOffline = Boolean(outcome.queuedOffline);
-            this.lastSubmitFailureKind = outcome.failureKind;
-            this.lastSubmitScreenshotDropped = Boolean(outcome.screenshotDropped);
-            this.render();
-          }
-          if (this.autoCloseTimer !== null) {
-            clearTimeout(this.autoCloseTimer);
-          }
-          // 6 s when we have a deep link (long enough to read + copy
-          // the id), 2.8 s for the legacy bare-stamp path.
-          const closeDelayMs = this.lastReportId && this.config.dashboardUrl ? 6000 : 2800;
-          this.autoCloseTimer = setTimeout(() => {
-            this.autoCloseTimer = null;
-            if (this.step === 'success') this.close();
-          }, closeDelayMs);
+          if (this.step !== 'success' || !outcome) return;
+          this.lastReportId = outcome.reportId ?? null;
+          this.lastSubmitQueuedOffline = Boolean(outcome.queuedOffline);
+          this.lastSubmitFailureKind = outcome.failureKind;
+          this.lastSubmitScreenshotDropped = Boolean(outcome.screenshotDropped);
+          this.render();
         });
       }, 500);
     };
@@ -2304,7 +2361,7 @@ export class MushiWidget {
 
   private async loadFeatureBoard(): Promise<void> {
     this.step = 'roadmap';
-    this.reporterLoading = true;
+    this.listLoading = true;
     this.reporterError = null;
     this.render();
     try {
@@ -2312,14 +2369,14 @@ export class MushiWidget {
     } catch (err) {
       this.reporterError = err instanceof Error ? err.message : 'Could not load community ideas.';
     } finally {
-      this.reporterLoading = false;
+      this.listLoading = false;
       this.render();
     }
   }
 
   private async voteFeatureBoard(requestId: string): Promise<void> {
-    if (!this.callbacks.onFeatureBoardVote || this.reporterLoading) return;
-    this.reporterLoading = true;
+    if (!this.callbacks.onFeatureBoardVote || this.actionPending) return;
+    this.actionPending = true;
     this.render();
     try {
       await this.callbacks.onFeatureBoardVote(requestId);
@@ -2327,35 +2384,51 @@ export class MushiWidget {
     } catch (err) {
       this.reporterError = err instanceof Error ? err.message : 'Could not update vote.';
     } finally {
-      this.reporterLoading = false;
+      this.actionPending = false;
+      this.render();
+    }
+  }
+
+  /**
+   * Run a thread action (reply / feedback / reopen) without leaving or
+   * blanking the thread: the conversation stays painted, the action button
+   * disables, and afterwards the status + comments refresh in place.
+   */
+  private async runThreadAction(fallbackError: string, action: (reportId: string) => Promise<unknown>): Promise<boolean> {
+    const reportId = this.selectedReportId;
+    if (!reportId || this.actionPending) return false;
+    this.actionPending = true;
+    this.actionError = null;
+    this.render();
+    try {
+      await action(reportId);
+      await this.refreshReporterInboxQuiet();
+      await this.loadReporterComments(reportId, true);
+      return true;
+    } catch (err) {
+      this.actionError = err instanceof Error ? err.message : fallbackError;
+      return false;
+    } finally {
+      this.actionPending = false;
       this.render();
     }
   }
 
   private async submitReporterReopen(): Promise<void> {
-    const reportId = this.selectedReportId;
-    if (!reportId || this.reporterLoading) return;
-    this.reporterLoading = true;
-    this.render();
-    try {
+    await this.runThreadAction('Could not reopen report.', async (reportId) => {
       if (this.callbacks.onReporterReopen) {
         await this.callbacks.onReporterReopen(reportId, 'Not fixed for me');
       } else {
         await this.callbacks.onReporterFeedback?.(reportId, 'not_fixed', 'Not fixed for me');
       }
-      await this.loadReporterReports();
-    } catch (err) {
-      this.reporterError = err instanceof Error ? err.message : 'Could not reopen report.';
-    } finally {
-      this.reporterLoading = false;
-      this.render();
-    }
+    });
   }
 
   /** Refresh My Reports data for unread badges without opening the inbox panel. */
   async refreshReporterInboxQuiet(): Promise<void> {
     try {
-      this.reporterReports = await this.callbacks.onReporterReportsRequest?.() ?? [];
+      const req = this.callbacks.onReporterReportsRequest?.();
+      this.reporterReports = req ? await withDeadline(req, REPORTER_READ_DEADLINE_MS) : [];
       if (!this.isOpen) return;
       // Only the reports list actually displays this data — re-render it.
       // Every other step gets a targeted badge-text update instead of a full
@@ -2382,83 +2455,85 @@ export class MushiWidget {
 
   private async loadReporterReports(): Promise<void> {
     this.step = 'reports';
-    this.reporterLoading = true;
+    this.listLoading = true;
     this.reporterError = null;
     this.render();
     try {
-      this.reporterReports = await this.callbacks.onReporterReportsRequest?.() ?? [];
+      const req = this.callbacks.onReporterReportsRequest?.();
+      this.reporterReports = req ? await withDeadline(req, REPORTER_READ_DEADLINE_MS) : [];
     } catch (err) {
       this.reporterError = err instanceof Error ? err.message : 'Could not load reports.';
     } finally {
-      this.reporterLoading = false;
+      this.listLoading = false;
       this.render();
     }
   }
 
-  private async loadReporterComments(reportId: string): Promise<void> {
+  /** "Track this report" on the success step → that report's thread in My Reports. */
+  private async openTrackedReport(reportId: string): Promise<void> {
+    await this.loadReporterReports();
+    // The reporter may have navigated (or closed) while the list loaded.
+    if (this.isOpen && this.step === 'reports') await this.loadReporterComments(reportId);
+  }
+
+  /**
+   * Open (or refresh) a thread. The header + summary paint immediately from
+   * the in-memory report; only the comment list shows a skeleton while it
+   * loads. `quiet` keeps the current comments on screen (post-action refresh).
+   */
+  private async loadReporterComments(reportId: string, quiet = false): Promise<void> {
     // Navigating to a DIFFERENT thread must drop any in-progress reply draft —
     // otherwise an unsent draft typed for report A reappears (and could be
-    // posted) under report B. `submitReporterReply` already clears the draft
-    // itself before calling back in here for the *same* reportId, so this is
-    // a no-op on that path.
+    // posted) under report B.
     if (this.selectedReportId !== reportId) {
       this.draftReply = '';
+      this.reporterComments = [];
+      this.actionError = null;
+      quiet = false;
     }
     this.selectedReportId = reportId;
     this.step = 'report-detail';
-    this.reporterLoading = true;
-    this.reporterError = null;
-    this.render();
+    this.threadError = null;
+    if (!quiet) {
+      this.threadLoading = true;
+      this.render();
+    }
     try {
-      this.reporterComments = await this.callbacks.onReporterCommentsRequest?.(reportId) ?? [];
-    } catch (err) {
-      this.reporterError = err instanceof Error ? err.message : 'Could not load thread.';
+      // A read that never settles used to leave "Loading thread…" up forever
+      // (live, 2026-10-02); the deadline turns it into a retryable error.
+      const req = this.callbacks.onReporterCommentsRequest?.(reportId);
+      const comments = req ? await withDeadline(req, REPORTER_READ_DEADLINE_MS) : [];
+      // The reporter may have opened a different thread meanwhile.
+      if (this.selectedReportId === reportId) this.reporterComments = comments;
+    } catch {
+      if (this.selectedReportId === reportId) this.threadError = this.locale.flows.thread.loadFailed;
     } finally {
-      this.reporterLoading = false;
+      this.threadLoading = false;
       this.render();
     }
   }
 
   private async submitReporterFeedback(signal: string): Promise<void> {
-    const reportId = this.selectedReportId;
-    if (!reportId || this.reporterLoading) return;
-    this.reporterLoading = true;
-    this.render();
-    try {
-      await this.callbacks.onReporterFeedback?.(reportId, signal);
-      await this.loadReporterReports();
-      if (reportId) await this.loadReporterComments(reportId);
-    } catch (err) {
-      this.reporterError = err instanceof Error ? err.message : 'Could not send feedback.';
-      this.reporterLoading = false;
-      this.render();
-    }
+    await this.runThreadAction('Could not send feedback.', (reportId) =>
+      Promise.resolve(this.callbacks.onReporterFeedback?.(reportId, signal)));
   }
 
   private async submitReporterReply(panel: HTMLElement): Promise<void> {
-    const reportId = this.selectedReportId;
     const textarea = panel.querySelector('[data-role="reporter-reply"]') as HTMLTextAreaElement | null;
-    const replyButton = panel.querySelector('[data-action="reporter-reply"]') as HTMLButtonElement | null;
     const body = textarea?.value.trim() ?? '';
-    // Guard: reject empty bodies AND already-in-flight submits — both prevented
-    // double-posts in dogfood when users mashed Enter on a slow link.
-    if (!reportId || !body || this.reporterLoading) return;
-    this.reporterLoading = true;
-    if (replyButton) replyButton.disabled = true;
-    this.render();
-    try {
+    // Guard: empty bodies and in-flight submits (runThreadAction) — both
+    // prevented double-posts in dogfood when users mashed Enter on a slow link.
+    if (!body) return;
+    // Snapshot the draft now: render() re-captures it from the live textarea.
+    this.draftReply = textarea?.value ?? '';
+    await this.runThreadAction('Could not send reply.', async (reportId) => {
       await this.callbacks.onReporterReply?.(reportId, body);
-      // Clear the field AND its preserved draft on success so the next render
-      // (driven by loadReporterComments) doesn't repaint the just-sent text
-      // and tempt the user into a duplicate submit.
-      if (textarea) textarea.value = '';
+      // Clear the draft on success so the refresh doesn't repaint the
+      // just-sent text and tempt the user into a duplicate submit.
       this.draftReply = '';
-      await this.loadReporterComments(reportId);
-    } catch (err) {
-      this.reporterError = err instanceof Error ? err.message : 'Could not send reply.';
-      this.reporterLoading = false;
-      this.render();
-    }
+      const live = this.shadow.querySelector<HTMLTextAreaElement>('[data-role="reporter-reply"]');
+      if (live) live.value = '';
+    });
   }
 
   /* ── Community: magic-link sign-in ───────────────────────────────── */

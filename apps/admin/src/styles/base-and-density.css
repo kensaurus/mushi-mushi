@@ -24,6 +24,18 @@ body,
   min-height: 0;
 }
 
+/* iOS zooms the whole page when a focused field's text is under 16px, and
+   the dense text-xs/text-sm field sizes are 12–14px. Phones and touch
+   tablets get 16px field text; desktop keeps the dense size. Unlayered, so
+   it outranks the Tailwind text-* utility on the field. */
+@media (max-width: 639px), (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="button"], [type="submit"], [type="reset"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 body {
   background-color: var(--color-surface);
   color: var(--color-fg);
@@ -81,7 +93,7 @@ h1, h2, h3, h4, h5, h6,
 
    | Mode        | font   | line   | tracking  | numerics                | headings        |
    | ----------- | ------ | ------ | --------- | ----------------------- | --------------- |
-   | compact     | ×0.86  | ×0.92  | +0.006em  | tabular + slashed-zero  | tighter         |
+   | compact     | ×0.86  | ×0.92  | +0.006em  | tabular; mono slashed-0 | tighter         |
    | default     | ×1.00  | ×1.00  |  0        | tabular-nums            | -0.015em        |
    | comfortable | ×1.14  | ×1.08  | -0.012em  | tabular-nums            | -0.025em + balance |
 
@@ -109,11 +121,17 @@ html[data-density="compact"] {
   --ui-pad: 0.65;
   --ui-tracking: 0.006em;
   --ui-tracking-heading: -0.005em;
-  --ui-numeric: tabular-nums slashed-zero;
+  /* Slashed zero only on mono IDs (below). Inherited by every numeral it
+     drew KPI zeros as "∅", which reads as null rather than zero. */
+  --ui-numeric: tabular-nums;
   /* `pretty` balances orphans without doing the more expensive layout
      pass `balance` triggers — right at compact's "scan, don't read"
      intent. */
   --ui-balance: pretty;
+}
+
+html[data-density="compact"] :where(code, kbd, samp, .font-mono) {
+  font-variant-numeric: tabular-nums slashed-zero;
 }
 
 html[data-density="comfortable"] {

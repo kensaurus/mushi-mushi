@@ -99,6 +99,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `linear-oauth-callback` | Completes Linear OAuth; vaults tokens; registers inbound webhook |
 | `webhooks-linear` | Linear issue push webhooks (HMAC); resolves linked reports on completed/cancelled |
 | `webhooks-linear-agent` | Linear AgentSessionEvent webhooks (acknowledge within 10s; may dispatch fix-worker) |
+| `reporter-notify-fanout` | Email / push for a developer reply to a reporter; enqueued by the `report_comments` trigger, which stays the in-app writer (Plan 018) |
 
 Also: **`api`** (Hono REST router) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
 
@@ -322,7 +323,7 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **76 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **80 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 

@@ -63,6 +63,7 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   run_nl_query: 'triage',
   get_report_evidence: 'triage',
   triage_issue: 'triage',
+  import_sentry_issues: 'triage',
   query_lessons: 'triage',
   list_lessons: 'triage',
   suggest_fix: 'triage',
@@ -90,6 +91,9 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   refresh_ci: 'fixes',
   reopen_report: 'fixes',
   reply_to_reporter: 'fixes',
+  request_reporter_info: 'fixes',
+  list_reporter_outbox: 'fixes',
+  release_reporter_update: 'fixes',
 
   // rewards
   list_top_contributors: 'rewards',

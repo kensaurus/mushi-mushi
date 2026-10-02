@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
+import { useSendTestReport } from '../lib/useSendTestReport'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -97,6 +98,7 @@ function resolveProjectsTab(value: string | null): ProjectsTabId {
 export function ProjectsPage() {
   const toast = useToast()
   const navigate = useNavigate()
+  const postTestReport = useSendTestReport()
   const copy = usePageCopy('/projects')
   const [searchParams, setSearchParams] = useSearchParams()
   const activeProjectId = useActiveProjectId()
@@ -561,17 +563,10 @@ export function ProjectsPage() {
     })
   }
 
-  async function sendTestReport(projectId: string, name: string) {
+  async function sendTestReport(projectId: string) {
     setBusyProject(projectId)
     try {
-      const res = await apiFetch(`/v1/admin/projects/${projectId}/test-report`, { method: 'POST' })
-      if (!res.ok) throw new Error(res.error?.message ?? 'Test report failed')
-      toast.success(
-        `Test report queued for ${name}`,
-        'Watch /reports for it to land in the next ~10s.',
-      )
-    } catch (err) {
-      toast.error('Could not send test report', err instanceof Error ? err.message : String(err))
+      await postTestReport(projectId)
     } finally {
       setBusyProject(null)
     }

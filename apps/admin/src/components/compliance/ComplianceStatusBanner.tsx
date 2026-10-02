@@ -3,7 +3,6 @@
  * PURPOSE: SOC 2 / GDPR posture — entitlement, failing controls, DSAR SLA, evidence freshness.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { ComplianceStats, ComplianceTabId } from './types'
@@ -43,9 +42,7 @@ export function ComplianceStatusBanner({
         title="No project selected"
         subtitle="Compliance evidence and DSARs are scoped per project — pick an app in the header switcher first."
         action={
-          <Link to="/projects">
-            <Btn size="sm" variant="ghost">Go to Projects</Btn>
-          </Link>
+          <Btn to="/projects" size="sm" variant="ghost">Go to Projects</Btn>
         }
       />
     )
@@ -58,9 +55,7 @@ export function ComplianceStatusBanner({
         title="SOC 2 console requires Pro or Enterprise"
         subtitle={`${stats.planDisplayName} on ${projectLabel} doesn't include the compliance pack — upgrade to unlock evidence vault and DSAR tooling.`}
         action={
-          <Link to="/billing?tab=plans">
-            <Btn size="sm" variant="ghost">View plans</Btn>
-          </Link>
+          <Btn to="/billing?tab=plans" size="sm" variant="ghost">View plans</Btn>
         }
       />
     )

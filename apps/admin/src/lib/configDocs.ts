@@ -157,15 +157,15 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
   {
     id: 'settings.general.sentry_webhook_secret',
     label: 'Sentry Webhook Secret',
-    summary: 'Shared HMAC secret that authenticates inbound Sentry user-feedback webhooks.',
+    summary: 'Client Secret of the Sentry internal integration that sends issue, alert and user-feedback webhooks to Mushi.',
     howItWorks:
-      'The Sentry webhook handler verifies the `Sentry-Hook-Signature` HMAC against this secret before it accepts a payload. Mismatch → 401, the report is dropped. The same value must be set in Sentry → Settings → Webhooks.',
+      'Stored in Vault. The Sentry webhook handler verifies the `Sentry-Hook-Signature` HMAC against this secret, requires a `Sentry-Hook-Timestamp` within 5 minutes, and rejects a `Request-ID` or body it already accepted. Mismatch → 401, the delivery is dropped. Copy it from Sentry → Settings → Developer Settings → your internal integration → Client Secret.',
     default: { value: 'unset (inbound disabled)' },
     backend: {
       table: 'project_settings',
       column: 'sentry_webhook_secret',
       endpoint: 'PATCH /v1/admin/settings',
-      readBy: ['POST /v1/webhooks/sentry (api route)'],
+      readBy: ['POST /v1/webhooks/sentry (api route)', 'POST /v1/webhooks/sentry/seer (api route)'],
     },
     whenToChange:
       'Set this once when wiring inbound Sentry user feedback. Rotate it together with the Sentry-side value — never one without the other or every payload starts failing signature verification.',
@@ -192,8 +192,8 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     label: 'Classification model',
     summary: 'Which LLM writes the plain-English read on each report after noise is filtered out.',
     howItWorks:
-      'Stage 2 is the deep classifier — it labels severity, category, intent, dedup hints, and reproduction steps. The choice trades cost vs depth: Sonnet 4.6 is the recommended default; Opus is slow but catches subtle cases; Haiku is cheap but rougher. The selected model is read on every report, so changes apply immediately to new traffic.',
-    default: { value: 'claude-sonnet-4-6' },
+      'Stage 2 is the deep classifier — it labels severity, category, intent, dedup hints, and reproduction steps. The choice trades cost vs depth: Sonnet 5.5 is the recommended default; Opus is slow but catches subtle cases; Haiku is cheap but rougher. The selected model is read on every report, so changes apply immediately to new traffic.',
+    default: { value: 'claude-sonnet-5-5' },
     backend: {
       table: 'project_settings',
       column: 'stage2_model',
@@ -201,7 +201,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
       readBy: ['classify-report edge function'],
     },
     whenToChange:
-      "Stay on Sonnet 4.6 unless cost is biting (drop to Haiku) or you're finding misses on subtle pattern reports (try Opus on a small slice via Prompt Lab first).",
+      "Stay on Sonnet 5.5 unless cost is biting (drop to Haiku) or you're finding misses on subtle pattern reports (try Opus on a small slice via Prompt Lab first).",
     learnMore: {
       label: 'Architecture overview',
       href: 'https://kensaur.us/mushi-mushi/docs/concepts/architecture',
@@ -546,15 +546,20 @@ const INTEGRATIONS: ConfigDoc[] = [
     id: 'integrations.sentry.auth_token',
     label: 'Sentry auth token',
     summary:
-      'User-level Sentry token granting `project:read` + `event:read` for enrichment lookups.',
+      'Sentry token granting `project:read` + `event:read` (import, enrichment) and `event:write` (resolve the issue when a Mushi fix merges).',
     howItWorks:
-      'Stored as a vault reference (`vault://id`) — never in plaintext. The enricher uses it to fetch the matching event payload for a report.',
+      'Stored as a vault reference (`vault://id`) — never in plaintext. Used to import existing issues, fetch the matching event payload for a report, and resolve linked Sentry issues when their fix PR merges.',
     default: { value: 'unset (enrichment disabled)' },
     backend: {
       table: 'platform_integrations',
       column: 'config.sentry_auth_token_ref',
       endpoint: 'PUT /v1/admin/integrations/sentry',
-      readBy: ['sentry-seer-poll edge function', 'integration-health-probe edge function'],
+      readBy: [
+        'sentry-seer-poll edge function',
+        'integration-health-probe edge function',
+        'POST /v1/admin/projects/:id/sentry/import (api route)',
+        'finalizeFixMerge (_shared/fix-merge.ts)',
+      ],
     },
     whenToChange: 'Rotate quarterly, or whenever the issuing user leaves the org.',
   },

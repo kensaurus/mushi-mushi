@@ -13,6 +13,16 @@ export const LANDING_HERO = {
   lead:
     'For solo builders shipping Cursor- or Claude-written apps to real users. When someone hits a bug, Mushi turns what they felt into a plain-English diagnosis and a paste-ready fix in your editor. Sentry starts from what the code threw; Mushi starts from what the user felt.',
   proofLine: 'One queue for every bug. Sentry flows in, fixes flow out. Open source.',
+  /**
+   * Stage-fit proof under the CTAs: what it costs to try and what you can
+   * read. No star count — at this stage a small number is anti-proof.
+   */
+  reassure: 'Free Cloud: 50 diagnoses a month, no credit card. Self-hosting is free.',
+  star: {
+    label: 'Star on GitHub',
+    href: MUSHI_CANONICAL_URLS.repo,
+    ctaId: 'landing-star',
+  },
 } as const
 
 export interface LandingHeroCta {
@@ -341,6 +351,87 @@ export const LANDING_PILLARS: readonly LandingPillar[] = [
     role: 'Optional: an agent opens a PR on your repo. You merge, edit, or ignore it.',
   },
 ] as const
+
+/**
+ * "This is what a diagnosis looks like" — one real classifier output, so the
+ * wedge (VISION.md Bucket A) is shown, not only described.
+ *
+ * Source: `reports.stage2_analysis` of report 4618a607 in the public demo
+ * project `mushi-demo`, classified 2026-09-20. The report text is a fixture
+ * WE wrote (`_shared/demo-report-fixtures.json`, seeded by
+ * scripts/marketing/seed-demo.mjs); the diagnosis is the model's output,
+ * trimmed only where an ellipsis marks it. Kept as static copy because the
+ * demo can be reseeded. Never edit the wording to read better — re-pull it.
+ */
+export const LANDING_REAL_DIAGNOSIS = {
+  heading: 'This is what a diagnosis looks like',
+  report:
+    "After finishing the daily lesson the celebration sheet shows '+0 XP earned today' but my streak counter on the home screen incremented by 1. … Also the haptic 'tada' on the celebration sheet that used to fire is silent now. …",
+  title: 'Celebration screen shows +0 XP and haptic feedback is silent after lesson',
+  severity: 'high',
+  category: 'bug',
+  confidence: '0.82',
+  rootCause:
+    '… The XP value passed to the CelebrationSheet is read from state or props before the XP award async operation resolves, resulting in a stale 0 value being displayed … The haptic \'tada\' feedback call is either gated on the XP value being non-zero, is invoked before the component is fully mounted, or … missing/unreachable on this code path entirely.',
+  suggestedFix:
+    "… Ensure the XP earned value is sourced from the resolved result of the lesson-completion API call … Guard against rendering '0' as a fallback when the value is undefined/null — use a loading indicator instead. … Verify the haptic 'tada' trigger is called unconditionally on sheet presentation … and is not gated behind the XP value being truthy.",
+  editorCmd: 'get_fix_context',
+  provenance:
+    'Real classifier output from the public demo project, 2026-09-20, trimmed where marked with an ellipsis (numbering and headings inside the answer included). The report itself is a sample we wrote to resemble a real one. A diagnosis is a model’s reading and can be wrong; check it before you merge.',
+  nextHref: '/quickstart/incident-loop',
+  nextLabel: 'Pull a diagnosis into Cursor or Claude Code →',
+} as const
+
+export interface LandingMediatorLink {
+  label: string
+  detail: string
+  href: string
+}
+
+/**
+ * The mediator map (VISION.md §1.5, Bucket C): where bugs come in and where
+ * fixes and status go out. Every row links to the page that documents it —
+ * a row with no docs page does not belong here. No counts: they drift.
+ */
+export const LANDING_MEDIATOR = {
+  inbound: [
+    { label: 'Your users', detail: 'Widget or shake-to-report, with a screenshot and the console tail', href: '/quickstart/react' },
+    { label: 'Sentry', detail: 'An issue-alert webhook drops errors into the same queue', href: '/plugins/sentry' },
+    { label: 'Datadog · Bugsnag · Crashlytics · more', detail: 'Monitoring webhooks translated into reports by @mushi-mushi/adapters', href: '/sdks/adapters' },
+    { label: 'Your voice', detail: 'Dictate a bug from an iOS Shortcut, Slack, or a Telegram bot', href: '/integrations/voice-intake' },
+  ],
+  outbound: [
+    { label: 'Your editor', detail: 'Cursor or Claude Code reads the diagnosis and fix prompt over MCP', href: '/quickstart/mcp' },
+    { label: 'Cloud coding agents', detail: 'A Cursor Cloud Agent drafts the fix and opens a PR', href: '/plugins/cursor-cloud' },
+    { label: 'Linear · Jira · GitHub Issues', detail: 'An issue is filed when a report is classified', href: '/plugins/linear' },
+    { label: 'Slack · Discord · Teams', detail: 'Slack gets a card with buttons to dispatch a fix or resolve', href: '/plugins/slack' },
+  ],
+  core: 'One queue: deduplicated, diagnosed in plain English, remembered as lessons',
+  gating:
+    'The SDK, the widget, the diagnosis and the MCP server work on Free Cloud. Plugins need Indie or above on Mushi Cloud, or a self-hosted stack.',
+} as const satisfies {
+  inbound: readonly LandingMediatorLink[]
+  outbound: readonly LandingMediatorLink[]
+  core: string
+  gating: string
+}
+
+/** Landing pricing strip — tier rows come from PRICING_TIERS (lib/public-copy.ts). */
+export const LANDING_PRICING_STRIP = {
+  heading: 'Pricing you can predict',
+  lead: 'You pay per diagnosis, not per event. Duplicates collapse, noise is filtered, and both are free. Every paid plan has a spend cap.',
+  tierIds: ['free', 'indie', 'pro', 'self-host'] as const,
+  cta: 'Full pricing and the estimator →',
+  href: '/pricing',
+  ctaId: 'landing-pricing',
+} as const
+
+/** Community line under the closing CTA. */
+export const LANDING_COMMUNITY = {
+  lead: 'Shipped an app an AI mostly wrote, and hear about bugs from users? Tell us what you do with those messages today.',
+  label: 'GitHub Discussions →',
+  href: `${MUSHI_CANONICAL_URLS.repo}/discussions`,
+} as const
 
 export const LANDING_ARCHITECTURE_LINK =
   'See **[Concepts → Architecture](/concepts/architecture)** for the wire-level sequence diagram and component-by-component spec.'

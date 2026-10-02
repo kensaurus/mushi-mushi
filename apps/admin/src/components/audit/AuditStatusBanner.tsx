@@ -3,7 +3,6 @@
  * PURPOSE: Audit trail health — entitlement, failures, freshness, actor mix.
  */
 
-import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { AuditStats, AuditTabId } from './types'
@@ -34,9 +33,7 @@ export function AuditStatusBanner({ stats, onTab, onFilterFailures, onFilterWarn
         title="No project selected"
         subtitle="Audit entries are scoped per project — pick an app in the header switcher before investigating mutations."
         action={
-          <Link to="/projects">
-            <Btn size="sm" variant="ghost">Go to Projects</Btn>
-          </Link>
+          <Btn to="/projects" size="sm" variant="ghost">Go to Projects</Btn>
         }
       />
     )
@@ -49,9 +46,7 @@ export function AuditStatusBanner({ stats, onTab, onFilterFailures, onFilterWarn
         title="Audit log requires Pro or Enterprise"
         subtitle={`${stats.planDisplayName} on ${projectLabel} doesn't include append-only audit history — upgrade to export SOC 2 evidence.`}
         action={
-          <Link to="/billing?tab=plans">
-            <Btn size="sm" variant="ghost">View plans</Btn>
-          </Link>
+          <Btn to="/billing?tab=plans" size="sm" variant="ghost">View plans</Btn>
         }
       />
     )

@@ -91,6 +91,7 @@ const POLL_INTERVAL_MS = 15000
 export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
   const [open, setOpen] = useState(() => readOpen(fix.id, true))
   const [events, setEvents] = useState<FixTimelineEvent[] | null>(null)
+  const [baseBranch, setBaseBranch] = useState<string | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [secondsToNextPoll, setSecondsToNextPoll] = useState<number>(POLL_INTERVAL_MS / 1000)
   const cancelledRef = useRef(false)
@@ -119,12 +120,14 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
 
     const load = async () => {
       try {
-        const res = await apiFetch<{ events: FixTimelineEvent[] }>(
+        const res = await apiFetch<{ events: FixTimelineEvent[]; base_branch?: string | null }>(
           `/v1/admin/fixes/${fix.id}/timeline`,
         )
         if (cancelledRef.current) return
-        if (res.ok && res.data) setEvents(res.data.events)
-        else setLoadError(true)
+        if (res.ok && res.data) {
+          setEvents(res.data.events)
+          setBaseBranch(res.data.base_branch ?? null)
+        } else setLoadError(true)
       } catch {
         if (!cancelledRef.current) setLoadError(true)
       }
@@ -307,6 +310,7 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
                   prNumber={fix.pr_number}
                   prState={fix.pr_state}
                   branchName={fix.branch}
+                  baseBranch={baseBranch}
                   commitSha={fix.commit_sha}
                   agentModel={fix.llm_model ?? fix.agent}
                   filesChanged={fix.files_changed}

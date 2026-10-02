@@ -10,8 +10,19 @@ import type { DispatchState } from '../../lib/dispatchFix'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import type { ReportDetail } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { dispatchConfirmBody, featureRequestDispatchBlock } from '../../lib/dispatchConfirm'
 
-const STATUS_OPTS = ['new', 'classified', 'fixing', 'fixed', 'resolved', 'verified', 'reopened', 'dismissed']
+// One option per label: 'resolved' is the legacy spelling of 'fixed' (both
+// read "Fixed"), so listing both showed "Fixed" twice. A legacy row selects
+// the option that shares its label via selectableStatus().
+const STATUS_OPTS = ['new', 'classified', 'fixing', 'fixed', 'verified', 'reopened', 'dismissed']
+
+function selectableStatus(status: string): string {
+  if (STATUS_OPTS.includes(status)) return status
+  const label = STATUS_LABELS[status]
+  return STATUS_OPTS.find((s) => STATUS_LABELS[s] === label) ?? status
+}
 const SEV_OPTS = ['critical', 'high', 'medium', 'low']
 
 interface RoutingIntegration {
@@ -50,6 +61,7 @@ export function ReportTriageBar({
 }: ReportTriageBarProps) {
   const [showSaved, setShowSaved] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [confirmDispatch, setConfirmDispatch] = useState(false)
   const toast = useToast()
   const { data: integrationsData } = usePageData<{ integrations: RoutingIntegration[] }>('/v1/admin/integrations')
   const activeRoutes = (integrationsData?.integrations ?? []).filter((r) => r.is_active)
@@ -61,15 +73,20 @@ export function ReportTriageBar({
     return () => clearTimeout(t)
   }, [savedAt])
 
+  // The reporter filed a feature request: the server refuses to auto-fix it
+  // until someone re-categorizes it, so say so on the button.
+  const featureBlock = featureRequestDispatchBlock(report)
   const dispatchDisabled =
     report.status === 'fixed' ||
     report.status === 'dismissed' ||
     isDispatchBusy ||
+    featureBlock != null ||
     (preflight != null && !preflight.loading && !preflight.ready)
   const dispatchBlockReason =
-    preflight != null && !preflight.loading && !preflight.ready
+    featureBlock ??
+    (preflight != null && !preflight.loading && !preflight.ready
       ? `Preflight: ${preflight.failing.map((c) => c.label).join(', ')}`
-      : undefined
+      : undefined)
   const dispatchLabel =
     dispatchState.status === 'idle' ? 'Dispatch fix' :
     dispatchState.status === 'queueing' ? 'Dispatching…' :
@@ -120,7 +137,7 @@ export function ReportTriageBar({
     <Card  className="mb-3 flex flex-wrap items-end gap-3 p-3">
       <SelectField
         label="Status"
-        value={report.status}
+        value={selectableStatus(report.status)}
         onChange={(e) => onTriage({ status: e.currentTarget.value })}
         disabled={saving}
         className="!w-auto"
@@ -159,7 +176,7 @@ export function ReportTriageBar({
         <div className="flex flex-col items-end gap-1">
           <Btn
             variant="primary"
-            onClick={onDispatch}
+            onClick={() => setConfirmDispatch(true)}
             disabled={dispatchDisabled}
             loading={isDispatchBusy && dispatchState.status !== 'completed' && dispatchState.status !== 'failed'}
             leadingIcon={<IconArrowRight />}
@@ -190,6 +207,18 @@ export function ReportTriageBar({
             )}
         </div>
       </div>
+      {confirmDispatch && (
+        <ConfirmDialog
+          title="Dispatch a fix for this report?"
+          body={dispatchConfirmBody({ repoUrl: preflight?.repoUrl, baseBranch: preflight?.baseBranch })}
+          confirmLabel="Dispatch fix"
+          onCancel={() => setConfirmDispatch(false)}
+          onConfirm={() => {
+            setConfirmDispatch(false)
+            void onDispatch()
+          }}
+        />
+      )}
     </Card>
   )
 }

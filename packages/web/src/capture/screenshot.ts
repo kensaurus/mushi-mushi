@@ -8,8 +8,19 @@ export interface ScreenshotCapture {
 export interface ScreenshotCaptureOptions {
   privacy?: MushiPrivacyConfig;
   /** Callback invoked when capture fails (taint, security policy, etc.). */
-  onFailed?: (reason: 'taint' | 'error') => void;
+  onFailed?: (reason: ScreenshotFailureReason) => void;
 }
+
+/**
+ * Why a capture produced no image. Also the `detail.reason` of the
+ * `mushi:screenshot_failed` document event.
+ * - taint: cross-origin content made the canvas unreadable
+ * - timeout: the SVG never loaded or errored within 5 s
+ * - unsupported: no 2D canvas, or the engine rasterised nothing (WebKit)
+ * - csp: the host's Content-Security-Policy img-src blocks data: images
+ * - error: anything else
+ */
+export type ScreenshotFailureReason = 'taint' | 'timeout' | 'unsupported' | 'csp' | 'error';
 
 export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}): ScreenshotCapture {
   let activeOptions = options;
@@ -20,7 +31,11 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
 
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      if (!ctx) return null;
+      if (!ctx) {
+        activeOptions.onFailed?.('unsupported');
+        emitScreenshotFailed('unsupported');
+        return null;
+      }
 
       const width = window.innerWidth;
       const height = window.innerHeight;
@@ -43,17 +58,27 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
         </svg>
       `;
 
+      // data: URL, never blob:. Chrome (verified on 154) taints the canvas when
+      // a foreignObject SVG arrives via a blob: URL, so toDataURL threw on every
+      // capture; the same SVG as a data: URL exports cleanly (the approach
+      // html-to-image uses). It also passes CSPs whose img-src allows data: but
+      // not blob:. A CSP that blocks data: too is reported as 'csp'.
       const img = new Image();
-      const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
+      const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgData)}`;
+      let cspBlocked = false;
+      const onViolation = (e: Event) => {
+        const v = e as SecurityPolicyViolationEvent;
+        if (/^img-src|^default-src/.test(v.violatedDirective ?? '') && /^data/.test(v.blockedURI ?? '')) cspBlocked = true;
+      };
+      document.addEventListener('securitypolicyviolation', onViolation);
 
       return new Promise((resolve) => {
         let settled = false;
-        const settle = (value: string | null, reason?: 'taint' | 'error') => {
+        const settle = (value: string | null, reason?: ScreenshotFailureReason) => {
           if (settled) return;
           settled = true;
           clearTimeout(timer);
-          URL.revokeObjectURL(url);
+          document.removeEventListener('securitypolicyviolation', onViolation);
           if (reason) {
             activeOptions.onFailed?.(reason);
             emitScreenshotFailed(reason);
@@ -62,7 +87,7 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
         };
         // WebKit can leave the SVG image in limbo (neither load nor error) for
         // pathological documents — never let the report submit hang on it.
-        const timer = setTimeout(() => settle(null, 'error'), 5000);
+        const timer = setTimeout(() => settle(null, 'timeout'), 5000);
 
         img.onload = () => {
           try {
@@ -71,7 +96,7 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
             // nothing. A fully transparent canvas would export as a solid black
             // JPEG — report failure instead of attaching a useless image.
             if (isCanvasBlank(ctx, width, height)) {
-              settle(null, 'error');
+              settle(null, 'unsupported');
               return;
             }
             settle(canvas.toDataURL('image/jpeg', 0.7));
@@ -81,7 +106,10 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
             settle(null, 'taint');
           }
         };
-        img.onerror = () => settle(null, 'error');
+        // The CSP violation event and the image error are separate queued
+        // tasks with no guaranteed order — settle one task later so a
+        // policy block is reported as 'csp', not a generic failure.
+        img.onerror = () => setTimeout(() => settle(null, cspBlocked ? 'csp' : 'error'), 0);
         img.src = url;
       });
     } catch {
@@ -100,7 +128,7 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
 }
 
 /** Dispatch a CustomEvent on document so host apps can react to capture failures. */
-function emitScreenshotFailed(reason: 'taint' | 'error'): void {
+function emitScreenshotFailed(reason: ScreenshotFailureReason): void {
   try {
     document.dispatchEvent(new CustomEvent('mushi:screenshot_failed', { detail: { reason }, bubbles: false }));
   } catch {
@@ -108,10 +136,13 @@ function emitScreenshotFailed(reason: 'taint' | 'error'): void {
   }
 }
 
-const DEFAULT_REDACT_SELECTORS: readonly string[] = [
-  'input[type="password"]',
-  '[data-mushi-redact]',
-];
+/**
+ * Always blacked out of every screenshot — DOM capture and tab share alike —
+ * before any pixel is produced. `redactSelectors` adds to this list and can't
+ * remove from it: a host passing its own list used to drop password redaction.
+ */
+export const ALWAYS_REDACT_SELECTORS = 'input[type="password"],input[autocomplete^="cc-"],[data-private],[data-mushi-mask]';
+const DEFAULT_REDACT_SELECTORS: readonly string[] = ['[data-mushi-redact]'];
 
 function buildPrivacySafeDocument(privacy?: MushiPrivacyConfig): Element {
   const clone = document.documentElement.cloneNode(true) as Element;
@@ -122,12 +153,13 @@ function buildPrivacySafeDocument(privacy?: MushiPrivacyConfig): Element {
   stripTaintSources(clone);
   inlineDocumentStyles(clone);
 
-  // Redact: black-out matching elements. Applied before mask/block so that
-  // password fields are always blacked out even if not explicitly listed
-  // in maskSelectors. Pass an empty array to `redactSelectors` to opt out.
-  const redactSelectors: readonly string[] = privacy?.redactSelectors !== undefined
-    ? privacy.redactSelectors
-    : DEFAULT_REDACT_SELECTORS;
+  // Redact: black-out matching elements, before mask/block. The always-on
+  // baseline (passwords, card fields, [data-private], [data-mushi-mask]) runs
+  // first; `redactSelectors` replaces only the [data-mushi-redact] default.
+  const redactSelectors: readonly string[] = [
+    ALWAYS_REDACT_SELECTORS,
+    ...(privacy?.redactSelectors ?? DEFAULT_REDACT_SELECTORS),
+  ];
 
   for (const selector of redactSelectors) {
     for (const el of safeQueryAll(clone, selector)) {

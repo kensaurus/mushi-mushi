@@ -163,7 +163,7 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     retention: '7 days',
     seats: '1',
     highlights: 'Hosted admin, plain-English reads, hard stop at limit',
-    cloudNotes: 'All SDKs, hosted admin, community Discord, plain-English reads',
+    cloudNotes: 'All SDKs, hosted admin, community support in GitHub Discussions, plain-English reads',
   },
   {
     id: 'indie',

@@ -344,7 +344,7 @@ export async function awardPointsForEndUser(
   }
 
   // 9. Evaluate tier transition
-  const { tierChanged } = await evaluateTier(db, endUserId, organizationId)
+  const { tierChanged } = await evaluateTier(db, endUserId, organizationId, pointsAwarded)
 
   return { pointsAwarded, totalPoints, rejectedReason: null, tierChanged }
 }

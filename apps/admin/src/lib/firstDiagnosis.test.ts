@@ -9,6 +9,7 @@ import {
   FIRST_DIAGNOSIS_INITIAL,
   FIRST_DIAGNOSIS_POLL_TIMEOUT_MS,
   firstDiagnosisCopy,
+  hasDiagnosis,
   isPolling,
   readReport,
   reduceFirstDiagnosis,
@@ -24,6 +25,16 @@ function queued(): FirstDiagnosisState {
   const sending = reduceFirstDiagnosis(FIRST_DIAGNOSIS_INITIAL, { type: 'send' })
   return reduceFirstDiagnosis(sending, { type: 'send_ok', reportId: 'r1', at: T0 })
 }
+
+describe('hasDiagnosis', () => {
+  it('is true for a summary, a severity or a Stage-2 analysis, false otherwise', () => {
+    expect(hasDiagnosis({ summary: 'Session 401 on iPad' })).toBe(true)
+    expect(hasDiagnosis({ severity: 'high' })).toBe(true)
+    expect(hasDiagnosis({ stage2_analysis: {} })).toBe(true)
+    expect(hasDiagnosis({ summary: '  ', severity: null, stage2_analysis: null })).toBe(false)
+    expect(hasDiagnosis({})).toBe(false)
+  })
+})
 
 describe('readReport', () => {
   it('treats a bare row as queued and a stage-1 row as classifying', () => {

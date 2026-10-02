@@ -17,6 +17,13 @@ import { notifyTeamFixEvent } from './team-notify.ts';
 import { notifyReportStatusTransition } from './report-status-notify.ts';
 import { resolveExternalIssue } from './integrations.ts';
 import { emitProductEvent } from './product-events.ts';
+import {
+  PR_CLOSED_UNMERGED_LABEL,
+  preFixReportStatus,
+  shouldRevertReportOnPrClose,
+} from './fix-loop-status.ts';
+import { resolveLinkedSentryIssues } from './sentry-resolve-back.ts';
+import { keepAlive } from './background.ts';
 
 type Db = ReturnType<typeof getServiceClient>;
 
@@ -136,6 +143,7 @@ export async function finalizeFixMerge(
   let reportStatus: string | null = report?.status ?? null;
   const previousStatus = report?.status ?? null;
 
+  let resolveExternal = false;
   if (report && report.status !== 'fixed' && report.status !== 'dismissed') {
     const { error } = await db
       .from('reports')
@@ -144,10 +152,35 @@ export async function finalizeFixMerge(
       .eq('project_id', attempt.project_id);
     if (!error) {
       reportStatus = 'fixed';
-      resolveExternalIssue(attempt.report_id, attempt.project_id, db).catch((e: unknown) =>
-        log.warn('resolveExternalIssue failed', { reportId: attempt.report_id, err: String(e) }),
-      );
+      resolveExternal = true;
     }
+  }
+
+  // External trackers, in the background so a GitHub merge webhook still
+  // answers inside its 10s budget. Sentry links go first, through the Sentry
+  // API: a link is only marked resolved once Sentry accepted it, and the
+  // outcome lands as a fix_event (sentry-resolve-back.ts). resolveExternalIssue
+  // runs after it so it never stamps a Sentry link the API pass still owns.
+  if (report) {
+    void keepAlive(
+      (async () => {
+        try {
+          await resolveLinkedSentryIssues(db as never, {
+            projectId: attempt.project_id,
+            reportId: attempt.report_id,
+            fixAttemptId: attempt.id,
+            prUrl: meta.prUrl,
+          });
+        } catch (e) {
+          log.error('Sentry resolve-back crashed', { reportId: attempt.report_id, err: String(e) });
+        }
+        if (resolveExternal) {
+          await resolveExternalIssue(attempt.report_id, attempt.project_id, db).catch((e: unknown) =>
+            log.warn('resolveExternalIssue failed', { reportId: attempt.report_id, err: String(e) }),
+          );
+        }
+      })(),
+    );
   }
 
   if (reportStatus === 'fixed' && previousStatus !== 'fixed' && report?.reporter_token_hash) {
@@ -238,6 +271,101 @@ export async function finalizeFixMerge(
   }
 
   return { justMerged, reportStatus };
+}
+
+/**
+ * Idempotent bookkeeping for a fix PR that GitHub reports closed WITHOUT a
+ * merge. Shared by ci-sync (poll / refresh-ci) and the pull_request.closed
+ * webhook so the loop closes even when one of them never fires:
+ *   - fix_attempts.pr_state → 'closed' (merged rows are never touched)
+ *   - one `pr_state_changed` fix_event "PR closed without merge", which the
+ *     report's unified timeline reads
+ *   - the report leaves 'fixing' for its pre-fix status, unless a human moved
+ *     it already or another attempt is still live
+ */
+export async function finalizeFixClosedUnmerged(
+  db: Db,
+  attempt: FixAttemptMergeRow,
+  meta: { prNumber?: number | null; closedAt?: string | null; source: 'ci_sync' | 'webhook' },
+): Promise<{ justClosed: boolean; reportStatus: string | null }> {
+  const { data: closedRow, error: closeErr } = await db
+    .from('fix_attempts')
+    .update({ pr_state: 'closed', updated_at: new Date().toISOString() })
+    .eq('id', attempt.id)
+    .is('merged_at', null)
+    .or('pr_state.is.null,pr_state.neq.closed')
+    .select('id')
+    .maybeSingle();
+  if (closeErr) {
+    log.error('fix_attempts pr_state=closed update failed', { fixAttemptId: attempt.id, err: closeErr.message });
+  }
+  const justClosed = !!closedRow;
+
+  if (justClosed) {
+    const prNumber = meta.prNumber ?? attempt.pr_number;
+    const { error: eventErr } = await db.from('fix_events').insert({
+      fix_attempt_id: attempt.id,
+      project_id: attempt.project_id,
+      kind: 'pr_state_changed',
+      status: 'fail',
+      label: PR_CLOSED_UNMERGED_LABEL,
+      detail: prNumber ? `#${prNumber}` : null,
+      at: meta.closedAt ?? new Date().toISOString(),
+      dedupe_key: `pr_closed_unmerged:${attempt.id}:${meta.closedAt ?? 'unknown'}`,
+      payload: { state: 'closed', merged: false, source: meta.source },
+    });
+    if (eventErr && eventErr.code !== '23505') {
+      log.error('fix_events insert failed for closed PR', { fixAttemptId: attempt.id, err: eventErr.message });
+    }
+  }
+
+  const { data: report } = await db
+    .from('reports')
+    .select('id, status, category, severity, stage1_classification, fix_pr_url')
+    .eq('id', attempt.report_id)
+    .eq('project_id', attempt.project_id)
+    .maybeSingle();
+  if (!report) return { justClosed, reportStatus: null };
+
+  const { count: otherOpenAttempts } = await db
+    .from('fix_attempts')
+    .select('id', { count: 'exact', head: true })
+    .eq('report_id', attempt.report_id)
+    .neq('id', attempt.id)
+    .is('merged_at', null)
+    .or('status.in.(queued,running),pr_state.in.(open,draft),and(pr_url.not.is.null,pr_state.is.null)');
+
+  if (!shouldRevertReportOnPrClose({ reportStatus: report.status, otherOpenAttempts: otherOpenAttempts ?? 0 })) {
+    return { justClosed, reportStatus: report.status };
+  }
+
+  const nextStatus = preFixReportStatus(report);
+  const now = new Date().toISOString();
+  const { data: reverted, error: revertErr } = await db
+    .from('reports')
+    .update({
+      status: nextStatus,
+      updated_at: now,
+      ...(report.fix_pr_url && report.fix_pr_url === attempt.pr_url ? { fix_pr_url: null, fix_branch: null } : {}),
+    })
+    .eq('id', attempt.report_id)
+    .eq('project_id', attempt.project_id)
+    .eq('status', 'fixing')
+    .select('id')
+    .maybeSingle();
+  if (revertErr) {
+    log.error('report revert after closed PR failed', { reportId: attempt.report_id, err: revertErr.message });
+    return { justClosed, reportStatus: report.status };
+  }
+  if (!reverted) return { justClosed, reportStatus: report.status };
+
+  dispatchPluginEventDetached(db, attempt.project_id, 'report.status_changed', {
+    report: { id: attempt.report_id, status: nextStatus },
+    previousStatus: 'fixing',
+    actor: { kind: 'system' },
+  }).catch((e) => log.warn('Plugin dispatch failed', { event: 'report.status_changed', err: String(e) }));
+
+  return { justClosed, reportStatus: nextStatus };
 }
 
 export function parsePrRepoRef(prUrl: string | null | undefined): GithubRepoRef | null {

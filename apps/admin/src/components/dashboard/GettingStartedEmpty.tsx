@@ -17,8 +17,7 @@
 
 import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { apiFetch } from '../../lib/supabase'
-import { useToast } from '../../lib/toast'
+import { useSendTestReport } from '../../lib/useSendTestReport'
 import { useSetupStatus, type SetupProject } from '../../lib/useSetupStatus'
 import { pluralize } from '../../lib/format'
 import { PDCA_STAGES, PDCA_ORDER, PDCA_STAGE_OUTCOMES, type PdcaStageId } from '../../lib/pdca'
@@ -40,7 +39,7 @@ interface LoopStage {
 
 export function GettingStartedEmpty({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate()
-  const toast = useToast()
+  const sendTestReport = useSendTestReport()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
@@ -59,16 +58,8 @@ export function GettingStartedEmpty({ embedded = false }: { embedded?: boolean }
   async function submitTest() {
     if (!project) return
     setTestStatus('running')
-    const res = await apiFetch(`/v1/admin/projects/${project.project_id}/test-report`, {
-      method: 'POST',
-    })
+    const res = await sendTestReport(project.project_id)
     setTestStatus(res.ok ? 'pass' : 'fail')
-    if (res.ok) {
-      toast.success('Test report queued', 'Watch it land in Reports within a few seconds.')
-      setup.reload()
-    } else {
-      toast.error('Test report failed', res.error?.message ?? 'Check your project keys and try again.')
-    }
   }
 
   const stages: LoopStage[] = buildStages({

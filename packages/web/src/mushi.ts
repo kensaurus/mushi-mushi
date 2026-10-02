@@ -1,5 +1,6 @@
 import { compressScreenshotDataUrl } from './capture/compress-screenshot';
 import type { WidgetSubmitOutcome } from './widget-helpers';
+import { shouldShowSdkFreshness } from './widget-helpers';
 import {
   type MushiConfig,
   type MushiReport,
@@ -64,11 +65,11 @@ import {
   type DiscoveryCapture,
 } from './capture';
 import { createReplayCapture, type ReplayCapture } from './capture/replay';
-import {
-  createScreenshotAnnotation,
-  type AnnotationSession,
-  type AnnotationTool,
-} from './capture/screenshot-annotation';
+import { ALWAYS_REDACT_SELECTORS, type ScreenshotFailureReason } from './capture/screenshot';
+// Rare paths load on demand (code-split in the ESM build): markup and tab
+// share only cost bytes for reporters who use them. Compression stays static —
+// it runs at submit, where an offline chunk fetch would drop the screenshot.
+import type { AnnotationSession, AnnotationTool } from './capture/screenshot-annotation';
 import { captureSentryContext, tagSentryScope } from './sentry';
 import { setupProactiveTriggers, type ProactiveTriggerCleanup } from './proactive-triggers';
 import { createProactiveManager, type ProactiveManager } from './proactive-manager';
@@ -389,7 +390,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         privacy: activeConfig.privacy,
         // Surface capture failures (canvas taint, CSP) in the widget UI —
         // an invisible failure looks identical to a broken button.
-        onFailed: () => widget.setScreenshotError(true),
+        onFailed: (reason: ScreenshotFailureReason) => widget.setScreenshotError(true, reason),
       };
       if (activeConfig.capture?.screenshotProvider) {
         // When a custom provider is set the built-in DOM capturer is bypassed
@@ -567,6 +568,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   // Reentrance guard: prevents a user tapping the camera icon while
   // autoCaptureScreenshot is already mid-capture from double-hiding the panel.
   let screenshotCaptureInFlight = false;
+  /** Set when the host screenshotProvider was refused permission this attempt. */
+  let screenshotProviderDenied = false;
 
   function syncReporterInboxQuiet(): void {
     void widget.refreshReporterInboxQuiet();
@@ -638,6 +641,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
   async function takeScreenshotWithoutChrome(): Promise<string | null> {
     if (screenshotCaptureInFlight) return null;
+    screenshotProviderDenied = false;
     const provider = activeConfig.capture?.screenshotProvider;
     // Native / custom provider path — called before hiding panel so the host
     // has full control over timing (e.g. a Capacitor plugin that captures
@@ -657,6 +661,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         log.warn('screenshotProvider threw, falling back to built-in capturer', {
           error: err instanceof Error ? err.message : String(err),
         });
+        // getDisplayMedia / native plugins reject with NotAllowedError when
+        // the user or OS refuses — the one failure the reporter can fix.
+        screenshotProviderDenied = err instanceof Error
+          && (err.name === 'NotAllowedError' || err.name === 'SecurityError' || /permission|denied/i.test(err.message));
         // Fall through to built-in DOM capturer below.
       } finally {
         screenshotCaptureInFlight = false;
@@ -752,9 +760,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         // The button should be hidden in this state (setCaptureAvailability),
         // but if a stale render still shows it, fail visibly rather than no-op.
         log.warn('Screenshot requested but capture is disabled');
-        widget.setScreenshotError(true);
+        widget.setScreenshotError(true, 'unsupported');
         return;
       }
+      // A second click while a capture runs is not a failure — ignore it.
+      if (screenshotCaptureInFlight) return;
       log.debug('Taking screenshot');
       widget.setScreenshotCapturing(true);
       try {
@@ -767,8 +777,57 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       }
       widget.setScreenshotAttached(pendingScreenshot !== null);
       widget.setScreenshotPreview(pendingScreenshot);
-      if (pendingScreenshot === null) widget.setScreenshotError(true);
+      // Keeps a reason the capture module already reported (taint, timeout…).
+      if (pendingScreenshot === null) widget.setScreenshotError(true, screenshotProviderDenied ? 'permission' : undefined);
     },
+    onScreenshotShareTabRequest: typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getDisplayMedia === 'function'
+      ? () => {
+          // getDisplayMedia is called synchronously in the click — the picker
+          // needs its user activation, which awaiting the lazy module would
+          // lose. The panel hides so it isn't in the frame.
+          const stream = navigator.mediaDevices.getDisplayMedia({
+            video: { displaySurface: 'browser' },
+            audio: false,
+            preferCurrentTab: true,
+            selfBrowserSurface: 'include',
+          } as DisplayMediaStreamOptions);
+          // An instant rejection (cancel, iframe without display-capture) would
+          // otherwise surface as an unhandled rejection before the chunk loads;
+          // grabMaskedTabFrame still awaits the original and maps the reason.
+          stream.catch(() => {});
+          widget.setScreenshotCapturing(true);
+          const host = document.getElementById('mushi-mushi-widget');
+          if (host) host.style.visibility = 'hidden';
+          const p = activeConfig.privacy;
+          import('./capture/display-capture')
+            .then(
+              (m) => m.grabMaskedTabFrame(stream, [
+                ALWAYS_REDACT_SELECTORS,
+                '[data-mushi-redact]',
+                ...(p?.redactSelectors ?? []),
+                ...(p?.maskSelectors ?? []),
+                ...(p?.blockSelectors ?? []),
+              ]),
+              (err: unknown) => {
+                // Module failed to load: never leave a granted share running.
+                void stream.then((s) => s.getTracks().forEach((t) => t.stop()), () => {});
+                throw err;
+              },
+            )
+            .then((dataUrl) => {
+              pendingScreenshot = dataUrl;
+              widget.setScreenshotAttached(true);
+              widget.setScreenshotPreview(dataUrl);
+            })
+            .catch((err: unknown) => {
+              log.warn('Tab capture failed', { error: err instanceof Error ? err.name : String(err) });
+              widget.setScreenshotError(true, err instanceof Error && err.name === 'NotAllowedError' ? 'permission' : 'error');
+            })
+            .finally(() => {
+              if (host) host.style.visibility = '';
+            });
+        }
+      : undefined,
     onScreenshotRemove: () => {
       log.debug('Screenshot attachment removed');
       pendingScreenshot = null;
@@ -781,6 +840,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       if (container.childElementCount > 0) return;
       let session: AnnotationSession;
       try {
+        const { createScreenshotAnnotation } = await import('./capture/screenshot-annotation');
         session = await createScreenshotAnnotation(pendingScreenshot, container);
       } catch (err) {
         log.warn('Screenshot annotation failed', {
@@ -1140,7 +1200,13 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       deprecated: info.deprecated,
       message,
     });
-    if (activeConfig.widget?.outdatedBanner !== 'console-only') {
+    // A developer instruction: never shown to an app's end users (see
+    // shouldShowSdkFreshness). The console warning above always fires.
+    if (shouldShowSdkFreshness(
+      activeConfig.widget?.outdatedBanner,
+      Boolean(activeConfig.debug),
+      typeof location === 'undefined' ? undefined : location,
+    )) {
       widget.setSdkFreshness({
         latest,
         current: MUSHI_SDK_VERSION,

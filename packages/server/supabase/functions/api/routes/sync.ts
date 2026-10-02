@@ -25,7 +25,7 @@ import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { apiKeyAuth, requireApiKeyScope } from '../../_shared/auth.ts'
-import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts'
+import { notifyReportStatusTransition } from '../../_shared/report-status-notify.ts'
 import { normalizeSyncStatus, isReporterFixedStatus, toStoredStatus } from '../../_shared/report-status.ts'
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts'
 import { postReporterReply, computeTwoWayHealth } from '../../_shared/reporter-comms.ts'
@@ -382,18 +382,23 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
       (isReporterFixedStatus(canonicalStatus) || canonicalStatus === 'dismissed') &&
       toStoredStatus(existing.status) !== updates['status']
     ) {
-      const notifType = isReporterFixedStatus(canonicalStatus) ? 'fixed' : 'dismissed'
       // reporter_token_hash is not on existing (select was minimal) — re-fetch it.
+      // One path for every status message (Plan 018): the review-mode Outbox
+      // hold, followers and the closed-reason copy apply to CLI triage too.
       db.from('reports')
-        .select('reporter_token_hash')
+        .select('reporter_token_hash, closed_reason')
         .eq('id', id)
         .eq('project_id', projectId)
         .maybeSingle()
         .then(({ data: r }) => {
           if (!r?.reporter_token_hash) return
-          return createNotification(db, projectId, id, r.reporter_token_hash, notifType, {
-            message: buildNotificationMessage(notifType, {}),
+          return notifyReportStatusTransition(db, {
+            projectId,
             reportId: id,
+            reporterTokenHash: r.reporter_token_hash,
+            previousStatus: existing.status,
+            newStatus: updates['status'] as string,
+            closedReason: (r as { closed_reason?: string | null }).closed_reason ?? null,
           })
         })
         .then(() => null, () => null)

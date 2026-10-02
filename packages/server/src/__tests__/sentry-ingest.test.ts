@@ -178,3 +178,67 @@ describe('ingestSentryError', () => {
     expect(state.inserted).toHaveLength(0)
   })
 })
+
+describe('ingestSentryError — import intake, extra, frames', () => {
+  let state: Parameters<typeof makeDbStub>[0]
+
+  beforeEach(() => {
+    state = { links: [], reports: [], inserted: [], updated: [] }
+  })
+
+  it('an import of an already-linked fixed issue answers linked and never reopens it', async () => {
+    state.links = [{ report_id: 'r-1' }]
+    state.reports = [{ id: 'r-1', status: 'fixed', regression_count: 0 }]
+    const result = await mod.ingestSentryError(makeDbStub(state), {
+      projectId: 'proj-1',
+      event: EVENT,
+      issue: null,
+      triggerClassification: () => {},
+      intake: 'import',
+    })
+    expect(result).toEqual({ outcome: 'linked', reportId: 'r-1' })
+    expect(state.updated).toHaveLength(0)
+    expect(state.inserted).toHaveLength(0)
+  })
+
+  it('folds event extra into the description and stores frame paths + intake', async () => {
+    await mod.ingestSentryError(makeDbStub(state), {
+      projectId: 'proj-1',
+      event: {
+        ...EVENT,
+        extra: { error: { message: 'JWT expired', code: 'PGRST301' }, logMessage: 'fetch_patterns_failed' },
+        exception: {
+          values: [
+            {
+              type: 'Error',
+              value: '[object Object]',
+              stacktrace: { frames: [{ filename: 'app:///stores/mistake-patterns.ts', lineno: 58, in_app: true }] },
+            },
+          ],
+        },
+      },
+      issue: { id: '4501', shortId: 'GLOT-IT-C4' },
+      triggerClassification: () => {},
+      intake: 'import',
+    })
+    const report = state.inserted.find((i) => i.table === 'reports')!.row
+    expect(report.description).toContain('Event extra:')
+    expect(report.description).toContain('PGRST301')
+    expect(report.description).toContain('logMessage: fetch_patterns_failed')
+    const meta = report.custom_metadata as Row
+    expect(meta.source).toBe('sentry_webhook')
+    expect(meta.intake).toBe('import')
+    expect(meta.sentryShortId).toBe('GLOT-IT-C4')
+    expect(meta.sentryFrames).toEqual(['stores/mistake-patterns.ts'])
+  })
+})
+
+describe('formatSentryExtra', () => {
+  it('bounds each value and the whole block', () => {
+    const block = mod.formatSentryExtra({ a: 'x'.repeat(1000), b: null, c: 'short' }, 400)!
+    expect(block.length).toBeLessThanOrEqual(401)
+    expect(block).not.toContain('b:')
+    expect(mod.formatSentryExtra(null)).toBeNull()
+    expect(mod.formatSentryExtra({})).toBeNull()
+  })
+})

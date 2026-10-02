@@ -20,6 +20,9 @@ import {
   setActiveProjectIdSnapshot,
 } from '../lib/activeProject'
 import { useCreateProject } from '../lib/useCreateProject'
+import { ACTIVE_ORG_QUERY_PARAM, getActiveOrgIdSnapshot, setActiveOrgIdSnapshot, useActiveOrgSignal } from '../lib/activeOrg'
+import { findProjectTeam, lastTeamProject, rememberTeamProject } from '../lib/crossTeamProject'
+import { useToast } from '../lib/toast'
 import { ProjectFavicon } from './ProjectFavicon'
 import { ErrorAlert } from './ui'
 import { ProjectHeartbeatStrip } from './ProjectHeartbeatStrip'
@@ -52,12 +55,30 @@ export function ProjectSwitcher() {
     },
   })
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const toast = useToast()
+
+  // Which team the loaded project list belongs to. On a team switch the list
+  // stays the old team's until the refetch lands (stale-while-revalidate);
+  // resolving against it put the OLD team's first project back in the URL,
+  // and every panel then 404'd until a reload.
+  const activeOrg = useActiveOrgSignal()
+  const [listOrg, setListOrg] = useState<string | null>(null)
+  useEffect(() => {
+    if (setup.data) setListOrg(activeOrg)
+    // Stamp only when a new list arrives; an org change alone must not
+    // re-label the old list as the new team's, so activeOrg stays out of deps.
+  }, [setup.data])
+  const listIsCurrent = listOrg === activeOrg
+
+  // A deep link to a project in another of the user's teams: find that team
+  // and switch to it, once per project id.
+  const probedRef = useRef<string | null>(null)
 
   // Hydrate the active project from URL > localStorage > first project. Once
   // we've picked one, mirror it into both stores so the rest of the app can
   // read either without thinking about precedence.
   useEffect(() => {
-    if (setup.loading || !setup.data) return
+    if (setup.loading || !setup.data || !listIsCurrent) return
     const projects = setup.data.projects
     if (projects.length === 0) return
     const fromUrl = searchParams.get(ACTIVE_PROJECT_QUERY_PARAM)
@@ -75,7 +96,9 @@ export function ProjectSwitcher() {
     const candidate =
       (fromUrl && isValidProjectId(fromUrl) ? fromUrl : null) ?? fromStorage
     const known = projects.find((p) => p.project_id === candidate)
+    const orgId = getActiveOrgIdSnapshot()
     if (known) {
+      if (orgId) rememberTeamProject(orgId, known.project_id)
       if (fromStorage !== known.project_id) {
         setActiveProjectIdSnapshot(known.project_id)
       }
@@ -87,18 +110,41 @@ export function ProjectSwitcher() {
       return
     }
     // A valid project id in the URL that this list doesn't contain is a deep
-    // link (another org's project, or a stale pin): leave it alone. Pages that
-    // resolve their own project (report detail) rewrite the param themselves —
-    // overriding it to the first owned project here would fight that rewrite
-    // and flicker the address bar in a loop.
-    if (fromUrl && isValidProjectId(fromUrl)) return
-    // No valid candidate — fall back to first owned project.
-    const fallbackId = projects[0].project_id
+    // link (another team's project, or a stale pin). Don't override it to the
+    // first project here: pages that resolve their own project (report
+    // detail) rewrite the param themselves, and fighting that rewrite
+    // flickers the address bar in a loop. Instead, look for the team that
+    // owns it and switch there.
+    if (fromUrl && isValidProjectId(fromUrl)) {
+      if (probedRef.current === fromUrl) return
+      probedRef.current = fromUrl
+      void findProjectTeam(fromUrl, orgId).then((team) => {
+        if (!team) return
+        // Still the same link? The user may have navigated on meanwhile.
+        if (new URLSearchParams(window.location.search).get(ACTIVE_PROJECT_QUERY_PARAM) !== fromUrl) return
+        setActiveOrgIdSnapshot(team.id)
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev)
+            next.set(ACTIVE_ORG_QUERY_PARAM, team.id)
+            return next
+          },
+          { replace: true },
+        )
+        toast.info(`Switched to team ${team.name}`, 'The project in this link belongs to that team.')
+      })
+      return
+    }
+    // No valid candidate: the team's last-used project, else its first.
+    const remembered = orgId ? lastTeamProject(orgId) : null
+    const fallbackId =
+      projects.find((p) => p.project_id === remembered)?.project_id ?? projects[0].project_id
+    if (orgId) rememberTeamProject(orgId, fallbackId)
     setActiveProjectIdSnapshot(fallbackId)
     const next = new URLSearchParams(searchParams)
     next.set(ACTIVE_PROJECT_QUERY_PARAM, fallbackId)
     setSearchParams(next, { replace: true })
-  }, [setup.loading, setup.data, searchParams])
+  }, [setup.loading, setup.data, searchParams, listIsCurrent, setSearchParams, toast])
 
   // Close on outside click so the dropdown doesn't stay pinned open behind nav.
   useEffect(() => {
@@ -143,6 +189,8 @@ export function ProjectSwitcher() {
   const active = projects.find((p) => p.project_id === activeId) ?? projects[0]
 
   function pick(id: string) {
+    const orgId = getActiveOrgIdSnapshot()
+    if (orgId) rememberTeamProject(orgId, id)
     setActiveProjectIdSnapshot(id)
     const next = new URLSearchParams(searchParams)
     next.set(ACTIVE_PROJECT_QUERY_PARAM, id)
