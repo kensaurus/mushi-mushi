@@ -86,14 +86,22 @@ function toFunctionRequest(publicUrl: URL): { url: URL; headers: Headers } | nul
 interface FakeNetwork {
   fetchFn: (input: string | URL, init?: RequestInit) => Promise<Response>
   requests: string[]
+  tokenRequests: URLSearchParams[]
 }
 
 function fakeNetwork(): FakeNetwork {
   const requests: string[] = []
+  const tokenRequests: URLSearchParams[] = []
   const fetchFn = async (input: string | URL, init?: RequestInit): Promise<Response> => {
     const url = new URL(String(input))
     const method = init?.method ?? 'GET'
     requests.push(`${method} ${url.href}`)
+    if (method === 'POST' && url.href === `${FN_BASE}/oauth/token`) {
+      // Stand-in for the token endpoint: echo what the client sent.
+      const form = new URLSearchParams(String(init?.body))
+      tokenRequests.push(form)
+      return Response.json({ access_token: 'mushi_fixture', token_type: 'bearer' }, { status: 200 })
+    }
     if (method === 'POST' && url.href === `${FN_BASE}/oauth/register`) {
       // Stand-in for api/routes/mcp-oauth.ts — reaching it is the point.
       const body = JSON.parse(String(init?.body)) as OAuthClientMetadata
@@ -104,7 +112,7 @@ function fakeNetwork(): FakeNetwork {
     if (document === null) return new Response('not found', { status: 404 })
     return new Response(document, { status: 200, headers: { 'Content-Type': 'application/json' } })
   }
-  return { fetchFn, requests }
+  return { fetchFn, requests, tokenRequests }
 }
 
 /** The WWW-Authenticate challenge the function sends on an unauthenticated POST. */
@@ -161,6 +169,16 @@ const SERVER_URLS: Array<[label: string, serverUrl: string, expectedResource: st
   ['Supabase function URL, trailing slash', `${FN_BASE}/`, FN_BASE],
   ['kensaur.us proxy URL', PUBLIC_BASE, PUBLIC_BASE],
   ['kensaur.us proxy URL, trailing slash', `${PUBLIC_BASE}/`, PUBLIC_BASE],
+  // Published configs add ?features= to widen the tool set. The query is not
+  // part of the protected resource: discovery, the resource match and the
+  // authorize redirect must behave exactly as without it.
+  ['Supabase function URL with ?features=all', `${FN_BASE}?features=all`, FN_BASE],
+  [
+    'Supabase function URL with a features list',
+    `${FN_BASE}?features=triage,fixes,inventory,setup,docs`,
+    FN_BASE,
+  ],
+  ['kensaur.us proxy URL with ?features=all', `${PUBLIC_BASE}?features=all`, PUBLIC_BASE],
 ]
 
 describe('hosted MCP OAuth discovery under the official SDK', () => {
@@ -189,6 +207,45 @@ describe('hosted MCP OAuth discovery under the official SDK', () => {
     expect(authorize?.origin + (authorize?.pathname ?? '')).toBe(`${FN_BASE}/oauth/authorize`)
     expect(authorize?.searchParams.get('client_id')).toBe('fixture-client-id')
     expect(authorize?.searchParams.get('resource')?.replace(/\/$/, '')).toBe(expected)
+  })
+
+  it.each(SERVER_URLS)('%s: the code exchange reaches the token endpoint with the same resource', async (_l, serverUrl, expected) => {
+    const { fetchFn, tokenRequests } = fakeNetwork()
+    const provider = new RecordingProvider()
+    provider.client = { client_id: 'fixture-client-id' }
+    provider.verifier = 'fixture-verifier'
+    const result = await auth(provider, {
+      serverUrl,
+      authorizationCode: 'fixture-code',
+      resourceMetadataUrl: challengeFor(serverUrl),
+      fetchFn,
+    })
+    expect(result).toBe('AUTHORIZED')
+    expect(tokenRequests).toHaveLength(1)
+    expect(tokenRequests[0].get('grant_type')).toBe('authorization_code')
+    expect(tokenRequests[0].get('resource')?.replace(/\/$/, '')).toBe(expected)
+  })
+
+  // 2026-10-02: Claude Code reported "HTTP 404 dialing …/mcp?features=…". Its
+  // log showed a CACHED discovery state naming the supabase.co origin root as
+  // the authorization server. That state is what the SDK derives when it runs
+  // discovery WITHOUT the 401's resource_metadata hint: the Supabase origin
+  // cannot serve path-inserted or root well-known URLs, so it falls back to
+  // the origin and registers at /register, which 404s. Nothing on the server
+  // can correct a client that skips the hint; the user clears the stored
+  // auth. This pins the mechanism so nobody "fixes" the query instead.
+  it('without the resource_metadata hint, discovery on the Supabase origin falls back to its root', async () => {
+    const { fetchFn, requests } = fakeNetwork()
+    const provider = new RecordingProvider()
+    // The same error Claude Code surfaced as "HTTP 404 dialing …".
+    await expect(auth(provider, { serverUrl: `${FN_BASE}?features=all`, fetchFn })).rejects.toThrow(/HTTP 404/)
+    expect(requests).toContain(`POST ${SUPABASE_URL}/register`)
+    expect(provider.client).toBeUndefined()
+  })
+
+  it('every 401 challenge names the protected-resource document, with or without ?features=', () => {
+    expect(challengeFor(`${FN_BASE}?features=all`).href).toBe(`${FN_BASE}/.well-known/oauth-protected-resource`)
+    expect(challengeFor(FN_BASE).href).toBe(`${FN_BASE}/.well-known/oauth-protected-resource`)
   })
 
   it('reaches the AS metadata through the path-appended openid-configuration the Supabase origin can serve', async () => {
