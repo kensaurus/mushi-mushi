@@ -147,6 +147,8 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   get_codebase_domains: 'codebase',
   analyze_codebase_impact: 'codebase',
   analyze_wiki_knowledge: 'codebase',
+  // The digest needs no index, so it ships on the default surface (Plan 020 §10.3.1).
+  get_repo_digest: 'fixes',
 
   // docs / orientation
   search_mushi_docs: 'docs',

@@ -4,7 +4,7 @@
     "kensaurus"
   ],
   "name": "mushi-mushi",
-  "description": "MCP server for Cursor, Claude Code and Copilot. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor. 80 tools to triage user-reported bugs, pull a fix packet with evidence and blast radius, and dispatch a fix PR. Run it with npx @mushi-mushi/mcp. SDKs MIT · server AGPLv3 · enterprise edition commercial.",
+  "description": "MCP server for Cursor, Claude Code and Copilot. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor. 81 tools to triage user-reported bugs, pull a fix packet with evidence and blast radius, and dispatch a fix PR. Run it with npx @mushi-mushi/mcp. SDKs MIT · server AGPLv3 · enterprise edition commercial.",
   "license": "MIT",
   "tools": [
     {
@@ -310,6 +310,10 @@
     {
       "name": "analyze_wiki_knowledge",
       "description": "Return the wiki/docs knowledge-graph nodes and their sources for the project. Returns { nodes: [{ id, label, source_url }], sources }. Read-only. Use to see what doc entities exist; pass include_wiki=true to ask_codebase to merge this corpus into a grounded answer."
+    },
+    {
+      "name": "get_repo_digest",
+      "description": "Return the connected GitHub repo as one paste-ready text digest at a pinned commit: a directory tree plus file contents, ranked README → manifests → entry points → source → tests and cut to a token budget (budgetTokens, default 50,000, max 200,000; counts are estimates). Scope it to a folder (path) or to one bug (reportId: the report's stack-frame files, fix files and related code first, then the files that import them). Sensitive files (.env, keys) are never included, and a file that looks like it holds a secret is replaced with a notice. Returns { sha, ref, total_tokens, budget_tokens, files: [{ path, tokens, truncated }], dropped_counts, redacted, scope, text }. Works without codebase indexing. Read-only. Use to hand yourself the code around a bug before fixing it; use get_fix_context for the diagnosis, or search_codebase to find one thing."
     }
   ]
 }

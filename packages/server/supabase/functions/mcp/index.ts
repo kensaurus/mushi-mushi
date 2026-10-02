@@ -1715,6 +1715,7 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'get_product_events_summary',
   'get_user_paths',
   'list_reporter_outbox',
+  'get_repo_digest',
 ])
 
 /**

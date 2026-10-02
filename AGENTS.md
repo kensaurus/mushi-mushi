@@ -323,7 +323,7 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **80 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **81 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 
@@ -611,7 +611,7 @@ Server-hosted **Codebase Understand** surface in the admin console — parity wi
 | `project_codebase_wiki_sources` / `…_knowledge_*` | Wiki ingest + RAG merge via `match_knowledge_chunks` |
 | `project_settings.codebase_index_scope_paths` | Scoped subdirectory indexing |
 
-**MCP tools:** `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `search_codebase`, `get_codebase_domains`, `analyze_codebase_impact`, `analyze_wiki_knowledge`.
+**MCP tools:** `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `search_codebase`, `get_codebase_domains`, `analyze_codebase_impact`, `analyze_wiki_knowledge`, `get_repo_digest` (on the default feature set; needs no index).
 
 Graph builder concepts attributed to **Understand-Anything (MIT)** — see `packages/codebase-graph/README.md` and `_shared/codebase-graph-build.ts`.
 
