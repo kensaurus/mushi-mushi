@@ -63,6 +63,7 @@ import {
   EnvironmentFields,
 } from '../components/report-detail/ReportEvidence'
 import { ReportComments } from '../components/report-detail/ReportComments'
+import { ReporterViewPanel } from '../components/report-detail/ReporterViewPanel'
 import { TimelineCard } from '../components/report-detail/TimelineCard'
 import { screenshotEmptyText } from '../components/report-detail/reportCaptureHints'
 import { UnifiedTimelineCard } from '../components/report-detail/UnifiedTimelineCard'
@@ -717,6 +718,10 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
 
       <div className="mt-3">
         <ReportComments reportId={report.id} projectId={report.project_id} />
+      </div>
+
+      <div className="mt-3">
+        <ReporterViewPanel reportId={report.id} />
       </div>
 
       {/* Identifiers live at the bottom: UUIDs are reference material for
