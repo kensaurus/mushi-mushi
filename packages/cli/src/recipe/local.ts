@@ -18,13 +18,13 @@ const MAX_MANIFEST_BYTES = 64 * 1024
 const MAX_FILE_BYTES = 512 * 1024
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'out', 'coverage', '.turbo', 'Pods', '.gradle'])
 
-export interface RecipeIssue {
+interface RecipeIssue {
   severity: 'info' | 'warn' | 'error'
   message: string
   path?: string
 }
 
-export interface OffTokenFinding {
+interface OffTokenFinding {
   ruleId: 'off_token_literal'
   filePath: string
   line: number
@@ -104,7 +104,7 @@ function normHex(v: string): string {
 }
 
 /** Every hex colour a DTCG file defines ($value strings or { hex } objects). */
-export function tokenHexes(node: unknown, out = new Set<string>()): Set<string> {
+function tokenHexes(node: unknown, out = new Set<string>()): Set<string> {
   if (Array.isArray(node)) {
     for (const x of node) tokenHexes(x, out)
   } else if (node && typeof node === 'object') {

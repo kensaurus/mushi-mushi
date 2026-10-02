@@ -224,6 +224,24 @@ mushi radar show                     # every hole check for this project and wha
 
 ---
 
+## Store listings
+
+Copy the live App Store and Google Play listings into the repo once, so the
+listing lives as code. It runs with your own keys and sends nothing to Mushi.
+Your own CI publishes listing changes after that.
+
+```bash
+mushi store pull --asc-key-id <id> --asc-issuer-id <id> --asc-key-path AuthKey.p8 \
+  --play-key-path play-service-account.json
+```
+
+It reads `store.listingDir`, `store.ios.appleId` and `store.android.package`
+from `mushi.recipe.json`. The keys can also come from `MUSHI_ASC_KEY_ID`,
+`MUSHI_ASC_ISSUER_ID`, `MUSHI_ASC_KEY_PATH` and
+`GOOGLE_APPLICATION_CREDENTIALS`. Review the files before you commit them.
+
+---
+
 ## Skill pipelines
 
 ```bash
@@ -281,6 +299,7 @@ mushi test                           # synthetic report end-to-end
 | `MUSHI_CONSOLE_URL` | Admin console base for CLI hints + browser opens |
 | `MUSHI_BYOK_KEY` | BYOK key value for `mushi keys add` (keeps key out of shell history) |
 | `MUSHI_NO_UPDATE_CHECK=1` | Skip npm registry version nudge in `mushi init` |
+| `MUSHI_ASC_KEY_ID`, `MUSHI_ASC_ISSUER_ID`, `MUSHI_ASC_KEY_PATH` | Your App Store Connect key for `mushi store pull` (read on your machine, never sent to Mushi) |
 
 ### Config file
 
