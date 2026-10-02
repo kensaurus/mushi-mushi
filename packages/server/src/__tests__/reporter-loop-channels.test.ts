@@ -47,11 +47,13 @@ type Digest = typeof import('../../supabase/functions/_shared/reporter-digest.ts
 type Optin = typeof import('../../supabase/functions/_shared/reporter-optin.ts')
 type EmailPolicy = typeof import('../../supabase/functions/_shared/reporter-email.ts')
 type Copy = typeof import('../../supabase/functions/_shared/reporter-copy.ts')
+type Settings = typeof import('../../supabase/functions/_shared/reporter-settings.ts')
 let n: Notifications
 let digest: Digest
 let optin: Optin
 let policy: EmailPolicy
 let copy: Copy
+let settingsMod: Settings
 
 beforeAll(async () => {
   n = await import('../../supabase/functions/_shared/notifications.ts')
@@ -59,6 +61,7 @@ beforeAll(async () => {
   optin = await import('../../supabase/functions/_shared/reporter-optin.ts')
   policy = await import('../../supabase/functions/_shared/reporter-email.ts')
   copy = await import('../../supabase/functions/_shared/reporter-copy.ts')
+  settingsMod = await import('../../supabase/functions/_shared/reporter-settings.ts')
 })
 
 beforeEach(() => {
@@ -462,5 +465,53 @@ describe('per-project templates', () => {
     expect(policy.templateError('x'.repeat(281))).toMatch(/280/)
     expect(policy.templateError('   ')).toMatch(/empty/)
     expect(policy.sanitizeTemplates({ fixed: 'ok', bogus: 'no', released: '{evil}' })).toEqual({ fixed: 'ok' })
+  })
+})
+
+describe('console settings update', () => {
+  it('accepts mode, both gates and templates; empty template resets to the built-in wording', () => {
+    expect(
+      settingsMod.parseReporterSettingsUpdate({
+        mode: 'review',
+        email_enabled: true,
+        push_enabled: false,
+        templates: { fixed: '  Fixed in {app}!  ', released: '' },
+      }),
+    ).toEqual({
+      ok: true,
+      patch: {
+        reporter_updates_mode: 'review',
+        reporter_email_enabled: true,
+        reporter_push_enabled: false,
+        reporter_templates: { fixed: 'Fixed in {app}!' },
+      },
+    })
+  })
+
+  it('rejects unknown keys, bad placeholders and secrets', () => {
+    expect(settingsMod.parseReporterSettingsUpdate({ mode: 'sometimes' })).toMatchObject({ ok: false, field: 'mode' })
+    expect(settingsMod.parseReporterSettingsUpdate({ email_enabled: 'yes' })).toMatchObject({ ok: false, field: 'email_enabled' })
+    expect(settingsMod.parseReporterSettingsUpdate({ templates: { comment_reply: 'x' } })).toMatchObject({ ok: false, field: 'templates.comment_reply' })
+    expect(settingsMod.parseReporterSettingsUpdate({ templates: { fixed: 'Hi {user}' } })).toMatchObject({ ok: false, code: 'VALIDATION_ERROR' })
+    expect(settingsMod.parseReporterSettingsUpdate({ templates: { fixed: 'key ghp_abcdefghijklmnopqrstuvwxyz0123' } })).toMatchObject({
+      ok: false,
+      code: 'SECRET_DETECTED',
+    })
+  })
+
+  it('summarises the ledger by reason without leaking provider error text', () => {
+    const out = settingsMod.summarizeDeliveries([
+      { channel: 'email', status: 'skipped', error_message: 'not_configured' },
+      { channel: 'email', status: 'skipped', error_message: 'not_configured' },
+      { channel: 'email', status: 'failed', error_message: 'Resend 422: {"to":"secret@example.com"}' },
+      { channel: 'push', status: 'skipped', error_message: 'capped' },
+      { channel: 'email', status: 'sent', error_message: null },
+      { channel: 'in_app', status: 'sent', error_message: null },
+    ])
+    expect(out[0]).toEqual({ channel: 'email', status: 'skipped', reason: 'not_configured', count: 2 })
+    expect(out).toContainEqual({ channel: 'email', status: 'failed', reason: 'error', count: 1 })
+    expect(out).toContainEqual({ channel: 'push', status: 'skipped', reason: 'capped', count: 1 })
+    expect(JSON.stringify(out)).not.toContain('secret@example.com')
+    expect(out.some((r) => (r.channel as string) === 'in_app')).toBe(false)
   })
 })

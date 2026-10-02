@@ -49,6 +49,8 @@ const REVIEWED = new Map<string, 'keyed' | 'stored' | 'sentinel'>([
   ['api/routes/reporter-admin.ts reporter_token_hash', 'stored'], // reporter-view reads the reports row
   ['_shared/reporter-reply-signals.ts reporter_token_hash', 'stored'], // reopen reads the row back
   ['_shared/notifications.ts reporter_token_hash', 'stored'], // callers pass a row value
+  ['_shared/reporter-optin.ts reporter_token_hash', 'stored'], // auth.tokenHash from resolveReporterAuth
+  ['_shared/reporter-digest.ts reporter_token_hash', 'stored'], // deferred ledger row read back
   ['_shared/reputation.ts reporter_token_hash', 'stored'], // caller passes the key
   ['_shared/telemetry.ts reporter_token_hash', 'stored'], // caller passes the key
   ['_shared/anti-gaming.ts reporter_tokens', 'stored'], // caller passes the key, or 'tester:<id>'
