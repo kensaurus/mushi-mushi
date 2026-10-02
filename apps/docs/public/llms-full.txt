@@ -13968,15 +13968,11 @@ built. A number that could not be fetched says so instead of showing zero.
 - **The GitHub star count.** It is small and says little about whether anyone
   uses Mushi. The repository is
   [public](https://github.com/kensaurus/mushi-mushi) if you want to look.
-- **Product usage.** Signups, activated projects and paying customers come from
-  our own database, not a public API. The last published snapshot is in the
-  build-in-public post
+- **Product usage, unless it is published above.** Signups, activated
+  projects and paying customers come from our own database, not a public API.
+  The last published snapshot is in the build-in-public post
   [I shipped a bug tool for 5 months and got 9 signups](/blog/nine-signups-what-the-data-said)
   (numbers as of 2026-09-20).
-
-  **Owner to fill:** a "Product" section with the latest weekly row from the
-  GTM scorecard (activated external projects, signups, paid) and its date.
-  Publish only numbers the scorecard already holds.
 
 ## Where the numbers come from
 
