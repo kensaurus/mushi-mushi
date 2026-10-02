@@ -262,9 +262,11 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
        accent-filled action per view. */
     .mushi-panel {
       position: fixed;
-      width: ${panelWidth}px;
+      /* One screen, free text first: wider and taller than the old 3-step
+         card so the whole report fits without an inner scroll on desktop. */
+      width: calc(${panelWidth}px + 40px);
       max-width: calc(100vw - 32px);
-      max-height: min(${panelMaxHeight}px, calc(100dvh - 96px - var(--mushi-keyboard-inset, 0px)));
+      max-height: min(calc(${panelMaxHeight}px + 160px), calc(100dvh - 96px - var(--mushi-keyboard-inset, 0px)));
       background: var(--_bg);
       color: var(--_fg);
       border: 1px solid var(--_border);
@@ -322,7 +324,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     .mushi-outdated { margin: 8px 12px 0; padding: 8px 10px; border-radius: 8px; background: var(--_surface); font-size: 12px; }
 
     .mushi-header { display: flex; align-items: center; gap: 2px; min-height: 56px; padding: 6px 6px 6px 16px; border-bottom: 1px solid var(--_border); }
-    .mushi-title { flex: 1; min-width: 0; margin: 0; font-size: 16px; font-weight: 600; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mushi-title { flex: 1; min-width: 0; margin: 0; font-size: 16px; font-weight: 600; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
     .mushi-title:focus { outline: none; }
     .mushi-header-host-icon { width: 20px; height: 20px; margin-right: 8px; border-radius: 4px; object-fit: contain; }
     .mushi-header .mushi-icon-btn:first-child { margin-left: -10px; }
@@ -425,12 +427,13 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     .mushi-row-news { font-size: 13px; }
     .unread .mushi-row-title, .unread .mushi-row-news { font-weight: 600; }
     .mushi-roadmap-row .mushi-btn { align-self: flex-start; }
+    /* Tone text leans 15% toward the ink so every pill clears 4.5:1 on its tint. */
     .mushi-pill { flex: none; display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; line-height: 1.5; white-space: nowrap; }
     .mushi-tone-neutral, .mushi-tone-muted { background: var(--_surface); color: var(--_muted); }
-    .mushi-tone-info { background: ${statusSent.bg}; color: ${statusSent.fg}; }
-    .mushi-tone-attention { background: ${statusReview.bg}; color: ${statusReview.fg}; }
-    .mushi-tone-progress { background: ${statusFixing.bg}; color: ${statusFixing.fg}; }
-    .mushi-tone-success, .mushi-tone-success-muted { background: ${statusFixed.bg}; color: ${statusFixed.fg}; }
+    .mushi-tone-info { background: ${statusSent.bg}; color: color-mix(in oklab, ${statusSent.fg} 85%, var(--_fg)); }
+    .mushi-tone-attention { background: ${statusReview.bg}; color: color-mix(in oklab, ${statusReview.fg} 85%, var(--_fg)); }
+    .mushi-tone-progress { background: ${statusFixing.bg}; color: color-mix(in oklab, ${statusFixing.fg} 85%, var(--_fg)); }
+    .mushi-tone-success, .mushi-tone-success-muted { background: ${statusFixed.bg}; color: color-mix(in oklab, ${statusFixed.fg} 85%, var(--_fg)); }
     .mushi-skeleton { display: flex; flex-direction: column; gap: 8px; }
     .mushi-skeleton span { height: 14px; border-radius: 6px; background: var(--_surface); animation: mushi-shimmer 1.2s ease-in-out infinite alternate; }
     .mushi-skeleton span:nth-child(2) { width: 82%; }
@@ -445,7 +448,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     .mushi-event { display: flex; justify-content: space-between; gap: 8px; padding-left: 10px; border-left: 2px solid var(--_border); font-size: 12px; color: var(--_muted); }
     .mushi-event time, .mushi-bubble time { flex: none; }
     .mushi-bubble, .mushi-assistant-msg { display: flex; flex-direction: column; gap: 2px; max-width: 88%; padding: 8px 12px; border-radius: 12px; background: var(--_surface); white-space: pre-wrap; word-break: break-word; }
-    .mushi-bubble.dev, .mushi-assistant-msg.dev { align-self: flex-start; border-bottom-left-radius: 4px; }
+    .mushi-bubble.dev, .mushi-assistant-msg.dev { align-self: flex-start; border: 1px solid var(--_border); border-bottom-left-radius: 4px; background: none; }
     .mushi-bubble.mine, .mushi-assistant-msg.mine { align-self: flex-end; border-bottom-right-radius: 4px; background: color-mix(in oklab, var(--_fg) 9%, var(--_bg)); }
     .mushi-bubble strong { font-size: 12px; }
     .mushi-bubble p { margin: 0; font-size: 14px; }
@@ -469,7 +472,9 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
 
     /* ── Update toast (§4.2) — near the launcher, once per session ── */
     .mushi-toast { position: fixed; display: flex; align-items: center; gap: 6px; max-width: min(380px, calc(100vw - 32px)); padding: 6px 6px 6px 14px; background: var(--_bg); color: var(--_fg); border: 1px solid var(--_border); border-radius: 12px; box-shadow: var(--_shadow); font-size: 14px; animation: mushi-open 180ms ease-out both; }
-    .mushi-toast span { flex: 1; min-width: 0; }
+    .mushi-toast span { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+    .mushi-toast strong { font-weight: 600; }
+    .mushi-toast small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--_muted); }
     .mushi-toast .mushi-btn { min-height: 36px; padding: 0 12px; }
     .mushi-toast .mushi-icon-btn { min-height: 36px; min-width: 36px; }
     .mushi-toast.bottom-right, .mushi-toast.bottom-left { bottom: calc(var(--mushi-bottom, ${gutter}px) + ${panelLauncherGap}px); }

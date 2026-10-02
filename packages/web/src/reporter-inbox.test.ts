@@ -46,9 +46,13 @@ describe('reporter inbox device rules', () => {
     expect(pickUpdateToast([row({ unread_count: 0 })], 'en', replied)).toBeNull();
     expect(pickUpdateToast([row({ unread_count: 1, last_admin_reply_at: '2026-10-02T00:00:00Z' })], 'en', replied))
       .toEqual({ text: replied, reportId: 'r1' });
+    // A status change with no developer words reads as the status itself.
+    expect(pickUpdateToast([row({ status: 'fixing', unread_count: 1, title: 'Export is slow' })], 'en', replied))
+      .toEqual({ text: 'Fix in progress', reportId: 'r1', detail: 'Export is slow' });
     expect(pickUpdateToast([row({ status: 'resolved', fixed_in_version: '1.4', unread_count: 1 })], 'en', replied))
       .toEqual({ text: 'Fixed in v1.4', reportId: 'r1' });
-    expect(pickUpdateToast([row({ awaiting_reporter: true, unread_count: 1 })], 'ja', replied)!.text).toBe('あなたの返信待ち');
+    // A question from the developer is a reply, not a bare status.
+    expect(pickUpdateToast([row({ awaiting_reporter: true, unread_count: 1 })], 'ja', replied)!.text).toBe(replied);
     expect(pickUpdateToast([row({ unread_count: 2 }), row({ id: 'r2', unread_count: 1 })], 'en', replied))
       .toEqual({ text: '3 updates on your reports', reportId: null });
     // A report hidden from the reporter (spam) never produces a toast.

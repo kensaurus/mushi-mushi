@@ -1070,7 +1070,7 @@ describe('MushiWidget — live-QA polish', () => {
     await vi.advanceTimersByTimeAsync(500);
 
     expect(readStep(w)).toBe('success');
-    expect(q(w, '#mushi-title')!.textContent).toBe('Thanks — report received');
+    expect(q(w, '#mushi-title')!.textContent).toBe('Sent');
     expect(q(w, '[data-action="back"]')).toBeNull();
     expect(q(w, '.mushi-success-receipt-id')!.textContent).toContain('#abcdef12');
     expect(q(w, '.mushi-success-sla')!.textContent).toBe("We'll let you know here when there's news.");

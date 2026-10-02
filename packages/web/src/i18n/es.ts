@@ -146,7 +146,6 @@ export const es: MushiLocale = {
       replyPlaceholder: 'Responder al desarrollador…',
     },
     success: {
-      title: 'Gracias — reporte recibido',
       done: 'Listo',
       trackReport: 'Seguirlo',
       receipt: 'Recibo',
