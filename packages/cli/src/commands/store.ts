@@ -50,7 +50,9 @@ mushi.recipe.json.`)
       const keyPath = opts.ascKeyPath ?? process.env.MUSHI_ASC_KEY_PATH
       if (cfg.appleId && keyId && issuerId && keyPath) {
         try {
-          Object.assign(files, await pullAppStore(fetch, cfg.appleId, { keyId, issuerId, privateKey: readFileSync(keyPath, 'utf8') }, now))
+          const ios = await pullAppStore(fetch, cfg.appleId, { keyId, issuerId, privateKey: readFileSync(keyPath, 'utf8') }, now)
+          if (!Object.keys(ios).some((k) => k.endsWith('/description.txt'))) console.log('App Store: no version is live yet, so only the app name, subtitle and privacy link were pulled.')
+          Object.assign(files, ios)
         } catch (err) {
           process.stderr.write(`App Store: ${(err as Error).message}\n`)
           process.exitCode = 1

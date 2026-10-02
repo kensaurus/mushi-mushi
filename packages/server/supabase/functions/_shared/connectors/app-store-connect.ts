@@ -80,7 +80,7 @@ export const appStoreConnectConnector: RecipeConnector = {
     const apps = bindings.filter((b) => /^\d{6,12}$/.test(b.externalId)).slice(0, 10)
     const out: Array<{ projectId: string; appleId: string; versions: Array<{ version: string; state: string; createdDate: string | null }>; latestBuild: { version: string; processingState: string; uploadedDate: string | null } | null }> = []
     for (const b of apps) {
-      const v = await asc(ctx, key, `/v1/apps/${b.externalId}/appStoreVersions?limit=5&fields[appStoreVersions]=versionString,appStoreState,createdDate`)
+      const v = await asc(ctx, key, `/v1/apps/${b.externalId}/appStoreVersions?limit=5&fields[appStoreVersions]=versionString,appVersionState,appStoreState,createdDate`)
       if (isAgreementBlock(v.status, v.body)) throw new ConnectorError(AGREEMENT_BLOCKED_REASON, 'blocked')
       if (v.status !== 200) throw new ConnectorError(statusReason('App Store Connect', v.status))
       const builds = await asc(ctx, key, `/v1/builds?filter[app]=${b.externalId}&sort=-uploadedDate&limit=1&fields[builds]=version,processingState,uploadedDate`)
@@ -88,11 +88,12 @@ export const appStoreConnectConnector: RecipeConnector = {
       out.push({
         projectId: b.projectId,
         appleId: b.externalId,
-        versions: ((v.body?.data ?? []) as Array<{ attributes?: Record<string, string> }>).map((x) => ({ version: x.attributes?.versionString ?? '', state: x.attributes?.appStoreState ?? 'UNKNOWN', createdDate: x.attributes?.createdDate ?? null })),
+        versions: ((v.body?.data ?? []) as Array<{ attributes?: Record<string, string> }>).map((x) => ({ version: x.attributes?.versionString ?? '', state: x.attributes?.appVersionState ?? x.attributes?.appStoreState ?? 'UNKNOWN', createdDate: x.attributes?.createdDate ?? null })),
         latestBuild: lb ? { version: String(lb.version ?? ''), processingState: String(lb.processingState ?? ''), uploadedDate: lb.uploadedDate ?? null } : null,
       })
     }
-    const live = out[0]?.versions.find((x) => x.state === 'READY_FOR_SALE')?.version ?? null
+    // appVersionState (READY_FOR_DISTRIBUTION) replaced the deprecated appStoreState (READY_FOR_SALE).
+    const live = out[0]?.versions.find((x) => x.state === 'READY_FOR_DISTRIBUTION' || x.state === 'READY_FOR_SALE')?.version ?? null
     return {
       observedAt: ctx.now().toISOString(),
       elements: { deploy: { summary: { iosLive: live, iosInReview: out[0]?.versions.some((x) => /IN_REVIEW|WAITING_FOR_REVIEW/.test(x.state)) ?? null } } },
