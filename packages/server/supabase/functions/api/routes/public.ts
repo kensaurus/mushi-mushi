@@ -732,30 +732,50 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   // because Sentry doesn't propagate custom headers to internal integrations.
 
   app.post('/v1/webhooks/sentry/seer', async (c) => {
-    const {
-      verifySentryHookSignature,
-      parseIssueWebhookBody,
-      parseSeerAutofixBody,
-      applySeerAnalysis,
-    } = await import('../_shared/seer.ts');
+    const t0 = Date.now();
+    const { parseIssueWebhookBody, parseSeerAutofixBody, applySeerAnalysis } = await import(
+      '../../_shared/seer.ts'
+    );
+    const { readSentryHookHeaders, verifySentryDelivery } = await import('../../_shared/sentry-webhook-verify.ts');
+    const { audit, hasAcceptedDuplicate, checkRateLimit } = createWebhookMiddleware('sentry_seer');
+    const hookHeaders = readSentryHookHeaders((name) => c.req.header(name));
+    const rawBody = await c.req.text();
+    const sourceIp = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null;
+
+    const auditRow = await audit(c as never, rawBody, hookHeaders.requestId);
+    // Every return after this point goes through `done` so the audit row is
+    // resolved (a 2xx is recorded as accepted, which feeds the replay check).
+    const done = async (res: Response, error?: string): Promise<Response> => {
+      await auditRow.resolve(res.status < 400 ? 'accepted' : 'error', res.status, Date.now() - t0, error);
+      return res;
+    };
+    try {
+      checkRateLimit(sourceIp);
+    } catch (err) {
+      if (err instanceof RateLimitError) {
+        await auditRow.resolve('rejected_rate_limit', 429, Date.now() - t0, err.message);
+        return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: err.message } }, 429);
+      }
+      throw err;
+    }
 
     const projectId = c.req.query('projectId') ?? c.req.header('X-Mushi-Project') ?? '';
     if (!projectId) {
-      return c.json(
-        {
-          ok: false,
-          error: {
-            code: 'MISSING_PROJECT',
-            message: 'projectId query param or X-Mushi-Project header is required',
+      return done(
+        c.json(
+          {
+            ok: false,
+            error: {
+              code: 'MISSING_PROJECT',
+              message: 'projectId query param or X-Mushi-Project header is required',
+            },
           },
-        },
-        400,
+          400,
+        ),
+        'Cannot determine project',
       );
     }
-
-    const rawBody = await c.req.text();
-    const signature =
-      c.req.header('Sentry-Hook-Signature') ?? c.req.header('X-Sentry-Hook-Signature');
+    void auditRow.setProject(projectId).catch(() => {});
 
     const db = getServiceClient();
     const { data: settings } = await db
@@ -764,45 +784,41 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       .eq('project_id', projectId)
       .maybeSingle();
 
-    if (!settings?.sentry_webhook_secret) {
-      return c.json(
-        {
-          ok: false,
-          error: {
-            code: 'NO_SECRET',
-            message: 'Sentry webhook secret not configured for this project',
-          },
-        },
-        403,
-      );
-    }
-    if (!settings.sentry_seer_enabled) {
-      return c.json({ ok: true, data: { ignored: 'seer_disabled' } }, 202);
-    }
-
-    // Same Vault-backed secret as /v1/webhooks/sentry; unreadable → reject.
+    // Same Vault-backed secret and the same checks as /v1/webhooks/sentry:
+    // signature, timestamp window, Request-ID + body replay.
     const { dereferenceMaybeVault } = await import('../../_shared/integration-probes.ts');
-    const seerSecret = await dereferenceMaybeVault(db, settings.sentry_webhook_secret);
-    const valid = seerSecret
-      ? await verifySentryHookSignature(rawBody, signature ?? null, seerSecret)
-      : false;
-    if (!valid) {
-      return c.json(
-        { ok: false, error: { code: 'BAD_SIGNATURE', message: 'Invalid HMAC signature' } },
-        401,
+    const seerSecret = await dereferenceMaybeVault(db, settings?.sentry_webhook_secret ?? null);
+    let verdict: Awaited<ReturnType<typeof verifySentryDelivery>>;
+    try {
+      verdict = await verifySentryDelivery(
+        { headers: hookHeaders, body: rawBody, secret: seerSecret, nowMs: Date.now() },
+        {
+          isReplay: ({ requestId, bodyHash }) =>
+            hasAcceptedDuplicate(auditRow.id, { deliveryId: requestId, bodyHash }),
+        },
       );
+    } catch (err) {
+      await auditRow.resolve('error', 500, Date.now() - t0, String(err).slice(0, 300));
+      return c.json({ ok: false, error: { code: 'VERIFY_FAILED', message: 'Could not verify delivery' } }, 500);
+    }
+    if (!verdict.ok) {
+      await auditRow.resolve(verdict.auditOutcome, verdict.status, Date.now() - t0, verdict.message);
+      return c.json({ ok: false, error: { code: verdict.code, message: verdict.message } }, verdict.status);
+    }
+    if (!settings?.sentry_seer_enabled) {
+      return done(c.json({ ok: true, data: { ignored: 'seer_disabled' } }, 202));
     }
 
     let body: unknown;
     try {
       body = JSON.parse(rawBody);
     } catch {
-      return c.json({ ok: false, error: { code: 'BAD_JSON' } }, 400);
+      return done(c.json({ ok: false, error: { code: 'BAD_JSON' } }, 400), 'Invalid JSON body');
     }
 
     const issue = parseIssueWebhookBody(body);
     if (!issue) {
-      return c.json({ ok: true, data: { ignored: 'no_issue_in_payload' } }, 202);
+      return done(c.json({ ok: true, data: { ignored: 'no_issue_in_payload' } }, 202));
     }
 
     // Sentry sends two flavours of seer payload: (a) issue-event with the
@@ -837,7 +853,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
           /* best-effort */
         });
       }
-      return c.json({ ok: true, data: { issueId: issue.id, deferred: true } }, 202);
+      return done(c.json({ ok: true, data: { issueId: issue.id, deferred: true } }, 202));
     }
 
     const result = await applySeerAnalysis(db, projectId, {
@@ -851,7 +867,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       source: 'webhook',
     });
 
-    return c.json({ ok: true, data: { issueId: issue.id, ...result } });
+    return done(c.json({ ok: true, data: { issueId: issue.id, ...result } }));
   });
 
   // ============================================================
