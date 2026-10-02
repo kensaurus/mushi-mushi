@@ -7,7 +7,6 @@
  */
 
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { Btn, Tooltip } from './ui'
 import { JobStatusPill } from './ui/job-status-pill'
 import { CodeInline } from './CodePanel'
@@ -161,12 +160,10 @@ export function SdkUpgradeCTA({
           </Btn>
         </Tooltip>
         {!projectId && (
-          <Link to="/connect">
-            <Btn size="sm" variant="ghost" className="gap-1.5">
+          <Btn to="/connect" size="sm" variant="ghost" className="gap-1.5">
               <IconBolt className="h-3.5 w-3.5" aria-hidden />
               Connect GitHub
             </Btn>
-          </Link>
         )}
       </div>
     </div>

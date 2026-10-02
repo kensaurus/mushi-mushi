@@ -112,9 +112,7 @@ export function SetupCopilotPage() {
         ]}
         helpHowToUse="Select a project, paste connect credentials, open the SDK wizard, then run Verify Setup for both ingest and dispatch tracks."
       >
-        <Link to="/projects">
-          <Btn variant="ghost" size="sm">← Projects</Btn>
-        </Link>
+        <Btn to="/projects" variant="ghost" size="sm">← Projects</Btn>
       </PageHeaderBar>
 
       <nav

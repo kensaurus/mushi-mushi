@@ -28,9 +28,7 @@ export function FeedbackStatusBanner({
         title="Create a project before submitting feedback"
         subtitle="Tickets attach to a project so we know which app your bug or feature idea belongs to."
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">Go to Setup</Btn>
-          </Link>
+          <Btn to="/onboarding" size="sm" variant="ghost">Go to Setup</Btn>
         }
       />
     )

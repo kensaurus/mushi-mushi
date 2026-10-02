@@ -172,13 +172,11 @@ export function UpdateCenter({ project, preflight, hideVersionBadge = false }: U
             )}
           </>
         ) : (
-          <Link to="/integrations/config">
-            <Btn size="md" variant="ghost" className="gap-2">
+          <Btn to="/integrations/config" size="md" variant="ghost" className="gap-2">
               <IconGit className="h-4 w-4" aria-hidden />
               Connect GitHub in Integrations
               <IconArrowRight className="h-4 w-4" aria-hidden />
             </Btn>
-          </Link>
         )}
 
         <Tooltip content="Copy the mushi upgrade CLI command" side="top">

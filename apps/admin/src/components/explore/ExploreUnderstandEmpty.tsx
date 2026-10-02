@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { Btn, Card } from '../ui'
 import type { CodebaseUnderstandError } from './exploreUnderstandTypes'
 
@@ -30,32 +29,24 @@ export function ExploreUnderstandEmpty({ error, onRetry }: Props) {
       </p>
       <div className="flex flex-wrap gap-2">
         {isForbidden && (
-          <Link to="/projects">
-            <Btn size="sm" variant="primary">
+          <Btn to="/projects" size="sm" variant="primary">
               Switch project
             </Btn>
-          </Link>
         )}
         {isIndex && (
           <>
-            <Link to="/connect">
-              <Btn size="sm" variant="primary">
+            <Btn to="/connect" size="sm" variant="primary">
                 Connect &amp; enable index
               </Btn>
-            </Link>
-            <Link to="/settings">
-              <Btn size="sm" variant="ghost">
+            <Btn to="/settings" size="sm" variant="ghost">
                 Indexing settings
               </Btn>
-            </Link>
           </>
         )}
         {isKey && (
-          <Link to="/settings?tab=byok">
-            <Btn size="sm" variant="primary">
+          <Btn to="/settings?tab=byok" size="sm" variant="primary">
               Settings → API Keys
             </Btn>
-          </Link>
         )}
         {onRetry && !isForbidden && (
           <Btn size="sm" variant="ghost" onClick={onRetry}>
