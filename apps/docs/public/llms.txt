@@ -127,7 +127,6 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Where the report button lives](https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes): Choose where Mushi's bug-report button lives — corner stamp, edge tab, banner, your own button via attach, or fully manual — on web and mobile.
 - [Cursor integration](https://kensaur.us/mushi-mushi/docs/integrations/cursor): Wire Mushi's evolution loop into Cursor with one command — get fix context, lessons, and dispatch right from the editor.
 - [Voice intake](https://kensaur.us/mushi-mushi/docs/integrations/voice-intake): Say the bug on your phone, get a draft PR back. iOS Shortcut, Telegram, Slack, or the installed console — one pipeline, one confirmation gate, no audio kept.
-- [For investors](https://kensaur.us/mushi-mushi/docs/investors): Why Mushi Mushi exists, who it is for, how it makes money, and where it really stands today, with every number dated and sourced. Contact the founder.
 - [Launch Week](https://kensaur.us/mushi-mushi/docs/launch-week): How Mushi Mushi launches now — one public post per release (Show HN, then Product Hunt), the gate each release must pass, and what we publish after.
 - [Legal](https://kensaur.us/mushi-mushi/docs/legal): Privacy policy and terms of service for Mushi Mushi Cloud, the SDKs, and the tester program.
 - [Privacy Policy](https://kensaur.us/mushi-mushi/docs/legal/privacy): What Mushi Mushi collects, why, who processes it, how long it is kept, and how to exercise your rights under GDPR and Japan's APPI.
