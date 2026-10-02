@@ -58,6 +58,8 @@ export interface ReportFixAttempt {
    *  Only populated when status = 'failed'. */
   failure_category: FixAttemptFailureCategory | null
   error: string | null
+  /** Set once the PR landed (webhook, console merge, or ci-sync poll). */
+  merged_at?: string | null
   started_at: string | null
   completed_at: string | null
   created_at: string
@@ -156,6 +158,8 @@ export interface ReportJudgeEval {
 export interface ReportDetail {
   id: string
   project_id: string
+  /** projects.name, joined server-side for the header chip. */
+  project_name?: string | null
   description: string
   user_category: string
   user_intent: string | null
