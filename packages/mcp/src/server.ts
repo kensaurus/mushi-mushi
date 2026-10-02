@@ -1433,6 +1433,81 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   );
 
+  const EDIT_INPUT = z.object({
+    path: z.string().min(1).max(400).describe('Repo-relative path the recipe allows'),
+    content: z.string().max(512 * 1024).describe('The full new file content'),
+    reason: z.string().max(200).optional(),
+  });
+  const ELEMENT_INPUT = z.enum(['design', 'gates', 'env', 'routes', 'store', 'release']).describe('Which part of the recipe the edit belongs to');
+
+  server.registerTool(
+    'propose_recipe_change',
+    {
+      title: titleOf('propose_recipe_change'),
+      description: descOf('propose_recipe_change'),
+      annotations: annotationsFor('propose_recipe_change'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        element: ELEMENT_INPUT,
+        edits: z.array(EDIT_INPUT).min(1).max(30),
+        title: z.string().min(1).max(120).optional(),
+        confirm: z.boolean().optional().describe('true opens the draft PR; omitted or false is a dry run'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/recipe/changes`, {
+        method: 'POST',
+        body: JSON.stringify({ element: args.element, edits: args.edits, title: args.title, dryRun: args.confirm !== true }),
+      }));
+    },
+  );
+
+  server.registerTool(
+    'propose_portfolio_change',
+    {
+      title: titleOf('propose_portfolio_change'),
+      description: descOf('propose_portfolio_change'),
+      annotations: annotationsFor('propose_portfolio_change'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        element: ELEMENT_INPUT,
+        changes: z.array(z.object({ projectId: z.string().uuid(), edits: z.array(EDIT_INPUT).min(1).max(30) })).min(1).max(10),
+        title: z.string().min(1).max(120).optional(),
+        confirm: z.boolean().optional().describe('true opens one draft PR per repo; omitted or false is a dry run'),
+      }),
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/portfolio/changes`, {
+        method: 'POST',
+        body: JSON.stringify({ element: args.element, changes: args.changes, title: args.title, dryRun: args.confirm !== true }),
+      }));
+    },
+  );
+
+  server.registerTool(
+    'request_connector_action',
+    {
+      title: titleOf('request_connector_action'),
+      description: descOf('request_connector_action'),
+      annotations: annotationsFor('request_connector_action'),
+      inputSchema: z.object({
+        organizationId: z.string().uuid().optional().describe("Organization UUID — defaults to the key owner's only organization"),
+        connectorId: z.string().uuid().describe('Connector instance id (list_connectors)'),
+        action: z.string().min(1).max(60).describe('For example set_rollout or promote_track'),
+        payload: z.record(z.string(), z.unknown()).describe('The exact action input; the approval binds its hash'),
+        projectId: z.string().uuid().optional(),
+        reason: z.string().max(500).optional().describe('Why, shown to the approver'),
+      }),
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      const body = { connectorId: args.connectorId, action: args.action, payload: args.payload, projectId: args.projectId, reason: args.reason };
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/connector-actions`, { method: 'POST', body: JSON.stringify(body) }));
+    },
+  );
+
   server.registerTool(
     'get_radar',
     {

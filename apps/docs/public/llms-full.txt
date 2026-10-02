@@ -2814,6 +2814,21 @@ account whose agreement nobody accepted, shows **Blocked** with the step to
 take. Releasing (a Play rollout %, promoting a track) needs a separate write
 key and a person's approval for each action.
 
+## Changes and store actions
+
+A recipe change is always a **draft pull request** to files the recipe allows
+in `change.allowPaths`: token files, budgets in `mushi.recipe.json`,
+`.env.example`, and store listing text under `store.listingDir`. Workflows,
+env files, lockfiles, generated exports and migrations are never written. The
+draft stays a draft, so your CI does not run until you mark it ready. A
+listing change is published by your own CI after you merge.
+
+A store action, such as raising a Google Play rollout to 20%, is different: it
+calls the store directly. It needs a separate write key, and every single
+action needs a team owner or admin to approve it in the console and then run
+it there. The approval covers the exact payload, expires after an hour and
+runs once. An editor agent can ask for an action but can never approve it.
+
 ## Push from CI instead
 
 For a repo Mushi has no token for, push the recipe from your existing CI job:
@@ -4264,7 +4279,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP<br/>88 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>91 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
@@ -4312,7 +4327,7 @@ your client:
 }
 ```
 
-The full tool catalog (88 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (91 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -4488,7 +4503,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 88 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 91 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -6958,7 +6973,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **88-tool** catalog and
+on npm for the full **91-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 
@@ -7058,7 +7073,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 
   Auto-generated from `packages/mcp/src/catalog.ts`. Do not edit by hand — run `pnpm gen:mcp-tools-doc`.
 
-**88 tools** · **8 resources** · **4 prompts**
+**91 tools** · **8 resources** · **4 prompts**
 
 ## Read tools (`mcp:read`)
 
@@ -7130,6 +7145,9 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 
 | Tool | Title | Description |
 |------|-------|-------------|
+| `propose_recipe_change` | Propose a recipe change (draft PR) | Propose edits to files the app recipe allows (design tokens, budgets in mushi.recipe.json, .env.example declarations, store listing text under store.listingDir) as ONE draft pull request. Dry run by default: returns the diff of each file and any path that is not writable (workflows, env files, lockfiles, generated exports and migrations never are). confirm: true opens the draft PR; it stays a draft so the repo CI does not run until the owner marks it ready, and nothing is merged or published. Confirm with the user before confirm: true. Returns \{ dryRun, files, denied } or \{ jobId, status, prUrl }. Write. |
+| `propose_portfolio_change` | Fix once across apps (draft PRs) | Propose the same kind of recipe edit in up to 10 repos of one organization, one draft PR per repo with a shared batch id. Dry run by default (the diff and denied paths of each repo); confirm: true opens the drafts. One repo failing never rolls back the others; each result says what happened. Needs an account-level key. Confirm with the user before confirm: true. Returns \{ dryRun, plans } or \{ batchId, opened, results }. Write. |
+| `request_connector_action` | Request a store action (needs approval) | Ask for one connector action, for example set_rollout or promote_track on a Google Play connector. This only creates a request: nothing runs until a team owner or admin approves it in the console and then runs it there. An API key or this tool can never approve or run it. The approval binds the exact payload and expires after an hour. Confirm with the user first. Returns \{ id, status: "pending_approval", payloadSha256 }. Write. |
 | `submit_fix_result` | Record a fix outcome | Record a fix outcome from an external agent (e.g. your own Cursor/Claude run): branch, PR URL, files changed, lines added/removed. Creates a fix_attempt row then patches it to completed and links it to the report. Returns \{ fixAttemptId }. Write; NOT idempotent — each call creates a new fix_attempt, so call once per PR. Use after you opened a PR outside Mushi; use dispatch_fix to have Mushi open the PR instead, or merge_fix once CI is green. |
 | `dispatch_fix` | Dispatch Mushi fix agent | Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns \{ fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not. |
 | `trigger_judge` | Run Sonnet-as-Judge | Queue the Sonnet-as-Judge to grade recent fix quality across accessible projects. Returns \{ dispatched: number } — one judge-batch job per project; scores land asynchronously in judge_results (read back with run_nl_query). Write; consumes LLM budget. Idempotent within a short window. Use before shipping to vet fix quality; use get_fix_timeline to inspect a single attempt instead. |
@@ -17833,7 +17851,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**88 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**91 tools**, 8 resources, 4 prompts).
 
 ---
 

@@ -13,6 +13,7 @@
 import { useState } from 'react'
 import { Badge, Btn, Callout, DisclosurePanel, ErrorAlert, Input, Loading, Section, SelectField, Textarea, type BadgeTone } from '../ui'
 import { usePageData } from '../../lib/usePageData'
+import { ActionsCard } from './ActionsCard'
 import { apiFetchMutate } from '../../lib/supabase'
 
 interface Instance {
@@ -32,6 +33,8 @@ interface Available {
   title: string
   credentialNote: string
   legacyBacked: boolean
+  capabilities: string[]
+  actions: string[]
 }
 
 interface ConnectorsResponse {
@@ -69,6 +72,7 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
   const [credential, setCredential] = useState('')
   const [bindProject, setBindProject] = useState('')
   const [externalId, setExternalId] = useState('')
+  const [writeKey, setWriteKey] = useState<Record<string, string>>({})
   const nameOf = (id: string) => projects.find((p) => p.projectId === id)?.name ?? id.slice(0, 8)
   const form = FORM[kind]
 
@@ -130,6 +134,20 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
                       {i.status_reason && <p className="text-xs text-fg-muted">{i.status_reason}</p>}
                       {i.bindings.length > 0 && <p className="text-2xs text-fg-faint">{i.bindings.map((b) => `${nameOf(b.projectId)} → ${b.externalId}`).join(' · ')}</p>}
                     </div>
+                    {(data.available.find((a) => a.kind === i.kind)?.actions.length ?? 0) > 0 && (
+                      <div className="w-full sm:w-auto">
+                        <DisclosurePanel title={i.enabled_capabilities.includes('act') ? 'Release actions: on' : 'Release actions: off'}>
+                          <div className="flex flex-col gap-2 p-3">
+                            <p className="text-2xs text-fg-muted">Releases (rollout %, promote a track) need a separate write key, and each one still needs approval below.</p>
+                            <Textarea label="Write key (JSON)" rows={2} value={writeKey[i.id] ?? ''} onChange={(e) => setWriteKey({ ...writeKey, [i.id]: e.target.value })} spellCheck={false} />
+                            <div className="flex gap-2">
+                              <Btn size="sm" disabled={busy || !(writeKey[i.id] ?? '').trim()} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}`, { method: 'PATCH', body: JSON.stringify({ writeCredential: writeKey[i.id], enabledCapabilities: [...new Set([...i.enabled_capabilities, 'act'])] }) }), 'Release actions are on. Each one still needs approval.')}>Turn on</Btn>
+                              {i.enabled_capabilities.includes('act') && <Btn size="sm" variant="ghost" disabled={busy} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}`, { method: 'PATCH', body: JSON.stringify({ writeCredential: null }) }), 'Release actions are off and the write key is deleted.')}>Turn off</Btn>}
+                            </div>
+                          </div>
+                        </DisclosurePanel>
+                      </div>
+                    )}
                     <div className="flex shrink-0 gap-2">
                       <Btn size="sm" variant="ghost" disabled={busy} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}/probe`, { method: 'POST', body: '{}' }), 'Checked again.')}>Check</Btn>
                       <Btn size="sm" variant="ghost" disabled={busy} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}`, { method: 'DELETE' }), 'Removed, with its stored credential.')}>Remove</Btn>
@@ -139,6 +157,12 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
               })}
             </ul>
           )}
+          <ActionsCard
+            orgId={orgId}
+            connectors={data.instances
+              .filter((i) => i.enabled_capabilities.includes('act'))
+              .map((i) => ({ id: i.id, name: i.display_name, actions: data.available.find((a) => a.kind === i.kind)?.actions ?? [] }))}
+          />
           <DisclosurePanel title="Add a source">
             <div className="flex flex-col gap-2 p-3">
               <SelectField label="Kind" value={kind} onChange={(e) => { setKind(e.target.value); setConfigValue('') }}>
