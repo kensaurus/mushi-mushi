@@ -30,7 +30,9 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
       if (typeof document === 'undefined') return null;
 
       const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
+      // Read back on a grid by isCanvasBlank(); without this hint Chrome warns
+      // about repeated getImageData readbacks.
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) {
         activeOptions.onFailed?.('unsupported');
         emitScreenshotFailed('unsupported');
@@ -152,6 +154,7 @@ function buildPrivacySafeDocument(privacy?: MushiPrivacyConfig): Element {
   clone.querySelector('#mushi-mushi-widget')?.remove();
   stripTaintSources(clone);
   inlineDocumentStyles(clone);
+  freezeMotion(clone);
 
   // Redact: black-out matching elements, before mask/block. The always-on
   // baseline (passwords, card fields, [data-private], [data-mushi-mask]) runs
@@ -278,6 +281,21 @@ function inlineDocumentStyles(clone: Element): void {
   if (!css) return;
   const styleEl = document.createElement('style');
   styleEl.textContent = css;
+  (clone.querySelector('head') ?? clone).appendChild(styleEl);
+}
+
+/**
+ * CSS animations never run inside an SVG drawn as an <img>, so anything with
+ * an entrance animation (fade-in keyframes starting at opacity 0) stays at its
+ * first keyframe and the whole capture comes out transparent. Freeze motion
+ * last, after every page style, so the capture shows the settled page the
+ * reporter actually sees.
+ */
+const FREEZE_MOTION_CSS = '*,*::before,*::after{animation:none!important;transition:none!important}';
+
+function freezeMotion(clone: Element): void {
+  const styleEl = document.createElement('style');
+  styleEl.textContent = FREEZE_MOTION_CSS;
   (clone.querySelector('head') ?? clone).appendChild(styleEl);
 }
 

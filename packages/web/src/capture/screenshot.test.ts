@@ -60,6 +60,38 @@ describe('createScreenshotCapture failure reasons', () => {
     expect(spy.src()).not.toMatch(/^blob:/);
   });
 
+  it('freezes animations after every page style, so entrance animations cannot blank the capture', async () => {
+    // Live QA (console, Chrome): fade-in keyframes start at opacity 0 and never
+    // run inside an SVG <img>, so the whole page captured transparent.
+    const style = document.createElement('style');
+    style.textContent = '@keyframes fade-in{from{opacity:0}} .animate-in{animation:fade-in .3s}';
+    document.head.append(style);
+    const card = document.createElement('div');
+    card.className = 'animate-in';
+    card.textContent = 'Settled content';
+    document.body.append(card);
+    vi.useFakeTimers();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ scale: vi.fn() } as never);
+    const spy = interceptImage();
+
+    void createScreenshotCapture().take();
+    await vi.advanceTimersByTimeAsync(0);
+    const svg = decodeURIComponent(spy.src().replace(/^data:image\/svg\+xml;charset=utf-8,/, ''));
+    const freeze = '*,*::before,*::after{animation:none!important;transition:none!important}';
+    expect(svg).toContain('Settled content');
+    expect(svg.lastIndexOf(freeze)).toBeGreaterThan(svg.lastIndexOf('@keyframes fade-in'));
+    // Nothing that styles the page comes after the freeze rule.
+    expect(svg.slice(svg.lastIndexOf(freeze)).indexOf('<style')).toBe(-1);
+    style.remove();
+    card.remove();
+  });
+
+  it('asks for a readback-friendly canvas (no Canvas2D getImageData warning)', async () => {
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    await createScreenshotCapture().take();
+    expect(getContext).toHaveBeenCalledWith('2d', { willReadFrequently: true });
+  });
+
   it("reports 'csp' when the host's img-src blocks data: images", async () => {
     vi.useFakeTimers();
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ scale: vi.fn() } as never);
