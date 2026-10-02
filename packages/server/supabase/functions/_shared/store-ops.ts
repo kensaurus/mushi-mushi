@@ -117,6 +117,24 @@ function unknownResult(ruleId: StoreReviewResult['ruleId'] | string, reason: str
   return { ruleId: ruleId as StoreReviewResult['ruleId'], state: 'unknown', reason, findings: [] }
 }
 
+/** A check whose input read threw: a failed check, never "could not decide" and never ok. */
+function errorResult(ruleId: StoreReviewResult['ruleId'] | string, reason: string): StoreReviewResult {
+  return { ruleId: ruleId as StoreReviewResult['ruleId'], state: 'error', reason, findings: [] }
+}
+
+/** Run status: serious findings first, then any check that failed to run (never a pass). */
+export function storeRunStatus(results: readonly StoreReviewResult[]): 'fail' | 'error' | 'warn' | 'pass' | 'skipped' {
+  const findings = results.flatMap((r) => r.findings)
+  if (findings.some((f) => f.severity === 'error')) return 'fail'
+  if (results.some((r) => r.state === 'error')) return 'error'
+  if (findings.some((f) => f.severity === 'warn')) return 'warn'
+  return results.some((r) => r.state === 'ok' || r.state === 'finding') ? 'pass' : 'skipped'
+}
+
+function errText(err: unknown): string {
+  return String((err as Error)?.message ?? err).slice(0, 200)
+}
+
 /** Run every store check for one project and record a `store_review` gate run. */
 export async function runStoreReview(db: Db, projectId: string, deps: StoreOpsDeps, triggeredBy = 'manual'): Promise<StoreReport> {
   const now = deps.now()
@@ -133,7 +151,12 @@ export async function runStoreReview(db: Db, projectId: string, deps: StoreOpsDe
   const locales: string[] = Array.isArray(store?.locales) && store!.locales.length ? store!.locales : ['en-US']
 
   // Repo side: listing files, screenshots, package.json.
-  const repoRes = await deps.resolveRepo(db, projectId).catch((err): RecipeRepoResolution => ({ ok: false, repoConnected: true, tokenAvailable: true, reason: String((err as Error)?.message ?? err) }))
+  // `repoError` set = the repo read threw (a failed check); `!repoRes.ok` = no repo connected (undecided).
+  let repoError = null as string | null
+  const repoRes = await deps.resolveRepo(db, projectId).catch((err): RecipeRepoResolution => {
+    repoError = errText(err)
+    return { ok: false, repoConnected: true, tokenAvailable: true, reason: repoError }
+  })
   let listing: ParsedListing | null = null
   let collectors: string[] | null = null
   let shots: Array<{ path: string; width: number; height: number }> | null = null
@@ -168,8 +191,8 @@ export async function runStoreReview(db: Db, projectId: string, deps: StoreOpsDe
         }
       }
       repoInfo = await deps.repoInfo(repoRes.repo).catch(() => ({ public: null, license: null }))
-    } catch {
-      // Each check below says what it could not read.
+    } catch (err) {
+      repoError = errText(err)
     }
   }
 
@@ -180,8 +203,13 @@ export async function runStoreReview(db: Db, projectId: string, deps: StoreOpsDe
     results.push(unknownResult('listing_drift', 'No store.listingDir in mushi.recipe.json, so there is no listing in the repo to compare.'))
     results.push(unknownResult('listing_limit_exceeded', 'No listing in the repo to check against the store limits.'))
   } else if (!listing) {
-    results.push(unknownResult('listing_drift', repoRes.ok ? 'The listing files could not be read from the repo.' : `The repo could not be read: ${repoRes.reason}`))
-    results.push(unknownResult('listing_limit_exceeded', 'The listing files could not be read.'))
+    if (repoError) {
+      results.push(errorResult('listing_drift', `Reading the repo failed: ${repoError}`))
+      results.push(errorResult('listing_limit_exceeded', `Reading the repo failed: ${repoError}`))
+    } else {
+      results.push(unknownResult('listing_drift', repoRes.ok ? 'The listing files could not be read from the repo.' : `The repo could not be read: ${repoRes.reason}`))
+      results.push(unknownResult('listing_limit_exceeded', 'The listing files could not be read.'))
+    }
   } else {
     results.push(...compareListing(listing, { ios: live.ios, android: live.android }) as unknown as StoreReviewResult[])
     results.push(checkListingLimits(listing, listingDir) as unknown as StoreReviewResult)
@@ -193,8 +221,15 @@ export async function runStoreReview(db: Db, projectId: string, deps: StoreOpsDe
     ...(listing ? Object.values(listing.ios).slice(0, 1).map((l) => `${l.name ?? ''}\n${l.description ?? ''}`) : []),
   ].join('\n\n').trim().slice(0, 12_000)
   let claims: ExtractedClaim[] | null = null
-  if (listingText && deps.extractClaims) claims = await deps.extractClaims(db, projectId, listingText).catch(() => null)
-  const uploads = await deps.uploadPaths(db, projectId).catch(() => [] as string[])
+  let claimsError = null as string | null
+  if (listingText && deps.extractClaims) claims = await deps.extractClaims(db, projectId, listingText).catch((err) => { claimsError = `Reading the claims failed: ${errText(err)}`; return null })
+  // Without the upload evidence an on-device claim cannot be judged: a failed read is an error, not "no uploads".
+  let uploads: string[] = []
+  try {
+    uploads = await deps.uploadPaths(db, projectId)
+  } catch (err) {
+    claimsError ??= `Reading the code for uploads failed: ${errText(err)}`
+  }
   const [claimResult, labelResult] = judgeClaims(listingText ? claims : null, {
     networkUploadPaths: uploads,
     repoLicense: repoInfo.license,
@@ -204,10 +239,12 @@ export async function runStoreReview(db: Db, projectId: string, deps: StoreOpsDe
     privacyLabelDataTypes: null,
   }).results
   if (listingText && !deps.extractClaims) results.push(unknownResult('listing_claim_contradicts_code', 'No AI key is available to read the claims in the listing. Add an Anthropic or OpenAI key under API keys.'))
+  else if (claimsError || repoError) results.push(errorResult('listing_claim_contradicts_code', claimsError ?? `Reading the repo failed: ${repoError}`))
   else results.push(claimResult)
-  results.push(labelResult)
+  results.push(repoError ? errorResult(labelResult.ruleId, `Reading package.json failed: ${repoError}`) : labelResult)
 
-  results.push(shots === null ? unknownResult('screenshot_platform_mismatch', 'No iOS screenshots found in the repo (fastlane/screenshots).') : screenshotPlatformMismatch(shots))
+  if (repoError) results.push(errorResult('screenshot_platform_mismatch', `Reading the repo failed: ${repoError}`))
+  else results.push(shots === null ? unknownResult('screenshot_platform_mismatch', 'No iOS screenshots found in the repo (fastlane/screenshots).') : screenshotPlatformMismatch(shots))
   const { data: releases } = await db.from('releases').select('published_at').eq('project_id', projectId).order('published_at', { ascending: false }).limit(20)
   const releaseDates = ((releases ?? []) as Array<{ published_at: string | null }>).map((r) => r.published_at).filter((x): x is string => Boolean(x)).slice(0, 10)
   results.push(screenshotStale({ screenshots: shotDates, releaseDates }))
@@ -233,17 +270,23 @@ export async function runStoreReview(db: Db, projectId: string, deps: StoreOpsDe
 
   // Record one store_review run.
   const findings = results.flatMap((r) => r.findings)
-  const status = findings.some((f) => f.severity === 'error') ? 'fail' : findings.some((f) => f.severity === 'warn') ? 'warn' : results.some((r) => r.state === 'ok' || r.state === 'finding') ? 'pass' : 'skipped'
-  const { data: run } = await db.from('gate_runs').insert({
+  const status = storeRunStatus(results)
+  const { data: run, error: runError } = await db.from('gate_runs').insert({
     project_id: projectId, gate: STORE_REVIEW_GATE, status, triggered_by: triggeredBy, findings_count: findings.length,
     summary: { results: results.map((r) => ({ ruleId: r.ruleId, state: r.state, reason: r.reason, findings: r.findings.length })), checklist, liveRead: { ios: live.iosOk, android: live.androidOk } },
     started_at: now.toISOString(), completed_at: now.toISOString(),
   }).select('id').single()
-  if (run && findings.length) {
-    await db.from('gate_findings').insert(findings.slice(0, 200).map((f) => ({
+  if (runError || !run) throw new Error(`could not record the store review: ${runError?.message ?? 'no row'}`)
+  if (findings.length) {
+    const { error: fErr } = await db.from('gate_findings').insert(findings.slice(0, 200).map((f) => ({
       gate_run_id: (run as { id: string }).id, project_id: projectId, severity: f.severity, rule_id: f.ruleId, message: f.message.slice(0, 1000),
       suggested_fix: { fix: f.fix, target: f.target ?? null }, allowlisted: false,
     })))
+    if (fErr) {
+      // A run whose findings did not land must not read as a pass.
+      await db.from('gate_runs').update({ status: 'error' }).eq('id', (run as { id: string }).id)
+      throw new Error(`could not store the store review findings: ${fErr.message}`)
+    }
   }
   return { projectId, checkedAt: now.toISOString(), store, results, checklist, liveRead: { ios: live.iosOk, android: live.androidOk } }
 }

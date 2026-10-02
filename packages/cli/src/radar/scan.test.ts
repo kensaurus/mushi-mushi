@@ -43,7 +43,13 @@ describe('scanLocalRepo', () => {
   })
 
   it('marks the rule partial when the scan hit the file limit, so Mushi never records a pass', () => {
-    const body = toIngestBody({ scannedFiles: 20_000, truncated: true, findings: [], configFiles: {} }, null)
+    const body = toIngestBody({ scannedFiles: 20_000, truncated: true, unreadable: 0, findings: [], configFiles: {} }, null)
     expect(body).toMatchObject({ scanned: ['storage_sql_delete'], partial: ['storage_sql_delete'] })
+    expect(toIngestBody({ scannedFiles: 5, truncated: false, unreadable: 1, findings: [], configFiles: {} }, null)).toHaveProperty('partial')
+    expect(toIngestBody({ scannedFiles: 0, truncated: false, unreadable: 0, findings: [], configFiles: {} }, null)).toHaveProperty('partial')
+  })
+
+  it('throws on a --dir that does not exist instead of reporting nothing found', () => {
+    expect(() => scanLocalRepo(join(tmpdir(), 'mushi-radar-does-not-exist-9f3c'))).toThrow()
   })
 })

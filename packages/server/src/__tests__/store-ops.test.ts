@@ -89,3 +89,44 @@ describe('runStoreReview', () => {
     expect(ops.dataCollectorsFromPackageJson('nope')).toBeNull()
   })
 })
+
+describe('runStoreReview never turns a failed read into a pass', () => {
+  const seedDb = () => makeFakeDb({
+    app_recipe_snapshots: [{ project_id: P1, is_current: true, manifest: { version: 1, app: { ids: { bundleId: 'com.hhtp.app' } }, store: { listingDir: 'fastlane/metadata', locales: ['en-US'] } } }],
+  } as never, { autoId: true })
+
+  it('a repo read that threw makes the repo-based checks error and the run error', async () => {
+    const db = seedDb()
+    const report = await ops.runStoreReview(db as never, P1, deps({ listTree: vi.fn(async () => { throw new Error('GitHub answered 502') }) }) as never)
+    for (const id of ['listing_drift', 'listing_limit_exceeded', 'screenshot_platform_mismatch']) {
+      expect(report.results.find((r) => r.ruleId === id)?.state, id).toBe('error')
+    }
+    expect(db.table('gate_runs')[0]).toMatchObject({ gate: 'store_review', status: 'error' })
+  })
+
+  it('a resolveRepo that throws is error; a failed uploads read makes the claims check error, not ok', async () => {
+    const thrown = await ops.runStoreReview(seedDb() as never, P1, deps({ resolveRepo: vi.fn(async () => { throw new Error('vault down') }) }) as never)
+    expect(thrown.results.find((r) => r.ruleId === 'listing_drift')?.state).toBe('error')
+    const db = seedDb()
+    const report = await ops.runStoreReview(db as never, P1, deps({ uploadPaths: vi.fn(async () => { throw new Error('statement timeout') }) }) as never)
+    expect(report.results.find((r) => r.ruleId === 'listing_claim_contradicts_code')).toMatchObject({ state: 'error' })
+    expect(db.table('gate_runs')[0].status).not.toBe('pass')
+  })
+
+  it('storeRunStatus ranks serious findings, then failed checks, never pass with a failed check', () => {
+    const ok = { ruleId: 'listing_drift', state: 'ok', reason: '', findings: [] }
+    const err = { ruleId: 'screenshot_stale', state: 'error', reason: '', findings: [] }
+    expect(ops.storeRunStatus([ok, err] as never)).toBe('error')
+    expect(ops.storeRunStatus([ok] as never)).toBe('pass')
+  })
+
+  it('throws when the run row cannot be recorded', async () => {
+    const db = seedDb()
+    const failing = new Proxy(db, {
+      get: (t, prop, r) => (prop === 'from' ? (name: string) => (name === 'gate_runs'
+        ? { insert: () => ({ select: () => ({ single: async () => ({ data: null, error: { message: 'check constraint' } }) }) }), select: (...a: unknown[]) => (t.from(name) as any).select(...a) }
+        : t.from(name)) : Reflect.get(t, prop, r)),
+    })
+    await expect(ops.runStoreReview(failing as never, P1, deps() as never)).rejects.toThrow(/could not record the store review/)
+  })
+})

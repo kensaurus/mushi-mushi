@@ -46,13 +46,20 @@ Add one step to your existing CI job (no new job needed):
       MUSHI_API_KEY: \${{ secrets.MUSHI_INGEST_KEY }}`)
     .action(async (opts: { dir: string; push?: boolean; json?: boolean }) => {
       const root = resolve(opts.dir)
-      const scan = scanLocalRepo(root)
+      let scan
+      try {
+        scan = scanLocalRepo(root)
+      } catch (err) {
+        process.stderr.write(`error: could not read ${root}: ${(err as Error).message}\n`)
+        process.exitCode = 1
+        return
+      }
       const json = outputIsJson(opts.json)
       if (!opts.push) {
         if (json) {
           console.log(JSON.stringify({ scannedFiles: scan.scannedFiles, truncated: scan.truncated, findings: scan.findings, configFiles: Object.keys(scan.configFiles) }, null, 2))
         } else {
-          console.log(`Scanned ${scan.scannedFiles} files${scan.truncated ? ' (stopped at the file limit)' : ''}.`)
+          console.log(`Scanned ${scan.scannedFiles} files${scan.truncated ? ' (stopped at the file limit)' : ''}${scan.unreadable ? ` (${scan.unreadable} could not be read)` : ''}.`)
           if (scan.findings.length === 0) console.log('No storage deletes done in SQL.')
           for (const f of scan.findings) console.log(`  WARN  ${f.message}`)
           console.log(`Build files for the store rules: ${Object.keys(scan.configFiles).join(', ') || 'none found'}`)
