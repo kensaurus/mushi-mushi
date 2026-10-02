@@ -107,7 +107,17 @@ describe('ExploreDiagramPublishCard', () => {
     data: {
       diagram_id: 'd1',
       repo_private: repoPrivate,
-      payload: { owner: 'acme', repo: 'shop', sha: 'b'.repeat(40), groups: [], edges: [], nodes: [{ id: 'ui', label: 'Web UI', group: 'g', path: 'apps/web', description: 'The app', x: 0, y: 0 }] },
+      payload: {
+        owner: 'acme',
+        repo: 'shop',
+        sha: 'b'.repeat(40),
+        groups: [{ id: 'g', label: 'Frontend', x: 0, y: 0, w: 252, h: 120 }],
+        edges: [{ from: 'ui', to: 'api', label: 'calls' }],
+        nodes: [
+          { id: 'ui', label: 'Web UI', group: 'g', path: 'apps/web', description: 'The app', x: 0, y: 0 },
+          { id: 'api', label: 'API', group: 'g', path: null, description: '', x: 0, y: 84 },
+        ],
+      },
       payload_hash: 'h'.repeat(64),
       url: 'https://kensaur.us/mushi-mushi/r/acme/shop',
       can_publish: blocked === null,
@@ -126,6 +136,9 @@ describe('ExploreDiagramPublishCard', () => {
     expect(container.textContent).toContain('This repo is private on GitHub')
     expect(container.textContent).toContain('Web UI')
     expect(container.textContent).toContain('apps/web')
+    // Everything the public page shows is in the preview: group names and connection labels too.
+    expect(container.querySelector('[data-testid="diagram-preview-groups"]')?.textContent).toContain('Frontend')
+    expect(container.querySelector('[data-testid="diagram-preview-edges"]')?.textContent).toContain('Web UI → API (calls)')
     expect(button('Publish').disabled).toBe(true)
 
     const box = container.querySelector('input[type="checkbox"]') as HTMLInputElement
