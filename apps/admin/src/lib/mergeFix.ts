@@ -73,6 +73,7 @@ export function getMergeBlockerReason(fix: MergeEligibleFix): string | null {
   if (!fix.pr_url) return 'No pull request opened yet'
   if (!fix.pr_number) return 'PR number missing — refresh CI or open on GitHub'
   if (isFixMerged(fix)) return 'Already merged on GitHub'
+  if (fix.pr_state === 'closed') return 'PR was closed without merging — reopen it on GitHub or dispatch a new fix'
   if (fix.status !== 'completed' && fix.status !== 'merged') {
     return `Attempt status is “${fix.status ?? 'unknown'}” — only completed attempts can merge from the console`
   }
@@ -93,7 +94,7 @@ export function pickPrimaryFixAttempt<
   if (!attempts?.length) return undefined
   const mergeable = attempts.find((a) => canMergeFix(a))
   if (mergeable) return mergeable
-  const withOpenPr = attempts.find((a) => a.pr_url && a.status === 'completed')
+  const withOpenPr = attempts.find((a) => a.pr_url && a.status === 'completed' && a.pr_state !== 'closed')
   if (withOpenPr) return withOpenPr
   const inFlight = attempts.find((a) =>
     ['queued', 'running', 'dispatched'].includes(a.status ?? ''),

@@ -72,8 +72,8 @@ export function failedTooltip(stats: FixesStats, opts: Opts = {}): MetricTooltip
         : 'No failed fix attempts in 30d — the pipeline is clean or has not run yet.'
 
   return metricTip(
-    'Fix attempts that ended in failed status in the last 30 days.',
-    'Counts fix_attempts rows where status equals failed. topFailureCategory is the most frequent failure_category among failed rows.',
+    'Fix attempts that failed, were skipped, or opened a PR that went red on CI or was closed unmerged, in the last 30 days.',
+    'Counts fix_attempts rows with status failed or skipped_*, plus unmerged PRs whose CI failed or that were closed unmerged (same rule as the "Failed / skipped" filter). topFailureCategory is the most frequent failure_category among them (ci_failed / pr_closed_unmerged for PRs).',
     takeaway,
     stats.failed > 0
       ? {

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Card } from '../../components/ui'
 import { SelectField, Btn } from '../ui'
 import { STATUS_LABELS, SEVERITY_LABELS } from '../../lib/tokens'
+import { normalizeReportStatus } from '../../lib/reportStatus'
 import { IconArrowRight, IconExternalLink } from '../icons'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
@@ -10,8 +11,19 @@ import type { DispatchState } from '../../lib/dispatchFix'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import type { ReportDetail } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { dispatchConfirmBody } from '../../lib/dispatchConfirm'
 
-const STATUS_OPTS = ['new', 'classified', 'fixing', 'fixed', 'resolved', 'verified', 'reopened', 'dismissed']
+// One option per label: 'resolved' is the legacy spelling of 'fixed' (both
+// read "Fixed"), so listing both showed "Fixed" twice. A legacy row selects
+// the canonical option via selectableStatus().
+const STATUS_OPTS = ['new', 'classified', 'fixing', 'fixed', 'verified', 'reopened', 'dismissed']
+
+function selectableStatus(status: string): string {
+  if (STATUS_OPTS.includes(status)) return status
+  const canonical = normalizeReportStatus(status)
+  return STATUS_OPTS.includes(canonical) ? canonical : status
+}
 const SEV_OPTS = ['critical', 'high', 'medium', 'low']
 
 interface RoutingIntegration {
@@ -50,6 +62,7 @@ export function ReportTriageBar({
 }: ReportTriageBarProps) {
   const [showSaved, setShowSaved] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [confirmDispatch, setConfirmDispatch] = useState(false)
   const toast = useToast()
   const { data: integrationsData } = usePageData<{ integrations: RoutingIntegration[] }>('/v1/admin/integrations')
   const activeRoutes = (integrationsData?.integrations ?? []).filter((r) => r.is_active)
@@ -120,7 +133,7 @@ export function ReportTriageBar({
     <Card  className="mb-3 flex flex-wrap items-end gap-3 p-3">
       <SelectField
         label="Status"
-        value={report.status}
+        value={selectableStatus(report.status)}
         onChange={(e) => onTriage({ status: e.currentTarget.value })}
         disabled={saving}
         className="!w-auto"
@@ -159,7 +172,7 @@ export function ReportTriageBar({
         <div className="flex flex-col items-end gap-1">
           <Btn
             variant="primary"
-            onClick={onDispatch}
+            onClick={() => setConfirmDispatch(true)}
             disabled={dispatchDisabled}
             loading={isDispatchBusy && dispatchState.status !== 'completed' && dispatchState.status !== 'failed'}
             leadingIcon={<IconArrowRight />}
@@ -190,6 +203,18 @@ export function ReportTriageBar({
             )}
         </div>
       </div>
+      {confirmDispatch && (
+        <ConfirmDialog
+          title="Dispatch a fix for this report?"
+          body={dispatchConfirmBody({ repoUrl: preflight?.repoUrl, baseBranch: preflight?.baseBranch })}
+          confirmLabel="Dispatch fix"
+          onCancel={() => setConfirmDispatch(false)}
+          onConfirm={() => {
+            setConfirmDispatch(false)
+            void onDispatch()
+          }}
+        />
+      )}
     </Card>
   )
 }
