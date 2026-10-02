@@ -1344,7 +1344,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart/react-native",
     markdown: "quickstart/react-native.md",
     keywords: ["quickstart", "react-native", "react", "native"],
-    headings: ["1. Install", "2. Mount the provider", "3. Verify"],
+    headings: ["1. Install", "2. Mount the provider", "Optional native modules", "3. Verify"],
     excerpt: "Add shake-to-report bug capture to a React Native or Expo app with @mushi-mushi/react-native — install, mount the provider, and verify the first report.",
   },
   {
