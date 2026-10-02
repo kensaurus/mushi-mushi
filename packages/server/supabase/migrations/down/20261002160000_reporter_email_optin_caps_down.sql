@@ -5,7 +5,8 @@
 
 UPDATE public.notification_deliveries
    SET status = 'skipped', error_message = 'deferred_dropped_by_rollback'
- WHERE status = 'deferred';
+ WHERE status = 'deferred'
+    OR (status = 'pending' AND digest_run_id IS NOT NULL);
 
 DROP INDEX IF EXISTS public.notification_deliveries_deferred_idx;
 DROP INDEX IF EXISTS public.notification_deliveries_reporter_sent_idx;
@@ -17,7 +18,8 @@ ALTER TABLE public.notification_deliveries
   CHECK (status IN ('pending', 'sent', 'failed', 'skipped'));
 
 ALTER TABLE public.notification_deliveries
-  DROP COLUMN IF EXISTS digest_run_id;
+  DROP COLUMN IF EXISTS digest_run_id,
+  DROP COLUMN IF EXISTS digest_claimed_at;
 
 DROP INDEX IF EXISTS public.reporter_notification_prefs_verify_token_idx;
 DROP INDEX IF EXISTS public.reporter_notification_prefs_unsubscribe_token_key;

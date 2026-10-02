@@ -114,10 +114,24 @@ export function reporterEmailApiBase(): string {
   return `${supabase}/functions/v1/api`
 }
 
-export function verifyUrl(apiBase: string, token: string): string {
-  return `${apiBase}/v1/public/reporter/email/verify?t=${encodeURIComponent(token)}`
+/**
+ * Where the confirm / unsubscribe pages live: the console's public
+ * `/email/reporter` route. Supabase serves HTML from Edge Functions as
+ * `text/plain` with a sandbox CSP, so a page rendered by the API can not be
+ * clicked; the console page POSTs the token to the API instead.
+ */
+export function reporterEmailPageBase(): string {
+  const env = (globalThis as { Deno?: { env: { get(key: string): string | undefined } } }).Deno?.env
+  const base = env?.get('MUSHI_ADMIN_URL') ?? env?.get('SITE_URL') ?? 'https://kensaur.us/mushi-mushi/admin'
+  return base.replace(/\/+$/, '')
 }
 
+/** The button page a person opens from an email. */
+export function emailPageUrl(pageBase: string, action: 'verify' | 'unsubscribe', token: string): string {
+  return `${pageBase}/email/reporter?action=${action}&t=${encodeURIComponent(token)}`
+}
+
+/** The List-Unsubscribe target: mail clients POST `List-Unsubscribe=One-Click` here. */
 export function unsubscribeUrl(apiBase: string, token: string): string {
   return `${apiBase}/v1/public/reporter/email/unsubscribe?t=${encodeURIComponent(token)}`
 }
@@ -163,21 +177,29 @@ const FOOTER = (app: string, unsub: string) =>
   `You get this because you asked ${app} for updates on a report you sent.\n` +
   `Stop these emails: ${unsub}`
 
+/**
+ * `unsubscribeUrl` is the API endpoint for the one-click header;
+ * `unsubscribePageUrl` is the page a person clicks in the body.
+ */
+interface UnsubscribeLinks {
+  unsubscribeUrl: string
+  unsubscribePageUrl: string
+}
+
 /** One status update about one report. */
 export function buildReporterUpdateEmail(input: {
   type: NotificationType
   appName: string | null
   reportTitle: string | null
   message: string
-  unsubscribeUrl: string
-}): BuiltEmail {
+} & UnsubscribeLinks): BuiltEmail {
   const app = appLabel(input.appName)
   const subject = `${app}: ${SUBJECTS[input.type] ?? 'An update on your report'}`
   const title = input.reportTitle ? `Your report: "${clip(input.reportTitle, 120)}"\n\n` : ''
   const text =
     `${title}${clip(input.message, 2000)}\n\n` +
     `Open ${app} and look in "Your reports" to reply.\n\n` +
-    `--\n${FOOTER(app, input.unsubscribeUrl)}\n`
+    `--\n${FOOTER(app, input.unsubscribePageUrl)}\n`
   return { subject, text, headers: listUnsubscribeHeaders(input.unsubscribeUrl) }
 }
 
@@ -185,8 +207,7 @@ export function buildReporterUpdateEmail(input: {
 export function buildReporterDigestEmail(input: {
   appName: string | null
   items: Array<{ reportTitle: string | null; message: string }>
-  unsubscribeUrl: string
-}): BuiltEmail {
+} & UnsubscribeLinks): BuiltEmail {
   const app = appLabel(input.appName)
   const n = input.items.length
   const subject = `${app}: ${n === 1 ? '1 update' : `${n} updates`} on your reports`
@@ -197,7 +218,7 @@ export function buildReporterDigestEmail(input: {
   const text =
     `Here is what changed on your reports today.\n\n${lines.join('\n')}\n\n` +
     `Open ${app} and look in "Your reports" for details.\n\n` +
-    `--\n${FOOTER(app, input.unsubscribeUrl)}\n`
+    `--\n${FOOTER(app, input.unsubscribePageUrl)}\n`
   return { subject, text, headers: listUnsubscribeHeaders(input.unsubscribeUrl) }
 }
 

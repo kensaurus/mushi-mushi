@@ -24,13 +24,13 @@ import {
   VERIFY_LINK_TTL_MS,
   VERIFY_RESEND_INTERVAL_MS,
   buildVerifyEmail,
+  emailPageUrl,
   isWellFormedEmailToken,
   maskEmail,
   mintEmailToken,
   normalizeEmail,
-  reporterEmailApiBase,
+  reporterEmailPageBase,
   sha256Hex,
-  verifyUrl,
 } from './reporter-email.ts'
 import { getVapidConfig, isAllowedPushEndpoint } from './web-push.ts'
 
@@ -217,7 +217,7 @@ export async function updateReporterPrefs(
   if (error) return { ok: false, status: 500, code: 'DB_ERROR', message: error.message }
 
   if (verifyToken && newAddress) {
-    const mail = buildVerifyEmail({ appName: settings.appName, confirmUrl: verifyUrl(reporterEmailApiBase(), verifyToken) })
+    const mail = buildVerifyEmail({ appName: settings.appName, confirmUrl: emailPageUrl(reporterEmailPageBase(), 'verify', verifyToken) })
     const sent = await sendTransactionalEmail({
       to: newAddress,
       subject: mail.subject,
