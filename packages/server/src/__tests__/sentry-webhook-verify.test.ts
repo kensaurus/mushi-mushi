@@ -181,7 +181,8 @@ describe('Sentry webhook routes (source shape)', () => {
     src.indexOf("app.post('/v1/webhooks/sentry',"),
     src.indexOf("app.post('/v1/webhooks/sentry/seer',"),
   )
-  const seerRoute = src.slice(src.indexOf("app.post('/v1/webhooks/sentry/seer',"))
+  const seerStart = src.indexOf("app.post('/v1/webhooks/sentry/seer',")
+  const seerRoute = src.slice(seerStart, src.indexOf('app.post(', seerStart + 10))
 
   it('verifies through the shared helper with Vault-read secret and both replay keys', () => {
     expect(sentryRoute).toContain('readSentryHookHeaders(')
@@ -191,10 +192,27 @@ describe('Sentry webhook routes (source shape)', () => {
     expect(sentryRoute).not.toMatch(/Sentry-Hook-Resource-Id/)
   })
 
-  it('the seer route reads the secret out of Vault before verifying', () => {
-    const verifyAt = seerRoute.indexOf('verifySentryHookSignature(rawBody')
-    const derefAt = seerRoute.indexOf('dereferenceMaybeVault(')
-    expect(derefAt).toBeGreaterThan(-1)
-    expect(verifyAt).toBeGreaterThan(derefAt)
+  it('the seer route runs the same verification as the main route', () => {
+    expect(seerRoute).toContain("createWebhookMiddleware('sentry_seer')")
+    expect(seerRoute).toContain('readSentryHookHeaders(')
+    expect(seerRoute).toContain('dereferenceMaybeVault(')
+    expect(seerRoute).toContain('hasAcceptedDuplicate(')
+    expect(seerRoute).not.toContain('verifySentryHookSignature')
+    // The module path must resolve from api/routes/.
+    expect(seerRoute).toContain("'../../_shared/seer.ts'")
+  })
+
+  it('the seer route verifies before it reads the enabled flag or the body', () => {
+    const verifyAt = seerRoute.indexOf('verifySentryDelivery(')
+    expect(verifyAt).toBeGreaterThan(-1)
+    expect(seerRoute.indexOf('sentry_seer_enabled) {')).toBeGreaterThan(verifyAt)
+    expect(seerRoute.indexOf('JSON.parse(rawBody)')).toBeGreaterThan(verifyAt)
+  })
+
+  it('every seer response after verification resolves the audit row', () => {
+    const afterVerdict = seerRoute.slice(seerRoute.indexOf('if (!verdict.ok) {'))
+    const tail = afterVerdict.slice(afterVerdict.indexOf('verdict.status);') + 1)
+    expect(tail).not.toMatch(/return c\.json\(/)
+    expect((tail.match(/return done\(/g) ?? []).length).toBeGreaterThanOrEqual(5)
   })
 })
