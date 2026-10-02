@@ -102,7 +102,7 @@ describe('CopyRepoDigestButton', () => {
 })
 
 describe('ExploreDiagramPublishCard', () => {
-  const preview = (repoPrivate: boolean) => ({
+  const preview = (repoPrivate: boolean, blocked: string | null = null) => ({
     ok: true,
     data: {
       diagram_id: 'd1',
@@ -110,7 +110,8 @@ describe('ExploreDiagramPublishCard', () => {
       payload: { owner: 'acme', repo: 'shop', sha: 'b'.repeat(40), groups: [], edges: [], nodes: [{ id: 'ui', label: 'Web UI', group: 'g', path: 'apps/web', description: 'The app', x: 0, y: 0 }] },
       payload_hash: 'h'.repeat(64),
       url: 'https://kensaur.us/mushi-mushi/r/acme/shop',
-      can_publish: true,
+      can_publish: blocked === null,
+      publish_blocked_reason: blocked,
     },
   })
 
@@ -153,6 +154,16 @@ describe('ExploreDiagramPublishCard', () => {
 
     expect(toast.error).toHaveBeenCalledWith('The diagram changed', 'Review the new preview, then publish.')
     expect(apiFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('explains why publishing is blocked and keeps the button off', async () => {
+    const reason = 'Only someone with write access to this repo on GitHub can publish its diagram.'
+    apiFetch.mockResolvedValue(preview(false, reason))
+    act(() => root.render(createElement(ExploreDiagramPublishCard, { projectId: 'p1', publication: { published: false }, onChanged: vi.fn() })))
+    await act(async () => button('Preview public page').click())
+    await flush()
+    expect(container.textContent).toContain(reason)
+    expect(button('Publish').disabled).toBe(true)
   })
 
   it('offers unpublish once live', async () => {

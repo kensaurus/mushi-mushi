@@ -86,6 +86,14 @@ export async function resolveProjectGithubToken(
   db: ReturnType<typeof getServiceClient>,
   projectId: string,
   installationId: number | null = null,
+  opts: {
+    /**
+     * false = never fall back to the platform `GITHUB_TOKEN`. Routes that hand
+     * repo contents to the caller (digest, diagram) pass false: otherwise any
+     * project could point repo_url at a repo only the platform token can read.
+     */
+    allowEnvFallback?: boolean
+  } = {},
 ): Promise<string | null> {
   if (installationId && installationId > 0) {
     try {
@@ -137,6 +145,7 @@ export async function resolveProjectGithubToken(
   }
 
   // Step 3: env fallback.
+  if (opts.allowEnvFallback === false) return null
   return Deno.env.get('GITHUB_TOKEN') ?? null
 }
 

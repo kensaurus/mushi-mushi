@@ -73,6 +73,13 @@ const DIAGRAM_GENERATIONS_PER_HOUR = 6
 const MAX_DIAGRAMS_PER_PROJECT = 10
 const PUBLIC_VIEWS_PER_HOUR_PER_IP = 120
 const PUBLIC_PAGE_BASE = 'https://kensaur.us/mushi-mushi/r'
+/**
+ * Wall-clock budget: the edge function must finish the GitHub reads and the
+ * LLM call well inside the platform limit (150 s), or the console shows an
+ * error while the server is still working and a retry pays twice.
+ */
+const DIAGRAM_DIGEST_DEADLINE_MS = 30_000
+const DIAGRAM_LLM_TIMEOUT_MS = 90_000
 
 const DiagramLlmSchema = z.object({
   groups: z.array(z.object({ id: z.string(), label: z.string() })),
@@ -243,6 +250,7 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
       token, owner, repo, pinned, tree,
       options: { budgetTokens: DIAGRAM_DIGEST_BUDGET },
       scopeLabel: 'whole repo (diagram input)',
+      deadlineMs: DIAGRAM_DIGEST_DEADLINE_MS,
     })
 
     const started = Date.now()
@@ -266,6 +274,7 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
           system: DIAGRAM_SYSTEM_PROMPT,
           messages: [{ role: 'user', content: userPrompt }],
           maxTokens: DIAGRAM_MAX_OUTPUT_TOKENS + THINKING_HEADROOM_TOKENS,
+          timeoutMs: DIAGRAM_LLM_TIMEOUT_MS,
         }),
         (key) => {
           usedModel = ASSIST_FALLBACK
@@ -391,7 +400,12 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
         payload,
         payload_hash: await publicPayloadHash(payload),
         url: publicDiagramUrl(vis.owner, vis.repo),
-        can_publish: access.role === 'owner' || access.role === 'admin',
+        can_publish: (access.role === 'owner' || access.role === 'admin') && vis.canWrite,
+        publish_blocked_reason: !(access.role === 'owner' || access.role === 'admin')
+          ? 'Only a project owner or admin can publish.'
+          : !vis.canWrite
+            ? "Only someone with write access to this repo on GitHub can publish its diagram. The project's GitHub token cannot push to it."
+            : null,
       },
     })
   })
@@ -438,6 +452,7 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
       .eq('repo_name', vis.repo.toLowerCase())
       .maybeSingle()
     const decision = decidePublish({
+      repoWriteAccess: vis.canWrite,
       previewedHash: body.payload_hash,
       currentHash: hash,
       repoPrivate: vis.private,

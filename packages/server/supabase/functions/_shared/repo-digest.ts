@@ -137,6 +137,28 @@ export interface RepoDigest {
   text: string
 }
 
+// ── Secrets ──────────────────────────────────────────────────────────────────
+
+/**
+ * Patterns the shared scanner (secret-scan.ts, kept byte-identical with
+ * ux/design-plane) does not cover but the fix-worker and pii-scrubber guards
+ * do. Repo text goes to an LLM provider and possibly a public page.
+ */
+const EXTRA_SECRET_PATTERNS: ReadonlyArray<{ re: RegExp; label: string }> = [
+  { re: /AIza[0-9A-Za-z_-]{35}/, label: 'Google API key' },
+  { re: /\b(?:sk|rk)_test_[A-Za-z0-9]{16,}/, label: 'Stripe test key' },
+  { re: /\bnpm_[A-Za-z0-9]{36}\b/, label: 'npm token' },
+  { re: /\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}/, label: 'SendGrid key' },
+]
+
+/** The label of the first secret-shaped match in repo text, or null. */
+export function scanRepoTextForSecrets(text: string): string | null {
+  const shared = scanForSecrets(text)
+  if (shared) return shared
+  for (const { re, label } of EXTRA_SECRET_PATTERNS) if (re.test(text)) return label
+  return null
+}
+
 // ── Token estimate ───────────────────────────────────────────────────────────
 
 /** Characters / 4, rounded up. An estimate, not a tokenizer. */
@@ -498,7 +520,7 @@ export function assembleRepoDigest(
     }
     let body = got
     let truncatedNote = ''
-    const secretLabel = scanForSecrets(body)
+    const secretLabel = scanRepoTextForSecrets(body)
     if (secretLabel) {
       redacted.push({ path: f.path, label: secretLabel })
       body = `[Mushi left this file's contents out: it looks like it holds a secret (${secretLabel}).]`
@@ -770,8 +792,10 @@ export async function buildRepoDigestFromTree(opts: {
  * plus the resolved seed list (a report's linked files can change between
  * calls, so the report id alone is not a key).
  */
-export function digestCacheKeyInput(opts: RepoDigestOptions, seeds: readonly string[]): string {
+export function digestCacheKeyInput(opts: RepoDigestOptions, seeds: readonly string[], scopeKey: string): string {
   return JSON.stringify({
+    // The scope changes the text's header even when no seeds resolve.
+    k: scopeKey,
     b: clampDigestBudget(opts.budgetTokens ?? DEFAULT_DIGEST_BUDGET_TOKENS),
     i: [...(opts.include ?? [])].map((s) => s.trim()).filter(Boolean).sort(),
     e: [...(opts.exclude ?? [])].map((s) => s.trim()).filter(Boolean).sort(),

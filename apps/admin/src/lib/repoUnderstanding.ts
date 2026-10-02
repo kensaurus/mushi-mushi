@@ -136,7 +136,10 @@ export interface DiagramPublishPreview {
   payload: { owner: string; repo: string; sha: string; nodes: DiagramNode[]; groups: DiagramGroup[]; edges: DiagramEdge[] }
   payload_hash: string
   url: string
+  /** Project owner/admin AND write access to the repo on GitHub. */
   can_publish: boolean
+  /** Plain-English reason when can_publish is false. */
+  publish_blocked_reason: string | null
 }
 
 /** Must match DIAGRAM_NODE_W / _H in _shared/repo-diagram.ts. */

@@ -80,7 +80,9 @@ export async function resolveConnectedRepo(db: Db, projectId: string): Promise<R
     return { ok: false, status: 400, code: 'BAD_REPO', message: 'The connected repo URL is not a GitHub repo URL.' }
   }
   const installationId = (repoRow.github_app_installation_id as number | null) ?? null
-  const token = await resolveProjectGithubToken(db, projectId, installationId)
+  // Never the platform GITHUB_TOKEN: these routes return repo contents, so a
+  // project must read GitHub with its own credential.
+  const token = await resolveProjectGithubToken(db, projectId, installationId, { allowEnvFallback: false })
   if (!token) {
     return { ok: false, status: 400, code: 'NO_GITHUB', message: 'GitHub is not connected. Add a token on the Connect page.' }
   }
@@ -274,7 +276,8 @@ export function registerRepoDigestRoutes(app: Hono<{ Variables: Variables }>): v
       }
     }
 
-    const optionsHash = await sha256HexOf(digestCacheKeyInput(options, options.seedPaths ?? []))
+    const scopeKey = scope.kind === 'report' ? `report:${scope.report_id}` : scope.kind
+    const optionsHash = await sha256HexOf(digestCacheKeyInput(options, options.seedPaths ?? [], scopeKey))
     const { data: cached } = await db
       .from('repo_digest_cache')
       .select('digest')

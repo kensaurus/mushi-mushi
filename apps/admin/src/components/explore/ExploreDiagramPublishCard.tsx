@@ -139,7 +139,7 @@ export function ExploreDiagramPublishCard({ projectId, publication, onChanged }:
               />
             )}
             {!preview.can_publish && (
-              <p className="text-xs text-warn">Only a project owner or admin can publish.</p>
+              <p className="text-xs text-warn">{preview.publish_blocked_reason ?? 'You cannot publish this diagram.'}</p>
             )}
             <div className="flex flex-wrap gap-2">
               <Btn
