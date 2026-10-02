@@ -78,6 +78,14 @@
     "path": "/v1/admin/fixes/{fixId}/refresh-ci",
     "required": ["fixId"]
   },
+  "import_sentry_issues": {
+    "scope": "mcp:write",
+    "description": "Import existing Sentry issues into the report queue.",
+    "method": "POST",
+    "path": "/v1/admin/projects/{projectId}/sentry/import",
+    "body": { "issueIds": "{issueIds}", "query": "{query}", "limit": "{limit}" },
+    "hints": { "destructive": false, "idempotent": true }
+  },
   "reopen_report": {
     "scope": "mcp:write",
     "description": "Reopen a report for regression triage.",
