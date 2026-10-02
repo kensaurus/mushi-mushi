@@ -12,7 +12,7 @@
  *          (Dashboard, Reports, Fixes, Judge, Integrations, etc.) updates.
  */
 
-import { Link, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import { usePostureHasStatusBanner } from '../lib/postureChromeStore'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -170,18 +170,17 @@ function NbaCta({
   onTestReport: () => void
   testRunning: boolean
 }) {
+  // Outline, not filled: this strip rides above every page, so a filled CTA
+  // here competed with each page's own primary action for attention.
   if (cta.kind === 'link') {
     return (
-      <Link
-        to={cta.to}
-        className="inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity motion-safe:active:scale-[0.97] motion-safe:duration-150"
-      >
+      <Btn to={cta.to} size="sm" variant="ghost">
         {cta.label} <span aria-hidden="true">→</span>
-      </Link>
+      </Btn>
     )
   }
   return (
-    <Btn size="sm" variant="primary" onClick={onTestReport} loading={testRunning}>
+    <Btn size="sm" variant="ghost" onClick={onTestReport} loading={testRunning}>
       {cta.label}
     </Btn>
   )

@@ -94,15 +94,19 @@ export function SegmentedControl<T extends string>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(opt.id)}
+            // Selected = the soft SELECTED_TONE wash, not the filled brand
+            // action colour. A filled tab competed with the page's one
+            // primary button (Connect: "Studio" tab vs "Add to Cursor").
+            // Inset ring instead of a border so the segment doesn't grow.
             className={`${SEGMENT_SIZE[size]} rounded-sm motion-safe:transition-[transform,opacity] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:active:scale-[0.97] ${
               active
-                ? 'bg-brand text-brand-fg shadow-brand-raised'
+                ? 'bg-brand-subtle text-brand-foreground font-medium ring-1 ring-inset ring-brand/40'
                 : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50 hover:-translate-y-px'
             }`}
           >
             {opt.label}
             {opt.count !== undefined && (
-              <span className={`ml-1 font-mono ${active ? 'text-brand-fg/80' : 'text-fg-faint'}`}>
+              <span className={`ml-1 font-mono ${active ? 'text-brand-foreground/80' : 'text-fg-faint'}`}>
                 {opt.count}
               </span>
             )}

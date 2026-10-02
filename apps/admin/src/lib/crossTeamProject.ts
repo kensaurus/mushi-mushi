@@ -17,7 +17,7 @@
 
 import { apiFetch } from './supabase'
 
-export interface TeamRef {
+interface TeamRef {
   id: string
   name: string
 }

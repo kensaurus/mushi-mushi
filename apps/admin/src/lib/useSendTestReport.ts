@@ -18,12 +18,12 @@ import { useToast } from './toast'
 import { scopedHref } from './humanPageHints'
 import { invalidateSetupStatus } from './useSetupStatus'
 
-export type SendTestReportResult =
+type SendTestReportResult =
   | { ok: true; reportId: string; projectName: string }
   | { ok: false; message: string }
 
 /** Report detail URL pinned to the project the report belongs to. */
-export function testReportHref(reportId: string, projectId: string): string {
+function testReportHref(reportId: string, projectId: string): string {
   return scopedHref(`/reports/${reportId}`, projectId)
 }
 
