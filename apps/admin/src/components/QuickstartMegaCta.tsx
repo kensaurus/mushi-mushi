@@ -18,6 +18,7 @@ import { useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { SEVERITY_TRAFFIC } from '../lib/severityTraffic'
 import { useAdminMode } from '../lib/mode'
+import { shouldShowQuickstartMegaCta } from '../lib/chromePosture'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from './ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
@@ -29,8 +30,6 @@ interface NextReport {
   severity: string | null
   component: string | null
 }
-
-const SHOW_ON_PATHS = new Set(['/', '/reports', '/fixes'])
 
 export function QuickstartMegaCta({ embedded = false }: { embedded?: boolean }) {
   const { isQuickstart } = useAdminMode()
@@ -95,6 +94,19 @@ export function QuickstartMegaCta({ embedded = false }: { embedded?: boolean }) 
       }
     }
 
+    // No untriaged bug, but triaged ones may still have no fix. Saying
+    // "caught up" here contradicted the next step the console showed below.
+    if (project.fix_count === 0) {
+      const n = project.report_count
+      return {
+        title: `Dispatch a fix on your ${n} waiting ${n === 1 ? 'report' : 'reports'}`,
+        sub: 'No new bugs to triage. Mushi opens a draft PR with its reasoning; you review the diff.',
+        button: 'Open Reports',
+        to: '/reports',
+        tone: 'do' as const,
+      }
+    }
+
     return {
       title: "You're caught up",
       sub: 'No new bugs waiting. Mushi will surface the next one here as soon as it lands.',
@@ -108,7 +120,7 @@ export function QuickstartMegaCta({ embedded = false }: { embedded?: boolean }) 
   if (pathname.startsWith('/login') || pathname.startsWith('/recovery')) return null
   if (pathname.startsWith('/onboarding')) return null
   if (pathname.startsWith('/reports/')) return null
-  if (!SHOW_ON_PATHS.has(pathname)) return null
+  if (!shouldShowQuickstartMegaCta(isQuickstart, pathname)) return null
   if (setup.loading) return null
   if (!cta) return null
 

@@ -9,7 +9,7 @@
  *              before reports show up here")
  */
 
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { ZodType, ZodTypeDef } from 'zod'
 import { usePageData } from './usePageData'
 import { SetupResponseSchema } from './apiSchemas'
@@ -137,6 +137,19 @@ const EMPTY_SELECTORS: SetupSelectors = {
   done: false,
 }
 
+const SETUP_INVALIDATE_EVENT = 'mushi:setup-invalidate'
+
+/**
+ * Tell every mounted `useSetupStatus` to refetch. Each instance owns its own
+ * fetch state, so a reload in one (say, the dashboard) left the setup guide
+ * saying "Receive your first bug report — Do this next" after the report had
+ * landed. Call this when something the checklist reads has just changed.
+ */
+export function invalidateSetupStatus(): void {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new Event(SETUP_INVALIDATE_EVENT))
+}
+
 export function useSetupStatus(activeProjectId?: string | null): UseSetupStatusResult {
   // FE-API-1: Zod-validate the response. Setup drives the onboarding gate,
   // the banner, and every per-page "finish setup first" nudge — silent
@@ -149,6 +162,11 @@ export function useSetupStatus(activeProjectId?: string | null): UseSetupStatusR
     schema: SetupResponseSchema as unknown as ZodType<SetupResponse, ZodTypeDef, SetupResponse>,
     scope: 'enumeration',
   })
+
+  useEffect(() => {
+    window.addEventListener(SETUP_INVALIDATE_EVENT, reload)
+    return () => window.removeEventListener(SETUP_INVALIDATE_EVENT, reload)
+  }, [reload])
 
   return useMemo(() => {
     const projects = data?.projects ?? []

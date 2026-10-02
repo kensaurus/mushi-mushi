@@ -18,6 +18,7 @@ import { usePostureHasStatusBanner } from '../lib/postureChromeStore'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from './ProjectSwitcher'
 import { useAdminMode } from '../lib/mode'
+import { shouldShowQuickstartMegaCta } from '../lib/chromePosture'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
 import { CHIP_TONE } from '../lib/chipTone'
@@ -95,6 +96,8 @@ export function NextBestAction() {
   // users are missing there, so it renders in both Quick and Beginner.
   // Advanced stays opted out for a denser layout.
   if (!isBeginner && !isQuickstart) return null
+  // The Quickstart mega CTA already names the next step on these routes.
+  if (shouldShowQuickstartMegaCta(isQuickstart, pathname)) return null
   // Status banner on PagePosture already carries the next step for this route.
   if (postureHasStatusBanner) return null
   // Login/recovery routes are unauthenticated — never render the strip.
