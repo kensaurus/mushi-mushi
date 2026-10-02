@@ -154,6 +154,18 @@ describe('tab-share frame grab', () => {
     expect(stop).toHaveBeenCalledTimes(1);
   });
 
+  it('refuses a window or screen share (masking only reaches this page) and stops it', async () => {
+    const stop = vi.fn();
+    const stream = {
+      getTracks: () => [{ stop }],
+      getVideoTracks: () => [{ getSettings: () => ({ displaySurface: 'monitor' }) }],
+    } as unknown as MediaStream;
+    const { grabMaskedTabFrame } = await import('./display-capture');
+    await expect(grabMaskedTabFrame(Promise.resolve(stream), ['[data-private]'])).rejects.toMatchObject({ name: 'NotAllowedError' });
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('style[data-mushi-capture-mask]')).toBeNull();
+  });
+
   it('a cancelled share rejects and leaves no mask behind', async () => {
     const { grabMaskedTabFrame } = await import('./display-capture');
     const denied = Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });

@@ -791,6 +791,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
             preferCurrentTab: true,
             selfBrowserSurface: 'include',
           } as DisplayMediaStreamOptions);
+          // An instant rejection (cancel, iframe without display-capture) would
+          // otherwise surface as an unhandled rejection before the chunk loads;
+          // grabMaskedTabFrame still awaits the original and maps the reason.
+          stream.catch(() => {});
           widget.setScreenshotCapturing(true);
           const host = document.getElementById('mushi-mushi-widget');
           if (host) host.style.visibility = 'hidden';
