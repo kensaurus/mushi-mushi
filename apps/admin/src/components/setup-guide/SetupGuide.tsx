@@ -39,6 +39,9 @@ import { SetupGuidePanel } from './SetupGuidePanel'
 /** Auth-shell routes where chrome is deliberately absent. */
 const HIDDEN_PREFIXES = ['/login', '/signup', '/reset-password', '/invite', '/cli-auth', '/mcp-auth']
 
+/** Fallback setup polls per awaiting project (30s apart = 5 minutes). */
+const SETUP_POLL_MAX = 10
+
 export function SetupGuide() {
   const { user } = useAuth()
   const { pathname } = useLocation()
@@ -46,27 +49,6 @@ export function SetupGuide() {
   const setup = useSetupStatus(activeProjectId)
   const snapshots = useProjectSnapshots()
   const [storedView, setStoredView] = useSetupGuideView()
-
-  // While the first report is still outstanding, watch for it to land so the
-  // guide (and every other setup surface) moves on without a page reload.
-  // Off once the step completes, so steady-state sessions hold no channel.
-  const awaitingProjectId =
-    setup.activeProject && setup.isStepIncomplete(SETUP_STEPS.firstReportReceived)
-      ? setup.activeProject.project_id
-      : null
-  const { channelState } = useRealtimeReload(
-    [{ table: 'reports', event: 'INSERT', filter: `project_id=eq.${awaitingProjectId ?? ''}` }],
-    invalidateSetupStatus,
-    { debounceMs: 1000, enabled: !!user && !!awaitingProjectId },
-  )
-  // Realtime can be blocked (proxy, extension); fall back to a slow poll.
-  useEffect(() => {
-    if (!user || !awaitingProjectId || channelState === 'live') return
-    const t = setInterval(() => {
-      if (!document.hidden) invalidateSetupStatus()
-    }, 30_000)
-    return () => clearInterval(t)
-  }, [user, awaitingProjectId, channelState])
 
   const headingRef = useRef<HTMLHeadingElement | null>(null)
   const previousView = useRef<string | null>(null)
@@ -87,6 +69,35 @@ export function SetupGuide() {
     requiredComplete: model.allRequiredDone,
     suppressAutoExpand: shouldSuppressAutoExpand(pathname),
   })
+
+  // While the guide is on screen and the first report is still outstanding,
+  // watch for it to land so the guide (and every other setup surface) moves
+  // on without a page reload. Off once the step completes or the guide is
+  // hidden, so steady-state sessions hold no channel.
+  const guideOnScreen = !!user && view !== 'dismissed' && !HIDDEN_PREFIXES.some((p) => pathname.startsWith(p))
+  const awaitingProjectId =
+    guideOnScreen && setup.activeProject && setup.isStepIncomplete(SETUP_STEPS.firstReportReceived)
+      ? setup.activeProject.project_id
+      : null
+  const { channelState } = useRealtimeReload(
+    [{ table: 'reports', event: 'INSERT', filter: `project_id=eq.${awaitingProjectId ?? ''}` }],
+    invalidateSetupStatus,
+    { debounceMs: 1000, enabled: !!awaitingProjectId },
+  )
+  // Realtime can be blocked (proxy, extension). Fall back to a slow, bounded
+  // poll: SETUP_POLL_MAX checks (5 minutes) per project per mount, which
+  // covers "just sent a test report" without polling a never-connected
+  // project from every open tab forever.
+  useEffect(() => {
+    if (!awaitingProjectId || channelState === 'live') return
+    let left = SETUP_POLL_MAX
+    const t = setInterval(() => {
+      if (document.hidden) return
+      invalidateSetupStatus()
+      if (--left <= 0) clearInterval(t)
+    }, 30_000)
+    return () => clearInterval(t)
+  }, [awaitingProjectId, channelState])
 
   const expand = useCallback(() => setStoredView('expanded'), [setStoredView])
   const minimize = useCallback(() => setStoredView('minimized'), [setStoredView])

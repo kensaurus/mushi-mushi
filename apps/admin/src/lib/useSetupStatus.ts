@@ -9,9 +9,10 @@
  *              before reports show up here")
  */
 
-import { useEffect, useMemo } from 'react'
+import { useMemo, useSyncExternalStore } from 'react'
 import type { ZodType, ZodTypeDef } from 'zod'
 import { usePageData } from './usePageData'
+import { invalidateApiCache } from './supabase'
 import { SetupResponseSchema } from './apiSchemas'
 
 export type SetupStepId =
@@ -158,17 +159,29 @@ function withTabbedCtas(project: SetupProject): SetupProject {
   }
 }
 
-const SETUP_INVALIDATE_EVENT = 'mushi:setup-invalidate'
+let setupGeneration = 0
+const setupGenerationListeners = new Set<() => void>()
+
+function subscribeSetupGeneration(listener: () => void): () => void {
+  setupGenerationListeners.add(listener)
+  return () => setupGenerationListeners.delete(listener)
+}
 
 /**
  * Tell every mounted `useSetupStatus` to refetch. Each instance owns its own
  * fetch state, so a reload in one (say, the dashboard) left the setup guide
  * saying "Receive your first bug report — Do this next" after the report had
  * landed. Call this when something the checklist reads has just changed.
+ *
+ * It drops the cached response and bumps a shared generation that every
+ * instance passes as a `usePageData` dep, so the ~17 mounted instances share
+ * ONE deduplicated request. Calling each instance's `reload()` would bypass
+ * the dedup (`no-store`) and fire one request per instance.
  */
 export function invalidateSetupStatus(): void {
-  if (typeof window === 'undefined') return
-  window.dispatchEvent(new Event(SETUP_INVALIDATE_EVENT))
+  invalidateApiCache('/v1/admin/setup')
+  setupGeneration += 1
+  for (const listener of setupGenerationListeners) listener()
 }
 
 export function useSetupStatus(activeProjectId?: string | null): UseSetupStatusResult {
@@ -179,15 +192,12 @@ export function useSetupStatus(activeProjectId?: string | null): UseSetupStatusR
   // break Zod validation. The cast below bridges the Zod-inferred type (where
   // step.id is `string`) back to the SetupResponse interface (where step.id is
   // the narrower `SetupStepId` union). Runtime shape is unchanged.
+  const generation = useSyncExternalStore(subscribeSetupGeneration, () => setupGeneration, () => 0)
   const { data, loading, error, reload } = usePageData<SetupResponse>('/v1/admin/setup', {
     schema: SetupResponseSchema as unknown as ZodType<SetupResponse, ZodTypeDef, SetupResponse>,
     scope: 'enumeration',
+    deps: [generation],
   })
-
-  useEffect(() => {
-    window.addEventListener(SETUP_INVALIDATE_EVENT, reload)
-    return () => window.removeEventListener(SETUP_INVALIDATE_EVENT, reload)
-  }, [reload])
 
   return useMemo(() => {
     const projects = (data?.projects ?? []).map(withTabbedCtas)
