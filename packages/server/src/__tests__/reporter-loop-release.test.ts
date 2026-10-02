@@ -107,3 +107,18 @@ describe('notifyReleaseReporters + stampDeliveredReleaseCredits', () => {
     expect(fake.table('release_credits')[0].notified_at).toBeNull()
   })
 })
+
+describe('release-builder draft', () => {
+  it('never lists a report an earlier release already shipped (its reporter would hear "shipped" twice)', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve, dirname } = await import('node:path')
+    const { fileURLToPath } = await import('node:url')
+    const src = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), '../../supabase/functions/release-builder/index.ts'),
+      'utf8',
+    )
+    const query = src.slice(src.indexOf(".from('reports')"), src.indexOf('.limit(50)'))
+    expect(query).toContain(".eq('status', 'fixed')")
+    expect(query).toContain(".is('fixed_release_id', null)")
+  })
+})

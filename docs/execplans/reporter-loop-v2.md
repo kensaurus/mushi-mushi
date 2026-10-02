@@ -621,6 +621,8 @@ Reporter routes use `apiKeyAuth` plus `resolveReporterAuth`.
 
 One-screen report, free text first; the theming contract with a neutral default, plus the RN theme prop; wrapping chips; automatic masking, with a test that the masked image is what the server receives; the accessibility items; incremental web rendering; list, detail and timeline views.
 
+React Native parity built 2026-10-02 (`feat/reporter-loop-phase2-3`): one-screen report, v2 timeline, Reduce Motion, receipt with email opt-in, next-visit toast. The RN bundle budget moved from 22 kB to 23.5 kB brotli for it (measured 22.95 kB; see `packages/react-native/.size-limit.cjs`); the shared widget rules live in `@mushi-mushi/core/reporter-ui`.
+
 ### Phase 2 — loop wiring
 
 Migrations 1–4; the fan-out function; release linkage; duplicate follows; "Ask for more info" / Waiting on you; the `reporter_replied` plugin event; admin unread state; `/updates` plus the toast; the outbox; the console Reporter view; the MCP additions.
@@ -628,6 +630,8 @@ Migrations 1–4; the fan-out function; release linkage; duplicate follows; "Ask
 ### Phase 3 — opt-in channels
 
 Email opt-in, verification and unsubscribe (needs `RESEND_*` in production); web push for hosts that opt in; frequency caps and the digest; the DPA / 委託 template.
+
+Built 2026-10-02 (branch `feat/reporter-loop-phase2-3`): migrations `20261002160000` (additive) and `20261002160100` (digest cron, value switch); `_shared/reporter-email.ts`, `reporter-optin.ts`, `reporter-digest.ts`, `reporter-settings.ts`; routes in `api/routes/reporter-prefs.ts` and `reporter-admin.ts`; console card `ReporterChannelsCard`; SDK calls in `@mushi-mushi/core/reporter-channels`. Email links open the console's public `/email/reporter` page (Supabase serves Edge Function HTML as `text/plain` with a sandbox CSP, so the API can not render a clickable page); `List-Unsubscribe` still points at the API for the RFC 8058 one-click POST. Without `RESEND_API_KEY` + `RESEND_FROM_EMAIL` email reports `not_configured` (console, `/v1/sdk/config`, ledger `skipped not_configured`). The built-in widget opt-in UI (receipt checkbox, "Notify me") is not shipped: the web bundle has ~10 B of its 89.5 kB budget left, so hosts render opt-in through the instance methods.
 
 ### Release batching
 

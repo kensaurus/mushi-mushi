@@ -6,6 +6,7 @@ export type {
   MushiPreset,
   MushiSentryConfig,
   MushiWidgetConfig,
+  MushiNotificationsConfig,
   MushiWidgetAnchor,
   MushiCaptureConfig,
   MushiDiscoverInventoryConfig,
@@ -271,3 +272,14 @@ export {
   readPageFaviconHref,
   type ProjectFaviconSource,
 } from './favicon';
+// Types only: the calls themselves live in the `@mushi-mushi/core/reporter-channels`
+// subpath so this entry stays inside its size budget.
+export type {
+  MushiReporterUpdates,
+  MushiReporterNotificationPrefs,
+  MushiReporterPrefsUpdate,
+  MushiReporterChannelUnavailable,
+  MushiPushSubscriptionJSON,
+  MushiReporterTimelineItem,
+  MushiReporterReportDetail,
+} from './reporter-channels';

@@ -45,6 +45,7 @@ import { generateValidatedObject } from '../../_shared/structured-output.ts'
 import { verifyEndUserToken, MUSHI_USER_TOKEN_HEADER } from '../../_shared/end-user-identity.ts'
 import { canManageProjectSdkConfig } from '../helpers.ts'
 import { logAudit } from '../../_shared/audit.ts'
+import { scanForSecrets } from '../../_shared/secret-scan.ts'
 
 const log = rootLog.child('sdk-assistant')
 
@@ -131,30 +132,6 @@ function normalizeReply(raw: z.infer<typeof ReplyLlmSchema>): Record<string, unk
     .filter((s) => s.label?.trim())
     .map((s) => ({ label: s.label.trim(), ...(s.detail?.trim() ? { detail: s.detail.trim() } : {}) }))
   return { kind: 'answer', text, ...(steps.length ? { steps } : {}) }
-}
-
-/**
- * Scan an operator-authored knowledge corpus for leaked secrets before it is
- * persisted. The corpus is fed verbatim into the LLM system prompt, so a stray
- * key here would be a real exposure. Pattern set mirrors _shared/skill-packet
- * style guards (API keys, private keys, connection strings, JWTs).
- */
-const SECRET_PATTERNS: Array<{ re: RegExp; label: string }> = [
-  { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/, label: 'private key' },
-  { re: /sk-[a-zA-Z0-9]{20,}/, label: 'OpenAI-style key' },
-  { re: /sk-ant-[a-zA-Z0-9_-]{20,}/, label: 'Anthropic key' },
-  { re: /AKIA[0-9A-Z]{16}/, label: 'AWS access key id' },
-  { re: /gh[pousr]_[A-Za-z0-9]{20,}/, label: 'GitHub token' },
-  { re: /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/, label: 'JWT' },
-  { re: /postgres(?:ql)?:\/\/[^:\s]+:[^@\s]+@/, label: 'database connection string' },
-  { re: /xox[baprs]-[A-Za-z0-9-]{10,}/, label: 'Slack token' },
-]
-
-function scanForSecrets(text: string): string | null {
-  for (const { re, label } of SECRET_PATTERNS) {
-    if (re.test(text)) return label
-  }
-  return null
 }
 
 /** Per-project hourly cap. Reuses scoped_rate_limit_claim with the project id. */

@@ -54,6 +54,11 @@
         "!playground/**"
       ]
     },
+    "packages/react-native": {
+      "entry": [
+        "src/bundling/*.ts!"
+      ]
+    },
     "packages/capacitor": {
       "ignoreBinaries": [
         "pod"

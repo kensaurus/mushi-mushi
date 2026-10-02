@@ -37,3 +37,6 @@ export { AsyncStorageQueue } from './storage/async-storage-queue'
 
 // Re-export shared types that host apps commonly need
 export type { MushiReporterReport, MushiReporterComment, MushiHallOfFameEntry } from '@mushi-mushi/core'
+
+// Optional native modules a host can pass in config (netInfo, viewShot, expoSensors).
+export type { MushiNetInfoModule, MushiViewShotModule, MushiExpoSensorsModule } from './optional-modules'

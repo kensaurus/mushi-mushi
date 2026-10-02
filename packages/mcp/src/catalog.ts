@@ -513,6 +513,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     title: 'What should I work on now?',
     description:
       'Prioritised "do this next" list for the project: blocked auto-fixes first (with the unblock action), ' +
+      'then reporters waiting for an answer (they replied in the in-app thread since you last looked), ' +
       'then in-flight fixes to shepherd to merge, then user-felt classified reports by severity, with ' +
       'robot/cron chores (dependency bumps) last. Returns { steps: [{ priority, action, reason, tool, args }], summary }. ' +
       'Read-only. Call this first when the user asks "what needs my attention / what should I triage or fix".',

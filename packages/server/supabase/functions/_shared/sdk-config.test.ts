@@ -122,3 +122,21 @@ Deno.test('coerceSdkConfigUpdate — screenshotSensitiveHint boolean/string/null
     null,
   )
 })
+
+Deno.test('normalizeSdkConfig — reporter channels are offered only when the project gate is on AND the server can send', () => {
+  // Default: nothing offered.
+  assertEquals(normalizeSdkConfig(null).reporter, { emailEnabled: false, pushEnabled: false, vapidPublicKey: null })
+  const on: SdkConfigRow = { reporter_email_enabled: true, reporter_push_enabled: true }
+  // Gate on, provider unset (no RESEND_* / VAPID): still not offered.
+  assertEquals(normalizeSdkConfig(on).reporter, { emailEnabled: false, pushEnabled: false, vapidPublicKey: null })
+  // Gate on and configured.
+  assertEquals(
+    normalizeSdkConfig(on, { emailProviderConfigured: true, vapidPublicKey: 'BPub' }).reporter,
+    { emailEnabled: true, pushEnabled: true, vapidPublicKey: 'BPub' },
+  )
+  // Configured but the project left the gates off: not offered, key not leaked.
+  assertEquals(
+    normalizeSdkConfig({}, { emailProviderConfigured: true, vapidPublicKey: 'BPub' }).reporter,
+    { emailEnabled: false, pushEnabled: false, vapidPublicKey: null },
+  )
+})

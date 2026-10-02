@@ -59,7 +59,19 @@ import {
   type MushiPageContext,
   type MushiAssistantReply,
   type MushiPropertyValue,
+  type MushiApiResponse,
 } from '@mushi-mushi/core'
+import {
+  reporterChannels,
+  type MushiReporterNotificationPrefs,
+  type MushiReporterPrefsUpdate,
+  type MushiReporterReportDetail,
+  type MushiReporterUpdates,
+} from '@mushi-mushi/core/reporter-channels'
+import { reporterShouldShowToast, reporterToastMessage, resolveReporterLocale } from '@mushi-mushi/core/reporter-ui'
+import { readReporterFlag, writeReporterFlag } from './storage/reporter-flags'
+import { MushiUpdateToast } from './components/MushiUpdateToast'
+import { resolveExpoSensors, resolveNetInfo, resolveViewShot } from './optional-modules'
 import { setupConsoleCapture } from './capture/console-capture'
 import { setupNetworkCapture } from './capture/network-capture'
 import { getDeviceInfo } from './capture/device-info'
@@ -73,7 +85,7 @@ import { createRNEventTracker, type RNAnalyticsConfig, type RNEventTracker } fro
 import { createRNSessionTracker, type RNSessionTracker } from './analytics/session-tracker'
 import { MUSHI_SDK_PACKAGE, MUSHI_SDK_VERSION } from './version'
 import type { MushiRNTheme } from './theme'
-import { markReporterReportRead } from './reporter-thread'
+import { createReporterUpdateHub, markReporterReportRead } from './reporter-thread'
 
 export interface MushiRNConfig {
   projectId: string
@@ -119,6 +131,32 @@ export interface MushiRNConfig {
      * `accent` is set, the text on it is chosen for contrast.
      */
     theme?: Partial<MushiRNTheme>
+    /**
+     * Characters needed before Send enables. Default 8 (Plan 018 §1.1); an
+     * attached screenshot lowers it to 0.
+     */
+    minDescriptionLength?: number
+  }
+  /**
+   * Optional native modules, passed in instead of loaded. When set, the SDK
+   * uses them and never loads that package itself — the safest option for
+   * Metro configs that disallow optional requires. Each one is also picked up
+   * automatically when installed.
+   * - `netInfo`: `@react-native-community/netinfo` — resend queued reports when the network returns.
+   * - `viewShot`: `react-native-view-shot` — attach a screenshot.
+   * - `expoSensors`: `expo-sensors` — shake to report.
+   */
+  netInfo?: unknown
+  viewShot?: unknown
+  expoSensors?: unknown
+  /** How reporters hear back outside the sheet (Plan 018 §4). No native push. */
+  notifications?: {
+    /** One "the developer replied" / "your bug is fixed" toast when the app returns to the foreground. Default true. */
+    toast?: boolean
+    /** Offer "Get updates by email" after sending, when the project offers email. Default true. */
+    email?: boolean
+    /** Prefill that email box from `setUser({ email })`. Default false; the box is never pre-ticked. */
+    emailFromIdentity?: boolean
   }
   assistant?: {
     enabled?: boolean
@@ -180,6 +218,8 @@ export interface MushiRNInstance {
   submitReport(data: {
     description: string
     category: string
+    /** Host / chip sub-label, e.g. 'Feature request' for the Idea chip. */
+    userCategory?: string
     screenshotDataUrl?: string
   }): Promise<{
     ok: boolean
@@ -225,6 +265,33 @@ export interface MushiRNInstance {
   loadMyThread(reportId: string): Promise<MushiReporterComment[] | null>
   /** Mark this device's unread notifications for a report as read. Resolves the number marked (0 on failure). */
   markReportRead(reportId: string): Promise<number>
+  /** Unread count and the newest unread updates on this device's reports (null on failure). */
+  getReporterUpdates(): Promise<MushiReporterUpdates | null>
+  /**
+   * Fires with the unread count and newest updates when you subscribe and
+   * each time the app comes back to the foreground, so the host can draw its
+   * own badge (a feedback band, a tab dot). Returns an unsubscribe function.
+   */
+  onReporterUpdate(cb: (updates: MushiReporterUpdates) => void): () => void
+  /** This reporter's email choices; the address comes back masked (null on failure). */
+  getNotificationPrefs(): Promise<MushiReporterNotificationPrefs | null>
+  /**
+   * Ask for email updates (`{ email }` sends a confirmation email first) or
+   * change channels. Only when the reporter asked — never pre-tick an opt-in.
+   * Resolves the server's answer, including `EMAIL_NOT_AVAILABLE` when this
+   * app does not offer email. (No native push on React Native.)
+   */
+  setNotificationPrefs(update: MushiReporterPrefsUpdate): Promise<MushiApiResponse<MushiReporterNotificationPrefs>>
+  /**
+   * One report with its timeline (GET /v1/reporter/reports/:id). Resolves
+   * null when it could not be loaded (show Retry) and 'unsupported' when the
+   * server predates the route (fall back to `loadMyThread`).
+   */
+  loadMyReportDetail(reportId: string): Promise<MushiReporterReportDetail | null | 'unsupported'>
+  /** The address to prefill in the email opt-in box, only with `notifications.emailFromIdentity`. */
+  emailPrefill(): string | null
+  /** Open the sheet on "Your reports". */
+  openMyReports(): void
   /** Post a reporter reply on a report thread. Returns the new comment or null on failure. */
   replyToReport(reportId: string, body: string): Promise<MushiReporterComment | null>
   /** Record a reporter feedback signal (e.g. `confirms`, `not_fixed`) on a report. Returns the outcome or null. */
@@ -282,13 +349,6 @@ function resolveScreenshotHint(v: boolean | string | undefined): string | null {
   if (v === false) return null
   if (typeof v === 'string') return v.trim() ? v : null
   return DEFAULT_SCREENSHOT_HINT
-}
-
-type ExpoSensorsModule = {
-  Accelerometer: {
-    setUpdateInterval(ms: number): void
-    addListener(listener: (event: { x: number; y: number; z: number }) => void): { remove(): void }
-  }
 }
 
 /** Map a breadcrumb category to the repro-timeline `kind` enum.
@@ -455,33 +515,22 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
     }
   }, [])
 
-  // Added: network-aware delivery (Phase 2.4)
-  // Uses require() instead of new Function('s','return import(s)') — Hermes
-  // (RN 0.76+, AOT-only) rejects dynamic import() inside Function constructor
-  // bodies with "SyntaxError: Invalid expression encountered" at evaluation
-  // time, even if the constructed function is never called. require() is the
-  // correct sync-optional-dep pattern for Metro + Hermes environments.
+  // Network-aware delivery (Phase 2.4). Optional native modules load through
+  // ./optional-modules.ts: the host's injected module first, else a literal
+  // require() (never dynamic import() — Hermes rejects it inside Function bodies).
   useEffect(() => {
     let unsubscribe: (() => void) | undefined
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const NetInfo = (require('@react-native-community/netinfo') as {
-        default: {
-          addEventListener: (
-            cb: (state: { isConnected: boolean | null; isInternetReachable: boolean | null }) => void,
-          ) => () => void
-        }
-      }).default
-      unsubscribe = NetInfo.addEventListener((state) => {
+      unsubscribe = resolveNetInfo(config.netInfo)?.addEventListener((state) => {
         if (state.isConnected && state.isInternetReachable) {
           queueRef.current?.flush().catch(() => {})
         }
       })
     } catch {
-      // @react-native-community/netinfo is an optional peer dep — web / test envs won't have it
+      // netinfo is an optional peer dep — web / test envs won't have it
     }
     return () => unsubscribe?.()
-  }, [])
+  }, [config.netInfo])
 
   const open = useCallback(() => {
     setSheetPreferredTab('report')
@@ -503,11 +552,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
     // Capture a screenshot of the current app state BEFORE the sheet overlays it.
     // react-native-view-shot is an optional peer dep — fall through immediately when
     // it isn't installed. The sheet opens after capture resolves (typ. <150 ms).
-    let vshot: { captureScreen(opts: Record<string, unknown>): Promise<string> } | null = null
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      vshot = require('react-native-view-shot') as { captureScreen(opts: Record<string, unknown>): Promise<string> }
-    } catch { /* optional dep not installed */ }
+    const vshot = resolveViewShot(config.viewShot)
 
     if (!vshot) {
       setSheetScreenshot(null)
@@ -520,7 +565,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       .then((url: string) => { setSheetScreenshot(url) })
       .catch(() => { setSheetScreenshot(null) })
       .finally(() => { setSheetVisible(true) })
-  }, [config.capture?.screenshot])
+  }, [config.capture?.screenshot, config.viewShot])
   const openAssistant = useCallback(() => {
     if (!config.assistant?.enabled) return
     setSheetPreferredTab('assistant')
@@ -539,13 +584,11 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
     let lastShake = 0
     const threshold = config.widget?.shakeThreshold ?? 2.7
 
-    // require() instead of new Function dynamic import — same Hermes rationale
-    // as the NetInfo effect above. expo-sensors is an optional peer dep;
-    // bare React Native apps that don't install it stay dependency-light.
+    // expo-sensors is an optional peer dep; bare React Native apps that don't
+    // install it stay dependency-light (see ./optional-modules.ts).
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const mod = require('expo-sensors') as ExpoSensorsModule
-      if (!disposed) {
+      const mod = resolveExpoSensors(config.expoSensors)
+      if (mod && !disposed) {
         mod.Accelerometer.setUpdateInterval(120)
         const sub = mod.Accelerometer.addListener((evt) => {
           const g = Math.sqrt(evt.x * evt.x + evt.y * evt.y + evt.z * evt.z)
@@ -565,10 +608,10 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       disposed = true
       cleanup?.()
     }
-  }, [config.widget?.trigger, config.widget?.shakeThreshold, open])
+  }, [config.widget?.trigger, config.widget?.shakeThreshold, config.expoSensors, open])
 
   const submitReport = useCallback(
-    async (data: { description: string; category: string; screenshotDataUrl?: string }) => {
+    async (data: { description: string; category: string; userCategory?: string; screenshotDataUrl?: string }) => {
       await reporterTokenReadyRef.current
 
       const deviceInfo = getDeviceInfo()
@@ -625,6 +668,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         id: newUuid(),
         projectId: config.projectId,
         category: data.category as MushiReport['category'],
+        ...(data.userCategory ? { userCategory: data.userCategory } : {}),
         description: scrubPii(data.description),
         environment: {
           userAgent: deviceInfo.systemName ?? 'ReactNative',
@@ -709,6 +753,8 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         }
       } else {
         config.callbacks?.onReportSubmitted?.(report.id)
+        // From now on this device has reports worth checking for updates.
+        void writeReporterFlag(config.projectId, 'has_reports', '1')
         return { ok: true }
       }
     },
@@ -810,6 +856,81 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
     config.analytics?.flushIntervalMs,
     config.trackSessions,
   ])
+
+  // Host badges (onReporterUpdate): refreshed on subscribe and each time the
+  // app returns to the foreground; no listener means no request.
+  const reporterUpdatesRef = useRef(
+    createReporterUpdateHub(async () => {
+      const client = apiClientRef.current
+      if (!client) return null
+      await reporterTokenReadyRef.current
+      const res = await reporterChannels(client).getUpdates(reporterTokenRef.current)
+      return res.ok ? res.data ?? null : null
+    }),
+  )
+
+  useEffect(() => {
+    let sub: NativeEventSubscription | undefined
+    try {
+      if (typeof AppState?.addEventListener === 'function') {
+        sub = AppState.addEventListener('change', (state) => {
+          if (state === 'active' && reporterUpdatesRef.current.listenerCount() > 0) void reporterUpdatesRef.current.emit()
+        })
+      }
+    } catch {
+      /* AppState unavailable (tests, web) */
+    }
+    return () => sub?.remove()
+  }, [])
+
+  // Next-visit toast (Plan 018 §4.2): at most one per app session and one a
+  // day, only for a device that has sent a report, never with toast: false.
+  const [toast, setToast] = useState<{ message: string; reportId: string | null } | null>(null)
+  const toastShownRef = useRef(false)
+  const toastEnabled = config.notifications?.toast !== false
+  const maybeShowToast = useCallback(async () => {
+    if (!toastEnabled || toastShownRef.current) return
+    if ((await readReporterFlag(config.projectId, 'has_reports')) !== '1') return
+    const updates = await reporterUpdatesRef.current.emit()
+    if (!updates) return
+    const now = Date.now()
+    const show = reporterShouldShowToast({
+      enabled: toastEnabled,
+      unreadTotal: updates.unread_total,
+      shownThisSession: toastShownRef.current,
+      lastShownAt: Number(await readReporterFlag(config.projectId, 'toast_shown_at')) || null,
+      now,
+    })
+    if (!show) return
+    toastShownRef.current = true
+    void writeReporterFlag(config.projectId, 'toast_shown_at', String(now))
+    const locale = resolveReporterLocale(
+      typeof navigator !== 'undefined' ? (navigator as { language?: string }).language : undefined,
+    )
+    setToast({ message: reporterToastMessage(updates, locale), reportId: updates.latest[0]?.report_id ?? null })
+  }, [toastEnabled, config.projectId])
+
+  useEffect(() => {
+    void reporterTokenReadyRef.current.then(() => maybeShowToast())
+    let sub: NativeEventSubscription | undefined
+    try {
+      if (typeof AppState?.addEventListener === 'function') {
+        sub = AppState.addEventListener('change', (state) => {
+          if (state === 'active') void maybeShowToast()
+        })
+      }
+    } catch {
+      /* AppState unavailable (tests, web) */
+    }
+    return () => sub?.remove()
+  }, [maybeShowToast])
+
+  const openMyReports = useCallback(() => {
+    setToast(null)
+    setSheetScreenshot(null)
+    setSheetPreferredTab('inbox')
+    setSheetVisible(true)
+  }, [])
 
   const instance: MushiRNInstance = useMemo(
     () => ({
@@ -915,13 +1036,44 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         }
       },
       async markReportRead(reportId: string) {
-        // Phase 0 path: the existing notification routes, matched on
-        // payload.reportId (both the comment trigger and createNotification
-        // write it). Best effort — a failure only leaves the badge as it was.
+        // One call to the v2 mark-read route (legacy per-notification routes
+        // on an older server). Best effort — a failure only leaves the badge
+        // as it was.
         const client = apiClientRef.current
         if (!client) return 0
         await reporterTokenReadyRef.current
         return markReporterReportRead(client, reporterTokenRef.current, reportId)
+      },
+      getReporterUpdates: () => reporterUpdatesRef.current.emit(),
+      async loadMyReportDetail(reportId: string) {
+        const client = apiClientRef.current
+        if (!client) return null
+        try {
+          await reporterTokenReadyRef.current
+          const res = await reporterChannels(client).getReport(reportId, reporterTokenRef.current)
+          if (res.ok) return res.data ?? null
+          return res.error?.status === 404 && res.error.code !== 'NOT_FOUND' ? 'unsupported' : null
+        } catch {
+          return null
+        }
+      },
+      emailPrefill() {
+        return config.notifications?.emailFromIdentity ? userRef.current?.email ?? null : null
+      },
+      openMyReports,
+      onReporterUpdate: (cb) => reporterUpdatesRef.current.subscribe(cb),
+      async getNotificationPrefs() {
+        const client = apiClientRef.current
+        if (!client) return null
+        await reporterTokenReadyRef.current
+        const res = await reporterChannels(client).getPrefs(reporterTokenRef.current)
+        return res.ok ? res.data ?? null : null
+      },
+      async setNotificationPrefs(update) {
+        const client = apiClientRef.current
+        if (!client) return { ok: false, error: { code: 'NOT_INITIALIZED', message: 'Mushi is not ready yet' } }
+        await reporterTokenReadyRef.current
+        return reporterChannels(client).setPrefs(reporterTokenRef.current, update)
       },
       async replyToReport(reportId: string, body: string) {
         const client = apiClientRef.current
@@ -998,7 +1150,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         return res.ok ? (res.data as MushiAssistantReply) : null
       },
     }),
-    [open, close, attachTo, submitReport, openAssistant, config.rewards?.enabled, config.assistant?.enabled],
+    [open, close, attachTo, submitReport, openAssistant, openMyReports, config.rewards?.enabled, config.assistant?.enabled, config.notifications?.emailFromIdentity],
   )
 
   const trigger = config.widget?.trigger ?? 'button'
@@ -1038,7 +1190,17 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         assistantSuggestions={config.assistant?.suggestions}
         inboxPollIntervalMs={config.widget?.inboxPollIntervalMs ?? 0}
         theme={config.widget?.theme}
+        minDescriptionLength={config.widget?.minDescriptionLength}
+        emailOptIn={config.notifications?.email !== false}
       />
+      {toast ? (
+        <MushiUpdateToast
+          message={toast.message}
+          onView={openMyReports}
+          onDismiss={() => setToast(null)}
+          theme={config.widget?.theme}
+        />
+      ) : null}
     </MushiContext.Provider>
   )
 }

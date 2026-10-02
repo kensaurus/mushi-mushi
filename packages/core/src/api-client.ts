@@ -397,6 +397,8 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
       return requestForReporter<{ reports: MushiReporterReport[] }>('GET', '/v1/reporter/reports', reporterToken);
     },
 
+    reporterRequest: requestForReporter,
+
     async listReporterComments(reportId: string, reporterToken: string) {
       return requestForReporter<{ comments: MushiReporterComment[] }>(
         'GET',

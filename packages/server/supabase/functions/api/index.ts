@@ -253,7 +253,8 @@ app.use(
       'baggage',
       'sentry-trace',
     ],
-    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    // PUT / DELETE: notification prefs and push subscriptions (Plan 018 §4.1).
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     maxAge: PUBLIC_CORS_MAX_AGE_SECONDS,
   }),
 );
