@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { createScreenshotCapture } from './screenshot';
+import { createScreenshotCapture, FREEZE_ANIMATIONS_CSS } from './screenshot';
 
 /**
  * The widget turns these reasons into actionable copy ("blocked by another
@@ -125,6 +125,28 @@ describe('screenshot redaction before capture', () => {
     expect(svg).toContain('Visible copy');
     // The live page is untouched — only the serialized clone is redacted.
     expect((document.querySelector('input[type="password"]') as HTMLInputElement).value).toBe('hunter2-secret');
+  });
+
+  it('freezes animations after the page CSS, so fade-in content is not captured at opacity 0', async () => {
+    vi.useFakeTimers();
+    const pageStyle = document.createElement('style');
+    pageStyle.textContent = '@keyframes enter{from{opacity:0}} .card{animation:enter .3s both}';
+    document.head.appendChild(pageStyle);
+    document.body.innerHTML = '<div class="card">Fades in</div>';
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ scale: vi.fn() } as never);
+    let src = '';
+    vi.spyOn(HTMLImageElement.prototype, 'src', 'set').mockImplementation((v: string) => { src = v; });
+
+    void createScreenshotCapture().take();
+    await vi.advanceTimersByTimeAsync(0);
+    const svg = decodeURIComponent(src.replace(/^data:image\/svg\+xml;charset=utf-8,/, ''));
+    pageStyle.remove();
+
+    const freezeAt = svg.lastIndexOf(FREEZE_ANIMATIONS_CSS);
+    expect(freezeAt).toBeGreaterThan(-1);
+    // Later in the document than the page's own animation rule, so it overrides it.
+    expect(freezeAt).toBeGreaterThan(svg.indexOf('animation:enter'));
+    expect(getContext).toHaveBeenCalledWith('2d', { willReadFrequently: true });
   });
 });
 
