@@ -12,9 +12,11 @@ import { getLocale, type MushiLocale } from './i18n';
 import { getWidgetStyles } from './styles';
 import { MUSHI_SDK_VERSION } from './version';
 import { readPageFaviconHref, MUSHI_TIER_COLORS } from '@mushi-mushi/core';
-import { CATEGORY_ICONS, FEATURE_REQUEST_INTENT, bindFaviconFallbacks, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession } from './widget-helpers';
+import { CATEGORY_ICONS, FEATURE_REQUEST_INTENT, REPORTER_READ_DEADLINE_MS, bindFaviconFallbacks, charCounterText, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession, withDeadline } from './widget-helpers';
 import type {
   AssistantTurn,
+  DetailMode,
+  ScreenshotErrorReason,
   WidgetCallbacks,
   WidgetRewardsState,
   WidgetStep,
@@ -69,6 +71,8 @@ export class MushiWidget {
   private screenshotAttached = false;
   private screenshotCapturing = false;
   private screenshotError = false;
+  /** Why the last capture failed; drives the actionable hint under the tools. */
+  private screenshotErrorReason: ScreenshotErrorReason | null = null;
   private allowScreenshotRemove = true;
   /**
    * Whether the screenshot / element-select tools are actually usable
@@ -124,12 +128,26 @@ export class MushiWidget {
    *  ("REPORT · 14:23:07 JST") doesn't drift while the success step
    *  is on screen. */
   private submittedAt: Date | null = null;
-  /** Pending success-state + auto-close timers. Tracked so destroy()
-   *  can clear them — otherwise a host that unmounts mid-submit leaks
-   *  this MushiWidget reference (and re-renders into a detached shadow
-   *  root) for up to ~3.3s after destroy. */
+  /** Pending success-state timer. Tracked so destroy() can clear it —
+   *  otherwise a host that unmounts mid-submit leaks this MushiWidget
+   *  reference (and re-renders into a detached shadow root). */
   private successTimer: ReturnType<typeof setTimeout> | null = null;
-  private autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Set on pointerdown inside the panel. A background re-render (runtime
+   * config, rewards, inbox poll…) that lands between pointerdown and click
+   * replaces the button under the pointer, and the browser then drops the
+   * click — the first Submit "did nothing". render() defers while this is set
+   * (bounded, so a lost pointerup can't freeze the panel).
+   */
+  private pointerDownAt: number | null = null;
+  private renderDeferred = false;
+  private readonly onPointerRelease = (): void => {
+    this.pointerDownAt = null;
+    if (!this.renderDeferred) return;
+    this.renderDeferred = false;
+    // After the click dispatches (it follows pointerup in the same task).
+    setTimeout(() => this.render(), 0);
+  };
   private rewardsState: WidgetRewardsState | null = null;
   private leaderboardEntries: Array<{
     display_name: string;
@@ -252,6 +270,8 @@ export class MushiWidget {
     if (this.host.isConnected) return;
     this.syncHostChromeState();
     document.body.appendChild(this.host);
+    window.addEventListener('pointerup', this.onPointerRelease, true);
+    window.addEventListener('pointercancel', this.onPointerRelease, true);
     this.syncAttachedLaunchers();
     this.syncSmartHide();
     this.bindColorSchemeListener();
@@ -366,6 +386,7 @@ export class MushiWidget {
     this.screenshotAttached = false;
     this.screenshotCapturing = false;
     this.screenshotError = false;
+    this.screenshotErrorReason = null;
     this.screenshotPreview = null;
     this.elementSelected = false;
     this.elementCapturing = false;
@@ -579,7 +600,10 @@ export class MushiWidget {
     // The capture attempt is over either way; a successful attach also
     // clears any stale error state from a previous failed attempt.
     this.screenshotCapturing = false;
-    if (attached) this.screenshotError = false;
+    if (attached) {
+      this.screenshotError = false;
+      this.screenshotErrorReason = null;
+    }
     // A detached screenshot has no preview to show.
     if (!attached) this.screenshotPreview = null;
     if (this.isOpen) this.render();
@@ -640,11 +664,18 @@ export class MushiWidget {
   setScreenshotCapturing(capturing: boolean): void {
     this.screenshotCapturing = capturing;
     this.screenshotError = false;
+    this.screenshotErrorReason = null;
     if (this.isOpen) this.render();
   }
 
-  setScreenshotError(failed: boolean): void {
+  /**
+   * Flag (or clear) a failed capture. A call without a reason keeps the more
+   * specific one an earlier call recorded for the same attempt (the capture
+   * module reports 'taint'/'timeout' before the caller's generic failure).
+   */
+  setScreenshotError(failed: boolean, reason?: ScreenshotErrorReason): void {
     this.screenshotError = failed;
+    this.screenshotErrorReason = failed ? (reason ?? this.screenshotErrorReason ?? 'error') : null;
     this.screenshotCapturing = false;
     if (this.isOpen) this.render();
   }
@@ -814,13 +845,11 @@ export class MushiWidget {
   }
 
   destroy(): void {
+    window.removeEventListener('pointerup', this.onPointerRelease, true);
+    window.removeEventListener('pointercancel', this.onPointerRelease, true);
     if (this.successTimer !== null) {
       clearTimeout(this.successTimer);
       this.successTimer = null;
-    }
-    if (this.autoCloseTimer !== null) {
-      clearTimeout(this.autoCloseTimer);
-      this.autoCloseTimer = null;
     }
     if (this.smartHideTimer !== null) {
       clearTimeout(this.smartHideTimer);
@@ -1360,6 +1389,13 @@ export class MushiWidget {
   }
 
   private render(): void {
+    if (this.isOpen && this.pointerDownAt !== null && Date.now() - this.pointerDownAt < 2000) {
+      // A pointerup released outside the window may never arrive — flush anyway.
+      if (!this.renderDeferred) setTimeout(() => { if (this.renderDeferred) this.render(); }, 2000);
+      this.renderDeferred = true;
+      return;
+    }
+    this.renderDeferred = false;
     const theme = this.getTheme();
     const pos = this.config.position;
     const t = this.locale;
@@ -1459,6 +1495,7 @@ export class MushiWidget {
       const ctx = this.renderCtx();
       panel.innerHTML = `${renderOutdatedBanner(ctx)}${renderStep(ctx)}${renderBrandFooter(ctx)}`;
       this.shadow.appendChild(panel);
+      panel.addEventListener('pointerdown', () => { this.pointerDownAt = Date.now(); });
       this.attachHandlers(panel);
       // First render with the mark visible → one impression per instance.
       if (!this.brandImpressionSent && this.config.brandFooter === true) {
@@ -1775,6 +1812,19 @@ export class MushiWidget {
   }
 
   /**
+   * Copy mode for the details step. Feature mode covers both the ✨ shortcut
+   * and Other → "Feature request" intent (whose localized label is the first
+   * entry of step2.intents.other in every locale).
+   */
+  private detailMode(): DetailMode {
+    const id = this.selectedCategory;
+    const intent = this.selectedIntent;
+    if (this.viaFeatureRequest || intent === FEATURE_REQUEST_INTENT) return 'feature';
+    if (id === 'other' && !this.resolveCustomCategory(id) && intent === this.locale.step2.intents.other[0]) return 'feature';
+    return id && this.resolveBaseCategory(id) === 'other' ? 'other' : 'bug';
+  }
+
+  /**
    * Minimum description length, lowered for CJK locales where each character
    * carries more meaning. Used by both the view layer (via renderCtx) and the
    * details-step input validation in attachHandlers.
@@ -1824,6 +1874,8 @@ export class MushiWidget {
       submitting: this.submitting,
       sdkFreshness: this.sdkFreshness,
       screenshotError: this.screenshotError,
+      screenshotErrorReason: this.screenshotErrorReason,
+      detailMode: this.detailMode(),
       reporterReports: this.reporterReports,
       magicLinkSending: this.magicLinkSending,
       magicLinkEmail: this.magicLinkEmail,
@@ -1893,12 +1945,6 @@ export class MushiWidget {
       else if (this.step === 'assistant') { this.step = 'category'; }
       else if (this.step === 'account') { this.step = 'category'; }
       else if (this.step === 'cross-app-reports') { this.step = 'account'; }
-      else if (this.step === 'success') {
-        this.step = 'category';
-        this.selectedCategory = null;
-        this.selectedIntent = null;
-        this.viaFeatureRequest = false;
-      }
       // Progressive disclosure collapses again whenever we land back on the
       // category step, so a previously-expanded list doesn't stay open across
       // navigation (Sentry 14751132/1).
@@ -2055,6 +2101,10 @@ export class MushiWidget {
       this.render();
     });
 
+    panel.querySelector('[data-action="retry-thread"]')?.addEventListener('click', () => {
+      if (this.selectedReportId) void this.loadReporterComments(this.selectedReportId);
+    });
+
     panel.querySelector('[data-action="reporter-reply"]')?.addEventListener('click', () => {
       void this.submitReporterReply(panel);
     });
@@ -2071,9 +2121,10 @@ export class MushiWidget {
     // inside the widget rather than emitting a callback so the
     // optical feedback (button label flips to "Copied") is instant
     // and the host doesn't have to wire anything to enjoy it.
-    panel.querySelector('[data-action="view-my-reports"]')?.addEventListener('click', () => {
-      void this.loadReporterReports();
+    panel.querySelector('[data-action="track-report"]')?.addEventListener('click', () => {
+      if (this.lastReportId) void this.openTrackedReport(this.lastReportId);
     });
+    panel.querySelector('[data-action="done"]')?.addEventListener('click', () => this.close());
 
     panel.querySelector('[data-action="copy-report-id"]')?.addEventListener('click', (e) => {
       const btn = e.currentTarget as HTMLButtonElement;
@@ -2121,18 +2172,13 @@ export class MushiWidget {
 
     // Wire live char counter so users see their progress as they type.
     const textarea = panel.querySelector('.mushi-textarea') as HTMLTextAreaElement | null;
-    const charCurrentEl = panel.querySelector('[data-role="char-current"]') as HTMLElement | null;
-    if (textarea && charCurrentEl) {
+    const counterEl = panel.querySelector('[data-role="char-counter"]') as HTMLElement | null;
+    if (textarea && counterEl) {
       const minLen = this.effectiveMinLength();
-      const updateCounter = () => {
-        const len = textarea.value.trim().length;
-        charCurrentEl.textContent = String(len);
-        const counterEl = panel.querySelector('[data-role="char-counter"]') as HTMLElement | null;
-        if (counterEl) {
-          counterEl.style.color = len >= minLen ? 'var(--mushi-ok, #22c55e)' : '';
-        }
-      };
-      textarea.addEventListener('input', updateCounter);
+      textarea.addEventListener('input', () => {
+        counterEl.textContent = charCounterText(textarea.value, minLen, t.step3.charsNeeded);
+        counterEl.style.color = textarea.value.trim().length >= minLen ? 'var(--mushi-ok, #22c55e)' : '';
+      });
     }
 
     // Wire example chips — clicking one pre-fills the textarea.
@@ -2173,7 +2219,7 @@ export class MushiWidget {
       const minLen = this.effectiveMinLength();
       if (description.length < minLen) {
         if (errorEl) {
-          const msg = `${t.step3.tooShort} (${description.length}/${minLen})`;
+          const msg = `${t.step3.tooShort} (${charCounterText(description, minLen, t.step3.charsNeeded)})`;
           errorEl.textContent = msg;
           errorEl.style.display = 'block';
           // Focus the textarea so the user can immediately keep typing.
@@ -2199,12 +2245,16 @@ export class MushiWidget {
         try {
           const catId = this.selectedCategory!;
           const baseCategory = this.resolveBaseCategory(catId);
-          // Only set userCategory when the host uses a custom category list
-          // and the id differs from the resolved base (avoids redundant duplication).
+          // A host custom category id always wins (it is the documented
+          // reports.user_category contract). Otherwise feature requests land
+          // as user_category='feature' so they never read as an "other" bug.
           const isCustomCat = this.config.categories && this.config.categories.length > 0;
+          const userCategory = isCustomCat && this.resolveCustomCategory(catId)
+            ? catId
+            : this.detailMode() === 'feature' ? 'feature' : isCustomCat ? catId : undefined;
           const ret = this.callbacks.onSubmit({
             category: baseCategory,
-            ...(isCustomCat ? { userCategory: catId } : {}),
+            ...(userCategory ? { userCategory } : {}),
             description,
             intent: this.selectedIntent ?? undefined,
           });
@@ -2239,29 +2289,17 @@ export class MushiWidget {
         // 'details' textarea), which would otherwise re-populate
         // draftDescription with the just-submitted text and clobber this clear.
         this.draftDescription = '';
-        // Don't auto-close as aggressively if we're waiting on a
-        // report id — give the user a moment to copy it. Once the
-        // outcome lands we kick off a longer auto-close so the deep
-        // link stays readable.
+        // No auto-close: the panel used to vanish 2.8 s in, under a reporter
+        // who was reading the receipt or reaching for "Track this report".
+        // It now stays until Done / ✕ / Esc. The outcome patches the
+        // receipt id in place once it lands.
         void outcomeP.then((outcome) => {
-          if (this.step !== 'success') return;
-          if (outcome) {
-            this.lastReportId = outcome.reportId ?? null;
-            this.lastSubmitQueuedOffline = Boolean(outcome.queuedOffline);
-            this.lastSubmitFailureKind = outcome.failureKind;
-            this.lastSubmitScreenshotDropped = Boolean(outcome.screenshotDropped);
-            this.render();
-          }
-          if (this.autoCloseTimer !== null) {
-            clearTimeout(this.autoCloseTimer);
-          }
-          // 6 s when we have a deep link (long enough to read + copy
-          // the id), 2.8 s for the legacy bare-stamp path.
-          const closeDelayMs = this.lastReportId && this.config.dashboardUrl ? 6000 : 2800;
-          this.autoCloseTimer = setTimeout(() => {
-            this.autoCloseTimer = null;
-            if (this.step === 'success') this.close();
-          }, closeDelayMs);
+          if (this.step !== 'success' || !outcome) return;
+          this.lastReportId = outcome.reportId ?? null;
+          this.lastSubmitQueuedOffline = Boolean(outcome.queuedOffline);
+          this.lastSubmitFailureKind = outcome.failureKind;
+          this.lastSubmitScreenshotDropped = Boolean(outcome.screenshotDropped);
+          this.render();
         });
       }, 500);
     };
@@ -2386,13 +2424,21 @@ export class MushiWidget {
     this.reporterError = null;
     this.render();
     try {
-      this.reporterReports = await this.callbacks.onReporterReportsRequest?.() ?? [];
+      const req = this.callbacks.onReporterReportsRequest?.();
+      this.reporterReports = req ? await withDeadline(req, REPORTER_READ_DEADLINE_MS) : [];
     } catch (err) {
       this.reporterError = err instanceof Error ? err.message : 'Could not load reports.';
     } finally {
       this.reporterLoading = false;
       this.render();
     }
+  }
+
+  /** "Track this report" on the success step → that report's thread in My Reports. */
+  private async openTrackedReport(reportId: string): Promise<void> {
+    await this.loadReporterReports();
+    // The reporter may have navigated (or closed) while the list loaded.
+    if (this.isOpen && this.step === 'reports') await this.loadReporterComments(reportId);
   }
 
   private async loadReporterComments(reportId: string): Promise<void> {
@@ -2403,6 +2449,7 @@ export class MushiWidget {
     // a no-op on that path.
     if (this.selectedReportId !== reportId) {
       this.draftReply = '';
+      this.reporterComments = [];
     }
     this.selectedReportId = reportId;
     this.step = 'report-detail';
@@ -2410,9 +2457,14 @@ export class MushiWidget {
     this.reporterError = null;
     this.render();
     try {
-      this.reporterComments = await this.callbacks.onReporterCommentsRequest?.(reportId) ?? [];
-    } catch (err) {
-      this.reporterError = err instanceof Error ? err.message : 'Could not load thread.';
+      // A read that never settles used to leave "Loading thread…" up forever
+      // (live, 2026-10-02); the deadline turns it into a retryable error.
+      const req = this.callbacks.onReporterCommentsRequest?.(reportId);
+      const comments = req ? await withDeadline(req, REPORTER_READ_DEADLINE_MS) : [];
+      // The reporter may have opened a different thread meanwhile.
+      if (this.selectedReportId === reportId) this.reporterComments = comments;
+    } catch {
+      if (this.selectedReportId === reportId) this.reporterError = this.locale.flows.thread.loadFailed;
     } finally {
       this.reporterLoading = false;
       this.render();

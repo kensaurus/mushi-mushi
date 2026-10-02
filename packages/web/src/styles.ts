@@ -519,6 +519,9 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       padding: 8px 22px 16px;
       overflow-y: auto;
       flex: 1;
+      /* Without this a flex child can't shrink below its content, so a long
+         thread pushed the panel's footer (Reply, Submit) past the clip. */
+      min-height: 0;
       scrollbar-width: thin;
       scrollbar-color: ${inkFaint} transparent;
     }
@@ -726,6 +729,9 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       overflow: auto;
       margin-bottom: 12px;
     }
+    /* Reply composer pinned below the scrolling thread. */
+    .mushi-thread-composer { align-items: flex-end; }
+    .mushi-thread-composer .mushi-textarea { flex: 1; min-width: 0; margin: 0; }
     .mushi-thread-comment {
       padding: 8px 10px;
       border: 1px solid ${rule};
@@ -958,6 +964,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     }
 
     .mushi-footer {
+      flex-shrink: 0;
       padding: 14px 22px 16px;
       border-top: 1px solid ${rule};
       display: flex;
@@ -1049,33 +1056,6 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       text-decoration: underline;
     }
 
-    .mushi-step-indicator {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 10px 22px 14px;
-      color: ${inkFaint};
-      font-family: ${fontMono};
-      font-size: 11px;
-      letter-spacing: 0.10em;
-    }
-    .mushi-step-num {
-      display: inline-flex;
-      align-items: baseline;
-      gap: 4px;
-      transition: opacity ${durFast}ms ${easeStamp};
-    }
-    .mushi-step-num.done { color: ${inkMuted}; text-decoration: line-through; text-decoration-color: ${inkFaint}; }
-    .mushi-step-num.active {
-      color: ${widgetAccent};
-      font-family: ${fontDisplay};
-      font-size: 14px;
-      font-weight: 600;
-      letter-spacing: 0;
-    }
-    .mushi-step-sep { width: 14px; height: 1px; background: ${rule}; }
-
     .mushi-success {
       text-align: center;
       padding: 28px 16px 20px;
@@ -1115,13 +1095,6 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       transform: rotate(-6deg);
       opacity: 0;
       animation: mushi-stamp-press 360ms ${easeStamp} 600ms forwards;
-    }
-    .mushi-success-headline {
-      font-family: ${fontDisplay};
-      font-size: 18px;
-      font-weight: 500;
-      color: ${ink};
-      margin-bottom: 4px;
     }
     .mushi-success-meta {
       font-family: ${fontMono};

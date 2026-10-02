@@ -20,6 +20,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { MushiWidget, type WidgetCallbacks } from './widget';
+import { charCounterText, formatReceiptTime, shouldShowSdkFreshness, submitShortcutKey } from './widget-helpers';
 
 const DEFAULT_TRIGGER = '\uD83D\uDC1B'; // 🐛
 
@@ -820,6 +821,395 @@ describe('MushiWidget — element selector error feedback', () => {
 
     w.open({ featureRequest: true });
     expect((w as unknown as { elementError: boolean }).elementError).toBe(false);
+    w.destroy();
+  });
+});
+
+// ── Live-QA polish (2026-10-02, Windows Chrome) ──────────────────────────────
+
+describe('MushiWidget — live-QA polish', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: false }),
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: undefined,
+    });
+  });
+
+  const getShadow = (w: MushiWidget): ShadowRoot =>
+    (w as unknown as { shadow: ShadowRoot }).shadow;
+  const readStep = (w: MushiWidget): string => (w as unknown as { step: string }).step;
+  const q = <T extends Element = HTMLElement>(w: MushiWidget, sel: string): T | null =>
+    getShadow(w).querySelector(sel) as T | null;
+  const LONG = 'The save button does nothing when I click it twice';
+  const REPORT_ID = 'abcdef12-3456-7890-abcd-ef1234567890';
+
+  function typeDescription(w: MushiWidget, text: string): void {
+    const ta = q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!;
+    ta.value = text;
+    ta.dispatchEvent(new Event('input'));
+  }
+
+  function submit(w: MushiWidget): void {
+    q<HTMLButtonElement>(w, '[data-action="submit"]')!.click();
+  }
+
+  // Item 1
+  it('the built-in trigger opens on the type step, not a preselected category', () => {
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    q<HTMLButtonElement>(w, '.mushi-trigger')!.click();
+    expect(readStep(w)).toBe('category');
+    expect(q(w, '[data-category="bug"]')?.getAttribute('aria-checked')).toBe('false');
+    w.destroy();
+  });
+
+  it('the banner bug action also opens on the type step', () => {
+    const w = new MushiWidget({ trigger: 'banner' }, noopCallbacks);
+    w.mount();
+    q<HTMLButtonElement>(w, '.mushi-banner-btn')!.click();
+    expect(readStep(w)).toBe('category');
+    w.destroy();
+  });
+
+  // Items 2 + 9
+  it('feature-request mode swaps the placeholder and chips, and submits user_category=feature', () => {
+    const onSubmit = vi.fn();
+    const w = new MushiWidget({}, { ...noopCallbacks, onSubmit });
+    w.mount();
+    w.open({ featureRequest: true });
+
+    const ta = q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!;
+    expect(ta.placeholder).toBe('Describe your idea…');
+    const chips = Array.from(getShadow(w).querySelectorAll('.mushi-example-chip')).map((c) => c.textContent);
+    expect(chips).toEqual(['Add a dark mode', 'Export my data', 'Keyboard shortcuts']);
+
+    typeDescription(w, 'Please add a CSV export for my invoices');
+    submit(w);
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      category: 'other',
+      userCategory: 'feature',
+      intent: 'Feature request',
+    }));
+    w.destroy();
+  });
+
+  it('Other → the localized "Feature request" intent is feature mode too (ja)', () => {
+    const onSubmit = vi.fn();
+    const w = new MushiWidget({ locale: 'ja' }, { ...noopCallbacks, onSubmit });
+    w.mount();
+    w.open({ category: 'other' });
+    q<HTMLButtonElement>(w, '[data-intent="機能要望"]')!.click();
+
+    expect(q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!.placeholder).toBe('アイデアを教えてください…');
+    typeDescription(w, 'ダークモードを追加してほしいです');
+    submit(w);
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ userCategory: 'feature' }));
+    w.destroy();
+  });
+
+  it('a host custom category id stays the userCategory even with a "Feature request" intent', () => {
+    const onSubmit = vi.fn();
+    const w = new MushiWidget({
+      categories: [{ id: 'ideas', label: 'Ideas', baseCategory: 'other', intents: ['Feature request', 'Other'] }],
+    }, { ...noopCallbacks, onSubmit });
+    w.mount();
+    w.open({ category: 'ideas' });
+    q<HTMLButtonElement>(w, '[data-intent="Feature request"]')!.click();
+    expect(q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!.placeholder).toBe('Describe your idea…');
+    typeDescription(w, 'Please add a CSV export for my invoices');
+    submit(w);
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ category: 'other', userCategory: 'ideas' }));
+    w.destroy();
+  });
+
+  it('bug mode keeps bug copy and sends no userCategory; Other keeps neutral copy and no chips', () => {
+    const onSubmit = vi.fn();
+    const w = new MushiWidget({}, { ...noopCallbacks, onSubmit });
+    w.mount();
+    w.open({ category: 'bug' });
+    q<HTMLButtonElement>(w, '[data-intent="Crash"]')!.click();
+    expect(q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!.placeholder).toBe('Describe what happened…');
+    expect(getShadow(w).querySelectorAll('.mushi-example-chip').length).toBe(3);
+    typeDescription(w, LONG);
+    submit(w);
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('userCategory');
+    w.destroy();
+
+    const w2 = new MushiWidget({}, noopCallbacks);
+    w2.mount();
+    w2.open({ category: 'other' });
+    q<HTMLButtonElement>(w2, '[data-intent="Typo"]')!.click();
+    expect(q<HTMLTextAreaElement>(w2, 'textarea.mushi-textarea')!.placeholder).toBe("What's on your mind?");
+    expect(q(w2, '.mushi-example-chips')).toBeNull();
+    w2.destroy();
+  });
+
+  // Item 3
+  it('picks ⌘ on Apple platforms and Ctrl elsewhere', () => {
+    expect(submitShortcutKey('MacIntel')).toBe('⌘');
+    expect(submitShortcutKey('iPad')).toBe('⌘');
+    expect(submitShortcutKey('macOS')).toBe('⌘');
+    expect(submitShortcutKey('Win32')).toBe('Ctrl');
+    expect(submitShortcutKey('Windows')).toBe('Ctrl');
+    expect(submitShortcutKey('Linux x86_64')).toBe('Ctrl');
+  });
+
+  it('renders "Ctrl + Enter" on Windows instead of "⌘ + ENTER"', () => {
+    const spy = vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    w.open({ featureRequest: true });
+    expect(q(w, '.mushi-footer-hint')!.textContent).toBe('Ctrl + Enter to send');
+    spy.mockRestore();
+    w.destroy();
+  });
+
+  // Item 4
+  it('counter shows characters still needed, then length/max — never length/min', () => {
+    expect(charCounterText('', 20, '{n} more characters')).toBe('20 more characters');
+    expect(charCounterText('  abc  ', 20, '{n} more characters')).toBe('17 more characters');
+    expect(charCounterText('x'.repeat(397), 12, '{n} more characters')).toBe('397/4000');
+
+    const w = new MushiWidget({ minDescriptionLength: 12 }, noopCallbacks);
+    w.mount();
+    w.open({ featureRequest: true });
+    const counter = q(w, '[data-role="char-counter"]')!;
+    expect(counter.textContent).toBe('12 more characters');
+    typeDescription(w, 'x'.repeat(397));
+    expect(counter.textContent).toBe('397/4000');
+    w.destroy();
+  });
+
+  // Item 5
+  it('a failed capture shows an actionable reason and a Try again button', () => {
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    w.open({ featureRequest: true });
+
+    // The capture module reports the specific reason first; the caller's
+    // reasonless failure afterwards must not overwrite it.
+    w.setScreenshotError(true, 'taint');
+    w.setScreenshotError(true);
+    const btn = q<HTMLButtonElement>(w, '[data-action="screenshot"]')!;
+    expect(btn.textContent).toContain('Try again');
+    expect(btn.disabled).toBe(false);
+    expect(q(w, '[data-role="screenshot-reason"]')!.textContent).toContain('another site');
+
+    w.setScreenshotError(true, 'permission');
+    expect(q(w, '[data-role="screenshot-reason"]')!.textContent).toContain('Allow it');
+
+    // A retry clears the stale reason.
+    w.setScreenshotCapturing(true);
+    expect(q(w, '[data-role="screenshot-reason"]')).toBeNull();
+    w.setScreenshotError(true);
+    expect(q(w, '[data-role="screenshot-reason"]')!.textContent).toBe('Capture failed.');
+    w.destroy();
+  });
+
+  // Items 6 + 7
+  it('success step: proper title, receipt, zoned date-time, Done, no Back, no auto-close', async () => {
+    vi.useFakeTimers();
+    const onClose = vi.fn();
+    const w = new MushiWidget({}, {
+      ...noopCallbacks,
+      onClose,
+      onSubmit: () => Promise.resolve({ reportId: REPORT_ID, queuedOffline: false }),
+    });
+    w.mount();
+    w.open({ featureRequest: true });
+    typeDescription(w, LONG);
+    submit(w);
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(readStep(w)).toBe('success');
+    expect(q(w, '.mushi-header h3')!.textContent).toBe('Thanks — report received');
+    expect(q(w, '[data-action="back"]')).toBeNull();
+    expect(q(w, '.mushi-success-receipt-id')!.textContent).toContain('#abcdef12');
+    const time = q(w, 'time.mushi-success-meta')!;
+    expect(time.getAttribute('datetime')).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(time.textContent).not.toMatch(/^\d{2}:\d{2}:\d{2}$/);
+
+    // The panel used to auto-close at 2.8 s / 6 s under the reader.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(w.getIsOpen()).toBe(true);
+
+    q<HTMLButtonElement>(w, '[data-action="done"]')!.click();
+    expect(w.getIsOpen()).toBe(false);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    w.destroy();
+  });
+
+  it('a queued/retrying send never claims "report received"', async () => {
+    vi.useFakeTimers();
+    const w = new MushiWidget({}, {
+      ...noopCallbacks,
+      onReporterReportsRequest: () => Promise.resolve([]),
+      onSubmit: () => Promise.resolve({ reportId: null, queuedOffline: true, failureKind: 'retrying' as const }),
+    });
+    w.mount();
+    w.open({ featureRequest: true });
+    typeDescription(w, LONG);
+    submit(w);
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(q(w, '.mushi-header h3')!.textContent).toBe('Queued — retrying');
+    expect(q(w, '[data-action="track-report"]')).toBeNull();
+    w.destroy();
+  });
+
+  it('formats the receipt time with date and zone, tolerating a bad locale tag', () => {
+    const text = formatReceiptTime(new Date(Date.UTC(2026, 9, 2, 1, 37, 50)), 'en-US');
+    expect(text).toContain('Oct');
+    expect(text).toMatch(/GMT|UTC|[A-Z]{2,4}/);
+    expect(() => formatReceiptTime(new Date(), 'not a locale!!')).not.toThrow();
+  });
+
+  // Item 8
+  it('"Track this report" opens that report\'s thread in My Reports', async () => {
+    vi.useFakeTimers();
+    const onReporterCommentsRequest = vi.fn().mockResolvedValue([]);
+    const w = new MushiWidget({}, {
+      ...noopCallbacks,
+      onSubmit: () => Promise.resolve({ reportId: REPORT_ID, queuedOffline: false }),
+      onReporterReportsRequest: () => Promise.resolve([
+        { id: REPORT_ID, status: 'new', summary: 'Save does nothing', created_at: new Date().toISOString() },
+      ] as never),
+      onReporterCommentsRequest,
+    });
+    w.mount();
+    w.open({ featureRequest: true });
+    typeDescription(w, LONG);
+    submit(w);
+    await vi.advanceTimersByTimeAsync(500);
+
+    q<HTMLButtonElement>(w, '[data-action="track-report"]')!.click();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(readStep(w)).toBe('report-detail');
+    expect(w.getIsOpen()).toBe(true);
+    expect(onReporterCommentsRequest).toHaveBeenCalledWith(REPORT_ID);
+    expect(q(w, '.mushi-thread-summary p')!.textContent).toBe('Save does nothing');
+    w.destroy();
+  });
+
+  // Item 10
+  it('never shows the SDK-update notice to end users under the default mode', () => {
+    const prod = { hostname: 'kensaur.us', protocol: 'https:' };
+    expect(shouldShowSdkFreshness(undefined, false, prod)).toBe(false);
+    expect(shouldShowSdkFreshness('auto', false, prod)).toBe(false);
+    expect(shouldShowSdkFreshness('auto', true, prod)).toBe(true); // debug: true
+    expect(shouldShowSdkFreshness('banner', false, prod)).toBe(true); // explicit opt-in
+    expect(shouldShowSdkFreshness('console-only', true, { hostname: 'localhost', protocol: 'http:' })).toBe(false);
+    expect(shouldShowSdkFreshness('off', true, { hostname: 'localhost', protocol: 'http:' })).toBe(false);
+    for (const hostname of ['localhost', '127.0.0.1', '[::1]', 'app.localhost', 'mac.local']) {
+      expect(shouldShowSdkFreshness('auto', false, { hostname, protocol: 'http:' })).toBe(true);
+    }
+    expect(shouldShowSdkFreshness('auto', false, { hostname: '', protocol: 'file:' })).toBe(true);
+    expect(shouldShowSdkFreshness('auto', false, undefined)).toBe(false);
+  });
+
+  // Item 11
+  it('a thread read that never settles becomes a retryable error, not an endless spinner', async () => {
+    vi.useFakeTimers();
+    const comments = vi.fn()
+      .mockReturnValueOnce(new Promise(() => {}))
+      .mockResolvedValueOnce([{ id: 'c1', author_kind: 'developer', author_name: 'Kenji', body: 'Fixed in 1.2', created_at: '' }]);
+    const w = new MushiWidget({}, {
+      ...noopCallbacks,
+      onReporterReportsRequest: () => Promise.resolve([
+        { id: REPORT_ID, status: 'fixing', summary: 'Save does nothing', created_at: new Date().toISOString() },
+      ] as never),
+      onReporterCommentsRequest: comments,
+    });
+    w.mount();
+    w.open();
+    q<HTMLButtonElement>(w, '[data-action="toggle-more-nav"]')!.click();
+    q<HTMLButtonElement>(w, '[data-action="reports"]')!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    q<HTMLButtonElement>(w, `[data-report-id="${REPORT_ID}"]`)!.click();
+    expect(q(w, '.mushi-thread')!.textContent).toContain('Loading thread');
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(q(w, '.mushi-thread')!.textContent).not.toContain('Loading thread');
+    expect(q(w, '.mushi-thread [role="alert"]')!.textContent).toBe("Couldn't load this thread.");
+
+    q<HTMLButtonElement>(w, '[data-action="retry-thread"]')!.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(comments).toHaveBeenCalledTimes(2);
+    expect(q(w, '.mushi-thread')!.textContent).toContain('Fixed in 1.2');
+    w.destroy();
+  });
+
+  it('a rejected thread read shows the error and retry instead of "No developer replies"', async () => {
+    const w = new MushiWidget({}, {
+      ...noopCallbacks,
+      onReporterCommentsRequest: () => Promise.reject(new Error('HTTP 401')),
+    });
+    w.mount();
+    w.open();
+    await (w as unknown as { loadReporterComments(id: string): Promise<void> }).loadReporterComments(REPORT_ID);
+    expect(q(w, '[data-action="retry-thread"]')).not.toBeNull();
+    expect(q(w, '.mushi-thread')!.textContent).not.toContain('No developer replies');
+    w.destroy();
+  });
+
+  it('keeps the reply composer in a footer outside the scrolling body', async () => {
+    const w = new MushiWidget({}, { ...noopCallbacks, onReporterCommentsRequest: () => Promise.resolve([]) });
+    w.mount();
+    w.open();
+    await (w as unknown as { loadReporterComments(id: string): Promise<void> }).loadReporterComments(REPORT_ID);
+    const reply = q(w, '[data-action="reporter-reply"]')!;
+    expect(reply.closest('.mushi-body')).toBeNull();
+    expect(reply.closest('.mushi-footer.mushi-thread-composer')).not.toBeNull();
+    expect(q<HTMLTextAreaElement>(w, 'textarea[data-role="reporter-reply"]')!.placeholder).toBe('Reply to the developer…');
+    w.destroy();
+  });
+
+  // Item 12 (re-render swallowing the first Submit click)
+  it('defers a background re-render while a pointer is down in the panel', async () => {
+    vi.useFakeTimers();
+    const onSubmit = vi.fn();
+    const w = new MushiWidget({}, { ...noopCallbacks, onSubmit });
+    w.mount();
+    w.open({ featureRequest: true });
+    typeDescription(w, LONG);
+
+    const submitBtn = q<HTMLButtonElement>(w, '[data-action="submit"]')!;
+    submitBtn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    // e.g. a runtime-config / rewards update landing mid-press:
+    w.setRewardsState({ tier: null, nextTier: null, totalPoints: 10, pointsForReport: 50 });
+    expect(submitBtn.isConnected).toBe(true);
+
+    window.dispatchEvent(new Event('pointerup'));
+    submitBtn.click();
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    w.destroy();
+  });
+
+  it('omits "Track this report" when there is no reporter inbox to open', async () => {
+    vi.useFakeTimers();
+    const w = new MushiWidget({}, {
+      ...noopCallbacks,
+      onSubmit: () => Promise.resolve({ reportId: REPORT_ID, queuedOffline: false }),
+    });
+    w.mount();
+    w.open({ featureRequest: true });
+    typeDescription(w, LONG);
+    submit(w);
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(readStep(w)).toBe('success');
+    expect(q(w, '[data-action="track-report"]')).toBeNull();
     w.destroy();
   });
 });
