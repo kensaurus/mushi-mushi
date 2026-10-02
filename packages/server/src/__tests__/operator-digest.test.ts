@@ -237,3 +237,29 @@ describe('collectDigest hole-check state', () => {
     expect(by[P2]).toMatchObject({ checked: false, failed: false })
   })
 })
+
+describe('collectDigest read failures', () => {
+  const base = () => ({
+    organizations: [{ id: ORG, name: 'A' }],
+    projects: [{ id: P1, name: 'glot.it', organization_id: ORG }],
+    reports: [], releases: [], llm_invocations: [],
+    gate_runs: [{ id: 'r1', project_id: P1, gate: 'portfolio_radar', status: 'fail', summary: {}, started_at: '2026-10-02T04:05:00Z' }],
+    gate_findings: [{ gate_run_id: 'r1', project_id: P1, severity: 'error', allowlisted: false }],
+  })
+
+  it('rejects instead of reporting "nothing new" when the findings read fails', async () => {
+    const db = makeFakeDb(base() as never)
+    const failed = { data: null, error: { message: 'statement timeout' } }
+    const chain: any = new Proxy({}, { get: (_t, prop) => (prop === 'then' ? (ok: (v: unknown) => unknown) => Promise.resolve(failed).then(ok) : () => chain) })
+    const broken = new Proxy(db, { get: (t, prop, r) => (prop === 'from' ? (name: string) => (name === 'gate_findings' ? chain : t.from(name)) : Reflect.get(t, prop, r)) })
+    await expect(digest.collectDigest(broken as never, ORG, NOW)).rejects.toThrow(/hole-check findings/)
+    const ok = await digest.collectDigest(db as never, ORG, NOW)
+    expect(ok.projects[0].radar).toMatchObject({ error: 1, checked: true })
+  })
+
+  it('a skipped run (every check undecided) does not count as checked', async () => {
+    const db = makeFakeDb({ ...base(), gate_runs: [{ id: 'r1', project_id: P1, gate: 'portfolio_radar', status: 'skipped', summary: {}, started_at: '2026-10-02T04:05:00Z' }], gate_findings: [] } as never)
+    const data = await digest.collectDigest(db as never, ORG, NOW)
+    expect(data.projects[0].radar).toMatchObject({ checked: false, failed: false })
+  })
+})
