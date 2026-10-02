@@ -26,6 +26,10 @@ ship only as reviewed draft PRs. It never leads a public surface.
 
 **Primary buyer.** The solo / indie **vibe coder** who builds fast with AI (Cursor, Claude Code, Lovable, Bolt), ships to real users, then loses afternoons when something breaks because they don't fully grasp the generated code. Small teams and agencies are secondary; the enterprise SRE running Sentry + Datadog + Firebase is explicitly *not* who we lead with.
 
+**Portfolio operator** (ADR 0017) is the same vibe coder with several apps.
+Portfolio and radar features never lead a public surface; the claim is
+"nobody bundles this for a solo operator", never "nobody does this".
+
 **The three things we will not do** (drift tripwires):
 
 1. **We will not require a monitoring stack to get value.** Standalone-first, always — every inbound integration is an optional on-ramp, never a prerequisite.
