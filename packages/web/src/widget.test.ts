@@ -1483,7 +1483,7 @@ describe('MushiWidget — reporter loop v2 (Phase 1)', () => {
         timeline: [
           { kind: 'received', at: '2026-09-30T00:00:00Z' },
           { kind: 'reviewing', at: '2026-09-30T01:00:00Z', text: 'classified as bug/high' },
-          { kind: 'comment', at: '2026-09-30T02:00:00Z', text: 'Thanks, found it.', author_name: 'Kenji' },
+          { kind: 'comment', at: '2026-09-30T02:00:00Z', text: 'Thanks, found it.', custom: true },
           { kind: 'released', at: '2026-10-01T00:00:00Z', version: '1.4.0' },
         ],
       }),
@@ -1633,7 +1633,7 @@ describe('MushiWidget — reporter loop v2 (Phase 1)', () => {
     q<HTMLButtonElement>(w, '[data-action="save-email"]')!.click();
     await vi.advanceTimersByTimeAsync(0);
     expect(onReporterEmailOptIn).toHaveBeenCalledWith('ana@example.com');
-    expect(q(w, '.mushi-optins')!.textContent).toContain('Check your inbox to confirm.');
+    expect(q(w, '.mushi-optins')!.textContent).toContain('Check your inbox and tap the link to confirm.');
     w.destroy();
   });
 });

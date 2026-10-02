@@ -620,6 +620,24 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     tick();
   }
 
+  /** What the project offers (`/v1/sdk/config` → `reporter`); null until known. */
+  let reporterOffer: MushiRuntimeSdkConfig['reporter'] | null = null;
+
+  /**
+   * Opt-ins appear only for a channel the project offers AND the host allows:
+   * email unless `notifications.email: false`, push only with a service worker
+   * (`notifications.webPush`). The address is prefilled from identify() only
+   * with `emailFromIdentity`, and the box is never pre-ticked.
+   */
+  function syncReporterChannels(): void {
+    const n = activeConfig.notifications ?? bootstrapConfig.notifications;
+    widget.setReporterChannels({
+      email: Boolean(reporterOffer?.emailEnabled) && n?.email !== false,
+      push: Boolean(reporterOffer?.pushEnabled && reporterOffer.vapidPublicKey) && Boolean(n?.webPush),
+      emailPrefill: n?.emailFromIdentity ? userInfo?.email ?? '' : '',
+    });
+  }
+
   /** Latest "Your reports" rows, for the next-visit toast. */
   let lastReporterReports: MushiReporterReport[] = [];
 
@@ -629,11 +647,16 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
    * and one per 24 hours; hosts turn it off with `notifications.toast: false`.
    */
   function scheduleUpdateToast(): void {
-    const notifications = (bootstrapConfig as { notifications?: { toast?: boolean } }).notifications;
-    if (notifications?.toast === false || !deviceHasReports(projectId) || !toastAllowed(projectId)) return;
+    if (bootstrapConfig.notifications?.toast === false || !deviceHasReports(projectId) || !toastAllowed(projectId)) return;
     const run = async () => {
+      const updates = await emitReporterUpdates();
+      if (updates && !updates.unread_total) return;
+      // Titles and statuses come from the list; it also lights the header badge.
       await widget.refreshReporterInboxQuiet();
-      if (widget.showUpdatesToast(lastReporterReports)) recordToastShown(projectId);
+      const shown = updates
+        ? widget.showUpdatesFeedToast(updates, lastReporterReports)
+        : widget.showUpdatesToast(lastReporterReports);
+      if (shown) recordToastShown(projectId);
     };
     const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
     if (idle) idle(() => void run(), { timeout: 5000 });
@@ -641,12 +664,14 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   }
 
   /**
-   * Mark a report's notifications read (§2.3). Until the server's
-   * POST /v1/reporter/reports/:id/read ships, match the in-app rows on
+   * Mark a report's updates read (§2.3) with POST /v1/reporter/reports/:id/read.
+   * A server without that route gets the old path: match the in-app rows on
    * `payload.reportId` and mark each one read.
    */
-  async function markReporterReportRead(reportId: string): Promise<null> {
+  async function markReporterReportRead(reportId: string): Promise<number | null> {
     const token = getReporterToken(projectId);
+    const v2 = await rc.markReportRead(reportId, token);
+    if (v2.ok) return v2.data?.unread_total ?? null;
     const list = await apiClient.listNotifications(token, { limit: 50 });
     if (!list.ok) return null;
     const rows = (list.data?.notifications ?? []).filter((n) => {
@@ -994,6 +1019,19 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       return lastReporterReports;
     },
     onReporterMarkRead: (reportId) => markReporterReportRead(reportId),
+    async onReporterReportRequest(reportId) {
+      const res = await rc.getReport(reportId, getReporterToken(projectId));
+      // null → the widget falls back to the comments call (servers before Plan 018 Phase 2).
+      return res.ok && res.data ? { report: res.data.report as Partial<MushiReporterReport>, timeline: res.data.timeline } : null;
+    },
+    async onReporterEmailOptIn(email) {
+      const res = await rc.setPrefs(getReporterToken(projectId), { email, channels: { email: true } });
+      if (!res.ok) throw new Error(res.error?.code ?? 'EMAIL_OPT_IN_FAILED');
+    },
+    async onReporterPushSubscribe() {
+      const res = await sdk.subscribeReporterPush();
+      if (!res.ok) throw new Error(res.reason);
+    },
     async onReporterCommentsRequest(reportId) {
       const result = await apiClient.listReporterComments(reportId, getReporterToken(projectId));
       if (!result.ok) throw new Error(result.error?.message ?? 'Could not load thread');
@@ -1193,6 +1231,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   function applyRuntimeConfig(runtime: MushiRuntimeSdkConfig) {
     runtimeConfigLoaded = true;
     reporterNotificationsEnabled = runtime.reporterNotificationsEnabled !== false;
+    reporterOffer = runtime.enabled === false ? null : runtime.reporter ?? null;
+    syncReporterChannels();
     if (runtime.enabled === false) {
       activeConfig = bootstrapConfig;
       clearCachedRuntimeConfig(config.projectId);
@@ -1889,6 +1929,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       widget.setIdentifiedUser(
         (userInfo.name || userInfo.email) ? { name: userInfo.name, email: userInfo.email } : null,
       );
+      syncReporterChannels();
       if (traits) {
         for (const [k, v] of Object.entries(traits)) {
           if (k !== 'email' && k !== 'name') customMetadata[`user.${k}`] = v;
@@ -2098,8 +2139,14 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
     async subscribeReporterPush() {
       const sw = activeConfig.notifications?.webPush;
-      const cfg = sw ? await apiClient.getSdkConfig() : null;
-      return subscribeBrowserPush(rc, reporterTokenForProject(), sw ? sw.serviceWorkerPath : null, cfg?.ok ? cfg.data?.reporter?.vapidPublicKey : null);
+      // The permission prompt needs the click's user activation, so use the
+      // key runtime config already delivered; fetch only as a last resort.
+      let key = reporterOffer?.vapidPublicKey ?? null;
+      if (sw && !key) {
+        const cfg = await apiClient.getSdkConfig();
+        key = cfg.ok ? cfg.data?.reporter?.vapidPublicKey ?? null : null;
+      }
+      return subscribeBrowserPush(rc, reporterTokenForProject(), sw ? sw.serviceWorkerPath : null, key);
     },
 
     async getHallOfFame(limit = 20): Promise<MushiHallOfFameEntry[]> {
