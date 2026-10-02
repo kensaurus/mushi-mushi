@@ -104,7 +104,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `recompute-tester-reputation` | Tester marketplace reputation recompute |
 | `reward-payout-aggregator` | Aggregates reward payout batches |
 | `recipe-collector` | Daily (03:35 UTC) refresh of each project's `mushi.recipe.json` + DTCG tokens into `app_recipe_snapshots`, then the `design_drift` deviance scan (Plan 019 Phase 1b) |
-| `radar-scan` | Daily (04:05 UTC) hole checks per project (Plan 020): public probes (store names, listing locales, domain and certificate expiry, security headers, privacy link) and store-policy rules read from the repo → `gate_runs` gate `radar`. Host CI pushes `radar_ci` via `POST /v1/ingest/radar` (`mushi radar scan --push`) |
+| `radar-scan` | Daily (04:05 UTC) hole checks per project (Plan 020): public probes (store names, listing locales, domain and certificate expiry, security headers, privacy link) and store-policy rules read from the repo → `gate_runs` gate `portfolio_radar`. Host CI pushes `portfolio_radar_ci` via `POST /v1/ingest/radar` (`mushi radar scan --push`) |
 | `operator-digest` | Hourly at :20; sends each organization's opt-in daily digest (new reports, holes, releases, AI spend jump) once a day at its `send_hour_utc` (Plan 020 §9; `operator_digest_settings`, off by default) |
 | `healthz` | Unauthenticated liveness + cheap DB probe (`{status, db, version}`); `verify_jwt = false` |
 | `linear-oauth-callback` | Completes Linear OAuth; vaults tokens; registers inbound webhook |

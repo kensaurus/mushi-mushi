@@ -213,7 +213,7 @@ export async function runStoreReview(db: Db, projectId: string, deps: StoreOpsDe
   results.push(screenshotStale({ screenshots: shotDates, releaseDates }))
 
   // The checklist reuses the latest hole checks; anything not checked stays unknown.
-  const { data: radarRun } = await db.from('gate_runs').select('summary').eq('project_id', projectId).in('gate', ['radar', 'radar_ci']).order('started_at', { ascending: false }).limit(2)
+  const { data: radarRun } = await db.from('gate_runs').select('summary').eq('project_id', projectId).in('gate', ['portfolio_radar', 'portfolio_radar_ci']).order('started_at', { ascending: false }).limit(2)
   const radarResults = ((radarRun ?? []) as Array<{ summary: { results?: Array<{ ruleId: string; state: string }> } | null }>).flatMap((r) => r.summary?.results ?? [])
   const stateOf = (rule: string): boolean | null => {
     const r = radarResults.find((x) => x.ruleId === rule)

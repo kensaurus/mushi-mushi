@@ -49,7 +49,7 @@ export interface ComposeDeps {
 }
 
 /** Plan 020 hole-check gates; shown in the radar, never counted in the recipe's gates card. */
-export const RADAR_GATES = ['radar', 'radar_ci', 'store_review']
+export const RADAR_GATES = ['portfolio_radar', 'portfolio_radar_ci', 'store_review']
 const ELEMENT_DRIFT_GATES = ['ci_drift', 'env_drift', 'deploy_drift']
 
 const INVENTORY_GATES = ['dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim', 'spec_drift', 'orphan_endpoint', 'unknown_call']

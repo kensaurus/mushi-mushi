@@ -10,7 +10,7 @@ Add three tools, on by default in the `inventory` group. The two portfolio tools
 
 The portfolio tools take an optional `organizationId`; without it, your only organization is used.
 
-Also adds `get_recipe_drift` (what drifted from the recipe — CI workflows, deploys not live, env names, unapplied migrations, off-token values — each with a fix) and `list_connectors` (the sources an organization connected, their status and scopes; never credentials). `list_gate_findings` accepts the `radar`, `radar_ci` and `store_review` gates.
+Also adds `get_recipe_drift` (what drifted from the recipe — CI workflows, deploys not live, env names, unapplied migrations, off-token values — each with a fix) and `list_connectors` (the sources an organization connected, their status and scopes; never credentials). `list_gate_findings` accepts the `portfolio_radar`, `portfolio_radar_ci` and `store_review` gates.
 
 Three write tools, dry run by default: `propose_recipe_change` (one draft PR to paths the recipe allows; it stays a draft), `propose_portfolio_change` (the same fix in up to 10 repos, one draft PR each) and `request_connector_action` (asks for a store action such as a Play rollout change; nothing runs until a person approves and runs it in the console — a key can never approve). The server instructions now list them with the other confirm-first tools.
 

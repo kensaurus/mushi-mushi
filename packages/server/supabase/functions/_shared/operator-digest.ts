@@ -26,7 +26,11 @@ export interface DigestProjectLine {
   name: string
   newReports24h: number
   openReports: number
-  radar: { error: number; warn: number; checked: boolean }
+  /**
+   * checked: a latest hole-check run finished without a failed check.
+   * failed: a latest run, or a check inside it, failed to run.
+   */
+  radar: { error: number; warn: number; checked: boolean; failed: boolean }
   draftReleases: number
   publishedReleases24h: number
   /** Mushi's own LLM spend: the last 24 h and the daily average of the 7 days before. */
@@ -57,6 +61,10 @@ export function spendJumped(s: DigestProjectLine['spend']): boolean {
 function lineFor(p: DigestProjectLine): { text: string; weight: number } | null {
   const parts: string[] = []
   let weight = 0
+  if (p.radar.failed) {
+    parts.push('hole checks failed to run')
+    weight += 50
+  }
   if (p.radar.error > 0) {
     parts.push(`${p.radar.error} serious hole${p.radar.error === 1 ? '' : 's'}`)
     weight += 100 * p.radar.error
@@ -84,9 +92,10 @@ export function composeDigest(data: DigestData, consoleUrl: string): ComposedDig
     .map((p) => ({ p, l: lineFor(p) }))
     .filter((x): x is { p: DigestProjectLine; l: { text: string; weight: number } } => x.l !== null)
     .sort((a, b) => b.l.weight - a.l.weight || a.p.name.localeCompare(b.p.name))
-  const unchecked = data.projects.filter((p) => !p.radar.checked).length
+  // Never checked is said out loud, even when nothing else happened: silence would read as "all fine".
+  const unchecked = data.projects.filter((p) => !p.radar.checked && !p.radar.failed).length
   const lines = scored.map((x) => x.l.text)
-  if (lines.length > 0 && unchecked > 0) lines.push(`${unchecked} app${unchecked === 1 ? ' has' : 's have'} not had hole checks yet.`)
+  if (unchecked > 0) lines.push(`${unchecked} app${unchecked === 1 ? ' has' : 's have'} not had hole checks yet.`)
   const org = data.organizationName ?? 'your apps'
   const title = `Mushi daily digest for ${org}`
   const body = lines.length ? lines.map((l) => `• ${l}`).join('\n') : 'Nothing new across your apps today.'
@@ -94,7 +103,7 @@ export function composeDigest(data: DigestData, consoleUrl: string): ComposedDig
     title,
     lines,
     text: `${title}\n${body}\nOpen the portfolio: ${consoleUrl}`,
-    hasContent: scored.length > 0,
+    hasContent: lines.length > 0,
   }
 }
 
@@ -113,18 +122,18 @@ export async function collectDigest(db: Db, organizationId: string, now: Date): 
     ? await Promise.all([
       db.from('reports').select('project_id').in('project_id', ids).gte('created_at', day).limit(5000),
       db.from('reports').select('project_id').in('project_id', ids).in('status', [...DIGEST_OPEN_STATUSES]).limit(20000),
-      db.from('gate_runs').select('id, project_id, gate, started_at').in('project_id', ids).in('gate', ['radar', 'radar_ci']).order('started_at', { ascending: false }).limit(500),
+      db.from('gate_runs').select('id, project_id, gate, status, summary, started_at').in('project_id', ids).in('gate', ['portfolio_radar', 'portfolio_radar_ci']).order('started_at', { ascending: false }).limit(500),
       db.from('releases').select('project_id, status, published_at').in('project_id', ids).order('created_at', { ascending: false }).limit(500),
       db.from('llm_invocations').select('project_id, cost_usd, created_at').in('project_id', ids).gte('created_at', week).limit(50000),
     ])
     : [empty, empty, empty, empty, empty]
 
-  const latestRun = new Map<string, string>()
-  for (const r of ((runs as { data: unknown }).data ?? []) as Array<{ id: string; project_id: string; gate: string }>) {
+  const latestRun = new Map<string, { id: string; project_id: string; failed: boolean }>()
+  for (const r of ((runs as { data: unknown }).data ?? []) as Array<{ id: string; project_id: string; gate: string; status: string; summary: { errored?: number } | null }>) {
     const key = `${r.project_id}:${r.gate}`
-    if (!latestRun.has(key)) latestRun.set(key, r.id)
+    if (!latestRun.has(key)) latestRun.set(key, { id: r.id, project_id: r.project_id, failed: r.status === 'error' || Number(r.summary?.errored ?? 0) > 0 })
   }
-  const runIds = [...latestRun.values()]
+  const runIds = [...latestRun.values()].map((r) => r.id)
   const { data: findings } = runIds.length
     ? await db.from('gate_findings').select('project_id, severity').in('gate_run_id', runIds).eq('allowlisted', false).limit(5000)
     : { data: [] }
@@ -148,7 +157,8 @@ export async function collectDigest(db: Db, organizationId: string, now: Date): 
         radar: {
           error: f.filter((x) => x.severity === 'error').length,
           warn: f.filter((x) => x.severity === 'warn').length,
-          checked: latestRun.has(`${p.id}:radar`) || latestRun.has(`${p.id}:radar_ci`),
+          checked: [...latestRun.values()].some((r) => r.project_id === p.id && !r.failed),
+          failed: [...latestRun.values()].some((r) => r.project_id === p.id && r.failed),
         },
         draftReleases: rel.filter((r) => r.status === 'draft').length,
         publishedReleases24h: rel.filter((r) => r.status === 'published' && r.published_at && r.published_at >= day).length,

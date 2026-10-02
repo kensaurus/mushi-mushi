@@ -24,7 +24,7 @@ interface RadarDetectorView {
   state: DetectorState
   reason: string
   checkedAt: string | null
-  from: 'radar' | 'radar_ci' | null
+  from: 'portfolio_radar' | 'portfolio_radar_ci' | null
   findings: RadarFindingView[]
 }
 

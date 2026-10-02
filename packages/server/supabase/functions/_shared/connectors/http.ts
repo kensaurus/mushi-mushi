@@ -77,7 +77,7 @@ export const httpConnector: RecipeConnector = {
       const x = f as Record<string, unknown>
       if (typeof x.ruleId !== 'string' || typeof x.message !== 'string') return []
       const severity = x.severity === 'error' || x.severity === 'warn' ? x.severity : 'info'
-      return [{ gate: 'radar', ruleId: x.ruleId.slice(0, 80), severity, message: x.message.slice(0, 500) }]
+      return [{ gate: 'portfolio_radar', ruleId: x.ruleId.slice(0, 80), severity, message: x.message.slice(0, 500) }]
     })
   },
 }

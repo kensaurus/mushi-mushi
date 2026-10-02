@@ -1,5 +1,5 @@
 -- ============================================================================
--- 20261002170500_org_funnel_definitions
+-- 20261002180500_org_funnel_definitions
 --
 -- Plan 020 Phase 3 (§8, ADR 0017). ADDITIVE: apply BEFORE deploying the api
 -- function (GET/PUT /v1/admin/orgs/:orgId/funnel read and write this table).

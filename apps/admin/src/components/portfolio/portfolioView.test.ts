@@ -14,7 +14,7 @@ const card = (over: Partial<PortfolioCard>): PortfolioCard => ({
   openReports: 0,
   sdk: [],
   latestRelease: null,
-  radar: { checkedAt: null, status: 'never_run', open: { error: 0, warn: 0, info: 0 }, unchecked: 0 },
+  radar: { checkedAt: null, status: 'never_run', open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 0 },
   spend: { llmUsd30d: 0, llmCalls30d: 0, autofixCapUsd: null, monthlyLlmBudgetUsd: null },
   ...over,
 })
@@ -32,8 +32,10 @@ describe('portfolioView', () => {
 
   it('never shows a radar that has not run as a pass', () => {
     expect(radarLabel(card({}).radar)).toMatchObject({ text: 'Not checked yet', tone: 'neutral' })
-    expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'pass', open: { error: 0, warn: 0, info: 2 }, unchecked: 0 }).text).toBe('No holes found')
-    expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'fail', open: { error: 1, warn: 2, info: 0 }, unchecked: 0 })).toMatchObject({ text: '3 holes', tone: 'dangerSubtle' })
+    expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'pass', open: { error: 0, warn: 0, info: 2 }, unchecked: 0, errored: 0 }).text).toBe('No holes found')
+    expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'fail', open: { error: 1, warn: 2, info: 0 }, unchecked: 0, errored: 0 })).toMatchObject({ text: '3 holes', tone: 'dangerSubtle' })
+    // A check that failed to run is never green.
+    expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'error', open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 1 })).toMatchObject({ text: 'Check failed', tone: 'danger' })
   })
 
   it('labels the SDK by its worst package and says unknown when nothing reported', () => {
@@ -59,6 +61,6 @@ describe('radarStateMeta', () => {
   })
 
   it('labels a radar run with nothing declared as nothing to check', () => {
-    expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'nothing_to_check', open: { error: 0, warn: 0, info: 0 }, unchecked: 6 }).text).toBe('Nothing to check yet')
+    expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'nothing_to_check', open: { error: 0, warn: 0, info: 0 }, unchecked: 6, errored: 0 }).text).toBe('Nothing to check yet')
   })
 })

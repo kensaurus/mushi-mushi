@@ -4,7 +4,7 @@
  *   GET  /v1/admin/projects/:id/radar        adminOrApiKey(mcp:read)  every detector's state
  *   POST /v1/admin/projects/:id/radar/run    adminOrApiKey(mcp:write) run now (1 per 10 min)
  *   GET  /v1/admin/orgs/:orgId/radar         adminOrApiKey(mcp:read)  open findings across the org
- *   POST /v1/ingest/radar                    apiKeyAuth               the host CI's scan (radar_ci)
+ *   POST /v1/ingest/radar                    apiKeyAuth               the host CI's scan (portfolio_radar_ci)
  *
  * Reads never show a check that did not run as passing (see _shared/radar/run.ts).
  * The CI ingest stores only server-written messages: the CI sends rule ids,
@@ -149,7 +149,8 @@ export function registerRadarRoutes(app: Hono<{ Variables: Variables }>, deps: R
           name: nameOf.get(id) ?? null,
           status: view.status,
           checkedAt: view.checkedAt,
-          unchecked: view.detectors.filter((d) => d.state === 'unknown' || d.state === 'error').length,
+          unchecked: view.detectors.filter((d) => d.state === 'unknown').length,
+          errored: view.detectors.filter((d) => d.state === 'error').length,
           findings: view.detectors.flatMap((d) => d.findings.map((f) => ({ ...f, ruleId: d.ruleId, title: d.title }))),
         }
       }))

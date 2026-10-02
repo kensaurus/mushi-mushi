@@ -1,8 +1,8 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/radar/run.ts
  * PURPOSE: Run the scheduled hole checks (Plan 020 Phase 1) for one project
- *          and record them as one `gate_runs` row (gate `radar`) plus its
- *          `gate_findings`; accept the host-CI push (gate `radar_ci`); and
+ *          and record them as one `gate_runs` row (gate `portfolio_radar`) plus its
+ *          `gate_findings`; accept the host-CI push (gate `portfolio_radar_ci`); and
  *          read both back as one list of detectors.
  *
  * Never green by default: every rule in RADAR_RULE_IDS appears in the read
@@ -32,8 +32,8 @@ import {
 
 type Db = ReturnType<typeof getServiceClient>
 
-export const RADAR_GATE = 'radar'
-export const RADAR_CI_GATE = 'radar_ci'
+export const RADAR_GATE = 'portfolio_radar'
+export const RADAR_CI_GATE = 'portfolio_radar_ci'
 /** A host-CI policy report newer than this makes the scheduled run skip its own repo read. */
 export const CI_FACTS_FRESH_DAYS = 14
 /** Rules only the host's CI can check (whole-repo scans; Mushi never clones). */
@@ -172,7 +172,10 @@ export interface RadarRunSummary {
   status: 'pass' | 'warn' | 'fail' | 'skipped' | 'error'
   results: Array<{ ruleId: RadarRuleId; state: DetectorState; reason: string; findings: number }>
   checked: number
+  /** Checks that could not decide. */
   unchecked: number
+  /** Checks that failed to run. */
+  errored: number
   commitSha: string | null
   error?: string
 }
@@ -204,9 +207,11 @@ async function repoPolicyResults(db: Db, projectId: string, deps: RadarRunDeps, 
   }
 }
 
-function runStatus(results: readonly DetectorResult[]): RadarRunSummary['status'] {
+export function runStatus(results: readonly DetectorResult[]): RadarRunSummary['status'] {
   const findings = results.flatMap((r) => r.findings)
   if (findings.some((f) => f.severity === 'error')) return 'fail'
+  // A check that failed to run is never a pass, even when the others found nothing.
+  if (results.some((r) => r.state === 'error')) return 'error'
   if (findings.some((f) => f.severity === 'warn')) return 'warn'
   if (!results.some((r) => r.state === 'ok' || r.state === 'finding')) return 'skipped'
   return 'pass'
@@ -231,7 +236,10 @@ async function recordRun(db: Db, projectId: string, gate: string, triggeredBy: s
   const summary = {
     results: results.map((r) => ({ ruleId: r.ruleId, state: r.state, reason: r.reason.slice(0, 500), findings: r.findings.length })),
     checked: results.filter((r) => r.state === 'ok' || r.state === 'finding').length,
-    unchecked: results.filter((r) => r.state === 'unknown' || r.state === 'error').length,
+    /** Could not decide (nothing declared, a store or registry did not answer). */
+    unchecked: results.filter((r) => r.state === 'unknown').length,
+    /** Failed to run (a connector or the repo read threw). Counted apart from `unchecked`. */
+    errored: results.filter((r) => r.state === 'error').length,
     ...extra,
   }
   const findings = results.reduce((n, r) => n + r.findings.length, 0)
@@ -251,7 +259,7 @@ async function recordRun(db: Db, projectId: string, gate: string, triggeredBy: s
       throw new Error(`could not store the ${gate} findings: ${fErr.message}`)
     }
   }
-  return { runId, status, results: summary.results, checked: summary.checked, unchecked: summary.unchecked, commitSha }
+  return { runId, status, results: summary.results, checked: summary.checked, unchecked: summary.unchecked, errored: summary.errored, commitSha }
 }
 
 /** Latest completed run of a gate for a project, or null. */
@@ -307,7 +315,7 @@ export interface CiRadarPush {
   files: Record<string, string>
 }
 
-/** Record what the host's CI checked as one `radar_ci` run. */
+/** Record what the host's CI checked as one `portfolio_radar_ci` run. */
 export async function recordCiRadar(db: Db, projectId: string, push: CiRadarPush, now: Date): Promise<RadarRunSummary> {
   const results: DetectorResult[] = []
   for (const ruleId of CI_ONLY_RULES) {
@@ -336,7 +344,7 @@ export interface RadarDetectorView {
   reason: string
   checkedAt: string | null
   /** Which run answered: Mushi's scheduled check or the host's CI. */
-  from: 'radar' | 'radar_ci' | null
+  from: 'portfolio_radar' | 'portfolio_radar_ci' | null
   findings: Array<{ id: string; severity: string; message: string; filePath: string | null; line: number | null; fix: string | null; target: string | null }>
 }
 
@@ -359,8 +367,8 @@ export async function readRadar(db: Db, projectId: string): Promise<RadarView> {
 
   const answerFrom = (ruleId: RadarRuleId) => {
     const pick = [
-      { gate: 'radar' as const, r: run },
-      { gate: 'radar_ci' as const, r: ci },
+      { gate: 'portfolio_radar' as const, r: run },
+      { gate: 'portfolio_radar_ci' as const, r: ci },
     ]
       .map(({ gate, r }) => ({ gate, r, res: (r?.summary?.results as Array<{ ruleId: string; state: DetectorState; reason: string }> | undefined)?.find((x) => x.ruleId === ruleId) }))
       .filter((x) => x.res && x.r)
