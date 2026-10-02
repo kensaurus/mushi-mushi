@@ -201,7 +201,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
       readBy: ['classify-report edge function'],
     },
     whenToChange:
-      "Stay on Sonnet 4.6 unless cost is biting (drop to Haiku) or you're finding misses on subtle pattern reports (try Opus on a small slice via Prompt Lab first).",
+      "Stay on Sonnet 5.5 unless cost is biting (drop to Haiku) or you're finding misses on subtle pattern reports (try Opus on a small slice via Prompt Lab first).",
     learnMore: {
       label: 'Architecture overview',
       href: 'https://kensaur.us/mushi-mushi/docs/concepts/architecture',

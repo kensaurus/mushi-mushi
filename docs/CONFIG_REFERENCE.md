@@ -127,7 +127,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Where it lives** — table `project_settings.stage2_model` · endpoint `PATCH /v1/admin/settings` · read by `classify-report edge function`
 
-**When to change** — Stay on Sonnet 4.6 unless cost is biting (drop to Haiku) or you're finding misses on subtle pattern reports (try Opus on a small slice via Prompt Lab first).
+**When to change** — Stay on Sonnet 5.5 unless cost is biting (drop to Haiku) or you're finding misses on subtle pattern reports (try Opus on a small slice via Prompt Lab first).
 
 **Learn more** — [Architecture overview](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
 
