@@ -75,7 +75,7 @@ export type SecretSettingWrite =
 /**
  * Decide what a settings PATCH does with one secret field.
  *
- * - `null` / `''` clears the column.
+ * - `null` / `''` clears the column; whitespace only is skipped.
  * - A masked hint (`…abcd`) or a value identical to the stored column is a
  *   form round-trip, not an edit: skip it. The console's General panel sends
  *   the whole settings row back, stored refs included.
@@ -87,7 +87,8 @@ export function planSecretSettingWrite(value: unknown, stored: string | null | u
   if (value === null || value === '') return { action: 'clear' }
   if (typeof value !== 'string') return { action: 'skip' }
   const raw = value.trim()
-  if (!raw) return { action: 'clear' }
+  // Whitespace is an untouched input, not a request to delete the secret.
+  if (!raw) return { action: 'skip' }
   if (raw.startsWith('…') && raw.length <= 6) return { action: 'skip' }
   if (stored != null && value === stored) return { action: 'skip' }
   if (isVaultRef(raw)) return { action: 'reject' }
