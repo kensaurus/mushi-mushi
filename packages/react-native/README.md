@@ -105,6 +105,23 @@ import { MushiBottomSheet, MushiFloatingButton } from '@mushi-mushi/react-native
 - `MushiBottomSheet` — Conversational report modal with category → description → submit flow. Dark/light theme, drag-to-dismiss.
 - `MushiFloatingButton` — Positioned FAB with spring animation. Configurable via `buttonPosition` and `inset`.
 
+## Theming
+
+The report sheet takes the host's look through `widget.theme`. Every token is optional; unset tokens use neutral defaults with an ink accent, and when only `accent` is set the text on it is picked for contrast.
+
+```tsx
+<MushiProvider
+  config={{
+    widget: {
+      theme: { accent: '#C9A227', fontFamily: 'Georgia', radius: 8 },
+      // also: bg, fg, muted, surface, border, accentFg, success, error
+    },
+  }}
+>
+```
+
+"Your reports" shows the same status labels as the web widget ("Received", "Looking into it", "Fix in progress", "Fixed in v1.4"), from `@mushi-mushi/core/reporter-ui`. A thread that fails or does not answer within 12 s shows Retry, and opening a thread marks its updates read.
+
 ## What gets captured
 
 - Device info (platform, OS version, screen dimensions) + a stable device `fingerprintHash`
@@ -182,4 +199,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 59 edge functions · 378 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 60 edge functions · 382 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

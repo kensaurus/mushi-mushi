@@ -4025,7 +4025,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP<br/>76 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>80 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
@@ -4073,7 +4073,7 @@ your client:
 }
 ```
 
-The full tool catalog (76 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (80 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -4249,7 +4249,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 76 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 80 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -6695,7 +6695,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **76-tool** catalog and
+on npm for the full **80-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 
@@ -7700,6 +7700,23 @@ The SDK captures **before** the bottom sheet overlays the screen. Users see a
 
 Console operators can override the caption via **Projects → SDK install →
 Screenshot privacy caption** (runtime config — no app rebuild).
+
+### Theming the report sheet
+
+The report sheet takes the host's look through `widget.theme`. Every token is optional; unset tokens use neutral defaults with an ink accent, and when only `accent` is set the text on it is picked for contrast.
+
+```tsx
+<MushiProvider
+  config={{
+    widget: {
+      theme: { accent: '#C9A227', fontFamily: 'Georgia', radius: 8 },
+      // also: bg, fg, muted, surface, border, accentFg, success, error
+    },
+  }}
+>
+```
+
+"Your reports" shows the same status labels as the web widget ("Received", "Looking into it", "Fix in progress", "Fixed in v1.4"), from `@mushi-mushi/core/reporter-ui`. A thread that fails or does not answer within 12 s shows Retry, and opening a thread marks its updates read.
 
 On finance/health apps, keeping capture on with a clear caption is often better
 than disabling screenshots entirely. For screens that must never be captured,
@@ -10102,13 +10119,14 @@ doesn't do: user-triggered bug reports with plain-English AI diagnosis and a
 paste-ready fix you can hand to your editor's agent via MCP.
 
   **Three ways to run Mushi with Sentry:**
-  1. **Route errors in (recommended)** — point a Sentry issue-alert webhook at
-     `/v1/webhooks/sentry?projectId=<your-project>` and Sentry errors land
+  1. **Route errors in (recommended)** — point a Sentry internal integration's
+     webhook at `/v1/webhooks/sentry?projectId=<your-project>` (and import
+     the issues you already have) and Sentry errors land
      in the same Mushi queue as user reports: deduped per issue, diagnosed in
      plain English, fix-dispatchable. Merging the fix resolves the Sentry issue;
      resolving in Sentry resolves the report; a repeat alert on a fixed report
      reopens it as a regression. See [the Sentry plugin page](/plugins/sentry)
-     for the 3-step setup.
+     for the setup.
   2. **Enrich** — keep Sentry as-is; Mushi captures user bug reports and links
      each one to the matching Sentry event via `@mushi-mushi/plugin-sentry`.
   3. **Standalone** — use Mushi on its own for capture + diagnosis + fix. You
@@ -10943,6 +10961,7 @@ interface MushiEvent<TName extends MushiEventName, TData> {
 | `report.status_changed`   | Status updated via API or admin                                              | `{ report_id, from, to, actor_id }`                        |
 | `report.commented`        | A comment is added to a report                                               | `{ report_id, comment_id, body, visible_to_reporter }`     |
 | `report.dedup_grouped`    | Report is grouped into a dedup cluster                                       | `{ report_id, group_id, peers }`                           |
+| `report.reporter_replied` | The reporter answered in the report's thread (widget reply)                  | `{ report: { id }, comment: { id, body, author_kind } }`   |
 | `fix.requested`           | A fix dispatch has been requested (pre-agent launch)                         | `{ report_id, fix_id }`                                    |
 | `fix.proposed`            | Orchestrator opens a draft PR (standard agent or Cursor Cloud Agent)         | `{ report_id, attempt_id, pr_url }`                        |
 | `fix.applied`             | Draft PR merged                                                              | `{ report_id, attempt_id, pr_url, sha }`                   |
@@ -11230,22 +11249,44 @@ critical Mushi reports into Sentry.
 
 No plugin needed — this is built into the hosted API:
 
-1. In the Mushi console: **Integrations → Sentry** — set a **Webhook secret**
-   and copy the **Receive URL** shown on the card
-   (`/v1/webhooks/sentry?projectId=<your-project-id>`).
-2. In Sentry: **Alerts → Create Alert Rule** (issue alert) → add a
-   **webhook** action pointed at the receive URL, and set the same secret on
-   the webhook (HMAC-SHA256, `X-Sentry-Hook-Signature`).
-3. Fire a test alert. The error lands in **Reports** with a `via Sentry` badge,
+1. In Sentry: **Settings → Developer Settings → Custom Integrations → Create
+   New Integration → Internal Integration**. Set its webhook URL to the
+   **Receive URL** shown on the Mushi Sentry card
+   (`/v1/webhooks/sentry?projectId=<your-project-id>`), subscribe to the
+   **issue** resource, enable **Alert Rule Action**, and give it **Issue &
+   Event: Read & Write**.
+2. In the Mushi console: **Integrations → Sentry** — paste the integration's
+   **Client Secret** as the **Webhook secret**, plus your org slug, project
+   slug and auth token. Sentry signs every delivery with that secret
+   (`Sentry-Hook-Signature`, HMAC-SHA256 of the body); Mushi also requires a
+   fresh `Sentry-Hook-Timestamp` and drops a `Request-ID` or body it already
+   accepted.
+3. To route alerts too: **Alerts → Create Alert Rule** (issue alert) → action
+   **Send a notification via** your internal integration.
+4. Fire a test alert. The error lands in **Reports** with a `via Sentry` badge,
    a plain-English diagnosis, and a dispatchable fix.
+
+Issues that already exist never fire again. Pull them in with **Import** on
+the Sentry card, the `import_sentry_issues` MCP tool, or
+`POST /v1/admin/projects//sentry/import` with
+`{ "issueIds": ["WEB-12"] }` (ids or short ids, at most 10) or
+`{ "query": "is:unresolved", "limit": 5 }`.
 
 Behavior:
 
-- **Deduped per Sentry issue** — repeat alerts land on the same report.
+- **Deduped per Sentry issue** — repeat alerts land on the same report;
+  re-importing a linked issue returns the existing report.
 - **Regressions reopen** — an alert for an already-fixed report flips it to
   `reopened` and bumps the regression counter instead of filing a duplicate.
-- **Resolves both ways** — `fix.applied` in Mushi resolves the Sentry issue;
-  `action: resolved` from Sentry resolves the linked Mushi report.
+- **Resolves both ways** — when a Mushi fix PR merges, Mushi resolves the
+  linked Sentry issue through the Sentry API (`resolvedInNextRelease`, else
+  `resolved`) and comments the PR link; the fix commit also carries
+  `Fixes <SHORT-ID>` for Sentry's GitHub integration. A failed resolve shows
+  on the fix timeline. `action: resolved` from Sentry resolves the linked
+  Mushi report.
+- **Fix context** — the files named in an imported issue's stack are indexed
+  right away, and codebase sweeps index stack-frame files of open
+  Sentry-linked reports first.
 - Your Sentry **alert rules are the noise filter**: only alerts you route at
   the webhook are ingested. Sentry User Feedback submissions are also ingested
   on the same endpoint.
@@ -17514,7 +17555,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**76 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**80 tools**, 8 resources, 4 prompts).
 
 ---
 

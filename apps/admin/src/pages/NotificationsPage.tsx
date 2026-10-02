@@ -45,6 +45,7 @@ import { ConfigHelp } from '../components/ConfigHelp'
 import { NotificationsStatusBanner } from '../components/notifications/NotificationsStatusBanner'
 import { NotificationsSnapshotStrip } from '../components/notifications/NotificationsSnapshotStrip'
 import { NotificationsReadout } from '../components/notifications/NotificationsReadout'
+import { ReporterOutboxPanel } from '../components/notifications/ReporterOutboxPanel'
 import {
   EMPTY_NOTIFICATIONS_STATS,
   TYPE_BADGE,
@@ -68,6 +69,11 @@ const TABS: Array<{ id: NotificationTabId; label: string; description: string }>
     description: 'Every outbound message keyed by reporter token — expand payloads to debug SDK polling.',
   },
   {
+    id: 'outbox',
+    label: 'Outbox',
+    description: 'Pipeline updates to reporters waiting for review, and whether they wait at all.',
+  },
+  {
     id: 'setup',
     label: 'Setup',
     description: 'Whether reporter notifications are enabled and how messages reach the widget.',
@@ -75,7 +81,7 @@ const TABS: Array<{ id: NotificationTabId; label: string; description: string }>
 ]
 
 function resolveNotificationTab(value: string | null): NotificationTabId {
-  if (value === 'inbox' || value === 'setup') return value
+  if (value === 'inbox' || value === 'outbox' || value === 'setup') return value
   return 'overview'
 }
 
@@ -180,6 +186,7 @@ export function NotificationsPage() {
     () => [
       { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
       { id: 'inbox' as const, label: copy?.tabLabels?.inbox ?? 'Inbox', count: stats.unread > 0 ? stats.unread : undefined },
+      { id: 'outbox' as const, label: copy?.tabLabels?.outbox ?? 'Outbox' },
       { id: 'setup' as const, label: copy?.tabLabels?.setup ?? 'Setup' },
     ],
     [copy?.tabLabels, stats.unread],
@@ -559,6 +566,12 @@ export function NotificationsPage() {
               </div>
             )}
           </div>
+        </Section>
+      )}
+
+      {activeTab === 'outbox' && activeProjectId && (
+        <Section title="Outbox">
+          <ReporterOutboxPanel projectId={activeProjectId} />
         </Section>
       )}
 

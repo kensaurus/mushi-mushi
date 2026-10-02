@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 202 pages, generated from llms.txt. */
+/** 203 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
@@ -39,7 +39,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/",
     markdown: "index.md",
     keywords: ["know", "ai-built", "app", "broke", "fix", "ready"],
-    headings: ["See it in action", "What this is (and is not)", "Get started with the SDK", "Install in your framework", "One queue. Sentry flows in, fixes flow out."],
+    headings: ["This is what a diagnosis looks like", "See it in action", "What this is (and is not)", "Get started with the SDK", "Install in your framework", "One queue. Sentry flows in, fixes flow out."],
     excerpt: "Your AI shipped it. Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.",
   },
   {
@@ -1051,6 +1051,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Upgrade a Vue 2 app to Vue 3 and move from the vanilla Mushi web SDK to the @mushi-mushi/vue plugin, with an interactive migration checklist.",
   },
   {
+    title: "Open metrics",
+    url: docUrl("/open"),
+    route: "/open",
+    markdown: "open.md",
+    keywords: ["open", "metrics"],
+    headings: ["What is not on this page, and why", "Where the numbers come from"],
+    excerpt: "Mushi Mushi's public numbers (releases, commits, contributors, npm downloads), fetched from public APIs at build time, with what each one does not mean.",
+  },
+  {
     title: "Operating (maintainers)",
     url: docUrl("/operating"),
     route: "/operating",
@@ -1614,7 +1623,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/react-native",
     markdown: "sdks/react-native.md",
     keywords: ["sdks", "react-native", "react", "native", "@mushi-mushi/react-native"],
-    headings: ["Install", "Mount the provider", "Submit a report from a screen", "Offline queue", "What gets captured (v0.19+)", "Screenshots (react-native-view-shot)", "Manual breadcrumbs", "Reporter identity contract"],
+    headings: ["Install", "Mount the provider", "Submit a report from a screen", "Offline queue", "What gets captured (v0.19+)", "Screenshots (react-native-view-shot)", "Theming the report sheet", "Manual breadcrumbs"],
     excerpt: "Reference for @mushi-mushi/react-native — MushiProvider, hooks, shake-to-report, screenshots, identity and the offline queue for React Native and Expo.",
   },
   {

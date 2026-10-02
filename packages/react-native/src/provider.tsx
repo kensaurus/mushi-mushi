@@ -72,8 +72,8 @@ import { MushiBanner } from './components/MushiBanner'
 import { createRNEventTracker, type RNAnalyticsConfig, type RNEventTracker } from './analytics/event-tracker'
 import { createRNSessionTracker, type RNSessionTracker } from './analytics/session-tracker'
 import { MUSHI_SDK_PACKAGE, MUSHI_SDK_VERSION } from './version'
-
-export { reporterStatusShort } from './reporter-status'
+import type { MushiRNTheme } from './theme'
+import { markReporterReportRead } from './reporter-thread'
 
 export interface MushiRNConfig {
   projectId: string
@@ -112,6 +112,13 @@ export interface MushiRNConfig {
     }
     /** Poll interval (ms) for My Reports while the inbox tab is open. 0 = off (default). */
     inboxPollIntervalMs?: number
+    /**
+     * Theme tokens for the report sheet (bg, fg, muted, surface, border,
+     * accent, accentFg, success, error, fontFamily, radius). Unset tokens
+     * use neutral system-style defaults with an ink accent; when only
+     * `accent` is set, the text on it is chosen for contrast.
+     */
+    theme?: Partial<MushiRNTheme>
   }
   assistant?: {
     enabled?: boolean
@@ -212,8 +219,12 @@ export interface MushiRNInstance {
   // Reporter API — returns reports/comments for this device's persistent token
   /** List this device's reports ordered by most recent. Returns [] on failure. */
   listMyReports(): Promise<MushiReporterReport[]>
-  /** List admin + reporter comments on a specific report. */
+  /** List admin + reporter comments on a specific report. Returns [] on failure. */
   listMyComments(reportId: string): Promise<MushiReporterComment[]>
+  /** Like `listMyComments`, but resolves `null` when the thread could not be loaded, so a UI can offer Retry. */
+  loadMyThread(reportId: string): Promise<MushiReporterComment[] | null>
+  /** Mark this device's unread notifications for a report as read. Resolves the number marked (0 on failure). */
+  markReportRead(reportId: string): Promise<number>
   /** Post a reporter reply on a report thread. Returns the new comment or null on failure. */
   replyToReport(reportId: string, body: string): Promise<MushiReporterComment | null>
   /** Record a reporter feedback signal (e.g. `confirms`, `not_fixed`) on a report. Returns the outcome or null. */
@@ -892,6 +903,26 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
           ? (res.data as { comments: MushiReporterComment[] }).comments ?? []
           : []
       },
+      async loadMyThread(reportId: string) {
+        const client = apiClientRef.current
+        if (!client) return null
+        try {
+          await reporterTokenReadyRef.current
+          const res = await client.listReporterComments(reportId, reporterTokenRef.current)
+          return res.ok ? (res.data as { comments?: MushiReporterComment[] } | undefined)?.comments ?? [] : null
+        } catch {
+          return null
+        }
+      },
+      async markReportRead(reportId: string) {
+        // Phase 0 path: the existing notification routes, matched on
+        // payload.reportId (both the comment trigger and createNotification
+        // write it). Best effort — a failure only leaves the badge as it was.
+        const client = apiClientRef.current
+        if (!client) return 0
+        await reporterTokenReadyRef.current
+        return markReporterReportRead(client, reporterTokenRef.current, reportId)
+      },
       async replyToReport(reportId: string, body: string) {
         const client = apiClientRef.current
         if (!client) return null
@@ -1006,6 +1037,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         assistantGreeting={config.assistant?.greeting}
         assistantSuggestions={config.assistant?.suggestions}
         inboxPollIntervalMs={config.widget?.inboxPollIntervalMs ?? 0}
+        theme={config.widget?.theme}
       />
     </MushiContext.Provider>
   )

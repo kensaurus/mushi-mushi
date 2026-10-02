@@ -1899,8 +1899,30 @@ export interface MushiSdkVersionInfo {
 export interface MushiReporterReport {
   id: string;
   status: string;
-  category: string;
+  /** @deprecated No longer sent to reporters (Plan 018); internal triage only. */
+  category?: string;
+  /** @deprecated No longer sent to reporters (Plan 018); internal triage only. */
   severity?: string | null;
+  /** Reporter-safe title (the summary, or the first line of the description). */
+  title?: string | null;
+  /** The type the reporter picked (`user_category`), if any. */
+  user_category?: string | null;
+  /** Page path the report was filed on. */
+  page?: string | null;
+  app_version?: string | null;
+  /** Signed, short-lived thumbnail URL; null without a screenshot. */
+  screenshot_thumb_url?: string | null;
+  /** Bucketed duplicate count: never a raw number. */
+  group_bucket?: 'none' | 'few' | 'many';
+  closed_reason?: string | null;
+  fixed_in_version?: string | null;
+  /** The developer asked a question and is waiting on the reporter. */
+  awaiting_reporter?: boolean;
+  /** True when this row is a report the reporter follows (theirs was a duplicate of it). */
+  followed?: boolean;
+  last_event_at?: string | null;
+  /** Template-rendered (or verbatim developer) text of the latest event. */
+  last_event_preview?: string | null;
   summary?: string | null;
   description?: string | null;
   created_at: string;

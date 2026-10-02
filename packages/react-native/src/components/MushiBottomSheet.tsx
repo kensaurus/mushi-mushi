@@ -6,7 +6,9 @@
  * - Slide-up modal built entirely on RN built-ins (Modal, Animated, PanResponder)
  * - Conversational flow: category → description → submit → confirmation
  * - Drag-to-dismiss via PanResponder on the handle area
- * - Dark/light theme via useColorScheme
+ * - Host-adaptive theme (`widget.theme`, see ../theme.ts) over light/dark
+ * - "Your reports": statuses come from the shared core table
+ *   (`@mushi-mushi/core/reporter-ui`), so web and RN say the same thing
  *
  * DEPENDENCIES:
  * - React Native built-in APIs only (no third-party libs)
@@ -20,10 +22,14 @@
  * - PanResponder threshold: 80 px downward drag dismisses
  * - Animated.spring for slide-up, Animated.timing for backdrop
  * - Success confirmation auto-closes after 1.4 s
+ * - Thread loads show a skeleton, then Retry on failure; a failed reply keeps
+ *   its text and offers Retry. Opening a thread marks it read.
  *
  * NOTES:
  * - KeyboardAvoidingView wraps the sheet so the text input stays visible
  * - Categories match the web SDK: bug, slow, visual, confusing, other
+ * - accessibilityViewIsModal is iOS-only; RN's Modal is its own window on
+ *   Android, which keeps TalkBack focus inside the sheet there.
  */
 
 import {
@@ -52,23 +58,25 @@ import {
   type TextStyle,
 } from 'react-native'
 import {
-  mushiPalette,
-  MUSHI_BANNER_NEON,
   MUSHI_COPY,
-  MUSHI_CONTROL_DISABLED,
   MUSHI_INVERSE,
   MUSHI_RADIUS,
   MUSHI_SHADOW_INK,
   MUSHI_SPACING,
   MUSHI_TYPE,
+  type MushiReporterComment,
+  type MushiReporterReport,
 } from '@mushi-mushi/core'
+import { reporterCopy, reporterStatus, resolveReporterLocale } from '@mushi-mushi/core/reporter-ui'
 import { getLocale } from '@mushi-mushi/web/i18n'
 import { useMushiContext } from '../provider'
-import { reporterStatusShort } from '../reporter-status'
+import { resolveRNTheme, type MushiRNTheme } from '../theme'
+import { loadReporterThread, settleWithin, THREAD_LOAD_TIMEOUT_MS } from '../reporter-thread'
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window')
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.55
 const DISMISS_THRESHOLD = 80
+const MIN_DESCRIPTION = 20
 
 const CATEGORY_KEYS = ['bug', 'slow', 'visual', 'confusing', 'other'] as const
 const CATEGORY_EMOJI: Record<(typeof CATEGORY_KEYS)[number], string> = {
@@ -79,11 +87,8 @@ const CATEGORY_EMOJI: Record<(typeof CATEGORY_KEYS)[number], string> = {
   other: '💬',
 }
 
-// Reporter-fixed/terminal statuses that should surface the verify ("Yes,
-// fixed") / reopen ("Not fixed") row. Mirrors the web widget, which treats
-// `resolved` (CLI alias) and `verified` (already-confirmed, still reopenable on
-// regression) as fixed-ish alongside `fixed`.
-const VERIFIABLE_STATUSES = new Set(['fixed', 'resolved', 'verified'])
+type ThreadStatus = 'idle' | 'loading' | 'ready' | 'error'
+type ReplyState = 'idle' | 'sending' | 'failed'
 
 export interface MushiBottomSheetProps {
   visible: boolean
@@ -106,6 +111,8 @@ export interface MushiBottomSheetProps {
   assistantSuggestions?: string[]
   /** Poll My Reports while inbox tab is open. 0 disables polling. */
   inboxPollIntervalMs?: number
+  /** Theme tokens (`widget.theme`); unset tokens use the neutral defaults. */
+  theme?: Partial<MushiRNTheme>
 }
 
 export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
@@ -120,9 +127,14 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   assistantGreeting,
   assistantSuggestions = [],
   inboxPollIntervalMs = 0,
+  theme,
 }) => {
   const mushi = useMushiContext()
   const t = getLocale()
+  const locale = resolveReporterLocale(
+    typeof navigator !== 'undefined' ? (navigator as { language?: string }).language : undefined,
+  )
+  const rc = reporterCopy(locale)
   const greeting = assistantGreeting ?? t.assistant.defaultGreeting
   const scheme = useColorScheme()
   const dark = scheme === 'dark'
@@ -135,11 +147,17 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   const [phase, setPhase] = useState<'form' | 'sending' | 'sent' | 'error'>('form')
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [sheetTab, setSheetTab] = useState<'report' | 'inbox' | 'assistant'>('report')
-  const [inboxReports, setInboxReports] = useState<Array<{ id: string; status: string; summary?: string | null; description?: string }>>([])
+  const [inboxReports, setInboxReports] = useState<MushiReporterReport[]>([])
+  const [inboxLoaded, setInboxLoaded] = useState(false)
   const [inboxLoading, setInboxLoading] = useState(false)
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
-  const [threadComments, setThreadComments] = useState<Array<{ id: number; body: string; author_kind: string; created_at: string }>>([])
+  const selectedRef = useRef<string | null>(null)
+  const [threadComments, setThreadComments] = useState<MushiReporterComment[]>([])
+  const [threadStatus, setThreadStatus] = useState<ThreadStatus>('idle')
   const [replyText, setReplyText] = useState('')
+  const [replyState, setReplyState] = useState<ReplyState>('idle')
+  const [feedbackSending, setFeedbackSending] = useState(false)
+  const [feedbackError, setFeedbackError] = useState(false)
   const [assistantInput, setAssistantInput] = useState('')
   const [assistantThreadId, setAssistantThreadId] = useState<string | null>(null)
   const [assistantSending, setAssistantSending] = useState(false)
@@ -148,16 +166,23 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   // Local shadow of the screenshot so we can clear it from inside the sheet
   const [screenshotAttached, setScreenshotAttached] = useState(true)
 
-  const loadInbox = useCallback(async () => {
-    if (!mushi?.listMyReports) return
-    setInboxLoading(true)
-    try {
-      const rows = await mushi.listMyReports()
-      setInboxReports(rows as typeof inboxReports)
-    } finally {
-      setInboxLoading(false)
-    }
-  }, [mushi])
+  /** Load the list. `silent` (polls, refreshes) never blanks what is on screen. */
+  const loadInbox = useCallback(
+    async (opts: { silent?: boolean } = {}) => {
+      if (!mushi?.listMyReports) return
+      if (!opts.silent) setInboxLoading(true)
+      try {
+        const rows = await mushi.listMyReports()
+        setInboxReports(rows.filter((r) => !reporterStatus(r, locale).hidden))
+        setInboxLoaded(true)
+      } catch {
+        // listMyReports resolves [] on API failure; a throw keeps the last list.
+      } finally {
+        if (!opts.silent) setInboxLoading(false)
+      }
+    },
+    [mushi, locale],
+  )
 
   useEffect(() => {
     if (visible) {
@@ -170,31 +195,96 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   useEffect(() => {
     if (!visible || sheetTab !== 'inbox' || inboxPollIntervalMs <= 0) return
     const timer = setInterval(() => {
-      void loadInbox()
+      void loadInbox({ silent: true })
     }, inboxPollIntervalMs)
     return () => clearInterval(timer)
   }, [visible, sheetTab, inboxPollIntervalMs, loadInbox])
 
-  const openThread = useCallback(async (reportId: string) => {
-    setSelectedReportId(reportId)
-    if (!mushi?.listMyComments) return
-    const comments = await mushi.listMyComments(reportId)
-    setThreadComments(comments as typeof threadComments)
-  }, [mushi])
+  const openThread = useCallback(
+    async (reportId: string, opts: { silent?: boolean } = {}) => {
+      selectedRef.current = reportId
+      setSelectedReportId(reportId)
+      if (!opts.silent) {
+        setThreadComments([])
+        setThreadStatus('loading')
+        setReplyState('idle')
+        setFeedbackError(false)
+      }
+      const load = mushi?.loadMyThread ?? mushi?.listMyComments
+      const comments = load ? await loadReporterThread(load, reportId) : null
+      // The reporter may have gone back or opened another thread meanwhile.
+      if (selectedRef.current !== reportId) return
+      if (comments === null) {
+        // A failed background refresh keeps the thread that is already shown.
+        setThreadStatus((prev) => (opts.silent && prev === 'ready' ? 'ready' : 'error'))
+        return
+      }
+      setThreadComments(comments)
+      setThreadStatus('ready')
+      if (!opts.silent && mushi?.markReportRead) {
+        mushi
+          .markReportRead(reportId)
+          .then((marked) => {
+            if (marked > 0) {
+              setInboxReports((rows) => rows.map((r) => (r.id === reportId ? { ...r, unread_count: 0 } : r)))
+            }
+          })
+          .catch(() => undefined)
+      }
+    },
+    [mushi],
+  )
+
+  const closeThread = useCallback(() => {
+    selectedRef.current = null
+    setSelectedReportId(null)
+    setThreadStatus('idle')
+  }, [])
 
   const sendReply = useCallback(async () => {
-    if (!mushi?.replyToReport || !selectedReportId || !replyText.trim()) return
-    await mushi.replyToReport(selectedReportId, replyText.trim())
-    setReplyText('')
-    await openThread(selectedReportId)
-  }, [mushi, selectedReportId, replyText, openThread])
+    const body = replyText.trim()
+    const reportId = selectedReportId
+    if (!mushi?.replyToReport || !reportId || !body || replyState === 'sending') return
+    setReplyState('sending')
+    try {
+      const comment = await settleWithin(mushi.replyToReport(reportId, body), THREAD_LOAD_TIMEOUT_MS)
+      if (!comment) {
+        setReplyState('failed')
+        return
+      }
+      setReplyText('')
+      setReplyState('idle')
+      if (selectedRef.current === reportId) {
+        setThreadComments((prev) => [...prev, comment])
+        void openThread(reportId, { silent: true })
+      }
+    } catch {
+      setReplyState('failed')
+    }
+  }, [mushi, selectedReportId, replyText, replyState, openThread])
 
-  const submitFeedback = useCallback(async (signal: string) => {
-    if (!mushi?.submitFeedbackSignal || !selectedReportId) return
-    await mushi.submitFeedbackSignal(selectedReportId, signal)
-    await loadInbox()
-    await openThread(selectedReportId)
-  }, [mushi, selectedReportId, loadInbox, openThread])
+  const submitFeedback = useCallback(
+    async (signal: string) => {
+      const reportId = selectedReportId
+      if (!mushi?.submitFeedbackSignal || !reportId || feedbackSending) return
+      setFeedbackSending(true)
+      setFeedbackError(false)
+      try {
+        const outcome = await mushi.submitFeedbackSignal(reportId, signal)
+        if (!outcome) {
+          setFeedbackError(true)
+          return
+        }
+        await loadInbox({ silent: true })
+        await openThread(reportId, { silent: true })
+      } catch {
+        setFeedbackError(true)
+      } finally {
+        setFeedbackSending(false)
+      }
+    },
+    [mushi, selectedReportId, feedbackSending, loadInbox, openThread],
+  )
 
   const sendAssistant = useCallback(async (message: string) => {
     if (!mushi?.askAssistant || !message.trim() || assistantSending) return
@@ -298,7 +388,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   const handleSubmit = async () => {
     if (!category || !description.trim() || !mushi) return
     const trimmed = description.trim()
-    if (trimmed.length < 20) {
+    if (trimmed.length < MIN_DESCRIPTION) {
       setSubmitError('Please write at least 20 characters so we can understand the issue.')
       return
     }
@@ -336,23 +426,215 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
 
   const activeScreenshot = screenshotDataUrl && screenshotAttached ? screenshotDataUrl : null
 
-  // Surface/text colours come from the shared washi/sumi tokens so the sheet
-  // reads as the same product as the web widget (cross-platform coherence —
-  // Workstream C). The neon accent is intentionally retained: it matches the
-  // banner the user tapped to open this sheet.
-  const pal = mushiPalette(dark ? 'dark' : 'light')
-  const colors = dark
-    ? { bg: pal.paper, text: pal.ink, sub: pal.inkMuted, card: pal.paperRaised, accent: MUSHI_BANNER_NEON.bg, accentInk: MUSHI_BANNER_NEON.fg, border: pal.ruleStrong, backdrop: 'rgba(0,0,0,0.6)', disabled: MUSHI_CONTROL_DISABLED.dark, disabledText: pal.inkFaint }
-    : { bg: pal.paperRaised, text: pal.ink, sub: pal.inkMuted, card: pal.paper, accent: MUSHI_BANNER_NEON.bg, accentInk: MUSHI_BANNER_NEON.fg, border: pal.ruleStrong, backdrop: 'rgba(0,0,0,0.35)', disabled: MUSHI_CONTROL_DISABLED.light, disabledText: pal.inkFaint }
+  const colors = resolveRNTheme(dark, theme)
+  const font: TextStyle | null = colors.fontFamily ? { fontFamily: colors.fontFamily } : null
+  const radius = colors.radius
 
   const sheetTabs = (
     ['report', 'inbox', ...(assistantEnabled ? (['assistant'] as const) : [])] as const
   )
 
-  const canSubmit = !!category && description.trim().length >= 20 && (phase === 'form' || phase === 'error')
+  const canSubmit = !!category && description.trim().length >= MIN_DESCRIPTION && (phase === 'form' || phase === 'error')
+  const submitHint = canSubmit || phase === 'sending'
+    ? undefined
+    : !category
+      ? t.step1.heading
+      : rc.ui.addWords
+
+  const selectedReport = selectedReportId ? inboxReports.find((r) => r.id === selectedReportId) ?? null : null
+  const selectedView = selectedReport ? reporterStatus(selectedReport, locale) : null
+  const headerTitle =
+    sheetTab === 'assistant' ? assistantLabel : sheetTab === 'inbox' ? t.flows.reports.title : t.widget.title
+
+  const renderThread = () => (
+    <>
+      <TouchableOpacity
+        onPress={closeThread}
+        accessibilityRole="button"
+        accessibilityLabel={t.widget.back}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Text style={[{ color: colors.accent, marginBottom: 8 }, font]}>← {t.widget.back}</Text>
+      </TouchableOpacity>
+
+      {/* Header card renders instantly from the list row. */}
+      {selectedReport && selectedView ? (
+        <View style={[s.headerCard, { backgroundColor: colors.surface, borderRadius: radius, borderColor: colors.border }]}>
+          <Text style={[s.pill, { color: colors.fg, borderColor: colors.border }, font]}>{selectedView.label}</Text>
+          <Text style={[{ color: colors.muted, fontSize: 12, marginTop: 4 }, font]}>{selectedView.detail}</Text>
+          <Text style={[{ color: colors.fg, marginTop: 8 }, font]} numberOfLines={4}>
+            {selectedReport.title ?? selectedReport.summary ?? selectedReport.description ?? ''}
+          </Text>
+        </View>
+      ) : null}
+
+      {threadStatus === 'loading' ? (
+        <View accessibilityLabel={t.flows.reports.loading} accessibilityLiveRegion="polite">
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={[s.skeleton, { backgroundColor: colors.surface, width: `${90 - i * 18}%` as `${number}%` }]} />
+          ))}
+        </View>
+      ) : threadStatus === 'error' ? (
+        <View style={s.errorRow} accessibilityLiveRegion="polite">
+          <Text style={[{ color: colors.error, flex: 1 }, font]} accessibilityRole="alert">
+            {rc.ui.loadError}
+          </Text>
+          <TouchableOpacity
+            onPress={() => selectedReportId && void openThread(selectedReportId)}
+            accessibilityRole="button"
+            style={[s.retryBtn, { borderColor: colors.border, borderRadius: radius }]}
+          >
+            <Text style={[{ color: colors.fg, fontWeight: '600' }, font]}>{rc.ui.retry}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : threadComments.length === 0 ? (
+        <Text style={[{ color: colors.muted, marginBottom: 8 }, font]}>{rc.ui.noReplies}</Text>
+      ) : (
+        threadComments.map((c) => (
+          <View
+            key={c.id}
+            style={[
+              s.threadBubble,
+              {
+                backgroundColor: colors.surface,
+                alignSelf: c.author_kind === 'reporter' ? 'flex-end' : 'flex-start',
+              },
+            ]}
+          >
+            <Text style={[{ color: colors.muted, fontSize: 11 }, font]}>
+              {c.author_kind === 'reporter' ? rc.ui.you : rc.ui.developer}
+            </Text>
+            <Text style={[{ color: colors.fg }, font]}>{c.body}</Text>
+          </View>
+        ))
+      )}
+
+      {replyState === 'sending' ? (
+        <View style={[s.threadBubble, { backgroundColor: colors.surface, alignSelf: 'flex-end', opacity: 0.7 }]}>
+          <Text style={[{ color: colors.muted, fontSize: 11 }, font]}>{rc.ui.sending}</Text>
+          <Text style={[{ color: colors.fg }, font]}>{replyText.trim()}</Text>
+        </View>
+      ) : null}
+
+      {selectedView?.canVerify ? (
+        <View style={s.verifyRow}>
+          <TouchableOpacity
+            style={[s.verifyBtn, { backgroundColor: colors.accent, borderRadius: radius }]}
+            onPress={() => void submitFeedback('confirms')}
+            disabled={feedbackSending}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: feedbackSending, busy: feedbackSending }}
+          >
+            <Text style={[s.submitText, { color: colors.accentFg }, font]}>{rc.ui.yes}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.verifyBtn, { backgroundColor: colors.border, borderRadius: radius }]}
+            onPress={() => void submitFeedback('not_fixed')}
+            disabled={feedbackSending}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: feedbackSending, busy: feedbackSending }}
+          >
+            <Text style={[s.submitText, { color: colors.fg }, font]}>{rc.ui.notYet}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+      {feedbackError ? (
+        <Text style={[{ color: colors.error, marginBottom: 8 }, font]} accessibilityRole="alert">
+          {rc.ui.sendFailed}
+        </Text>
+      ) : null}
+
+      <View style={s.composer}>
+        <TextInput
+          style={[
+            s.input,
+            s.composerInput,
+            { backgroundColor: colors.surface, color: colors.fg, borderColor: colors.border, borderRadius: radius },
+            font,
+          ]}
+          placeholder={t.flows.thread.replyPlaceholder}
+          placeholderTextColor={colors.muted}
+          value={replyText}
+          onChangeText={(text) => {
+            setReplyText(text.slice(0, 2000))
+            if (replyState === 'failed') setReplyState('idle')
+          }}
+          multiline
+          maxLength={2000}
+          editable={replyState !== 'sending'}
+          accessibilityLabel={t.flows.thread.replyPlaceholder}
+        />
+        <TouchableOpacity
+          style={[
+            s.sendBtn,
+            {
+              backgroundColor: replyText.trim() && replyState !== 'sending' ? colors.accent : colors.disabled,
+              borderRadius: radius,
+            },
+          ]}
+          onPress={() => void sendReply()}
+          disabled={!replyText.trim() || replyState === 'sending'}
+          accessibilityRole="button"
+          accessibilityLabel={replyState === 'failed' ? rc.ui.retry : t.flows.thread.send}
+          accessibilityState={{ disabled: !replyText.trim() || replyState === 'sending', busy: replyState === 'sending' }}
+        >
+          <Text
+            style={[
+              s.submitText,
+              { color: replyText.trim() && replyState !== 'sending' ? colors.accentFg : colors.disabledFg },
+              font,
+            ]}
+          >
+            {replyState === 'failed' ? rc.ui.retry : t.flows.thread.send}
+          </Text>
+        </TouchableOpacity>
+      </View>
+      {replyState === 'failed' ? (
+        <Text style={[{ color: colors.error, marginTop: 6, fontSize: 12 }, font]} accessibilityRole="alert">
+          {rc.ui.sendFailed} · {rc.ui.retry}
+        </Text>
+      ) : null}
+    </>
+  )
+
+  const renderInboxList = () => {
+    if (inboxLoading && !inboxLoaded) {
+      return <Text style={[{ color: colors.muted }, font]}>{t.flows.reports.loading}</Text>
+    }
+    if (inboxReports.length === 0) {
+      return <Text style={[{ color: colors.muted }, font]}>{rc.ui.empty}</Text>
+    }
+    return inboxReports.map((r) => {
+      const view = reporterStatus(r, locale)
+      const unread = (r.unread_count ?? 0) > 0
+      const title = (r.title ?? r.summary ?? r.description ?? 'Report').slice(0, 80)
+      return (
+        <TouchableOpacity
+          key={r.id}
+          style={[s.inboxRow, { borderColor: colors.border }]}
+          onPress={() => void openThread(r.id)}
+          accessibilityRole="button"
+          accessibilityLabel={`${view.label}. ${title}${unread ? `. ${r.unread_count} new` : ''}`}
+        >
+          <Text style={[{ color: colors.fg, fontWeight: unread ? '700' : '600' }, font]} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text style={[{ color: unread ? colors.fg : colors.muted, fontSize: 12, marginTop: 2 }, font]} numberOfLines={1}>
+            {view.label}
+            {view.othersNote ? ` · ${view.othersNote}` : ''}
+          </Text>
+          {unread && r.last_event_preview ? (
+            <Text style={[{ color: colors.fg, fontSize: 12, fontWeight: '700', marginTop: 2 }, font]} numberOfLines={1}>
+              {r.last_event_preview}
+            </Text>
+          ) : null}
+        </TouchableOpacity>
+      )
+    })
+  }
 
   return (
-    <Modal visible={visible} transparent animationType="none" statusBarTranslucent>
+    <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={handleClose}>
       <KeyboardAvoidingView
         style={s.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -362,47 +644,61 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
         <Animated.View
           style={[s.backdrop, { backgroundColor: colors.backdrop, opacity: backdropOpacity }]}
         >
-          <TouchableOpacity style={s.flex} activeOpacity={1} onPress={handleClose} />
+          <TouchableOpacity
+            style={s.flex}
+            activeOpacity={1}
+            onPress={handleClose}
+            accessibilityRole="button"
+            accessibilityLabel={t.widget.close}
+          />
         </Animated.View>
 
         {/* Sheet */}
         <Animated.View
+          accessibilityViewIsModal
+          onAccessibilityEscape={handleClose}
           style={[
             s.sheet,
             { backgroundColor: colors.bg, transform: [{ translateY }] } as ViewStyle,
           ]}
         >
           {/* Drag handle */}
-          <View {...panResponder.panHandlers} style={s.handleArea}>
-            <View style={[s.handle, { backgroundColor: colors.sub }]} />
+          <View
+            {...panResponder.panHandlers}
+            style={s.handleArea}
+            accessible
+            accessibilityRole="adjustable"
+            accessibilityLabel={t.widget.close}
+            accessibilityActions={[{ name: 'decrement', label: t.widget.close }, { name: 'escape' }]}
+            onAccessibilityAction={(e) => {
+              if (e.nativeEvent.actionName === 'decrement' || e.nativeEvent.actionName === 'escape') handleClose()
+            }}
+          >
+            <View style={[s.handle, { backgroundColor: colors.muted }]} />
           </View>
 
-          {/* Neon brand header — mirrors the web SDK banner so the sheet reads
-              as the same surface the user tapped to open it. */}
-          <View style={[s.brandHeader, { backgroundColor: MUSHI_BANNER_NEON.bg, borderBottomColor: MUSHI_BANNER_NEON.border }]}>
-            <Text style={[s.brandEyebrow, { color: MUSHI_BANNER_NEON.fg }]}>MUSHI · BETA</Text>
-            <Text style={[s.brandTitle, { color: MUSHI_BANNER_NEON.fg }]}>
-              {sheetTab === 'assistant'
-                ? assistantLabel
-                : sheetTab === 'inbox'
-                  ? t.flows.reports.title
-                  : t.widget.title}
+          {/* Header: host font and colours, no brand strip. */}
+          <View style={[s.header, { borderBottomColor: colors.border }]}>
+            <Text accessibilityRole="header" style={[s.headerTitle, { color: colors.fg }, font]}>
+              {headerTitle}
             </Text>
           </View>
 
           {/* Tab row */}
-          <View style={[s.tabRow, { borderBottomColor: colors.border }]}>
+          <View style={[s.tabRow, { borderBottomColor: colors.border }]} accessibilityRole="tablist">
             {sheetTabs.map((tab) => (
               <TouchableOpacity
                 key={tab}
                 onPress={() => {
                   setSheetTab(tab)
-                  if (tab === 'inbox') void loadInbox()
-                  else setSelectedReportId(null)
+                  if (tab === 'inbox') void loadInbox({ silent: inboxLoaded })
+                  else closeThread()
                 }}
                 style={[s.tabBtn, sheetTab === tab && { borderBottomColor: colors.accent }]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: sheetTab === tab }}
               >
-                <Text style={[s.tabLabel, { color: sheetTab === tab ? colors.text : colors.sub }]}>
+                <Text style={[s.tabLabel, { color: sheetTab === tab ? colors.fg : colors.muted }, font]}>
                   {tab === 'report'
                     ? t.widget.trigger
                     : tab === 'inbox'
@@ -417,14 +713,15 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
             <ScrollView style={s.body} keyboardShouldPersistTaps="handled">
               {assistantTurns.length === 0 ? (
                 <>
-                  <Text style={{ color: colors.sub, marginBottom: 12, lineHeight: 20 }}>{greeting}</Text>
+                  <Text style={[{ color: colors.muted, marginBottom: 12, lineHeight: 20 }, font]}>{greeting}</Text>
                   {assistantSuggestions.map((chip) => (
                     <TouchableOpacity
                       key={chip}
-                      style={[s.assistantChip, { borderColor: colors.border, backgroundColor: colors.card }]}
+                      style={[s.assistantChip, { borderColor: colors.border, backgroundColor: colors.surface }]}
                       onPress={() => void sendAssistant(chip)}
+                      accessibilityRole="button"
                     >
-                      <Text style={{ color: colors.text, fontSize: 13 }}>{chip}</Text>
+                      <Text style={[{ color: colors.fg, fontSize: 13 }, font]}>{chip}</Text>
                     </TouchableOpacity>
                   ))}
                 </>
@@ -436,108 +733,71 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                       s.assistantBubble,
                       {
                         alignSelf: turn.role === 'user' ? 'flex-end' : 'flex-start',
-                        backgroundColor: turn.role === 'user' ? colors.accent : colors.card,
+                        backgroundColor: turn.role === 'user' ? colors.accent : colors.surface,
                       },
                     ]}
                   >
-                    <Text style={{ color: turn.role === 'user' ? colors.accentInk : colors.text }}>{turn.text}</Text>
+                    <Text style={[{ color: turn.role === 'user' ? colors.accentFg : colors.fg }, font]}>{turn.text}</Text>
                     {turn.options?.map((opt) => (
-                      <TouchableOpacity key={opt} onPress={() => void sendAssistant(opt)} style={{ marginTop: 8 }}>
-                        <Text style={{ color: colors.accent, fontSize: 12 }}>{opt}</Text>
+                      <TouchableOpacity
+                        key={opt}
+                        onPress={() => void sendAssistant(opt)}
+                        style={{ marginTop: 8 }}
+                        accessibilityRole="button"
+                      >
+                        <Text style={[{ color: colors.accent, fontSize: 12 }, font]}>{opt}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
                 ))
               )}
               {assistantSending ? (
-                <Text style={{ color: colors.sub, marginTop: 8 }} accessibilityLiveRegion="polite">
+                <Text style={[{ color: colors.muted, marginTop: 8 }, font]} accessibilityLiveRegion="polite">
                   {t.assistant.thinking}
                 </Text>
               ) : null}
               {assistantError ? (
-                <Text style={{ color: pal.danger, marginTop: 8 }} accessibilityRole="alert">
+                <Text style={[{ color: colors.error, marginTop: 8 }, font]} accessibilityRole="alert">
                   {assistantError}
                 </Text>
               ) : null}
               <View style={s.assistantComposer}>
                 <TextInput
-                  style={[s.input, { flex: 1, minHeight: 44, backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+                  style={[s.input, { flex: 1, minHeight: 44, backgroundColor: colors.surface, color: colors.fg, borderColor: colors.border, borderRadius: radius }, font]}
                   placeholder={t.assistant.inputPlaceholder}
-                  placeholderTextColor={colors.sub}
+                  placeholderTextColor={colors.muted}
                   value={assistantInput}
                   onChangeText={setAssistantInput}
                   editable={!assistantSending}
                 />
                 <TouchableOpacity
-                  style={[s.submitBtn, { backgroundColor: colors.accent, paddingHorizontal: 16 }]}
+                  style={[s.submitBtn, { backgroundColor: colors.accent, paddingHorizontal: 16, borderRadius: radius }]}
                   onPress={() => void sendAssistant(assistantInput)}
                   disabled={!assistantInput.trim() || assistantSending}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.flows.thread.send}
+                  accessibilityState={{ disabled: !assistantInput.trim() || assistantSending, busy: assistantSending }}
                 >
-                  <Text style={[s.submitText, { color: colors.accentInk }]}>↑</Text>
+                  <Text style={[s.submitText, { color: colors.accentFg }]}>↑</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
           ) : sheetTab === 'inbox' ? (
-            <ScrollView style={s.body} keyboardShouldPersistTaps="handled">
-              {inboxLoading ? (
-                <Text style={{ color: colors.sub }}>{t.flows.reports.loading}</Text>
-              ) : selectedReportId ? (
-                <>
-                  <TouchableOpacity onPress={() => setSelectedReportId(null)}>
-                    <Text style={{ color: colors.accent, marginBottom: 8 }}>← {t.widget.back}</Text>
-                  </TouchableOpacity>
-                  {threadComments.map((c) => (
-                    <View key={c.id} style={[s.threadBubble, { backgroundColor: colors.card }]}>
-                      <Text style={{ color: colors.sub, fontSize: 11 }}>{c.author_kind}</Text>
-                      <Text style={{ color: colors.text }}>{c.body}</Text>
-                    </View>
-                  ))}
-                  {VERIFIABLE_STATUSES.has(
-                    inboxReports.find((r) => r.id === selectedReportId)?.status ?? '',
-                  ) && (
-                    <View style={s.verifyRow}>
-                      <TouchableOpacity style={[s.verifyBtn, { backgroundColor: colors.accent }]} onPress={() => submitFeedback('confirms')}>
-                        <Text style={[s.submitText, { color: colors.accentInk }]}>{t.flows.thread.confirmFixed}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[s.verifyBtn, { backgroundColor: colors.border }]} onPress={() => submitFeedback('not_fixed')}>
-                        <Text style={[s.submitText, { color: colors.text }]}>{t.flows.thread.notFixed}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                  <TextInput
-                    style={[s.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border, minHeight: 48 }]}
-                    placeholder={t.flows.thread.replyPlaceholder}
-                    placeholderTextColor={colors.sub}
-                    value={replyText}
-                    onChangeText={setReplyText}
-                  />
-                  <TouchableOpacity style={[s.submitBtn, { backgroundColor: colors.accent }]} onPress={sendReply}>
-                    <Text style={[s.submitText, { color: colors.accentInk }]}>{t.flows.thread.send}</Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                inboxReports.map((r) => (
-                  <TouchableOpacity key={r.id} style={[s.inboxRow, { borderColor: colors.border }]} onPress={() => openThread(r.id)}>
-                    <Text style={{ color: colors.text, fontWeight: '600' }} numberOfLines={1}>
-                      {(r.summary ?? r.description ?? 'Report').slice(0, 60)}
-                    </Text>
-                    <Text style={{ color: colors.sub, fontSize: 11 }}>{reporterStatusShort(r.status)}</Text>
-                  </TouchableOpacity>
-                ))
-              )}
+            <ScrollView style={s.body} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+              {selectedReportId ? renderThread() : renderInboxList()}
             </ScrollView>
           ) : phase === 'sent' ? (
-            <View style={s.sentWrap}>
+            <View style={s.sentWrap} accessibilityLiveRegion="polite">
               <Text style={[s.sentEmoji]}>✅</Text>
-              <Text style={[s.sentText, { color: colors.text }]}>{t.widget.submitted}</Text>
+              <Text style={[s.sentText, { color: colors.fg }, font]}>{t.widget.submitted}</Text>
             </View>
           ) : (
             <ScrollView style={s.body} keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ paddingBottom: 24 }}>
-              <Text style={[s.stepLabel, { color: colors.sub }]}>{t.step1.heading}</Text>
+              <Text style={[s.stepLabel, { color: colors.muted }, font]}>{t.step1.heading}</Text>
 
-              {/* Categories */}
-              <View style={s.catRow}>
+              {/* Categories: wrapping chips sized to their label, never squeezed. */}
+              <View style={s.catRow} accessibilityRole="radiogroup">
                 {CATEGORY_KEYS.map((key) => {
                   const active = category === key
                   return (
@@ -545,19 +805,26 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                       key={key}
                       onPress={() => setCategory(key)}
                       activeOpacity={0.7}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: active, checked: active }}
+                      accessibilityLabel={t.step1.categories[key]}
                       style={[
                         s.catBtn,
                         {
-                          backgroundColor: active ? colors.accent : colors.card,
+                          backgroundColor: active ? colors.accent : colors.surface,
                           borderColor: active ? colors.accent : colors.border,
                         },
                       ]}
                     >
-                      <Text style={s.catEmoji}>{CATEGORY_EMOJI[key]}</Text>
+                      <Text style={s.catEmoji} importantForAccessibility="no">
+                        {CATEGORY_EMOJI[key]}
+                      </Text>
                       <Text
+                        numberOfLines={1}
                         style={[
                           s.catLabel,
-                          { color: active ? colors.accentInk : colors.text } as TextStyle,
+                          { color: active ? colors.accentFg : colors.fg } as TextStyle,
+                          font,
                         ]}
                       >
                         {t.step1.categories[key]}
@@ -572,13 +839,16 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                 style={[
                   s.input,
                   {
-                    backgroundColor: colors.card,
-                    color: colors.text,
+                    backgroundColor: colors.surface,
+                    color: colors.fg,
                     borderColor: colors.border,
+                    borderRadius: radius,
                   },
+                  font,
                 ]}
                 placeholder={t.step3.descriptionPlaceholder}
-                placeholderTextColor={colors.sub}
+                placeholderTextColor={colors.muted}
+                accessibilityLabel={t.step3.descriptionPlaceholder}
                 multiline
                 textAlignVertical="top"
                 value={description}
@@ -591,7 +861,9 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                 maxLength={4000}
               />
               {submitError ? (
-                <Text style={{ color: colors.accent, marginTop: 6, fontSize: 12 }}>{submitError}</Text>
+                <Text style={[{ color: colors.error, marginTop: 6, fontSize: 12 }, font]} accessibilityRole="alert">
+                  {submitError}
+                </Text>
               ) : null}
 
               {/* Screenshot thumbnail — shown if a screenshot was captured */}
@@ -599,14 +871,14 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                 <View style={s.screenshotRow}>
                   <Image
                     source={{ uri: activeScreenshot }}
-                    style={[s.screenshotThumb, { backgroundColor: colors.text }]}
+                    style={[s.screenshotThumb, { backgroundColor: colors.fg }]}
                     accessibilityLabel={t.step3.screenshotPreviewAlt}
                   />
                   <View style={s.screenshotMeta}>
-                    <Text style={[s.screenshotLabel, { color: colors.text }]}>
+                    <Text style={[s.screenshotLabel, { color: colors.fg }, font]}>
                       {t.step3.screenshotAttached.replace(' ✓', '')}
                     </Text>
-                    <Text style={[s.screenshotSub, { color: colors.sub }]}>
+                    <Text style={[s.screenshotSub, { color: colors.muted }, font]}>
                       {screenshotSensitiveHint && screenshotSensitiveHint.trim()
                         ? `⚠ ${screenshotSensitiveHint}`
                         : t.step3.screenshotSensitiveHint.split('—')[0]?.trim() ?? t.step3.screenshotSensitiveHint}
@@ -618,24 +890,32 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                       onClearScreenshot?.()
                     }}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityRole="button"
                     accessibilityLabel={t.widget.close}
                   >
-                    <Text style={[s.screenshotRemove, { color: colors.sub }]}>✕</Text>
+                    <Text style={[s.screenshotRemove, { color: colors.muted }]}>✕</Text>
                   </TouchableOpacity>
                 </View>
               ) : null}
 
               {/* Submit */}
+              {submitHint ? (
+                <Text style={[{ color: colors.muted, fontSize: 12, marginBottom: 6 }, font]}>{submitHint}</Text>
+              ) : null}
               <TouchableOpacity
                 onPress={handleSubmit}
                 disabled={!canSubmit}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={phase === 'sending' ? t.widget.submitting : t.widget.submit}
+                accessibilityHint={submitHint}
+                accessibilityState={{ disabled: !canSubmit, busy: phase === 'sending' }}
                 style={[
                   s.submitBtn,
-                  { backgroundColor: canSubmit ? colors.accent : colors.disabled },
+                  { backgroundColor: canSubmit ? colors.accent : colors.disabled, borderRadius: radius },
                 ]}
               >
-                <Text style={[s.submitText, { color: canSubmit ? colors.accentInk : colors.disabledText }]}>
+                <Text style={[s.submitText, { color: canSubmit ? colors.accentFg : colors.disabledFg }, font]}>
                   {phase === 'sending' ? t.widget.submitting : t.widget.submit}
                 </Text>
               </TouchableOpacity>
@@ -683,32 +963,18 @@ const s = StyleSheet.create({
     borderRadius: MUSHI_RADIUS.control,
     opacity: 0.5,
   },
-  brandHeader: {
+  header: {
     paddingHorizontal: MUSHI_SPACING.lounge,
-    paddingTop: MUSHI_SPACING.comfy,
     paddingBottom: MUSHI_SPACING.comfy,
-    borderBottomWidth: 1.5,
   },
-  brandEyebrow: {
-    fontSize: MUSHI_TYPE.sizeLabel,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    marginBottom: 2,
-    opacity: 0.7,
-  },
-  brandTitle: {
+  headerTitle: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: -0.2,
   },
   body: {
     paddingHorizontal: MUSHI_SPACING.lounge,
     paddingTop: MUSHI_SPACING.tight,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: MUSHI_SPACING.roomy,
   },
   stepLabel: {
     fontSize: MUSHI_TYPE.sizeLabel,
@@ -720,37 +986,35 @@ const s = StyleSheet.create({
   },
   catRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
     marginBottom: MUSHI_SPACING.roomy,
   },
   catBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: MUSHI_SPACING.comfy,
-    paddingHorizontal: 6,
-    borderRadius: MUSHI_RADIUS.card,
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
     borderWidth: 1,
-    flex: 1,
-    marginHorizontal: 3,
     minHeight: 44,
   },
   catEmoji: {
-    fontSize: 22,
-    marginBottom: MUSHI_SPACING.tight,
+    fontSize: 16,
   },
   catLabel: {
-    fontSize: MUSHI_TYPE.sizeLabel,
+    fontSize: 14,
     fontWeight: '600',
   },
   input: {
     borderWidth: 1,
-    borderRadius: MUSHI_RADIUS.card,
     padding: 14,
     fontSize: 15,
     minHeight: 100,
     marginBottom: MUSHI_SPACING.roomy,
   },
   submitBtn: {
-    borderRadius: MUSHI_RADIUS.card,
     paddingVertical: 14,
     alignItems: 'center',
     minHeight: 44,
@@ -816,6 +1080,7 @@ const s = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
+    minHeight: 44,
   },
   tabLabel: {
     fontSize: 14,
@@ -823,12 +1088,47 @@ const s = StyleSheet.create({
   },
   inboxRow: {
     paddingVertical: 12,
+    minHeight: 56,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  headerCard: {
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 12,
+    marginBottom: 12,
+  },
+  pill: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    fontSize: 12,
+    fontWeight: '600',
+    overflow: 'hidden',
+  },
+  skeleton: {
+    height: 14,
+    borderRadius: 6,
+    marginBottom: 10,
+  },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  retryBtn: {
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   threadBubble: {
     borderRadius: 10,
     padding: 10,
     marginBottom: 8,
+    maxWidth: '88%',
   },
   verifyRow: {
     flexDirection: 'row',
@@ -837,9 +1137,26 @@ const s = StyleSheet.create({
   },
   verifyBtn: {
     flex: 1,
-    borderRadius: 10,
     paddingVertical: 10,
     alignItems: 'center',
+    minHeight: 44,
+  },
+  composer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  composerInput: {
+    flex: 1,
+    minHeight: 44,
+    maxHeight: 120,
+    marginBottom: 0,
+  },
+  sendBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   assistantBubble: {
     maxWidth: '88%',

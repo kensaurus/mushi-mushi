@@ -554,7 +554,27 @@ const BASE_TOOLS: Record<string, HostedTool> = {
       return apiCall(`/v1/admin/reports/${encodeURIComponent(args.reportId as string)}`, {
         method: 'PATCH',
         headers: ctx.authHeaders,
-        body: JSON.stringify({ status: args.status, reason: args.reason }),
+        body: JSON.stringify({
+          status: args.status,
+          reason: args.reason,
+          closed_reason: args.closedReason,
+          reporter_message: args.reporterMessage,
+        }),
+      })
+    },
+  },
+
+  // Plan 018 — send or drop one held reporter message (review mode Outbox).
+  release_reporter_update: {
+    scope: 'mcp:write',
+    handler: async (args, ctx) => {
+      requireString(args.messageId, 'messageId')
+      const verb = args.action === 'discard' ? 'discard' : 'release'
+      const override = typeof args.bodyOverride === 'string' && args.bodyOverride ? args.bodyOverride : null
+      return apiCall(`/v1/admin/reporter-outbox/${encodeURIComponent(args.messageId as string)}/${verb}`, {
+        method: 'POST',
+        headers: ctx.authHeaders,
+        body: JSON.stringify(verb === 'release' && override ? { body_override: override } : {}),
       })
     },
   },
@@ -1694,6 +1714,7 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'list_lessons',
   'get_product_events_summary',
   'get_user_paths',
+  'list_reporter_outbox',
 ])
 
 /**
