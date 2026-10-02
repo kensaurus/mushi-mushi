@@ -43,7 +43,7 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync }
 import { join, relative, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildRssFeed } from './lib/blog-feed.mjs';
-import { isNoindex, parseFrontmatter } from './lib/frontmatter.mjs';
+import { parseFrontmatter } from './lib/frontmatter.mjs';
 import { mdxToPlainMarkdown } from './lib/mdx-prose.mjs';
 import { MUSHI_TAGLINE_V2 } from '../packages/brand/src/index.js';
 
@@ -178,9 +178,6 @@ const missingFromLlmsTxt = [];
 
 for (const file of files) {
   const src = readFileSync(file, 'utf8');
-  // A noindex page (e.g. /investors while it carries owner placeholders) is
-  // not handed to answer engines either — no llms-full section, no md twin.
-  if (isNoindex(parseFrontmatter(src).data)) continue;
   const urlPath = fileToUrlPath(file);
   const fullUrl = `${BASE_URL}${urlPath}`;
   const title = parseFrontmatter(src).data.title || basename(file, '.mdx');

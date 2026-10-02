@@ -52,17 +52,11 @@ export default {
   '-- Reference': { type: 'separator', title: 'Reference' },
   changelog: { title: 'Changelog', theme: { toc: false } },
   roadmap: 'Roadmap',
+  open: { title: 'Open metrics', theme: { toc: false } },
   // Conversion surface — same sidebar-off treatment as the landing (see `index`).
   pricing: { title: 'Pricing', theme: { sidebar: false } },
   legal: 'Legal',
   'launch-week': { title: 'Launch Week', theme: { toc: false } },
   blog: { title: 'Blog', theme: { toc: false } },
-  // Linked from the site footer only, never the nav or the hero (VISION.md:
-  // the buyer is the vibe coder; investors are not who the site leads with).
-  investors: {
-    title: 'For investors',
-    display: 'hidden',
-    theme: { sidebar: false, toc: false, timestamp: false, breadcrumb: false, pagination: false },
-  },
   github: { title: 'GitHub ↗', href: 'https://github.com/kensaurus/mushi-mushi' },
 }

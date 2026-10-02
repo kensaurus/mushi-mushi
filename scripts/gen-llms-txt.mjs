@@ -14,7 +14,7 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import { isNoindex, parseFrontmatter } from "./lib/frontmatter.mjs"
+import { parseFrontmatter } from "./lib/frontmatter.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, "..")
@@ -53,7 +53,6 @@ function walkMdx(dir, baseRoute = "", acc = []) {
     } else if (name.endsWith(".mdx")) {
       const slug = name === "index.mdx" ? baseRoute || "/" : `${baseRoute}/${name.replace(/\.mdx$/, "")}`
       const { data, body } = parseFrontmatter(readFileSync(full, "utf8"))
-      if (isNoindex(data)) continue
       const title = data.title || body.match(/^#\s+(.+)/m)?.[1]?.trim() || slug
       acc.push({
         route: slug.replace(/\/index$/, "") || "/",
