@@ -4118,6 +4118,51 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   );
 
+  server.registerTool(
+    'get_repo_digest',
+    {
+      title: titleOf('get_repo_digest', CODEBASE_TOOL_CATALOG),
+      description: descOf('get_repo_digest', CODEBASE_TOOL_CATALOG),
+      annotations: annotationsFor('get_repo_digest', CODEBASE_TOOL_CATALOG),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        reportId: z
+          .string()
+          .optional()
+          .describe("Scope to one bug: the report's files come first, then the rest of the repo by priority"),
+        path: z.string().optional().describe('Scope to one folder, e.g. "apps/web/src"'),
+        budgetTokens: z
+          .number()
+          .int()
+          .min(2_000)
+          .max(200_000)
+          .optional()
+          .describe('Estimated token budget for the whole digest (default 50,000)'),
+        include: z
+          .array(z.string())
+          .max(50)
+          .optional()
+          .describe('Glob patterns a file must match, e.g. ["src/**/*.ts", "*.md"]'),
+        exclude: z.array(z.string()).max(50).optional().describe('Glob patterns to leave out, e.g. ["tests/"]'),
+        ref: z.string().optional().describe('Branch, tag or commit SHA (default: the repo default branch)'),
+      }),
+    },
+    async (args) => {
+      const pid = args.projectId ?? projectId;
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required');
+      const qs = new URLSearchParams();
+      if (args.budgetTokens) qs.set('budget', String(args.budgetTokens));
+      if (args.reportId) qs.set('report_id', args.reportId);
+      if (args.path) qs.set('path', args.path);
+      if (args.include?.length) qs.set('include', args.include.join(','));
+      if (args.exclude?.length) qs.set('exclude', args.exclude.join(','));
+      if (args.ref) qs.set('ref', args.ref);
+      const query = qs.toString();
+      const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/digest${query ? `?${query}` : ''}`);
+      return jsonText(data);
+    },
+  );
+
   // ── use_mushi meta-tool ────────────────────────────────────────────────────
   // Single entry point for orientation and context-cost reduction.
   // Returns a curated tool list for the agent's stated intent so it can skip

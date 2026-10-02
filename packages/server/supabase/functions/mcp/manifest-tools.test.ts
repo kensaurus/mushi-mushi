@@ -151,6 +151,22 @@ Deno.test('optional query parameters are dropped when unset; booleans are flags'
   assertEquals(calls[3].path, `/v1/admin/projects/${CTX.projectIdHint}/codebase/tour`);
 });
 
+Deno.test('get_repo_digest maps the catalog arguments onto the digest route', async () => {
+  const { tools, calls } = recordingTools(() => ({}));
+  await tools.get_repo_digest.handler({}, CTX);
+  assertEquals(calls[0].path, `/v1/admin/projects/${CTX.projectIdHint}/codebase/digest`);
+  await tools.get_repo_digest.handler(
+    { reportId: 'r-1', budgetTokens: 20000, include: ['src/**', '*.md'], exclude: ['tests/'], ref: 'main' },
+    CTX,
+  );
+  assertEquals(
+    calls[1].path,
+    `/v1/admin/projects/${CTX.projectIdHint}/codebase/digest?budget=20000&report_id=r-1&include=src%2F**%2C*.md&exclude=tests%2F&ref=main`,
+  );
+  assertEquals(tools.get_repo_digest.scope, 'mcp:read');
+  assertEquals(tools.get_repo_digest.annotations?.readOnlyHint, true);
+});
+
 Deno.test('ask_codebase sends the message list the chat route requires', async () => {
   const { tools, calls } = recordingTools();
   await tools.ask_codebase.handler({ question: 'where is auth?', filePath: 'src/auth.ts', threadId: 't-1' }, CTX);

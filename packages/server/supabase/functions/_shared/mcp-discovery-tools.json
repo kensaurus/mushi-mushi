@@ -1689,6 +1689,61 @@
       },
       "returnsUntrusted": true
     },
+    "get_repo_digest": {
+      "title": "Repo digest (paste-ready code)",
+      "description": "Return the connected GitHub repo as one paste-ready text digest at a pinned commit: a directory tree plus file contents, ranked README → manifests → entry points → source → tests and cut to a token budget (budgetTokens, default 50,000, max 200,000; counts are estimates). Scope it to a folder (path) or to one bug (reportId: the report's stack-frame files, fix files and related code first, then the files that import them). Sensitive files (.env, keys) are never included, and a file that looks like it holds a secret is replaced with a notice. Returns { sha, ref, total_tokens, budget_tokens, files: [{ path, tokens, truncated }], dropped_counts, redacted, scope, text }. Works without codebase indexing. Read-only. Use to hand yourself the code around a bug before fixing it; use get_fix_context for the diagnosis, or search_codebase to find one thing.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Repo digest (paste-ready code)",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID (defaults to configured project) (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "reportId": {
+            "description": "Scope to one bug: the report's files come first, then the rest of the repo by priority (`report_id` is accepted too.)",
+            "type": "string"
+          },
+          "path": {
+            "description": "Scope to one folder, e.g. \"apps/web/src\"",
+            "type": "string"
+          },
+          "budgetTokens": {
+            "description": "Estimated token budget for the whole digest (default 50,000)",
+            "type": "integer",
+            "minimum": 2000,
+            "maximum": 200000
+          },
+          "include": {
+            "description": "Glob patterns a file must match, e.g. [\"src/**/*.ts\", \"*.md\"]",
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "exclude": {
+            "description": "Glob patterns to leave out, e.g. [\"tests/\"]",
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ref": {
+            "description": "Branch, tag or commit SHA (default: the repo default branch)",
+            "type": "string"
+          }
+        }
+      },
+      "returnsUntrusted": true
+    },
     "get_report_detail": {
       "title": "Report detail",
       "description": "Fetch the full record for one bug report by id: description, console logs, network requests, screenshot URL, classification (stage 1/2), fix history, the paste-ready fix packet and the inventory action it is filed against. Returns { report } with the documented fields; includeRaw=true returns every column the detail route has instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Read-only. Use when you have a reportId and need everything about it; for evidence only use get_report_evidence, for the activity thread use get_report_timeline, for a one-call fix bundle use get_fix_context.",

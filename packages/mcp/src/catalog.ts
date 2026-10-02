@@ -1210,4 +1210,14 @@ export const CODEBASE_TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What docs entities exist for onboarding?',
   },
+  {
+    name: 'get_repo_digest',
+    title: 'Repo digest (paste-ready code)',
+    description:
+      'Return the connected GitHub repo as one paste-ready text digest at a pinned commit: a directory tree plus file contents, ranked README → manifests → entry points → source → tests and cut to a token budget (budgetTokens, default 50,000, max 200,000; counts are estimates). Scope it to a folder (path) or to one bug (reportId: the report\'s stack-frame files, fix files and related code first, then the files that import them). Sensitive files (.env, keys) are never included, and a file that looks like it holds a secret is replaced with a notice. Returns { sha, ref, total_tokens, budget_tokens, files: [{ path, tokens, truncated }], dropped_counts, redacted, scope, text }. Works without codebase indexing. Read-only. Use to hand yourself the code around a bug before fixing it; use get_fix_context for the diagnosis, or search_codebase to find one thing.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Give me the code around this bug in one paste.',
+  },
 ];
