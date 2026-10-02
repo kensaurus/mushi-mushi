@@ -1,0 +1,84 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/2025.10/schema.json",
+  "$description": "glot.it art direction Nang Lamp: lesson-loop components.",
+  "button": {
+    "primary": {
+      "background": {
+        "$type": "color",
+        "$value": "{color.action.primary}"
+      },
+      "foreground": {
+        "$type": "color",
+        "$value": "{color.action.onPrimary}"
+      },
+      "radius": {
+        "$type": "dimension",
+        "$value": "{radius.control}"
+      },
+      "minHeight": {
+        "$type": "dimension",
+        "$value": "{space.target.primary}"
+      },
+      "label": {
+        "$type": "typography",
+        "$value": "{typography.body}"
+      }
+    }
+  },
+  "choice": {
+    "background": {
+      "$type": "color",
+      "$value": "{color.surface.raised}"
+    },
+    "foreground": {
+      "$type": "color",
+      "$value": "{color.text.onRaised}"
+    },
+    "selectedOutline": {
+      "$type": "color",
+      "$value": "{color.feedback.reward}"
+    },
+    "radius": {
+      "$type": "dimension",
+      "$value": "{radius.control}"
+    },
+    "minHeight": {
+      "$type": "dimension",
+      "$value": "{space.target.primary}"
+    }
+  },
+  "hud": {
+    "height": {
+      "$type": "dimension",
+      "$value": "{space.hud}"
+    },
+    "foreground": {
+      "$type": "color",
+      "$value": "{color.text.primary}"
+    },
+    "exitTarget": {
+      "$type": "dimension",
+      "$value": "{space.target.min}"
+    }
+  },
+  "prompt": {
+    "word": {
+      "$type": "typography",
+      "$value": "{typography.prompt}"
+    },
+    "foreground": {
+      "$type": "color",
+      "$value": "{color.text.onRaised}"
+    }
+  },
+  "lessonFeedback": {
+    "accent": {
+      "$type": "color",
+      "$value": "{color.feedback.reward}"
+    },
+    "enter": {
+      "$type": "duration",
+      "$value": "{motion.duration.base}"
+    }
+  }
+}

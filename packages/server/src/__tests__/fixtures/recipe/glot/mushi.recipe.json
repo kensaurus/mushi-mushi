@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "x-fixture-note": "Test fixture written by Mushi, not by glot.it. glot has not chosen a direction yet; pha-khram is the fixture's choice. Token files are copied from glot branch design/art-direction at 927bf34c9 (unpushed).",
+  "app": { "name": "glot.it", "kind": "app", "platforms": ["web", "android", "ios"] },
+  "design": {
+    "tokens": [
+      { "path": "packages/design-tokens/tokens/directions/pha-khram/primitive.tokens.json", "role": "source", "format": "dtcg-2025.10" },
+      { "path": "packages/design-tokens/tokens/directions/pha-khram/semantic.tokens.json", "role": "source", "format": "dtcg-2025.10" },
+      { "path": "packages/design-tokens/tokens/directions/pha-khram/component.tokens.json", "role": "source", "format": "dtcg-2025.10" },
+      { "path": "packages/design-tokens/dtcg/tokens.json", "role": "export", "format": "dtcg-2025.10", "generator": "pnpm tokens:dtcg" }
+    ],
+    "components": { "globs": ["design-system/primitives/**/*.tsx", "packages/ui-mobile/src/**/*.tsx"] },
+    "literalScan": {
+      "globs": ["app/**/*.{ts,tsx,css}", "components/**/*.{ts,tsx,css}", "features/**/*.{ts,tsx,css}"],
+      "ignore": ["**/*.test.*", "**/__tests__/**", "design-system/**"]
+    },
+    "contrast": [
+      { "fg": "color.text.primary", "bg": "color.surface.base", "use": "body text on the page" },
+      { "fg": "color.text.secondary", "bg": "color.surface.base", "use": "secondary text on the page" },
+      { "fg": "color.text.onRaised", "bg": "color.surface.raised", "use": "body text on cards" },
+      { "fg": "color.text.onRaisedSecondary", "bg": "color.surface.raised", "use": "secondary text on cards" },
+      { "fg": "color.action.onPrimary", "bg": "color.action.primary", "use": "CTA label" },
+      { "fg": "color.feedback.reward", "bg": "color.surface.base", "large": true, "use": "reward accent, large text only" },
+      { "fg": "color.tone.mid", "bg": "color.surface.raised", "use": "tone colours on cards" },
+      { "fg": "color.tone.high", "bg": "color.surface.raised", "use": "tone colours on cards" }
+    ],
+    "rules": {
+      "raw_interactive_element": { "enabled": true, "severity": "info", "primitives": { "button": "Button" } }
+    }
+  },
+  "data": { "provider": "supabase", "migrationsDir": "supabase/migrations" },
+  "routes": { "inventory": "inventory.yaml" },
+  "change": { "allowPaths": ["mushi.recipe.json", "packages/design-tokens/tokens/**", "inventory.yaml", ".env.example"] }
+}
