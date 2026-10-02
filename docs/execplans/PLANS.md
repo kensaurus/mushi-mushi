@@ -592,7 +592,7 @@ package moved every run. Detail as bug 11 in
 `pnpm install` was run and `pnpm-lock.yaml` is updated — CI's
 `--frozen-lockfile` needs it.
 
-## Plan 018 — Reporter Loop v2 (2026-10-02) `PLANNED`
+## Plan 018 — Reporter Loop v2 (2026-10-02) `IN PROGRESS`
 
 One widget on web and RN, an end-user status vocabulary, two-way replies, opt-in notifications, and fix/release links back to the reporter. Spec and audit: [reporter-loop-v2.md](./reporter-loop-v2.md).
 
@@ -600,3 +600,16 @@ One widget on web and RN, an end-user status vocabulary, two-way replies, opt-in
 - [ ] Phase 1: widget parity (one screen, host-adaptive theme, masking, accessibility)
 - [ ] Phase 2: loop wiring (migrations 1–4, fan-out, release linkage, duplicate follows, Waiting on you, outbox)
 - [ ] Phase 3: opt-in email and web push, caps, DPA / 委託 template
+
+Built on `ux/reporter-loop` (not applied or deployed; web widget and
+`core/src/api-client.ts` are a parallel workstream):
+- core `@mushi-mushi/core/reporter-ui` (status table, timeline templates, en/ja/es/th)
+- React Native: `widget.theme`, wrapping chips, accessibility roles, thread
+  loading / Retry, mark-read
+- server Phase 0 (CORS max-age, no severity/category to reporters, templates
+  rendered on read, mark-read routes) and Phase 2 (migrations
+  `20261002120000`–`120300`, `reporter-notify-fanout`, release linkage,
+  duplicate follows, request-info, reply signals, Outbox, `/updates`)
+- MCP `request_reporter_info`, `list_reporter_outbox`, `release_reporter_update`
+- console Outbox tab and `ReporterViewPanel`
+- DPA / 委託 template: [`docs/operators/reporter-data-processing.md`](../operators/reporter-data-processing.md)
