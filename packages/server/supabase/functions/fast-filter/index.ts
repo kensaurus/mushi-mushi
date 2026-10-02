@@ -24,6 +24,7 @@ import { parseBody, FastFilterBodySchema } from '../_shared/validate.ts'
 import { summarizeReplayEvents } from '../_shared/replay-evidence.ts'
 import { STAGE1_MODEL, STAGE1_FALLBACK } from '../_shared/models.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
+import { isEarlyRealReport, type OldestReportRow } from '../_shared/first-report.ts'
 
 const stage1Schema = z.object({
   symptom: z.string().describe('What the user observed'),
@@ -404,7 +405,33 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
         .catch(err => log.error('Reputation award failed', { action: 'element_select', err: String(err) }))
     }
 
-    if (classification.confidence > confidenceThreshold || usedHeuristic) {
+    // A project's first real report always gets the full Stage-2 diagnosis.
+    // Stopping at Stage 1 here leaves a new user with no root cause and no
+    // fix on the report they judge the product by. The quota gate in
+    // classify-report stays authoritative. A failed lookup keeps the normal
+    // path, loudly: a silent fallback here would hide the feature being off.
+    let forceStage2 = false
+    if (classification.confidence > confidenceThreshold && !usedHeuristic) {
+      const { data: oldest, error: oldestErr } = await db
+        .from('reports')
+        .select('id, custom_metadata')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .limit(50)
+      if (oldestErr) {
+        log.error('First-report lookup failed; keeping the Stage 1 result', { err: oldestErr.message })
+      } else {
+        forceStage2 = isEarlyRealReport((oldest ?? []) as OldestReportRow[], reportId)
+        if (forceStage2) {
+          log.info('First real report: forwarding to Stage 2 despite high confidence', {
+            confidence: classification.confidence,
+          })
+        }
+      }
+    }
+
+    if ((classification.confidence > confidenceThreshold && !forceStage2) || usedHeuristic) {
       const summary = `${classification.symptom} — ${classification.actual}`.slice(0, 200)
       await db.from('reports').update({
         status: 'classified',
@@ -560,7 +587,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       }), { headers: { 'Content-Type': 'application/json' } })
     }
 
-    // Low confidence → forward to Stage 2
+    // Low confidence, or the project's first real report → forward to Stage 2
     try {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!
       const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!

@@ -29,6 +29,8 @@ import { childTraceparent } from '../_shared/trace.ts';
 import { otlpSpan, setGenAiAttributes } from '../_shared/otlp-exporter.ts';
 import { estimateCallCostUsd } from '../_shared/pricing.ts';
 import { checkDiagnosisQuota, invalidateDiagnosisCache } from '../_shared/quota.ts';
+import { emitProductEvent } from '../_shared/product-events.ts';
+import { isNonRealReport, type OldestReportRow } from '../_shared/first-report.ts';
 import {
   findInventoryCandidates,
   formatCandidatesForPrompt,
@@ -794,6 +796,54 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
             invalidateDiagnosisCache(projectId);
           }
         });
+
+      // Company funnel (mushi-self): the project's first real report with a
+      // full diagnosis = "first_diagnosis_ready". The dedup key only makes the
+      // write idempotent; it does not make it first. A project that already
+      // had diagnoses before this emitter shipped would otherwise get one
+      // stamped on its next diagnosis, so check for an earlier real one. The
+      // console test fixture (stage2_model 'precomputed') never counts.
+      if (!isNonRealReport(report.custom_metadata as Record<string, unknown> | null)) {
+        void (async () => {
+          const { data: prior, error: priorErr } = await db
+            .from('reports')
+            .select('id, custom_metadata')
+            .eq('project_id', projectId)
+            .neq('id', reportId)
+            .not('stage2_analysis', 'is', null)
+            .or('stage2_model.is.null,stage2_model.neq.precomputed')
+            .limit(20);
+          if (priorErr) {
+            log.error('first_diagnosis_ready: prior-diagnosis lookup failed; event not emitted', {
+              err: priorErr.message,
+            });
+            return;
+          }
+          const hadEarlierDiagnosis = ((prior ?? []) as OldestReportRow[]).some(
+            (row) => !isNonRealReport(row.custom_metadata),
+          );
+          if (hadEarlierDiagnosis) return;
+
+          const { data: proj } = await db
+            .from('projects')
+            .select('owner_id')
+            .eq('id', projectId)
+            .maybeSingle();
+          await emitProductEvent(db, {
+            userId: ((proj as { owner_id?: string | null } | null)?.owner_id) ?? null,
+            eventName: 'first_diagnosis_ready',
+            surface: 'server',
+            properties: {
+              project_id: projectId,
+              report_id: reportId,
+              model: usedModel,
+            },
+            dedupKey: `first_diagnosis_ready:${projectId}`,
+          });
+        })().catch((err) =>
+          log.error('first_diagnosis_ready emit failed', { err: String(err) }),
+        );
+      }
 
       log.info('Stage 2 analyzed', {
         category: classification.category,

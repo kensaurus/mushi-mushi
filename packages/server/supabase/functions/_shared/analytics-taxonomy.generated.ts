@@ -136,6 +136,12 @@ export const MUSHI_EVENTS = {
       "project_id"
     ]
   },
+  "first_diagnosis_ready": {
+    "surface": "server",
+    "required": [
+      "project_id"
+    ]
+  },
   "fix_merged": {
     "surface": "server",
     "required": [

@@ -25,7 +25,9 @@
 //   2. Deletes `reports` rows older than the cutoff in batches of 1000.
 //      The CASCADE on reports deletes report-attached rows
 //      automatically (report_events, dispatch_jobs); no need to walk
-//      them manually.
+//      them manually. On free plans (no explicit override) the project's
+//      first real report is kept, so a returning new user still sees
+//      their first diagnosis (keepsFirstReport / firstRealReportId).
 //   3. Writes ONE audit_logs row per project per sweep with
 //      { deleted_count, retention_days, plan_id, source }, so the
 //      operator UI can render "last sweep on X projects, deleted N rows".
@@ -47,6 +49,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { listPlans, type PricingPlan } from '../_shared/plans.ts'
 import { resolveProjectRetention } from '../_shared/retention-policy.ts'
+import { firstRealReportId, type OldestReportRow } from '../_shared/first-report.ts'
 
 // Ambient `Deno` so the file type-checks under both Deno (real Edge Function
 // runtime) and Node/Vitest (the unit tests for `deleteOldReportsBatch`).
@@ -160,12 +163,34 @@ async function runSweep(db: ReturnType<typeof getServiceClient>): Promise<SweepS
 
     const cutoff = new Date(Date.now() - retention_days * 24 * 60 * 60 * 1000).toISOString()
 
+    // Free plans keep the project's first real report past the window, so a
+    // new user who comes back after a week still finds their first diagnosis
+    // instead of an empty project. Explicit retention overrides are honoured
+    // to the letter. If the lookup fails, skip this project for today rather
+    // than delete the report we meant to keep; tomorrow's run catches up.
+    let keepReportId: string | null = null
+    if (keepsFirstReport(source, plan_id, plans)) {
+      const { data: oldest, error: oldestErr } = await db
+        .from('reports')
+        .select('id, custom_metadata')
+        .eq('project_id', proj.id)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .limit(50)
+        .returns<OldestReportRow[]>()
+      if (oldestErr) {
+        rlog.error('first_report_lookup_failed', { project_id: proj.id, err: oldestErr.message })
+        continue
+      }
+      keepReportId = firstRealReportId(oldest ?? [])
+    }
+
     let totalDeleted = 0
     // Iterate batches until we drain the over-cutoff backlog. Bound the
     // outer loop at 50 batches (50,000 rows / project / day) so a
     // pathological backlog can't burn a function execution budget.
     for (let i = 0; i < 50; i++) {
-      const { deleted, error: delErr } = await deleteOldReportsBatch(db, proj.id, cutoff)
+      const { deleted, error: delErr } = await deleteOldReportsBatch(db, proj.id, cutoff, BATCH_SIZE, keepReportId)
       if (delErr) {
         rlog.error('delete_batch_failed', {
           project_id: proj.id,
@@ -217,6 +242,21 @@ async function runSweep(db: ReturnType<typeof getServiceClient>): Promise<SweepS
 }
 
 /**
+ * True when the sweep should spare the project's first real report: a free
+ * plan (monthly price 0, or a plan id the catalog does not know) reached
+ * through the plan or the fallback, never an explicit override.
+ */
+export function keepsFirstReport(
+  source: SweepStat['source'],
+  planId: string,
+  plans: readonly Pick<PricingPlan, 'id' | 'monthly_price_usd'>[],
+): boolean {
+  if (source === 'override') return false
+  const plan = plans.find((p) => p.id === planId)
+  return !plan || Number(plan.monthly_price_usd ?? 0) === 0
+}
+
+/**
  * PostgREST surfaces transient schema-cache misses as
  * `column "<table>.<col>" does not exist` immediately after an `ALTER
  * TABLE` migration runs (the schema cache is populated lazily over the
@@ -258,16 +298,19 @@ export async function deleteOldReportsBatch(
   projectId: string,
   cutoff: string,
   batchSize = BATCH_SIZE,
+  keepReportId: string | null = null,
 ): Promise<{ deleted: number; error: string | null }> {
-  const runSelect = () =>
-    db
+  const runSelect = () => {
+    const query = db
       .from('reports')
       .select('id')
       .eq('project_id', projectId)
       .lt('created_at', cutoff)
+    return (keepReportId ? query.neq('id', keepReportId) : query)
       .order('created_at', { ascending: true })
       .limit(batchSize)
       .returns<ReportIdRow[]>()
+  }
 
   let { data: candidates, error: selectErr } = await runSelect()
 
