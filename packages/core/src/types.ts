@@ -230,7 +230,13 @@ export interface MushiWidgetConfig {
    * 3. Default `false`.
    */
   brandFooter?: boolean;
-  /** How the widget should surface SDK freshness warnings. Defaults to auto. */
+  /**
+   * How the widget surfaces the "update @mushi-mushi/web" notice. It is a
+   * developer instruction, so `'auto'` (default) shows it in the widget only on
+   * a dev host (localhost, loopback, `*.localhost`, `*.local`, `file:`) or with
+   * `debug: true` — never to an app's end users. `'banner'` always shows it;
+   * `'console-only'` and `'off'` never render it in the widget.
+   */
   outdatedBanner?: 'auto' | 'banner' | 'console-only' | 'off';
   /**
    * Privacy nudge shown beside an attached screenshot preview, reminding the
@@ -615,9 +621,10 @@ export interface MushiPrivacyConfig {
    * sensitive fields that should never appear in any form — passwords, PII,
    * financial data. Applied in addition to `maskSelectors`.
    *
-   * Default: `['input[type="password"]', '[data-mushi-redact]']`
-   *
-   * To disable the default redaction, pass an empty array.
+   * Always redacted, whatever this is set to: `input[type="password"]`,
+   * `input[autocomplete^="cc-"]`, `[data-private]`, `[data-mushi-mask]`.
+   * This list is added on top; it defaults to `['[data-mushi-redact]']`,
+   * and an empty array drops only that default.
    */
   redactSelectors?: string[];
   /** Let reporters remove an attached screenshot before submitting. Defaults to true. */

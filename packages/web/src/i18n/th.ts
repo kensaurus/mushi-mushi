@@ -65,6 +65,7 @@ export const th: MushiLocale = {
     screenshotCapturing: 'กำลังถ่ายสกรีนช็อต…',
     screenshotFailed: 'ไม่สามารถถ่ายภาพได้ — โปรดอธิบายแทน',
     screenshotRetry: 'ลองอีกครั้ง',
+    screenshotShareTab: 'แชร์แท็บนี้แทน',
     screenshotErrors: {
       permission: 'การจับภาพถูกบล็อก โปรดอนุญาตแล้วลองอีกครั้ง',
       unsupported: 'เบราว์เซอร์นี้จับภาพหน้าไม่ได้ โปรดอธิบายแทน',

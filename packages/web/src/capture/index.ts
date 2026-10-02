@@ -13,8 +13,4 @@ export {
   normalizeSegment,
 } from './discovery';
 export { createReplayCapture, type ReplayCapture, type ReplayCaptureOptions } from './replay';
-export {
-  createScreenshotAnnotation,
-  type AnnotationSession,
-  type AnnotationTool,
-} from './screenshot-annotation';
+// screenshot-annotation is imported lazily by mushi.ts (its own chunk); re-exporting it here would pull it back into the main bundle.
