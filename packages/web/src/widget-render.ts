@@ -1,1183 +1,629 @@
 /**
  * FILE: packages/web/src/widget-render.ts
- * PURPOSE: Stateless view layer for the MushiWidget panel. Each function takes a
- *          WidgetRenderCtx snapshot (read-only state + bound helper closures the
- *          class builds once per render) and returns an HTML string.
+ * PURPOSE: Stateless view layer for the MushiWidget panel. `renderView(ctx)`
+ *          returns one HTML string per panel region; the class patches only the
+ *          regions whose string changed (Plan 018 §1.3, "patch, don't rebuild").
  *
  * OVERVIEW:
- * - Extracted verbatim from widget.ts (the render*() methods) so that file can
- *   stay focused on DOM structure, state, lifecycle, and event wiring.
- * - WidgetRenderCtx is the contract between the class and this view layer. The
- *   class's renderCtx() builds it; tsc enforces both sides stay in sync.
+ * - Regions: `header` (title, Your reports pill, overflow menu, close), `lead`
+ *   (the stable top of the scroll area — the report textarea, the detail
+ *   card), `body` (everything else that scrolls) and `footer` (the sticky
+ *   action row: Send, Done, the reply composer).
+ * - Every interactive element carries `data-action` (+ `data-value`); the class
+ *   handles them with one delegated listener, so a patched region needs no
+ *   re-binding.
+ * - Reporter-facing status, timeline and generic UI copy comes from
+ *   `@mushi-mushi/core/reporter-ui` (shared with React Native); this file never
+ *   shows an internal status, category or severity.
  *
- * DEPENDENCIES:
- * - @mushi-mushi/core — report / reporter / leaderboard wire types.
- * - ./i18n — MushiLocale (string tables).
- * - ./widget-helpers — pure formatters, constants, and shared contracts.
- *
- * USAGE:
- * - renderStep / renderOutdatedBanner / renderBrandFooter are called by
- *   MushiWidget.render(); the rest are called transitively via ctx.
- *
- * NOTES:
- * - Behaviour-preserving move: bodies are identical to the pre-split methods,
- *   with `this.<member>` rewritten to `ctx.<member>` and inter-render calls to
- *   `render*(ctx, ...)`. No DOM/state mutation happens here.
+ * DEPENDENCIES: @mushi-mushi/core (types + reporter-ui), ./i18n, ./widget-helpers.
  */
 import type {
   MushiCrossAppReport,
   MushiCustomCategory,
   MushiLeaderboardEntry,
-  MushiReportCategory,
   MushiReporterComment,
   MushiReporterReport,
   MushiTesterReputation,
   MushiWidgetConfig,
 } from '@mushi-mushi/core';
+import {
+  reporterCopy,
+  reporterStatus,
+  reporterTimelineText,
+  type ReporterCopy,
+  type ReporterTimelineKind,
+} from '@mushi-mushi/core/reporter-ui';
 import type { MushiLocale } from './i18n';
 import {
   buildBrandFooterHref,
-  CATEGORY_ICONS,
-  charCounterText,
   DESCRIPTION_MAX_LENGTH,
   escapeHtml,
   formatReceiptTime,
   formatRelativeTime,
-  pad2,
   readPlatform,
   renderAppIconHtml,
-  reporterStatusLabel,
-  reporterStatusShort,
-  reporterStatusTone,
-  STEP_NUMBER,
   submitShortcutKey,
-  TOTAL_STEPS,
 } from './widget-helpers';
-import type { AssistantTurn, DetailMode, ScreenshotErrorReason, WidgetCallbacks, WidgetRewardsState, WidgetStep, WidgetSubmitOutcome } from './widget-helpers';
+import type {
+  AssistantTurn,
+  PendingReply,
+  ScreenshotErrorReason,
+  WidgetCallbacks,
+  WidgetRewardsState,
+  WidgetStep,
+  WidgetSubmitOutcome,
+  WidgetTimelineEvent,
+} from './widget-helpers';
 
 export interface WidgetRenderCtx {
   config: Required<MushiWidgetConfig>;
-  rewardsState: WidgetRewardsState | null;
-  lastReportId: string | null;
-  /** Reports list / roadmap loading. */
-  listLoading: boolean;
-  /** Thread comments loading (the summary still paints). */
-  threadLoading: boolean;
-  /** A reply / feedback / reopen / vote is in flight. */
-  actionPending: boolean;
-  threadError: string | null;
-  actionError: string | null;
   locale: MushiLocale;
-  /**
-   * Host-app user identity from `Mushi.identify()` or `identifyWithToken()`.
-   * Shown as "Reporting as <name>" in the details step when present.
-   * Distinct from the Mushi tester magic-link session.
-   */
-  identifiedUser: { name?: string; email?: string } | null;
-  testerReputation: MushiTesterReputation | null;
-  testerInfo: { id: string; public_handle: string | null; display_name: string | null } | null;
+  /** Reporter-facing copy from core, already resolved to the widget locale. */
+  rc: ReporterCopy;
+  /** Base locale code (`en`, `ja`…) for core's reporter helpers. */
+  lang: string;
+  step: WidgetStep;
+  callbacks: WidgetCallbacks;
+  // ─── Report screen ─────────────────────────────────────────────
+  /** Selected type chip: a built-in id, `idea`, a custom category id, or null. */
+  chip: string | null;
+  intent: string | null;
+  /** Host custom categories are revealed under "More…". */
+  showAllCategories: boolean;
+  /** Current description text (kept in sync on input). */
+  draftLength: number;
+  canSend: boolean;
+  submitting: boolean;
   screenshotCapturing: boolean;
   screenshotAttached: boolean;
-  /** Data URL of the attached screenshot, rendered as a visible preview. */
   screenshotPreview: string | null;
-  /** Resolved privacy caption shown beside the preview; null hides it. */
+  previewOpen: boolean;
   screenshotHint: string | null;
-  /** False hides the Attach Screenshot button (capture disabled/unavailable). */
   screenshotAvailable: boolean;
-  /** False hides the Select Element button (selector disabled/unavailable). */
   elementAvailable: boolean;
-  reporterError: string | null;
-  magicLinkError: string;
-  elementCapturing: boolean;
-  submitting: boolean;
-  sdkFreshness: { latest: string | null; current: string; deprecated: boolean; message?: string | null } | null;
   screenshotError: boolean;
-  /** Why the last capture failed (null when it didn't). */
   screenshotErrorReason: ScreenshotErrorReason | null;
-  /** Placeholder + starter-chip set for the details step. */
-  detailMode: DetailMode;
-  reporterReports: MushiReporterReport[];
-  magicLinkSending: boolean;
-  magicLinkEmail: string;
-  globalLeaderboardLoading: boolean;
-  globalLeaderboard: MushiLeaderboardEntry[] | null;
   elementSelected: boolean;
-  /** True when the last element-selection attempt failed or was cancelled unexpectedly. */
+  elementCapturing: boolean;
   elementError: boolean;
-  crossAppLoading: boolean;
-  callbacks: WidgetCallbacks;
-  testerJwt: string | null;
+  allowScreenshotRemove: boolean;
+  identifiedUser: { name?: string; email?: string } | null;
+  // ─── Receipt ───────────────────────────────────────────────────
+  lastReportId: string | null;
   submittedAt: Date | null;
-  step: WidgetStep;
-  selectedReportId: string | null;
-  selectedCategory: string | null;
-  sdkVersion: string;
-  reporterComments: MushiReporterComment[];
-  magicLinkSent: boolean;
-  leaderboardLoading: boolean;
-  leaderboardEntries: Array<{ display_name: string; tier_name: string | null; total_points: number; points_30d: number }> | null;
   lastSubmitQueuedOffline: boolean;
   lastSubmitFailureKind: WidgetSubmitOutcome['failureKind'];
   lastSubmitScreenshotDropped: boolean;
-  featureBoard: Array<Record<string, unknown>>;
+  /** Reporter channels the host enabled and the server has configured. */
+  channels: { email: boolean; push: boolean; emailPrefill: string };
+  emailOptInOpen: boolean;
+  emailState: 'idle' | 'saving' | 'saved' | 'error';
+  pushState: 'idle' | 'asking' | 'on' | 'error';
+  // ─── Your reports ──────────────────────────────────────────────
+  reporterReports: MushiReporterReport[];
+  listLoading: boolean;
+  reporterError: string | null;
+  selectedReportId: string | null;
+  reporterComments: MushiReporterComment[];
+  timeline: WidgetTimelineEvent[] | null;
+  pendingReplies: PendingReply[];
+  threadLoading: boolean;
+  threadError: string | null;
+  actionPending: boolean;
+  actionError: string | null;
+  unreadCount: number;
+  // ─── Header ────────────────────────────────────────────────────
+  showMoreNav: boolean;
+  pageFaviconHref: string | null;
+  sdkFreshness: { latest: string | null; current: string; deprecated: boolean; message?: string | null } | null;
+  brandRef: string | null;
+  // ─── Secondary views (behind the overflow menu) ────────────────
+  rewardsState: WidgetRewardsState | null;
+  testerReputation: MushiTesterReputation | null;
+  testerInfo: { id: string; public_handle: string | null; display_name: string | null } | null;
+  testerJwt: string | null;
+  magicLinkError: string;
+  magicLinkSending: boolean;
+  magicLinkEmail: string;
+  magicLinkSent: boolean;
+  globalLeaderboardLoading: boolean;
+  globalLeaderboard: MushiLeaderboardEntry[] | null;
+  leaderboardLoading: boolean;
+  leaderboardEntries: Array<{ display_name: string; tier_name: string | null; total_points: number; points_30d: number }> | null;
+  crossAppLoading: boolean;
   crossAppReports: MushiCrossAppReport[] | null;
-  allowScreenshotRemove: boolean;
-  unreadCount: () => number;
-  tierColor: (slug: string) => string;
-  resolveCustomCategory: (id: string) => MushiCustomCategory | undefined;
-  effectiveMinLength: () => number;
-  categoryLabel: (id: string) => string;
-  categoryIcon: (id: string) => string;
-  // ─── Assistant tab (P5) ──────────────────────────────────────────
+  featureBoard: Array<Record<string, unknown>>;
   assistantTurns: AssistantTurn[];
   assistantSending: boolean;
   assistantError: string | null;
-  // ─── Progressive disclosure ──────────────────────────────────────
-  showAllCategories: boolean;
-  /** Secondary hub links (inbox, assistant, community) collapsed under "More". */
-  showMoreNav: boolean;
-  /** Host page favicon — shown in header during report flow when available. */
-  pageFaviconHref: string | null;
-  /** Anonymous project ref (SHA-256 prefix) for the brand-footer link; null until resolved. */
-  brandRef: string | null;
+  tierColor: (slug: string) => string;
+  resolveCustomCategory: (id: string) => MushiCustomCategory | undefined;
 }
 
-export function renderStep(ctx: WidgetRenderCtx): string {
-    switch (ctx.step) {
-      case 'category': return renderCategoryStep(ctx);
-      case 'intent': return renderIntentStep(ctx);
-      case 'details': return renderDetailsStep(ctx);
-      case 'success': return renderSuccessStep(ctx);
-      case 'reports': return renderReportsStep(ctx);
-      case 'report-detail': return renderReportDetailStep(ctx);
-      case 'leaderboard': return renderLeaderboardStep(ctx);
-      case 'roadmap': return renderRoadmapStep(ctx);
-      case 'account': return renderAccountStep(ctx);
-      case 'cross-app-reports': return renderCrossAppReportsStep(ctx);
-      case 'assistant': return renderAssistantStep(ctx);
-    }
+/** The HTML of every panel region for the current view. */
+export interface ViewRegions {
+  header: string;
+  lead: string;
+  body: string;
+  footer: string;
+}
+
+const esc = escapeHtml;
+const BUILTIN_CHIPS = ['bug', 'slow', 'visual', 'confusing'] as const;
+
+function btn(action: string, label: string, cls = '', extra = ''): string {
+  return `<button type="button" class="${cls}" data-action="${action}"${extra}>${label}</button>`;
+}
+
+export function renderView(ctx: WidgetRenderCtx): ViewRegions {
+  switch (ctx.step) {
+    case 'report': return reportView(ctx);
+    case 'success': return successView(ctx);
+    case 'reports': return reportsView(ctx);
+    case 'report-detail': return detailView(ctx);
+    case 'assistant': return assistantView(ctx);
+    case 'roadmap': return roadmapView(ctx);
+    case 'leaderboard': return leaderboardView(ctx);
+    case 'account': return accountView(ctx);
+    case 'cross-app-reports': return crossAppView(ctx);
   }
+}
 
-/**
- * Page-aware assistant tab. A simple chat transcript + composer that shares
- * the panel chrome. Replies (answer / clarify) are rendered as assistant
- * bubbles; clarify options become quick-reply chips. The greeting + starter
- * suggestions come from the assistant config (console-overridable).
- */
-export function renderAssistantStep(ctx: WidgetRenderCtx): string {
-  const t = ctx.locale;
-  const label = ctx.callbacks.assistantLabel || t.assistant.defaultLabel;
-  const greeting = ctx.callbacks.assistantGreeting || t.assistant.defaultGreeting;
-  const suggestions = ctx.callbacks.assistantSuggestions ?? [];
-  const empty = ctx.assistantTurns.length === 0;
+// ─── Header ────────────────────────────────────────────────────────
 
-  const transcript = empty
-    ? `<div class="mushi-assistant-greeting">${escapeHtml(greeting)}</div>
-       ${suggestions.length ? `<div class="mushi-assistant-suggestions">${suggestions
-         .map((s) => `<button type="button" class="mushi-assistant-chip" data-action="assistant-suggest" data-value="${escapeHtml(s)}">${escapeHtml(s)}</button>`)
-         .join('')}</div>` : ''}`
-    : ctx.assistantTurns
-        .map((turn) => {
-          const cls = turn.role === 'user' ? 'mushi-assistant-msg-user' : 'mushi-assistant-msg-bot';
-          const opts = turn.options && turn.options.length
-            ? `<div class="mushi-assistant-suggestions">${turn.options
-                .map((o) => `<button type="button" class="mushi-assistant-chip" data-action="assistant-suggest" data-value="${escapeHtml(o)}">${escapeHtml(o)}</button>`)
-                .join('')}</div>`
-            : '';
-          const reportCta = turn.offerReport
-            ? `<div class="mushi-assistant-recovery">
-                 <button type="button" class="mushi-assistant-report-cta" data-action="assistant-report">${escapeHtml(t.assistant.fileReportCta)}</button>
-               </div>`
-            : '';
-          return `<div class="mushi-assistant-msg ${cls}">${escapeHtml(turn.text)}</div>${opts}${reportCta}`;
-        })
-        .join('');
+/** Overflow destinations, shown only when the host enabled them. */
+function menuItems(ctx: WidgetRenderCtx): string[] {
+  const mn = ctx.locale.step1.moreNav;
+  const items: string[] = [];
+  if (ctx.callbacks.assistantEnabled) items.push(btn('assistant', esc(ctx.callbacks.assistantLabel || ctx.locale.assistant.defaultLabel), 'mushi-menu-item', ' role="menuitem"'));
+  if (ctx.callbacks.onFeatureBoardRequest) items.push(btn('roadmap', esc(mn.communityIdeas), 'mushi-menu-item', ' role="menuitem"'));
+  if (ctx.rewardsState) items.push(btn('open-leaderboard', esc(mn.leaderboard), 'mushi-menu-item', ' role="menuitem"'));
+  if (ctx.rewardsState || ctx.testerInfo) {
+    items.push(btn('open-account', esc(ctx.testerInfo ? (ctx.testerInfo.public_handle ?? ctx.testerInfo.display_name ?? mn.myAccount) : mn.joinCommunity), 'mushi-menu-item', ' role="menuitem"'));
+  }
+  return items;
+}
 
-  const thinking = ctx.assistantSending
-    ? `<div class="mushi-assistant-msg mushi-assistant-msg-bot mushi-assistant-thinking" role="status" aria-live="polite">${escapeHtml(t.assistant.thinking)}</div>`
+function renderHeader(ctx: WidgetRenderCtx, title: string, back = false): string {
+  const p = ctx.locale.panel;
+  const home = ctx.step === 'report' || ctx.step === 'success';
+  const n = ctx.unreadCount;
+  const pill = home && ctx.callbacks.onReporterReportsRequest
+    ? btn('reports', `${esc(p.yourReports)}${n ? ` <span class="mushi-badge">${esc(p.newCount.replace('{n}', String(n)))}</span>` : ''}`, 'mushi-pill-btn')
     : '';
-  const error = ctx.assistantError
-    ? `<div class="mushi-assistant-error" role="alert">${escapeHtml(ctx.assistantError)}
-         <button type="button" class="mushi-assistant-report-cta" data-action="assistant-report">${escapeHtml(t.assistant.fileReportCta)}</button>
-       </div>`
+  const items = home ? menuItems(ctx) : [];
+  const menu = items.length
+    ? `<div class="mushi-menu-wrap">${btn('toggle-more-nav', '⋯', 'mushi-icon-btn', ` aria-haspopup="menu" aria-expanded="${ctx.showMoreNav}" aria-label="${esc(p.moreOptions)}"`)}${ctx.showMoreNav ? `<div class="mushi-menu" role="menu">${items.join('')}</div>` : ''}</div>`
     : '';
-  const stillStuck =
-    !empty && !ctx.assistantSending && !ctx.assistantError
-      ? `<div class="mushi-assistant-recovery mushi-assistant-recovery-footer">
-           <button type="button" class="mushi-assistant-report-link" data-action="assistant-report">${escapeHtml(t.assistant.stillStuckCta)}</button>
-         </div>`
+  const lead = back
+    ? btn('back', '←', 'mushi-icon-btn', ` aria-label="${esc(ctx.locale.widget.back)}"`)
+    : ctx.pageFaviconHref
+      ? `<img class="mushi-header-host-icon" src="${esc(ctx.pageFaviconHref)}" alt="" referrerpolicy="no-referrer" width="20" height="20" />`
       : '';
-
-  return `
-    ${renderHeader(ctx, { title: label, showBack: true })}
-    <div class="mushi-assistant">
-      <div class="mushi-assistant-log">
-        ${transcript}
-        ${thinking}
-        ${error}
-        ${stillStuck}
-      </div>
-      <form class="mushi-assistant-form" data-action="assistant-send">
-        <textarea
-          class="mushi-assistant-input"
-          rows="1"
-          placeholder="${escapeHtml(t.assistant.inputPlaceholder)}"
-          ${ctx.assistantSending ? 'disabled' : ''}
-        ></textarea>
-        <button type="submit" class="mushi-assistant-submit" ${ctx.assistantSending ? 'disabled' : ''} aria-label="${escapeHtml(t.assistant.sendAriaLabel)}">\u2191</button>
-      </form>
-    </div>
-  `;
+  return `${lead}<h2 id="mushi-title" class="mushi-title">${esc(title)}</h2>${pill}${menu}${btn('close', '✕', 'mushi-icon-btn', ` aria-label="${esc(ctx.locale.widget.close)}"`)}`;
 }
+
 export function renderOutdatedBanner(ctx: WidgetRenderCtx): string {
-    if (!ctx.sdkFreshness) return '';
-    if (ctx.config.outdatedBanner === 'off' || ctx.config.outdatedBanner === 'console-only') return '';
-    const { latest, current, deprecated, message } = ctx.sdkFreshness;
-    if (!latest && !deprecated) return '';
-    return `
-      <div class="mushi-outdated" role="status">
-        <strong>Mushi SDK ${escapeHtml(current)}</strong>
-        ${latest ? `latest is ${escapeHtml(latest)}.` : 'needs attention.'}
-        ${message ? `<span>${escapeHtml(message)}</span>` : ''}
-      </div>
-    `;
-  }
+  if (!ctx.sdkFreshness) return '';
+  if (ctx.config.outdatedBanner === 'off' || ctx.config.outdatedBanner === 'console-only') return '';
+  const { latest, current, deprecated, message } = ctx.sdkFreshness;
+  if (!latest && !deprecated) return '';
+  return `<div class="mushi-outdated" role="status"><strong>Mushi SDK ${esc(current)}</strong> ${latest ? `latest is ${esc(latest)}.` : 'needs attention.'}${message ? ` <span>${esc(message)}</span>` : ''}</div>`;
+}
+
 /** "Bug reports by Mushi" mark (see MushiWidgetConfig.brandFooter); new-tab link, click wired via data-action. */
 export function renderBrandFooter(ctx: WidgetRenderCtx): string {
-    if (ctx.config.brandFooter !== true) return '';
-    const href = buildBrandFooterHref(ctx.brandRef);
-    return `<div class="mushi-brand-footer"><a class="mushi-brand-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" data-action="brand-footer">${escapeHtml(ctx.locale.flows.poweredBy)}<span aria-hidden="true"> \u2197</span></a></div>`;
-  }
-
-  /**
-   * Editorial masthead. Always carries:
-   *   • the brand mark (虫 kanji on vermillion, "MUSHI" in mono above)
-   *   • the page title (serif display)
-   *   • the close affordance
-   *
-   * On sub-steps it additionally renders a back button (replacing the
-   * "MUSHI" eyebrow with a "← BACK" mono link) and a step counter
-   * ledger ("02 / 03") on the far right.
-   */
-export function renderHeader(ctx: WidgetRenderCtx, opts: {
-    title: string;
-    showBack?: boolean;
-    step?: number;
-    eyebrow?: string;
-  }): string {
-    const t = ctx.locale;
-    const { title, showBack = false, step, eyebrow } = opts;
-
-    const eyebrowHtml = showBack
-      ? `<button type="button" class="mushi-back" data-action="back" aria-label="${escapeHtml(t.widget.back)}">\u2190 ${escapeHtml(t.widget.back)}</button>`
-      : `<span class="mushi-header-eyebrow">${escapeHtml(eyebrow ?? 'Mushi \u00B7 Report')}</span>`;
-
-    const counterHtml = step
-      ? `<span class="mushi-step-counter" aria-label="Step ${step} of ${TOTAL_STEPS}"><b>${pad2(step)}</b> / ${pad2(TOTAL_STEPS)}</span>`
-      : '';
-
-    return `
-      <div class="mushi-header">
-        <div class="mushi-header-mark" aria-hidden="true">${ctx.pageFaviconHref
-          ? `<img class="mushi-header-host-icon" src="${escapeHtml(ctx.pageFaviconHref)}" alt="" referrerpolicy="no-referrer" width="20" height="20" />`
-          : '\u866B'}</div>
-        <div class="mushi-header-titles">
-          ${eyebrowHtml}
-          <h3>${title}</h3>
-        </div>
-        <div class="mushi-header-meta">
-          ${counterHtml}
-          <button type="button" class="mushi-close" data-action="close" aria-label="${escapeHtml(t.widget.close)}">\u2715</button>
-        </div>
-      </div>
-    `;
-  }
-
-/**
- * Secondary hub destinations (inbox, roadmap, assistant, account) live behind
- * a single "More" disclosure so the report path stays visually primary.
- */
-function countMoreNavItems(ctx: WidgetRenderCtx): number {
-  let n = 1; // Your reports — always present
-  if (ctx.callbacks.onFeatureBoardRequest) n += 1;
-  if (ctx.callbacks.assistantEnabled) n += 1;
-  if (ctx.rewardsState) n += 1; // leaderboard
-  n += 1; // account / community
-  return n;
+  if (ctx.config.brandFooter !== true) return '';
+  return `<div class="mushi-brand-footer"><a class="mushi-brand-link" href="${esc(buildBrandFooterHref(ctx.brandRef))}" target="_blank" rel="noopener noreferrer" data-action="brand-footer">${esc(ctx.locale.flows.poweredBy)}<span aria-hidden="true"> ↗</span></a></div>`;
 }
 
-function renderMoreNavSection(ctx: WidgetRenderCtx): string {
+// ─── Report screen (§1.1) ─────────────────────────────────────────
+
+/** Label of a type id — built-in, idea, or the host's custom category. */
+export function chipLabel(ctx: WidgetRenderCtx, id: string): string {
+  if (id === 'idea' || id === 'feature') return ctx.config.featureRequestLabel || ctx.rc.categories.idea;
+  const custom = ctx.resolveCustomCategory(id);
+  if (custom) return custom.label;
+  return (ctx.rc.categories as Record<string, string>)[id] ?? '';
+}
+
+function chip(ctx: WidgetRenderCtx, id: string, index: number, selected: string | null): string {
+  const on = selected === id;
+  // Roving tabindex: the checked chip (or the first) is the one Tab stop.
+  const tab = on || (selected === null && index === 0) ? '0' : '-1';
+  return `<button type="button" class="mushi-chip" role="radio" aria-checked="${on}" tabindex="${tab}" data-action="chip" data-category="${esc(id)}">${esc(chipLabel(ctx, id))}</button>`;
+}
+
+function intentOptions(ctx: WidgetRenderCtx): string[] {
+  const id = ctx.chip;
+  if (!id || id === 'idea') return [];
+  const custom = ctx.resolveCustomCategory(id);
+  if (custom) return custom.intents ?? [];
+  const list = (ctx.locale.step2.intents as Record<string, string[] | undefined>)[id] ?? [];
+  return list.slice(0, -1).slice(0, 4);
+}
+
+function reportView(ctx: WidgetRenderCtx): ViewRegions {
   const t = ctx.locale;
-  const mn = t.step1.moreNav;
-  const count = countMoreNavItems(ctx);
-  const toggleLabel = `${t.step1.moreNavLabel} (${count})`;
-  const unread = ctx.unreadCount();
-  const reportsLabel = unread
-    ? `${mn.yourReports} (${unread} ${mn.unreadNew})`
-    : mn.yourReports;
-
-  const panelItems: string[] = [
-    `<button type="button" class="mushi-option-btn mushi-reports-entry" data-action="reports">
-      <span class="mushi-option-icon" aria-hidden="true">\uD83D\uDCEC</span>
-      <div class="mushi-option-text">
-        <span class="mushi-option-label">${escapeHtml(reportsLabel)}</span>
-        <span class="mushi-option-desc">${escapeHtml(mn.yourReportsDesc)}</span>
-      </div>
-      <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
-    </button>`,
-  ];
-
-  if (ctx.callbacks.onFeatureBoardRequest) {
-    panelItems.push(`
-      <button type="button" class="mushi-option-btn" data-action="roadmap">
-        <span class="mushi-option-icon" aria-hidden="true">\uD83D\uDDF3\uFE0F</span>
-        <div class="mushi-option-text">
-          <span class="mushi-option-label">${escapeHtml(mn.communityIdeas)}</span>
-          <span class="mushi-option-desc">${escapeHtml(mn.communityIdeasDesc)}</span>
-        </div>
-        <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
-      </button>`);
-  }
-
-  if (ctx.callbacks.assistantEnabled) {
-    panelItems.push(`
-      <button type="button" class="mushi-option-btn" data-action="assistant">
-        <span class="mushi-option-icon" aria-hidden="true">\uD83D\uDCAC</span>
-        <div class="mushi-option-text">
-          <span class="mushi-option-label">${escapeHtml(ctx.callbacks.assistantLabel || t.assistant.defaultLabel)}</span>
-          <span class="mushi-option-desc">${escapeHtml(t.assistant.hubDescription)}</span>
-        </div>
-        <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
-      </button>`);
-  }
-
-  if (ctx.rewardsState) {
-    panelItems.push(`
-      <button type="button" class="mushi-link-btn mushi-more-nav-link" data-action="open-leaderboard">\uD83C\uDFC6 ${escapeHtml(mn.leaderboard)}</button>`);
-  }
-
-  panelItems.push(`
-    <button type="button" class="mushi-link-btn mushi-more-nav-link" data-action="open-account">
-      ${ctx.testerInfo
-        ? `\uD83D\uDC64 ${escapeHtml(ctx.testerInfo.public_handle ?? ctx.testerInfo.display_name ?? mn.myAccount)}`
-        : `\uD83C\uDF10 ${escapeHtml(mn.joinCommunity)}`}
-    </button>`);
-
-  const panelHtml = ctx.showMoreNav
-    ? `<div class="mushi-more-nav-panel">${panelItems.join('')}</div>`
+  const p = t.panel;
+  const s3 = t.step3;
+  const ids: string[] = [...BUILTIN_CHIPS];
+  if (ctx.config.featureRequestCard !== false) ids.push('idea');
+  const custom = ctx.config.categories ?? [];
+  if (ctx.showAllCategories) ids.push(...custom.map((c) => c.id));
+  const chips = ids.map((id, i) => chip(ctx, id, i, ids.includes(ctx.chip ?? '') ? ctx.chip : null)).join('');
+  const more = custom.length && !ctx.showAllCategories ? btn('show-all-categories', esc(p.more), 'mushi-chip mushi-chip-more') : '';
+  const intents = intentOptions(ctx);
+  const intentRow = intents.length
+    ? `<div class="mushi-chips mushi-intents" role="radiogroup" aria-label="${esc(chipLabel(ctx, ctx.chip!))}">${intents
+        .map((it, i) => `<button type="button" class="mushi-chip mushi-chip-sm" role="radio" aria-checked="${ctx.intent === it}" tabindex="${ctx.intent === it || (!ctx.intent && i === 0) ? '0' : '-1'}" data-action="intent" data-intent="${esc(it)}">${esc(it)}</button>`)
+        .join('')}</div>`
     : '';
 
-  return `
-    <div class="mushi-more-nav">
-      <button
-        type="button"
-        class="mushi-more-toggle mushi-more-nav-toggle"
-        data-action="toggle-more-nav"
-        aria-expanded="${ctx.showMoreNav ? 'true' : 'false'}"
-      >
-        <span class="mushi-more-toggle-text">${escapeHtml(toggleLabel)}</span>
-        <span class="mushi-more-toggle-arrow" aria-hidden="true">${ctx.showMoreNav ? '\u25BE' : '\u25B8'}</span>
-      </button>
-      ${panelHtml}
-    </div>
-  `;
+  const shotLabel = ctx.screenshotCapturing ? s3.screenshotCapturing : ctx.screenshotError ? s3.screenshotRetry : s3.screenshotButton;
+  const elLabel = ctx.elementCapturing ? s3.elementCapturing : ctx.elementError ? s3.elementFailed : ctx.elementSelected ? s3.elementSelected : p.pointAt;
+  const spin = '<span class="mushi-spinner" aria-hidden="true"></span>';
+  const shot = ctx.screenshotAttached && ctx.screenshotPreview
+    ? `<figure class="mushi-screenshot-preview${ctx.previewOpen ? ' open' : ''}"><button type="button" class="mushi-thumb" data-action="toggle-preview" aria-expanded="${ctx.previewOpen}"><img src="${esc(ctx.screenshotPreview)}" alt="${esc(s3.screenshotPreviewAlt)}" /></button><figcaption><span class="mushi-attach-name">${esc(s3.screenshotAttached)}</span>${ctx.screenshotHint ? `<span class="mushi-screenshot-hint">${esc(ctx.screenshotHint)}</span>` : ''}<span class="mushi-attach-actions">${ctx.callbacks.onScreenshotAnnotateRequest ? btn('annotate-screenshot', esc(p.markUp), 'mushi-link-btn') : ''}${ctx.allowScreenshotRemove ? btn('remove-screenshot', esc(p.remove), 'mushi-link-btn') : ''}</span></figcaption></figure><div class="mushi-annotate-host" data-role="annotate-host"></div>`
+    : ctx.screenshotAvailable
+      ? btn('screenshot', `${ctx.screenshotCapturing ? spin : ''}${esc(shotLabel)}`, `mushi-attach-btn${ctx.screenshotError ? ' error' : ''}`, `${ctx.screenshotCapturing ? ' disabled' : ''} aria-label="${esc(shotLabel)}"`)
+      : '';
+  const element = ctx.elementAvailable
+    ? btn('element', `${ctx.elementCapturing ? spin : ''}${esc(elLabel)}`, `mushi-attach-btn${ctx.elementSelected ? ' active' : ''}${ctx.elementError ? ' error' : ''}`, `${ctx.elementCapturing ? ' disabled' : ''} aria-label="${esc(elLabel)}"`)
+    : '';
+  const reason = ctx.screenshotError && ctx.screenshotErrorReason
+    ? `<p class="mushi-note mushi-error-inline" role="status" data-role="screenshot-reason">${esc(s3.screenshotErrors[ctx.screenshotErrorReason])}${ctx.callbacks.onScreenshotShareTabRequest ? ` ${btn('screenshot-share-tab', esc(s3.screenshotShareTab), 'mushi-link-btn')}` : ''}</p>`
+    : '';
+  const who = ctx.identifiedUser?.name ?? ctx.identifiedUser?.email;
+  const feature = ctx.chip === 'idea';
+
+  const hint = ctx.canSend
+    ? esc(s3.submitHint.replace('{key}', submitShortcutKey(readPlatform())))
+    : esc(ctx.rc.ui.addWords);
+  return {
+    header: renderHeader(ctx, ctx.config.expandedTitle || p.title),
+    lead: `<textarea class="mushi-textarea" data-role="description" rows="3" maxlength="${DESCRIPTION_MAX_LENGTH}" placeholder="${esc(feature ? s3.featurePlaceholder : s3.descriptionPlaceholder)}" aria-label="${esc(p.title)}" aria-describedby="mushi-hint"></textarea>`,
+    body: `${ctx.config.betaMode?.enabled ? renderBetaStrip(ctx) : ''}<div class="mushi-chips"><div class="mushi-chip-group" role="radiogroup" aria-label="${esc(p.title)}">${chips}</div>${more}</div>${intentRow}<div class="mushi-attachments">${shot}${element}</div>${reason}<p class="mushi-note">🔒 ${esc(p.privacy)}</p>${who ? `<p class="mushi-note">👤 ${esc(who)}</p>` : ''}${ctx.draftLength > DESCRIPTION_MAX_LENGTH - 400 ? `<p class="mushi-note" aria-live="polite">${ctx.draftLength}/${DESCRIPTION_MAX_LENGTH}</p>` : ''}`,
+    footer: `<span class="mushi-footer-hint" id="mushi-hint" data-role="hint">${hint}</span><button type="button" class="mushi-submit" data-action="submit" aria-disabled="${!ctx.canSend || ctx.submitting}"${ctx.submitting ? ' aria-busy="true"' : ''}>${esc(ctx.submitting ? t.widget.submitting : p.send)}</button>`,
+  };
 }
 
-export function renderCategoryStep(ctx: WidgetRenderCtx): string {
-    const t = ctx.locale;
-    // When the host supplies custom categories, render those instead of the
-    // built-in five. The feature-request shortcut is still shown above them
-    // unless explicitly disabled (consistent UX regardless of category set).
-    const categoryEntries: Array<{ id: string; icon: string; label: string; desc: string }> =
-      ctx.config.categories && ctx.config.categories.length > 0
-        ? ctx.config.categories.map((c) => ({
-            id: c.id,
-            icon: c.icon ?? '💬',
-            label: c.label,
-            desc: c.description ?? '',
-          }))
-        : (['bug', 'slow', 'visual', 'confusing', 'other'] as MushiReportCategory[]).map((id) => ({
-            id,
-            icon: CATEGORY_ICONS[id],
-            label: t.step1.categories[id],
-            desc: t.step1.categoryDescriptions[id],
-          }));
+/** "What's new" changelog row (beta mode). */
+function renderBetaChangelog(ctx: WidgetRenderCtx): string {
+  const latest = ctx.config.betaMode?.changelogItems?.[0];
+  if (!latest) return '';
+  const whatsNew = esc(ctx.locale.flows.changelog.whatsNew.replace('{version}', latest.version));
+  return `<details class="mushi-changelog"><summary>${latest.date ? `${whatsNew} · ${esc(latest.date)}` : whatsNew}</summary><ul>${latest.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul></details>`;
+}
 
-    const renderEntry = ({ id, icon, label, desc }: typeof categoryEntries[0]) => `
-      <button type="button" class="mushi-option-btn" data-category="${escapeHtml(id)}" role="radio" aria-checked="false">
-        <span class="mushi-option-icon" aria-hidden="true">${escapeHtml(icon)}</span>
-        <div class="mushi-option-text">
-          <span class="mushi-option-label">${escapeHtml(label)}</span>
-          ${desc ? `<span class="mushi-option-desc">${escapeHtml(desc)}</span>` : ''}
-        </div>
-        <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
-      </button>
-    `;
+function renderBetaStrip(ctx: WidgetRenderCtx): string {
+  const beta = ctx.config.betaMode!;
+  const strip = ctx.locale.flows.betaStrip;
+  const appName = esc(beta.appName ?? 'This app');
+  const message = beta.message ? esc(beta.message) : esc(strip.defaultMessage).replace('{appName}', appName);
+  const perks = beta.perks ?? [];
+  return `<div class="mushi-beta-strip" role="note" aria-label="${esc(strip.ariaLabel)}"><p><span class="mushi-beta-tag">Beta</span> ${message}</p>${beta.contactEmail ? `<p class="mushi-note">${esc(strip.contactHint).replace('{email}', esc(beta.contactEmail))}</p>` : ''}${perks.length ? `<ul class="mushi-beta-perks">${perks.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}${renderBetaChangelog(ctx)}</div>`;
+}
 
-    // Progressive disclosure: for the default built-in set, always show 'bug'
-    // (the most common) and hide slower/rarer categories behind a toggle.
-    // Custom category sets are shown in full (host knows which are primary).
-    const isCustom = ctx.config.categories && ctx.config.categories.length > 0;
-    const PRIMARY_LIMIT = 1; // show only 'bug' (index 0) by default
-    const primaryEntries = isCustom ? categoryEntries : categoryEntries.slice(0, PRIMARY_LIMIT);
-    const secondaryEntries = isCustom ? [] : categoryEntries.slice(PRIMARY_LIMIT);
-    const hasMore = secondaryEntries.length > 0;
+// ─── Receipt (§1.1 Success) ───────────────────────────────────────
 
-    const primaryCategories = primaryEntries.map(renderEntry).join('');
-    const secondaryCategories = secondaryEntries.map(renderEntry).join('');
-
-    const secondaryHtml = hasMore
-      ? ctx.showAllCategories
-        ? `<div class="mushi-categories-expanded">${secondaryCategories}</div>`
-        : `<button type="button" class="mushi-more-toggle" data-action="show-all-categories">
-             <span class="mushi-more-toggle-text">${escapeHtml(t.step1.moreCategoriesLabel)}</span>
-             <span class="mushi-more-toggle-count">${escapeHtml(t.step1.moreCategoriesCount.replace('{n}', String(secondaryEntries.length)))}</span>
-             <span class="mushi-more-toggle-arrow" aria-hidden="true">\u2192</span>
-           </button>`
-      : '';
-
-    return `
-      ${renderHeader(ctx, { title: t.step1.heading, step: STEP_NUMBER.category })}
-      ${ctx.config.betaMode?.enabled ? renderBetaStrip(ctx) : ''}
-      <div class="mushi-body" role="radiogroup" aria-label="${escapeHtml(t.step1.heading)}">
-        <p class="mushi-section-label">${escapeHtml(t.step1.reportSectionLabel)}</p>
-        ${renderFeatureRequestEntry(ctx)}
-        ${primaryCategories}
-        ${secondaryHtml}
-        ${ctx.rewardsState ? renderRewardsNudge(ctx) : ''}
-        ${renderMoreNavSection(ctx)}
-      </div>
-    `;
-  }
-
-export function renderFeatureRequestEntry(ctx: WidgetRenderCtx): string {
-    const enabled = ctx.config.featureRequestCard !== false;
-    if (!enabled) return '';
-    const f = ctx.locale.flows.featureRequest;
-    const label = ctx.config.featureRequestLabel || f.label;
-    const desc = ctx.config.featureRequestDescription || f.description;
-    return `
-      <button
-        type="button"
-        class="mushi-option-btn mushi-feature-entry"
-        data-action="feature-request"
-        aria-label="${escapeHtml(label)}"
-      >
-        <span class="mushi-option-icon" aria-hidden="true">\u2728</span>
-        <div class="mushi-option-text">
-          <span class="mushi-option-label">${escapeHtml(label)}</span>
-          <span class="mushi-option-desc">${escapeHtml(desc)}</span>
-        </div>
-        <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
-      </button>
-    `;
-  }
-
-  /** Collapsible "What's new" changelog row. Closes the reporter feedback loop. */
-export function renderBetaChangelog(ctx: WidgetRenderCtx): string {
-    const entries = ctx.config.betaMode?.changelogItems;
-    if (!entries?.length) return '';
-    const latest = entries[0];
-    const items = latest.items.map((item) => `<li>\u2022 ${escapeHtml(item)}</li>`).join('');
-    const whatsNew = escapeHtml(
-      ctx.locale.flows.changelog.whatsNew.replace('{version}', latest.version),
-    );
-    const label = latest.date ? `${whatsNew} \u00B7 ${escapeHtml(latest.date)}` : whatsNew;
-    return `
-      <details class="mushi-changelog">
-        <summary class="mushi-changelog-summary">${label}</summary>
-        <ul class="mushi-changelog-list">${items}</ul>
-      </details>
-    `;
-  }
-
-  /**
-   * Discreet beta status strip: communicates "work in progress", invites
-   * feedback, and sets expectations — reducing user frustration while
-   * nudging the reciprocity instinct ("your reports help us build this").
-   */
-export function renderBetaStrip(ctx: WidgetRenderCtx): string {
-    const beta = ctx.config.betaMode!;
-    const strip = ctx.locale.flows.betaStrip;
-    const appName = escapeHtml(beta.appName ?? 'This app');
-    // Host-supplied `message` wins verbatim; the default follows the widget
-    // locale so a ja/es/th widget no longer shows an English beta banner.
-    const message = beta.message
-      ? escapeHtml(beta.message)
-      : escapeHtml(strip.defaultMessage).replace('{appName}', appName);
-    const email = beta.contactEmail ? escapeHtml(beta.contactEmail) : null;
-    const perks = beta.perks ?? [];
-
-    return `
-      <div class="mushi-beta-strip" role="note" aria-label="${escapeHtml(strip.ariaLabel)}">
-        <div class="mushi-beta-strip-row">
-          <span class="mushi-beta-tag" aria-hidden="true">BETA</span>
-          <span class="mushi-beta-msg">${message}</span>
-        </div>
-        ${email ? `<div class="mushi-beta-contact-hint">${escapeHtml(strip.contactHint).replace('{email}', email)}</div>` : ''}
-        ${perks.length > 0 ? `
-          <ul class="mushi-beta-perks" aria-label="Beta tester perks">
-            ${perks.map((p) => `<li>\u2713 ${escapeHtml(p)}</li>`).join('')}
-          </ul>
-        ` : ''}
-        ${renderBetaChangelog(ctx)}
-      </div>
-    `;
-  }
-export function renderReportsStep(ctx: WidgetRenderCtx): string {
-    const f = ctx.locale.flows;
-    const reports = ctx.reporterReports.map((report) => {
-      const title = report.summary ?? report.description ?? `Report ${report.id.slice(0, 8)}`;
-      const tone = reporterStatusTone(report.status);
-      const when = formatRelativeTime(report.created_at);
-      const unread = report.unread_count && report.unread_count > 0
-        ? `<span class="mushi-unread-badge" aria-label="${report.unread_count} unread">${report.unread_count}</span>`
-        : '';
-      return `
-      <button type="button" class="mushi-report-row" data-report-id="${escapeHtml(report.id)}" aria-label="View report: ${escapeHtml(title)}">
-        <div class="mushi-report-main">
-          <span class="mushi-report-title">${escapeHtml(title)}</span>
-          <span class="mushi-report-meta">
-            <span class="mushi-report-status mushi-status-${tone}">${escapeHtml(reporterStatusShort(report.status))}</span>
-            ${when ? `<span class="mushi-report-when">${escapeHtml(when)}</span>` : ''}
-            ${unread}
-          </span>
-        </div>
-        <span class="mushi-report-chevron" aria-hidden="true">\u203A</span>
-      </button>`;
-    }).join('');
-    const leaderboardBtn = ctx.rewardsState
-      ? `<button type="button" class="mushi-leaderboard-link" data-action="open-leaderboard">\uD83C\uDFC6 ${escapeHtml(f.reports.leaderboardLink)}</button>`
-      : '';
-    return `
-      ${renderHeader(ctx, { title: f.reports.title, showBack: true, eyebrow: f.eyebrows.inbox })}
-      <div class="mushi-body">
-        ${ctx.listLoading ? `<p class="mushi-muted">${escapeHtml(f.reports.loading)}</p>` : ''}
-        ${ctx.reporterError ? `<p class="mushi-error-inline">${escapeHtml(ctx.reporterError)}</p>` : ''}
-        ${reports || (!ctx.listLoading ? `<p class="mushi-muted">${escapeHtml(f.reports.empty)}</p>` : '')}
-        ${leaderboardBtn}
-      </div>
-    `;
-  }
-export function renderRoadmapStep(ctx: WidgetRenderCtx): string {
-    const f = ctx.locale.flows;
-    const rows = ctx.featureBoard.map((ticket) => {
-      const id = String(ticket.id ?? '');
-      const subject = escapeHtml(String(ticket.subject ?? f.roadmap.untitled));
-      const votes = Number(ticket.vote_count ?? 0);
-      const shipped = Boolean(ticket.shipped_at);
-      const voted = Boolean(ticket.my_vote);
-      const status = shipped ? f.roadmap.shipped : String(ticket.status_label ?? ticket.status ?? 'open');
-      const voteLabel = f.roadmap.voteCount.replace('{n}', String(votes));
-      return `
-        <div class="mushi-report-row mushi-roadmap-row">
-          <div class="mushi-report-main">
-            <span class="mushi-report-title">${subject}</span>
-            <span class="mushi-report-meta">
-              <span class="mushi-report-status">${escapeHtml(status)}</span>
-              <span class="mushi-report-when">${escapeHtml(voteLabel)}</span>
-            </span>
-          </div>
-          ${ctx.callbacks.onFeatureBoardVote ? `
-            <button type="button" class="mushi-vote-btn" data-vote-id="${escapeHtml(id)}" aria-pressed="${voted}">
-              ${voted ? escapeHtml(f.roadmap.voted) : escapeHtml(f.roadmap.vote)}
-            </button>` : ''}
-        </div>`;
-    }).join('');
-
-    return `
-      ${renderHeader(ctx, { title: f.roadmap.title, showBack: true, eyebrow: f.eyebrows.roadmap })}
-      <div class="mushi-body">
-        ${ctx.listLoading ? `<p class="mushi-muted">${escapeHtml(f.roadmap.loading)}</p>` : ''}
-        ${ctx.reporterError ? `<p class="mushi-error-inline">${escapeHtml(ctx.reporterError)}</p>` : ''}
-        ${rows || (!ctx.listLoading ? `<p class="mushi-muted">${escapeHtml(f.roadmap.empty)}</p>` : '')}
-      </div>
-    `;
-  }
-export function renderLeaderboardStep(ctx: WidgetRenderCtx): string {
-    const f = ctx.locale.flows;
-    // Show global leaderboard (cross-app) when available, fall back to org scope
-    const isGlobal = ctx.globalLeaderboard !== null || ctx.globalLeaderboardLoading;
-    const entries = isGlobal
-      ? (ctx.globalLeaderboard ?? [])
-      : (ctx.leaderboardEntries ?? []).map(e => ({
-          tester_id: '',
-          public_handle: null,
-          display_name: e.display_name,
-          rank: 0,
-          points_30d: e.points_30d,
-          total_points: e.total_points,
-        }));
-    const loading = isGlobal ? ctx.globalLeaderboardLoading : ctx.leaderboardLoading;
-
-    // Find caller's rank
-    const myRank = ctx.testerReputation?.rank ?? null;
-
-    const rows = entries.map((e, i) => {
-      const rank = (e as MushiLeaderboardEntry).rank || (i + 1);
-      const isMe = ctx.testerReputation && (e as MushiLeaderboardEntry).tester_id === ctx.testerReputation.tester_id;
-      return `
-        <div class="mushi-lb-row ${rank === 1 ? 'mushi-lb-top' : ''}${isMe ? ' mushi-lb-me' : ''}">
-          <span class="mushi-lb-rank">#${rank}</span>
-          <span class="mushi-lb-name">${escapeHtml((e as MushiLeaderboardEntry).public_handle ?? e.display_name ?? f.leaderboard.anon)}</span>
-          <span class="mushi-lb-pts">${(e.points_30d ?? e.total_points).toLocaleString()} pts</span>
-        </div>
-      `;
-    }).join('');
-
-    const myRankBadge = myRank
-      ? `<div class="mushi-lb-myrank">${escapeHtml(f.leaderboard.myRank.replace('{rank}', String(myRank)))}</div>`
-      : (!ctx.testerJwt ? `<button type="button" class="mushi-link-btn" data-action="open-account">${escapeHtml(f.leaderboard.signInPrompt)}</button>` : '');
-
-    return `
-      ${renderHeader(ctx, { title: f.leaderboard.title, showBack: true, eyebrow: f.eyebrows.community })}
-      <div class="mushi-body">
-        ${loading ? `<p class="mushi-muted">${escapeHtml(f.leaderboard.loading)}</p>` : ''}
-        ${!loading && !entries.length ? `<p class="mushi-muted">${escapeHtml(f.leaderboard.empty)}</p>` : ''}
-        <div class="mushi-lb-list">${rows}</div>
-        ${myRankBadge}
-        <p class="mushi-lb-note">${escapeHtml(f.leaderboard.footer)}</p>
-      </div>
-    `;
-  }
-export function renderAccountStep(ctx: WidgetRenderCtx): string {
-    const f = ctx.locale.flows;
-    const tester = ctx.testerInfo;
-    if (tester) {
-      // Signed in — show account info + cross-app link
-      const handle = tester.public_handle ?? tester.display_name ?? f.leaderboard.anon;
-      const rep = ctx.testerReputation;
-      const rankLine = rep
-        ? f.account.rankSummary
-            .replace('{rank}', String(rep.rank ?? '—'))
-            .replace('{points}', (rep.points_30d ?? 0).toLocaleString())
-        : '';
-      return `
-        ${renderHeader(ctx, { title: f.account.title, showBack: true, eyebrow: f.eyebrows.identity })}
-        <div class="mushi-body">
-          <div class="mushi-account-card">
-            <div class="mushi-account-avatar">${escapeHtml(handle.charAt(0).toUpperCase())}</div>
-            <div class="mushi-account-info">
-              <strong>${escapeHtml(handle)}</strong>
-              ${rep ? `<span class="mushi-account-rank">${escapeHtml(rankLine)}</span>` : ''}
-            </div>
-          </div>
-          <button type="button" class="mushi-nav-item" data-action="open-cross-app-reports">
-            ${escapeHtml(f.account.crossAppReports)}
-          </button>
-          <button type="button" class="mushi-nav-item" data-action="open-global-leaderboard">
-            ${escapeHtml(f.account.viewLeaderboard)}
-          </button>
-          <button type="button" class="mushi-link-btn" data-action="sign-out-tester">${escapeHtml(f.account.signOut)}</button>
-        </div>
-      `;
-    }
-
-    // Not signed in — magic-link form
-    if (ctx.magicLinkSent) {
-      return `
-        ${renderHeader(ctx, { title: f.account.checkEmailTitle, showBack: true, eyebrow: f.eyebrows.signIn })}
-        <div class="mushi-body">
-          <p class="mushi-muted">${escapeHtml(f.account.magicLinkSent.replace('{email}', ctx.magicLinkEmail))}</p>
-          <button type="button" class="mushi-link-btn" data-action="resend-magic-link">${escapeHtml(f.account.resendEmail)}</button>
-          ${ctx.magicLinkError ? `<p class="mushi-error">${escapeHtml(ctx.magicLinkError)}</p>` : ''}
-        </div>
-      `;
-    }
-
-    return `
-      ${renderHeader(ctx, { title: f.account.joinTitle, showBack: true, eyebrow: f.eyebrows.signIn })}
-      <div class="mushi-body">
-        <p class="mushi-muted">${escapeHtml(f.account.signInPrompt)}</p>
-        <label class="mushi-label" for="mushi-email-input">${escapeHtml(f.account.emailLabel)}</label>
-        <input
-          id="mushi-email-input"
-          type="email"
-          class="mushi-textarea"
-          data-role="magic-link-email"
-          placeholder="${escapeHtml(f.account.emailPlaceholder)}"
-          autocomplete="email"
-          value="${escapeHtml(ctx.magicLinkEmail)}"
-          style="padding: 10px 12px; height: auto; resize: none;"
-        />
-        ${ctx.magicLinkError ? `<p class="mushi-error">${escapeHtml(ctx.magicLinkError)}</p>` : ''}
-        <button type="button" class="mushi-submit" data-action="send-magic-link"${ctx.magicLinkSending ? ' disabled aria-disabled="true"' : ''}>
-          <span>${ctx.magicLinkSending ? escapeHtml(f.account.sending) : escapeHtml(f.account.sendLink)}</span><span class="mushi-submit-arrow" aria-hidden="true">→</span>
-        </button>
-      </div>
-    `;
-  }
-export function renderCrossAppReportsStep(ctx: WidgetRenderCtx): string {
-    const f = ctx.locale.flows;
-    const reports = ctx.crossAppReports ?? [];
-    const grouped = new Map<string, { name: string; slug: string | null; domain: string | null; reports: MushiCrossAppReport[] }>();
-    for (const r of reports) {
-      const key = r.project_id ?? 'unknown';
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          name: r.app_name ?? f.crossApp.unknownApp,
-          slug: r.app_slug ?? null,
-          domain: r.app_domain ?? null,
-          reports: [],
-        });
-      }
-      grouped.get(key)!.reports.push(r);
-    }
-
-    const rows = [...grouped.entries()].map(([projectId, group]) => {
-      const icon = renderAppIconHtml({
-        projectId,
-        appName: group.name,
-        appSlug: group.slug,
-        appDomain: group.domain,
-      });
-      return `
-      <div class="mushi-xapp-group">
-        <div class="mushi-xapp-app-head">
-          ${icon}
-          <h4 class="mushi-xapp-app-name">${escapeHtml(group.name)}</h4>
-        </div>
-        ${group.reports.map(r => {
-          const tone = reporterStatusTone(r.status);
-          return `
-            <div class="mushi-report-row" data-report-id="${escapeHtml(r.id)}" tabindex="0" role="button">
-              <span class="mushi-report-status mushi-status-${tone}">${escapeHtml(reporterStatusShort(r.status))}</span>
-              <span class="mushi-report-title">${escapeHtml(r.title ?? r.category)}</span>
-              <span class="mushi-report-when">${escapeHtml(formatRelativeTime(r.created_at))}</span>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    `;
-    }).join('');
-
-    return `
-      ${renderHeader(ctx, { title: f.crossApp.title, showBack: true, eyebrow: f.eyebrows.allApps })}
-      <div class="mushi-body">
-        ${ctx.crossAppLoading ? `<p class="mushi-muted">${escapeHtml(f.crossApp.loading)}</p>` : ''}
-        ${!ctx.crossAppLoading && !reports.length ? `<p class="mushi-muted">${escapeHtml(f.crossApp.empty)}</p>` : ''}
-        ${rows}
-      </div>
-    `;
-  }
-export function renderReportDetailStep(ctx: WidgetRenderCtx): string {
-    const f = ctx.locale.flows;
-    const report = ctx.reporterReports.find((r) => r.id === ctx.selectedReportId);
-    // Opened via "Track this report" before the list caught up → it's new.
-    const status = report?.status ?? 'new';
-    const tone = reporterStatusTone(status);
-    const when = report?.created_at ? formatRelativeTime(report.created_at) : '';
-    const busy = ctx.actionPending ? ' disabled aria-busy="true"' : '';
-    const comments = ctx.reporterComments.map((comment) => `
-      <div class="mushi-thread-comment ${comment.author_kind}">
-        <strong>${escapeHtml(comment.author_kind === 'reporter' ? 'You' : (comment.author_name ?? 'Developer'))}</strong>
-        <p>${escapeHtml(comment.body)}</p>
-      </div>
-    `).join('');
-    return `
-      ${renderHeader(ctx, { title: f.thread.title, showBack: true, eyebrow: f.eyebrows.thread })}
-      <div class="mushi-body">
-        <div class="mushi-thread-summary">
-          <div class="mushi-thread-summary-meta">
-            <span class="mushi-report-status mushi-status-${tone}">${escapeHtml(reporterStatusLabel(status))}</span>
-            ${when ? `<span class="mushi-report-when">Reported ${escapeHtml(when)}</span>` : ''}
-          </div>
-          <p>${escapeHtml(report?.summary ?? report?.description ?? `#${(ctx.selectedReportId ?? '').slice(0, 8)}`)}</p>
-        </div>
-        <div class="mushi-thread">
-          ${ctx.threadLoading
-            ? `<div class="mushi-thread-skeleton" role="status" aria-label="${escapeHtml(f.thread.loading)}"><span></span><span></span></div>`
-            : ctx.threadError
-              ? `<p class="mushi-error-inline" role="alert">${escapeHtml(ctx.threadError)}</p>
-                 <button type="button" class="mushi-link-btn" data-action="retry-thread">${escapeHtml(f.thread.retry)}</button>`
-              : comments || `<p class="mushi-muted">${escapeHtml(f.thread.empty)}</p>`}
-        </div>
-        ${['fixed', 'resolved', 'verified'].includes(status) ? `
-          <div class="mushi-verify-actions" role="group" aria-label="Fix verification">
-            <button type="button" class="mushi-option-btn" data-action="reporter-confirms"${busy}>${escapeHtml(f.thread.confirmFixed)}</button>
-            <button type="button" class="mushi-option-btn" data-action="reporter-not-fixed"${busy}>${escapeHtml(f.thread.notFixed)}</button>
-          </div>
-        ` : ''}
-      </div>
-      ${ctx.actionError ? `<p class="mushi-error-inline mushi-thread-action-error" role="alert">${escapeHtml(ctx.actionError)}</p>` : ''}
-      <div class="mushi-footer mushi-thread-composer">
-        <textarea class="mushi-textarea" data-role="reporter-reply" rows="2" placeholder="${escapeHtml(f.thread.replyPlaceholder)}"></textarea>
-        <button type="button" class="mushi-submit" data-action="reporter-reply"${busy}>
-          <span>${escapeHtml(f.thread.send)}</span><span class="mushi-submit-arrow" aria-hidden="true">\u2192</span>
-        </button>
-      </div>
-    `;
-  }
-export function renderIntentStep(ctx: WidgetRenderCtx): string {
-    const t = ctx.locale;
-    const catId = ctx.selectedCategory!;
-    // For custom categories, use their declared intents; for built-in categories
-    // use the i18n-localised intent list.
-    const customEntry = ctx.resolveCustomCategory(catId);
-    const intents: string[] = customEntry?.intents
-      ?? (t.step2.intents[catId as MushiReportCategory] || []);
-
-    const options = intents.map((intent) => `
-      <button type="button" class="mushi-option-btn" data-intent="${escapeHtml(intent)}">
-        <span class="mushi-option-text"><span class="mushi-option-label">${escapeHtml(intent)}</span></span>
-        <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
-      </button>
-    `).join('');
-
-    const icon = ctx.categoryIcon(catId);
-    const label = ctx.categoryLabel(catId);
-
-    return `
-      ${renderHeader(ctx, { title: t.step2.heading, showBack: true, step: STEP_NUMBER.intent })}
-      <div class="mushi-body">
-        <div class="mushi-selected-category">
-          <span aria-hidden="true">${escapeHtml(icon)}</span>
-          <span>${escapeHtml(label)}</span>
-        </div>
-        <div class="mushi-intents">
-          ${options}
-        </div>
-      </div>
-    `;
-  }
-
-export function renderDetailsStep(ctx: WidgetRenderCtx): string {
-    const t = ctx.locale;
-    const minLen = ctx.effectiveMinLength();
-
-    const screenshotLabel = ctx.screenshotCapturing
-      ? t.step3.screenshotCapturing
-      : ctx.screenshotError
-        ? t.step3.screenshotRetry
-        : ctx.screenshotAttached
-          ? t.step3.screenshotAttached
-          : t.step3.screenshotButton;
-
-    const screenshotClass = [
-      'mushi-attach-btn',
-      ctx.screenshotAttached ? 'active' : '',
-      ctx.screenshotError ? 'error' : '',
-      ctx.screenshotCapturing ? 'loading' : '',
-    ].filter(Boolean).join(' ');
-
-    const elementLabel = ctx.elementCapturing
-      ? t.step3.elementCapturing
-      : ctx.elementError
-        ? t.step3.elementFailed
-        : ctx.elementSelected
-          ? t.step3.elementSelected
-          : t.step3.elementButton;
-
-    const elementClass = [
-      'mushi-attach-btn',
-      ctx.elementSelected ? 'active' : '',
-      ctx.elementError ? 'error' : '',
-      ctx.elementCapturing ? 'loading' : '',
-    ].filter(Boolean).join(' ');
-
-    const mode = ctx.detailMode;
-    const placeholder = mode === 'feature'
-      ? t.step3.featurePlaceholder
-      : mode === 'other' ? t.step3.otherPlaceholder : t.step3.descriptionPlaceholder;
-    const examples = mode === 'feature' ? t.step3.featureExamples : mode === 'other' ? [] : t.step3.examplePrompts;
-    const exampleChips = examples
-      .map((p) => `<button type="button" class="mushi-example-chip" data-example="${escapeHtml(p)}">${escapeHtml(p)}</button>`)
-      .join('');
-    const screenshotReason = ctx.screenshotError && ctx.screenshotErrorReason
-      ? `<p class="mushi-error-inline" role="status" data-role="screenshot-reason">${escapeHtml(t.step3.screenshotErrors[ctx.screenshotErrorReason])}${ctx.callbacks.onScreenshotShareTabRequest
-          ? ` <button type="button" class="mushi-link-btn" data-action="screenshot-share-tab">${escapeHtml(t.step3.screenshotShareTab)}</button>`
-          : ''}</p>`
-      : '';
-
-    return `
-      ${renderHeader(ctx, { title: t.step3.heading, showBack: true, step: STEP_NUMBER.details })}
-      <div class="mushi-body">
-        ${exampleChips ? `<div class="mushi-example-chips" aria-label="Example prompts">${exampleChips}</div>` : ''}
-        <div class="mushi-textarea-wrap">
-          <textarea
-            class="mushi-textarea"
-            placeholder="${escapeHtml(placeholder)}"
-            rows="4"
-            maxlength="${DESCRIPTION_MAX_LENGTH}"
-            aria-label="${escapeHtml(t.step3.heading)}"
-            autofocus
-          ></textarea>
-          <div class="mushi-char-counter" data-role="char-counter" aria-hidden="true">${escapeHtml(charCounterText('', minLen, t.step3.charsNeeded))}</div>
-        </div>
-        <div class="mushi-attachments">
-          ${ctx.screenshotAvailable
-            ? `<button type="button" class="${screenshotClass}"
-            data-action="screenshot"
-            ${ctx.screenshotCapturing ? 'disabled' : ''}
-            aria-label="${escapeHtml(screenshotLabel)}"
-          >
-            ${ctx.screenshotCapturing ? '<span class="mushi-spinner" aria-hidden="true"></span>' : '\uD83D\uDCF8'}
-            ${escapeHtml(screenshotLabel)}
-          </button>`
-            : ''}
-          ${ctx.screenshotAttached && ctx.allowScreenshotRemove
-            ? '<button type="button" class="mushi-attach-btn danger" data-action="remove-screenshot" aria-label="Remove screenshot">\u2715 Remove</button>'
-            : ''}
-          ${ctx.screenshotAttached
-            ? '<button type="button" class="mushi-attach-btn" data-action="annotate-screenshot" aria-label="Mark up screenshot">\u270F Mark up</button><div class="mushi-annotate-host" data-role="annotate-host"></div>'
-            : ''}
-          ${ctx.elementAvailable
-            ? `<button type="button" class="${elementClass}"
-            data-action="element"
-            ${ctx.elementCapturing ? 'disabled' : ''}
-            aria-label="${escapeHtml(elementLabel)}"
-          >
-            ${ctx.elementCapturing ? '<span class="mushi-spinner" aria-hidden="true"></span>' : '\uD83C\uDFAF'}
-            ${escapeHtml(elementLabel)}
-          </button>`
-            : ''}
-        </div>
-        ${screenshotReason}
-        ${ctx.screenshotAttached && ctx.screenshotPreview
-          ? `<figure class="mushi-screenshot-preview">
-              <img src="${escapeHtml(ctx.screenshotPreview)}" alt="${escapeHtml(t.step3.screenshotPreviewAlt)}" />
-              ${ctx.screenshotHint
-                ? `<figcaption class="mushi-screenshot-hint">\u26A0 ${escapeHtml(ctx.screenshotHint)}</figcaption>`
-                : ''}
-            </figure>`
-          : ''}
-        <div class="mushi-error" style="display:none" role="alert"></div>
-        ${ctx.identifiedUser
-          ? `<p class="mushi-identified-user" aria-label="Reporting as ${escapeHtml(ctx.identifiedUser.name ?? ctx.identifiedUser.email ?? '')}">\uD83D\uDC64 Reporting as <strong>${escapeHtml(ctx.identifiedUser.name ?? ctx.identifiedUser.email ?? 'you')}</strong></p>`
-          : ''}
-      </div>
-      <div class="mushi-footer">
-        <span class="mushi-footer-hint" aria-hidden="true">${escapeHtml(t.step3.submitHint.replace('{key}', submitShortcutKey(readPlatform())))}</span>
-        <button type="button" class="mushi-submit" data-action="submit"${ctx.submitting ? ' disabled' : ''}>
-          <span>${ctx.submitting ? t.widget.submitting : t.widget.submit}</span>
-          <span class="mushi-submit-arrow" aria-hidden="true">\u2192</span>
-        </button>
-      </div>
-    `;
-  }
-
-  /** Failure label for the success step's title, or null when the report is accepted / delivering. */
 function submitFailureLabel(ctx: WidgetRenderCtx): string | null {
-    const s = ctx.locale.flows.success;
-    switch (ctx.lastSubmitFailureKind) {
-      case 'rate_limited': return s.rateLimited;
-      case 'quota': return s.quotaBlocked;
-      case 'permanent': return s.permanentFailed;
-      case 'retrying': return s.retrying;
+  const s = ctx.locale.flows.success;
+  switch (ctx.lastSubmitFailureKind) {
+    case 'rate_limited': return s.rateLimited;
+    case 'quota': return s.quotaBlocked;
+    case 'permanent': return s.permanentFailed;
+    case 'retrying': return s.retrying;
+  }
+  return ctx.lastSubmitQueuedOffline ? s.queuedOffline : null;
+}
+
+function receipt(ctx: WidgetRenderCtx): string {
+  const s = ctx.locale.flows.success;
+  const kind = ctx.lastSubmitFailureKind;
+  if (submitFailureLabel(ctx)) {
+    const hint = kind === 'rate_limited' ? s.rateLimitedHint
+      : kind === 'quota' ? s.quotaBlockedHint
+      : kind === 'permanent' ? s.permanentFailedHint
+      : kind === 'retrying' ? s.retryingHint
+      : s.queuedHint;
+    return `<p class="mushi-note mushi-success-receipt mushi-warn" role="status">${esc(hint)}</p>`;
+  }
+  const sla = esc((ctx.config.responseSlaLabel ?? '').trim() || s.slaDefault);
+  if (!ctx.lastReportId) {
+    return `<div class="mushi-success-receipt" role="status"><p class="mushi-success-sla">${sla}</p><p class="mushi-note"><span class="mushi-spinner" aria-hidden="true"></span> ${esc(s.delivering)}</p></div>`;
+  }
+  const id = esc(ctx.lastReportId);
+  const dashboard = (ctx.config.dashboardUrl ?? '').replace(/\/$/, '');
+  return `<div class="mushi-success-receipt" role="status"><p class="mushi-success-sla">${sla}</p><p class="mushi-note">${esc(s.receipt)} <button type="button" class="mushi-success-receipt-id" data-action="copy-report-id" data-copy-id="${id}" aria-label="Copy report id ${id}">#${esc(ctx.lastReportId.slice(0, 8))}</button>${dashboard ? ` · <a class="mushi-link-btn" href="${esc(`${dashboard}/reports/${encodeURIComponent(ctx.lastReportId)}`)}" target="_blank" rel="noopener noreferrer">${esc(s.trackOnMushi)} ↗</a>` : ''}</p>${ctx.lastSubmitScreenshotDropped ? `<p class="mushi-note mushi-warn">${esc(s.screenshotDropped)}</p>` : ''}</div>`;
+}
+
+/** Email + push opt-ins (§4.1). Never pre-ticked; shown only for configured channels. */
+function renderOptIns(ctx: WidgetRenderCtx): string {
+  const p = ctx.locale.panel;
+  const out: string[] = [];
+  if (ctx.channels.email && ctx.callbacks.onReporterEmailOptIn) {
+    if (ctx.emailState === 'saved') out.push(`<p class="mushi-note" role="status">✉ ${esc(p.emailSaved)}</p>`);
+    else {
+      out.push(`<label class="mushi-check"><input type="checkbox" data-action="email-optin"${ctx.emailOptInOpen ? ' checked' : ''} /> ${esc(p.emailOptIn)}</label>`);
+      if (ctx.emailOptInOpen) {
+        out.push(`<div class="mushi-inline-form"><input type="email" class="mushi-input" data-role="optin-email" autocomplete="email" aria-label="${esc(p.emailLabel)}" placeholder="${esc(p.emailLabel)}" value="${esc(ctx.channels.emailPrefill)}" />${btn('save-email', esc(p.save), 'mushi-btn', ctx.emailState === 'saving' ? ' aria-busy="true"' : '')}</div>${ctx.emailState === 'error' ? `<p class="mushi-note mushi-error-inline" role="alert">${esc(ctx.rc.ui.sendFailed)}</p>` : ''}`);
+      }
     }
-    return ctx.lastSubmitQueuedOffline ? s.queuedOffline : null;
   }
-
-  /**
-   * Editorial success state: 朱印-style red stamp ring with the kanji
-   * 受 ("received") at its centre, a locale-aware timestamp, and the receipt.
-   * The title follows the outcome, so a rate-limited or queued send never
-   * reads "report received". There is no Back (it led into the submitted
-   * form); Done closes. The ring + label animations are defined in styles.ts
-   * so this stays pure markup and `prefers-reduced-motion` flips them to the
-   * final frame instantly.
-   */
-export function renderSuccessStep(ctx: WidgetRenderCtx): string {
-    const t = ctx.locale;
-    const s = t.flows.success;
-    const stamp = ctx.submittedAt ?? new Date();
-    const locale = ctx.config.locale === 'auto' ? undefined : ctx.config.locale;
-    const failure = submitFailureLabel(ctx);
-    // In-widget tracking needs a server id and the reporter inbox. With
-    // neither, the control is omitted rather than left dead; a host
-    // dashboardUrl still renders "Track on Mushi" inside the receipt.
-    const canTrack = !failure && ctx.lastReportId && ctx.callbacks.onReporterReportsRequest;
-
-    return `
-      ${renderHeader(ctx, { title: escapeHtml(failure ?? s.title), eyebrow: t.flows.eyebrows.receipt })}
-      <div class="mushi-body">
-        <div class="mushi-success">
-          <div class="mushi-success-stamp" aria-hidden="true">
-            <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"><circle cx="50" cy="50" r="44"/></svg>
-            <span class="mushi-success-stamp-label">\u53D7</span>
-          </div>
-          <time class="mushi-success-meta" datetime="${stamp.toISOString()}">${escapeHtml(formatReceiptTime(stamp, locale))}</time>
-          ${renderSuccessReceipt(ctx)}
-          ${ctx.rewardsState ? renderSuccessRewards(ctx) : ''}
-          ${ctx.config.betaMode?.enabled ? renderBetaSuccessFooter(ctx) : ''}
-          ${canTrack ? `<button type="button" class="mushi-link-btn mushi-success-my-reports" data-action="track-report">${escapeHtml(s.trackReport)}</button>` : ''}
-        </div>
-      </div>
-      <div class="mushi-footer">
-        <span></span>
-        <button type="button" class="mushi-submit" data-action="done"><span>${escapeHtml(s.done)}</span></button>
-      </div>
-    `;
+  if (ctx.channels.push && ctx.callbacks.onReporterPushSubscribe) {
+    out.push(ctx.pushState === 'on'
+      ? `<p class="mushi-note" role="status">🔔 ${esc(p.notifyOn)}</p>`
+      : btn('notify-me', `🔔 ${esc(p.notifyMe)}`, 'mushi-btn', ctx.pushState === 'asking' ? ' aria-busy="true"' : ''));
+    if (ctx.pushState === 'error') out.push(`<p class="mushi-note mushi-error-inline" role="alert">${esc(ctx.rc.ui.sendFailed)}</p>`);
   }
+  return out.length ? `<div class="mushi-optins">${out.join('')}</div>` : '';
+}
 
-  /**
-   * Two-way receipt block. Until the host's `onSubmit` resolves with a
-   * server-confirmed report id, we show a discreet "delivering..." pill so
-   * the user knows their submission is still in flight. Once we have the
-   * id, we surface a short monospaced id + a copy button + an optional
-   * "Track on Mushi" deep link to `dashboardUrl/reports/<id>` so the user
-   * can watch the status walk through queued -> classified -> fixed in
-   * real time (Peak-End rule: the last impression sticks). If we never
-   * get an id (offline retry queue), we say so explicitly rather than
-   * pretending everything is fine.
-   */
-export function renderSuccessReceipt(ctx: WidgetRenderCtx): string {
-    const s = ctx.locale.flows.success;
-    const failureKind = ctx.lastSubmitFailureKind;
-    if (submitFailureLabel(ctx)) {
-      const hint =
-        failureKind === 'rate_limited' ? s.rateLimitedHint
-        : failureKind === 'quota' ? s.quotaBlockedHint
-        : failureKind === 'permanent' ? s.permanentFailedHint
-        : failureKind === 'retrying' ? s.retryingHint
-        : s.queuedHint;
-      return `
-        <div class="mushi-success-receipt" role="status">
-          <div class="mushi-success-receipt-row mushi-success-receipt-warn">
-            <span class="mushi-success-receipt-hint">${escapeHtml(hint)}</span>
-          </div>
-        </div>
-      `;
+function successView(ctx: WidgetRenderCtx): ViewRegions {
+  const s = ctx.locale.flows.success;
+  const stamp = ctx.submittedAt ?? new Date();
+  const failure = submitFailureLabel(ctx);
+  // In-widget tracking needs a server id and the reporter inbox.
+  const canTrack = !failure && ctx.lastReportId && ctx.callbacks.onReporterReportsRequest;
+  return {
+    header: renderHeader(ctx, failure ?? s.title),
+    lead: '',
+    body: `<div class="mushi-success"><div class="mushi-success-stamp" aria-hidden="true"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44"/></svg><span class="mushi-success-stamp-label">受</span></div><time class="mushi-success-meta" datetime="${stamp.toISOString()}">${esc(formatReceiptTime(stamp, ctx.config.locale === 'auto' ? undefined : ctx.config.locale))}</time>${receipt(ctx)}${failure ? '' : renderOptIns(ctx)}${ctx.rewardsState ? renderSuccessRewards(ctx) : ''}</div>`,
+    footer: `${canTrack ? btn('track-report', esc(s.trackReport), 'mushi-btn') : '<span></span>'}${btn('done', esc(s.done), 'mushi-submit')}`,
+  };
+}
+
+/** Points earned + tier progress on the receipt. */
+function renderSuccessRewards(ctx: WidgetRenderCtx): string {
+  const { tier, nextTier, totalPoints, pointsForReport } = ctx.rewardsState!;
+  const projected = totalPoints + pointsForReport;
+  let pct = 100;
+  let next = '';
+  if (nextTier) {
+    const base = tier?.pointsThreshold ?? 0;
+    const ceiling = nextTier.pointsThreshold;
+    pct = ceiling > base ? Math.round(Math.min(1, (projected - base) / (ceiling - base)) * 100) : 100;
+    const remaining = Math.max(0, ceiling - projected);
+    next = remaining > 0 ? `${remaining.toLocaleString()} pts to ${esc(nextTier.displayName)}` : `🎉 ${esc(nextTier.displayName)}`;
+  }
+  return `<div class="mushi-success-rewards"><div class="mushi-success-pts-award">+${pointsForReport} pts</div>${nextTier ? `<div class="mushi-tier-bar-track" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="${esc(nextTier.displayName)}"><div class="mushi-tier-bar-fill" style="--mushi-tier-pct:${pct / 100}"></div></div><p class="mushi-note">${next}</p>` : ''}</div>`;
+}
+
+// ─── Your reports (§2.2) ──────────────────────────────────────────
+
+function statusPill(label: string, tone: string): string {
+  return `<span class="mushi-pill mushi-tone-${tone}">${esc(label)}</span>`;
+}
+
+function reportTitle(r: MushiReporterReport): string {
+  return r.title ?? r.summary ?? r.description ?? `#${r.id.slice(0, 8)}`;
+}
+
+/** Type label for a row: the reporter's own pick, never the internal category. */
+function typeLabel(ctx: WidgetRenderCtx, userCategory: string | null | undefined): string {
+  const id = (userCategory ?? '').toLowerCase();
+  if (!id || id === 'other') return '';
+  return chipLabel(ctx, id === 'feature_request' ? 'idea' : id);
+}
+
+function skeleton(label: string, rows = 3): string {
+  return `<div class="mushi-skeleton" role="status" aria-label="${esc(label)}">${'<span></span>'.repeat(rows)}</div>`;
+}
+
+/** Unread first, then newest activity. */
+export function orderReports(reports: MushiReporterReport[]): MushiReporterReport[] {
+  const at = (r: MushiReporterReport) => Date.parse(r.last_event_at ?? r.created_at) || 0;
+  return [...reports].sort((a, b) => Number((b.unread_count ?? 0) > 0) - Number((a.unread_count ?? 0) > 0) || at(b) - at(a));
+}
+
+function reportRow(ctx: WidgetRenderCtx, r: MushiReporterReport): string {
+  const st = reporterStatus(r, ctx.lang);
+  if (st.hidden) return '';
+  const unread = (r.unread_count ?? 0) > 0;
+  const meta = [typeLabel(ctx, r.user_category), r.page, st.othersNote].filter(Boolean).map((x) => esc(String(x))).join(' · ');
+  const news = st.key === 'waiting' || st.key === 'fixed_version'
+    ? st.label
+    : unread && r.last_event_preview ? r.last_event_preview : '';
+  const title = reportTitle(r);
+  return `<button type="button" class="mushi-report-row${unread ? ' unread' : ''}" data-report-id="${esc(r.id)}" aria-label="${esc(`${st.label}: ${title}`)}"><span class="mushi-row-top">${statusPill(st.label, st.tone)}<span class="mushi-row-title">${esc(title)}</span><span class="mushi-row-when">${esc(formatRelativeTime(r.last_event_at ?? r.created_at))}</span></span>${meta ? `<span class="mushi-row-meta">${meta}</span>` : ''}${news ? `<span class="mushi-row-news">${esc(news)}</span>` : ''}</button>`;
+}
+
+function reportsView(ctx: WidgetRenderCtx): ViewRegions {
+  const rc = ctx.rc;
+  const rows = orderReports(ctx.reporterReports).map((r) => reportRow(ctx, r)).join('');
+  const body = ctx.reporterError
+    ? `<p class="mushi-error-inline" role="alert">${esc(rc.ui.loadError)} ${btn('retry-list', esc(rc.ui.retry), 'mushi-link-btn')}</p>${rows}`
+    : rows || (ctx.listLoading ? skeleton(ctx.locale.flows.reports.loading) : `<p class="mushi-empty">${esc(rc.ui.empty)}</p>`);
+  return { header: renderHeader(ctx, ctx.locale.flows.reports.title, true), lead: '', body: `<div class="mushi-report-list">${body}</div>`, footer: '' };
+}
+
+// ─── Report detail: card, timeline, composer (§2.3) ──────────────
+
+interface Entry { kind: ReporterTimelineKind; at: string; text: string; who?: string; pending?: PendingReply }
+
+/** Merge the server timeline (or the comments, on older servers) with replies still in flight. */
+export function buildTimeline(ctx: WidgetRenderCtx, report: MushiReporterReport | undefined): Entry[] {
+  const rc = ctx.rc;
+  const out: Entry[] = [];
+  if (ctx.timeline) {
+    for (const e of ctx.timeline) {
+      out.push({
+        kind: e.kind,
+        at: e.at,
+        text: reporterTimelineText(e.kind, { text: e.text, version: e.version, closed_reason: e.closed_reason }, ctx.lang),
+        who: e.kind === 'comment' ? (e.author_name ?? rc.ui.developer) : e.kind === 'reporter_comment' ? rc.ui.you : undefined,
+      });
     }
-
-    if (!ctx.lastReportId) {
-      return `
-        <div class="mushi-success-receipt" role="status">
-          <div class="mushi-success-receipt-row">
-            <span class="mushi-success-receipt-spinner" aria-hidden="true"></span>
-            <span class="mushi-success-receipt-hint">${escapeHtml(s.delivering)}</span>
-          </div>
-          ${renderSlaLine(ctx)}
-        </div>
-      `;
+  } else {
+    if (report) out.push({ kind: 'received', at: report.created_at, text: rc.timeline.received });
+    for (const c of ctx.reporterComments) {
+      const mine = c.author_kind === 'reporter';
+      out.push({ kind: mine ? 'reporter_comment' : 'comment', at: c.created_at, text: c.body, who: mine ? rc.ui.you : (c.author_name ?? rc.ui.developer) });
     }
-
-    const idShort = `#${ctx.lastReportId.slice(0, 8)}`;
-    const dashboard = (ctx.config.dashboardUrl ?? '').replace(/\/$/, '');
-    const trackHref = dashboard ? `${dashboard}/reports/${encodeURIComponent(ctx.lastReportId)}` : '';
-    const screenshotDroppedNote = ctx.lastSubmitScreenshotDropped
-      ? `
-        <div class="mushi-success-receipt-row mushi-success-receipt-warn">
-          <span class="mushi-success-receipt-hint">${escapeHtml(s.screenshotDropped)}</span>
-        </div>
-      `
-      : '';
-
-    return `
-      <div class="mushi-success-receipt" role="status">
-        <div class="mushi-success-receipt-row">
-          <span class="mushi-success-receipt-label">${escapeHtml(s.receipt)}</span>
-          <button
-            type="button"
-            class="mushi-success-receipt-id"
-            data-action="copy-report-id"
-            data-copy-id="${escapeHtml(ctx.lastReportId)}"
-            title="Copy report id ${escapeHtml(ctx.lastReportId)}"
-            aria-label="Copy report id ${escapeHtml(ctx.lastReportId)}"
-          >${escapeHtml(idShort)}<span class="mushi-success-receipt-copy" aria-hidden="true">\u2398</span></button>
-        </div>
-        ${trackHref ? `
-          <a
-            class="mushi-success-receipt-track"
-            href="${escapeHtml(trackHref)}"
-            target="_blank"
-            rel="noopener noreferrer"
-          >${escapeHtml(s.trackOnMushi)} <span aria-hidden="true">\u2197</span></a>
-        ` : ''}
-        ${screenshotDroppedNote}
-        ${renderSlaLine(ctx)}
-      </div>
-    `;
   }
-export function renderSlaLine(ctx: WidgetRenderCtx): string {
-    const sla = (ctx.config.responseSlaLabel ?? '').trim();
-    if (sla) {
-      return `<div class="mushi-success-sla">${escapeHtml(sla)}</div>`;
-    }
-    return `<div class="mushi-success-sla mushi-success-sla-default">${escapeHtml(ctx.locale.flows.success.slaDefault)}</div>`;
+  out.sort((a, b) => (Date.parse(a.at) || 0) - (Date.parse(b.at) || 0));
+  for (const r of ctx.pendingReplies) out.push({ kind: 'reporter_comment', at: '', text: r.body, who: rc.ui.you, pending: r });
+  return out;
+}
+
+function entryHtml(ctx: WidgetRenderCtx, e: Entry): string {
+  const when = e.at ? `<time datetime="${esc(e.at)}">${esc(formatRelativeTime(e.at))}</time>` : '';
+  if (e.kind !== 'comment' && e.kind !== 'reporter_comment') {
+    return `<li class="mushi-event"><span>${esc(e.text)}</span>${when}</li>`;
   }
+  const mine = e.kind === 'reporter_comment';
+  const state = e.pending
+    ? e.pending.state === 'sending'
+      ? `<span class="mushi-bubble-state">${esc(ctx.rc.ui.sending)}</span>`
+      : `<span class="mushi-bubble-state mushi-error-inline">${esc(ctx.rc.ui.sendFailed)} · ${btn('retry-reply', esc(ctx.rc.ui.retry), 'mushi-link-btn', ` data-value="${e.pending.id}"`)}</span>`
+    : when;
+  return `<li class="mushi-bubble ${mine ? 'mine' : 'dev'}"><strong>${esc(e.who ?? '')}</strong><p>${esc(e.text)}</p>${state}</li>`;
+}
 
-  /**
-   * Reciprocity footer on the success step: closes the feedback loop by
-   * attributing where the report goes, sets a response expectation, and
-   * reinforces the "beta tester" identity (Peak-End Rule — the last thing
-   * the user sees shapes their entire impression of the interaction).
-   */
-export function renderBetaSuccessFooter(ctx: WidgetRenderCtx): string {
-    const beta = ctx.config.betaMode!;
-    const email = beta.contactEmail ? escapeHtml(beta.contactEmail) : null;
-    const appName = escapeHtml(beta.appName ?? 'the team');
-    return `
-      <div class="mushi-beta-success-footer" role="note" aria-label="Beta feedback acknowledgement">
-        ${email
-          ? `<div class="mushi-beta-success-line">\uD83D\uDCEC Sent to ${email}</div>`
-          : `<div class="mushi-beta-success-line">\uD83D\uDCEC Sent to ${appName}</div>`
-        }
-      </div>
-    `;
+function detailView(ctx: WidgetRenderCtx): ViewRegions {
+  const rc = ctx.rc;
+  const report = ctx.reporterReports.find((r) => r.id === ctx.selectedReportId);
+  // Opened via "Track it" before the list caught up → it's new.
+  const st = reporterStatus(report ?? { status: 'new' }, ctx.lang);
+  const meta = [report?.page, report?.app_version ? `v${report.app_version}` : '', report ? formatRelativeTime(report.created_at) : '']
+    .filter(Boolean).map((x) => esc(String(x))).join(' · ');
+  const lead = `<div class="mushi-thread-summary"><p class="mushi-card-status">${statusPill(st.label, st.tone)}</p><p class="mushi-note">${esc(st.detail)}${st.othersNote ? ` ${esc(st.othersNote)}.` : ''}</p><p class="mushi-summary-text">${esc(report ? (report.description ?? reportTitle(report)) : `#${(ctx.selectedReportId ?? '').slice(0, 8)}`)}</p>${report?.screenshot_thumb_url ? `<img class="mushi-card-thumb" src="${esc(report.screenshot_thumb_url)}" alt="" />` : ''}${meta ? `<p class="mushi-note">${meta}</p>` : ''}</div>`;
+
+  const entries = buildTimeline(ctx, report);
+  const hasDev = entries.some((e) => e.kind === 'comment');
+  let body: string;
+  if (ctx.threadLoading && entries.length <= 1 && !ctx.pendingReplies.length) {
+    body = skeleton(ctx.locale.flows.thread.loading);
+  } else {
+    body = `${ctx.threadError ? `<p class="mushi-error-inline" role="alert">${esc(rc.ui.loadError)} ${btn('retry-thread', esc(rc.ui.retry), 'mushi-link-btn')}</p>` : ''}<ol class="mushi-timeline">${entries.map((e) => entryHtml(ctx, e)).join('')}</ol>${!hasDev && !ctx.threadError && !ctx.threadLoading ? `<p class="mushi-empty">${esc(rc.ui.noReplies)}</p>` : ''}`;
   }
+  const busy = ctx.actionPending ? ' disabled aria-busy="true"' : '';
+  const verify = st.canVerify
+    ? `<div class="mushi-verify" role="group" aria-label="${esc(st.detail)}">${btn('reporter-confirms', esc(rc.ui.yes), 'mushi-btn', busy)}${btn('reporter-not-fixed', esc(rc.ui.notYet), 'mushi-btn', busy)}</div>`
+    : '';
+  return {
+    header: renderHeader(ctx, ctx.locale.panel.reportTitle, true),
+    lead,
+    body: `<div class="mushi-thread">${body}</div>${renderOptIns(ctx)}`,
+    footer: `${verify}${ctx.actionError ? `<p class="mushi-error-inline mushi-thread-action-error" role="alert">${esc(ctx.actionError)}</p>` : ''}<div class="mushi-thread-composer"><textarea class="mushi-input mushi-reply" data-role="reporter-reply" rows="1" maxlength="2000" placeholder="${esc(ctx.locale.flows.thread.replyPlaceholder)}" aria-label="${esc(ctx.locale.flows.thread.replyPlaceholder)}"></textarea>${btn('reporter-reply', '↑', 'mushi-submit mushi-send', ` aria-label="${esc(ctx.locale.panel.send)}"`)}</div>`,
+  };
+}
 
-  /** Compact rewards nudge rendered at the bottom of the category-step body. */
-export function renderRewardsNudge(ctx: WidgetRenderCtx): string {
-    const { tier, nextTier, totalPoints, pointsForReport } = ctx.rewardsState!;
-    const tierName = tier?.displayName ?? 'Free';
-    const tierSlug = tier?.slug ?? 'free';
-    const color = ctx.tierColor(tierSlug);
+// ─── Secondary views (overflow menu) ──────────────────────────────
 
-    let pct = 100;
-    let nextLabel = '';
-    if (nextTier) {
-      const base = tier?.pointsThreshold ?? 0;
-      const ceiling = nextTier.pointsThreshold;
-      pct = ceiling > base ? Math.round(Math.min(1, (totalPoints - base) / (ceiling - base)) * 100) : 100;
-      const remaining = Math.max(0, ceiling - totalPoints);
-      nextLabel = `${remaining.toLocaleString()} pts to ${escapeHtml(nextTier.displayName)}`;
-    }
+function assistantView(ctx: WidgetRenderCtx): ViewRegions {
+  const t = ctx.locale.assistant;
+  const greeting = ctx.callbacks.assistantGreeting || t.defaultGreeting;
+  const chips = (opts: string[]) => opts.length
+    ? `<div class="mushi-chips">${opts.map((s) => `<button type="button" class="mushi-chip mushi-chip-sm" data-action="assistant-suggest" data-value="${esc(s)}">${esc(s)}</button>`).join('')}</div>`
+    : '';
+  const report = (label: string, cls = 'mushi-link-btn') => btn('assistant-report', esc(label), cls);
+  const turns = ctx.assistantTurns.length === 0
+    ? `<p class="mushi-assistant-greeting">${esc(greeting)}</p>${chips(ctx.callbacks.assistantSuggestions ?? [])}`
+    : ctx.assistantTurns.map((turn) => `<div class="mushi-assistant-msg ${turn.role === 'user' ? 'mine' : 'dev'}">${esc(turn.text)}</div>${chips(turn.options ?? [])}${turn.offerReport ? report(t.fileReportCta, 'mushi-btn') : ''}`).join('');
+  const thinking = ctx.assistantSending ? `<div class="mushi-assistant-msg dev" role="status" aria-live="polite">${esc(t.thinking)}</div>` : '';
+  const error = ctx.assistantError ? `<p class="mushi-error-inline" role="alert">${esc(ctx.assistantError)} ${report(t.fileReportCta)}</p>` : '';
+  const stuck = ctx.assistantTurns.length && !ctx.assistantSending && !ctx.assistantError ? report(t.stillStuckCta) : '';
+  return {
+    header: renderHeader(ctx, ctx.callbacks.assistantLabel || t.defaultLabel, true),
+    lead: '',
+    body: `<div class="mushi-assistant-log">${turns}${thinking}${error}${stuck}</div>`,
+    footer: `<form class="mushi-thread-composer" data-action="assistant-send"><textarea class="mushi-input mushi-reply mushi-assistant-input" rows="1" placeholder="${esc(t.inputPlaceholder)}" aria-label="${esc(t.inputPlaceholder)}"${ctx.assistantSending ? ' disabled' : ''}></textarea><button type="submit" class="mushi-submit mushi-send" aria-label="${esc(t.sendAriaLabel)}"${ctx.assistantSending ? ' disabled' : ''}>↑</button></form>`,
+  };
+}
 
-    return `
-      <div class="mushi-rewards-nudge" aria-label="Rewards progress">
-        <div class="mushi-rewards-row">
-          <span class="mushi-tier-pip" style="background:${color}" aria-hidden="true"></span>
-          <span class="mushi-rewards-tier-name">${escapeHtml(tierName)}</span>
-          <span class="mushi-rewards-pts-count">${totalPoints.toLocaleString()} pts</span>
-          <span class="mushi-rewards-pts-earn">+${pointsForReport} pts for a report</span>
-        </div>
-        ${nextTier ? `
-          <div class="mushi-tier-bar-track" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Progress to ${escapeHtml(nextTier.displayName)}">
-            <div class="mushi-tier-bar-fill" style="--mushi-tier-pct:${pct / 100}"></div>
-          </div>
-          <div class="mushi-rewards-next-label">${nextLabel}</div>
-        ` : ''}
-      </div>
-    `;
+function roadmapView(ctx: WidgetRenderCtx): ViewRegions {
+  const f = ctx.locale.flows.roadmap;
+  const rows = ctx.featureBoard.map((ticket) => {
+    const id = String(ticket.id ?? '');
+    const voted = Boolean(ticket.my_vote);
+    const status = ticket.shipped_at ? f.shipped : String(ticket.status_label ?? ticket.status ?? 'open');
+    return `<div class="mushi-report-row mushi-roadmap-row"><span class="mushi-row-top"><span class="mushi-row-title">${esc(String(ticket.subject ?? f.untitled))}</span></span><span class="mushi-row-meta">${esc(status)} · ${esc(f.voteCount.replace('{n}', String(Number(ticket.vote_count ?? 0))))}</span>${ctx.callbacks.onFeatureBoardVote ? `<button type="button" class="mushi-btn" data-vote-id="${esc(id)}" aria-pressed="${voted}">${esc(voted ? f.voted : f.vote)}</button>` : ''}</div>`;
+  }).join('');
+  return {
+    header: renderHeader(ctx, f.title, true),
+    lead: '',
+    body: `${ctx.reporterError ? `<p class="mushi-error-inline" role="alert">${esc(ctx.reporterError)}</p>` : ''}${rows || (ctx.listLoading ? skeleton(f.loading) : `<p class="mushi-empty">${esc(f.empty)}</p>`)}`,
+    footer: '',
+  };
+}
+
+function leaderboardView(ctx: WidgetRenderCtx): ViewRegions {
+  const f = ctx.locale.flows.leaderboard;
+  const isGlobal = ctx.globalLeaderboard !== null || ctx.globalLeaderboardLoading;
+  const entries: Array<Partial<MushiLeaderboardEntry> & { display_name: string | null; points_30d: number; total_points: number }> = isGlobal
+    ? (ctx.globalLeaderboard ?? [])
+    : (ctx.leaderboardEntries ?? []);
+  const loading = isGlobal ? ctx.globalLeaderboardLoading : ctx.leaderboardLoading;
+  const rows = entries.map((e, i) => {
+    const rank = e.rank || i + 1;
+    const me = ctx.testerReputation && e.tester_id === ctx.testerReputation.tester_id;
+    return `<li class="mushi-lb-row${me ? ' me' : ''}"><span>#${rank}</span><span class="mushi-row-title">${esc(e.public_handle ?? e.display_name ?? f.anon)}</span><span>${(e.points_30d ?? e.total_points).toLocaleString()} pts</span></li>`;
+  }).join('');
+  const myRank = ctx.testerReputation?.rank;
+  return {
+    header: renderHeader(ctx, f.title, true),
+    lead: '',
+    body: `${loading ? skeleton(f.loading) : ''}${!loading && !entries.length ? `<p class="mushi-empty">${esc(f.empty)}</p>` : ''}<ol class="mushi-lb">${rows}</ol>${myRank ? `<p class="mushi-note">${esc(f.myRank.replace('{rank}', String(myRank)))}</p>` : !ctx.testerJwt ? btn('open-account', esc(f.signInPrompt), 'mushi-link-btn') : ''}<p class="mushi-note">${esc(f.footer)}</p>`,
+    footer: '',
+  };
+}
+
+function accountView(ctx: WidgetRenderCtx): ViewRegions {
+  const f = ctx.locale.flows.account;
+  const tester = ctx.testerInfo;
+  if (tester) {
+    const handle = tester.public_handle ?? tester.display_name ?? ctx.locale.flows.leaderboard.anon;
+    const rep = ctx.testerReputation;
+    const rank = rep ? f.rankSummary.replace('{rank}', String(rep.rank ?? '—')).replace('{points}', (rep.points_30d ?? 0).toLocaleString()) : '';
+    return {
+      header: renderHeader(ctx, f.title, true),
+      lead: '',
+      body: `<div class="mushi-thread-summary"><p class="mushi-summary-text">${esc(handle)}</p>${rank ? `<p class="mushi-note">${esc(rank)}</p>` : ''}</div>${btn('open-cross-app-reports', esc(f.crossAppReports), 'mushi-menu-item')}${btn('open-global-leaderboard', esc(f.viewLeaderboard), 'mushi-menu-item')}${btn('sign-out-tester', esc(f.signOut), 'mushi-link-btn')}`,
+      footer: '',
+    };
   }
-
-  /** Points earned + tier progress shown on the success step. */
-export function renderSuccessRewards(ctx: WidgetRenderCtx): string {
-    const { tier, nextTier, totalPoints, pointsForReport } = ctx.rewardsState!;
-    const projected = totalPoints + pointsForReport;
-
-    let pctAfter = 100;
-    let nextLabel = '';
-    if (nextTier) {
-      const base = tier?.pointsThreshold ?? 0;
-      const ceiling = nextTier.pointsThreshold;
-      pctAfter = ceiling > base ? Math.round(Math.min(1, (projected - base) / (ceiling - base)) * 100) : 100;
-      const remaining = Math.max(0, ceiling - projected);
-      nextLabel = remaining > 0
-        ? `${remaining.toLocaleString()} pts to ${escapeHtml(nextTier.displayName)}`
-        : `\uD83C\uDF89 ${escapeHtml(nextTier.displayName)} reached!`;
-    }
-
-    return `
-      <div class="mushi-success-rewards">
-        <div class="mushi-success-pts-award">+${pointsForReport} pts</div>
-        ${nextTier ? `
-          <div class="mushi-tier-bar-track success-bar" role="progressbar" aria-valuenow="${pctAfter}" aria-valuemin="0" aria-valuemax="100" aria-label="Progress to ${escapeHtml(nextTier.displayName)}">
-            <div class="mushi-tier-bar-fill" style="--mushi-tier-pct:${pctAfter / 100}"></div>
-          </div>
-          <div class="mushi-rewards-next-label">${nextLabel}</div>
-        ` : ''}
-      </div>
-    `;
+  if (ctx.magicLinkSent) {
+    return {
+      header: renderHeader(ctx, f.checkEmailTitle, true),
+      lead: '',
+      body: `<p class="mushi-note">${esc(f.magicLinkSent.replace('{email}', ctx.magicLinkEmail))}</p>${btn('resend-magic-link', esc(f.resendEmail), 'mushi-link-btn')}${ctx.magicLinkError ? `<p class="mushi-error-inline" role="alert">${esc(ctx.magicLinkError)}</p>` : ''}`,
+      footer: '',
+    };
   }
+  return {
+    header: renderHeader(ctx, f.joinTitle, true),
+    lead: '',
+    body: `<p class="mushi-note">${esc(f.signInPrompt)}</p><input type="email" class="mushi-input" data-role="magic-link-email" aria-label="${esc(f.emailLabel)}" placeholder="${esc(f.emailPlaceholder)}" autocomplete="email" value="${esc(ctx.magicLinkEmail)}" />${ctx.magicLinkError ? `<p class="mushi-error-inline" role="alert">${esc(ctx.magicLinkError)}</p>` : ''}`,
+    footer: `<span></span>${btn('send-magic-link', esc(ctx.magicLinkSending ? f.sending : f.sendLink), 'mushi-submit', ctx.magicLinkSending ? ' aria-busy="true"' : '')}`,
+  };
+}
+
+function crossAppView(ctx: WidgetRenderCtx): ViewRegions {
+  const f = ctx.locale.flows.crossApp;
+  const reports = ctx.crossAppReports ?? [];
+  const groups = new Map<string, { name: string; slug: string | null; domain: string | null; reports: MushiCrossAppReport[] }>();
+  for (const r of reports) {
+    const key = r.project_id ?? 'unknown';
+    if (!groups.has(key)) groups.set(key, { name: r.app_name ?? f.unknownApp, slug: r.app_slug ?? null, domain: r.app_domain ?? null, reports: [] });
+    groups.get(key)!.reports.push(r);
+  }
+  const html = [...groups.entries()].map(([projectId, g]) => `<section class="mushi-xapp-group"><h3 class="mushi-xapp-app-name">${renderAppIconHtml({ projectId, appName: g.name, appSlug: g.slug, appDomain: g.domain })} ${esc(g.name)}</h3>${g.reports.map((r) => {
+    const st = reporterStatus(r, ctx.lang);
+    // The internal category never reaches a reporter: untitled rows show their short id.
+    return `<div class="mushi-report-row"><span class="mushi-row-top">${statusPill(st.label, st.tone)}<span class="mushi-row-title">${esc(r.title ?? `#${r.short_id ?? r.id.slice(0, 8)}`)}</span><span class="mushi-row-when">${esc(formatRelativeTime(r.created_at))}</span></span></div>`;
+  }).join('')}</section>`).join('');
+  return {
+    header: renderHeader(ctx, f.title, true),
+    lead: '',
+    body: `${ctx.crossAppLoading ? skeleton(f.loading) : ''}${!ctx.crossAppLoading && !reports.length ? `<p class="mushi-empty">${esc(f.empty)}</p>` : ''}${html}`,
+    footer: '',
+  };
+}
+
+/** Reporter copy for a locale code; exported so the class resolves it once per locale change. */
+export function resolveReporterCopy(lang: string): ReporterCopy {
+  return reporterCopy(lang);
+}

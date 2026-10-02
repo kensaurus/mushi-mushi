@@ -144,6 +144,41 @@ export function getWidgetThemeVars(
   };
 }
 
+/**
+ * A host-supplied colour (config, `--mushi-accent`, `accent-color`, `<meta
+ * name="theme-color">`) that is safe to place inside the widget's <style>:
+ * plain colour syntax only (no `;{}<>:` or quotes), and one the browser
+ * parses as a colour when `CSS.supports` exists. Anything else → ''.
+ */
+export function safeCssColor(value: string): string {
+  const v = value.trim();
+  if (!v || v.length > 64 || !/^[#\w\s(),.%/+-]+$/.test(v)) return '';
+  if (typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && !CSS.supports('color', v)) return '';
+  return v;
+}
+
+function luminance([r, g, b]: [number, number, number]): number {
+  const lin = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+/**
+ * WCAG contrast of `rgb` against `against` (default: whichever of black or
+ * white reads better on it) — `ink` is that better text colour for an accent fill.
+ */
+export function contrastingInk(
+  rgb: [number, number, number],
+  against?: [number, number, number],
+): { ink: string; ratio: number } {
+  const l = luminance(rgb);
+  const ratio = (x: number) => (Math.max(l, x) + 0.05) / (Math.min(l, x) + 0.05);
+  if (against) return { ink: '', ratio: ratio(luminance(against)) };
+  return ratio(1) >= ratio(0) ? { ink: 'white', ratio: ratio(1) } : { ink: 'black', ratio: ratio(0) };
+}
+
 /** Preview subset for admin SdkInstallCard — same palette as the live widget. */
 export function getWidgetPreviewTokens(theme: 'light' | 'dark') {
   const v = getWidgetThemeVars(theme);
