@@ -75,9 +75,13 @@ export function FilterChipCell({
           aria-hidden
         />
       ) : null}
+      {/* framer-motion makes a `whileTap` element focusable (tabIndex 0), so
+          every chip took two Tab presses: this div, then the chip's button.
+          The button is the control; the wrapper only animates the press. */}
       <motion.div
         className="relative"
         whileTap={reduceMotion ? undefined : { scale: microTapScale }}
+        tabIndex={-1}
       >
         {children}
       </motion.div>
