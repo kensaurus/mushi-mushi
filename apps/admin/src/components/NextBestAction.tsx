@@ -19,8 +19,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from './ProjectSwitcher'
 import { useAdminMode } from '../lib/mode'
 import { shouldShowQuickstartMegaCta } from '../lib/chromePosture'
-import { useToast } from '../lib/toast'
-import { apiFetch } from '../lib/supabase'
+import { useSendTestReport } from '../lib/useSendTestReport'
 import { CHIP_TONE } from '../lib/chipTone'
 import { Btn, ResultChip } from './ui'
 
@@ -69,7 +68,7 @@ export function NextBestAction() {
   const postureHasStatusBanner = usePostureHasStatusBanner()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
-  const toast = useToast()
+  const sendTestReport = useSendTestReport()
   const [testState, setTestState] = useState<'idle' | 'running' | 'success' | 'error'>('idle')
 
   // Compute the action even when we're going to bail — its identity drives
@@ -130,15 +129,8 @@ export function NextBestAction() {
     const projectId = setup.activeProject?.project_id
     if (!projectId) return
     setTestState('running')
-    const res = await apiFetch(`/v1/admin/projects/${projectId}/test-report`, { method: 'POST' })
-    if (res.ok) {
-      setTestState('success')
-      toast.success('Test report queued', 'Watch it land in Reports within a few seconds.')
-      setup.reload()
-    } else {
-      setTestState('error')
-      toast.error('Test report failed', res.error?.message ?? 'Check project keys and try again.')
-    }
+    const res = await sendTestReport(projectId)
+    setTestState(res.ok ? 'success' : 'error')
   }
 
   return (
