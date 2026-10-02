@@ -19,6 +19,7 @@
 
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
 import { STAMP_VISUAL, type StageStamp } from '../../lib/pdcaStamp'
+import { ACT_BLOCKER_COPY, ACT_BLOCKER_LINK_LABEL, ACT_BLOCKER_STAMP, actBlocker } from '../../lib/pdcaAct'
 import { ActionPill } from './ReportSurface'
 import type { DispatchState } from '../../lib/dispatchFix'
 import type { ReportDetail, ReportFixAttempt } from './types'
@@ -200,20 +201,24 @@ function buildStripReceipts(
   })()
   const check: StageReceipt = { id: 'check', stamp: checkStamp, proof: checkProof }
 
-  // ACT — report is fixed AND a PR was merged.
+  // ACT — report is fixed AND a PR was merged. A closed PR, red CI or an
+  // agent review flag blocks the loop instead of "Awaiting merge".
+  const blocker = actBlocker(fix)
   let actStamp: StageStamp = 'idle'
   if (status === 'fixed') actStamp = 'done'
   else if (fixStatus === 'failed' || status === 'dismissed') actStamp = 'failed'
+  else if (blocker) actStamp = ACT_BLOCKER_STAMP[blocker]
   else if (fix?.pr_url || ciConclusion === 'success') actStamp = 'pending'
   const actProof = (() => {
     if (status === 'fixed') return 'Loop closed — report marked fixed'
     if (status === 'dismissed') return 'Loop closed — report dismissed (no fix)'
-    if (actStamp === 'pending') return 'Awaiting merge / mark-as-fixed'
     if (fixStatus === 'failed') return `Loop blocked — ${fix?.error ?? 'fix attempt failed'}`
+    if (blocker) return ACT_BLOCKER_COPY[blocker]
+    if (actStamp === 'pending') return 'Awaiting merge / mark-as-fixed'
     return 'Not yet — needs fix + check first'
   })()
-  const actLink = fix?.pr_url && actStamp === 'pending'
-    ? { href: fix.pr_url, label: 'Review & merge' }
+  const actLink = fix?.pr_url && (actStamp === 'pending' || blocker)
+    ? { href: fix.pr_url, label: blocker ? ACT_BLOCKER_LINK_LABEL[blocker] : 'Review & merge' }
     : undefined
   const act: StageReceipt = { id: 'act', stamp: actStamp, proof: actProof, link: actLink }
 

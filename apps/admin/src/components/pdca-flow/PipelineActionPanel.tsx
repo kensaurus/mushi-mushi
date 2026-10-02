@@ -11,6 +11,7 @@ import { useCallback, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { usePdcaFlow } from './PdcaFlowContext'
+import { describeJudgeRun, type JudgeRunResponse } from '../../lib/judgeRun'
 
 interface PipelineActionPanelProps {
   /** Optional override for the judge-run endpoint. */
@@ -27,9 +28,12 @@ export function PipelineActionPanel({
   const runJudge = useCallback(async () => {
     setJudgeBusy(true)
     try {
-      const res = await apiFetch(judgeRunEndpoint, { method: 'POST' })
+      const res = await apiFetch<JudgeRunResponse>(judgeRunEndpoint, { method: 'POST' })
       if (res.ok) {
-        toast.success('Judge run dispatched', 'Scores will refresh in a moment.')
+        // Nothing eligible is not a success: say so instead of "dispatched".
+        const outcome = describeJudgeRun(res.data)
+        if (outcome.kind === 'nothing') toast.info(outcome.title, outcome.description)
+        else toast.success(outcome.title, 'Scores will refresh in a moment.')
       } else {
         toast.error('Judge run failed', res.error?.message ?? 'Please try again.')
       }

@@ -58,6 +58,8 @@ export interface ReportFixAttempt {
    *  Only populated when status = 'failed'. */
   failure_category: FixAttemptFailureCategory | null
   error: string | null
+  /** Set once the PR landed (webhook, console merge, or ci-sync poll). */
+  merged_at?: string | null
   started_at: string | null
   completed_at: string | null
   created_at: string
@@ -156,6 +158,8 @@ export interface ReportJudgeEval {
 export interface ReportDetail {
   id: string
   project_id: string
+  /** projects.name, joined server-side for the header chip. */
+  project_name?: string | null
   description: string
   user_category: string
   user_intent: string | null
@@ -168,6 +172,12 @@ export interface ReportDetail {
   stage1_classification: Record<string, unknown> | null
   stage1_model: string | null
   stage1_latency_ms: number | null
+  /** Model that wrote `stage2_analysis`; null when Stage 2 never ran. */
+  stage2_model?: string | null
+  /** Stage-2 object while it is still streaming; null once the final row lands. */
+  stage2_partial?: Record<string, unknown> | null
+  /** Column copy of the Stage-2 reproduction steps. */
+  reproduction_steps?: unknown
   category: string
   severity: string | null
   summary: string | null

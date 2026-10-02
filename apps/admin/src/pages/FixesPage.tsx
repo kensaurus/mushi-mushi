@@ -34,6 +34,7 @@ import { InflightDispatches } from '../components/fixes/InflightDispatches'
 import { FixesTable } from '../components/fixes/FixesTable'
 import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
+import { isFixCountedFailed } from '../lib/pdcaAct'
 import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/types'
 import { FixesStatusBanner } from '../components/fixes/FixesStatusBanner'
 import { FixesPipelineGuide } from '../components/fixes/FixesPipelineGuide'
@@ -98,7 +99,9 @@ function bucketize(fix: FixAttempt): StatusBucket {
   // approval) needs the same "look at me" treatment as failed — the old
   // bucketing dropped them into 'all' where they were invisible
   // (2026-08-16 audit P1-4).
-  if (status === 'failed' || status?.startsWith('skipped')) return 'failed'
+  // A PR that went red on CI or closed unmerged counts as failed too, so the
+  // filter and the header agree with the card's Check = Failed (2026-10-02).
+  if (isFixCountedFailed(fix)) return 'failed'
   if (isFixMerged(fix)) return 'merged'
   // Open PRs (including CI-green) stay in pr_open — "Shipped" is merged-only.
   if (fix.pr_url) return 'pr_open'
@@ -154,6 +157,7 @@ export function FixesPage() {
   const [dispatches, setDispatches] = useState<DispatchJob[]>([])
   const [summary, setSummary] = useState<FixSummary | null>(null)
   const [timelines, setTimelines] = useState<Record<string, FixTimelineEvent[]>>({})
+  const [baseBranches, setBaseBranches] = useState<Record<string, string | null>>({})
   const [inventoryActions, setInventoryActions] = useState<Record<string, InventoryActionNode | null>>({})
   const [loading, setLoading] = useState(true)
   const [isValidating, setIsValidating] = useState(true)
@@ -260,11 +264,13 @@ export function FixesPage() {
   useEffect(() => {
     if (!expanded) return
     let cancelled = false
-    apiFetch<{ events: FixTimelineEvent[] }>(`/v1/admin/fixes/${expanded}/timeline`)
+    apiFetch<{ events: FixTimelineEvent[]; base_branch?: string | null }>(`/v1/admin/fixes/${expanded}/timeline`)
       .then((res) => {
         if (cancelled) return
         if (res.ok && res.data) {
-          setTimelines((prev) => ({ ...prev, [expanded]: res.data!.events }))
+          const data = res.data
+          setTimelines((prev) => ({ ...prev, [expanded]: data.events }))
+          setBaseBranches((prev) => ({ ...prev, [expanded]: data.base_branch ?? null }))
         }
       })
       .catch(() => {
@@ -592,10 +598,12 @@ export function FixesPage() {
       'Which fixes are waiting on a human review?',
     ],
     actions: [
-      ...(bucketCounts.failed > 0
+      // Retry re-dispatches status=failed attempts only (failedFixes), so the
+      // label counts those, not the wider "Failed / skipped" bucket.
+      ...(failedFixes.length > 0
         ? [{
             id: 'retry-all-failed',
-            label: `Retry all ${pluralizeWithCount(bucketCounts.failed, 'failed fix', 'failed fixes')}`,
+            label: `Retry all ${pluralizeWithCount(failedFixes.length, 'failed fix', 'failed fixes')}`,
             hint: 'Re-dispatches every failed fix in the current view',
             run: () => { void retryAllFailed() },
           }]
@@ -864,6 +872,7 @@ export function FixesPage() {
                 fixes={visibleFixes}
                 expandedId={expanded}
                 timelines={timelines}
+                baseBranches={baseBranches}
                 traceUrlFor={(traceId) => platform.traceUrl(traceId)}
                 inFlightReportIds={inFlightReportIds}
                 inventoryActions={inventoryActions}

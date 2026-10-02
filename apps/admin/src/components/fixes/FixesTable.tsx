@@ -27,6 +27,8 @@ interface Props {
   fixes: FixAttempt[]
   expandedId: string | null
   timelines: Record<string, FixTimelineEvent[]>
+  /** Per-fix `base_branch` from the timeline endpoint. */
+  baseBranches?: Record<string, string | null>
   traceUrlFor: (traceId: string | null | undefined) => string | null
   inFlightReportIds: Set<string>
   inventoryActions: Record<string, InventoryActionNodeLike | null | undefined>
@@ -48,6 +50,7 @@ export function FixesTable({
   fixes,
   expandedId,
   timelines,
+  baseBranches,
   traceUrlFor,
   inFlightReportIds,
   inventoryActions,
@@ -147,6 +150,7 @@ export function FixesTable({
                         <FixDetailPanel
                           fix={fix}
                           timeline={timelines[fix.id]}
+                          baseBranch={baseBranches?.[fix.id]}
                           traceUrl={traceUrlFor(fix.langfuse_trace_id)}
                           onRetry={() => Promise.resolve(onRetry(fix.report_id))}
                           onRefreshed={onRefreshed}
