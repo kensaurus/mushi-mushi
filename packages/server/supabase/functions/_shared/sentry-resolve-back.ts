@@ -15,7 +15,9 @@
  *
  * Failures are never silent: each outcome is a `fix_events` row on the fix
  * attempt (the report timeline's fix lane), and a failed resolve logs at
- * error. `resolved_at` is stamped only after Sentry answered 2xx.
+ * error. `resolved_at` is stamped only after Sentry answered 2xx. Event rows
+ * carry a dedupe key per (fix attempt, Sentry issue, outcome), so a webhook
+ * redelivery that re-runs finalize cannot stack duplicate rows.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
@@ -156,7 +158,7 @@ async function recordFixEvent(
     status: 'ok' | 'fail';
     label: string;
     detail: string;
-    dedupeKey: string | null;
+    dedupeKey: string;
   },
 ): Promise<void> {
   const { error } = await db.from('fix_events').insert({
@@ -169,7 +171,8 @@ async function recordFixEvent(
     at: new Date().toISOString(),
     dedupe_key: row.dedupeKey,
   });
-  // 23505 = this success was already recorded by an earlier finalize.
+  // 23505 = this outcome was already recorded for this attempt and issue
+  // (redelivered webhook / repeated finalize). Every attempt still logs.
   if (error && error.code !== '23505') {
     log.error('fix_events insert failed for Sentry resolve-back', {
       fixAttemptId: row.fixAttemptId,
@@ -215,7 +218,7 @@ export async function resolveLinkedSentryIssues(
         status: 'fail',
         label: `Sentry issue ${link.external_id} not resolved`,
         detail,
-        dedupeKey: null,
+        dedupeKey: `sentry_resolve_fail:${link.external_id}`,
       });
     }
     return {
@@ -265,7 +268,7 @@ export async function resolveLinkedSentryIssues(
         status: 'fail',
         label: `Sentry issue ${link.external_id} not resolved`,
         detail: `${message}. The token needs event:write; resolve it in Sentry by hand.`,
-        dedupeKey: null,
+        dedupeKey: `sentry_resolve_fail:${link.external_id}`,
       });
       result.failed.push({ issueId: link.external_id, error: message });
     }
