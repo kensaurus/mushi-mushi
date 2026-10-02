@@ -1,5 +1,11 @@
 # @mushi-mushi/plugin-sdk
 
+## 0.9.0
+
+### Minor Changes
+
+- f48d15b: Add the `report.reporter_replied` event: the person who filed a report answered in its thread. `data.comment.body` is their text, which comes from a public widget, so treat it as untrusted input.
+
 ## 0.8.1
 
 ### Patch Changes
