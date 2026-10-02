@@ -183,6 +183,7 @@ const GATE_LABELS: Record<string, string> = {
   dead_handler: 'Dead Handler (G1)',
   mock_leak: 'Mock Leak (G2)',
   status_claim: 'Status Claim (G5)',
+  radar: 'Mushi setup checks',
 }
 
 function GateRunsTable({ runs }: { runs: AuditGateRun[] }) {
