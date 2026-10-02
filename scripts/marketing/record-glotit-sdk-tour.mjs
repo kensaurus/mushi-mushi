@@ -111,31 +111,31 @@ await pause(page, 3800)
 step('2/7  Click Report bug edge tab…')
 const trigger = await getCenter(page, 'getTriggerCenter')
 if (await clickCenter(page, trigger)) {
-  await waitForStep(page, 'category')
+  await waitForStep(page, 'report')
 } else {
   warn('  Could not locate edge tab — falling back to recorder API')
   await callRecorder(page, 'clickTrigger')
-  await waitForStep(page, 'category')
+  await waitForStep(page, 'report')
 }
 await pause(page, 2400)
 
-step('3/7  Choose Bug category…')
+step('3/7  Pick the Bug type chip…')
 const bugBtn = await getCenter(page, 'getCategoryCenter', 'bug')
 if (await clickCenter(page, bugBtn)) {
-  await waitForStep(page, 'intent')
+  await waitForStep(page, 'report')
 } else {
   await callRecorder(page, 'selectCategory', 'bug')
-  await waitForStep(page, 'intent')
+  await waitForStep(page, 'report')
 }
 await pause(page, 2000)
 
-step('4/7  Choose intent…')
+step('4/7  Pick a sub-chip…')
 const intentBtn = await getCenter(page, 'getIntentCenter', 'Unresponsive')
 if (await clickCenter(page, intentBtn)) {
-  await waitForStep(page, 'details')
+  await waitForStep(page, 'report')
 } else {
   await callRecorder(page, 'selectIntent', 'Unresponsive')
-  await waitForStep(page, 'details')
+  await waitForStep(page, 'report')
 }
 await pause(page, 1800)
 

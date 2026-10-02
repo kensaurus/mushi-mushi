@@ -82,7 +82,7 @@ Types live on `MushiConfig` in `@mushi-mushi/core`.
 ## Screenshot preview & consent (1.19+)
 
 When screenshot capture is enabled (`capture.screenshot: 'on-report'` or
-`'auto'`), the details step shows a **visible preview** of the image that will
+`'auto'`), the report screen shows a **visible preview** of the image that will
 be attached — not just a "Screenshot attached ✓" label. Reporters can **Remove**
 the screenshot before submit and optionally read a **privacy caption** beneath
 the preview.
