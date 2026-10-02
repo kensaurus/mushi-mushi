@@ -764,6 +764,8 @@ export async function confirmVoice(db: SupabaseClient, input: VoiceConfirmInput)
     requestedBy: UUID_RE.test(input.actor) ? input.actor : null,
     skipMembershipCheck: true,
     metadata: { source: 'voice', voice_session_id: row.id, actor: input.actor.slice(0, 200) },
+    // The speaker confirmed the dispatch.
+    trigger: 'manual',
   })
 
   if (!dispatch.ok) {

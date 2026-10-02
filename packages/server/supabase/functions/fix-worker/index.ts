@@ -52,7 +52,7 @@ import { generateObject, NoObjectGeneratedError } from 'npm:ai@4';
 import { createOpenAI } from 'npm:@ai-sdk/openai@1';
 import { z } from 'npm:zod@3';
 import { getServiceClient } from '../_shared/db.ts';
-import { withSentry, tagLangfuseTrace } from '../_shared/sentry.ts';
+import { reportError, withSentry, tagLangfuseTrace } from '../_shared/sentry.ts';
 import { safeErrorResponse } from '../_shared/safe-error.ts';
 import { resolveLlmKey } from '../_shared/byok.ts';
 import { withAnthropicOrOpenAi, LlmFailoverError } from '../_shared/llm-failover.ts';
@@ -99,7 +99,8 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { FIX_EFFORT, FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts';
 import { claudeGenerateObject } from '../_shared/claude-messages.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
-import { checkAutofixBudget } from '../_shared/autofix-budget.ts';
+import { budgetSnapshot, checkAutofixBudget, dispatchTrigger, isSiblingDispatch } from '../_shared/autofix-budget.ts';
+import { logLlmInvocation } from '../_shared/telemetry.ts';
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
 import { notifyTeamFixEvent } from '../_shared/team-notify.ts';
 import { notifyReportStatusTransition } from '../_shared/report-status-notify.ts';
@@ -388,12 +389,33 @@ Deno.serve(
         return await blockFixAttempt(db, trace, dispatch, fixAttemptId, featureBlock, { files_changed: [] });
       }
 
+      // The caps bound what Mushi spends on its own. A manual dispatch (console,
+      // CLI, MCP, Slack, voice, Linear delegation) proceeds past them, and the
+      // 30-day spend is stamped on the dispatch row so the timeline shows it.
+      // A failed budget read throws into the catch below (attempt + job fail
+      // with the reason) instead of being read as "$0 spent".
       const budget = await checkAutofixBudget(db, dispatch.project_id, {
         autofix_max_spend_usd: (settings?.autofix_max_spend_usd as number | null) ?? null,
         autofix_max_dispatches_per_day: (settings?.autofix_max_dispatches_per_day as number | null) ?? null,
         autofix_approval_cost_threshold_usd:
           (settings?.autofix_approval_cost_threshold_usd as number | null) ?? null,
-      }, { severity: report.severity as string | null, estimatedCostUsd: 0.25 });
+      }, {
+        severity: report.severity as string | null,
+        estimatedCostUsd: 0.25,
+        trigger: dispatchTrigger(dispatch.dispatch_metadata),
+      });
+      {
+        const { error: snapErr } = await db
+          .from('fix_dispatch_jobs')
+          .update({
+            dispatch_metadata: {
+              ...((dispatch.dispatch_metadata as Record<string, unknown> | null) ?? {}),
+              autofix_budget: budgetSnapshot(budget),
+            },
+          })
+          .eq('id', dispatch.id);
+        if (snapErr) log.warn('autofix budget snapshot not stored', { dispatchId: dispatch.id, err: snapErr.message });
+      }
 
       if (!budget.allowed) {
         await completeAttempt(db, fixAttemptId, {
@@ -803,6 +825,7 @@ ${
       let usedModel = '';
       let inputTokens = 0;
       let outputTokens = 0;
+      let usedKeySource: 'byok' | 'env' | null = null;
 
       const DEFAULT_ANTHROPIC_MODEL = FIX_MODEL;
       const DEFAULT_OPENAI_MODEL = `openai/${FIX_FALLBACK}`;
@@ -816,6 +839,7 @@ ${
           dispatch.project_id,
           async (anthropicResolved) => {
             usedModel = DEFAULT_ANTHROPIC_MODEL;
+            usedKeySource = anthropicResolved.source;
             const { object, usage } = await claudeGenerateObject({
               apiKey: anthropicResolved.key,
               model: usedModel,
@@ -847,6 +871,7 @@ ${
             const openaiBaseUrl = openaiResolved.baseUrl;
             const isOpenRouter = openaiBaseUrl?.includes('openrouter.ai') ?? false;
             usedModel = isOpenRouter ? DEFAULT_OPENAI_MODEL : FIX_FALLBACK;
+            usedKeySource = openaiResolved.source;
             const openai = createOpenAI({
               apiKey: openaiKey,
               ...(openaiBaseUrl ? { baseURL: openaiBaseUrl } : {}),
@@ -865,7 +890,25 @@ ${
           },
         );
         fix = result;
-        void usedProvider; // logged via usedModel
+        // The auto-fix spend cap sums llm_invocations rows for fix-worker.
+        // None were ever written, so the cap always read $0 and never fired.
+        void logLlmInvocation(db, {
+          projectId: dispatch.project_id,
+          reportId: dispatch.report_id,
+          functionName: 'fix-worker',
+          stage: 'fix',
+          primaryModel: DEFAULT_ANTHROPIC_MODEL,
+          usedModel,
+          fallbackUsed: usedProvider !== 'anthropic',
+          fallbackReason: usedProvider !== 'anthropic' ? 'anthropic_unavailable' : null,
+          status: 'success',
+          latencyMs: Date.now() - llmStart,
+          inputTokens,
+          outputTokens,
+          promptVersion: fixPromptVersion ?? null,
+          keySource: usedKeySource,
+          langfuseTraceId: trace.id,
+        });
         lastLlmErr = null;
         break;
         } catch (llmErr) {
@@ -1200,8 +1243,13 @@ ${
       // groundwork here makes that fan-out a *new fix_dispatch_jobs row
       // per matched repo* away. Best-effort — never blocks the success
       // path.
+      // Only a primary dispatch fans out. A sibling job (it carries the
+      // parent's coordination_id) fanning out again would queue a job for
+      // the original repo, which fans out again — an endless ping-pong.
       try {
-        await markCrossRepoSpan(db, ghToken, log, {
+        if (isSiblingDispatch(dispatch)) {
+          log.info('sibling dispatch: cross-repo fan-out skipped', { dispatchId: dispatch.id });
+        } else await markCrossRepoSpan(db, ghToken, log, {
           projectId: dispatch.project_id,
           reportId: dispatch.report_id,
           fixAttemptId,
@@ -1577,14 +1625,20 @@ async function markCrossRepoSpan(
   // coordination_id so the multi-repo worker (or a future fan-out
   // sweeper) groups them; `target_repo_id` is a metadata hint stored
   // in `dispatch_metadata` JSONB so the column doesn't need to exist.
+  // `skill` used to be 'fix', which fix_dispatch_jobs_skill_check rejects: no
+  // sibling dispatch was ever created, and the failure was logged as
+  // non-fatal. Sibling dispatches are started by Mushi, not a person, so they
+  // carry no 'manual' trigger and stay under the auto-fix caps.
+  const siblingFailures: string[] = [];
   for (const sib of siblings) {
     const { error: dispatchErr } = await db.from('fix_dispatch_jobs').insert({
       project_id: projectId,
       report_id: reportId,
       coordination_id: coord.id,
-      skill: 'fix',
+      skill: 'dispatch_fix',
       status: 'queued',
       dispatch_metadata: {
+        trigger: 'automatic',
         target_repo_id: sib.id,
         target_repo_url: sib.repo_url,
         coordinated_with_pr: prUrl,
@@ -1592,11 +1646,17 @@ async function markCrossRepoSpan(
       },
     });
     if (dispatchErr) {
-      log.warn('sibling dispatch insert failed (non-fatal)', {
+      siblingFailures.push(`${sib.repo_url}: ${dispatchErr.message}`);
+      log.error('sibling dispatch insert failed', {
         siblingRepoId: sib.id,
         err: dispatchErr.message,
       });
     }
+  }
+  if (siblingFailures.length > 0) {
+    reportError(new Error(`cross-repo sibling dispatch failed: ${siblingFailures.join('; ')}`), {
+      tags: { function: 'fix-worker', stage: 'sibling_dispatch' },
+    });
   }
 
   // Post a cross-link comment on the primary PR — the reviewer needs to

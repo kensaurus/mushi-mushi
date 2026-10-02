@@ -432,6 +432,8 @@ describe('confirmVoice', () => {
       requestedBy: null,
       skipMembershipCheck: true,
       metadata: { source: 'voice', voice_session_id: sessionId, actor: 'telegram:42' },
+      // The speaker confirmed: a person asked for this fix, so the auto-fix caps do not apply.
+      trigger: 'manual',
     })
     const session = db.table('voice_intake_sessions')[0]!
     expect(session).toMatchObject({ status: 'dispatched', dispatch_id: 'disp-1', confirmed_by: 'telegram:42', confirm_token_hash: null })

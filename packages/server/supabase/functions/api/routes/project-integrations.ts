@@ -10,6 +10,7 @@ import { emitProductEvent } from '../../_shared/product-events.ts';
 import { getDemoReportFixture, materializeDemoReport, precomputedClassification } from '../../_shared/demo-report-fixtures.ts';
 import { checkIngestQuota } from '../../_shared/quota.ts';
 import { log } from '../../_shared/logger.ts';
+import { parseAutofixCapsBody } from '../../_shared/autofix-budget.ts';
 import { classifyIngestRateLimitError } from './ingest-rate-limit.ts';
 // Pure readiness → dry-run shaping lives in its own import-free module so it
 // can be unit-tested under CI's permission-less `deno test`.
@@ -248,13 +249,60 @@ export function registerProjectIntegrationsRoutes(app: Hono<{ Variables: Variabl
 
     const { data, error } = await db
       .from('project_settings')
-      .select('autofix_enabled')
+      .select('autofix_enabled, autofix_max_spend_usd, autofix_max_dispatches_per_day')
       .eq('project_id', projectId)
       .maybeSingle();
 
     if (error) return dbError(c, error);
 
-    return c.json({ ok: true, data: { autofix_enabled: Boolean(data?.autofix_enabled) } });
+    return c.json({
+      ok: true,
+      data: {
+        autofix_enabled: Boolean(data?.autofix_enabled),
+        autofix_max_spend_usd: data?.autofix_max_spend_usd ?? null,
+        autofix_max_dispatches_per_day: data?.autofix_max_dispatches_per_day ?? null,
+      },
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Auto-fix caps — PUT /v1/admin/projects/:id/autofix/caps
+  //
+  // Body: { maxSpendUsd?: number | null, maxDispatchesPerDay?: number | null }.
+  // The caps bound dispatches Mushi starts on its own; a person's manual
+  // dispatch runs past them (see _shared/autofix-budget.ts). This is the fix
+  // path for the radar's `spend_cap_unset` finding.
+  // ---------------------------------------------------------------------------
+  app.put('/v1/admin/projects/:id/autofix/caps', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    if (!UUID_RE.test(projectId)) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
+        400,
+      );
+    }
+
+    const access = await callerCanAccessProject(c, db, userId, projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+
+    const parsed = parseAutofixCapsBody(await c.req.json().catch(() => null));
+    if (!parsed.ok) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: parsed.message } }, 400);
+    }
+
+    const { data, error } = await db
+      .from('project_settings')
+      .upsert({ project_id: projectId, ...parsed.patch }, { onConflict: 'project_id' })
+      .select('autofix_max_spend_usd, autofix_max_dispatches_per_day')
+      .single();
+    if (error) return dbError(c, error);
+
+    return c.json({ ok: true, data });
   });
 
   // ---------------------------------------------------------------------------

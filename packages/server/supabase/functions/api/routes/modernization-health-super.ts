@@ -152,6 +152,8 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
         report_id: finding.related_report_id,
         requested_by: userId,
         status: 'queued',
+        // A person pressed "Dispatch fix" on the finding.
+        dispatch_metadata: { trigger: 'manual' },
       })
       .select('id, status, created_at')
       .single();
