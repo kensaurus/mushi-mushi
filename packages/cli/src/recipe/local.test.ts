@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { checkRecipe, starterManifest, tokenHexes } from './local.js'
+import { checkRecipe, starterManifest } from './local.js'
 
 let dir: string | null = null
 afterEach(() => {
@@ -61,6 +61,11 @@ describe('checkRecipe', () => {
   })
 
   it('reads hex values from both $value strings and colour objects', () => {
-    expect([...tokenHexes(JSON.parse(TOKENS))].sort()).toEqual(['#e8387f', '#ffffff'])
+    const root = repo({
+      'mushi.recipe.json': JSON.stringify({ version: 1, design: { tokens: [{ path: 'tokens.json', role: 'source' }], literalScan: { globs: ['src/**/*.ts'] } } }),
+      'tokens.json': TOKENS,
+      'src/a.ts': 'const x = "#E8387F"\nconst y = "#FFFFFF"\nconst z = "#000000"\n',
+    })
+    expect(checkRecipe(root).findings.map((f) => f.value)).toEqual(['#000000'])
   })
 })
