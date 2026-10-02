@@ -30,7 +30,7 @@ export function healthyCountTooltip(stats: StorageStats): MetricTooltipData {
 }
 
 export function healthyCountDetail(stats: StorageStats): string {
-  return `${stats.failingCount} failing · ${stats.degradedCount} degraded`
+  return `${stats.failingCount} failing · ${stats.degradedCount} degraded · all projects`
 }
 
 export function screenshotsTooltip(stats: StorageStats): MetricTooltipData {
