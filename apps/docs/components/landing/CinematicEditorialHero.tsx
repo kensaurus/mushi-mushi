@@ -132,6 +132,18 @@ export function CinematicEditorialHero({
             )
           })}
         </div>
+        <p className="landing-hero-reassure">
+          {LANDING_HERO.reassure}{' '}
+          <a
+            href={LANDING_HERO.star.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-mushi-cta={LANDING_HERO.star.ctaId}
+            data-mushi-location="hero"
+          >
+            {LANDING_HERO.star.label}
+          </a>
+        </p>
       </div>
     </header>
   )

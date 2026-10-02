@@ -25,6 +25,18 @@ import {
 
 <OssTrustStrip />
 
+## This is what a diagnosis looks like
+
+A user writes one or two sentences about what went wrong. Mushi reads them with
+the screenshot, console and network tail, and writes back a plain-English title,
+a severity, the likely cause and a suggested fix. Below is a real one.
+
+<ScrollReveal>
+  <RealDiagnosisCard />
+</ScrollReveal>
+
+<DiagnosisScrollStage />
+
 <ProofPinSection />
 
 ## See it in action
@@ -64,6 +76,12 @@ replay alongside. Mushi starts from what the user reported, ingests Sentry's
 errors too, explains each one in plain English, and hands your agent a fix
 prompt to start from. With or without Sentry.
 
+Sentry is one on-ramp of several. Bugs come in from your users, your
+monitoring and your voice; fixes and status go out to your editor, your coding
+agents, your tracker and your chat. Nothing has to be ripped out.
+
+<MediatorMap />
+
 <ComparisonScrub>
   <ComparisonTable
     foil="Sentry alone"
@@ -74,7 +92,7 @@ prompt to start from. With or without Sentry.
 See **[Concepts &rarr; Architecture](/concepts/architecture)** for the wire-level
 sequence diagram and component-by-component spec.
 
-<DiagnosisScrollStage />
+<PricingStrip />
 
 <LandingFaq />
 
