@@ -2145,7 +2145,7 @@ export class MushiWidget {
 
   /** The toast from GET /v1/reporter/updates (core's wording), naming the report when there is one. */
   showUpdatesFeedToast(updates: MushiReporterUpdates, reports: MushiReporterReport[]): boolean {
-    if (!updates.unread_total) return false;
+    if (!(updates.unread_total > 0)) return false;
     const ids = new Set(updates.latest.map((u) => u.report_id));
     const reportId = ids.size === 1 ? [...ids][0]! : null;
     const row = reportId ? reports.find((r) => r.id === reportId) : undefined;
@@ -2154,7 +2154,7 @@ export class MushiWidget {
   }
 
   showUpdateToast(update: { text: string; reportId?: string | null; detail?: string }): boolean {
-    if (this.isOpen || !this.triggerVisible || this.isRouteHidden() || this.isSuppressedByHost()) return false;
+    if (this.isOpen || !this.triggerVisible || this.triggerHiddenByScroll || this.isMobileSmartHidden() || this.isRouteHidden() || this.isSuppressedByHost()) return false;
     this.removeToast();
     const toast = document.createElement('div');
     toast.className = `mushi-toast ${this.config.trigger === 'banner' ? `banner-${this.config.bannerConfig?.position ?? 'top'}` : this.config.position}`;

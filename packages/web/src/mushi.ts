@@ -649,7 +649,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   function scheduleUpdateToast(): void {
     if (bootstrapConfig.notifications?.toast === false || !deviceHasReports(projectId) || !toastAllowed(projectId)) return;
     const run = async () => {
-      const updates = await emitReporterUpdates();
+      // A malformed feed counts as no feed: fall back to the list.
+      const feed = await emitReporterUpdates();
+      const updates = feed && typeof feed.unread_total === 'number' && Array.isArray(feed.latest) ? feed : null;
       if (updates && !updates.unread_total) return;
       // Titles and statuses come from the list; it also lights the header badge.
       await widget.refreshReporterInboxQuiet();
