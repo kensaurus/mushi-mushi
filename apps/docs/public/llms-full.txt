@@ -2599,7 +2599,7 @@ Source: https://kensaur.us/mushi-mushi/docs/concepts/app-recipe
 
 ---
 title: 'App recipe and design system'
-description: The App Recipe is the record of what your app is made of — schema, design tokens, routes, gates, CI, deploy, env names and integrations — kept so a diagnosis can say what changed and a fix can respect your design system.
+description: The App Recipe records what your app is made of, so a diagnosis can say what changed and a fix can respect your design system.
 ---
 
 # App recipe and design system

@@ -697,7 +697,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "concepts/app-recipe.md",
     keywords: ["concepts", "app-recipe", "app", "recipe", "design", "system"],
     headings: ["The five states", "mushi.recipe.json", "The design system page", "Directions", "The deviance check", "The deviance score", "In your editor"],
-    excerpt: "The App Recipe is the record of what your app is made of — schema, design tokens, routes, gates, CI, deploy, env names and integrations — kept so a diagnosis can say what changed…",
+    excerpt: "The App Recipe records what your app is made of, so a diagnosis can say what changed and a fix can respect your design system.",
   },
   {
     title: "Architecture",
