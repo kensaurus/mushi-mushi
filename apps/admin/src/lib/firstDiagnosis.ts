@@ -57,7 +57,8 @@ function nonEmpty(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null
 }
 
-function readRootCause(stage2: Record<string, unknown> | null | undefined): string | null {
+/** Stage-2 root cause, tolerating the older snake_case keys. Shared with report detail. */
+export function readRootCause(stage2: Record<string, unknown> | null | undefined): string | null {
   if (!stage2) return null
   for (const key of ['rootCause', 'root_cause', 'root_cause_hypothesis']) {
     const value = stage2[key]

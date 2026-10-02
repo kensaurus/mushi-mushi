@@ -172,6 +172,12 @@ export interface ReportDetail {
   stage1_classification: Record<string, unknown> | null
   stage1_model: string | null
   stage1_latency_ms: number | null
+  /** Model that wrote `stage2_analysis`; null when Stage 2 never ran. */
+  stage2_model?: string | null
+  /** Stage-2 object while it is still streaming; null once the final row lands. */
+  stage2_partial?: Record<string, unknown> | null
+  /** Column copy of the Stage-2 reproduction steps. */
+  reproduction_steps?: unknown
   category: string
   severity: string | null
   summary: string | null
