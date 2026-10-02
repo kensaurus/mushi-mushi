@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   diagramBadgeMarkdown,
   escapeHtml,
+  livePublicUrl,
   publicPageDescription,
   publicPageKeys,
   renderPublicDiagramHtml,
@@ -19,6 +20,7 @@ import {
 import {
   deletePublicPage,
   readPublicPageStoreConfig,
+  removeProjectPublicPage,
   writePublicPage,
   PAGE_MAX_AGE_SECONDS,
 } from '../../supabase/functions/_shared/public-page-store.ts'
@@ -110,6 +112,12 @@ describe('keys and badge', () => {
       '[![Architecture diagram](https://img.shields.io/badge/architecture-diagram-c2410c)](https://kensaur.us/mushi-mushi/r/Acme/Shop.js)',
     )
   })
+  it('sends people to the interactive view until the static page exists', () => {
+    // Without the file, /r/<owner>/<repo> would be an S3 NoSuchKey page.
+    expect(livePublicUrl('Acme', 'Shop.js', false)).toBe('https://kensaur.us/mushi-mushi/docs/r?repo=Acme%2FShop.js')
+    expect(livePublicUrl('Acme', 'Shop.js', true)).toBe('https://kensaur.us/mushi-mushi/r/Acme/Shop.js')
+    expect(diagramBadgeMarkdown('Acme', 'Shop.js', false)).toContain('(https://kensaur.us/mushi-mushi/docs/r?repo=Acme%2FShop.js)')
+  })
   it('escapes HTML special characters', () => {
     expect(escapeHtml(`<a href="x">'&'</a>`)).toBe('&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;')
   })
@@ -157,6 +165,24 @@ describe('public page store', () => {
   it('fails loudly when S3 refuses a write', async () => {
     const fetchImpl = vi.fn(async () => new Response('denied', { status: 403 }))
     await expect(writePublicPage(cfg, PAYLOAD, fetchImpl)).rejects.toThrow(/S3 PUT .* 403/)
+  })
+
+  it('removes a deleted project\'s page from S3 and never throws', async () => {
+    const db = (row: unknown) => ({
+      from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: row }) }) }) }),
+    })
+    const urls: string[] = []
+    const ok = vi.fn(async (url: string) => {
+      urls.push(url)
+      return new Response(null, { status: 204 })
+    })
+    const onError = vi.fn()
+    expect(await removeProjectPublicPage(db({ payload: { owner: 'Acme', repo: 'Shop.js' }, static_page_at: null }), 'p1', cfg, onError, ok)).toBe('deleted')
+    expect(urls).toHaveLength(2)
+    expect(await removeProjectPublicPage(db(null), 'p1', cfg, onError, ok)).toBe('none')
+    const broken = vi.fn(async () => new Response('denied', { status: 403 }))
+    expect(await removeProjectPublicPage(db({ payload: { owner: 'Acme', repo: 'Shop.js' } }), 'p1', cfg, onError, broken)).toBe('failed')
+    expect(onError).toHaveBeenCalledTimes(1)
   })
 
   it('deletes the page before its twin and treats a missing key as gone', async () => {

@@ -84,14 +84,22 @@ export function ExploreDiagramPublishCard({ projectId, publication, onChanged }:
         <div className="space-y-1">
           <h3 className="text-sm font-semibold text-fg">Public page</h3>
           {publication.published ? (
-            <p className="text-xs text-fg-muted">
-              Live at{' '}
-              <a className="text-brand underline" href={publication.url} target="_blank" rel="noreferrer">
-                {publication.url}
-              </a>{' '}
-              · commit <span className="font-mono">{publication.commit_sha.slice(0, 7)}</span>
-              {publication.outdated && ' · shows an older version of this diagram. Update it to show the latest one.'}
-            </p>
+            <>
+              <p className="text-xs text-fg-muted">
+                Live at{' '}
+                <a className="text-brand underline" href={publication.url} target="_blank" rel="noreferrer">
+                  {publication.url}
+                </a>{' '}
+                · commit <span className="font-mono">{publication.commit_sha.slice(0, 7)}</span>
+                {publication.outdated && ' · shows an older version of this diagram. Update it to show the latest one.'}
+              </p>
+              {publication.indexable === false && (
+                <p className="text-xs text-fg-muted" data-testid="diagram-publish-not-indexed">
+                  Search engines do not see this page yet: the page store is not set up, so the link opens the
+                  interactive view. Publishing again after setup makes it indexable.
+                </p>
+              )}
+            </>
           ) : (
             <p className="text-xs text-fg-muted">
               Share this diagram on a public page. People see the part names, descriptions and file paths. They never see

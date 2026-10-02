@@ -1,3 +1,4 @@
+import { readPublicPageStoreConfig, removeProjectPublicPage } from '../../_shared/public-page-store.ts';
 import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
@@ -1217,6 +1218,15 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         403,
       );
     }
+
+    // A published diagram page lives in S3, outside the cascade: remove it
+    // while the publication row still names it. Best-effort, logged.
+    await removeProjectPublicPage(
+      db,
+      projectId,
+      readPublicPageStoreConfig((name) => Deno.env.get(name)),
+      (err) => log.error('project delete: public diagram page removal failed', { project_id: projectId, error: String(err) }),
+    );
 
     const { error: deleteErr } = await db.from('projects').delete().eq('id', projectId);
     if (deleteErr) return dbError(c, deleteErr);

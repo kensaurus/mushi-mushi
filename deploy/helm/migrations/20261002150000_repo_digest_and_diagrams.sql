@@ -16,7 +16,8 @@
 --                           tree. Regenerated on demand only (cost). Members read.
 --   public_repo_diagrams    the opt-in public page for one project: a frozen
 --                           copy of the public payload (nodes, paths, edges,
---                           SHA; never file contents) plus who consented.
+--                           SHA; never file contents), who consented, and
+--                           whether the static page file was written.
 --                           Regenerating a diagram does not change a published
 --                           page until the owner publishes again. Members read;
 --                           the public page reads through the api (service role).
@@ -34,6 +35,9 @@
 --    WHERE tablename IN ('repo_digest_cache','project_codebase_diagrams','public_repo_diagrams');
 --   -- expect exactly: project_codebase_diagrams_member_select (authenticated, SELECT),
 --   --                 public_repo_diagrams_member_select (authenticated, SELECT)
+--   SELECT column_name FROM information_schema.columns
+--    WHERE table_schema = 'public' AND table_name = 'public_repo_diagrams' AND column_name = 'static_page_at';
+--   -- expect 1 row
 --   SELECT t, r, p, has_table_privilege(r, t, p) AS granted
 --     FROM unnest(ARRAY['public.repo_digest_cache','public.project_codebase_diagrams','public.public_repo_diagrams']) AS t,
 --          unnest(ARRAY['anon','authenticated']) AS r,
@@ -104,7 +108,11 @@ CREATE TABLE IF NOT EXISTS public.public_repo_diagrams (
   payload       jsonb NOT NULL,
   payload_hash  text NOT NULL CHECK (payload_hash ~ '^[0-9a-f]{64}$'),
   published_by  uuid REFERENCES auth.users(id) ON DELETE SET NULL,
-  published_at  timestamptz NOT NULL DEFAULT now()
+  published_at  timestamptz NOT NULL DEFAULT now(),
+  -- When the crawlable static page (S3 mushi-mushi/r/<owner>/<repo>.html)
+  -- was last written. NULL = not written (page store off or the write
+  -- failed): links then go to the interactive docs view instead.
+  static_page_at timestamptz
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_public_repo_diagrams_repo
