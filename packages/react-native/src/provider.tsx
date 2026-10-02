@@ -65,8 +65,12 @@ import {
   reporterChannels,
   type MushiReporterNotificationPrefs,
   type MushiReporterPrefsUpdate,
+  type MushiReporterReportDetail,
   type MushiReporterUpdates,
 } from '@mushi-mushi/core/reporter-channels'
+import { reporterShouldShowToast, reporterToastMessage, resolveReporterLocale } from '@mushi-mushi/core/reporter-ui'
+import { readReporterFlag, writeReporterFlag } from './storage/reporter-flags'
+import { MushiUpdateToast } from './components/MushiUpdateToast'
 import { setupConsoleCapture } from './capture/console-capture'
 import { setupNetworkCapture } from './capture/network-capture'
 import { getDeviceInfo } from './capture/device-info'
@@ -126,6 +130,20 @@ export interface MushiRNConfig {
      * `accent` is set, the text on it is chosen for contrast.
      */
     theme?: Partial<MushiRNTheme>
+    /**
+     * Characters needed before Send enables. Default 8 (Plan 018 §1.1); an
+     * attached screenshot lowers it to 0.
+     */
+    minDescriptionLength?: number
+  }
+  /** How reporters hear back outside the sheet (Plan 018 §4). No native push. */
+  notifications?: {
+    /** One "the developer replied" / "your bug is fixed" toast when the app returns to the foreground. Default true. */
+    toast?: boolean
+    /** Offer "Get updates by email" after sending, when the project offers email. Default true. */
+    email?: boolean
+    /** Prefill that email box from `setUser({ email })`. Default false; the box is never pre-ticked. */
+    emailFromIdentity?: boolean
   }
   assistant?: {
     enabled?: boolean
@@ -187,6 +205,8 @@ export interface MushiRNInstance {
   submitReport(data: {
     description: string
     category: string
+    /** Host / chip sub-label, e.g. 'Feature request' for the Idea chip. */
+    userCategory?: string
     screenshotDataUrl?: string
   }): Promise<{
     ok: boolean
@@ -249,6 +269,16 @@ export interface MushiRNInstance {
    * app does not offer email. (No native push on React Native.)
    */
   setNotificationPrefs(update: MushiReporterPrefsUpdate): Promise<MushiApiResponse<MushiReporterNotificationPrefs>>
+  /**
+   * One report with its timeline (GET /v1/reporter/reports/:id). Resolves
+   * null when it could not be loaded (show Retry) and 'unsupported' when the
+   * server predates the route (fall back to `loadMyThread`).
+   */
+  loadMyReportDetail(reportId: string): Promise<MushiReporterReportDetail | null | 'unsupported'>
+  /** The address to prefill in the email opt-in box, only with `notifications.emailFromIdentity`. */
+  emailPrefill(): string | null
+  /** Open the sheet on "Your reports". */
+  openMyReports(): void
   /** Post a reporter reply on a report thread. Returns the new comment or null on failure. */
   replyToReport(reportId: string, body: string): Promise<MushiReporterComment | null>
   /** Record a reporter feedback signal (e.g. `confirms`, `not_fixed`) on a report. Returns the outcome or null. */
@@ -592,7 +622,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
   }, [config.widget?.trigger, config.widget?.shakeThreshold, open])
 
   const submitReport = useCallback(
-    async (data: { description: string; category: string; screenshotDataUrl?: string }) => {
+    async (data: { description: string; category: string; userCategory?: string; screenshotDataUrl?: string }) => {
       await reporterTokenReadyRef.current
 
       const deviceInfo = getDeviceInfo()
@@ -649,6 +679,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         id: newUuid(),
         projectId: config.projectId,
         category: data.category as MushiReport['category'],
+        ...(data.userCategory ? { userCategory: data.userCategory } : {}),
         description: scrubPii(data.description),
         environment: {
           userAgent: deviceInfo.systemName ?? 'ReactNative',
@@ -733,6 +764,8 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         }
       } else {
         config.callbacks?.onReportSubmitted?.(report.id)
+        // From now on this device has reports worth checking for updates.
+        void writeReporterFlag(config.projectId, 'has_reports', '1')
         return { ok: true }
       }
     },
@@ -861,6 +894,55 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
     return () => sub?.remove()
   }, [])
 
+  // Next-visit toast (Plan 018 §4.2): at most one per app session and one a
+  // day, only for a device that has sent a report, never with toast: false.
+  const [toast, setToast] = useState<{ message: string; reportId: string | null } | null>(null)
+  const toastShownRef = useRef(false)
+  const toastEnabled = config.notifications?.toast !== false
+  const maybeShowToast = useCallback(async () => {
+    if (!toastEnabled || toastShownRef.current) return
+    if ((await readReporterFlag(config.projectId, 'has_reports')) !== '1') return
+    const updates = await reporterUpdatesRef.current.emit()
+    if (!updates) return
+    const now = Date.now()
+    const show = reporterShouldShowToast({
+      enabled: toastEnabled,
+      unreadTotal: updates.unread_total,
+      shownThisSession: toastShownRef.current,
+      lastShownAt: Number(await readReporterFlag(config.projectId, 'toast_shown_at')) || null,
+      now,
+    })
+    if (!show) return
+    toastShownRef.current = true
+    void writeReporterFlag(config.projectId, 'toast_shown_at', String(now))
+    const locale = resolveReporterLocale(
+      typeof navigator !== 'undefined' ? (navigator as { language?: string }).language : undefined,
+    )
+    setToast({ message: reporterToastMessage(updates, locale), reportId: updates.latest[0]?.report_id ?? null })
+  }, [toastEnabled, config.projectId])
+
+  useEffect(() => {
+    void reporterTokenReadyRef.current.then(() => maybeShowToast())
+    let sub: NativeEventSubscription | undefined
+    try {
+      if (typeof AppState?.addEventListener === 'function') {
+        sub = AppState.addEventListener('change', (state) => {
+          if (state === 'active') void maybeShowToast()
+        })
+      }
+    } catch {
+      /* AppState unavailable (tests, web) */
+    }
+    return () => sub?.remove()
+  }, [maybeShowToast])
+
+  const openMyReports = useCallback(() => {
+    setToast(null)
+    setSheetScreenshot(null)
+    setSheetPreferredTab('inbox')
+    setSheetVisible(true)
+  }, [])
+
   const instance: MushiRNInstance = useMemo(
     () => ({
       open,
@@ -974,6 +1056,22 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         return markReporterReportRead(client, reporterTokenRef.current, reportId)
       },
       getReporterUpdates: () => reporterUpdatesRef.current.emit(),
+      async loadMyReportDetail(reportId: string) {
+        const client = apiClientRef.current
+        if (!client) return null
+        try {
+          await reporterTokenReadyRef.current
+          const res = await reporterChannels(client).getReport(reportId, reporterTokenRef.current)
+          if (res.ok) return res.data ?? null
+          return res.error?.status === 404 && res.error.code !== 'NOT_FOUND' ? 'unsupported' : null
+        } catch {
+          return null
+        }
+      },
+      emailPrefill() {
+        return config.notifications?.emailFromIdentity ? userRef.current?.email ?? null : null
+      },
+      openMyReports,
       onReporterUpdate: (cb) => reporterUpdatesRef.current.subscribe(cb),
       async getNotificationPrefs() {
         const client = apiClientRef.current
@@ -1063,7 +1161,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         return res.ok ? (res.data as MushiAssistantReply) : null
       },
     }),
-    [open, close, attachTo, submitReport, openAssistant, config.rewards?.enabled, config.assistant?.enabled],
+    [open, close, attachTo, submitReport, openAssistant, openMyReports, config.rewards?.enabled, config.assistant?.enabled, config.notifications?.emailFromIdentity],
   )
 
   const trigger = config.widget?.trigger ?? 'button'
@@ -1103,7 +1201,17 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         assistantSuggestions={config.assistant?.suggestions}
         inboxPollIntervalMs={config.widget?.inboxPollIntervalMs ?? 0}
         theme={config.widget?.theme}
+        minDescriptionLength={config.widget?.minDescriptionLength}
+        emailOptIn={config.notifications?.email !== false}
       />
+      {toast ? (
+        <MushiUpdateToast
+          message={toast.message}
+          onView={openMyReports}
+          onDismiss={() => setToast(null)}
+          theme={config.widget?.theme}
+        />
+      ) : null}
     </MushiContext.Provider>
   )
 }
