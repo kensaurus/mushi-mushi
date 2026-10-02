@@ -621,6 +621,8 @@ Reporter routes use `apiKeyAuth` plus `resolveReporterAuth`.
 
 One-screen report, free text first; the theming contract with a neutral default, plus the RN theme prop; wrapping chips; automatic masking, with a test that the masked image is what the server receives; the accessibility items; incremental web rendering; list, detail and timeline views.
 
+React Native parity built 2026-10-02 (`feat/reporter-loop-phase2-3`): one-screen report, v2 timeline, Reduce Motion, receipt with email opt-in, next-visit toast. The RN bundle budget moved from 22 kB to 23.5 kB brotli for it (measured 22.95 kB; see `packages/react-native/.size-limit.cjs`); the shared widget rules live in `@mushi-mushi/core/reporter-ui`.
+
 ### Phase 2 — loop wiring
 
 Migrations 1–4; the fan-out function; release linkage; duplicate follows; "Ask for more info" / Waiting on you; the `reporter_replied` plugin event; admin unread state; `/updates` plus the toast; the outbox; the console Reporter view; the MCP additions.
