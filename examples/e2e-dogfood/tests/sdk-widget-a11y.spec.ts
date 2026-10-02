@@ -130,8 +130,6 @@ test.describe('Mushi SDK widget — banner offset + focus visibility', () => {
     await shadowWaitFor(page, '.mushi-panel.open')
     await shadowWaitFor(page, '[data-category="bug"]')
     await shadowClick(page, '[data-category="bug"]')
-    await shadowWaitFor(page, '.mushi-intent-btn')
-    await shadowClick(page, '.mushi-intent-btn')
     await shadowWaitFor(page, '.mushi-textarea')
 
     const visible = await page.evaluate(() => {
