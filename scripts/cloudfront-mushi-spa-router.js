@@ -19,6 +19,9 @@
  *                                    serving the same bytes at the bare root resolves
  *                                    correctly against S3. The slashless
  *                                    /mushi-mushi 301s to /mushi-mushi/.
+ *            /mushi-mushi/r/<owner>/<repo> -> INTERNAL REWRITE to the docs
+ *                                    export's public-diagram shell (docs/r.html),
+ *                                    which reads the repo from the URL.
  *            /mushi-mushi/llms{,-full,-ctx}.txt -> INTERNAL REWRITE to the
  *                                    docs export's copies (llmstxt.org root).
  *            /mushi-mushi/<docs-path> -> 301 to /mushi-mushi/docs/<docs-path>
@@ -186,6 +189,13 @@ function handler(event) {
   var llms = LLMS_ROOT.exec(uri);
   if (llms) {
     request.uri = '/mushi-mushi/docs/' + llms[1];
+    return request;
+  }
+
+  // 0c. Public repo diagram (apps/docs/app/r): one static shell for every
+  //     repo. Before the asset rule: a repo named `next.js` is not a file.
+  if (/^\/mushi-mushi\/r\/[^/]+\/[^/]+\/?$/.test(uri)) {
+    request.uri = '/mushi-mushi/docs/r.html';
     return request;
   }
 
