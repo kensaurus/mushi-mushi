@@ -33,8 +33,9 @@ export async function findProjectTeam(projectId: string, activeOrgId: string | n
     if (org.id === activeOrgId) continue
     const res = await apiFetch<{ projects: Array<{ id: string }> }>('/v1/admin/projects', {
       scope: 'none',
-      // The micro-cache keys on the path only; another team's list must not
-      // be served from (or poison) the active team's cached response.
+      // The micro-cache keys on the STORED active team, not on this header
+      // override, so another team's list must bypass it rather than be
+      // served from (or poison) the active team's cached response.
       cache: 'no-store',
       headers: { 'X-Mushi-Org-Id': org.id, 'x-org-id': org.id },
     })
