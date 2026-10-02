@@ -33,6 +33,7 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from '../_shared/logger.ts'
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
+import { LlmBudgetExceededError } from '../_shared/llm-budget.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { PROMPT_TUNE_MODEL } from '../_shared/models.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
@@ -271,7 +272,11 @@ async function proposeCandidate(
   const buckets = bucketize(failures)
   const trace = createTrace('prompt-auto-tune', { projectId, stage, parentVersion: active.version })
 
-  const resolved = await resolveLlmKey(db, projectId, 'anthropic').catch(() => null)
+  // Over budget rethrows: falling back to the env key would bypass the budget.
+  const resolved = await resolveLlmKey(db, projectId, 'anthropic').catch((err) => {
+    if (err instanceof LlmBudgetExceededError) throw err
+    return null
+  })
   const apiKey = resolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY')
   if (!apiKey) {
     log.info('skipping — no Anthropic key', { projectId, stage })

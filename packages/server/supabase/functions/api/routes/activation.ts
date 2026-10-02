@@ -252,7 +252,8 @@ async function buildPreflightSummary(
       .eq('project_id', projectId)
       .maybeSingle(),
     db.from('project_repos').select('repo_url').eq('project_id', projectId).limit(1),
-    resolveLlmKey(db, projectId, 'anthropic'),
+    // Is a key configured? A probe, not a generation: no budget check.
+    resolveLlmKey(db, projectId, 'anthropic', { purpose: 'probe' }),
   ]);
 
   const settings = settingsRes.data;

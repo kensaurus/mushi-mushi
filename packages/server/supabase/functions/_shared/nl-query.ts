@@ -4,6 +4,7 @@ import { z } from 'npm:zod@3'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { createTrace } from './observability.ts'
 import { resolveLlmKey } from './byok.ts'
+import { LlmBudgetExceededError } from './llm-budget.ts'
 import { detectGraphQuery, executeGraphQuery } from './graph-nl.ts'
 import { NL_QUERY_PLANNER_MODEL, NL_QUERY_SUMMARY_MODEL } from './models.ts'
 import { getPromptForStage } from './prompt-ab.ts'
@@ -190,7 +191,11 @@ export async function executeNaturalLanguageQuery(
   // owns. Falls back to the env key if the project hasn't configured BYOK.
   // Resolution failures are non-fatal — `resolved` is null and we use env.
   const resolved = projectIds.length > 0
-    ? await resolveLlmKey(db, projectIds[0], 'anthropic').catch(() => null)
+    ? await resolveLlmKey(db, projectIds[0], 'anthropic').catch((err) => {
+        // Over budget rethrows: the env-key fallback below would bypass it.
+        if (err instanceof LlmBudgetExceededError) throw err
+        return null
+      })
     : null
   const apiKey = resolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY')
   if (!apiKey) throw new Error('No Anthropic key available (BYOK or env)')
