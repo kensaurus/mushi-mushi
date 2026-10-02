@@ -12,8 +12,17 @@
  * Auth: pg_cron POSTs with the service-role bearer; we re-validate
  * identically to sentry-seer-poll. Never accept external requests.
  *
+ * Versions come from the registry, never from the model (2026-10-02: the
+ * model proposed @sentry/react 10.45 → 8.55 and @stripe/react-stripe-js
+ * 6.2 → 3.5 from stale training data). A finding is filed only when npm's
+ * latest stable is strictly newer than the declared range's floor and outside
+ * the range (_shared/modernizer-versions.ts). Manifests other than
+ * package.json have no registry check yet, so they are skipped.
+ *
  * Cost control:
- *   - Per project, max 10 deps per repo, top-level only.
+ *   - No upgradable dependency → no LLM call at all.
+ *   - Per repo, the first 40 top-level deps are checked on npm; at most 10
+ *     upgrade candidates go to the model.
  *   - Per dep, max 1 firecrawl scrape (cached 24h).
  *   - LLM call uses BYOK Anthropic; project skipped if no key + no env fallback.
  */
@@ -29,6 +38,11 @@ import { resolveLlmKey } from '../_shared/byok.ts'
 import { firecrawlScrape } from '../_shared/firecrawl.ts'
 import { MODERNIZER_MODEL } from '../_shared/models.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import {
+  bindFindingsToRegistry,
+  npmLatestStable,
+  upgradeCandidates,
+} from '../_shared/modernizer-versions.ts'
 
 ensureSentry('library-modernizer')
 
@@ -171,7 +185,7 @@ const findingSchema = z.object({
   findings: z.array(z.object({
     name: z.string().describe('Package/dep name as it appears in the manifest.'),
     currentVersion: z.string(),
-    suggestedVersion: z.string().describe('Latest stable version you recommend upgrading to.'),
+    suggestedVersion: z.string().describe('Copy the npm latest stable given for this package.'),
     severity: z.enum(['major', 'minor', 'security', 'deprecated']),
     summary: z.string().min(20).max(400)
       .describe('2-3 sentences: what changed, why upgrading matters, and any breaking-change risk.'),
@@ -219,8 +233,24 @@ async function processRepo(
     return { scanned: 0, created: 0, skipped: 'no_manifest' }
   }
 
-  const deps = parseManifest(manifestKind, manifestContents).slice(0, 10)
-  if (deps.length === 0) return { scanned: 0, created: 0, skipped: 'empty_manifest' }
+  if (manifestKind !== 'package.json') {
+    // No registry check for this ecosystem yet; a model-only guess is how the
+    // downgrade proposals happened.
+    return { scanned: 0, created: 0, skipped: 'registry_check_unsupported' }
+  }
+
+  const allDeps = parseManifest(manifestKind, manifestContents).slice(0, 40)
+  if (allDeps.length === 0) return { scanned: 0, created: 0, skipped: 'empty_manifest' }
+
+  const latestByName = new Map<string, string | null>()
+  for (let i = 0; i < allDeps.length; i += 8) {
+    const batch = allDeps.slice(i, i + 8)
+    const latest = await Promise.all(batch.map((d) => npmLatestStable(d.name)))
+    batch.forEach((d, j) => latestByName.set(d.name, latest[j]))
+  }
+  const candidates = upgradeCandidates(allDeps, latestByName).slice(0, 10)
+  if (candidates.length === 0) return { scanned: allDeps.length, created: 0, skipped: null }
+  const deps = candidates.map((c) => ({ name: c.name, version: c.installed }))
 
   const anthropic = await resolveLlmKey(db, row.project_id, 'anthropic')
   if (!anthropic) return { scanned: deps.length, created: 0, skipped: 'no_llm_key' }
@@ -265,8 +295,8 @@ async function processRepo(
     const result = await generateObject({
       model,
       schema: findingSchema,
-      system: `You are a senior dependency auditor. Identify which of the provided top-level dependencies look materially behind their latest stable release. Use the optional release-notes excerpts to set severity. Mark security CVEs as 'security'; deprecated/yanked packages as 'deprecated'; otherwise 'major' (breaking) vs 'minor'. Return at most 8 findings — only flag genuinely actionable ones.`,
-      prompt: `Manifest: ${manifestPath} (${manifestKind})\n\nDependencies:\n${deps.map((d) => `- ${d.name}@${d.version}`).join('\n')}\n\nRelease-notes excerpts (best-effort web scrape, may be empty):\n${releaseNotes.map((n) => `### ${n.name}\n${n.notes}`).join('\n\n') || '(no excerpts available — base your judgement on the version strings only)'}`,
+      system: `You are a senior dependency auditor. Each dependency below is behind npm's latest stable release; the installed range and the latest version are facts from the npm registry, do not change them. Use the optional release-notes excerpts to set severity. Mark security CVEs as 'security'; deprecated/yanked packages as 'deprecated'; otherwise 'major' (breaking) vs 'minor'. Return at most 8 findings — only flag genuinely actionable ones.`,
+      prompt: `Manifest: ${manifestPath} (${manifestKind})\n\nDependencies (installed range → npm latest stable):\n${candidates.map((c) => `- ${c.name}: ${c.installed} → ${c.latest}`).join('\n')}\n\nRelease-notes excerpts (best-effort web scrape, may be empty):\n${releaseNotes.map((n) => `### ${n.name}\n${n.notes}`).join('\n\n') || '(no excerpts available — base your judgement on the version strings only)'}`,
       maxTokens: 2_000,
     })
     plan = result.object
@@ -276,7 +306,8 @@ async function processRepo(
   }
 
   let created = 0
-  for (const f of plan.findings) {
+  // Versions from the manifest and the registry, never from the model.
+  for (const f of bindFindingsToRegistry(plan.findings, candidates)) {
     const { error: insErr, data: insData } = await db
       .from('modernization_findings')
       .upsert({
