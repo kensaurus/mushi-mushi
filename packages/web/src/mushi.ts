@@ -2118,8 +2118,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   // is logged + breadcrumbed and swallowed, returning a type-safe fallback.
   // Non-void methods need a real fallback so the host doesn't choke on
   // `undefined` (e.g. `.map` over a list); everything else returns void.
+  // The reporter-channel calls never reject (they resolve { ok: false } / null).
   const PUBLIC_API_FALLBACKS: Record<string, unknown> = {
     on: () => {}, // returns a no-op unsubscribe
+    // mushi-mushi-allowlist: no-op unsubscribe
     onReporterUpdate: () => {},
     isOpen: false,
     getBreadcrumbs: [],
@@ -2133,7 +2135,6 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     replyToReport: null,
     submitFeedbackSignal: null,
     reopenReport: null,
-    // The reporter-channel calls resolve { ok: false } / null themselves.
   };
   const noteSdkError = (method: string, err: unknown): void => {
     const message = err instanceof Error ? err.message : String(err);
