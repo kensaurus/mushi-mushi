@@ -86,6 +86,21 @@ describe('createScreenshotCapture failure reasons', () => {
     card.remove();
   });
 
+  it('paints the page background across the whole capture, so short pages are not half black', async () => {
+    document.body.style.backgroundColor = 'rgb(246, 247, 249)';
+    vi.useFakeTimers();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ scale: vi.fn() } as never);
+    const spy = interceptImage();
+
+    void createScreenshotCapture().take();
+    await vi.advanceTimersByTimeAsync(0);
+    const svg = decodeURIComponent(spy.src().replace(/^data:image\/svg\+xml;charset=utf-8,/, ''));
+    const root = svg.match(/<html[^>]*style="([^"]*)"/)?.[1] ?? '';
+    expect(root).toContain('background-color: rgb(246, 247, 249)');
+    expect(root).toContain(`min-height: ${window.innerHeight}px`);
+    document.body.style.backgroundColor = '';
+  });
+
   it('asks for a readback-friendly canvas (no Canvas2D getImageData warning)', async () => {
     const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     await createScreenshotCapture().take();
