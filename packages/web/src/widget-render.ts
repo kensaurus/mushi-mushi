@@ -27,10 +27,10 @@ import type {
   MushiTesterReputation,
   MushiWidgetConfig,
 } from '@mushi-mushi/core';
-import { statusView } from './reporter-inbox';
 import {
   isReporterConversation,
   reporterCopy,
+  reporterStatus,
   reporterTimelineEntryText,
   type ReporterCopy,
 } from '@mushi-mushi/core/reporter-ui';
@@ -289,6 +289,23 @@ function reportView(ctx: WidgetRenderCtx): ViewRegions {
   };
 }
 
+/** "Questions? {email}" as a mailto link — the report itself never goes by email. */
+function betaContact(ctx: WidgetRenderCtx): string {
+  const email = ctx.config.betaMode?.contactEmail?.trim();
+  if (!email || !/^[^\s@<>"]+@[^\s@<>"]+$/.test(email)) return '';
+  const link = `<a class="mushi-link-btn" href="mailto:${esc(encodeURIComponent(email).replace(/%40/g, '@'))}">${esc(email)}</a>`;
+  return `<p class="mushi-note mushi-beta-contact">${esc(ctx.locale.flows.betaStrip.contactHint).replace(esc('{email}'), link)}</p>`;
+}
+
+/** Who will see the report (beta mode receipt). Truthful: it goes to the developer's queue. */
+function betaReceipt(ctx: WidgetRenderCtx): string {
+  const beta = ctx.config.betaMode;
+  if (!beta?.enabled) return '';
+  const strip = ctx.locale.flows.betaStrip;
+  const sees = beta.appName ? strip.teamSees.replace('{appName}', beta.appName) : strip.teamSeesGeneric;
+  return `<div class="mushi-beta-receipt"><p class="mushi-note">${esc(sees)}</p>${betaContact(ctx)}</div>`;
+}
+
 /** "What's new" changelog row (beta mode). */
 function renderBetaChangelog(ctx: WidgetRenderCtx): string {
   const latest = ctx.config.betaMode?.changelogItems?.[0];
@@ -303,7 +320,7 @@ function renderBetaStrip(ctx: WidgetRenderCtx): string {
   const appName = esc(beta.appName ?? 'This app');
   const message = beta.message ? esc(beta.message) : esc(strip.defaultMessage).replace('{appName}', appName);
   const perks = beta.perks ?? [];
-  return `<div class="mushi-beta-strip" role="note" aria-label="${esc(strip.ariaLabel)}"><p><span class="mushi-beta-tag">Beta</span> ${message}</p>${beta.contactEmail ? `<p class="mushi-note">${esc(strip.contactHint).replace('{email}', esc(beta.contactEmail))}</p>` : ''}${perks.length ? `<ul class="mushi-beta-perks">${perks.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}${renderBetaChangelog(ctx)}</div>`;
+  return `<div class="mushi-beta-strip" role="note" aria-label="${esc(strip.ariaLabel)}"><p><span class="mushi-beta-tag">Beta</span> ${message}</p>${betaContact(ctx)}${perks.length ? `<ul class="mushi-beta-perks">${perks.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}${renderBetaChangelog(ctx)}</div>`;
 }
 
 // ─── Receipt (§1.1 Success) ───────────────────────────────────────
@@ -371,7 +388,7 @@ function successView(ctx: WidgetRenderCtx): ViewRegions {
   return {
     header: renderHeader(ctx, failure ?? ctx.rc.ui.sent),
     lead: '',
-    body: `<div class="mushi-success"><div class="mushi-success-stamp" aria-hidden="true"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44"/></svg><span class="mushi-success-stamp-label">受</span></div><time class="mushi-success-meta" datetime="${stamp.toISOString()}">${esc(formatReceiptTime(stamp, ctx.config.locale === 'auto' ? undefined : ctx.config.locale))}</time>${receipt(ctx)}${failure ? '' : renderOptIns(ctx)}${ctx.rewardsState ? renderSuccessRewards(ctx) : ''}</div>`,
+    body: `<div class="mushi-success"><div class="mushi-success-stamp" aria-hidden="true"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44"/></svg><span class="mushi-success-stamp-label">受</span></div><time class="mushi-success-meta" datetime="${stamp.toISOString()}">${esc(formatReceiptTime(stamp, ctx.config.locale === 'auto' ? undefined : ctx.config.locale))}</time>${receipt(ctx)}${failure ? '' : betaReceipt(ctx) + renderOptIns(ctx)}${ctx.rewardsState ? renderSuccessRewards(ctx) : ''}</div>`,
     footer: `${canTrack ? btn('track-report', esc(s.trackReport), 'mushi-btn') : '<span></span>'}${btn('done', esc(s.done), 'mushi-submit')}`,
   };
 }
@@ -420,7 +437,7 @@ function orderReports(reports: MushiReporterReport[]): MushiReporterReport[] {
 }
 
 function reportRow(ctx: WidgetRenderCtx, r: MushiReporterReport): string {
-  const st = statusView(r, ctx.lang);
+  const st = reporterStatus(r, ctx.lang);
   if (st.hidden) return '';
   const unread = (r.unread_count ?? 0) > 0;
   const meta = [typeLabel(ctx, r.user_category), r.page, st.othersNote].filter(Boolean).map((x) => esc(String(x))).join(' · ');
@@ -492,7 +509,7 @@ function detailView(ctx: WidgetRenderCtx): ViewRegions {
   const rc = ctx.rc;
   const report = ctx.reporterReports.find((r) => r.id === ctx.selectedReportId);
   // Opened via "Track it" before the list caught up → it's new.
-  const st = statusView(report ?? { status: 'new' }, ctx.lang);
+  const st = reporterStatus(report ?? { status: 'new' }, ctx.lang);
   const meta = [report?.page, report?.app_version ? `v${report.app_version}` : '', report ? formatRelativeTime(report.created_at) : '']
     .filter(Boolean).map((x) => esc(String(x))).join(' · ');
   const lead = `<div class="mushi-thread-summary"><p class="mushi-card-status">${statusPill(st.label, st.tone)}</p><p class="mushi-note">${esc(st.detail)}${st.othersNote ? ` ${esc(st.othersNote)}.` : ''}</p><p class="mushi-summary-text">${esc(report ? (report.description ?? reportTitle(report)) : `#${(ctx.selectedReportId ?? '').slice(0, 8)}`)}</p>${report?.screenshot_thumb_url ? `<img class="mushi-card-thumb" src="${esc(report.screenshot_thumb_url)}" alt="" />` : ''}${meta ? `<p class="mushi-note">${meta}</p>` : ''}</div>`;
@@ -617,7 +634,7 @@ function crossAppView(ctx: WidgetRenderCtx): ViewRegions {
     groups.get(key)!.reports.push(r);
   }
   const html = [...groups.entries()].map(([projectId, g]) => `<section class="mushi-xapp-group"><h3 class="mushi-xapp-app-name">${renderAppIconHtml({ projectId, appName: g.name, appSlug: g.slug, appDomain: g.domain })} ${esc(g.name)}</h3>${g.reports.map((r) => {
-    const st = statusView(r, ctx.lang);
+    const st = reporterStatus(r, ctx.lang);
     // The internal category never reaches a reporter: untitled rows show their short id.
     return `<div class="mushi-report-row"><span class="mushi-row-top">${statusPill(st.label, st.tone)}<span class="mushi-row-title">${esc(r.title ?? `#${r.short_id ?? r.id.slice(0, 8)}`)}</span><span class="mushi-row-when">${esc(formatRelativeTime(r.created_at))}</span></span></div>`;
   }).join('')}</section>`).join('');

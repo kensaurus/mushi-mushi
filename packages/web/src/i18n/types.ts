@@ -247,8 +247,12 @@ export interface MushiLocale {
     betaStrip: {
       /** Default status line when the host sets no message; `{appName}` placeholder. */
       defaultMessage: string;
-      /** Where reports land; `{email}` placeholder. */
+      /** Optional contact line, rendered as a mailto link; `{email}` placeholder. Nothing is emailed. */
       contactHint: string;
+      /** Who sees the report; `{appName}` placeholder. */
+      teamSees: string;
+      /** Same, when the host gave no app name. */
+      teamSeesGeneric: string;
       /** aria-label for the strip. */
       ariaLabel: string;
     };

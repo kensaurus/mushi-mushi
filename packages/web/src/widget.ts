@@ -986,7 +986,7 @@ export class MushiWidget {
         nav.appendChild(btn);
       };
 
-      appendAction(bugLabel, () => this.open());
+      appendAction(bugLabel, () => this.open({ category: 'bug' }));
       if (showFeat) {
         appendDivider(true);
         appendAction(featLabel, () => this.open({ featureRequest: true }), true);
@@ -1024,7 +1024,7 @@ export class MushiWidget {
       const bugBtn = document.createElement('button');
       bugBtn.className = 'mushi-banner-btn';
       bugBtn.textContent = bugLabel;
-      bugBtn.addEventListener('click', () => this.open());
+      bugBtn.addEventListener('click', () => this.open({ category: 'bug' }));
       banner.appendChild(bugBtn);
 
       if (showFeat) {
