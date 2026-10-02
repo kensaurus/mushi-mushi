@@ -4025,7 +4025,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP<br/>80 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>81 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
@@ -4073,7 +4073,7 @@ your client:
 }
 ```
 
-The full tool catalog (80 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (81 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -4249,7 +4249,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 80 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 81 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -6695,7 +6695,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **80-tool** catalog and
+on npm for the full **81-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 
@@ -6795,7 +6795,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 
   Auto-generated from `packages/mcp/src/catalog.ts`. Do not edit by hand — run `pnpm gen:mcp-tools-doc`.
 
-**76 tools** · **8 resources** · **4 prompts**
+**81 tools** · **8 resources** · **4 prompts**
 
 ## Read tools (`mcp:read`)
 
@@ -6838,6 +6838,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `get_map_run_status` | Story map run status | Poll the status and results of a story_map_run started by map_user_stories. Returns \{ status: pending\|running\|completed\|failed, pages_crawled, proposal_id (once done), cursor_pr_url (if Cursor Cloud refined the draft) }. Read-only. Use to know when a crawl has finished and which inventory_proposals row to review next. |
 | `list_byok_keys` | List your API key pool | List the project's BYOK API keys grouped by provider (anthropic \| openai \| firecrawl \| browserbase \| cursor). Returns pooled \{ keys: [\{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at }] } plus read-only \{ legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, or rate-limited; use add_byok_key to add one. |
 | `list_pending_review_stories` | List QA stories pending review | List auto-generated QA/TDD stories in approval_status=pending_review — the queue waiting for human sign-off before they run on schedule. Returns \{ stories: [\{ id, title, source, target_url, created_at }] }. Read-only. Use to find what needs review today; then approve_qa_story to approve or reject each. |
+| `list_reporter_outbox` | List held reporter updates | List pipeline messages waiting for review before they reach reporters (projects in review mode hold "fix in progress", "fixed", "shipped in vX" and "closed" messages). Each row has \{ id, report_id, report_title, notification_type, text, body_override, created_at }; text is exactly what the reporter will see. Read-only. Use before release_reporter_update; an empty list means nothing is waiting (or the project sends updates automatically). |
 | `get_two_way_comms_health` | Two-way communication health | Summarize SDK ↔ admin two-way reporter health for a host app: last SDK heartbeat, app version/platform last seen, unread reporter messages, recent reporter replies, and pending QA/TDD follow-ups. Use after wiring @mushi-mushi/web in a Vite/Capacitor app to confirm reports land in the console and admin/MCP replies reach the in-app widget. |
 | `list_qa_story_runs` | Recent QA story runs | Return the most recent runs for a given QA story, newest first. Each row includes status (passed/failed/error/running), latency_ms, created_at, error_message headline, and assertion_failures (up to 10). Use this to understand whether a story is currently healthy, what the last failure was, and whether a manual run has completed. |
 | `get_qa_story_run` | QA story run detail | Fetch the full detail for a single qa_story_run: status, error_message, assertion_failures, latency_ms, provider_session_url (Browserbase replay link when available), and screenshot URLs from qa_story_evidence. Use this to drill into a specific failing run and understand the exact error before deciding whether to improve the story script or fix the app. |
@@ -6853,6 +6854,7 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `get_codebase_domains` | Business domain map | Extract the business domains, flows, and steps in the repo, each mapped to the file paths that implement it. Returns \{ domains: [\{ name, flows: [\{ name, steps, paths }] }] }. Cached per index fingerprint. Requires codebase indexing. Read-only. Use to see what the app does at a product level; use get_codebase_tour for a dependency-ordered code walkthrough instead. |
 | `analyze_codebase_impact` | Diff impact analysis | Find files that depend on a set of changed paths by walking the reverse import graph. Source paths from: manual list, last push, a GitHub compare range, or a fix PR's files. Returns \{ changed_paths, source, affected_file_paths, affected_node_ids, meta }. Requires codebase indexing. Read-only. Use to gauge a diff's blast radius before merging; use get_blast_radius for a bug's component impact, or search_codebase to locate files. |
 | `analyze_wiki_knowledge` | Wiki knowledge graph | Return the wiki/docs knowledge-graph nodes and their sources for the project. Returns \{ nodes: [\{ id, label, source_url }], sources }. Read-only. Use to see what doc entities exist; pass include_wiki=true to ask_codebase to merge this corpus into a grounded answer. |
+| `get_repo_digest` | Repo digest (paste-ready code) | Return the connected GitHub repo as one paste-ready text digest at a pinned commit: a directory tree plus file contents, ranked README → manifests → entry points → source → tests and cut to a token budget (budgetTokens, default 50,000, max 200,000; counts are estimates). Scope it to a folder (path) or to one bug (reportId: the report's stack-frame files, fix files and related code first, then the files that import them). Sensitive files (.env, keys) are never included, and a file that looks like it holds a secret is replaced with a notice. Returns \{ sha, ref, total_tokens, budget_tokens, files: [\{ path, tokens, truncated }], dropped_counts, redacted, scope, text }. Works without codebase indexing. Read-only. Use to hand yourself the code around a bug before fixing it; use get_fix_context for the diagnosis, or search_codebase to find one thing. |
 
 ## Write tools (`mcp:write`)
 
@@ -6862,12 +6864,13 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `dispatch_fix` | Dispatch Mushi fix agent | Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns \{ fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not. |
 | `trigger_judge` | Run Sonnet-as-Judge | Queue the Sonnet-as-Judge to grade recent fix quality across accessible projects. Returns \{ dispatched: number } — one judge-batch job per project; scores land asynchronously in judge_results (read back with run_nl_query). Write; consumes LLM budget. Idempotent within a short window. Use before shipping to vet fix quality; use get_fix_timeline to inspect a single attempt instead. |
 | `test_gen_from_report` | Generate Playwright test from report | Generate a Playwright regression test from a classified report using your project LLM key, then open a draft GitHub PR with the spec. Requires the inventory_v2 plan plus GitHub and LLM keys configured. Returns \{ qaStoryId, prUrl }. Write; consumes LLM budget; NOT idempotent — each call opens a new PR. Use to lock in a regression as an E2E test; use generate_tdd_from_story to build a test from a mapped user story instead. |
-| `transition_status` | Move report between states | Move a report to a new workflow state, enforcing the same transition rules as the admin UI. Valid targets: classified, grouped, fixing, fixed, verified, reopened, dismissed. Returns \{ report } with the updated status. Write; idempotent (setting the current status is a no-op); rejects illegal transitions. Use to dismiss a duplicate or mark fixed; use merge_fix to mark fixed via a merged PR, or reopen_report for the reopened path. |
+| `transition_status` | Move report between states | Move a report to a new workflow state, enforcing the same transition rules as the admin UI. Valid targets: classified, grouped, fixing, fixed, verified, reopened, dismissed. When dismissing, closedReason (duplicate, not_reproducible, wont_fix, working_as_intended, spam) sets what the reporter is told — spam closes silently, and duplicate needs the report grouped under another one first; reporterMessage posts your note to the reporter verbatim. Returns \{ ok }. Write; idempotent (setting the current status is a no-op); rejects illegal transitions. Use to dismiss a duplicate or mark fixed; use merge_fix to mark fixed via a merged PR, or reopen_report for the reopened path. |
 | `merge_fix` | Merge fix PR | Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns \{ merged, reportStatus }. Write; destructive and irreversible from Mushi's side — once GitHub merges into the target repo's default branch there is no unmerge endpoint, only a manual revert PR outside this tool. Idempotent — re-running an already-merged attempt is a safe no-op. Prerequisite: CI green (check with refresh_ci); confirm the diff and CI status with the user before calling on a PR you have not reviewed. Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging. |
 | `refresh_ci` | Refresh fix CI status | Re-poll GitHub for the latest check-run status of a fix attempt's PR and persist it on the fix_attempt row (does not merge or mutate GitHub). Returns \{ check_run_status, check_run_conclusion, check_run_updated_at }. Write; idempotent. Use right before merge_fix to confirm CI is green; use get_fix_timeline for the full attempt lifecycle. |
 | `reopen_report` | Reopen report (operator) | Move a previously fixed/verified/dismissed report back to the reopened state for regression review, recording an operator note. Returns \{ report } with status=reopened. Write; idempotent — reopening an already-reopened report is a no-op. Use when a reporter says "still broken" after a fix shipped; use transition_status for any other state change. |
 | `award_bonus_points` | Award bonus points | Award ad-hoc bonus points (1-50000, positive only — there is no way to subtract via this tool) to a contributor by their external user id (as passed to Mushi.identify()). Points post immediately to their total and are audit-logged as bonus_manual. Destructive and effectively irreversible: there is no reversal endpoint, so confirm the amount and recipient with the user before calling. Tier re-evaluation (and any host-side reward_webhooks grant tied to crossing a threshold) is NOT immediate — it only runs on the contributor's next tracked activity, not on this call. Requires mcp:write scope. Use this to thank a contributor who found a critical bug or to run a one-off promotional campaign. |
 | `set_tier` | Override contributor tier | Override a contributor's tier by tier slug (e.g. "champion"), bypassing the normal points-threshold logic entirely. This is an admin escape hatch for manual promotions — normal tier transitions happen automatically via point thresholds instead. Destructive: it is a label-only override that does NOT replay the automatic tier-evaluation path, so any host_credit_payload grant (Stripe perk, badge, etc.) normally tied to reaching that tier via points will NOT fire — confirm with the user whether they also need the perk granted another way. The override persists until another set_tier call changes it; the prior override stays in the end_user_activity audit trail either way, logged as tier_override_manual. Requires mcp:write scope. |
+| `import_sentry_issues` | Import Sentry issues | Pull existing Sentry issues into Mushi's report queue: by issueIds (numeric ids or short ids like WEB-12, at most 10) or by a Sentry search query (default is:unresolved) within the project's configured Sentry project, limit 1-10. Each issue goes through the same path as a Sentry webhook delivery: deduped per issue, linked, classified. An issue already linked to a report answers linked and is never reopened. Returns \{ items: [\{ input, issueId, shortId, outcome, reportId, error? }], created, linked, failed, indexing }. Write; idempotent; spends classification budget per new report. Needs the Sentry org slug, project slug and an auth token (event:read, project:read) in Integrations → Sentry. Use for issues that existed before the webhook was wired; then call triage_issue on a created report. |
 | `map_user_stories` | Map user stories from live app | Crawl a live application URL (Firecrawl/Browserbase) and have Claude draft an inventory.yaml of pages and user stories, written to an inventory_proposals row (source=live_crawl). Optionally dispatches a Cursor Cloud agent to refine the draft and open a PR. Returns \{ runId, status: "pending" } immediately — poll get_map_run_status. Write; consumes crawl + LLM budget; NOT idempotent. Use to bootstrap test coverage without hand-writing YAML; then generate_tdd_from_story per accepted story. |
 | `generate_tdd_from_story` | Generate TDD test from user story | Generate a full Playwright TypeScript test from a mapped user story id (from accepted inventory) using Claude, and insert a qa_stories row (source=test_gen_from_story). approval_status follows the project automation_mode (auto = enabled immediately; review/approve = pending_review). Optionally opens a draft GitHub PR. Returns \{ qaStoryId, prUrl, approvalStatus, needsHumanReview }. Write; consumes LLM budget; NOT idempotent. Run map_user_stories first; use test_gen_from_report to build a test from a bug report instead. |
 | `improve_qa_story` | Auto-improve a failing QA story | Analyze recently failed qa_story_runs and use Claude to write improved test scripts that address the failures. New tests are created with source=pdca, parent_story_id chained to the original, and approval gated by the original story's automation_mode. Returns \{ improvedStoryIds }. Write; consumes LLM budget; NOT idempotent. Use to repair flaky/broken tests; use run_qa_story to re-run as-is, or list_qa_story_runs to inspect failures first. |
@@ -6877,6 +6880,8 @@ description: Every tool, resource and prompt the Mushi MCP server exposes to Cur
 | `remove_byok_key` | Remove an API key | Permanently remove one pooled BYOK credential by key id from the authenticated project, including its Vault secret. Write; destructive; idempotent. |
 | `approve_qa_story` | Approve or reject a pending QA story | Approve or reject a qa_story currently in pending_review (pass approve=true\|false and an optional note). Approved stories are enabled in the QA schedule immediately; rejected ones are disabled. Returns \{ id, approval_status }. Write; idempotent — re-approving an approved story is a no-op. Use to clear the review queue from list_pending_review_stories. |
 | `reply_to_reporter` | Reply to a reporter | Send a visible message to the end-user who filed a bug report. The reply appears in the in-app Mushi widget as an admin comment and creates an unread notification badge so the reporter sees it immediately. Use this to answer questions, request reproduction steps, or confirm a fix — without leaving the Cursor IDE. |
+| `request_reporter_info` | Ask the reporter a question | Ask the end-user who filed a report a question: it appears in their in-app "Your reports" thread, marks the report "Waiting on you", and the waiting state clears when they answer (their reply reaches Slack and the console). Returns \{ comment_id, awaiting_reporter }. Write; messages a real end user and is NOT idempotent — each call posts another question, so confirm the wording with the user first. Fails with NO_REPORTER for reports that came from an integration. Use when you need reproduction details; use reply_to_reporter for a plain reply. |
+| `release_reporter_update` | Release or discard a held reporter update | Send (action=release, the default) or drop (action=discard) one held reporter message from list_reporter_outbox; bodyOverride replaces its text before sending. Returns \{ delivered, skipped, failed }. Write; messages a real end user — confirm with the user first. Idempotent in effect: a message that is no longer held returns CONFLICT instead of sending twice. |
 | `test_notification_channel` | Send a test notification | Send a test notification to a configured notification channel for the project. Supported channel kinds: "slack" (posts a test Block Kit message to the configured channel), "discord" (posts to the project discord_webhook_url). Returns ok=true if the message was accepted. Use this to verify the integration is working after setup or after changing credentials. |
 | `start_skill_pipeline` | Start a skill pipeline | Start a new skill pipeline run for a report. Pass rootSkillSlug and optionally reportId. Returns run_id, context_packet (full instructions + report context), and step list. Read the context_packet — it contains skill instructions plus full report context (repro steps, root cause, RAG files). After executing each step, call checkin_pipeline_step. The PM watching the console sees progress live. |
 | `checkin_pipeline_step` | Check in a pipeline step | Report the completion status of a pipeline step (passed, failed, running, or skipped). Optionally include notes, a PR URL, or the Cursor agentId. Updates the live React Flow canvas in the Mushi console so PMs see real-time progress. |
@@ -15557,7 +15562,7 @@ description: Visual, searchable map of every indexed source file — explore arc
 
 The Explore page turns the raw indexed source files into a visual, navigable map of how your project is architecturally structured. It is the fastest way to answer "where does X live?", "what imports what?", and "which layer handles this concern?" — without opening your editor.
 
-  **Prerequisite:** The Explore page requires codebase indexing to be enabled. Run `mushi index` from your project directory, or enable **Settings → Codebase Indexing** in the admin console. Indexing typically completes in under a minute for codebases up to 10,000 files.
+  **Prerequisite:** Most of the Explore page requires codebase indexing to be enabled. **Copy digest** and **Map → Diagram** only need a connected GitHub repo. Run `mushi index` from your project directory, or enable **Settings → Codebase Indexing** in the admin console. Indexing typically completes in under a minute for codebases up to 10,000 files.
 
 ---
 
@@ -15569,14 +15574,34 @@ The page is organized into three rails (URL `?tab=`):
 |------|------|---------|
 | **Summary** | Summary | Index health, file counts, last index attempt / error |
 | **Understand** | Ask · Tour · Domains · Knowledge | Chat with citations, guided walkthrough, business domains, wiki/docs knowledge merged into Ask |
-| **Map** | Graph · Layers · Search | Visual architecture map and semantic search (detailed below) |
+| **Map** | Graph · Layers · Diagram · Search | Visual architecture map, an AI architecture diagram, and semantic search (detailed below) |
 | **Index** | Index | Indexer debug — repo, webhook, embedding coverage, last error |
 
-MCP equivalents: `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `search_codebase`, `get_codebase_domains`, `analyze_codebase_impact`, `analyze_wiki_knowledge`.
+MCP equivalents: `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `search_codebase`, `get_codebase_domains`, `analyze_codebase_impact`, `analyze_wiki_knowledge`, `get_repo_digest` (on the default feature set; needs no index).
+
+---
+
+## Copy digest
+
+**Copy digest** (top of the page) copies your repo as one paste for an AI chat or coding agent: the folder tree plus the most useful files, in this order — README, manifests (`package.json`, …), entry points, source, then tests. Pick a size first; the digest stops at that many tokens (an estimate: characters ÷ 4) and says what it left out.
+
+- It reads GitHub at one commit and names the commit, so the paste matches a real version of your code.
+- `.env` files, private keys and similar files are never included. A file that looks like it holds a secret is replaced with a notice.
+- On a bug report, **Copy code for this bug** puts the bug's files first: files from its stack trace, files earlier fixes changed, related code from the index, then the files that import them.
+
+The same digest is the MCP tool `get_repo_digest`, on the default tool set.
 
 ---
 
 ## Map views
+
+### Diagram
+
+An AI drawing of the main parts of your app and how they connect. Mushi reads the repo on GitHub at the latest commit and asks the AI for the parts, their folders or files, and the links between them. Then Mushi checks every path against the real repo: a path that does not exist is removed and the part is marked, so a made-up file never becomes a link.
+
+- **Draw diagram** costs one AI call. Diagrams are stored per commit and never redrawn on their own. **Update to latest commit** draws only when there is a new commit; **Redraw** asks the AI again.
+- Click a part to read what it does and open its folder or file on GitHub at that commit.
+- **Public page** (optional, owner or admin): share the diagram at `kensaur.us/mushi-mushi/r//`. The preview shows exactly what becomes public: part names, descriptions and paths, never file contents. A private repo needs you to tick a consent box first. The page shows the commit it was drawn from, keeps showing that drawing until you publish again, and **Unpublish** removes it.
 
 ### Graph
 
@@ -17555,7 +17580,7 @@ Wire Mushi into Cursor, Claude Code, Windsurf, or any MCP client. Once connected
 your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
-The live **Catalog** tab mirrors the server registry (**80 tools**, 8 resources, 4 prompts).
+The live **Catalog** tab mirrors the server registry (**81 tools**, 8 resources, 4 prompts).
 
 ---
 

@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-10-02 · **572** routes.
+> Generated: 2026-10-02 · **579** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,9 +10,9 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 109 |
 | `apiKeyAuth` | 51 |
-| `jwtAuth` | 342 |
+| `jwtAuth` | 345 |
 | `jwtOrApiKey` | 3 |
-| `unknown` | 67 |
+| `unknown` | 71 |
 
 ## Routes by path
 
@@ -252,6 +252,12 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/admin/projects/:id/codebase/chat/threads/:threadId` | `unknown` | `packages/server/supabase/functions/api/routes/codebase-understand.ts` |
 | PATCH | `/v1/admin/projects/:id/codebase/chat/threads/:threadId` | `unknown` | `packages/server/supabase/functions/api/routes/codebase-understand.ts` |
 | GET | `/v1/admin/projects/:id/codebase/chat/threads/:threadId/messages` | `unknown` | `packages/server/supabase/functions/api/routes/codebase-understand.ts` |
+| GET | `/v1/admin/projects/:id/codebase/diagram` | `unknown` | `packages/server/supabase/functions/api/routes/repo-diagram.ts` |
+| POST | `/v1/admin/projects/:id/codebase/diagram` | `unknown` | `packages/server/supabase/functions/api/routes/repo-diagram.ts` |
+| DELETE | `/v1/admin/projects/:id/codebase/diagram/publish` | `jwtAuth` | `packages/server/supabase/functions/api/routes/repo-diagram.ts` |
+| POST | `/v1/admin/projects/:id/codebase/diagram/publish` | `jwtAuth` | `packages/server/supabase/functions/api/routes/repo-diagram.ts` |
+| GET | `/v1/admin/projects/:id/codebase/diagram/publish-preview` | `jwtAuth` | `packages/server/supabase/functions/api/routes/repo-diagram.ts` |
+| GET | `/v1/admin/projects/:id/codebase/digest` | `unknown` | `packages/server/supabase/functions/api/routes/repo-digest.ts` |
 | GET | `/v1/admin/projects/:id/codebase/domains` | `unknown` | `packages/server/supabase/functions/api/routes/codebase-understand.ts` |
 | POST | `/v1/admin/projects/:id/codebase/enable` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-codebase.ts` |
 | GET | `/v1/admin/projects/:id/codebase/explore` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-codebase.ts` |
@@ -495,6 +501,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/org/:id/members/:userId` | `jwtAuth` | `packages/server/supabase/functions/api/routes/organizations.ts` |
 | PATCH | `/v1/org/:id/members/:userId` | `jwtAuth` | `packages/server/supabase/functions/api/routes/organizations.ts` |
 | GET | `/v1/org/:id/members/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/organizations.ts` |
+| GET | `/v1/public/diagrams/:owner/:repo` | `unknown` | `packages/server/supabase/functions/api/routes/repo-diagram.ts` |
 | GET | `/v1/public/email/unsubscribe` | `unknown` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/public/email/unsubscribe` | `unknown` | `packages/server/supabase/functions/api/routes/public.ts` |
 | GET | `/v1/public/marketplace/apps` | `unknown` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
