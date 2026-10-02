@@ -37,6 +37,10 @@ import { useAdminMode } from '../lib/mode'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { FirstDiagnosisInline } from '../components/onboarding/FirstDiagnosisScreen'
+import { useActiveOrgId } from '../components/OrgSwitcher'
+import { RecipeStateChip } from '../components/recipe/RecipeStateChip'
+import type { ElementState } from '../lib/recipeTypes'
+import type { PortfolioResponse } from '../lib/portfolioTypes'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -164,6 +168,16 @@ export function OverviewPage() {
 
   const portfolioTotals = data && data.length > 0 ? summarizePortfolio(data) : null
 
+  // Recipe chip per card (Plan 019 §3): the worst recipe state, read from the
+  // portfolio rollup. Loaded only once there are cards; a failure just hides
+  // the chips — the activity cards never depend on it.
+  const orgId = useActiveOrgId()
+  const recipe = usePageData<PortfolioResponse>(orgId && data && data.length > 0 ? `/v1/admin/orgs/${orgId}/portfolio` : null)
+  const worstByProject = useMemo(
+    () => new Map((recipe.data?.cards ?? []).map((c) => [c.projectId, c.worst] as const)),
+    [recipe.data],
+  )
+
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-overview">
       <PageHeaderBar
@@ -257,7 +271,7 @@ export function OverviewPage() {
       )}
       {data && data.length > 0 && (
         <PanelErrorBoundary label="Portfolio">
-          <PortfolioGrid cards={data} />
+          <PortfolioGrid cards={data} recipeWorst={worstByProject} />
         </PanelErrorBoundary>
       )}
     </div>
@@ -266,7 +280,7 @@ export function OverviewPage() {
 
 // ─── Portfolio grid ───────────────────────────────────────────────────────────
 
-function PortfolioGrid({ cards }: { cards: ProjectCard[] }) {
+function PortfolioGrid({ cards, recipeWorst }: { cards: ProjectCard[]; recipeWorst: ReadonlyMap<string, ElementState> }) {
   const { isAdvanced } = useAdminMode()
 
   const sorted = useMemo(
@@ -288,7 +302,7 @@ function PortfolioGrid({ cards }: { cards: ProjectCard[] }) {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {sorted.map((card, i) => (
           <SpringChromeEnter key={card.project_id} delay={i * 0.03}>
-            <ProjectHealthCard card={card} />
+            <ProjectHealthCard card={card} recipeWorst={recipeWorst.get(card.project_id) ?? null} />
           </SpringChromeEnter>
         ))}
       </div>
@@ -307,7 +321,7 @@ function PortfolioGrid({ cards }: { cards: ProjectCard[] }) {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {attention.map((card, i) => (
             <SpringChromeEnter key={card.project_id} delay={i * 0.03}>
-              <ProjectHealthCard card={card} />
+              <ProjectHealthCard card={card} recipeWorst={recipeWorst.get(card.project_id) ?? null} />
             </SpringChromeEnter>
           ))}
         </div>
@@ -322,7 +336,7 @@ function PortfolioGrid({ cards }: { cards: ProjectCard[] }) {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {healthy.map((card, i) => (
             <SpringChromeEnter key={card.project_id} delay={(attention.length + i) * 0.03}>
-              <ProjectHealthCard card={card} />
+              <ProjectHealthCard card={card} recipeWorst={recipeWorst.get(card.project_id) ?? null} />
             </SpringChromeEnter>
           ))}
         </div>
@@ -333,7 +347,7 @@ function PortfolioGrid({ cards }: { cards: ProjectCard[] }) {
 
 // ─── Project health card ──────────────────────────────────────────────────────
 
-function ProjectHealthCard({ card }: { card: ProjectCard }) {
+function ProjectHealthCard({ card, recipeWorst }: { card: ProjectCard; recipeWorst: ElementState | null }) {
   const dauValues = (card.dau_spark ?? []).map((p) => p.dau)
   const healthTone = healthToneFor(card)
 
@@ -429,6 +443,17 @@ function ProjectHealthCard({ card }: { card: ProjectCard }) {
         >
           Dashboard
         </Link>
+        {recipeWorst && (
+          <Link
+            to="/recipe"
+            onClick={handleSwitchProject}
+            className="ml-auto inline-flex min-h-6 items-center gap-1 rounded-sm text-2xs text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            aria-label="Open this project's recipe"
+          >
+            <span>Recipe</span>
+            <RecipeStateChip state={recipeWorst} />
+          </Link>
+        )}
       </div>
     </Card>
   )

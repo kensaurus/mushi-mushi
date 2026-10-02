@@ -1360,6 +1360,46 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   );
 
+  // --- Portfolio (Plan 019 P1) ----------------------------------------------
+  // Organization-wide reads. The api refuses project-bound keys (403) and any
+  // organization the key owner is not a member of, so these never widen access.
+
+  const ORG_ID_INPUT = z.object({
+    organizationId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe("Organization UUID — defaults to the key owner's only organization when omitted"),
+  });
+
+  server.registerTool(
+    'get_portfolio',
+    {
+      title: titleOf('get_portfolio'),
+      description: descOf('get_portfolio'),
+      annotations: annotationsFor('get_portfolio'),
+      inputSchema: ORG_ID_INPUT,
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/portfolio`));
+    },
+  );
+
+  server.registerTool(
+    'list_portfolio_findings',
+    {
+      title: titleOf('list_portfolio_findings'),
+      description: descOf('list_portfolio_findings'),
+      annotations: annotationsFor('list_portfolio_findings'),
+      inputSchema: ORG_ID_INPUT,
+    },
+    async (args) => {
+      const org = encodeURIComponent(args.organizationId ?? 'current');
+      return jsonText(await apiCall(`/v1/admin/orgs/${org}/portfolio/findings`));
+    },
+  );
+
   server.registerTool(
     'suggest_fix',
     {

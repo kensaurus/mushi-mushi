@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-02T06:00:03.191Z",
+  "generatedAt": "2026-10-02T11:41:20.282Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -307,6 +307,15 @@
       "route_path": "/recipe",
       "kind": "page",
       "content_hash": "16c3ff43fd5efb5d32c6af2bcb19e49659b3351e56d9c6a7583b725b7dbbca73"
+    },
+    {
+      "doc_path": "pages/portfolio.md",
+      "section": "main",
+      "title": "Portfolio",
+      "body": "# Portfolio\n\nEvery app in the team at once: worst recipe state, hole checks, SDK versions, and problems to fix once across apps.\n\nRoute: /portfolio\nSection: Check\n\nKeywords: portfolio, all apps, fix once, sdk skew, radar, holes, team, organization\n\nUse this page when the user asks about: portfolio, all apps, fix once, sdk skew, radar, holes",
+      "route_path": "/portfolio",
+      "kind": "page",
+      "content_hash": "1354fb90032eb98f9c7bd5d132b8a7aac32268f744d0f7b12dc80a1088bd8816"
     },
     {
       "doc_path": "pages/design.md",

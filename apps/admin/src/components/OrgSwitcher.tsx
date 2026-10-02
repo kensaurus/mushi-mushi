@@ -280,6 +280,14 @@ export function OrgSwitcher() {
               <span>View team page</span>
               <span aria-hidden className="text-fg-faint">→</span>
             </Link>
+            <Link
+              to="/portfolio"
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center justify-between gap-1.5 border-b border-edge-subtle px-2.5 py-1.5 text-left text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity focus-visible:outline-none focus-visible:bg-surface-overlay"
+            >
+              <span>All this team's apps</span>
+              <span aria-hidden className="text-fg-faint">→</span>
+            </Link>
             {creating ? (
               <form
                 onSubmit={(e) => {
