@@ -1,43 +1,32 @@
 /**
  * FILE: ChromeBreadcrumb.tsx
- * PURPOSE: Supabase-style breadcrumb trail in the desktop top bar —
- *          org / project / current route label.
+ * PURPOSE: Breadcrumb trail in the desktop top bar: Console / current route.
+ *
+ * The project segment was dropped: the project switcher in the same row
+ * already names the project, and in the 224px slot the three segments
+ * truncated each other at 1440px ("Console / solo-boss-c… / Inb…").
  */
 
 import { Link, useLocation } from 'react-router-dom'
 import { routeFallbackTitle } from '../lib/navRegistry'
-import { useActiveProjectId } from './ProjectSwitcher'
-import { useSetupStatus } from '../lib/useSetupStatus'
 
 export function ChromeBreadcrumb() {
   const { pathname } = useLocation()
-  const activeProjectId = useActiveProjectId()
-  const setup = useSetupStatus(activeProjectId)
-  const projectName = setup.activeProject?.project_name
   const routeLabel = routeFallbackTitle(pathname) ?? 'Console'
 
   return (
     <nav
       aria-label="Breadcrumb"
-      className="hidden xl:flex items-center gap-1.5 min-w-0 max-w-56 text-2xs text-fg-muted shrink"
+      className="hidden xl:flex items-center gap-1.5 min-w-0 max-w-64 text-2xs text-fg-muted shrink"
     >
-      <Link to="/dashboard" className="hover:text-fg motion-safe:transition-opacity truncate">
+      <Link
+        to="/dashboard"
+        className="inline-flex min-h-6 items-center hover:text-fg motion-safe:transition-opacity shrink-0"
+      >
         Console
       </Link>
-      {projectName && (
-        <>
-          <span aria-hidden className="text-fg-faint">/</span>
-          <Link
-            to="/projects"
-            className="hover:text-fg motion-safe:transition-opacity truncate max-w-32"
-            title={projectName}
-          >
-            {projectName}
-          </Link>
-        </>
-      )}
       <span aria-hidden className="text-fg-faint">/</span>
-      <span className="text-fg-secondary font-medium truncate" aria-current="page">
+      <span className="text-fg-secondary font-medium truncate" aria-current="page" title={routeLabel}>
         {routeLabel}
       </span>
     </nav>

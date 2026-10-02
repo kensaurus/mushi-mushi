@@ -24,6 +24,18 @@ body,
   min-height: 0;
 }
 
+/* iOS zooms the whole page when a focused field's text is under 16px, and
+   the dense text-xs/text-sm field sizes are 12–14px. Phones and touch
+   tablets get 16px field text; desktop keeps the dense size. Unlayered, so
+   it outranks the Tailwind text-* utility on the field. */
+@media (max-width: 639px), (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="button"], [type="submit"], [type="reset"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 body {
   background-color: var(--color-surface);
   color: var(--color-fg);
