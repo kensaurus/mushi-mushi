@@ -30,7 +30,9 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
       if (typeof document === 'undefined') return null;
 
       const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
+      // isCanvasBlank reads pixels back; this hint keeps Chrome from warning
+      // about (and slowing down) repeated getImageData readbacks.
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) {
         activeOptions.onFailed?.('unsupported');
         emitScreenshotFailed('unsupported');
@@ -141,7 +143,25 @@ function emitScreenshotFailed(reason: ScreenshotFailureReason): void {
  * before any pixel is produced. `redactSelectors` adds to this list and can't
  * remove from it: a host passing its own list used to drop password redaction.
  */
-export const ALWAYS_REDACT_SELECTORS = 'input[type="password"],input[autocomplete^="cc-"],[data-private],[data-mushi-mask]';
+/**
+ * CSS animations do not run inside an SVG rendered through <img>: an element
+ * with an entrance animation (fade-in from opacity 0, for example) is painted
+ * at its first keyframe. On pages that animate their content in, the whole
+ * capture came out transparent and was reported as 'unsupported'. Appended
+ * last, after the inlined page CSS, so it wins; the capture then shows the
+ * settled page the reporter is looking at.
+ */
+export const FREEZE_ANIMATIONS_CSS =
+  '*,*::before,*::after{animation:none!important;transition:none!important}';
+
+function freezeAnimations(clone: Element): void {
+  const styleEl = document.createElement('style');
+  styleEl.setAttribute('data-mushi-freeze', '');
+  styleEl.textContent = FREEZE_ANIMATIONS_CSS;
+  (clone.querySelector('head') ?? clone).appendChild(styleEl);
+}
+
+export const ALWAYS_REDACT_SELECTORS ='input[type="password"],input[autocomplete^="cc-"],[data-private],[data-mushi-mask]';
 const DEFAULT_REDACT_SELECTORS: readonly string[] = ['[data-mushi-redact]'];
 
 function buildPrivacySafeDocument(privacy?: MushiPrivacyConfig): Element {
@@ -152,6 +172,7 @@ function buildPrivacySafeDocument(privacy?: MushiPrivacyConfig): Element {
   clone.querySelector('#mushi-mushi-widget')?.remove();
   stripTaintSources(clone);
   inlineDocumentStyles(clone);
+  freezeAnimations(clone);
 
   // Redact: black-out matching elements, before mask/block. The always-on
   // baseline (passwords, card fields, [data-private], [data-mushi-mask]) runs
