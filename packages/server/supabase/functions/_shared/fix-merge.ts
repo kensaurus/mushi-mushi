@@ -18,9 +18,12 @@ import { notifyReportStatusTransition } from './report-status-notify.ts';
 import { resolveExternalIssue } from './integrations.ts';
 import { emitProductEvent } from './product-events.ts';
 import {
+  decideFixingReport,
+  FIXING_GRACE_MS,
   PR_CLOSED_UNMERGED_LABEL,
   preFixReportStatus,
   shouldRevertReportOnPrClose,
+  type FixingAttemptView,
 } from './fix-loop-status.ts';
 import { resolveLinkedSentryIssues } from './sentry-resolve-back.ts';
 import { keepAlive } from './background.ts';
@@ -366,6 +369,93 @@ export async function finalizeFixClosedUnmerged(
   }).catch((e) => log.warn('Plugin dispatch failed', { event: 'report.status_changed', err: String(e) }));
 
   return { justClosed, reportStatus: nextStatus };
+}
+
+export interface FixingReconcileSummary {
+  scanned: number;
+  finalized: number;
+  reverted: number;
+  flagged: number;
+}
+
+const RECONCILE_BATCH = 25;
+
+/**
+ * Second phase of the ci-sync sweep: no report stays in 'fixing' once
+ * nothing behind it is alive (see decideFixingReport). Covers what the PR
+ * lifecycle sync cannot see: a merge whose bookkeeping crashed, an attempt
+ * that failed after an earlier PR was closed, a PR Mushi can never read.
+ */
+export async function reconcileStuckFixingReports(
+  db: Db,
+  now: Date = new Date(),
+): Promise<FixingReconcileSummary> {
+  const summary: FixingReconcileSummary = { scanned: 0, finalized: 0, reverted: 0, flagged: 0 };
+  const { data: reports, error } = await db
+    .from('reports')
+    .select('id, project_id, status, updated_at, processing_error, category, severity, stage1_classification, fix_pr_url')
+    .eq('status', 'fixing')
+    .lt('updated_at', new Date(now.getTime() - FIXING_GRACE_MS).toISOString())
+    .order('updated_at', { ascending: true })
+    .limit(RECONCILE_BATCH);
+  if (error) {
+    log.warn('fixing-report scan failed', { err: error.message });
+    return summary;
+  }
+  if (!reports?.length) return summary;
+
+  const { data: attemptRows } = await db
+    .from('fix_attempts')
+    .select('id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, pr_state, merged_at, status, created_at, completed_at')
+    .in('report_id', reports.map((r) => r.id));
+  const byReport = new Map<string, Array<FixingAttemptView & FixAttemptMergeRow>>();
+  for (const a of (attemptRows ?? []) as Array<FixingAttemptView & FixAttemptMergeRow>) {
+    const list = byReport.get(a.report_id) ?? [];
+    list.push(a);
+    byReport.set(a.report_id, list);
+  }
+
+  for (const report of reports) {
+    summary.scanned++;
+    const attempts = (byReport.get(report.id) ?? []).filter((a) => a.project_id === report.project_id);
+    const verdict = decideFixingReport({ report, attempts, now });
+
+    if (verdict.action === 'finalize_merged') {
+      const attempt = attempts.find((a) => a.id === verdict.attemptId);
+      if (!attempt?.pr_url) continue;
+      await finalizeFixMerge(db, attempt, { prUrl: attempt.pr_url, prNumber: attempt.pr_number });
+      summary.finalized++;
+    } else if (verdict.action === 'flag_unreadable') {
+      await db
+        .from('reports')
+        .update({ processing_error: verdict.processingError })
+        .eq('id', report.id)
+        .eq('status', 'fixing');
+      summary.flagged++;
+    } else if (verdict.action === 'revert') {
+      const nextStatus = preFixReportStatus(report);
+      const { data: reverted } = await db
+        .from('reports')
+        .update({
+          status: nextStatus,
+          processing_error: verdict.processingError,
+          ...(report.fix_pr_url ? { fix_pr_url: null, fix_branch: null } : {}),
+        })
+        .eq('id', report.id)
+        .eq('project_id', report.project_id)
+        .eq('status', 'fixing')
+        .select('id')
+        .maybeSingle();
+      if (!reverted) continue;
+      summary.reverted++;
+      dispatchPluginEventDetached(db, report.project_id, 'report.status_changed', {
+        report: { id: report.id, status: nextStatus },
+        previousStatus: 'fixing',
+        actor: { kind: 'system' },
+      }).catch((e) => log.warn('Plugin dispatch failed', { event: 'report.status_changed', err: String(e) }));
+    }
+  }
+  return summary;
 }
 
 export function parsePrRepoRef(prUrl: string | null | undefined): GithubRepoRef | null {

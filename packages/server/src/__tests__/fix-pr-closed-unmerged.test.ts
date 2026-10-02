@@ -192,8 +192,9 @@ describe('every PR-lifecycle path uses the shared close bookkeeping', () => {
     expect(src).toMatch(/fetchPullRequest\(/)
     expect(src).toMatch(/finalizeFixClosedUnmerged\(/)
     expect(src).toMatch(/finalizeFixMerge\(/)
-    // Both sweep queries skip merged / closed PRs.
-    expect(src.match(/\.or\('pr_state\.is\.null,pr_state\.in\.\(open,draft\)'\)/g)?.length).toBe(2)
+    // The sweep queue (one round-robin query since 2026-10-02) skips merged / closed PRs.
+    expect(src.match(/\.or\('pr_state\.is\.null,pr_state\.in\.\(open,draft\)'\)/g)?.length).toBe(1)
+    expect(src).toMatch(/\.is\('merged_at', null\)\s*\.or\('pr_state\.is\.null,pr_state\.in\.\(open,draft\)'\)/)
   })
 
   it('the pull_request.closed webhook routes unmerged closes through the shared helper', () => {
