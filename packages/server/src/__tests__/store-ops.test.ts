@@ -120,6 +120,17 @@ describe('runStoreReview never turns a failed read into a pass', () => {
     expect(ops.storeRunStatus([ok] as never)).toBe('pass')
   })
 
+  it('marks the run error and throws when its findings cannot be stored', async () => {
+    const db = seedDb()
+    const failing = new Proxy(db, {
+      get: (t, prop, r) => (prop === 'from' ? (name: string) => (name === 'gate_findings'
+        ? { insert: async () => ({ data: null, error: { message: 'disk full' } }) }
+        : t.from(name)) : Reflect.get(t, prop, r)),
+    })
+    await expect(ops.runStoreReview(failing as never, P1, deps() as never)).rejects.toThrow(/could not store the store review findings: disk full/)
+    expect(db.table('gate_runs')[0]).toMatchObject({ gate: 'store_review', status: 'error' })
+  })
+
   it('throws when the run row cannot be recorded', async () => {
     const db = seedDb()
     const failing = new Proxy(db, {

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -47,6 +47,13 @@ describe('scanLocalRepo', () => {
     expect(body).toMatchObject({ scanned: ['storage_sql_delete'], partial: ['storage_sql_delete'] })
     expect(toIngestBody({ scannedFiles: 5, truncated: false, unreadable: 1, findings: [], configFiles: {} }, null)).toHaveProperty('partial')
     expect(toIngestBody({ scannedFiles: 0, truncated: false, unreadable: 0, findings: [], configFiles: {} }, null)).toHaveProperty('partial')
+  })
+
+  it('counts a file that cannot be read and marks the push partial, instead of aborting or passing', () => {
+    const root = repo({ 'ok.sql': 'select 1;\n', 'locked.sql': 'delete from storage.objects;\n' })
+    const scan = scanLocalRepo(root, (p) => { if (p.endsWith('locked.sql')) throw new Error('EACCES'); return readFileSync(p, 'utf8') })
+    expect(scan).toMatchObject({ scannedFiles: 1, unreadable: 1, findings: [] })
+    expect(toIngestBody(scan, null)).toMatchObject({ partial: ['storage_sql_delete'] })
   })
 
   it('throws on a --dir that does not exist instead of reporting nothing found', () => {
