@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_104 configuration knobs across 19 sections · last regenerated 2026-07-24._
+_104 configuration knobs across 19 sections · last regenerated 2026-10-02._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -87,13 +87,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `settings.general.sentry_webhook_secret`
 
-**Summary** — Shared HMAC secret that authenticates inbound Sentry user-feedback webhooks.
+**Summary** — Client Secret of the Sentry internal integration that sends issue, alert and user-feedback webhooks to Mushi.
 
-**How it works** — The Sentry webhook handler verifies the `Sentry-Hook-Signature` HMAC against this secret before it accepts a payload. Mismatch → 401, the report is dropped. The same value must be set in Sentry → Settings → Webhooks.
+**How it works** — Stored in Vault. The Sentry webhook handler verifies the `Sentry-Hook-Signature` HMAC against this secret, requires a `Sentry-Hook-Timestamp` within 5 minutes, and rejects a `Request-ID` or body it already accepted. Mismatch → 401, the delivery is dropped. Copy it from Sentry → Settings → Developer Settings → your internal integration → Client Secret.
 
 **Default** — `unset (inbound disabled)`
 
-**Where it lives** — table `project_settings.sentry_webhook_secret` · endpoint `PATCH /v1/admin/settings` · read by `POST /v1/webhooks/sentry (api route)`
+**Where it lives** — table `project_settings.sentry_webhook_secret` · endpoint `PATCH /v1/admin/settings` · read by `POST /v1/webhooks/sentry (api route)`, `POST /v1/webhooks/sentry/seer (api route)`
 
 **When to change** — Set this once when wiring inbound Sentry user feedback. Rotate it together with the Sentry-side value — never one without the other or every payload starts failing signature verification.
 
@@ -475,13 +475,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `integrations.sentry.auth_token`
 
-**Summary** — User-level Sentry token granting `project:read` + `event:read` for enrichment lookups.
+**Summary** — Sentry token granting `project:read` + `event:read` (import, enrichment) and `event:write` (resolve the issue when a Mushi fix merges).
 
-**How it works** — Stored as a vault reference (`vault://id`) — never in plaintext. The enricher uses it to fetch the matching event payload for a report.
+**How it works** — Stored as a vault reference (`vault://id`) — never in plaintext. Used to import existing issues, fetch the matching event payload for a report, and resolve linked Sentry issues when their fix PR merges.
 
 **Default** — `unset (enrichment disabled)`
 
-**Where it lives** — table `platform_integrations.config.sentry_auth_token_ref` · endpoint `PUT /v1/admin/integrations/sentry` · read by `sentry-seer-poll edge function`, `integration-health-probe edge function`
+**Where it lives** — table `platform_integrations.config.sentry_auth_token_ref` · endpoint `PUT /v1/admin/integrations/sentry` · read by `sentry-seer-poll edge function`, `integration-health-probe edge function`, `POST /v1/admin/projects/:id/sentry/import (api route)`, `finalizeFixMerge (_shared/fix-merge.ts)`
 
 **When to change** — Rotate quarterly, or whenever the issuing user leaves the org.
 

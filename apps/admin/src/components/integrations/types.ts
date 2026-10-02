@@ -231,10 +231,10 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     consoleLabel: 'Create Sentry auth token',
     setupSteps: [
       'Open Sentry → Settings → Account → Auth Tokens → Create New Token.',
-      'Grant at least project:read and event:read scopes.',
+      'Grant project:read, event:read and event:write (event:write lets a merged Mushi fix resolve the Sentry issue).',
       'Copy the org slug from your Sentry URL: sentry.io/organizations/{org-slug}/.',
       'Paste org slug + token below, then Save → Test connection.',
-      'To route errors INTO Mushi: Sentry → Alerts → create an issue-alert rule with a webhook action pointed at the receive URL below, and set the same webhook secret in both places.',
+      'To route errors INTO Mushi: Sentry → Settings → Developer Settings → create an internal integration with the receive URL below as its webhook URL (resources: issue, event_alert), then paste its Client Secret as the webhook secret here. Existing issues: use Import below.',
     ],
     whyItMatters: 'Sentry errors become Mushi reports: an alert firing lands in your queue with plain-English triage and a dispatchable fix, deduped per Sentry issue, and the loop closes both ways — Mushi fix → Sentry resolve, Sentry resolve → Mushi resolved. Seer analysis and event context enrich classification.',
     capabilitiesOnceConnected: [
@@ -248,9 +248,9 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     fields: [
       { name: 'sentry_org_slug', label: 'Org slug', placeholder: 'my-company', help: 'The segment after sentry.io/organizations/ in your Sentry URL.', required: true, helpId: 'integrations.sentry.org_slug', validator: 'slug' },
       { name: 'sentry_project_slug', label: 'Project slug', placeholder: 'web-app', help: 'Optional — narrows event search to one project (faster enrichment).', helpId: 'integrations.sentry.project_slug', validator: 'slug' },
-      { name: 'sentry_auth_token_ref', label: 'Auth token', placeholder: 'sntrys_… or sntryu_…', type: 'password', help: 'User auth token with project:read + event:read. Create at sentry.io/settings/account/api/auth-tokens/.', required: true, helpId: 'integrations.sentry.auth_token', validator: 'token' },
+      { name: 'sentry_auth_token_ref', label: 'Auth token', placeholder: 'sntrys_… or sntryu_…', type: 'password', help: 'Auth token with project:read + event:read (import, enrichment) and event:write (resolve on merge). Create at sentry.io/settings/account/api/auth-tokens/.', required: true, helpId: 'integrations.sentry.auth_token', validator: 'token' },
       { name: 'sentry_dsn', label: 'DSN (optional)', placeholder: 'https://abc@o0.ingest.sentry.io/0', help: 'DSN for the SDK to send events. Only needed if you want Mushi reports forwarded as Sentry events.', helpId: 'settings.general.sentry_dsn', validator: 'sentryDsn' },
-      { name: 'sentry_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'HMAC secret. Set the same value on the Sentry webhook (alert rules and user feedback) that targets the receive URL shown on this card.', helpId: 'settings.general.sentry_webhook_secret', validator: 'token' },
+      { name: 'sentry_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'The Client Secret of the Sentry internal integration whose webhook URL is the receive URL on this card. Sentry signs every delivery with it.', helpId: 'settings.general.sentry_webhook_secret', validator: 'token' },
     ],
   },
   {
