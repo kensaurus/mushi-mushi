@@ -12,7 +12,7 @@
  *   GET  /v1/admin/projects/:id/design[?direction=]       → DesignPlaneResponse
  *   GET  /v1/admin/projects/:id/design/tokens[?group=&type=&direction=] → DesignTokensResponse
  *   GET  /v1/admin/projects/:id/design/deviance[?limit=]  → DesignDevianceResponse
- *   POST /v1/admin/projects/:id/design/deviance/run       → DesignDevianceRunResult
+ *   POST /v1/admin/projects/:id/design/deviance/run       → DesignDevianceRunResult (202; run.status 'running', poll GET …/deviance)
  *   POST /v1/admin/projects/:id/design/changes            → DesignChangeResult
  *   GET  /v1/admin/projects/:id/design/excerpt[?files=]   → DesignExcerpt
  *
@@ -340,6 +340,8 @@ export interface DesignTokensResponse {
 export interface DesignDevianceResponse {
   projectId: string
   latest: DevianceRun | null
+  /** A scan still in progress (POST /deviance/run answers 202 and finishes in the background). */
+  running: DevianceRun | null
   trend: Array<{ at: string; score: number | null; status: DevianceRunStatus }>
   findings: DevianceFinding[]
   rules: DesignRuleConfig[]

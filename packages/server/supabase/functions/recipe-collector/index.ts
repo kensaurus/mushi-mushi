@@ -7,7 +7,7 @@
 // Auth:    requireServiceRoleAuth (internal only).
 //
 // For each project with a primary GitHub repo (at most MAX_PROJECTS a run,
-// least-recently refreshed first):
+// least-recently refreshed first, and no new project after START_BUDGET_MS):
 //   1. refreshRecipeSnapshot: read mushi.recipe.json + DTCG token files at the
 //      default-branch head into app_recipe_snapshots.
 //   2. When the snapshot has tokens and the last design_drift scan is older
@@ -29,6 +29,8 @@ declare const Deno: {
 
 const clog = log.child('recipe-collector')
 const MAX_PROJECTS = 25
+/** Stop starting new projects after this, so one run stays inside the function's wall clock. */
+const START_BUDGET_MS = 60_000
 const SCAN_EVERY_HOURS = 20
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -69,7 +71,12 @@ async function handler(req: Request): Promise<Response> {
   const batch = ids.sort((a, b) => (last.get(a) ?? 0) - (last.get(b) ?? 0)).slice(0, MAX_PROJECTS)
 
   const results: Array<{ projectId: string; refresh: string; scan: string }> = []
+  const t0 = Date.now()
   for (const projectId of batch) {
+    if (Date.now() - t0 > START_BUDGET_MS) {
+      clog.info('recipe collection budget reached; the rest rotate to the next run', { done: results.length, left: batch.length - results.length })
+      break
+    }
     const row = { projectId, refresh: 'skipped', scan: 'skipped' }
     try {
       const refresh = await refreshRecipeSnapshot(db, projectId, 'cron')

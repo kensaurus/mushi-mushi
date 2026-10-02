@@ -25,12 +25,13 @@ import {
   resolveRecipeRepo,
   type RecipeRepo,
 } from '../../_shared/recipe-github.ts'
-import { loadCurrentSnapshot, refreshRecipeSnapshot, runDesignDeviance, type SnapshotRow } from '../../_shared/design-plane.ts'
+import { loadCurrentSnapshot, refreshRecipeSnapshot, startDesignDeviance, type SnapshotRow } from '../../_shared/design-plane.ts'
+import { runInBackground } from '../../_shared/background.ts'
 import { judgingSet, type StoredTokens } from '../../_shared/design-sets.ts'
 import { applyRulesEdit, applyTokenEdits, unifiedDiff, type TokenFileEdit } from '../../_shared/design-change.ts'
 import { effectiveDesignRules, isWritablePath, RECIPE_MANIFEST_MAX_BYTES, RECIPE_MANIFEST_PATH } from '../../_shared/recipe-schema.ts'
 import { MAX_TOKEN_FILE_BYTES } from '../../_shared/design-sets.ts'
-import { DESIGN_RULE_IDS, RECIPE_ELEMENT_KEYS, type DesignChangeResult, type DesignTokensResponse, type RecipeElementKey, type RecipeHistoryResponse } from '../../_shared/recipe-types.ts'
+import { DESIGN_RULE_IDS, RECIPE_ELEMENT_KEYS, type DesignChangeResult, type DesignDevianceRunResult, type DesignTokensResponse, type DevianceRun, type RecipeElementKey, type RecipeHistoryResponse } from '../../_shared/recipe-types.ts'
 import { inferStack, requiredCiVarNames } from './project-ci-secrets.ts'
 import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
 import type { Variables } from '../types.ts'
@@ -56,7 +57,8 @@ export interface RecipeRouteDeps extends ComposeDeps {
   readAuth: MiddlewareHandler
   writeAuth: MiddlewareHandler
   refresh: typeof refreshRecipeSnapshot
-  runDeviance: typeof runDesignDeviance
+  startDeviance: typeof startDesignDeviance
+  runInBackground: typeof runInBackground
   loadSnapshot: typeof loadCurrentSnapshot
   readRepoFile: typeof readRepoFile
   createPr: typeof createPrFromFiles
@@ -67,7 +69,8 @@ export const defaultRecipeDeps: RecipeRouteDeps = {
   readAuth: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
   writeAuth: adminOrApiKey({ scope: 'mcp:write' }) as MiddlewareHandler,
   refresh: refreshRecipeSnapshot,
-  runDeviance: runDesignDeviance,
+  startDeviance: startDesignDeviance,
+  runInBackground,
   loadSnapshot: loadCurrentSnapshot,
   readRepoFile,
   createPr: createPrFromFiles,
@@ -240,15 +243,17 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
     if (!access.ok) return access.response
     const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 25) || 25, 1), 200)
     const [runs, snapshot] = await Promise.all([loadDesignRuns(db, access.projectId), deps.loadSnapshot(db, access.projectId)])
-    const scans = runs.filter(isScanRun)
-    const latestRow = scans.find((r) => r.status !== 'running') ?? null
-    const findings = latestRow && latestRow.status !== 'error' ? await loadRunFindings(db, latestRow.id, limit) : []
+    const now = deps.now()
+    const scans = runs.filter(isScanRun).map((r) => toDevianceRun(r, now))
+    const latest = scans.find((r) => r.status !== 'running') ?? null
+    const findings = latest && latest.status !== 'error' ? await loadRunFindings(db, latest.runId, limit) : []
     return c.json({
       ok: true,
       data: {
         projectId: access.projectId,
-        latest: latestRow ? toDevianceRun(latestRow) : null,
-        trend: scans.filter((r) => r.status !== 'running').slice(0, 30).reverse().map((r) => ({ at: r.completed_at ?? r.started_at, score: toDevianceRun(r).score, status: toDevianceRun(r).status })),
+        latest,
+        running: scans[0]?.status === 'running' ? scans[0] : null,
+        trend: scans.filter((r) => r.status !== 'running').slice(0, 30).reverse().map((r) => ({ at: r.completedAt ?? r.startedAt, score: r.score, status: r.status })),
         findings,
         rules: effectiveDesignRules(snapshot?.manifest ?? null),
       },
@@ -260,19 +265,28 @@ export function registerRecipeRoutes(app: Hono<{ Variables: Variables }>, deps: 
     const db = deps.getServiceClient()
     const access = await projectAccess(c, db)
     if (!access.ok) return access.response
+    const now = deps.now()
     const runs = await loadDesignRuns(db, access.projectId, 5)
-    const recent = runs.find((r) => isScanRun(r) && r.status !== 'error')
-    if (recent && deps.now().getTime() - Date.parse(recent.started_at) < REFRESH_COOLDOWN_MS) {
+    const recent = runs.filter(isScanRun).map((r) => toDevianceRun(r, now)).find((r) => r.status !== 'error')
+    if (recent && now.getTime() - Date.parse(recent.startedAt) < REFRESH_COOLDOWN_MS) {
       return jsonError(c, 'RATE_LIMITED', recent.status === 'running' ? 'A deviance check is already running.' : 'A deviance check ran in the last 5 minutes. Try again shortly.', 429)
     }
+    if (recent?.status === 'running') return jsonError(c, 'RATE_LIMITED', 'A deviance check is already running.', 429)
     const trigger = c.get('authMethod') === 'apiKey' ? 'mcp' : 'manual'
     const refresh = await deps.refresh(db, access.projectId, trigger)
     if (!refresh.ok || refresh.tokenCount === 0) {
-      return c.json({ ok: true, data: { refresh, run: null } })
+      return c.json({ ok: true, data: { refresh, run: null } satisfies DesignDevianceRunResult })
     }
-    const result = await deps.runDeviance(db, access.projectId, trigger)
-    if (!result.ok) return jsonError(c, 'DEVIANCE_FAILED', result.error, 502)
-    return c.json({ ok: true, data: { refresh, run: result.run } })
+    // The scan reads up to 1,500 files; it finishes in the background and
+    // the console polls GET /design/deviance until `running` clears.
+    const started = await deps.startDeviance(db, access.projectId, trigger)
+    if (!started.ok) return jsonError(c, 'DEVIANCE_FAILED', started.error, 502)
+    deps.runInBackground(started.execute(), 'design-deviance-scan')
+    const run: DevianceRun = {
+      runId: started.runId, status: 'running', score: null, scannedFiles: 0, scannedLines: 0, matchedFiles: 0, truncated: false,
+      commitSha: started.commitSha, startedAt: started.startedAt, completedAt: null, breakdown: [], counts: {}, storedFindings: 0, error: null,
+    }
+    return c.json({ ok: true, data: { refresh, run } satisfies DesignDevianceRunResult }, 202)
   })
 
   // ── GET /v1/admin/projects/:id/design/excerpt ──────────────────────────────

@@ -14,7 +14,7 @@ import { cadenceDays, deriveElementState, ELEMENT_META, worstState, type Element
 import { judgingSet, toSetSummary, type StoredTokens } from '../../_shared/design-sets.ts'
 import { effectiveDesignRules, isWritablePath, RECIPE_MANIFEST_PATH, type RecipeManifest } from '../../_shared/recipe-schema.ts'
 import { evaluateContrast } from '../../_shared/design-deviance.ts'
-import { DESIGN_GATE, type SnapshotRow } from '../../_shared/design-plane.ts'
+import { DESIGN_GATE, STUCK_SCAN_MS, type SnapshotRow } from '../../_shared/design-plane.ts'
 import type { RecipeRepoResolution, RecipeRepo } from '../../_shared/recipe-github.ts'
 import type { WorkflowRunSnapshot } from '../../_shared/github.ts'
 import type {
@@ -104,8 +104,11 @@ export function isScanRun(r: Pick<GateRunRow, 'summary'>): boolean {
   return (r.summary as { phase?: string } | null)?.phase !== 'refresh'
 }
 
-export function toDevianceRun(r: GateRunRow): DevianceRun {
+/** A `running` row older than STUCK_SCAN_MS never finished; it reads as `error`, never as running forever. */
+export function toDevianceRun(r: GateRunRow, now: Date = new Date()): DevianceRun {
   const s = (r.summary ?? {}) as Record<string, unknown>
+  const stuck = r.status === 'running' && now.getTime() - Date.parse(r.started_at) > STUCK_SCAN_MS
+  if (stuck) return { ...toDevianceRun({ ...r, status: 'error' }, now), error: 'The scan did not finish (the function stopped before writing a result).' }
   return {
     runId: r.id,
     status: (['running', 'pass', 'warn', 'fail', 'error'].includes(r.status) ? r.status : 'error') as DevianceRunStatus,
@@ -168,13 +171,13 @@ export async function loadDesignState(db: Db, projectId: string, snapshot: Snaps
   const runs = await loadDesignRuns(db, projectId)
   const scans = runs.filter(isScanRun)
   const latestScan = scans[0] ?? null
-  const latestCompleted = scans.find((r) => r.status !== 'running') ?? null
+  const latestCompleted = scans.find((r) => toDevianceRun(r, now).status !== 'running') ?? null
   const latestError = runs.find((r) => r.status === 'error') ?? null
   const lastError = latestError
     ? { at: latestError.completed_at ?? latestError.started_at, message: String((latestError.summary as { error?: string } | null)?.error ?? 'unknown error') }
     : null
   let openFindings = 0
-  if (latestCompleted && latestCompleted.status !== 'error') {
+  if (latestCompleted && toDevianceRun(latestCompleted, now).status !== 'error') {
     const counts = await openFindingCounts(db, [latestCompleted.id])
     openFindings = counts.get(latestCompleted.id) ?? 0
   }
@@ -189,9 +192,9 @@ export async function loadDesignState(db: Db, projectId: string, snapshot: Snaps
     tokenCount: set?.tokens.length ?? 0,
     lastError,
     runAt: latestScan?.completed_at ?? latestScan?.started_at ?? null,
-    runStatus: latestScan ? toDevianceRun(latestScan).status : null,
+    runStatus: latestScan ? toDevianceRun(latestScan, now).status : null,
     openFindings,
-    score: latestCompleted ? toDevianceRun(latestCompleted).score : null,
+    score: latestCompleted ? toDevianceRun(latestCompleted, now).score : null,
   }
   return { runs, scans, latestScan, latestCompleted, lastError, openFindings, set, state: deriveElementState(input, now), input }
 }
@@ -350,7 +353,7 @@ export async function composeRecipe(db: Db, deps: ComposeDeps, projectId: string
   const integrationsList = configured.map((c) => ({ kind: c.kind, health: latestHealth.get(c.kind)?.status ?? null, checkedAt: latestHealth.get(c.kind)?.checked_at ?? null }))
   const integrationsState = deriveElementState({ key: 'integrations', configured: integrationsList }, now)
 
-  const designRun = design.latestCompleted ? toDevianceRun(design.latestCompleted) : null
+  const designRun = design.latestCompleted ? toDevianceRun(design.latestCompleted, now) : null
   const elements: Record<RecipeElementKey, RecipeElementSummary> = {
     schema: summary('schema', schemaState, (schemaSnap as { captured_at?: string } | null)?.captured_at ?? null,
       { linked: Boolean(settings.supabase_project_ref) }, schemaRun ? findingCounts.get(schemaRun.id) ?? 0 : 0,
@@ -428,8 +431,8 @@ export async function composeDesignPlane(db: Db, projectId: string, snapshot: Sn
   const manifest = (snapshot?.manifest ?? null) as RecipeManifest | null
   const rules = effectiveDesignRules(manifest)
   const contrast = evaluateContrast(shown?.tokens ?? [], manifest?.design?.contrast ?? [])
-  const latest = design.latestCompleted ? toDevianceRun(design.latestCompleted) : null
-  const topFindings = design.latestCompleted && design.latestCompleted.status !== 'error' ? await loadRunFindings(db, design.latestCompleted.id, 50) : []
+  const latest = design.latestCompleted ? toDevianceRun(design.latestCompleted, now) : null
+  const topFindings = latest && latest.status !== 'error' ? await loadRunFindings(db, latest.runId, 50) : []
 
   // Editability: the shown set's source files that the allowlist lets a PR write.
   let editable: DesignPlaneResponse['editable']
@@ -444,10 +447,11 @@ export async function composeDesignPlane(db: Db, projectId: string, snapshot: Sn
   else editable = { enabled: true, reason: null, tokenFiles: writable, manifestWritable }
 
   const trend = design.scans
+    .map((r) => toDevianceRun(r, now))
     .filter((r) => r.status !== 'running')
     .slice(0, 30)
     .reverse()
-    .map((r) => ({ at: r.completed_at ?? r.started_at, score: toDevianceRun(r).score, status: toDevianceRun(r).status }))
+    .map((r) => ({ at: r.completedAt ?? r.startedAt, score: r.score, status: r.status }))
 
   const issues = [...((snapshot?.validation_errors ?? []) as RecipeIssue[]), ...(shown?.issues ?? [])]
   return {

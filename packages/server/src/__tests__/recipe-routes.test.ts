@@ -159,7 +159,8 @@ function harness(db: FakeDb, over: Partial<RecipeModule['defaultRecipeDeps']> = 
     readRepoFile: vi.fn(async (_r: unknown, _ref: string, path: string) => ({ kind: 'file' as const, path, text: glotFile(path), sha: 's', size: 1 })),
     createPr: vi.fn(async () => ({ url: 'https://github.com/kensaurus/glot.it/pull/9', number: 9, branch: 'mushi/recipe-design-x', commitSha: 'c' })),
     refresh: vi.fn(async () => ({ ok: true, state: 'unknown' as const, reason: 'ok', snapshotId: 's', tokensHash: 'h', manifestPresent: true, tokenCount: 87, issues: [] })),
-    runDeviance: vi.fn(async () => ({ ok: false as const, error: 'not in this test' })),
+    startDeviance: vi.fn(async () => ({ ok: true as const, runId: 'run-1', startedAt: NOW.toISOString(), commitSha: 'abc1234def', execute: vi.fn(async () => ({ ok: false as const, error: 'not awaited here' })) })),
+    runInBackground: vi.fn(),
     ...over,
   }
   recipe.registerRecipeRoutes(app as never, deps as never)
@@ -362,6 +363,40 @@ describe('POST /design/changes', () => {
     expect((await app.call('POST', url, { body: { ...body, dryRun: false }, vars: { userId: 'member-a' } })).status).toBe(403)
     expect((await app.call('POST', url, { body: { kind: 'nope' } })).status).toBe(400)
     expect(deps.createPr).not.toHaveBeenCalled()
+  })
+})
+
+describe('deviance runs', () => {
+  it('POST /design/deviance/run answers 202 with a running run and hands the scan to the background', async () => {
+    const { app, deps } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)] }))
+    const res = await app.call('POST', `/v1/admin/projects/${P_A}/design/deviance/run`)
+    expect(res.status).toBe(202)
+    expect((res.body.data as any).run).toMatchObject({ runId: 'run-1', status: 'running', score: null })
+    expect(deps.runInBackground).toHaveBeenCalledTimes(1)
+  })
+
+  it('a scan still running after 15 minutes reads as error, never as running forever', async () => {
+    const stuck = { id: 'run-stuck', project_id: P_A, gate: 'design_drift', status: 'running', started_at: '2026-10-02T11:00:00Z', completed_at: null, summary: { phase: 'scan' }, findings_count: 0, commit_sha: 'abc' }
+    const { app } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)], gate_runs: [stuck] }))
+    const res = await app.call('GET', `/v1/admin/projects/${P_A}/design`)
+    const d = res.body.data as any
+    expect(d.state).toBe('error')
+    expect(d.deviance.latest).toMatchObject({ status: 'error', error: expect.stringMatching(/did not finish/) })
+    const dev = await app.call('GET', `/v1/admin/projects/${P_A}/design/deviance`)
+    expect((dev.body.data as any).running).toBeNull()
+  })
+
+  it('a finished scan with warn findings is drift, with the score and the stored findings', async () => {
+    const run = { id: 'run-2', project_id: P_A, gate: 'design_drift', status: 'warn', started_at: '2026-10-02T11:30:00Z', completed_at: '2026-10-02T11:31:00Z', summary: { phase: 'scan', score: 21, scannedFiles: 3, scannedLines: 900, matchedFiles: 3, breakdown: [], counts: { off_token_color: 1 } }, findings_count: 1, commit_sha: 'abc' }
+    const finding = { id: 'f1', gate_run_id: 'run-2', project_id: P_A, severity: 'warn', rule_id: 'off_token_color', message: 'Colour #E8387F is not in your tokens.', file_path: 'app/page.tsx', line: 4, col: 9, allowlisted: false, suggested_fix: { value: '#E8387F', suggestion: { token: 'color.action.primary', cssVar: '--color-cta', ts: 'colors.cta', value: '#C8372D', distance: 9.1 } } }
+    const { app } = harness(seed({ app_recipe_snapshots: [glotSnapshot(P_A)], gate_runs: [run], gate_findings: [finding] }))
+    const d = (await app.call('GET', `/v1/admin/projects/${P_A}/design`)).body.data as any
+    expect(d.state).toBe('drift')
+    expect(d.deviance.latest.score).toBe(21)
+    expect(d.deviance.topFindings[0]).toMatchObject({ rule_id: 'off_token_color', value: '#E8387F', suggestion: { cssVar: '--color-cta' } })
+    const ex = (await app.call('GET', `/v1/admin/projects/${P_A}/design/excerpt?files=app/page.tsx`)).body.data as any
+    expect(ex.findings).toEqual([{ file: 'app/page.tsx', line: 4, rule: 'off_token_color', value: '#E8387F', use: '--color-cta' }])
+    expect(ex.score).toBe(21)
   })
 })
 
