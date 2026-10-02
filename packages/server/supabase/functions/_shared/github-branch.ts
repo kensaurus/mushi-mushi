@@ -14,12 +14,16 @@
 
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>
 
-function headers(token: string): Record<string, string> {
+/** Request init for a GitHub GET, with a deadline so a hung call cannot stall a connect or a sweep. */
+function ghInit(token: string, timeoutMs = 8_000): RequestInit {
   return {
-    Authorization: `Bearer ${token}`,
-    Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-    'User-Agent': 'mushi-mushi/1.0',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'mushi-mushi/1.0',
+    },
+    signal: AbortSignal.timeout(timeoutMs),
   }
 }
 
@@ -30,9 +34,7 @@ export async function lookupGithubDefaultBranch(
   repo: string,
   fetchImpl: FetchLike = fetch,
 ): Promise<{ ok: true; branch: string } | { ok: false; status: number }> {
-  const res = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}`, {
-    headers: headers(token),
-  })
+  const res = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}`, ghInit(token))
   if (!res.ok) return { ok: false, status: res.status }
   const body = (await res.json().catch(() => null)) as { default_branch?: unknown } | null
   return typeof body?.default_branch === 'string' && body.default_branch.length > 0
@@ -68,7 +70,7 @@ export async function resolveBranchForConnect(opts: {
     }
     const branchRes = await fetchImpl(
       `https://api.github.com/repos/${opts.owner}/${opts.repo}/branches/${encodeURIComponent(requested)}`,
-      { headers: headers(opts.token) },
+      ghInit(opts.token),
     )
     if (branchRes.ok) return { branch: requested, source: 'requested' }
     if (branchRes.status === 404) return { branch: lookup.branch, source: 'github_default' }
@@ -77,6 +79,9 @@ export async function resolveBranchForConnect(opts: {
     return unverified
   }
 }
+
+/** A recursive tree of a few thousand files can take seconds; repo metadata cannot. */
+const TREE_TIMEOUT_MS = 30_000
 
 export interface RepoTree {
   tree?: Array<{ path: string; type: string }>
@@ -103,7 +108,7 @@ export async function fetchRepoTreeWithBranchFallback(opts: {
   const treeUrl = (b: string) =>
     `https://api.github.com/repos/${opts.owner}/${opts.repo}/git/trees/${encodeURIComponent(b)}?recursive=1`
 
-  const first = await fetchImpl(treeUrl(opts.branch), { headers: headers(opts.token) })
+  const first = await fetchImpl(treeUrl(opts.branch), ghInit(opts.token, TREE_TIMEOUT_MS))
   if (first.ok) {
     return { tree: (await first.json()) as RepoTree, branch: opts.branch, correctedFrom: null }
   }
@@ -121,7 +126,7 @@ export async function fetchRepoTreeWithBranchFallback(opts: {
     throw new Error(`tree fetch 404 for branch '${opts.branch}' (the repo's GitHub default)`)
   }
 
-  const retry = await fetchImpl(treeUrl(lookup.branch), { headers: headers(opts.token) })
+  const retry = await fetchImpl(treeUrl(lookup.branch), ghInit(opts.token, TREE_TIMEOUT_MS))
   if (!retry.ok) {
     throw new Error(
       `tree fetch ${retry.status} for GitHub default branch '${lookup.branch}' ` +
