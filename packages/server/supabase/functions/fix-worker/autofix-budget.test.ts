@@ -64,7 +64,7 @@ Deno.test('daily dispatch cap: blocks automatic, never manual', async () => {
   assertEquals(manual.dispatchesToday, 3)
 })
 
-Deno.test('the approval gate applies to automatic dispatches only', async () => {
+Deno.test('the approval gate applies to manual and automatic dispatches alike', async () => {
   const caps = { ...CAPS, autofix_approval_cost_threshold_usd: 0.1 }
   const auto = await checkAutofixBudget(fakeDb(UNDER_SPEND, { count: 0 }), 'p1', caps, {
     trigger: 'automatic',
@@ -77,7 +77,9 @@ Deno.test('the approval gate applies to automatic dispatches only', async () => 
     severity: 'critical',
     estimatedCostUsd: 0.25,
   })
-  assertEquals(manual.requiresApproval, false)
+  // The caps step aside for a person; the owner's approval threshold does not.
+  assertEquals(manual.requiresApproval, true)
+  assertEquals(manual.allowed, true)
 })
 
 Deno.test('a failed spend read throws instead of reading as $0', async () => {

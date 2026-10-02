@@ -55,7 +55,7 @@ import { getServiceClient } from '../_shared/db.ts';
 import { reportError, withSentry, tagLangfuseTrace } from '../_shared/sentry.ts';
 import { safeErrorResponse } from '../_shared/safe-error.ts';
 import { resolveLlmKey } from '../_shared/byok.ts';
-import { withAnthropicOrOpenAi, LlmFailoverError } from '../_shared/llm-failover.ts';
+import { withAnthropicOrOpenAi, LlmBudgetExceededError, LlmFailoverError } from '../_shared/llm-failover.ts';
 import {
   getRelevantCodeWithReason,
   formatCodeContext,
@@ -916,6 +916,13 @@ ${
           if (NoObjectGeneratedError.isInstance(llmErr) && attempt < MAX_OUTPUT_RETRIES) {
             log.warn('Fix worker output validation failed — retrying', { attempt: attempt + 1 });
             continue;
+          }
+          // Over the monthly LLM budget: a state the owner set, not a crash.
+          // Block the attempt with the reason (report shows autofix_blocked)
+          // instead of the failure path that notifies the team.
+          if (llmErr instanceof LlmBudgetExceededError) {
+            llmSpan.end({ error: 'llm_budget_exceeded' });
+            return await blockFixAttempt(db, trace, dispatch, fixAttemptId, llmErr.message, { files_changed: [] });
           }
           if (llmErr instanceof LlmFailoverError) {
             llmSpan.end({ error: llmErr.message });
