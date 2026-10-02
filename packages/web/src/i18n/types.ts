@@ -41,10 +41,30 @@ export interface MushiLocale {
   step3: {
     heading: string;
     descriptionPlaceholder: string;
+    /** Placeholder + starter chips when the reporter is suggesting a feature. */
+    featurePlaceholder: string;
+    featureExamples: string[];
+    /** Placeholder for the "Other" category (no starter chips). */
+    otherPlaceholder: string;
+    /** Footer shortcut hint; `{key}` is ⌘ on Apple platforms, Ctrl elsewhere. */
+    submitHint: string;
+    /** Counter text below the minimum length; `{n}` = characters still needed. */
+    charsNeeded: string;
     screenshotButton: string;
     screenshotAttached: string;
     screenshotCapturing: string;
+    /** @deprecated The web widget now shows `screenshotRetry` + `screenshotErrors`; kept for type compatibility. */
     screenshotFailed: string;
+    /** Screenshot button label after a failed capture. */
+    screenshotRetry: string;
+    /** Why the last capture failed, shown under the attachment row. */
+    screenshotErrors: {
+      permission: string;
+      unsupported: string;
+      taint: string;
+      timeout: string;
+      error: string;
+    };
     /** Alt text for the attached-screenshot preview image. */
     screenshotPreviewAlt: string;
     /** Default privacy caption shown beside the screenshot preview. */
@@ -144,6 +164,10 @@ export interface MushiLocale {
       send: string;
     };
     success: {
+      /** Panel title once the report is accepted or delivering. */
+      title: string;
+      /** Closes the panel from the success step. */
+      done: string;
       trackReport: string;
       receipt: string;
       delivering: string;
