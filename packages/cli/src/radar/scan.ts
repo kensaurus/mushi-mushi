@@ -20,21 +20,27 @@ const MAX_CONFIG_FILES = 40
 export interface LocalRadarScan {
   scannedFiles: number
   truncated: boolean
+  /** Folders or files that could not be read; any of these makes the scan partial. */
+  unreadable: number
   findings: StorageScanFinding[]
   /** Build-config files for the server's store-policy rules (path → text). */
   configFiles: Record<string, string>
 }
 
 /** Repo-relative paths with forward slashes, depth-first, skipping vendor and build folders. */
-function listRepoFiles(root: string, limit = MAX_FILES): { files: string[]; truncated: boolean } {
+function listRepoFiles(root: string, limit = MAX_FILES): { files: string[]; truncated: boolean; unreadable: number } {
   const out: string[] = []
   let truncated = false
+  let unreadable = 0
+  // The root itself must be readable: a typo in --dir is an error, never "found nothing".
+  readdirSync(root)
   const walk = (dir: string) => {
     if (out.length >= limit) { truncated = true; return }
     let entries
     try {
       entries = readdirSync(dir, { withFileTypes: true })
     } catch {
+      unreadable++
       return
     }
     for (const e of entries) {
@@ -49,11 +55,12 @@ function listRepoFiles(root: string, limit = MAX_FILES): { files: string[]; trun
     }
   }
   walk(root)
-  return { files: out, truncated }
+  return { files: out, truncated, unreadable }
 }
 
 export function scanLocalRepo(root: string): LocalRadarScan {
-  const { files, truncated } = listRepoFiles(root)
+  const { files, truncated, unreadable: unreadableDirs } = listRepoFiles(root)
+  let unreadable = unreadableDirs
   const findings: StorageScanFinding[] = []
   const configFiles: Record<string, string> = {}
   let scannedFiles = 0
@@ -63,6 +70,7 @@ export function scanLocalRepo(root: string): LocalRadarScan {
     try {
       size = statSync(full).size
     } catch {
+      unreadable++
       continue
     }
     if (isRepoScanPath(rel) && size <= MAX_CONFIG_BYTES && Object.keys(configFiles).length < MAX_CONFIG_FILES) {
@@ -72,7 +80,7 @@ export function scanLocalRepo(root: string): LocalRadarScan {
     scannedFiles++
     findings.push(...scanStorageSqlDelete(rel, readFileSync(full, 'utf8')))
   }
-  return { scannedFiles, truncated, findings, configFiles }
+  return { scannedFiles, truncated, unreadable, findings, configFiles }
 }
 
 /** The body for POST /v1/ingest/radar: rule ids, paths and lines only, plus the config files. */
@@ -80,8 +88,9 @@ export function toIngestBody(scan: LocalRadarScan, commitSha: string | null): Re
   return {
     ...(commitSha && /^[0-9a-f]{7,64}$/i.test(commitSha) ? { commitSha } : {}),
     scanned: ['storage_sql_delete'],
-    // Over the file limit the scan covered only part of the repo: Mushi must not record a pass.
-    ...(scan.truncated ? { partial: ['storage_sql_delete'] } : {}),
+    // Over the file limit, with unreadable folders, or with nothing scanned, the scan did not
+    // cover the repo: Mushi must not record a pass.
+    ...(scan.truncated || scan.unreadable > 0 || scan.scannedFiles === 0 ? { partial: ['storage_sql_delete'] } : {}),
     findings: scan.findings.slice(0, 200).map((f) => ({ ruleId: f.ruleId, filePath: f.filePath, line: f.line })),
     files: scan.configFiles,
   }

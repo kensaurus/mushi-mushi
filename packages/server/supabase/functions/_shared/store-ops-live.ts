@@ -70,8 +70,9 @@ export const liveStoreOpsDeps: StoreOpsDeps = {
     return (result.object as { claims?: ExtractedClaim[] }).claims ?? null
   },
   async uploadPaths(db, projectId) {
-    const { data } = await db.from('project_codebase_files').select('file_path').eq('project_id', projectId)
+    const { data, error } = await db.from('project_codebase_files').select('file_path').eq('project_id', projectId)
       .or('content_preview.ilike.%storage.from(%,content_preview.ilike.%.upload(%,content_preview.ilike.%FormData%').limit(20)
+    if (error) throw new Error(`could not read the indexed code: ${error.message}`)
     return ((data ?? []) as Array<{ file_path: string }>).map((r) => r.file_path)
   },
   now: () => new Date(),
